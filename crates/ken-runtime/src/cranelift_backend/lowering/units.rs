@@ -172,7 +172,7 @@ impl UnitBundle {
 /// spell a symbol name never enters here; a call edge names its callee by static
 /// identity and the bundle answers with the declared target or with `None`.
 pub(in crate::cranelift_backend) struct CallEdgeTargets {
-    edges: Vec<(PredeclaredFunctionId, FuncId)>,
+    edges: Vec<(PredeclaredFunctionId, ResolvedUnitTarget)>,
 }
 
 impl CallEdgeTargets {
@@ -183,17 +183,59 @@ impl CallEdgeTargets {
     pub(in crate::cranelift_backend) fn targets_in(
         &self,
         caller: PredeclaredFunctionId,
-    ) -> impl Iterator<Item = FuncId> + '_ {
+    ) -> impl Iterator<Item = &ResolvedUnitTarget> + '_ {
         self.edges
             .iter()
             .filter(move |(from, _)| *from == caller)
-            .map(|(_, id)| *id)
+            .map(|(_, target)| target)
     }
 
     /// How many call edges were resolved.
     #[cfg(test)]
     pub(in crate::cranelift_backend) fn len(&self) -> usize {
         self.edges.len()
+    }
+}
+
+#[derive(Clone)]
+pub(in crate::cranelift_backend) struct ResolvedUnitTarget {
+    function: FuncId,
+    origin: StaticOriginId,
+    header: AbiFrameHeader,
+    slots: Vec<AbiSlot>,
+    offsets: Vec<u32>,
+}
+
+#[derive(Clone)]
+pub(in crate::cranelift_backend) struct DeclaredUnitCall {
+    pub(in crate::cranelift_backend) function: FuncRef,
+    pub(in crate::cranelift_backend) header: AbiFrameHeader,
+    pub(in crate::cranelift_backend) slots: Vec<AbiSlot>,
+    pub(in crate::cranelift_backend) offsets: Vec<u32>,
+}
+
+impl CallEdgeTargets {
+    pub(in crate::cranelift_backend) fn declare_in_func<M: Module>(
+        &self,
+        caller: PredeclaredFunctionId,
+        module: &mut M,
+        func: &mut Function,
+    ) -> Result<BTreeMap<StaticOriginId, DeclaredUnitCall>, CraneliftBackendError> {
+        let mut calls = BTreeMap::new();
+        for target in self.targets_in(caller) {
+            let call = DeclaredUnitCall {
+                function: module.declare_func_in_func(target.function, func),
+                header: target.header,
+                slots: target.slots.clone(),
+                offsets: target.offsets.clone(),
+            };
+            if calls.insert(target.origin, call).is_some() {
+                return Err(backend_module(
+                    "one caller has two static-body calls to the same body origin".to_string(),
+                ));
+            }
+        }
+        Ok(calls)
     }
 }
 
@@ -252,7 +294,32 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
         let target = bundle.function(edge.callee()).ok_or_else(|| {
             backend_module("a call edge names a unit that was never forward-declared".to_string())
         })?;
-        edges.push((edge.caller(), target));
+        let unit = plan
+            .emittable_units()?
+            .into_iter()
+            .find(|unit| unit.function() == edge.callee())
+            .ok_or_else(|| backend_module("call edge callee has no abi descriptor".to_string()))?;
+        if unit.origin() != edge.callee_origin() {
+            return Err(backend_module(
+                "call edge callee origin disagrees with its abi descriptor".to_string(),
+            ));
+        }
+        let (offsets, frame_bytes) = unit.slot_offsets()?;
+        if frame_bytes != unit.header().frame_bytes {
+            return Err(backend_module(
+                "call edge target frame size disagrees with its slot run".to_string(),
+            ));
+        }
+        edges.push((
+            edge.caller(),
+            ResolvedUnitTarget {
+                function: target,
+                origin: edge.callee_origin(),
+                header: unit.header(),
+                slots: unit.slots().to_vec(),
+                offsets,
+            },
+        ));
     }
     #[cfg(test)]
     B2F_CALL_EDGE_RESOLUTION.with(|cell| cell.set(edges.len()));
@@ -274,8 +341,8 @@ pub(in crate::cranelift_backend) fn b2f_last_call_edge_resolution() -> usize {
     B2F_CALL_EDGE_RESOLUTION.with(std::cell::Cell::get)
 }
 
-/// The uniform call ABI for every target unit: one pointer to the activation
-/// frame, returning one `i64`.
+/// The uniform internal call ABI for every target unit:
+/// `(frame_ptr, services_ptr) -> i64`.
 ///
 /// ⭐ **This is what "one fixed call-ABI scheme, not one fixed byte size"
 /// means.** Every unit shares this signature; what varies per origin is the
@@ -289,8 +356,10 @@ pub(in crate::cranelift_backend) fn b2f_last_call_edge_resolution() -> usize {
 /// making a unit's *signature* vary with the program would require a visible
 /// change here, so the compiler forbids that growth mode rather than a test
 /// detecting it.
-fn unit_signature<M: Module>(module: &M) -> cranelift_codegen::ir::Signature {
+pub(super) fn unit_signature<M: Module>(module: &M) -> cranelift_codegen::ir::Signature {
     let mut sig = module.make_signature();
+    sig.params
+        .push(AbiParam::new(module.target_config().pointer_type()));
     sig.params
         .push(AbiParam::new(module.target_config().pointer_type()));
     sig.returns.push(AbiParam::new(types::I64));
@@ -335,6 +404,151 @@ pub(in crate::cranelift_backend) fn declare_unit_bundle<M: Module>(
     Ok(UnitBundle { functions })
 }
 
+pub(super) fn define_root_adapter<M: Module>(
+    module: &mut M,
+    compiler: &mut Lowering<'_>,
+    helpers: ArtifactHelpers<'_>,
+    bundle: &UnitBundle,
+    adapter_id: FuncId,
+    process_mode: bool,
+) -> Result<(), CraneliftBackendError> {
+    let root = compiler.static_transition_plan.root_emittable_unit()?;
+    let root_id = bundle.function(root.function()).ok_or_else(|| {
+        backend_module("the recorded root unit was never forward-declared".to_string())
+    })?;
+    let (offsets, frame_bytes) = root.slot_offsets()?;
+    if frame_bytes != root.header().frame_bytes {
+        return Err(backend_module(
+            "root adapter target frame size disagrees with its slot run".to_string(),
+        ));
+    }
+    if process_mode {
+        for role in [
+            AbiProcessParameter::ProcessInput,
+            AbiProcessParameter::Capability,
+        ] {
+            compiler
+                .static_transition_plan
+                .process_parameter_slot(role)?
+                .ok_or_else(|| {
+                    backend_module("process root has no declared role-keyed ingress slot".to_string())
+                })?;
+        }
+    }
+
+    let sig = unit_signature(module);
+    let mut func =
+        Function::with_name_signature(UserFuncName::user(0, adapter_id.as_u32()), sig);
+    let mut function_local = helpers.declare_in_func(module, &mut func);
+    let root_origin = root.origin();
+    function_local.unit_calls.insert(
+        root_origin,
+        DeclaredUnitCall {
+            function: module.declare_func_in_func(root_id, &mut func),
+            header: root.header(),
+            slots: root.slots().to_vec(),
+            offsets,
+        },
+    );
+
+    let mut func_ctx = FunctionBuilderContext::new();
+    {
+        let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
+        let entry = builder.create_block();
+        builder.append_block_params_for_function_params(entry);
+        builder.switch_to_block(entry);
+        let ingress = builder.block_params(entry)[0];
+        let services = builder.block_params(entry)[1];
+        let pointer_type = module.target_config().pointer_type();
+        let native_int_arena = builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            services,
+            crate::activation_services::SERVICES_NATIVE_INT_ARENA,
+        );
+        Lowering::require_nonzero(&mut builder, native_int_arena);
+        let boundary_arena = builder.ins().load(
+            pointer_type,
+            MemFlags::trusted(),
+            services,
+            crate::activation_services::SERVICES_BOUNDARY_ARENA,
+        );
+        Lowering::require_nonzero(&mut builder, boundary_arena);
+        function_local.services_pointer = Some(services);
+        function_local.native_int_arena = Some(native_int_arena);
+        function_local.boundary_arena = Some(boundary_arena);
+
+        let mut inputs = Vec::new();
+        if process_mode {
+            let process_input = builder.ins().load(
+                pointer_type,
+                MemFlags::trusted(),
+                ingress,
+                crate::boundary_activation::ROOT_INGRESS_PROCESS_INPUT,
+            );
+            Lowering::require_nonzero(&mut builder, process_input);
+            let host_dispatch_context = builder.ins().load(
+                pointer_type,
+                MemFlags::trusted(),
+                ingress,
+                crate::boundary_activation::ROOT_INGRESS_HOST_DISPATCH_CONTEXT,
+            );
+            Lowering::require_nonzero(&mut builder, host_dispatch_context);
+            let capability = builder.ins().load(
+                types::I64,
+                MemFlags::trusted(),
+                ingress,
+                crate::boundary_activation::ROOT_INGRESS_CAPABILITY,
+            );
+            function_local.host_dispatch_context = Some(host_dispatch_context);
+            inputs.push(LoweringOperand::Specialized(
+                Lowered::BorrowedNativeValue {
+                    pointer: process_input,
+                },
+            ));
+            inputs.push(LoweringOperand::Specialized(Lowered::CapabilityToken {
+                value: capability,
+            }));
+            #[cfg(test)]
+            PROCESS_SLOT_MUTATION.with(|cell| match cell.get() {
+                ProcessSlotMutation::Exact | ProcessSlotMutation::RecoverFromHostContext => {}
+                ProcessSlotMutation::DeleteProcessInput => {
+                    inputs.remove(0);
+                }
+                ProcessSlotMutation::DeleteCapability => {
+                    inputs.pop();
+                }
+            });
+        } else {
+            function_local.host_dispatch_context =
+                Some(builder.ins().iconst(pointer_type, 0));
+        }
+
+        compiler.function_local = function_local;
+        let result = compiler.call_declared_unit(
+            &mut builder,
+            root_origin,
+            &inputs,
+            #[cfg(test)]
+            Some(ingress),
+        )?;
+        let LoweringOperand::Carried(result) = result else {
+            return Err(backend_module(
+                "the internal root call did not return its result word".to_string(),
+            ));
+        };
+        builder.ins().return_(&[result.word]);
+        builder.seal_all_blocks();
+        builder.finalize();
+    }
+    verify_cranelift_function(&func, module.isa())?;
+    let mut ctx = module.make_context();
+    std::mem::swap(&mut ctx.func, &mut func);
+    module
+        .define_function(adapter_id, &mut ctx)
+        .map_err(|err| backend_module(err.to_string()))
+}
+
 /// **`D2` — define every declared unit against its declared activation frame.**
 ///
 /// ⛔ **Every dynamic value crosses into a unit through the declared
@@ -351,41 +565,96 @@ pub(in crate::cranelift_backend) fn declare_unit_bundle<M: Module>(
 /// a slot is **representable** (`AC-11`) — those are separate obligations with
 /// their own controls, and ⛔ a body that addresses the right offset while
 /// violating an ownership mode satisfies everything asserted here.
-pub(in crate::cranelift_backend) fn define_unit_bodies<M: Module>(
+pub(super) struct RootUnitResult {
+    pub(super) decoder: Option<ResultDecoder>,
+    pub(super) trap: Option<RuntimeTrap>,
+}
+
+pub(super) fn define_unit_bodies<M: Module>(
     module: &mut M,
-    plan: &StaticTransitionPlan<'_>,
+    compiler: &mut Lowering<'_>,
+    helpers: ArtifactHelpers<'_>,
     bundle: &UnitBundle,
     call_edges: &CallEdgeTargets,
-) -> Result<(), CraneliftBackendError> {
-    for unit in plan.emittable_units()? {
-        let id = bundle.function(unit.function()).ok_or_else(|| {
+    staged_root_value: Option<&RuntimeValue>,
+) -> Result<RootUnitResult, CraneliftBackendError> {
+    let root = compiler.static_transition_plan.root_emittable_unit()?.function();
+    let mut root_result = None;
+    let emissions = compiler
+        .static_transition_plan
+        .emittable_units()?
+        .into_iter()
+        .map(|unit| {
+            let (offsets, frame_bytes) = unit.slot_offsets()?;
+            Ok(OwnedUnitEmission {
+                function: unit.function(),
+                origin: unit.origin(),
+                header: unit.header(),
+                slots: unit.slots().to_vec(),
+                offsets,
+                frame_bytes,
+            })
+        })
+        .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+    for unit in emissions {
+        let id = bundle.function(unit.function).ok_or_else(|| {
             backend_module("a planned unit was never forward-declared".to_string())
         })?;
-        let targets = call_edges.targets_in(unit.function()).collect::<Vec<_>>();
-        define_unit_body(module, unit, id, &targets)?;
+        let is_root = root == unit.function;
+        let outcome = define_unit_body(
+            module,
+            compiler,
+            helpers,
+            unit,
+            id,
+            call_edges,
+            is_root,
+            staged_root_value,
+        )?;
+        if let Some(outcome) = outcome {
+            if root_result.replace(outcome).is_some() {
+                return Err(backend_module(
+                    "more than one emitted unit claimed root result authority".to_string(),
+                ));
+            }
+        }
     }
-    Ok(())
+    root_result.ok_or_else(|| {
+        backend_module("the emitted unit bundle did not define its recorded root".to_string())
+    })
+}
+
+struct OwnedUnitEmission {
+    function: PredeclaredFunctionId,
+    origin: StaticOriginId,
+    header: AbiFrameHeader,
+    slots: Vec<AbiSlot>,
+    offsets: Vec<u32>,
+    frame_bytes: u32,
 }
 
 fn define_unit_body<M: Module>(
     module: &mut M,
-    unit: EmittableUnit<'_>,
+    compiler: &mut Lowering<'_>,
+    helpers: ArtifactHelpers<'_>,
+    unit: OwnedUnitEmission,
     id: FuncId,
-    call_targets: &[FuncId],
-) -> Result<(), CraneliftBackendError> {
-    let (offsets, frame_bytes) = unit.slot_offsets()?;
+    call_edges: &CallEdgeTargets,
+    is_root: bool,
+    staged_root_value: Option<&RuntimeValue>,
+) -> Result<Option<RootUnitResult>, CraneliftBackendError> {
     // ⭐ The declared size and the walked size must agree. They are the same
     // walk by construction (`abi::slot_offsets` totals for both), so this
     // rejects a corrupted descriptor rather than a divergent derivation.
-    if frame_bytes != unit.header().frame_bytes {
+    if unit.frame_bytes != unit.header.frame_bytes {
         return Err(backend_module(
             "abi frame size disagrees with its own slot run".to_string(),
         ));
     }
     let result_offset = unit
-        .slots()
+        .slots
         .iter()
-        .zip(&offsets)
+        .zip(&unit.offsets)
         .find(|(slot, _)| slot.kind == AbiSlotKind::Result)
         .map(|(_, offset)| *offset)
         .ok_or_else(|| {
@@ -406,20 +675,201 @@ fn define_unit_body<M: Module>(
     // resolved from a validated call edge through the declared bundle, with no
     // ordinal, no name parsing and no dynamic lookup anywhere on the path. ⚠ An
     // emitted `call` is not claimed and no control here asserts one.
-    for target in call_targets {
-        module.declare_func_in_func(*target, &mut func);
-    }
+    let mut function_local = helpers.declare_in_func(module, &mut func);
+    function_local.unit_calls =
+        call_edges.declare_in_func(unit.function, module, &mut func)?;
     let mut func_ctx = FunctionBuilderContext::new();
+    let root_outcome;
     {
         let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
         let entry = builder.create_block();
         builder.append_block_params_for_function_params(entry);
         builder.switch_to_block(entry);
-        let frame = builder.block_params(entry)[0];
-        let result = builder.ins().load(
-            types::I64,
+        let envelope = builder.block_params(entry)[0];
+        let slots = builder.ins().load(
+            module.target_config().pointer_type(),
             MemFlags::trusted(),
-            frame,
+            envelope,
+            crate::activation_services::UNIT_CALL_FRAME_SLOTS,
+        );
+        let host_dispatch_context = builder.ins().load(
+            module.target_config().pointer_type(),
+            MemFlags::trusted(),
+            envelope,
+            crate::activation_services::UNIT_CALL_FRAME_HOST_DISPATCH_CONTEXT,
+        );
+        let services = builder.block_params(entry)[1];
+        let native_int_arena = builder.ins().load(
+            module.target_config().pointer_type(),
+            MemFlags::trusted(),
+            services,
+            crate::activation_services::SERVICES_NATIVE_INT_ARENA,
+        );
+        Lowering::require_nonzero(&mut builder, native_int_arena);
+        let boundary_arena = builder.ins().load(
+            module.target_config().pointer_type(),
+            MemFlags::trusted(),
+            services,
+            crate::activation_services::SERVICES_BOUNDARY_ARENA,
+        );
+        Lowering::require_nonzero(&mut builder, boundary_arena);
+        function_local.host_dispatch_context = Some(host_dispatch_context);
+        function_local.native_int_arena = Some(native_int_arena);
+        function_local.boundary_arena = Some(boundary_arena);
+        function_local.services_pointer = Some(services);
+        // The two fixed envelope loads are unconditional. Semantic frame
+        // accesses below are relative only to the B2R payload base.
+        compiler.function_local = function_local;
+        let mut env = Vec::new();
+        for (slot, offset) in unit.slots.iter().zip(&unit.offsets) {
+            if matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
+                #[cfg(test)]
+                let (base, offset) = if is_root
+                    && slot.kind == AbiSlotKind::Parameter
+                    && PROCESS_SLOT_MUTATION.with(std::cell::Cell::get)
+                        == ProcessSlotMutation::RecoverFromHostContext
+                {
+                    let offset = match slot.ordinal {
+                        0 => crate::boundary_activation::ROOT_INGRESS_PROCESS_INPUT,
+                        1 => crate::boundary_activation::ROOT_INGRESS_CAPABILITY,
+                        _ => {
+                            return Err(backend_module(
+                                "the process-root mutation found an unknown parameter role"
+                                    .to_string(),
+                            ));
+                        }
+                    };
+                    (host_dispatch_context, offset)
+                } else {
+                    (
+                        slots,
+                        i32::try_from(*offset).map_err(|_| {
+                            backend_module(
+                                "abi input slot offset exceeds addressable range".to_string(),
+                            )
+                        })?,
+                    )
+                };
+                #[cfg(not(test))]
+                let (base, offset) = (
+                    slots,
+                    i32::try_from(*offset).map_err(|_| {
+                        backend_module("abi input slot offset exceeds addressable range".to_string())
+                    })?,
+                );
+                let word = builder.ins().load(
+                    types::I64,
+                    MemFlags::trusted(),
+                    base,
+                    offset,
+                );
+                env.push(LoweringOperand::Carried(CarriedBoundaryWord { word }));
+            }
+        }
+        // The in-process validation API historically stages one ground
+        // `RuntimeValue` as the root environment.  It is compile-time material,
+        // not launch ingress and not a generated-call transfer, so it does not
+        // acquire an ABI slot.  The value is lowered exactly once inside the
+        // selected root unit; descendants can receive it only through their
+        // ordinary declared captures.
+        if is_root {
+            if let Some(value) = staged_root_value {
+                env.push(LoweringOperand::Specialized(
+                    compiler.lower_value(&mut builder, value)?,
+                ));
+            }
+        }
+        if is_root {
+            compiler.root_terminal_authority =
+                compiler.take_distinguished_root_answer_authority()?;
+        }
+        // The explicit root *entry* selects the unit, but a root
+        // `ComputationalMatch` deliberately schedules its scrutinee while its
+        // source record belongs to the distinct root occurrence.  Body
+        // selection therefore uses the recorded occurrence only after the
+        // unmintable entry has selected the descriptor.
+        let body_origin = if is_root {
+            compiler.static_transition_plan.root_static_origin()?
+        } else {
+            unit.origin
+        };
+        let body = compiler.retained_body_occurrence(body_origin)?;
+        compiler.select_terminal_result_origins(body_origin, body.expr)?;
+        let lowered = compiler.lower_expr(&mut builder, body, &env)?;
+        let (result, outcome) = if is_root {
+            match lowered {
+                LoweringOperand::Carried(word) if !compiler.process_object => (
+                    word.word,
+                    Some(RootUnitResult {
+                        decoder: Some(ResultDecoder::Boundary),
+                        trap: None,
+                    }),
+                ),
+                LoweringOperand::Carried(word) => {
+                    let tag = builder.ins().band_imm(
+                        word.word,
+                        crate::boundary_value::BOUNDARY_TAG_MASK as i64,
+                    );
+                    Lowering::require_i64(
+                        &mut builder,
+                        tag,
+                        BoundaryTag::ImmediateExitStatus as i64,
+                    );
+                    let status = compiler.emit_carrier_scalar(&mut builder, word)?;
+                    (
+                        status,
+                        Some(RootUnitResult {
+                            decoder: Some(ResultDecoder::ProcessStatus),
+                            trap: None,
+                        }),
+                    )
+                }
+                LoweringOperand::Specialized(Lowered::Trap(trap)) => {
+                    #[cfg(test)]
+                    if compiler.process_object {
+                        px8tr_record_trap_provenance(
+                            Px8trTrapProvenanceEvent::FinalProcessObjectTrap {
+                                trap: trap.clone(),
+                            },
+                        );
+                    }
+                    let status = builder.ins().iconst(
+                        types::I64,
+                        if compiler.process_object { -4 } else { 0 },
+                    );
+                    (
+                        status,
+                        Some(RootUnitResult {
+                            decoder: None,
+                            trap: Some(trap),
+                        }),
+                    )
+                }
+                LoweringOperand::Specialized(value) => {
+                    let (token, decoder) = compiler.emit_result(&mut builder, value)?;
+                    (
+                        token,
+                        Some(RootUnitResult {
+                            decoder: Some(decoder),
+                            trap: None,
+                        }),
+                    )
+                }
+            }
+        } else {
+            let word = match lowered {
+                LoweringOperand::Carried(word) => word.word,
+                LoweringOperand::Specialized(value) => compiler
+                    .transfer_unit_result_into_carrier(&mut builder, unit.origin, &value)?
+                    .word,
+            };
+            (word, None)
+        };
+        root_outcome = outcome;
+        builder.ins().store(
+            MemFlags::trusted(),
+            result,
+            slots,
             i32::try_from(result_offset).map_err(|_| {
                 backend_module("abi result slot offset exceeds addressable range".to_string())
             })?,
@@ -448,5 +898,5 @@ fn define_unit_body<M: Module>(
         let (declared, defined) = cell.get();
         cell.set((declared, defined + 1));
     });
-    Ok(())
+    Ok(root_outcome)
 }

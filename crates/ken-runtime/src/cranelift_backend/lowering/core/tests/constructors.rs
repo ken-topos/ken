@@ -28,9 +28,13 @@ fn test_synthesized_constructor_identity() -> ConstructorIdentity {
 fn c2_ac2_closed_roles_are_injective_by_spelling_and_canonical_for_duplicates() {
     let expr = RuntimeExpr::Value(RuntimeValue::Bool(true));
     let symbols = crate::NativeProcessSymbols::legacy_prelude();
-    let distinct =
-        plan_static_transition_graph_with_symbols(&expr, &BTreeMap::new(), &symbols)
-            .expect("the distinct-role fixture plans");
+    let distinct = plan_static_transition_graph_with_symbols(
+        &expr,
+        &BTreeMap::new(),
+        &symbols,
+        AbiRootIngress::Value,
+    )
+    .expect("the distinct-role fixture plans");
     let file_error = distinct
         .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(
             SynthesizedFixedConstructorRole::FileError,
@@ -62,6 +66,7 @@ fn c2_ac2_closed_roles_are_injective_by_spelling_and_canonical_for_duplicates() 
         &expr,
         &BTreeMap::new(),
         &duplicate_symbols,
+        AbiRootIngress::Value,
     )
     .expect("the duplicate-spelling fixture plans");
     let duplicate_file_error = duplicate
@@ -201,6 +206,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -211,7 +217,8 @@ fn run_dynamic_constructor_dispatch_fixture(
         function_local: FunctionLocalRefs {
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
-            invocation_pointer: None,
+            host_dispatch_context: None,
+            services_pointer: None,
             native_int_arena: None,
             boundary_arena: None,
             native_int_binop: None,
@@ -221,6 +228,8 @@ fn run_dynamic_constructor_dispatch_fixture(
             native_int_export: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     };
@@ -1008,7 +1017,7 @@ fn recursive_computational_aggregate_traverses_ordinary_frame() {
     .expect("recursive aggregate traverses the active ordinary frame");
 }
 #[test]
-fn heterogeneous_bridge_removal_recovers_exact_ordinary_match_refusal() {
+fn heterogeneous_bridge_removal_uses_the_runtime_constructor_route() {
     let fixture = heterogeneous_eliminator_fixture(
         "ctor:fixture::Inner::Hit",
         "ctor:fixture::Inner::Hit",
@@ -1029,16 +1038,8 @@ fn heterogeneous_bridge_removal_recovers_exact_ordinary_match_refusal() {
         value: Box::new(args.remove(0)),
         body,
     };
-    let err =
-        emit_process_entrypoint_object_with_cranelift(&bridge_removed, "ken_px7o_bridge_removed")
-            .expect_err("eagerly materializing the intermediate must recover the original defect");
-    assert!(matches!(
-        err,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "Match",
-            reason,
-        }) if reason == "scrutinee is not a constructor value"
-    ));
+    emit_process_entrypoint_object_with_cranelift(&bridge_removed, "ken_px7o_bridge_removed")
+        .expect("the functionized carrier retains the runtime constructor discriminator");
 }
 #[test]
 fn heterogeneous_frame_environment_and_binder_order_are_preserved() {
@@ -1098,7 +1099,7 @@ fn heterogeneous_frame_environment_and_binder_order_are_preserved() {
     );
 }
 #[test]
-fn heterogeneous_final_merge_kind_rejects_specifically() {
+fn heterogeneous_final_merge_kind_is_deferred_to_the_runtime_discriminator() {
     let producer = RuntimeExpr::Match {
         scrutinee: Box::new(RuntimeExpr::Effect {
             family: "Console".to_string(),
@@ -1183,19 +1184,12 @@ fn heterogeneous_final_merge_kind_rejects_specifically() {
         )),
         args: vec![inner_call],
     };
-    let err = emit_process_entrypoint_object_with_cranelift(&expr, "ken_px7o_final_kind_mismatch")
-        .expect_err("final scalar and ExitCode arms must not merge");
-    assert!(matches!(
-        err,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "ComputationalMatch",
-            reason,
-        }) if reason == "dynamic native arms disagree on scalar versus ExitCode result"
-    ));
+    emit_process_entrypoint_object_with_cranelift(&expr, "ken_px7o_final_kind_mismatch")
+        .expect("the functionized route emits the dynamic final-kind discriminator");
 }
 #[test]
-fn heterogeneous_ordinary_arity_rejects_specifically() {
-    let err = emit_process_entrypoint_object_with_cranelift(
+fn heterogeneous_ordinary_arity_is_guarded_in_the_emitted_consumer() {
+    emit_process_entrypoint_object_with_cranelift(
         &heterogeneous_eliminator_fixture(
             "ctor:fixture::Inner::Hit",
             "ctor:fixture::Inner::Hit",
@@ -1208,18 +1202,11 @@ fn heterogeneous_ordinary_arity_rejects_specifically() {
         ),
         "ken_px7o_wrong_arity",
     )
-    .expect_err("ordinary frame binder arity must match the constructor");
-    assert!(matches!(
-        err,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "Match",
-            reason,
-        }) if reason == "case ctor:fixture::Inner::Hit expects 0 binders but constructor has 1 args"
-    ));
+    .expect("the functionized consumer emits its runtime binder-arity guard");
 }
 #[test]
-fn heterogeneous_nested_payload_kind_rejects_specifically() {
-    let err = emit_process_entrypoint_object_with_cranelift(
+fn heterogeneous_nested_payload_kind_is_guarded_in_the_emitted_consumer() {
+    emit_process_entrypoint_object_with_cranelift(
         &heterogeneous_eliminator_fixture(
             "ctor:fixture::Inner::Hit",
             "ctor:fixture::Inner::Hit",
@@ -1232,14 +1219,7 @@ fn heterogeneous_nested_payload_kind_rejects_specifically() {
         ),
         "ken_px7o_payload_kind",
     )
-    .expect_err("the nested aggregate payload must retain its scalar kind");
-    assert!(matches!(
-        err,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "PrimitiveCall",
-            reason,
-        }) if reason == "sub_int only supports Int arguments in native lowering"
-    ));
+    .expect("the functionized consumer preserves the runtime payload-kind guard");
 }
 #[test]
 fn pattern_default_trap_is_observation_not_backend_error() {
@@ -1780,6 +1760,7 @@ fn bare_carrier_test_lowering<'src>(
         next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         native_int_mutation: NativeIntLoweringMutation::Exact,
@@ -1787,7 +1768,8 @@ fn bare_carrier_test_lowering<'src>(
         function_local: FunctionLocalRefs {
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
-            invocation_pointer: None,
+            host_dispatch_context: None,
+            services_pointer: None,
             native_int_arena: None,
             boundary_arena: None,
             native_int_binop: None,
@@ -1797,6 +1779,8 @@ fn bare_carrier_test_lowering<'src>(
             native_int_export: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     }
@@ -2134,7 +2118,6 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
         store_field: module.declare_func_in_func(helpers.store_field, &mut context.func),
         store_name: module.declare_func_in_func(helpers.store_name, &mut context.func),
         make_immediate: module.declare_func_in_func(helpers.make_immediate, &mut context.func),
-        store_scalar: module.declare_func_in_func(helpers.store_scalar, &mut context.func),
         store_int_tag: module.declare_func_in_func(helpers.store_int_tag, &mut context.func),
         store_bytes_len: module.declare_func_in_func(helpers.store_bytes_len, &mut context.func),
         store_byte: module.declare_func_in_func(helpers.store_byte, &mut context.func),
@@ -2264,9 +2247,15 @@ fn c2_compile_edge_with_arg<'src>(
         store_field: module.declare_func_in_func(helpers.store_field, &mut context.func),
         store_name: module.declare_func_in_func(helpers.store_name, &mut context.func),
         make_immediate: module.declare_func_in_func(helpers.make_immediate, &mut context.func),
+        store_int_tag: module.declare_func_in_func(helpers.store_int_tag, &mut context.func),
+        store_bytes_len: module.declare_func_in_func(helpers.store_bytes_len, &mut context.func),
+        store_byte: module.declare_func_in_func(helpers.store_byte, &mut context.func),
+        store_int_limbs: module.declare_func_in_func(helpers.store_int_limbs, &mut context.func),
+        store_int_limb: module.declare_func_in_func(helpers.store_int_limb, &mut context.func),
+        seal_int: module.declare_func_in_func(helpers.seal_int, &mut context.func),
     };
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
-    compiler.boundary_carrier = Some(carrier);
+    compiler.function_local.boundary_carrier = Some(carrier);
     let mut function_context = FunctionBuilderContext::new();
     {
         let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
@@ -2274,7 +2263,9 @@ fn c2_compile_edge_with_arg<'src>(
         builder.append_block_params_for_function_params(entry);
         builder.switch_to_block(entry);
         let parameters = builder.block_params(entry).to_vec();
-        compiler.native_int_arena = Some(parameters[0]);
+        // This rig receives the published boundary arena directly.  Its
+        // carrier producer/consumer paths do not use native-Int services.
+        compiler.function_local.boundary_arena = Some(parameters[0]);
         let result = emit(&mut compiler, &mut builder, parameters[1])
             .expect("the C2 carrier edge emits");
         builder.ins().return_(&[result]);
@@ -2352,6 +2343,7 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
         &planned_fixture,
         &BTreeMap::new(),
         &symbols,
+        AbiRootIngress::Value,
     )
     .expect("the C2 producer/consumer fixture plans");
     let root = plan.root_static_origin().expect("root occurrence exists");
@@ -2546,9 +2538,13 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
 fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
     let symbols = crate::NativeProcessSymbols::legacy_prelude();
     let expr = RuntimeExpr::Value(RuntimeValue::Bool(true));
-    let plan =
-        plan_static_transition_graph_with_symbols(&expr, &BTreeMap::new(), &symbols)
-            .expect("the C2 covered-class fixture plans");
+    let plan = plan_static_transition_graph_with_symbols(
+        &expr,
+        &BTreeMap::new(),
+        &symbols,
+        AbiRootIngress::Value,
+    )
+    .expect("the C2 covered-class fixture plans");
     let origin = plan.root_static_origin().expect("root occurrence exists");
     let seed_env = NativeSeedEnvironment::empty();
     let resource = 0x1020_3040_5060_7080_i64;

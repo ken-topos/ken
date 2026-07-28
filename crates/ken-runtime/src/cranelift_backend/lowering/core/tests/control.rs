@@ -63,6 +63,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: true,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -73,7 +74,8 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         function_local: FunctionLocalRefs {
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
-            invocation_pointer: None,
+            host_dispatch_context: None,
+            services_pointer: None,
             native_int_arena: None,
             boundary_arena: None,
             native_int_binop: None,
@@ -83,6 +85,8 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
             native_int_export: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     }
@@ -158,6 +162,7 @@ fn run_px8j_malformed_recursor_consumer(
         next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -168,7 +173,8 @@ fn run_px8j_malformed_recursor_consumer(
         function_local: FunctionLocalRefs {
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
-            invocation_pointer: None,
+            host_dispatch_context: None,
+            services_pointer: None,
             native_int_arena: None,
             boundary_arena: None,
             native_int_binop: None,
@@ -178,6 +184,8 @@ fn run_px8j_malformed_recursor_consumer(
             native_int_export: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     };
@@ -1211,6 +1219,7 @@ fn oriented_five_control_invocation() -> RecursorInvocationSegment {
     }
     invocation
 }
+
 #[test]
 fn px8j_owned_scope_deletion_fails_closed_before_another_frame_is_emitted() {
     let expression = host_result_closure_match(px8j_layered_recursive_result(1, 1));
@@ -1334,7 +1343,27 @@ fn px8j_all_three_producer_paths_reach_real_consumers() {
         )));
     }
 
-    let deferred = host_result_closure_match(px8j_deferred_recursive_field_fixture());
+    let deferred = RuntimeExpr::Match {
+        scrutinee: Box::new(px8j_deferred_recursive_field_fixture()),
+        cases: [
+            "ctor:prelude::Result::Err",
+            "ctor:prelude::Result::Ok",
+        ]
+        .into_iter()
+        .map(|constructor| RuntimeMatchCase {
+            constructor: constructor.to_string(),
+            binders: 1,
+            body: RuntimeExpr::Construct {
+                constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                args: Vec::new(),
+            },
+        })
+        .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "direct deferred HostResult default".to_string(),
+        },
+    };
     let (result, trace) =
         px8j_capture_source_trace(&deferred, false, "ken_px8j_live_deferred_path");
     result.expect("the deferred-constructor producer path lowers");
@@ -2011,6 +2040,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -2021,7 +2051,8 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         function_local: FunctionLocalRefs {
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
-            invocation_pointer: None,
+            host_dispatch_context: None,
+            services_pointer: None,
             native_int_arena: None,
             boundary_arena: None,
             native_int_binop: None,
@@ -2031,6 +2062,8 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
             native_int_export: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     };
@@ -3471,9 +3504,10 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
         Census {
             file: "lowering/core.rs",
             source: include_str!("../../core.rs"),
-            // N1: exactly one root `FunctionBuilder::new` and one root
-            // `define_function`. The two declarations are the entry point and
-            // the IMPORTED host-dispatch symbol -- an import, not a definition.
+            // The selected recursive-descent root still lives here, but its
+            // builder and definition are now part of the closed selector arm
+            // in this file. The textual census sees that one arm; the
+            // functionized root adapter and unit body are in `units.rs`.
             builders: 1,
             definitions: 1,
             declarations: 2,
@@ -3536,8 +3570,10 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
         Census {
             file: "lowering/units.rs",
             source: include_str!("../../units.rs"),
-            builders: 1,
-            definitions: 1,
+            // One builder/definition for the public root adapter and one
+            // builder/definition site for the loop-defined internal units.
+            builders: 2,
+            definitions: 2,
             declarations: 1,
             data_declarations: 0,
             data_definitions: 0,
@@ -3837,12 +3873,14 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
             // because `static_transition.rs` may not name `SemanticOwner` at all.
             "pub(in crate::cranelift_backend) fn caller(self) -> PredeclaredFunctionId {",
             "pub(in crate::cranelift_backend) fn callee(self) -> PredeclaredFunctionId {",
+            "pub(in crate::cranelift_backend) fn callee_origin(self) -> StaticOriginId {",
             "pub(in crate::cranelift_backend) fn function(self) -> PredeclaredFunctionId {",
             "pub(in crate::cranelift_backend) fn origin(self) -> StaticOriginId {",
             "pub(in crate::cranelift_backend) fn definition(self) -> AbiUnitDefinition {",
             "pub(in crate::cranelift_backend) fn header(self) -> AbiFrameHeader {",
             "pub(in crate::cranelift_backend) fn slots(self) -> &'plan [AbiSlot] {",
             "pub(in crate::cranelift_backend) fn slot_offsets(",
+            "pub(in crate::cranelift_backend) fn process_parameter_slot(",
             // ⭐ `RT-FNSPLIT-B2A-S` `AC-4`'s own **behavioural** instrument,
             // added deliberately and argued rather than bumped. These three are
             // the counters behind
@@ -3913,6 +3951,7 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
             // consult `TransitionKind::ClosureBody`, which is a body's return
             // successor and not a unit head.
             "pub(in crate::cranelift_backend) fn emittable_call_edges(",
+            "pub(in crate::cranelift_backend) fn root_emittable_unit(",
             "pub(in crate::cranelift_backend) fn emittable_units(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(",
             "pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'src>(",
@@ -4021,14 +4060,15 @@ const LOWERING_IMPL_SOURCES: &[(&str, &str)] = &[
     ("lowering/mod.rs", include_str!("../../mod.rs")),
 ];
 
-/// Is the retained-body helper still declared private to module `core`?
+/// Is the retained-body helper exposed only to the `lowering` parent and its
+/// children?
 ///
-/// Matched as the exact unqualified form, so **any** visibility qualifier is a
-/// miss. That is intentional and is not a spelling list: the property is "no
-/// qualifier at all", which has exactly one spelling.
-fn retained_body_helper_is_private(core: &str) -> bool {
+/// `B2F` deliberately moved unit emission into sibling `units.rs`, so the
+/// narrow `pub(super)` qualifier is now required. Any wider qualifier remains
+/// a review-visible change.
+fn retained_body_helper_has_lowering_only_visibility(core: &str) -> bool {
     core.lines()
-        .any(|line| line.trim() == "fn retained_body_occurrence(")
+        .any(|line| line.trim() == "pub(super) fn retained_body_occurrence(")
 }
 
 /// **`RT-FNSPLIT-B2O` `AC-12` split row — the DECLARATION survives, the
@@ -4038,8 +4078,7 @@ fn retained_body_helper_is_private(core: &str) -> bool {
 /// the point of it:
 ///
 /// - **MEASURED:** `retained_body_occurrence` is declared in `lowering/core.rs`
-///   with **no visibility qualifier**. Source text is authoritative for its own
-///   declarations, so this is a fact the scan can settle.
+///   with the narrow `pub(super)` visibility needed by sibling `units.rs`.
 /// - **CLAIMED:** exactly that, and nothing further.
 /// - **THE GAP:** ⛔ this does **not** establish which functions can *reach* the
 ///   helper. The withdrawn oracle made that inference — *"`mod.rs` therefore
@@ -4054,23 +4093,20 @@ fn retained_body_helper_is_private(core: &str) -> bool {
 /// when one is added; see `b2o_ac10c_repointing_a_static_body_edge_changes_the_
 /// disposition` for the axis that *is* authority.
 ///
-/// Promise class: **normative compatibility vector** — the unqualified spelling
-/// is the contract, and widening it is a deliberate review event.
+/// Promise class: **normative compatibility vector** — `pub(super)` is the
+/// contract, and widening it further is a deliberate review event.
 #[test]
-fn the_retained_body_helper_carries_no_visibility_qualifier() {
+fn the_retained_body_helper_is_visible_only_inside_lowering() {
     let core = LOWERING_IMPL_SOURCES
         .iter()
         .find(|(file, _)| *file == "lowering/core.rs")
         .map(|(_, source)| *source)
         .expect("the impl-source list must carry core.rs");
     assert!(
-        retained_body_helper_is_private(core),
-        "`retained_body_occurrence` no longer declares as the exact unqualified \
-         form in `lowering/core.rs`.\n\
-         ⛔ DO NOT 'fix' this by accepting the new spelling -- that is the \
-         evasion this WP paid five review folds to learn. A visibility \
-         qualifier here is a DELIBERATE widening and belongs in review, with \
-         the frozen evidence in the D6 report updated to match.\n\
+        retained_body_helper_has_lowering_only_visibility(core),
+        "`retained_body_occurrence` no longer declares with the exact narrow \
+         `pub(super)` visibility in `lowering/core.rs`.\n\
+         A wider qualifier is a DELIBERATE widening and belongs in review.\n\
          ⚠ This pin makes NO claim about who can reach the helper; that is the \
          plan graph's to answer, not this file's."
     );
@@ -4080,7 +4116,7 @@ fn the_retained_body_helper_carries_no_visibility_qualifier() {
     // written, never who can call it.
     let declaring = LOWERING_IMPL_SOURCES
         .iter()
-        .filter(|(_, source)| retained_body_helper_is_private(source))
+        .filter(|(_, source)| retained_body_helper_has_lowering_only_visibility(source))
         .map(|(file, _)| *file)
         .collect::<Vec<_>>();
     assert_eq!(
@@ -4734,10 +4770,13 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
     // not a frozen count. `tokens` and `definitions` each move for a stated
     // reason; `calls` is their difference.
     let core = include_str!("../../core.rs");
-    let tokens = identifier_occurrences(core, "lower_expr");
+    let units = include_str!("../../units.rs");
+    let tokens = identifier_occurrences(core, "lower_expr")
+        + identifier_occurrences(units, "lower_expr");
     let definitions = core
         .lines()
-        .filter(|line| line.trim() == "fn lower_expr(")
+        .chain(units.lines())
+        .filter(|line| line.trim_end().ends_with("fn lower_expr("))
         .count();
     assert_eq!(
         definitions, 1,
@@ -4763,7 +4802,7 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
     // `StaticBody` edge is introduced, and no retained body is reached by a new
     // path.
     assert_eq!(
-        calls, 62,
+        calls, 65,
         "D6: the tokenized production call population into `lower_expr` moved. \
          ⚠ If you reached this by counting `self.lower_expr(` you will have got \
          one fewer -- the root call at `core.rs:188` is spelled \
@@ -4774,8 +4813,8 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
     // spelling, or the paragraph above is describing something the pin cannot
     // measure.
     assert!(
-        core.contains("compiler.lower_expr("),
-        "D6: the root call's spelling is gone, so this census no longer \
+        units.contains("compiler.lower_expr("),
+        "D6: the functionized root call's spelling is gone, so this census no longer \
          distinguishes the entry point from traversal"
     );
 
@@ -4808,6 +4847,110 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
         core.contains("#[cfg(test)]"),
         "the caveat above describes inline cfg(test) regions that are no longer \
          present, so it has gone stale and must be re-derived"
+    );
+}
+
+#[test]
+fn the_body_authority_selector_is_closed_static_and_chosen_from_source_shape() {
+    let declarations = BTreeMap::new();
+    assert_eq!(
+        select_body_emission_authority(
+            &RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            &declarations,
+        ),
+        BodyEmissionAuthority::FunctionizedUnits
+    );
+
+    let recursive = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::selector::Node".to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+        }),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::selector::Node".to_string(),
+            argument_binders: 1,
+            recursive_positions: vec![0],
+            body: RuntimeExpr::Var(0),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "selector fixture default".to_string(),
+        },
+    };
+    assert_eq!(
+        select_body_emission_authority(&recursive, &declarations),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+
+    let producer_match = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::selector::Wrap".to_string(),
+                    args: Vec::new(),
+                }),
+            }),
+            args: Vec::new(),
+        }),
+        cases: Vec::new(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "selector producer default".to_string(),
+        },
+    };
+    assert_eq!(
+        select_body_emission_authority(&producer_match, &declarations),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+    assert_eq!(
+        select_body_emission_authority(
+            &RuntimeExpr::Trap(RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message: "selector trap fixture".to_string(),
+            }),
+            &declarations,
+        ),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+    let seed_closure_call = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Closure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    assert_eq!(
+        select_body_emission_authority(&seed_closure_call, &declarations),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+}
+
+#[test]
+fn every_generated_root_and_unit_signature_is_two_pointers_to_one_word() {
+    let module = new_jit_module().expect("JIT module");
+    let signature = crate::cranelift_backend::lowering::units::unit_signature(&module);
+    let pointer = module.target_config().pointer_type();
+    assert_eq!(signature.params.len(), 2);
+    assert!(
+        signature
+            .params
+            .iter()
+            .all(|parameter| parameter.value_type == pointer)
+    );
+    assert_eq!(signature.returns.len(), 1);
+    assert_eq!(signature.returns[0].value_type, types::I64);
+
+    let units = include_str!("../../units.rs");
+    assert!(
+        units.contains("let sig = unit_signature(module);"),
+        "the adapter or unit definitions stopped sharing the closed signature"
+    );
+    assert!(
+        !units.contains("GeneratedRootIngressV1"),
+        "a launch-ingress type entered the internal unit implementation"
     );
 }
 
@@ -7225,7 +7368,14 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
         // from a direct application.
         RuntimeExpr::Let {
             value: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
-            body: Box::new(nullary_closure(RuntimeExpr::Var(0))),
+            body: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::Var(0)],
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Var(0)),
+                }),
+                args: Vec::new(),
+            }),
         },
         // ⭐⭐ **The PRODUCER-CONTEXT cell.** `lower_expr`'s `Match` arm routes
         // its scrutinee through `lower_computational_producer_expr` when the
@@ -7729,7 +7879,7 @@ fn a_seed_capture_borrows_from_artifact_static_storage_rather_than_folding() {
 /// the two worlds** — it is not evidence that `D6` will produce that reading by
 /// this mechanism, and the `THE GAP` paragraph above is what governs that.
 #[test]
-fn a_retained_body_is_relowered_once_per_call_site_until_d6() {
+fn a_retained_body_is_defined_once_even_when_called_twice() {
     fn resolutions(expr: &RuntimeExpr) -> usize {
         crate::cranelift_backend::planning::ac4_open_route_window();
         ac11_compiles(expr).expect("fixture compiles");
@@ -7781,17 +7931,11 @@ fn a_retained_body_is_relowered_once_per_call_site_until_d6() {
     );
     assert_eq!(
         twice,
-        once + 1,
-        "AC-6 -- TRANSITION SENTINEL, and read the direction before touching it. \
-         One retained closure occurrence applied twice performed {twice} \
-         origin->expression resolutions against {once} when applied once. \
-         \n\nIf twice == once + 1 was expected and you got twice == once, D6 HAS \
-         LANDED: the recursive-descent inliner is gone and the body is now \
-         emitted once into its own unit. That is the intended retirement -- \
-         change this to assert_eq!(twice, once), relabel it a durable \
-         invariant, and re-check that a resolution still stands for an emission \
-         under the new descent (it is not claimed to). \
-         \n\nAny other pair means neither reading holds and the descent has \
-         changed in a way nobody described."
+        once,
+        "AC-6 -- one retained closure occurrence applied twice performed \
+         {twice} origin->expression resolutions against {once} when applied \
+         once. The selected functionized authority must define that retained \
+         body once; a second call may add a call edge, never a second body \
+         resolution."
     );
 }

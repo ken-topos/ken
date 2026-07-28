@@ -34,6 +34,7 @@ pub(super) enum ResultDecoder {
     Int,
     ProcessStatus,
     Bool,
+    Boundary,
     Table,
 }
 
@@ -83,23 +84,63 @@ impl CompiledModule<JITModule> {
         let code = self.module.get_finalized_function(self.func_id);
         // Named native-code-execution boundary. This is tested/validated JIT
         // execution, never a proof and never a host-ABI syscall boundary.
-        let mut native_int_arena = crate::NativeIntArenaV1::default();
+        let mut store = crate::boundary_value::BoundaryValueStore::default();
+        let binding = crate::boundary_activation::BoundaryStoreBindingV1::open(
+            &mut store,
+            crate::boundary_resource_profile::starter_smoke_profile(),
+        );
+        let activation = crate::boundary_activation::BoundaryActivationV1::begin(&binding);
         let process_root = process_root
-            .unwrap_or_else(|| (&mut native_int_arena as *mut crate::NativeIntArenaV1).cast());
-        let native =
-            unsafe { mem::transmute::<_, extern "C" fn(*const std::ffi::c_void) -> i64>(code) };
-        let token = native(process_root);
+            .or_else(|| activation.native_frame_ptr())
+            .ok_or_else(|| {
+                backend_module("activation did not publish a launch pointer".to_string())
+            })?;
+        let services = activation
+            .services_ptr()
+            .ok_or_else(|| {
+                backend_module("activation did not publish its services".to_string())
+            })?;
+        let native = unsafe {
+            mem::transmute::<
+                _,
+                extern "C" fn(
+                    *const std::ffi::c_void,
+                    *const std::ffi::c_void,
+                ) -> i64,
+            >(code)
+        };
+        let token = native(process_root, services);
         let decoder = self
             .decoder
             .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?;
         let ground = match decoder {
             ResultDecoder::Int => RuntimeGroundValue::Int(
-                native_int_arena
+                activation
+                    .native_int_arena()
                     .decode_final_export()
                     .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?,
             ),
             ResultDecoder::ProcessStatus => RuntimeGroundValue::Int(token.into()),
             ResultDecoder::Bool => RuntimeGroundValue::Bool(token != 0),
+            ResultDecoder::Boundary => match crate::boundary_value::BoundaryWord(token as u64)
+                .tag()
+            {
+                Some(crate::boundary_value::BoundaryTag::ImmediateBool) => {
+                    RuntimeGroundValue::Bool(
+                        crate::boundary_value::BoundaryWord(token as u64).payload() != 0,
+                    )
+                }
+                Some(crate::boundary_value::BoundaryTag::ImmediateInt) => {
+                    RuntimeGroundValue::Int(
+                        crate::boundary_value::BoundaryWord(token as u64)
+                            .signed_payload()
+                            .into(),
+                    )
+                }
+                _ => {
+                    return Err(backend(BackendFailure::NativeResultDecode { token }));
+                }
+            },
             ResultDecoder::Table => self
                 .result_table
                 .get(&token)

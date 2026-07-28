@@ -72,9 +72,10 @@ pub(in crate::cranelift_backend) use super::compiled::{CompiledModule, ResultDec
 pub(in crate::cranelift_backend) use super::planning::{
     collect_checked_oriented_markers, collect_checked_subcontinuation_frames,
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
-    AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiSlot, AbiSlotKind,
-    AbiStorageOwner, AbiUnitDefinition, CheckedOrientedMarkerSets, ConstructorIdentity,
-    EmittableUnit, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
+    AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
+    AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
+    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableUnit, PredeclaredFunctionId,
+    StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
@@ -381,7 +382,7 @@ impl OwnedSourceOccurrence {
 /// | field kind | what it is | moving it to another function |
 /// |---|---|---|
 /// | `FuncRef`s, `SeedMaterialRefs`' `GlobalValue`s, `BoundaryCarrierRefs` | an identity **resolved into** a function | ⚠ must be **re-resolved** — the identity survives, the handle does not |
-/// | `invocation_pointer`, `native_int_arena` | a **result of this function's own dataflow** | ⛔ must be **re-derived** — there is no identity to re-resolve |
+/// | `host_dispatch_context`, `native_int_arena` | a **result of this function's own dataflow** | ⛔ must be **re-derived** — there is no identity to re-resolve |
 /// | `native_int_tags` | a map **keyed on `ir::Value`** | ⛔⛔ **silently aliases** |
 ///
 /// ⭐ **The `native_int_tags` row is the dangerous one, and it is why this
@@ -459,7 +460,8 @@ impl ArtifactHelpers<'_> {
                 .map(|id| module.declare_func_in_func(id, func)),
             // ⛔ Dataflow results, not identities: `None` here is correct, and
             // each function derives its own from its entry block.
-            invocation_pointer: None,
+            host_dispatch_context: None,
+            services_pointer: None,
             native_int_arena: None,
             // ⛔ Sourced by the activation-services record, which the `S6`/`D6`
             // reland introduces. Fail closed until then.
@@ -477,6 +479,8 @@ impl ArtifactHelpers<'_> {
             // alias across functions; starting it empty per function is why the
             // two structs are separate types rather than one with a `reset()`.
             native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
             boundary_carrier: Some(BoundaryCarrierRefs {
                 class: module.declare_func_in_func(self.boundary_value_abi.class, func),
                 tag: module.declare_func_in_func(self.boundary_value_abi.tag, func),
@@ -484,7 +488,6 @@ impl ArtifactHelpers<'_> {
                 field: module.declare_func_in_func(self.boundary_value_abi.field, func),
                 record_field: module
                     .declare_func_in_func(self.boundary_value_abi.record_field, func),
-                #[cfg(test)]
                 scalar: module.declare_func_in_func(self.boundary_value_abi.scalar, func),
                 host_success: module
                     .declare_func_in_func(self.boundary_value_abi.host_success, func),
@@ -527,7 +530,8 @@ struct FunctionLocalRefs {
     /// `D3` removes).
     seed_material: seed_material::SeedMaterialRefs,
     host_dispatch: Option<FuncRef>,
-    invocation_pointer: Option<cranelift_codegen::ir::Value>,
+    host_dispatch_context: Option<cranelift_codegen::ir::Value>,
+    services_pointer: Option<cranelift_codegen::ir::Value>,
     native_int_arena: Option<cranelift_codegen::ir::Value>,
     /// ⭐ **The BOUNDARY arena, and it is a different pointer from
     /// [`Self::native_int_arena`]** — Architect ruling via `evt_e300y2kjeb6k`.
@@ -559,6 +563,60 @@ struct FunctionLocalRefs {
     /// the inert threading the node forbids: present, plausible, and never
     /// reaching an emitted call.
     boundary_carrier: Option<BoundaryCarrierRefs>,
+    unit_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    /// Source occurrences reached only through the current unit's result
+    /// position. Process-exit constructors are normalized only at these
+    /// occurrences, never merely because an exit-shaped value appears nested.
+    terminal_result_origins: BTreeSet<StaticOriginId>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BodyEmissionAuthority {
+    RecursiveDescent,
+    FunctionizedUnits,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HostContextPropagationMutation {
+    Exact,
+    ServicesPointer,
+    NativeIntArena,
+    BoundaryArena,
+    Null,
+    LaunchIngress,
+}
+
+#[cfg(test)]
+thread_local! {
+    static HOST_CONTEXT_PROPAGATION_MUTATION:
+        std::cell::Cell<HostContextPropagationMutation> =
+        const { std::cell::Cell::new(HostContextPropagationMutation::Exact) };
+}
+
+#[cfg(test)]
+fn set_host_context_propagation_mutation(mutation: HostContextPropagationMutation) {
+    HOST_CONTEXT_PROPAGATION_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProcessSlotMutation {
+    Exact,
+    DeleteProcessInput,
+    DeleteCapability,
+    RecoverFromHostContext,
+}
+
+#[cfg(test)]
+thread_local! {
+    static PROCESS_SLOT_MUTATION: std::cell::Cell<ProcessSlotMutation> =
+        const { std::cell::Cell::new(ProcessSlotMutation::Exact) };
+}
+
+#[cfg(test)]
+fn set_process_slot_mutation(mutation: ProcessSlotMutation) {
+    PROCESS_SLOT_MUTATION.with(|cell| cell.set(mutation));
 }
 
 struct Lowering<'a> {
@@ -649,6 +707,7 @@ struct Lowering<'a> {
     next_dynamic_splice_edge: u64,
     assumptions: BTreeSet<String>,
     unsupported: Vec<String>,
+    body_emission_authority: BodyEmissionAuthority,
     process_object: bool,
     process_symbols: crate::NativeProcessSymbols,
     #[cfg(test)]
@@ -902,9 +961,7 @@ struct BoundaryCarrierRefs {
     /// `(arena, word, name_id, out) -> status` — `Project` by artifact-static
     /// field identity.
     record_field: FuncRef,
-    /// Test observation seam for the inline payload of a represented token or
-    /// borrowed response. Production carries these values opaquely.
-    #[cfg(test)]
+    /// Runtime scalar extraction for statically scalar consumer positions.
     scalar: FuncRef,
     /// HostResult runtime discriminant and selected payload.
     host_success: FuncRef,
@@ -1210,6 +1267,236 @@ impl<'a> Lowering<'a> {
         self.emit_carrier_transfer(builder, origin, value)
     }
 
+    /// Transfer the terminal value returned by one declared generated unit.
+    ///
+    /// Process exit constructors are the one result-edge representation that
+    /// differs from their nested carrier form: the root consumes a closed
+    /// `ImmediateExitStatus`, not a constructor node. Keeping the conversion at
+    /// this result surface prevents an ordinary nested exit-shaped constructor
+    /// from being mistaken for the process answer.
+    pub(super) fn transfer_unit_result_into_carrier(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        value: &Lowered,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let process_exit = self.process_object
+            && matches!(
+                value,
+                Lowered::Constructor { constructor, .. }
+                    if constructor == &self.process_symbols.exit_success
+                        || constructor == &self.process_symbols.exit_failure
+            );
+        if process_exit {
+            let status = self.emit_process_exit_status(builder, value.clone());
+            self.emit_carrier_immediate(builder, BoundaryTag::ImmediateExitStatus, status)
+        } else {
+            self.transfer_into_carrier(builder, origin, value)
+        }
+    }
+
+    /// Select the exact source occurrences evaluated in result position for
+    /// the generated unit currently being defined.
+    pub(super) fn select_terminal_result_origins(
+        &mut self,
+        origin: StaticOriginId,
+        expr: &RuntimeExpr,
+    ) -> Result<(), CraneliftBackendError> {
+        fn collect(
+            plan: &StaticTransitionPlan<'_>,
+            origin: StaticOriginId,
+            expr: &RuntimeExpr,
+            selected: &mut BTreeSet<StaticOriginId>,
+        ) -> Result<(), CraneliftBackendError> {
+            selected.insert(origin);
+            let result_child = |position| plan.child_static_origin(origin, position);
+            match expr {
+                RuntimeExpr::CheckedJoinSite { body, .. }
+                | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+                | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+                | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+                | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
+                    collect(plan, result_child(0)?, body, selected)?;
+                }
+                RuntimeExpr::Let { body, .. } => {
+                    collect(plan, result_child(1)?, body, selected)?;
+                }
+                RuntimeExpr::If {
+                    then_expr,
+                    else_expr,
+                    ..
+                } => {
+                    collect(plan, result_child(1)?, then_expr, selected)?;
+                    collect(plan, result_child(2)?, else_expr, selected)?;
+                }
+                RuntimeExpr::Match { cases, .. } => {
+                    for (index, case) in cases.iter().enumerate() {
+                        collect(plan, result_child(1 + index)?, &case.body, selected)?;
+                    }
+                }
+                RuntimeExpr::ComputationalMatch { cases, .. } => {
+                    for (index, case) in cases.iter().enumerate() {
+                        collect(plan, result_child(1 + index)?, &case.body, selected)?;
+                    }
+                }
+                RuntimeExpr::Value(_)
+                | RuntimeExpr::Var(_)
+                | RuntimeExpr::PrimitiveCall { .. }
+                | RuntimeExpr::Construct { .. }
+                | RuntimeExpr::Record { .. }
+                | RuntimeExpr::Project { .. }
+                | RuntimeExpr::Closure { .. }
+                | RuntimeExpr::LexicalClosure { .. }
+                | RuntimeExpr::DeclarationRef { .. }
+                | RuntimeExpr::ImportedDeclarationRef { .. }
+                | RuntimeExpr::Call { .. }
+                | RuntimeExpr::Effect { .. }
+                | RuntimeExpr::Trap(_) => {}
+            }
+            Ok(())
+        }
+
+        self.function_local.terminal_result_origins.clear();
+        collect(
+            &self.static_transition_plan,
+            origin,
+            expr,
+            &mut self.function_local.terminal_result_origins,
+        )
+    }
+
+    pub(super) fn call_declared_unit(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        body_origin: StaticOriginId,
+        inputs: &[LoweringOperand],
+        #[cfg(test)]
+        launch_ingress: Option<cranelift_codegen::ir::Value>,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let target = self
+            .function_local
+            .unit_calls
+            .get(&body_origin)
+            .cloned()
+            .ok_or_else(|| {
+                backend_module(
+                    "retained body has no graph-derived call target in this unit".to_string(),
+                )
+            })?;
+        let payload = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            target.header.frame_bytes,
+            3,
+        ));
+        let mut input = 0usize;
+        for (slot, offset) in target.slots.iter().zip(&target.offsets) {
+            let offset = i32::try_from(*offset).map_err(|_| {
+                backend_module("callee slot offset exceeds addressable range".to_string())
+            })?;
+            match slot.kind {
+                AbiSlotKind::Parameter | AbiSlotKind::Capture => {
+                    let value = inputs.get(input).ok_or_else(|| {
+                        backend_module("callee frame is missing a declared input".to_string())
+                    })?;
+                    let word = match value {
+                        LoweringOperand::Carried(word) => word.word,
+                        LoweringOperand::Specialized(value) => {
+                            self.transfer_into_carrier(builder, body_origin, value)?.word
+                        }
+                    };
+                    builder.ins().stack_store(word, payload, offset);
+                    input += 1;
+                }
+                AbiSlotKind::Control | AbiSlotKind::Trap | AbiSlotKind::Store => {
+                    let zero = builder.ins().iconst(types::I64, 0);
+                    builder.ins().stack_store(zero, payload, offset);
+                }
+                AbiSlotKind::Result => {}
+            }
+        }
+        if input != inputs.len() {
+            return Err(backend_module(
+                "caller supplied inputs absent from the callee descriptor".to_string(),
+            ));
+        }
+        let pointer_type = builder.func.dfg.value_type(
+            self.function_local
+                .services_pointer
+                .ok_or_else(|| backend_module("unit call has no services pointer".to_string()))?,
+        );
+        let slots = builder.ins().stack_addr(pointer_type, payload, 0);
+        let envelope = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            u32::try_from(crate::activation_services::UNIT_CALL_FRAME_BYTES)
+                .expect("unit call frame byte count fits u32"),
+            3,
+        ));
+        builder.ins().stack_store(
+            slots,
+            envelope,
+            crate::activation_services::UNIT_CALL_FRAME_SLOTS,
+        );
+        let services = self
+            .function_local
+            .services_pointer
+            .expect("services pointer checked above");
+        let exact_host_dispatch_context =
+            self.function_local.host_dispatch_context.ok_or_else(|| {
+                backend_module("unit call has no direct host-dispatch context".to_string())
+            })?;
+        #[cfg(test)]
+        let host_dispatch_context =
+            HOST_CONTEXT_PROPAGATION_MUTATION.with(|cell| match cell.get() {
+                HostContextPropagationMutation::Exact => exact_host_dispatch_context,
+                HostContextPropagationMutation::ServicesPointer
+                    if launch_ingress.is_none() =>
+                {
+                    services
+                }
+                HostContextPropagationMutation::NativeIntArena
+                    if launch_ingress.is_none() =>
+                {
+                    self.function_local
+                        .native_int_arena
+                        .expect("unit native-int arena is bound")
+                }
+                HostContextPropagationMutation::BoundaryArena
+                    if launch_ingress.is_none() =>
+                {
+                    self.function_local
+                        .boundary_arena
+                        .expect("unit boundary arena is bound")
+                }
+                HostContextPropagationMutation::Null if launch_ingress.is_none() => {
+                    builder.ins().iconst(pointer_type, 0)
+                }
+                HostContextPropagationMutation::LaunchIngress => {
+                    launch_ingress.unwrap_or(exact_host_dispatch_context)
+                }
+                HostContextPropagationMutation::ServicesPointer
+                | HostContextPropagationMutation::NativeIntArena
+                | HostContextPropagationMutation::BoundaryArena
+                | HostContextPropagationMutation::Null => exact_host_dispatch_context,
+            });
+        #[cfg(not(test))]
+        let host_dispatch_context = exact_host_dispatch_context;
+        builder.ins().stack_store(
+            host_dispatch_context,
+            envelope,
+            crate::activation_services::UNIT_CALL_FRAME_HOST_DISPATCH_CONTEXT,
+        );
+        let envelope = builder.ins().stack_addr(pointer_type, envelope, 0);
+        let call = builder
+            .ins()
+            .call(target.function, &[envelope, services]);
+        let [word] = builder.inst_results(call) else {
+            return Err(backend_module(
+                "internal unit call did not return exactly one word".to_string(),
+            ));
+        };
+        Ok(LoweringOperand::Carried(CarriedBoundaryWord { word: *word }))
+    }
+
     /// The recursive emission step. ⛔ Private, and ⛔ never the entry point —
     /// see [`Self::transfer_into_carrier`] for why the split is not stylistic.
     ///
@@ -1274,9 +1561,9 @@ impl<'a> Lowering<'a> {
                 self.emit_carrier_bytes(builder, tag, class, content)
             }
             Lowered::Constructor {
+                constructor,
                 synthesized_identity,
                 args,
-                ..
             } => {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
                 // ⭐ `D2` — the identity comes from the ONE artifact-static
@@ -1288,7 +1575,13 @@ impl<'a> Lowering<'a> {
                     Some(identity) => *identity,
                     None => self
                         .static_transition_plan
-                        .constructor_symbol_identity(origin)?,
+                        .constructor_symbol_identity(origin)
+                        .map_err(|error| {
+                            backend_module(format!(
+                                "constructor transfer for {constructor} at {origin:?} has no \
+                                 resolved identity: {error}"
+                            ))
+                        })?,
                 }
                 .tag_abi_word()?;
                 let word = self.emit_carrier_alloc(builder, tag, class, args.len())?;
@@ -1345,7 +1638,12 @@ impl<'a> Lowering<'a> {
                 let ok = self.emit_carrier_transfer(builder, origin, ok)?;
                 let error = self.emit_carrier_transfer(builder, origin, error)?;
                 let word = self.emit_carrier_alloc(builder, tag, class, 2)?;
-                self.emit_carrier_store_scalar(builder, word, *success)?;
+                let success = if builder.func.dfg.value_type(*success) == types::I64 {
+                    *success
+                } else {
+                    builder.ins().uextend(types::I64, *success)
+                };
+                self.emit_carrier_store_scalar(builder, word, success)?;
                 self.emit_carrier_store_field(builder, word, 0, ok)?;
                 self.emit_carrier_store_field(builder, word, 1, error)?;
                 Ok(word)
@@ -1357,6 +1655,18 @@ impl<'a> Lowering<'a> {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
                 let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
                 self.emit_carrier_store_scalar(builder, word, *payload)?;
+                Ok(word)
+            }
+            Lowered::CapabilityToken { value: payload } => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
+                self.emit_carrier_store_scalar(builder, word, *payload)?;
+                Ok(word)
+            }
+            Lowered::BorrowedNativeValue { pointer } => {
+                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
+                self.emit_carrier_store_scalar(builder, word, *pointer)?;
                 Ok(word)
             }
             Lowered::ResponseBytes { pointer, len } => {
@@ -1371,9 +1681,7 @@ impl<'a> Lowering<'a> {
                 self.emit_carrier_store_field(builder, word, 0, len)?;
                 Ok(word)
             }
-            Lowered::CapabilityToken { .. }
-            | Lowered::BorrowedNativeValue { .. }
-            | Lowered::BorrowedOption { .. } => Err(unsupported(
+            Lowered::BorrowedOption { .. } => Err(unsupported(
                 lowered_value_kind(value),
                 "the carrier producer does not yet emit borrowed ingress: an \
                  `InvocationBorrowed` handle is arena-owned and must clear \
@@ -2243,9 +2551,7 @@ impl<'a> Lowering<'a> {
         })
     }
 
-    /// Test observation seam for an opaque token or borrowed response scalar.
-    #[cfg(test)]
-    fn emit_carrier_scalar(
+    pub(super) fn emit_carrier_scalar(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         target: CarriedBoundaryWord,
@@ -5038,6 +5344,7 @@ enum SourceContinuation<'a> {
     },
     ConstructArgument {
         constructor: RuntimeSymbol,
+        static_origin: StaticOriginId,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
         env: Vec<LoweringOperand>,
@@ -5162,6 +5469,7 @@ enum SourcePrefixTemplate {
     },
     ConstructArgument {
         constructor: RuntimeSymbol,
+        static_origin: StaticOriginId,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
         env: Vec<LoweringOperand>,
@@ -7141,12 +7449,14 @@ impl<'a> Lowering<'a> {
             },
             SourceContinuation::ConstructArgument {
                 constructor,
+                static_origin,
                 remaining: arguments,
                 lowered,
                 env,
                 next,
             } => SourceContinuation::ConstructArgument {
                 constructor,
+                static_origin,
                 remaining: arguments,
                 lowered,
                 env,
@@ -7458,6 +7768,7 @@ impl<'a> Lowering<'a> {
             }
             SourceContinuation::ConstructArgument {
                 constructor,
+                static_origin,
                 remaining,
                 lowered,
                 env,
@@ -7467,6 +7778,7 @@ impl<'a> Lowering<'a> {
                 (
                     SourcePrefixTemplate::ConstructArgument {
                         constructor,
+                        static_origin,
                         remaining,
                         lowered,
                         env,
@@ -7628,12 +7940,14 @@ impl<'a> Lowering<'a> {
             },
             SourcePrefixTemplate::ConstructArgument {
                 constructor,
+                static_origin,
                 remaining,
                 lowered,
                 env,
                 next,
             } => SourceContinuation::ConstructArgument {
                 constructor: constructor.clone(),
+                static_origin: *static_origin,
                 remaining: remaining.clone(),
                 lowered: lowered.clone(),
                 env: env.clone(),
@@ -7786,6 +8100,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         constructor: RuntimeSymbol,
+        static_origin: StaticOriginId,
         lowered_args: Vec<Lowered>,
     ) -> Result<Lowered, CraneliftBackendError> {
         if lowered_args
@@ -7818,7 +8133,10 @@ impl<'a> Lowering<'a> {
         }
         Ok(Lowered::Constructor {
             constructor,
-            synthesized_identity: None,
+            synthesized_identity: Some(
+                self.static_transition_plan
+                    .constructor_symbol_identity(static_origin)?,
+            ),
             args: lowered_args,
         })
     }
@@ -7830,8 +8148,9 @@ impl<'a> Lowering<'a> {
     ) -> Result<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value), CraneliftBackendError>
     {
         let pointer_type = builder.func.dfg.value_type(
-            self.function_local.invocation_pointer
-                .expect("process byte lowering owns an invocation pointer"),
+            self.function_local
+                .host_dispatch_context
+                .expect("process byte lowering owns a direct host context"),
         );
         match value {
             Lowered::BorrowedNativeValue { pointer } => {
@@ -9120,7 +9439,7 @@ impl<'a> Lowering<'a> {
         })
     }
 
-    fn emit_result(
+    pub(super) fn emit_result(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         value: Lowered,

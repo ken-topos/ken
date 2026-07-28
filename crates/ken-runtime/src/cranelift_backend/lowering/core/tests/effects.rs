@@ -75,6 +75,7 @@ fn run_checked_bounded_nat_fixture(
         next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -85,7 +86,8 @@ fn run_checked_bounded_nat_fixture(
         function_local: FunctionLocalRefs {
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
-            invocation_pointer: None,
+            host_dispatch_context: None,
+            services_pointer: None,
             native_int_arena: None,
             boundary_arena: None,
             native_int_binop: None,
@@ -95,6 +97,8 @@ fn run_checked_bounded_nat_fixture(
             native_int_export: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
+            unit_calls: BTreeMap::new(),
+            terminal_result_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     };
@@ -535,18 +539,355 @@ fn run_borrowed_fixture(expr: &RuntimeExpr, root: &BorrowedFixtureValue) -> i64 
         None,
     )
     .expect("borrowed fixture lowers");
-    let mut native_int_arena = crate::NativeIntArenaV1::default();
-    let invocation = NativeInvocationFixture {
+    let mut host_context = ();
+    let invocation = RootIngressFixture {
         process_input: root,
-        host_context: std::ptr::null_mut(),
+        host_context: (&mut host_context as *mut ()).cast(),
         capability: 1_u64 << 32,
-        native_int_arena: &mut native_int_arena,
     };
     compiled
-        .run(Some((&invocation as *const NativeInvocationFixture).cast()))
+        .run(Some((&invocation as *const RootIngressFixture).cast()))
         .expect("borrowed fixture runs")
         .1
         .expect("borrowed fixture returns scalar")
+}
+
+thread_local! {
+    static B2F_EXPECTED_HOST_CONTEXT: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+    static B2F_HOST_CONTEXT_OBSERVATION: std::cell::Cell<(usize, usize)> =
+        const { std::cell::Cell::new((0, 0)) };
+}
+
+extern "C" fn b2f_host_context_probe(
+    host_context: *const std::ffi::c_void,
+    operation: i64,
+    _request: *const std::ffi::c_void,
+    _request_size: i64,
+    reply: *mut std::ffi::c_void,
+) -> i64 {
+    let expected = B2F_EXPECTED_HOST_CONTEXT.with(std::cell::Cell::get);
+    B2F_HOST_CONTEXT_OBSERVATION.with(|cell| {
+        let (calls, mismatches) = cell.get();
+        cell.set((
+            calls + 1,
+            mismatches + usize::from(host_context as usize != expected),
+        ));
+    });
+    if host_context as usize != expected
+        || operation != ken_host::HostOpV1::ConsoleWrite as i64
+    {
+        return -1;
+    }
+    let layout = ken_host::host_effect_wire_layout_v1(ken_host::HostOpV1::ConsoleWrite)
+        .expect("ConsoleWrite has a generated wire layout");
+    // SAFETY: the generated caller supplies the target-C-sized reply record.
+    unsafe {
+        std::ptr::write_bytes(reply.cast::<u8>(), 0, layout.reply_size as usize);
+        *(reply
+            .cast::<u8>()
+            .add(layout.reply_tag_offset as usize)
+            .cast::<u64>()) = layout.reply_unit_tag;
+    }
+    0
+}
+
+fn b2f_context_fixture() -> RuntimeExpr {
+    RuntimeExpr::Let {
+        value: Box::new(console_write_effect()),
+        body: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Let {
+                    value: Box::new(console_write_effect()),
+                    body: Box::new(RuntimeExpr::Construct {
+                        constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                        args: Vec::new(),
+                    }),
+                }),
+            }),
+            args: Vec::new(),
+        }),
+    }
+}
+
+fn run_b2f_context_fixture(
+    mutation: HostContextPropagationMutation,
+) -> (i64, (usize, usize)) {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            set_host_context_propagation_mutation(HostContextPropagationMutation::Exact);
+            B2F_EXPECTED_HOST_CONTEXT.with(|cell| cell.set(0));
+            B2F_HOST_CONTEXT_OBSERVATION.with(|cell| cell.set((0, 0)));
+        }
+    }
+    let _reset = Reset;
+    set_host_context_propagation_mutation(mutation);
+    let isa = native_isa().expect("native ISA");
+    let mut jit = JITBuilder::with_isa(isa, default_libcall_names());
+    jit.symbol(
+        "ken_host_dispatch_v1",
+        b2f_host_context_probe as *const u8,
+    );
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let expression = b2f_context_fixture();
+    let compiled = compile_expr_into_module(
+        JITModule::new(jit),
+        "b2f_host_context_envelope",
+        Linkage::Local,
+        &expression,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(&symbols),
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .expect("the context-propagation fixture compiles");
+    let input = BorrowedFixtureValue {
+        kind: 1,
+        tag: 0,
+        data: std::ptr::null(),
+        len: 0,
+    };
+    let mut context = 0u64;
+    let ingress = RootIngressFixture {
+        process_input: &input,
+        host_context: (&mut context as *mut u64).cast(),
+        capability: 1_u64 << 32,
+    };
+    B2F_EXPECTED_HOST_CONTEXT.with(|cell| cell.set(ingress.host_context as usize));
+    let result = compiled
+        .run(Some((&ingress as *const RootIngressFixture).cast()))
+        .expect("the context-propagation fixture runs")
+        .1
+        .expect("the process fixture returns a status");
+    let observation = B2F_HOST_CONTEXT_OBSERVATION.with(std::cell::Cell::get);
+    (result, observation)
+}
+
+#[test]
+fn root_and_descendant_effects_share_only_the_direct_host_context() {
+    let (status, exact) = run_b2f_context_fixture(HostContextPropagationMutation::Exact);
+    assert_eq!(status, 0, "the descendant process answer must reach the root");
+    assert_eq!(exact, (2, 0), "both host effects must see the direct context");
+
+    for mutation in [
+        HostContextPropagationMutation::ServicesPointer,
+        HostContextPropagationMutation::NativeIntArena,
+        HostContextPropagationMutation::BoundaryArena,
+        HostContextPropagationMutation::Null,
+        HostContextPropagationMutation::LaunchIngress,
+    ] {
+        let (_, (calls, mismatches)) = run_b2f_context_fixture(mutation);
+        assert!(calls > 0, "{mutation:?} never reached the host assertion");
+        assert!(
+            mismatches > 0,
+            "{mutation:?} did not perturb direct-context propagation"
+        );
+    }
+}
+
+fn b2f_process_pair_fixture() -> RuntimeExpr {
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)],
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Match {
+                scrutinee: Box::new(RuntimeExpr::Var(0)),
+                cases: vec![RuntimeMatchCase {
+                    constructor: crate::PROCESS_INPUT_CONSTRUCTOR.to_string(),
+                    binders: 3,
+                    body: RuntimeExpr::Let {
+                        value: Box::new(RuntimeExpr::Effect {
+                            family: "FS".to_string(),
+                            operation: ken_host::HostOpV1::FsReadFile,
+                            capability: Some(crate::RuntimeCapabilityUse {
+                                identity: "b2f.process.capability".to_string(),
+                                value: Box::new(RuntimeExpr::Var(4)),
+                            }),
+                            args: vec![RuntimeExpr::Value(RuntimeValue::Bytes(
+                                b"b2f-process-pair".to_vec(),
+                            ))],
+                        }),
+                        body: Box::new(RuntimeExpr::Construct {
+                            constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                            args: Vec::new(),
+                        }),
+                    },
+                }],
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: "B2F process-pair capture default".to_string(),
+                },
+            }),
+        }),
+        args: Vec::new(),
+    }
+}
+
+thread_local! {
+    static B2F_PROCESS_PAIR_OBSERVATION: std::cell::Cell<(usize, u64)> =
+        const { std::cell::Cell::new((0, 0)) };
+}
+
+extern "C" fn b2f_process_pair_probe(
+    _host_context: *const std::ffi::c_void,
+    operation: i64,
+    request: *const std::ffi::c_void,
+    _request_size: i64,
+    reply: *mut std::ffi::c_void,
+) -> i64 {
+    if operation != ken_host::HostOpV1::FsReadFile as i64
+        || request.is_null()
+        || reply.is_null()
+    {
+        return -1;
+    }
+    let layout = ken_host::host_effect_wire_layout_v1(ken_host::HostOpV1::FsReadFile)
+        .expect("FsReadFile has a generated wire layout");
+    // SAFETY: the generated request has the layout selected above.
+    let capability = unsafe {
+        *(request
+            .cast::<u8>()
+            .add(layout.request_offsets[0] as usize)
+            .cast::<u64>())
+    };
+    B2F_PROCESS_PAIR_OBSERVATION.with(|cell| {
+        let (calls, _) = cell.get();
+        cell.set((calls + 1, capability));
+    });
+    // SAFETY: the generated caller supplies the target-C-sized reply record.
+    unsafe {
+        std::ptr::write_bytes(reply.cast::<u8>(), 0, layout.reply_size as usize);
+        *(reply
+            .cast::<u8>()
+            .add(layout.reply_tag_offset as usize)
+            .cast::<u64>()) = layout.reply_bytes_tag;
+    }
+    0
+}
+
+fn compile_b2f_process_pair_fixture() -> Result<CompiledModule<JITModule>, CraneliftBackendError> {
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let isa = native_isa().expect("native ISA");
+    let mut jit = JITBuilder::with_isa(isa, default_libcall_names());
+    jit.symbol(
+        "ken_host_dispatch_v1",
+        b2f_process_pair_probe as *const u8,
+    );
+    compile_expr_into_module(
+        JITModule::new(jit),
+        "b2f_process_pair_slots",
+        Linkage::Local,
+        &b2f_process_pair_fixture(),
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(&symbols),
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    )
+}
+
+#[test]
+fn the_process_pair_reaches_a_retained_body_only_through_declared_slots() {
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            set_process_slot_mutation(ProcessSlotMutation::Exact);
+            B2F_PROCESS_PAIR_OBSERVATION.with(|cell| cell.set((0, 0)));
+        }
+    }
+    let _reset = Reset;
+
+    for mutation in [
+        ProcessSlotMutation::DeleteProcessInput,
+        ProcessSlotMutation::DeleteCapability,
+    ] {
+        set_process_slot_mutation(mutation);
+        let error = match compile_b2f_process_pair_fixture() {
+            Ok(_) => panic!("deleting either declared root slot must refuse emission"),
+            Err(error) => error,
+        };
+        assert!(
+            error.to_string().contains("declared input"),
+            "{mutation:?} failed for the wrong reason: {error}"
+        );
+    }
+
+    let fields = [
+        BorrowedFixtureValue {
+            kind: 2,
+            tag: 2,
+            data: std::ptr::null(),
+            len: 0,
+        },
+        BorrowedFixtureValue {
+            kind: 2,
+            tag: 2,
+            data: std::ptr::null(),
+            len: 0,
+        },
+        BorrowedFixtureValue {
+            kind: 1,
+            tag: 0,
+            data: std::ptr::null(),
+            len: 0,
+        },
+    ];
+    let process_input = BorrowedFixtureValue {
+        kind: 2,
+        tag: 1,
+        data: fields.as_ptr().cast(),
+        len: fields.len(),
+    };
+    let malformed = BorrowedFixtureValue {
+        kind: 99,
+        tag: 0,
+        data: std::ptr::null(),
+        len: 0,
+    };
+    let fake_context = RootIngressFixture {
+        process_input: &malformed,
+        host_context: std::ptr::null_mut(),
+        capability: 7,
+    };
+    let ingress = RootIngressFixture {
+        process_input: &process_input,
+        host_context: (&fake_context as *const RootIngressFixture).cast_mut().cast(),
+        capability: 1_u64 << 32,
+    };
+
+    set_process_slot_mutation(ProcessSlotMutation::Exact);
+    let exact = compile_b2f_process_pair_fixture()
+        .expect("the exact declared pair compiles")
+        .run(Some((&ingress as *const RootIngressFixture).cast()))
+        .expect("the exact declared pair runs")
+        .1
+        .expect("the exact declared pair returns a status");
+    assert_eq!(exact, 0, "the descendant process answer must reach the root");
+    let exact_observation = B2F_PROCESS_PAIR_OBSERVATION.with(std::cell::Cell::get);
+    assert_eq!(exact_observation, (1, ingress.capability));
+
+    B2F_PROCESS_PAIR_OBSERVATION.with(|cell| cell.set((0, 0)));
+    set_process_slot_mutation(ProcessSlotMutation::RecoverFromHostContext);
+    let _recovered = compile_b2f_process_pair_fixture()
+        .expect("the forbidden-recovery mutation still emits")
+        .run(Some((&ingress as *const RootIngressFixture).cast()))
+        .expect("the forbidden-recovery mutation runs")
+        .1
+        .expect("the forbidden-recovery mutation returns a status");
+    assert_eq!(
+        B2F_PROCESS_PAIR_OBSERVATION.with(std::cell::Cell::get),
+        (0, 0),
+        "recovering the process input from direct context still reached the \
+         capability-using answer"
+    );
 }
 
 #[test]
@@ -1237,11 +1578,10 @@ struct BorrowedFixtureValue {
 
 #[cfg(test)]
 #[repr(C)]
-struct NativeInvocationFixture {
+struct RootIngressFixture {
     process_input: *const BorrowedFixtureValue,
     host_context: *mut std::ffi::c_void,
     capability: u64,
-    native_int_arena: *mut crate::NativeIntArenaV1,
 }
 
 // RT-SPLIT slice 5: shared test helpers whose final users span the
@@ -1310,33 +1650,32 @@ fn run_px8n_arm_fixture(
         call_index: 0,
         malformed_request: 0,
     };
-    let mut native_int_arena = crate::NativeIntArenaV1::default();
-    let invocation = NativeInvocationFixture {
+    let invocation = RootIngressFixture {
         process_input: &input,
         host_context: (&mut fixture as *mut Px8nHostReplyFixture).cast(),
         capability: 0,
-        native_int_arena: &mut native_int_arena,
     };
     let (_, result) = compiled
-        .run(Some((&invocation as *const NativeInvocationFixture).cast()))
+        .run(Some((&invocation as *const RootIngressFixture).cast()))
         .unwrap();
     (result.unwrap(), fixture)
 }
 
 #[cfg(test)]
 extern "C" fn px8n_scripted_host_dispatch(
-    invocation: *const std::ffi::c_void,
+    host_context: *const std::ffi::c_void,
     operation: i64,
     request: *const std::ffi::c_void,
     request_size: i64,
     reply: *mut std::ffi::c_void,
 ) -> i64 {
-    // SAFETY: this symbol is installed only into the test JIT below, which
-    // supplies these exact call-scoped fixtures for one synchronous call.
-    let invocation = unsafe { &*(invocation.cast::<NativeInvocationFixture>()) };
-    // SAFETY: `host_context` points to the live fixture for the duration of
-    // the compiled call and is never retained by the dispatcher.
-    let fixture = unsafe { &mut *(invocation.host_context.cast::<Px8nHostReplyFixture>()) };
+    // SAFETY: the direct context points to the live fixture for the duration
+    // of the compiled call and is never retained by the dispatcher.
+    let fixture = unsafe {
+        &mut *(host_context
+            .cast_mut()
+            .cast::<Px8nHostReplyFixture>())
+    };
     let expected = if fixture.call_index == 0
         || (fixture.call_index == 1 && fixture.scenario != PX8I_METADATA_BIG)
     {

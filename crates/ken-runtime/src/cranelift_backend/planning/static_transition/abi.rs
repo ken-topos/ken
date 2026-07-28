@@ -287,9 +287,11 @@ impl AbiCaptureProvenance {
 #[repr(C)]
 pub(in crate::cranelift_backend) enum AbiUnitDefinition {
     /// A top-level scheduling entry — the root, or a transparent declaration.
-    /// It has no defining closure occurrence, so no declared parameters and no
-    /// captures.
-    SchedulingEntry,
+    /// It has no defining closure occurrence and no captures. Only the
+    /// explicitly recorded process root receives the closed ingress pair.
+    SchedulingEntry {
+        ingress: AbiSchedulingIngress,
+    },
     /// A retained closure body. Its **defining occurrence** is the source of the
     /// unique `StaticBody` edge whose target is this unit's seed
     /// (`static_transition.rs:858`, `:884` build that edge as
@@ -298,6 +300,38 @@ pub(in crate::cranelift_backend) enum AbiUnitDefinition {
         defining_origin: StaticOriginId,
         provenance: AbiCaptureProvenance,
     },
+}
+
+/// Static compilation mode for the explicitly recorded root scheduling entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum AbiRootIngress {
+    Value,
+    Process,
+}
+
+/// The closed source-valued ingress admitted by one scheduling entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum AbiSchedulingIngress {
+    Empty,
+    ProcessPair,
+}
+
+/// Role identity for the two process-root parameters.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum AbiProcessParameter {
+    ProcessInput,
+    Capability,
+}
+
+impl AbiProcessParameter {
+    const ALL: [Self; 2] = [Self::ProcessInput, Self::Capability];
+
+    pub(in crate::cranelift_backend) const fn ordinal(self) -> u32 {
+        match self {
+            Self::ProcessInput => 0,
+            Self::Capability => 1,
+        }
+    }
 }
 
 /// One declared frame slot.
@@ -406,7 +440,7 @@ impl AbiPlane {
     ) -> Result<AbiDescriptorShape, CraneliftBackendError> {
         let slots = slot_slice(&self.slots, descriptor.slots)?;
         let (definition_is_closure_body, provenance) = match descriptor.definition {
-            AbiUnitDefinition::SchedulingEntry => (false, None),
+            AbiUnitDefinition::SchedulingEntry { .. } => (false, None),
             AbiUnitDefinition::ClosureBody { provenance, .. } => (true, Some(provenance)),
         };
         Ok(AbiDescriptorShape {
@@ -446,6 +480,8 @@ pub(super) fn build_abi_plane(
     sources_in: &[SemanticSourceSeed],
     edges: &[StaticEdge],
     entries: &[StaticNodeId],
+    root_entry: StaticNodeId,
+    root_ingress: AbiRootIngress,
 ) -> Result<AbiPlane, CraneliftBackendError> {
     // ⛔ The planner's `semantic_sources` are in **walk order**, not positional
     // by origin. Reading `sources[origin]` directly returns a plausible seed for
@@ -454,7 +490,8 @@ pub(super) fn build_abi_plane(
     let sources = positioned_sources(nodes, sources_in)?;
     let sources = sources.as_slice();
 
-    let definitions = unit_definitions(plane, sources, edges, entries)?;
+    let definitions =
+        unit_definitions(plane, sources, edges, entries, root_entry, root_ingress)?;
 
     // `C4`, and deliberately before any descriptor is minted: an imported edge
     // must receive **no** callable descriptor at all, so the exclusion runs
@@ -493,7 +530,15 @@ pub(super) fn build_abi_plane(
         });
     }
 
-    abi.validate(plane, nodes, sources_in, edges, entries)?;
+    abi.validate(
+        plane,
+        nodes,
+        sources_in,
+        edges,
+        entries,
+        root_entry,
+        root_ingress,
+    )?;
     Ok(abi)
 }
 
@@ -654,6 +699,8 @@ fn unit_definitions(
     sources: &[SemanticSourceSeed],
     edges: &[StaticEdge],
     entries: &[StaticNodeId],
+    root_entry: StaticNodeId,
+    root_ingress: AbiRootIngress,
 ) -> Result<Vec<AbiUnitDefinition>, CraneliftBackendError> {
     // One pass over the edges rather than one per unit: the classification is
     // O(nodes + edges), not O(units × edges).
@@ -690,7 +737,16 @@ fn unit_definitions(
             .copied()
             .ok_or_else(|| planner_error("function unit seed is outside the planned nodes"))?;
         let definition = match (is_entry, body_edge) {
-            (true, None) => AbiUnitDefinition::SchedulingEntry,
+            (true, None) => AbiUnitDefinition::SchedulingEntry {
+                ingress: if function.planned_node == root_entry {
+                    match root_ingress {
+                        AbiRootIngress::Value => AbiSchedulingIngress::Empty,
+                        AbiRootIngress::Process => AbiSchedulingIngress::ProcessPair,
+                    }
+                } else {
+                    AbiSchedulingIngress::Empty
+                },
+            },
             (false, Some(from)) => {
                 let defining_origin = StaticOriginId(from.0);
                 let seed = source_for(sources, defining_origin)?;
@@ -752,7 +808,17 @@ fn declared_arity(
         defining_origin, ..
     } = definition
     else {
-        return Ok((0, 0));
+        let AbiUnitDefinition::SchedulingEntry { ingress } = definition else {
+            unreachable!()
+        };
+        return Ok(match ingress {
+            AbiSchedulingIngress::Empty => (0, 0),
+            AbiSchedulingIngress::ProcessPair => (
+                u32::try_from(AbiProcessParameter::ALL.len())
+                    .map_err(|_| planner_capacity_error("process ingress arity exhausted"))?,
+                0,
+            ),
+        });
     };
 
     let seed = source_for(sources, defining_origin)?;
@@ -826,7 +892,7 @@ fn push_slots(
     // A `SchedulingEntry` has no captures at all, so its carrier question does
     // not arise rather than being answered with a default.
     let capture_carrier = match definition {
-        AbiUnitDefinition::SchedulingEntry => {
+        AbiUnitDefinition::SchedulingEntry { .. } => {
             if captures != 0 {
                 return Err(planner_error(
                     "scheduling entry unit declares captures, which it cannot have",
@@ -1189,6 +1255,8 @@ impl AbiPlane {
         sources: &[SemanticSourceSeed],
         edges: &[StaticEdge],
         entries: &[StaticNodeId],
+        root_entry: StaticNodeId,
+        root_ingress: AbiRootIngress,
     ) -> Result<(), CraneliftBackendError> {
         let sources = positioned_sources(nodes, sources)?;
         let sources = sources.as_slice();
@@ -1200,7 +1268,8 @@ impl AbiPlane {
             ));
         }
 
-        let definitions = unit_definitions(plane, sources, edges, entries)?;
+        let definitions =
+            unit_definitions(plane, sources, edges, entries, root_entry, root_ingress)?;
 
         for (ordinal, descriptor) in self.descriptors.iter().enumerate() {
             // `AC-1`, direction 2 — every descriptor names a member of the
@@ -1481,7 +1550,7 @@ fn validate_slot_run(
     definition: AbiUnitDefinition,
 ) -> Result<(), CraneliftBackendError> {
     let capture_carrier = match definition {
-        AbiUnitDefinition::SchedulingEntry => None,
+        AbiUnitDefinition::SchedulingEntry { .. } => None,
         AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
     };
 

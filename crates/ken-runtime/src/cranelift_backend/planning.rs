@@ -37,8 +37,9 @@ pub(super) use static_transition::{
 // are deliberately NOT re-exported: the emitter reads a unit, and can neither
 // construct the plane nor reach the pre-emission validator to bypass it.
 pub(super) use static_transition::{
-    AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiSlot, AbiSlotKind,
-    AbiStorageOwner, AbiUnitDefinition, EmittableUnit, PredeclaredFunctionId,
+    AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
+    AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition, EmittableUnit,
+    PredeclaredFunctionId,
 };
 
 pub(super) fn native_join_plan_for_program(

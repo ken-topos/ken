@@ -129,13 +129,6 @@ enum PostureErrorV1 {
 }
 
 #[repr(C)]
-struct NativeInvocationV1 {
-    process_input: *const c_void,
-    host_context: *mut ProcessContext,
-    capability: u64,
-}
-
-#[repr(C)]
 pub(crate) struct HostInitResultV1 {
     context: *mut c_void,
     capability: u64,
@@ -1173,27 +1166,22 @@ fn decode_resource_error_reply(
 /// The single private V1 dispatch symbol linked into produced executables.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ken_host_dispatch_v1(
-    invocation: *const c_void,
+    host_context: *const c_void,
     op: u64,
     request: *const c_void,
     request_size: usize,
     reply: *mut c_void,
 ) -> i64 {
-    if invocation.is_null()
+    if host_context.is_null()
         || request.is_null()
         || reply.is_null()
-        || !invocation.cast::<NativeInvocationV1>().is_aligned()
+        || !host_context.cast::<ProcessContext>().is_aligned()
         || !reply.cast::<HostReplyV1>().is_aligned()
     {
         return -1;
     }
-    // SAFETY: the starter owns this immutable invocation through entry return.
-    let invocation = unsafe { &*(invocation.cast::<NativeInvocationV1>()) };
-    if invocation.host_context.is_null() || !invocation.host_context.is_aligned() {
-        return -1;
-    }
     // SAFETY: init created this unique context; generated calls are sequential.
-    let context = unsafe { &mut *invocation.host_context };
+    let context = unsafe { &mut *(host_context.cast_mut().cast::<ProcessContext>()) };
     let Ok(op) = u16::try_from(op)
         .ok()
         .and_then(|op| HostOpV1::try_from(op).ok())
@@ -1671,7 +1659,6 @@ mod tests {
         size_align!("SliceV1", SliceV1);
         size_align!("CapabilityTokenV1", CapabilityTokenV1);
         size_align!("ResourceTokenV1", crate::ResourceTokenV1);
-        size_align!("NativeInvocationV1", NativeInvocationV1);
         size_align!("HostInitResultV1", HostInitResultV1);
         size_align!("ConsoleWriteRequestV1", ConsoleWriteRequestV1);
         size_align!("ConsoleReadRequestV1", ConsoleReadRequestV1);
@@ -1704,9 +1691,6 @@ mod tests {
         }
         offset!("SliceV1", SliceV1, data);
         offset!("SliceV1", SliceV1, len);
-        offset!("NativeInvocationV1", NativeInvocationV1, process_input);
-        offset!("NativeInvocationV1", NativeInvocationV1, host_context);
-        offset!("NativeInvocationV1", NativeInvocationV1, capability);
         offset!("HostInitResultV1", HostInitResultV1, context);
         offset!("HostInitResultV1", HostInitResultV1, capability);
         offset!("HostInitResultV1", HostInitResultV1, plan_hash);
@@ -2461,14 +2445,9 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         let initialized = context(&directory);
         assert!(!initialized.context.is_null());
-        let invocation = NativeInvocationV1 {
-            process_input: std::ptr::null(),
-            host_context: initialized.context.cast(),
-            capability: (2_u64 << 32),
-        };
         let path = b"must-not-be-read";
         let request = FsReadFileRequestV1 {
-            capability: invocation.capability,
+            capability: 2_u64 << 32,
             path: SliceV1 {
                 data: path.as_ptr(),
                 len: path.len(),
@@ -2486,7 +2465,7 @@ mod tests {
         };
         let status = unsafe {
             ken_host_dispatch_v1(
-                (&invocation as *const NativeInvocationV1).cast(),
+                initialized.context.cast_const(),
                 HostOpV1::FsReadFile as u64,
                 (&request as *const FsReadFileRequestV1).cast(),
                 std::mem::size_of::<FsReadFileRequestV1>(),
@@ -2521,11 +2500,6 @@ mod tests {
         std::fs::write(directory.join("mode.bin"), b"retained").unwrap();
         let initialized = context(&directory);
         assert!(!initialized.context.is_null());
-        let invocation = NativeInvocationV1 {
-            process_input: std::ptr::null(),
-            host_context: initialized.context.cast(),
-            capability: initialized.capability,
-        };
         let path = b"mode.bin";
         let request = FsChangeModeRequestV1 {
             capability: initialized.capability,
@@ -2547,7 +2521,7 @@ mod tests {
         };
         let status = unsafe {
             ken_host_dispatch_v1(
-                (&invocation as *const NativeInvocationV1).cast(),
+                initialized.context.cast_const(),
                 HostOpV1::FsChangeMode as u64,
                 (&request as *const FsChangeModeRequestV1).cast(),
                 std::mem::size_of::<FsChangeModeRequestV1>(),
@@ -2575,11 +2549,6 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(directory.join("held.bin"), b"held-resource").unwrap();
         let initialized = context(&directory);
-        let invocation = NativeInvocationV1 {
-            process_input: std::ptr::null(),
-            host_context: initialized.context.cast(),
-            capability: initialized.capability,
-        };
         let path = b"held.bin";
         let open = FsOpenRequestV1 {
             capability: initialized.capability,
@@ -2601,7 +2570,7 @@ mod tests {
         };
         let status = unsafe {
             ken_host_dispatch_v1(
-                (&invocation as *const NativeInvocationV1).cast(),
+                initialized.context.cast_const(),
                 HostOpV1::FsOpen as u64,
                 (&open as *const FsOpenRequestV1).cast(),
                 std::mem::size_of::<FsOpenRequestV1>(),
@@ -2615,7 +2584,7 @@ mod tests {
         let request = ResourceRequestV1 { resource };
         let dispatch_resource = |operation, reply: &mut HostReplyV1| unsafe {
             ken_host_dispatch_v1(
-                (&invocation as *const NativeInvocationV1).cast(),
+                initialized.context.cast_const(),
                 operation as u64,
                 (&request as *const ResourceRequestV1).cast(),
                 std::mem::size_of::<ResourceRequestV1>(),

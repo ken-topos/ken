@@ -1327,7 +1327,9 @@ impl SemanticPlane {
             .filter(|atom| atom.kind == kind)
             .nth(occurrence)
             .ok_or_else(|| {
-                planner_error("static origin has no atom of that kind at that occurrence")
+                planner_error(format!(
+                    "static origin {origin:?} has no {kind:?} atom at occurrence {occurrence}"
+                ))
             })
     }
 
@@ -1494,7 +1496,14 @@ impl SemanticPlane {
     pub(super) fn static_body_call_edges(
         &self,
         edges: &[StaticEdge],
-    ) -> Result<Vec<(PredeclaredFunctionId, PredeclaredFunctionId)>, CraneliftBackendError> {
+    ) -> Result<
+        Vec<(
+            PredeclaredFunctionId,
+            PredeclaredFunctionId,
+            StaticOriginId,
+        )>,
+        CraneliftBackendError,
+    > {
         let owner_of = |node: StaticNodeId| -> Result<SemanticOwner, CraneliftBackendError> {
             self.descriptors
                 .get(node.0 as usize)
@@ -1513,9 +1522,30 @@ impl SemanticPlane {
                     "static body call edge does not join two function units",
                 ));
             };
-            call_edges.push((caller, callee));
+            let callee_origin = self
+                .functions
+                .get(callee.0 as usize)
+                .ok_or_else(|| planner_error("call edge callee has no function descriptor"))?
+                .origin;
+            call_edges.push((caller, callee, callee_origin));
         }
         Ok(call_edges)
+    }
+
+    pub(super) fn function_for_node(
+        &self,
+        node: StaticNodeId,
+    ) -> Result<PredeclaredFunctionId, CraneliftBackendError> {
+        let descriptor = self
+            .descriptors
+            .get(node.0 as usize)
+            .ok_or_else(|| planner_error("root entry has no semantic descriptor"))?;
+        match descriptor.owner {
+            SemanticOwner::Function(function) => Ok(function),
+            SemanticOwner::Terminal | SemanticOwner::TrapTerminal => {
+                Err(planner_error("root entry is owned by a shared exit"))
+            }
+        }
     }
 
     fn validate_function_units(

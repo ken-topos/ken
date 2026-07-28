@@ -22,6 +22,130 @@ fn c2_unit_emission_epoch() -> Option<u64> {
     C2_UNIT_EMISSION_EPOCH.with(std::cell::Cell::get)
 }
 
+/// Classify the closed source residual still owned by recursive descent during
+/// this B2F migration stage.
+///
+/// The residual includes every source shape named by
+/// [`select_body_emission_authority`], not only computational recursion. The
+/// match is exhaustive over `RuntimeExpr`; adding a form cannot silently
+/// default it into either authority.
+fn requires_recursive_descent_authority(expr: &RuntimeExpr) -> bool {
+    match expr {
+        RuntimeExpr::CheckedJoinSite { body, .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. }
+        | RuntimeExpr::Closure { body, .. } => {
+            requires_recursive_descent_authority(body)
+        }
+        RuntimeExpr::LexicalClosure { captures, body, .. } => {
+            captures
+                .iter()
+                .any(requires_recursive_descent_authority)
+                || requires_recursive_descent_authority(body)
+        }
+        RuntimeExpr::Let { value, body } => {
+            requires_recursive_descent_authority(value)
+                || requires_recursive_descent_authority(body)
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            requires_recursive_descent_authority(scrutinee)
+                || requires_recursive_descent_authority(then_expr)
+                || requires_recursive_descent_authority(else_expr)
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            args.iter()
+                .any(requires_recursive_descent_authority)
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            matches!(scrutinee.as_ref(), RuntimeExpr::Call { .. })
+                || requires_recursive_descent_authority(scrutinee)
+                || cases
+                    .iter()
+                    .any(|case| requires_recursive_descent_authority(&case.body))
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            cases
+                .iter()
+                .any(|case| !case.recursive_positions.is_empty())
+                || requires_recursive_descent_authority(scrutinee)
+                || cases
+                    .iter()
+                    .any(|case| requires_recursive_descent_authority(&case.body))
+        }
+        RuntimeExpr::Record { fields } => fields
+            .iter()
+            .any(|(_, value)| requires_recursive_descent_authority(value)),
+        RuntimeExpr::Project { record, .. } => {
+            requires_recursive_descent_authority(record)
+        }
+        RuntimeExpr::Call { callee, args } => {
+            matches!(callee.as_ref(), RuntimeExpr::Closure { .. })
+                || requires_recursive_descent_authority(callee)
+                || args
+                    .iter()
+                    .any(requires_recursive_descent_authority)
+        }
+        RuntimeExpr::Effect {
+            capability, args, ..
+        } => {
+            capability.as_ref().is_some_and(|capability| {
+                requires_recursive_descent_authority(&capability.value)
+            }) || args
+                .iter()
+                .any(requires_recursive_descent_authority)
+        }
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. } => false,
+        RuntimeExpr::Trap(_) => true,
+    }
+}
+
+/// The one temporary B2F migration selector, evaluated once at compilation
+/// entry from source syntax and declaration kinds only.
+///
+/// The active/default stage is `FunctionizedUnits`. `RecursiveDescent` retains
+/// the closed residual that still needs specialized computational recursion,
+/// a producer `Match` over a call, a seed/declaration closure body, or a root
+/// trap. No runtime value, carrier class, walk result, or emission failure can
+/// change this answer after it is chosen.
+fn select_body_emission_authority(
+    expr: &RuntimeExpr,
+    declarations: &BTreeMap<&str, &RuntimeDeclaration>,
+) -> BodyEmissionAuthority {
+    if requires_recursive_descent_authority(expr)
+        || declarations.values().any(|declaration| match &declaration.kind {
+            RuntimeDeclarationKind::Transparent { body } => {
+                matches!(
+                    body,
+                    RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
+                ) || requires_recursive_descent_authority(body)
+            }
+            RuntimeDeclarationKind::Primitive { .. }
+            | RuntimeDeclarationKind::Data { .. }
+            | RuntimeDeclarationKind::Record { .. }
+            | RuntimeDeclarationKind::RecursiveGroup { .. }
+            | RuntimeDeclarationKind::EffectBoundary { .. }
+            | RuntimeDeclarationKind::MetadataOnly => false,
+        })
+    {
+        BodyEmissionAuthority::RecursiveDescent
+    } else {
+        BodyEmissionAuthority::FunctionizedUnits
+    }
+}
+
 pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     mut module: M,
     function_name: &str,
@@ -46,6 +170,8 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         &declarations,
         oriented_subcontinuation_plan.as_ref(),
     )?;
+    let body_emission_authority =
+        select_body_emission_authority(expr, &declarations);
     // Boundary A of RT-NATIVE-FNSPLIT: close and validate the factored static
     // graph before Cranelift sees any semantic body. The plan's positional
     // child-origin table is reachable from the lowering, so
@@ -58,10 +184,19 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     let process_symbols = process_symbols
         .cloned()
         .unwrap_or_else(crate::NativeProcessSymbols::legacy_prelude);
-    let static_transition_plan =
-        plan_static_transition_graph_with_symbols(expr, &declarations, &process_symbols)?;
-    let root_static_origin = static_transition_plan.root_static_origin()?;
+    let static_transition_plan = plan_static_transition_graph_with_symbols(
+        expr,
+        &declarations,
+        &process_symbols,
+        if process_mode {
+            AbiRootIngress::Process
+        } else {
+            AbiRootIngress::Value
+        },
+    )?;
     let mut sig = module.make_signature();
+    sig.params
+        .push(AbiParam::new(module.target_config().pointer_type()));
     sig.params
         .push(AbiParam::new(module.target_config().pointer_type()));
     sig.returns.push(AbiParam::new(types::I64));
@@ -162,18 +297,21 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     // ⛔ Not inside `declare_unit_bundle`: stamping there would make the zero
     // reading unreachable, because observing the epoch would require declaring
     // the unit whose absence is the thing being measured.
-    #[cfg(test)]
-    super::units::b2f_reached_emission_seam();
-    static_transition_plan.validate_emitted_transfers_are_representable()?;
-    let unit_bundle = super::units::declare_unit_bundle(&mut module, &static_transition_plan)?;
-    // ⭐ `RT-FNSPLIT-B2F` `D4` — resolve every cross-owner call edge against the
-    // bundle before a single body is defined, so a callee the bundle never
-    // declared is refused while nothing has been emitted yet.
-    //
-    // ⛔ Derived from the planner's validated `StaticBody` edges. This node does
-    // not classify edges and must never be made to: the four classification laws
-    // are `B2O`'s, enforced as reject arms in `validate_function_units`.
-    let call_edges = super::units::resolve_call_edges(&static_transition_plan, &unit_bundle)?;
+    let functionized_bundle = match body_emission_authority {
+        BodyEmissionAuthority::RecursiveDescent => None,
+        BodyEmissionAuthority::FunctionizedUnits => {
+            #[cfg(test)]
+            super::units::b2f_reached_emission_seam();
+            static_transition_plan.validate_emitted_transfers_are_representable()?;
+            let units =
+                super::units::declare_unit_bundle(&mut module, &static_transition_plan)?;
+            // ⭐ `RT-FNSPLIT-B2F` `D4` — resolve every cross-owner call edge
+            // against the bundle before a single body is defined.
+            let calls =
+                super::units::resolve_call_edges(&static_transition_plan, &units)?;
+            Some((units, calls))
+        }
+    };
     // ⭐ `RT-FNSPLIT-B2F` `D3` — mint the artifact-static seed material before
     // any function context exists. `B2R` declared `GroundValueCarrier` as
     // `BorrowedForActivation` from `ArtifactStatic` and deliberately minted
@@ -238,6 +376,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         next_dynamic_splice_edge: 1,
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
+        body_emission_authority,
         process_object: process_mode,
         process_symbols,
         #[cfg(test)]
@@ -246,119 +385,155 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: root_function_local,
     };
-    let (maybe_trap, decoder) = {
-        let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
-        let block = builder.create_block();
-        builder.append_block_params_for_function_params(block);
-        builder.switch_to_block(block);
-        let invocation = builder.block_params(block)[0];
-        compiler.function_local.native_int_arena = Some(invocation);
-        let mut initial_env = Vec::new();
-        if process_mode {
-            compiler.function_local.invocation_pointer = Some(invocation);
-            let pointer_type = builder.func.dfg.value_type(invocation);
-            let process_input =
-                builder
-                    .ins()
-                    .load(pointer_type, MemFlags::trusted(), invocation, 0);
-            Lowering::require_nonzero(&mut builder, process_input);
-            let capability = builder
-                .ins()
-                .load(types::I64, MemFlags::trusted(), invocation, 16);
-            let int_arena = builder
-                .ins()
-                .load(pointer_type, MemFlags::trusted(), invocation, 24);
-            Lowering::require_nonzero(&mut builder, int_arena);
-            compiler.function_local.native_int_arena = Some(int_arena);
-            initial_env.push(LoweringOperand::Specialized(
-                Lowered::BorrowedNativeValue {
-                    pointer: process_input,
-                },
-            ));
-            initial_env.push(LoweringOperand::Specialized(Lowered::CapabilityToken {
-                value: capability,
-            }));
+    let root_result = match body_emission_authority {
+        BodyEmissionAuthority::FunctionizedUnits => {
+            let (unit_bundle, call_edges) = functionized_bundle
+                .as_ref()
+                .expect("the functionized selector arm owns its bundle");
+            let root_result = super::units::define_unit_bodies(
+                &mut module,
+                &mut compiler,
+                helpers,
+                unit_bundle,
+                call_edges,
+                staged_process_input,
+            )?;
+            compiler.require_complete_join_plan_consumption()?;
+            compiler.require_complete_dynamic_splice_edge_consumption()?;
+            super::units::define_root_adapter(
+                &mut module,
+                &mut compiler,
+                helpers,
+                unit_bundle,
+                func_id,
+                process_mode,
+            )?;
+            root_result
         }
-        if let Some(value) = staged_process_input {
-            initial_env.push(LoweringOperand::Specialized(
-                compiler.lower_value(&mut builder, value)?,
-            ));
-        }
-        compiler.root_terminal_authority = compiler.take_distinguished_root_answer_authority()?;
-        // D6/D9: the root lowering starts from the occurrence origin stored
-        // during the planner's root visit — never derived from the plan's
-        // scheduling `entries` — so the two walks start from one identity
-        // rather than two.
-        let lowered = compiler.lower_expr(
-            &mut builder,
-            SourceOccurrence {
-                expr,
-                static_origin: root_static_origin,
-            },
-            &initial_env,
-        )?;
-        compiler.require_complete_join_plan_consumption()?;
-        compiler.require_complete_dynamic_splice_edge_consumption()?;
-        // ⭐ `§2h` ¶2's typed phase boundary at the ROOT result surface.
-        // ⛔ Not a `Carried -> Lowered` conversion: a carried root FAILS CLOSED.
-        // A generated function's return is `emit_result`'s ground-value encoding,
-        // which reads a compile-time template; `D6`'s executable edge runs
-        // producer -> validator -> eliminator *inside* a body, and never asks the
-        // root to decode a boundary word.
-        let lowered = lowered.specialized_at("the generated function's root result")?;
-        let result = match lowered {
-            Lowered::Trap(trap) => {
-                #[cfg(test)]
+        BodyEmissionAuthority::RecursiveDescent => {
+            let mut maybe_trap = None;
+            let mut decoder = None;
+            {
+                let mut builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
+                let block = builder.create_block();
+                builder.append_block_params_for_function_params(block);
+                builder.switch_to_block(block);
+                let ingress = builder.block_params(block)[0];
+                let services = builder.block_params(block)[1];
+                let pointer_type = module.target_config().pointer_type();
+                let native_int_arena = builder.ins().load(
+                    pointer_type,
+                    MemFlags::trusted(),
+                    services,
+                    crate::activation_services::SERVICES_NATIVE_INT_ARENA,
+                );
+                Lowering::require_nonzero(&mut builder, native_int_arena);
+                let boundary_arena = builder.ins().load(
+                    pointer_type,
+                    MemFlags::trusted(),
+                    services,
+                    crate::activation_services::SERVICES_BOUNDARY_ARENA,
+                );
+                Lowering::require_nonzero(&mut builder, boundary_arena);
+                compiler.function_local.services_pointer = Some(services);
+                compiler.function_local.native_int_arena = Some(native_int_arena);
+                compiler.function_local.boundary_arena = Some(boundary_arena);
+
+                let mut initial_env = Vec::new();
                 if process_mode {
-                    px8tr_record_trap_provenance(
-                        Px8trTrapProvenanceEvent::FinalProcessObjectTrap { trap: trap.clone() },
+                    let process_input = builder.ins().load(
+                        pointer_type,
+                        MemFlags::trusted(),
+                        ingress,
+                        crate::boundary_activation::ROOT_INGRESS_PROCESS_INPUT,
                     );
+                    Lowering::require_nonzero(&mut builder, process_input);
+                    let host_dispatch_context = builder.ins().load(
+                        pointer_type,
+                        MemFlags::trusted(),
+                        ingress,
+                        crate::boundary_activation::ROOT_INGRESS_HOST_DISPATCH_CONTEXT,
+                    );
+                    Lowering::require_nonzero(&mut builder, host_dispatch_context);
+                    let capability = builder.ins().load(
+                        types::I64,
+                        MemFlags::trusted(),
+                        ingress,
+                        crate::boundary_activation::ROOT_INGRESS_CAPABILITY,
+                    );
+                    compiler.function_local.host_dispatch_context =
+                        Some(host_dispatch_context);
+                    initial_env.push(LoweringOperand::Specialized(
+                        Lowered::BorrowedNativeValue {
+                            pointer: process_input,
+                        },
+                    ));
+                    initial_env.push(LoweringOperand::Specialized(
+                        Lowered::CapabilityToken { value: capability },
+                    ));
+                } else {
+                    compiler.function_local.host_dispatch_context =
+                        Some(builder.ins().iconst(pointer_type, 0));
                 }
-                let status = builder
-                    .ins()
-                    .iconst(types::I64, if process_mode { -4 } else { 0 });
-                builder.ins().return_(&[status]);
-                (Some(trap), None)
+                if let Some(value) = staged_process_input {
+                    initial_env.push(LoweringOperand::Specialized(
+                        compiler.lower_value(&mut builder, value)?,
+                    ));
+                }
+                compiler.root_terminal_authority =
+                    compiler.take_distinguished_root_answer_authority()?;
+                let root_origin =
+                    compiler.static_transition_plan.root_static_origin()?;
+                let root = compiler.retained_body_occurrence(root_origin)?;
+                let lowered =
+                    compiler.lower_expr(&mut builder, root, &initial_env)?;
+                compiler.require_complete_join_plan_consumption()?;
+                compiler.require_complete_dynamic_splice_edge_consumption()?;
+                let lowered =
+                    lowered.specialized_at("the recursive-descent root result")?;
+                match lowered {
+                    Lowered::Trap(trap) => {
+                        #[cfg(test)]
+                        if process_mode {
+                            px8tr_record_trap_provenance(
+                                Px8trTrapProvenanceEvent::FinalProcessObjectTrap {
+                                    trap: trap.clone(),
+                                },
+                            );
+                        }
+                        let status = builder.ins().iconst(
+                            types::I64,
+                            if process_mode { -4 } else { 0 },
+                        );
+                        builder.ins().return_(&[status]);
+                        maybe_trap = Some(trap);
+                    }
+                    value => {
+                        let (token, result_decoder) =
+                            compiler.emit_result(&mut builder, value)?;
+                        builder.ins().return_(&[token]);
+                        decoder = Some(result_decoder);
+                    }
+                }
+                builder.seal_all_blocks();
+                builder.finalize();
             }
-            value => {
-                let (token, decoder) = compiler.emit_result(&mut builder, value)?;
-                builder.ins().return_(&[token]);
-                (None, Some(decoder))
+            verify_cranelift_function(&ctx.func, module.isa())?;
+            module
+                .define_function(func_id, &mut ctx)
+                .map_err(|err| backend_module(err.to_string()))?;
+            super::units::RootUnitResult {
+                decoder,
+                trap: maybe_trap,
             }
-        };
-        builder.seal_all_blocks();
-        builder.finalize();
-        result
+        }
     };
-
-    verify_cranelift_function(&ctx.func, module.isa())?;
-    module
-        .define_function(func_id, &mut ctx)
-        .map_err(|err| backend_module(err.to_string()))?;
-    // ⭐ `RT-FNSPLIT-B2F` `D2` — define every declared unit against `B2R`'s
-    // activation frame. After the root's own definition, so the root's context
-    // is finished before any unit context is made.
-    //
-    // ⚠ `compiler` owns the plan, so the units are defined through the borrow it
-    // holds rather than through a second copy — there is one plan and one
-    // population, not a re-derivation per emission phase.
-    super::units::define_unit_bodies(
-        &mut module,
-        &compiler.static_transition_plan,
-        &unit_bundle,
-        &call_edges,
-    )?;
-    // The plan is no longer dropped unused here: `compiler` owns it and it dies
-    // with this call. `CompiledModule::from_parts` below takes only owned data
-    // and the type has no lifetime parameter, so no part of the plan can reach
-    // the artifact — the non-escape property is a fact about the types.
-
     Ok(CompiledModule::from_parts(
         module,
         func_id,
-        decoder,
+        root_result.decoder,
         compiler.result_table,
-        maybe_trap,
+        root_result.trap,
         true,
         compiler.assumptions,
         compiler.unsupported,
@@ -787,33 +962,40 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     }) => {
-                        // Resolve the tag once, here, and shadow it: everything
-                        // below reads the body's syntax or its origin, and both come
-                        // from the one resolution rather than from a term the
-                        // closure carried.
-                        let body = self.retained_body_occurrence(body)?;
-                        if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
-                            if let Some((cases, default)) =
-                                ordinary_match_continuation(&params, body.expr)
+                        if matches!(
+                            self.body_emission_authority,
+                            BodyEmissionAuthority::RecursiveDescent
+                        ) {
+                            let retained = self.retained_body_occurrence(body)?;
+                            if args.len() == 1
+                                && requires_heterogeneous_deforestation(&args[0])
                             {
-                                let argument = self.child_occurrence(static_origin, 1, &args[0])?;
-                                let frame_env = env_with(captures, producer_env);
-                                let mut composed = Vec::with_capacity(eliminators.len() + 1);
-                                composed.push(EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
-                                    cases,
-                                    default,
-                                    env: &frame_env,
-                                    static_origin: body.static_origin,
-                                    retained_scrutinee_index: Some(0),
-                                    deferred_constructor_case: None,
-                                }));
-                                composed.extend_from_slice(eliminators);
-                                return self.lower_computational_producer_expr(
-                                    builder,
-                                    argument,
-                                    producer_env,
-                                    &composed,
-                                );
+                                if let Some((cases, default)) =
+                                    ordinary_match_continuation(&params, retained.expr)
+                                {
+                                    let argument =
+                                        self.child_occurrence(static_origin, 1, &args[0])?;
+                                    let frame_env = env_with(captures.clone(), producer_env);
+                                    let mut composed =
+                                        Vec::with_capacity(eliminators.len() + 1);
+                                    composed.push(EliminatorFrame::Ordinary(
+                                        OrdinaryEliminatorFrame {
+                                            cases,
+                                            default,
+                                            env: &frame_env,
+                                            static_origin: retained.static_origin,
+                                            retained_scrutinee_index: Some(0),
+                                            deferred_constructor_case: None,
+                                        },
+                                    ));
+                                    composed.extend_from_slice(eliminators);
+                                    return self.lower_computational_producer_expr(
+                                        builder,
+                                        argument,
+                                        producer_env,
+                                        &composed,
+                                    );
+                                }
                             }
                         }
                         if params.len() != args.len() {
@@ -832,17 +1014,61 @@ impl<'a> Lowering<'a> {
                             .map(|(position, arg)| {
                                 let arg =
                                     self.child_occurrence(static_origin, 1 + position, arg)?;
-                                self.lower_expr(builder, arg, producer_env)
+                                let lowered = self.lower_expr(builder, arg, producer_env)?;
+                                match self.body_emission_authority {
+                                    BodyEmissionAuthority::RecursiveDescent => Ok(lowered),
+                                    BodyEmissionAuthority::FunctionizedUnits => {
+                                        Ok(match lowered {
+                                            LoweringOperand::Carried(word) => {
+                                                LoweringOperand::Carried(word)
+                                            }
+                                            LoweringOperand::Specialized(value) => {
+                                                LoweringOperand::Carried(
+                                                    self.transfer_into_carrier(
+                                                        builder,
+                                                        arg.static_origin,
+                                                        &value,
+                                                    )?,
+                                                )
+                                            }
+                                        })
+                                    }
+                                }
                             })
                             .collect::<Result<Vec<_>, _>>()?;
                         call_env.extend(captures.into_iter().map(LoweringOperand::Specialized));
-                        call_env.extend_from_slice(producer_env);
-                        self.lower_computational_producer_expr(
-                            builder,
-                            body,
-                            &call_env,
-                            eliminators,
-                        )
+                        if matches!(
+                            self.body_emission_authority,
+                            BodyEmissionAuthority::RecursiveDescent
+                        ) {
+                            call_env.extend_from_slice(producer_env);
+                        }
+                        match self.body_emission_authority {
+                            BodyEmissionAuthority::RecursiveDescent => {
+                                let body = self.retained_body_occurrence(body)?;
+                                self.lower_computational_producer_expr(
+                                    builder,
+                                    body,
+                                    &call_env,
+                                    eliminators,
+                                )
+                            }
+                            BodyEmissionAuthority::FunctionizedUnits => {
+                                let returned =
+                                    self.call_declared_unit(
+                                        builder,
+                                        body,
+                                        &call_env,
+                                        #[cfg(test)]
+                                        None,
+                                    )?;
+                                self.lower_computational_match_value_composed(
+                                    builder,
+                                    returned,
+                                    eliminators,
+                                )
+                            }
+                        }
                     }
                     LoweringOperand::Specialized(
                         mut callee @ Lowered::ComputationalRecursorClosure { .. },
@@ -953,18 +1179,62 @@ impl<'a> Lowering<'a> {
                             .map(|(position, arg)| {
                                 let arg =
                                     self.child_occurrence(static_origin, 1 + position, arg)?;
-                                self.lower_expr(builder, arg, producer_env)
+                                let lowered = self.lower_expr(builder, arg, producer_env)?;
+                                match self.body_emission_authority {
+                                    BodyEmissionAuthority::RecursiveDescent => Ok(lowered),
+                                    BodyEmissionAuthority::FunctionizedUnits => {
+                                        Ok(match lowered {
+                                            LoweringOperand::Carried(word) => {
+                                                LoweringOperand::Carried(word)
+                                            }
+                                            LoweringOperand::Specialized(value) => {
+                                                LoweringOperand::Carried(
+                                                    self.transfer_into_carrier(
+                                                        builder,
+                                                        arg.static_origin,
+                                                        &value,
+                                                    )?,
+                                                )
+                                            }
+                                        })
+                                    }
+                                }
                             })
                             .collect::<Result<Vec<_>, _>>()?;
                         call_env.extend(captures.into_iter().map(LoweringOperand::Specialized));
-                        call_env.extend_from_slice(producer_env);
+                        if matches!(
+                            self.body_emission_authority,
+                            BodyEmissionAuthority::RecursiveDescent
+                        ) {
+                            call_env.extend_from_slice(producer_env);
+                        }
                         self.enter_oriented_semantic_region(installed.checked);
-                        let returned = self.lower_computational_producer_expr(
-                            builder,
-                            self.retained_body_occurrence(body)?,
-                            &call_env,
-                            &composed,
-                        );
+                        let returned = match self.body_emission_authority {
+                            BodyEmissionAuthority::RecursiveDescent => {
+                                let body = self.retained_body_occurrence(body)?;
+                                self.lower_computational_producer_expr(
+                                    builder,
+                                    body,
+                                    &call_env,
+                                    &composed,
+                                )
+                            }
+                            BodyEmissionAuthority::FunctionizedUnits => {
+                                let returned =
+                                    self.call_declared_unit(
+                                        builder,
+                                        body,
+                                        &call_env,
+                                        #[cfg(test)]
+                                        None,
+                                    )?;
+                                self.lower_computational_match_value_composed(
+                                    builder,
+                                    returned,
+                                    &composed,
+                                )
+                            }
+                        };
                         self.leave_oriented_semantic_region(installed.checked);
                         let returned = returned?;
                         self.lower_computational_match_value_composed(
@@ -1013,7 +1283,10 @@ impl<'a> Lowering<'a> {
                         .collect::<Result<Vec<_>, _>>()?;
                     return Ok(LoweringOperand::Specialized(Lowered::Constructor {
                         constructor: constructor.clone(),
-                        synthesized_identity: None,
+                        synthesized_identity: Some(
+                            self.static_transition_plan
+                                .constructor_symbol_identity(static_origin)?,
+                        ),
                         args: specialized_env_at(&lowered_args, "a constructor argument")?,
                     }));
                 }
@@ -1214,13 +1487,34 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, arg, producer_env)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                self.lower_computational_match_value_composed(
-                    builder,
+                let produced = if lowered_args
+                    .iter()
+                    .any(|argument| matches!(argument, LoweringOperand::Carried(_)))
+                {
+                    LoweringOperand::Carried(self.transfer_constructor_operands(
+                        builder,
+                        static_origin,
+                        constructor,
+                        &lowered_args,
+                    )?)
+                } else {
                     LoweringOperand::Specialized(Lowered::Constructor {
                         constructor: constructor.clone(),
-                        synthesized_identity: None,
+                        // Carry the plan's already-resolved source identity with
+                        // the template.  A later unit boundary may receive this
+                        // result after nested producer traversal, where the
+                        // caller occurrence is not the constructor occurrence
+                        // and therefore cannot lawfully re-query its atom.
+                        synthesized_identity: Some(
+                            self.static_transition_plan
+                                .constructor_symbol_identity(static_origin)?,
+                        ),
                         args: specialized_env_at(&lowered_args, "a constructor argument")?,
-                    }),
+                    })
+                };
+                self.lower_computational_match_value_composed(
+                    builder,
+                    produced,
                     eliminators,
                 )
             }
@@ -1610,8 +1904,8 @@ impl<'a> Lowering<'a> {
         }
         let Lowered::Constructor {
             constructor,
+            synthesized_identity,
             args,
-            ..
         } = scrutinee else {
             return Err(unsupported(
                 "ComputationalMatch",
@@ -1620,7 +1914,7 @@ impl<'a> Lowering<'a> {
         };
         let retained_scrutinee = Lowered::Constructor {
             constructor: constructor.clone(),
-            synthesized_identity: None,
+            synthesized_identity,
             args: args.clone(),
         };
         let remaining_eliminators = &eliminators[1..];
@@ -2156,7 +2450,10 @@ impl<'a> Lowering<'a> {
         }
         let outer_scrutinee = Lowered::Constructor {
             constructor: deferred.constructor.to_string(),
-            synthesized_identity: None,
+            synthesized_identity: Some(
+                self.static_transition_plan
+                    .constructor_symbol_identity(deferred.construct_origin)?,
+            ),
             args: constructor_args.clone(),
         };
         let outer_tail = match self.materialize_eliminator_frame_env(
@@ -2456,6 +2753,7 @@ impl<'a> Lowering<'a> {
                                 value: LoweringOperand::Specialized(self.finish_source_constructor(
                                     builder,
                                     constructor,
+                                    static_origin,
                                     vec![],
                                 )?),
                                 control,
@@ -2474,6 +2772,7 @@ impl<'a> Lowering<'a> {
                                 .collect::<Result<Vec<_>, _>>()?;
                             control.continuation = SourceContinuation::ConstructArgument {
                                 constructor,
+                                static_origin,
                                 remaining,
                                 lowered: Vec::new(),
                                 env: env.clone(),
@@ -2833,6 +3132,7 @@ impl<'a> Lowering<'a> {
                         }
                         SourceContinuation::ConstructArgument {
                             constructor,
+                            static_origin,
                             mut remaining,
                             mut lowered,
                             env,
@@ -2850,6 +3150,7 @@ impl<'a> Lowering<'a> {
                                     value: LoweringOperand::Specialized(self.finish_source_constructor(
                                         builder,
                                         constructor,
+                                        static_origin,
                                         lowered,
                                     )?),
                                     control,
@@ -2858,6 +3159,7 @@ impl<'a> Lowering<'a> {
                                 let first = remaining.remove(0);
                                 control.continuation = SourceContinuation::ConstructArgument {
                                     constructor,
+                                    static_origin,
                                     remaining,
                                     lowered,
                                     env: env.clone(),
@@ -4546,7 +4848,7 @@ impl<'a> Lowering<'a> {
     /// makes selection closed is therefore not one caller but that
     /// `Lowered::Closure`/`DeclarationClosure` carry only a tag — so this is the
     /// *only* way any of them can reach a term at all.
-    fn retained_body_occurrence(
+    pub(super) fn retained_body_occurrence(
         &self,
         static_origin: StaticOriginId,
     ) -> Result<SourceOccurrence<'a>, CraneliftBackendError> {
@@ -4706,9 +5008,141 @@ impl<'a> Lowering<'a> {
                 ),
             )),
             LoweringOperand::Specialized(lowered) => {
-                self.transfer_into_carrier(builder, origin, &lowered)
+                let terminal_exit = self.process_object
+                    && self
+                        .function_local
+                        .terminal_result_origins
+                        .contains(&origin)
+                    && matches!(
+                        &lowered,
+                        Lowered::Constructor { constructor, .. }
+                            if constructor == &self.process_symbols.exit_success
+                                || constructor == &self.process_symbols.exit_failure
+                    );
+                if terminal_exit {
+                    let status = self.emit_process_exit_status(builder, lowered);
+                    self.emit_carrier_immediate(
+                        builder,
+                        BoundaryTag::ImmediateExitStatus,
+                        status,
+                    )
+                } else {
+                    self.transfer_into_carrier(builder, origin, &lowered)
+                }
             }
         }
+    }
+
+    /// Build one source constructor directly in the boundary carrier when at
+    /// least one child has already crossed a generated-unit edge.
+    ///
+    /// The constructor identity and child origins still come exclusively from
+    /// the static plan.  A carried child is stored unchanged; a specialized
+    /// sibling crosses through the sole producer before both are joined in the
+    /// same runtime node.
+    fn transfer_constructor_operands(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        constructor: &str,
+        args: &[LoweringOperand],
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        if constructor == self.process_symbols.exit_failure {
+            if let [LoweringOperand::Carried(code)] = args {
+                return self.transfer_carried_failure_exit_status(builder, *code);
+            }
+        }
+        let identity = self
+            .static_transition_plan
+            .constructor_symbol_identity(origin)?
+            .tag_abi_word()?;
+        let word = self.emit_carrier_alloc(
+            builder,
+            BoundaryTag::PersistentGround,
+            BoundaryClass::Constructor,
+            args.len(),
+        )?;
+        self.emit_carrier_store_tag_id(builder, word, identity)?;
+        for (position, argument) in args.iter().enumerate() {
+            let child_origin = self
+                .static_transition_plan
+                .child_static_origin(origin, position)?;
+            let child = match argument {
+                LoweringOperand::Carried(child) => *child,
+                LoweringOperand::Specialized(value) => {
+                    self.transfer_into_carrier(builder, child_origin, value)?
+                }
+            };
+            self.emit_carrier_store_field(builder, word, position, child)?;
+        }
+        Ok(word)
+    }
+
+    /// Preserve the established process-exit mapping when the failure code
+    /// crosses a unit edge before its enclosing constructor is lowered.
+    ///
+    /// Every valid native exit code is inside the immediate-Int domain. A
+    /// non-immediate Int is therefore invalid without decoding its magnitude;
+    /// the immediate arm reads the scalar through the carrier ABI and applies
+    /// the same `0 -> 1`, `1..=255 -> self`, otherwise `-3` mapping used by
+    /// `emit_process_exit_status`.
+    fn transfer_carried_failure_exit_status(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        code: CarriedBoundaryWord,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let tag = builder.ins().band_imm(
+            code.word,
+            crate::boundary_value::BOUNDARY_TAG_MASK as i64,
+        );
+        let immediate = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            tag,
+            BoundaryTag::ImmediateInt as i64,
+        );
+        let immediate_block = builder.create_block();
+        let invalid_block = builder.create_block();
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        builder
+            .ins()
+            .brif(immediate, immediate_block, &[], invalid_block, &[]);
+
+        builder.switch_to_block(immediate_block);
+        let value = self.emit_carrier_scalar(builder, code)?;
+        let zero = builder.ins().iconst(types::I64, 0);
+        let one = builder.ins().iconst(types::I64, 1);
+        let malformed = builder.ins().iconst(types::I64, -3);
+        let positive = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedGreaterThan,
+            value,
+            zero,
+        );
+        let within_max = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
+            value,
+            255,
+        );
+        let valid = builder.ins().band(positive, within_max);
+        let nonzero = builder.ins().select(valid, value, malformed);
+        let is_zero = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            value,
+            zero,
+        );
+        let status = builder.ins().select(is_zero, one, nonzero);
+        builder.ins().jump(merge, &[status.into()]);
+
+        builder.switch_to_block(invalid_block);
+        let malformed = builder.ins().iconst(types::I64, -3);
+        builder.ins().jump(merge, &[malformed.into()]);
+
+        builder.switch_to_block(merge);
+        self.emit_carrier_immediate(
+            builder,
+            BoundaryTag::ImmediateExitStatus,
+            builder.block_params(merge)[0],
+        )
     }
 
     /// ⭐⭐ **`D3` — `Match` eliminating a value that has NO compile-time
@@ -4743,6 +5177,88 @@ impl<'a> Lowering<'a> {
     /// route is reached only by a test that seeds one. Stated here so the
     /// reachability is not overclaimed by a later reader.
     fn lower_carried_match(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        scrutinee: CarriedBoundaryWord,
+        cases: &[crate::RuntimeMatchCase],
+        default: &RuntimeTrap,
+        static_origin: StaticOriginId,
+        env: &[LoweringOperand],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        if cases.is_empty() {
+            return Ok(LoweringOperand::Specialized(Lowered::Trap(default.clone())));
+        }
+        // Only the closed process-input constructor family can arrive through
+        // the borrowed-opaque lane.  Do not materialize that branch for an
+        // ordinary carried match: Cranelift must compile both successors, so a
+        // runtime class test alone would incorrectly require borrowed
+        // identities for unrelated source constructors.
+        let admits_borrowed_input = self.process_object
+            && cases.iter().all(|case| {
+                borrowed_constructor_identity(&self.process_symbols, &case.constructor).is_some()
+            });
+        if !admits_borrowed_input {
+            return self.lower_nonborrowed_carried_match(
+                builder,
+                scrutinee,
+                cases,
+                default,
+                static_origin,
+                env,
+            );
+        }
+        let class = self.emit_carrier_class(builder, scrutinee)?;
+        let is_borrowed = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            class,
+            BoundaryClass::BorrowedOpaque as i64,
+        );
+        let borrowed = builder.create_block();
+        let represented = builder.create_block();
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+        builder
+            .ins()
+            .brif(is_borrowed, borrowed, &[], represented, &[]);
+
+        builder.switch_to_block(borrowed);
+        let pointer = self.emit_carrier_scalar(builder, scrutinee)?;
+        let borrowed_result =
+            self.lower_borrowed_match(builder, pointer, cases, default, static_origin, env)?;
+        let borrowed_word = self.carried_join_arm(
+            builder,
+            static_origin,
+            borrowed_result,
+            "a carried borrowed-input match",
+        )?;
+        builder.ins().jump(merge, &[borrowed_word.word.into()]);
+
+        builder.switch_to_block(represented);
+        let represented_result = self.lower_nonborrowed_carried_match(
+            builder,
+            scrutinee,
+            cases,
+            default,
+            static_origin,
+            env,
+        )?;
+        let represented_word = self.carried_join_arm(
+            builder,
+            static_origin,
+            represented_result,
+            "a carried represented-value match",
+        )?;
+        builder
+            .ins()
+            .jump(merge, &[represented_word.word.into()]);
+
+        builder.switch_to_block(merge);
+        Ok(LoweringOperand::Carried(CarriedBoundaryWord {
+            word: builder.block_params(merge)[0],
+        }))
+    }
+
+    fn lower_nonborrowed_carried_match(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         scrutinee: CarriedBoundaryWord,
@@ -5376,7 +5892,7 @@ impl<'a> Lowering<'a> {
     ///
     /// ⛔ Where the two orders could ever disagree the **planner's** position
     /// wins: the plane's records are already laid out against it.
-    fn lower_expr(
+    pub(super) fn lower_expr(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         occurrence: SourceOccurrence<'_>,
@@ -5500,13 +6016,32 @@ impl<'a> Lowering<'a> {
                 for (block, arm) in [(then_block, then_expr), (else_block, else_expr)] {
                     builder.switch_to_block(block);
                     let lowered = self.lower_expr(builder, arm, env)?;
-                    let LoweringOperand::Specialized(Lowered::Int { value, known }) = lowered else {
-                        return Err(unsupported(
-                            "If",
-                            "dynamic native If arms must produce scalar Int values",
-                        ));
+                    let (value, tag) = match lowered {
+                        LoweringOperand::Specialized(Lowered::Int { value, known }) => {
+                            (value, self.native_int_tag(builder, value, known)?)
+                        }
+                        LoweringOperand::Carried(word) => {
+                            let carrier_tag = builder.ins().band_imm(
+                                word.word,
+                                crate::boundary_value::BOUNDARY_TAG_MASK as i64,
+                            );
+                            Self::require_i64(
+                                builder,
+                                carrier_tag,
+                                crate::boundary_value::BoundaryTag::ImmediateInt as i64,
+                            );
+                            let value = self.emit_carrier_scalar(builder, word)?;
+                            let _ = self.lower_dynamic_small_int(builder, value);
+                            let tag = self.native_int_tag(builder, value, None)?;
+                            (value, tag)
+                        }
+                        LoweringOperand::Specialized(_) => {
+                            return Err(unsupported(
+                                "If",
+                                "dynamic native If arms must produce scalar Int values",
+                            ));
+                        }
                     };
-                    let tag = self.native_int_tag(builder, value, known)?;
                     builder.ins().jump(merge, &[tag.into(), value.into()]);
                 }
                 builder.switch_to_block(merge);
@@ -5555,9 +6090,25 @@ impl<'a> Lowering<'a> {
                         })));
                     }
                 }
+                if lowered_args
+                    .iter()
+                    .any(|argument| matches!(argument, LoweringOperand::Carried(_)))
+                {
+                    return Ok(LoweringOperand::Carried(
+                        self.transfer_constructor_operands(
+                            builder,
+                            static_origin,
+                            constructor,
+                            &lowered_args,
+                        )?,
+                    ));
+                }
                 Ok(LoweringOperand::Specialized(Lowered::Constructor {
                     constructor: constructor.clone(),
-                    synthesized_identity: None,
+                    synthesized_identity: Some(
+                        self.static_transition_plan
+                            .constructor_symbol_identity(static_origin)?,
+                    ),
                     args: specialized_env_at(&lowered_args, "a constructor argument")?,
                 }))
             }
@@ -5912,6 +6463,65 @@ impl<'a> Lowering<'a> {
             )),
             RuntimeExpr::Call { callee, args } => {
                 let callee = self.child_occurrence(static_origin, 0, callee)?;
+                if matches!(
+                    self.body_emission_authority,
+                    BodyEmissionAuthority::FunctionizedUnits
+                ) {
+                    if let RuntimeExpr::LexicalClosure {
+                        captures,
+                        params,
+                        body,
+                    } = callee.expr
+                    {
+                        if params.len() != args.len() {
+                            return Err(unsupported(
+                                "Call",
+                                format!(
+                                    "closure expects {} args but call provides {}",
+                                    params.len(),
+                                    args.len()
+                                ),
+                            ));
+                        }
+                        let mut inputs = args
+                            .iter()
+                            .enumerate()
+                            .map(|(position, argument)| {
+                                let argument = self.child_occurrence(
+                                    static_origin,
+                                    1 + position,
+                                    argument,
+                                )?;
+                                self.lower_expr(builder, argument, env)
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        let closure_origin = callee.static_origin;
+                        inputs.extend(
+                            captures
+                                .iter()
+                                .enumerate()
+                                .map(|(position, capture)| {
+                                    let capture = self.child_occurrence(
+                                        closure_origin,
+                                        1 + position,
+                                        capture,
+                                    )?;
+                                    self.lower_expr(builder, capture, env)
+                                })
+                                .collect::<Result<Vec<_>, _>>()?,
+                        );
+                        let body = self
+                            .child_occurrence(closure_origin, 0, body)?
+                            .static_origin;
+                        return self.call_declared_unit(
+                            builder,
+                            body,
+                            &inputs,
+                            #[cfg(test)]
+                            None,
+                        );
+                    }
+                }
                 let lowered_callee = self.lower_expr(builder, callee, env)?;
                 match lowered_callee {
                     LoweringOperand::Specialized(Lowered::DeclarationClosure {
@@ -5935,41 +6545,32 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     }) => {
-                        // Resolved once and shadowed, as in the producer arm above.
-                        let body = self.retained_body_occurrence(body)?;
-                        if args.len() == 1 && requires_heterogeneous_deforestation(&args[0]) {
-                            // The cases here belong to the closure BODY
-                            // occurrence: `ordinary_match_continuation` matches
-                            // only a body that *is* a `Match` (over `Var(0)`),
-                            // so the body's own origin is their parent.
-                            if let Some((cases, default)) =
-                                ordinary_match_continuation(&params, body.expr)
-                            {
-                                let argument =
-                                    self.child_occurrence(static_origin, 1, &args[0])?;
-                                let frame_env = env_with(captures, env);
-                                return self.lower_computational_producer_expr(
-                                    builder,
-                                    argument,
-                                    env,
-                                    &[EliminatorFrame::Ordinary(OrdinaryEliminatorFrame {
-                                        cases,
-                                        default,
-                                        env: &frame_env,
-                                        static_origin: body.static_origin,
-                                        retained_scrutinee_index: Some(0),
-                                        deferred_constructor_case: None,
-                                    })],
-                                );
-                            }
-                        }
                         let mut call_env = args
                             .iter()
                             .enumerate()
                             .map(|(position, arg)| {
                                 let arg =
                                     self.child_occurrence(static_origin, 1 + position, arg)?;
-                                self.lower_expr(builder, arg, env)
+                                let lowered = self.lower_expr(builder, arg, env)?;
+                                match self.body_emission_authority {
+                                    BodyEmissionAuthority::RecursiveDescent => Ok(lowered),
+                                    BodyEmissionAuthority::FunctionizedUnits => {
+                                        Ok(match lowered {
+                                            LoweringOperand::Carried(word) => {
+                                                LoweringOperand::Carried(word)
+                                            }
+                                            LoweringOperand::Specialized(value) => {
+                                                LoweringOperand::Carried(
+                                                    self.transfer_into_carrier(
+                                                        builder,
+                                                        arg.static_origin,
+                                                        &value,
+                                                    )?,
+                                                )
+                                            }
+                                        })
+                                    }
+                                }
                             })
                             .collect::<Result<Vec<_>, _>>()?;
                         if params.len() != call_env.len() {
@@ -5983,8 +6584,21 @@ impl<'a> Lowering<'a> {
                             ));
                         }
                         call_env.extend(captures.into_iter().map(LoweringOperand::Specialized));
-                        call_env.extend_from_slice(env);
-                        self.lower_expr(builder, body, &call_env)
+                        match self.body_emission_authority {
+                            BodyEmissionAuthority::RecursiveDescent => {
+                                let body = self.retained_body_occurrence(body)?;
+                                self.lower_expr(builder, body, &call_env)
+                            }
+                            BodyEmissionAuthority::FunctionizedUnits => {
+                                self.call_declared_unit(
+                                    builder,
+                                    body,
+                                    &call_env,
+                                    #[cfg(test)]
+                                    None,
+                                )
+                            }
+                        }
                     }
                     LoweringOperand::Specialized(
                         mut callee @ Lowered::ComputationalRecursorClosure { .. },
@@ -6163,8 +6777,9 @@ impl<'a> Lowering<'a> {
         // written into a host request under a guessed encoding.
         let lowered = specialized_env_at(&lowered, "a host-effect operand")?;
         let pointer_type = builder.func.dfg.value_type(
-            self.function_local.invocation_pointer
-                .expect("process effect lowering owns an invocation pointer"),
+            self.function_local
+                .host_dispatch_context
+                .expect("process effect lowering owns a direct host context"),
         );
         let wire = ken_host::host_effect_wire_layout_v1(operation).map_err(|error| {
             unsupported(
@@ -6240,13 +6855,17 @@ impl<'a> Lowering<'a> {
                 // Present ⇒ the capability value is child 0 of this occurrence.
                 let capability_value =
                     self.child_occurrence(static_origin, 0, &capability.value)?;
-                let LoweringOperand::Specialized(Lowered::CapabilityToken { value: token }) =
-                    self.lower_expr(builder, capability_value, env)?
-                else {
-                    return Err(unsupported(
-                        "Effect",
-                        "FS capability operand is not the opaque invocation token",
-                    ));
+                let token = match self.lower_expr(builder, capability_value, env)? {
+                    LoweringOperand::Specialized(Lowered::CapabilityToken { value }) => value,
+                    LoweringOperand::Carried(word) => {
+                        self.emit_carrier_scalar(builder, word)?
+                    }
+                    _ => {
+                        return Err(unsupported(
+                            "Effect",
+                            "FS capability operand is not the opaque invocation token",
+                        ));
+                    }
                 };
                 builder.ins().stack_store(token, request, request_offset(0));
                 let (path, path_len) = self.wire_bytes(
@@ -6468,9 +7087,10 @@ impl<'a> Lowering<'a> {
             wire.reply_size,
             wire.reply_align_shift,
         ));
-        let invocation = self.function_local
-            .invocation_pointer
-            .expect("process effect lowering owns an invocation pointer");
+        let host_context = self
+            .function_local
+            .host_dispatch_context
+            .expect("process effect lowering owns a direct host context");
         let op = builder.ins().iconst(types::I64, operation as i64);
         let request_pointer = builder.ins().stack_addr(pointer_type, request, 0);
         let request_size = builder
@@ -6487,7 +7107,13 @@ impl<'a> Lowering<'a> {
             let call = builder.ins().call(
                 self.function_local.host_dispatch
                     .expect("process effect lowering owns one host dispatch import"),
-                &[invocation, op, request_pointer, request_size, reply_pointer],
+                &[
+                    host_context,
+                    op,
+                    request_pointer,
+                    request_size,
+                    reply_pointer,
+                ],
             );
             let status = builder.inst_results(call)[0];
             Self::require_i64(builder, status, 0);
@@ -6533,7 +7159,13 @@ impl<'a> Lowering<'a> {
             let call = builder.ins().call(
                 self.function_local.host_dispatch
                     .expect("process effect lowering owns one host dispatch import"),
-                &[invocation, op, request_pointer, request_size, reply_pointer],
+                &[
+                    host_context,
+                    op,
+                    request_pointer,
+                    request_size,
+                    reply_pointer,
+                ],
             );
             let status = builder.inst_results(call)[0];
             Self::require_i64(builder, status, 0);
@@ -7920,13 +8552,110 @@ impl<'a> Lowering<'a> {
             }
         }
 
-        // ⭐ `§2h` ¶2's typed phase boundary in front of the primitive leaves.
-        // Every arm below builds a **fresh specialized value** out of templates
-        // it reads — an `Int`'s known-ness, a `Bytes` body, a `Bool`'s constant
-        // — which is the ruling's own example of a helper that keeps raw
-        // `Lowered`. ⛔ A carried operand fails closed here instead of reaching
-        // one of them; its route is an emitted helper call.
-        let lowered_args = specialized_env_at(&lowered_args, "a primitive-call operand")?;
+        // A primitive's static symbol determines whether its operands are
+        // scalar Ints or Bools. A carried word in one of those positions is
+        // projected through the emitted scalar helper; no runtime tag chooses
+        // which source type the operand is.
+        let scalar_kind = match primitive.symbol.as_str() {
+            "add_int" | "sub_int" | "mul_int" | "eq_int" | "leq_int"
+            | "uint8_to_int" | "int_to_uint8_raw" => Some("Int"),
+            "not_bool" | "and_bool" | "or_bool" => Some("Bool"),
+            _ => None,
+        };
+        let lowered_args = if primitive.symbol == "bytes_length" {
+            match lowered_args.as_slice() {
+                [LoweringOperand::Specialized(_)] => specialized_env_at(
+                    &lowered_args,
+                    "the bytes_length operand",
+                )?,
+                [LoweringOperand::Carried(word)] => {
+                    let class = self.emit_carrier_class(builder, *word)?;
+                    Self::require_i64(
+                        builder,
+                        class,
+                        BoundaryClass::BorrowedOpaque as i64,
+                    );
+                    let pointer = self.emit_carrier_scalar(builder, *word)?;
+                    vec![Lowered::BorrowedNativeValue { pointer }]
+                }
+                _ => {
+                    return Err(unsupported(
+                        "PrimitiveCall",
+                        "bytes_length requires exactly one bytes operand",
+                    ));
+                }
+            }
+        } else if primitive.symbol == "bytes_at" {
+            lowered_args
+                .into_iter()
+                .enumerate()
+                .map(|(position, arg)| match (position, arg) {
+                    (_, LoweringOperand::Specialized(value)) => Ok(value),
+                    (0, LoweringOperand::Carried(word)) => {
+                        let class = self.emit_carrier_class(builder, word)?;
+                        Self::require_i64(
+                            builder,
+                            class,
+                            BoundaryClass::BorrowedOpaque as i64,
+                        );
+                        let pointer = self.emit_carrier_scalar(builder, word)?;
+                        Ok(Lowered::BorrowedNativeValue { pointer })
+                    }
+                    (1, LoweringOperand::Carried(word)) => {
+                        let tag = builder.ins().band_imm(
+                            word.word,
+                            crate::boundary_value::BOUNDARY_TAG_MASK as i64,
+                        );
+                        Self::require_i64(
+                            builder,
+                            tag,
+                            crate::boundary_value::BoundaryTag::ImmediateInt as i64,
+                        );
+                        let value = self.emit_carrier_scalar(builder, word)?;
+                        Ok(self.lower_dynamic_small_int(builder, value))
+                    }
+                    (_, LoweringOperand::Carried(_)) => Err(unsupported(
+                        "PrimitiveCall",
+                        "bytes_at received more operands than its closed static signature",
+                    )),
+                })
+                .collect::<Result<Vec<_>, CraneliftBackendError>>()?
+        } else if let Some(kind) = scalar_kind {
+            lowered_args
+                .into_iter()
+                .map(|arg| match arg {
+                    LoweringOperand::Specialized(value) => Ok(value),
+                    LoweringOperand::Carried(word) => {
+                        let value = self.emit_carrier_scalar(builder, word)?;
+                        let tag = builder.ins().band_imm(
+                            word.word,
+                            crate::boundary_value::BOUNDARY_TAG_MASK as i64,
+                        );
+                        Ok(match kind {
+                            "Int" => {
+                                Self::require_i64(
+                                    builder,
+                                    tag,
+                                    crate::boundary_value::BoundaryTag::ImmediateInt as i64,
+                                );
+                                self.lower_dynamic_small_int(builder, value)
+                            }
+                            "Bool" => {
+                                Self::require_i64(
+                                    builder,
+                                    tag,
+                                    crate::boundary_value::BoundaryTag::ImmediateBool as i64,
+                                );
+                                Lowered::Bool { value, known: None }
+                            }
+                            _ => unreachable!("closed primitive scalar kind"),
+                        })
+                    }
+                })
+                .collect::<Result<Vec<_>, CraneliftBackendError>>()?
+        } else {
+            specialized_env_at(&lowered_args, "a primitive-call operand")?
+        };
         let lowered = match primitive.symbol.as_str() {
             "add_int" => self.lower_int_binop(builder, "add_int", lowered_args, |lhs, rhs| {
                 lhs.checked_add(rhs)

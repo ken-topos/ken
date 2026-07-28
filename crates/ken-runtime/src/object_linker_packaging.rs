@@ -1795,10 +1795,11 @@ extern long long ken_boundary_store_v1_open(const struct KenBoundaryResourceProf
 extern long long ken_boundary_store_v1_destroy(void *store);
 extern long long ken_activation_v1_begin(void *store, void **out_activation);
 extern long long ken_activation_v1_native_frame(const void *activation, const void **out_frame);
+extern long long ken_activation_v1_services(const void *activation, const void **out_services);
 extern long long ken_activation_v1_write_final_export(const void *activation, long long fallback, unsigned char *buffer, size_t capacity, size_t *out_len);
 extern long long ken_activation_v1_finish(void *activation, void *store, uint64_t escaping, uint64_t *out_word);
 extern long long ken_activation_v1_destroy(void *activation);
-extern long long ken_nc23_entrypoint(const void *frame);
+extern long long ken_nc23_entrypoint(const void *frame, const void *services);
 
 int main(void) {{
     struct KenBoundaryResourceProfileV1 profile = {{
@@ -1811,6 +1812,7 @@ int main(void) {{
     void *store = NULL;
     void *activation = NULL;
     const void *frame = NULL;
+    const void *services = NULL;
     if (ken_boundary_store_v1_open(&profile, &store) != 0) return 1;
     if (ken_activation_v1_begin(store, &activation) != 0) {{
         ken_boundary_store_v1_destroy(store);
@@ -1821,7 +1823,12 @@ int main(void) {{
         ken_boundary_store_v1_destroy(store);
         return 1;
     }}
-    long long value = ken_nc23_entrypoint(frame);
+    if (ken_activation_v1_services(activation, &services) != 0) {{
+        ken_activation_v1_destroy(activation);
+        ken_boundary_store_v1_destroy(store);
+        return 1;
+    }}
+    long long value = ken_nc23_entrypoint(frame, services);
     unsigned char rendered[512];
     size_t rendered_len = 0;
     int status = 0;
@@ -1907,10 +1914,11 @@ struct KenHostInitResultV1 {
     uint64_t plan_hash;
 };
 
-extern long long ken_nc23_entrypoint(const void *frame);
+extern long long ken_nc23_entrypoint(const void *frame, const void *services);
 extern long long ken_boundary_store_v1_open(const struct KenBoundaryResourceProfileV1 *profile, void **out_store);
 extern long long ken_boundary_store_v1_destroy(void *store);
 extern long long ken_activation_v1_begin(void *store, void **out_activation);
+extern long long ken_activation_v1_services(const void *activation, const void **out_services);
 extern long long ken_activation_v1_bind_process_frame(void *activation, const void *process_input, void *host_context, uint64_t capability, const void **out_frame);
 extern long long ken_activation_v1_finish(void *activation, void *store, uint64_t escaping, uint64_t *out_word);
 extern long long ken_activation_v1_destroy(void *activation);
@@ -2075,6 +2083,7 @@ int main(int argc, char **argv, char **envp) {
     void *store = NULL;
     void *activation = NULL;
     const void *frame = NULL;
+    const void *services = NULL;
     if (ken_boundary_store_v1_open(&profile, &store) != 0) { free(pool); free(cwd); return 1; }
     if (ken_activation_v1_begin(store, &activation) != 0) {
         ken_boundary_store_v1_destroy(store); free(pool); free(cwd); return 1;
@@ -2083,7 +2092,11 @@ int main(int argc, char **argv, char **envp) {
         ken_activation_v1_destroy(activation); ken_boundary_store_v1_destroy(store);
         free(pool); free(cwd); return 1;
     }
-    long long value = ken_nc23_entrypoint(frame);
+    if (ken_activation_v1_services(activation, &services) != 0) {
+        ken_activation_v1_destroy(activation); ken_boundary_store_v1_destroy(store);
+        free(pool); free(cwd); return 1;
+    }
+    long long value = ken_nc23_entrypoint(frame, services);
     long long finish_status = ken_host_invocation_v1_finish(host_init.context, value);
     uint64_t adopted = 0;
     ken_activation_v1_finish(activation, store, 0, &adopted);
