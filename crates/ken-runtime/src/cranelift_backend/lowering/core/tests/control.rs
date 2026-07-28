@@ -6527,6 +6527,136 @@ fn b2f_emits_one_defined_target_unit_per_planned_function_unit() {
     );
 }
 
+// ─── RT-FNSPLIT-B2F AC-11 — the producer walk can REJECT, and does not over-reject ─
+
+/// An imported reference — the one shape with no admitted carrier.
+#[cfg(test)]
+fn ac11_imported() -> RuntimeExpr {
+    RuntimeExpr::ImportedDeclarationRef {
+        symbol: "other::v".to_string(),
+        dependency: "other".to_string(),
+        dependency_semantic_hash: "hash".to_string(),
+    }
+}
+
+/// Compile `expr` and report only whether it was accepted.
+///
+/// ⚠ The closure is **called** in every fixture below, not returned: a closure
+/// is not an observable ground value at the root, so a fixture that merely
+/// mentions one is rejected for an unrelated reason and would look like a
+/// working discriminator while measuring nothing.
+#[cfg(test)]
+fn ac11_compiles(expr: &RuntimeExpr) -> Result<(), CraneliftBackendError> {
+    let module = new_jit_module().expect("jit module");
+    compile_expr_into_module(
+        module,
+        "b2f_ac11_probe",
+        Linkage::Local,
+        expr,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        false,
+        None,
+        None,
+        None,
+    )
+    .map(|_| ())
+}
+
+/// **`AC-11` clause 1 — the two holes `C4` leaves open are closed at the slots
+/// this node emits, and the intra-module counterparts still compile.**
+///
+/// ⛔ **Without the accepted rows this test is worthless.** A walk that rejects
+/// every program satisfies both rejection rows and is a catastrophic
+/// over-rejection; the paired intra-module fixtures are what distinguish
+/// "rejects an unrepresentable transfer" from "rejects".
+///
+/// **MEASURED:** four compiles — a wrapped import and a bare-body import are
+/// refused, and the same two shapes with an intra-module value are accepted.
+/// **CLAIMED:** the producer walk decides on the value that reaches the slot,
+/// not on the occurrence's own top-level shape.
+/// **THE GAP:** ⛔ this exercises the `If` pass-through only. A `Match` arm is
+/// not traced (see `producers_of`), so an import reaching a slot through a match
+/// arm is **not** covered by this test or by the walk.
+#[test]
+fn the_producer_walk_refuses_a_wrapped_import_and_still_admits_intra_module_values() {
+    // ⭐ Hole A. Binder-free: no de Bruijn reading makes this `If`'s result
+    // anything but the imported value, yet its top-level shape is `If`, so a
+    // check on the capture child's own shape admits it.
+    let wrapped_import = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::If {
+                scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                then_expr: Box::new(ac11_imported()),
+                else_expr: Box::new(ac11_imported()),
+            }],
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    // ⭐ Hole B. No wrapper at all: `C4` iterates capture children, and there
+    // are none, so the unit's own result slot is never carrier-checked.
+    let bare_body_import = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(ac11_imported()),
+        }),
+        args: Vec::new(),
+    };
+    // ⭐ The two POSITIVE CONTROLS: identical shapes, intra-module values.
+    let wrapped_intra_module = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::If {
+                scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(false))),
+            }],
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    let bare_body_intra_module = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+
+    assert!(
+        ac11_compiles(&wrapped_intra_module).is_ok(),
+        "AC-11 -- POSITIVE CONTROL: a binder-free wrapper over intra-module \
+         values must still compile. If this fails the walk is rejecting on the \
+         wrapper rather than on what flows through it, and both rejection rows \
+         below are satisfied for the wrong reason."
+    );
+    assert!(
+        ac11_compiles(&bare_body_intra_module).is_ok(),
+        "AC-11 -- POSITIVE CONTROL: a closure body producing an intra-module \
+         value must still compile."
+    );
+
+    let wrapped = ac11_compiles(&wrapped_import);
+    assert!(
+        matches!(wrapped, Err(CraneliftBackendError::Unsupported(_))),
+        "AC-11 -- HOLE A: an imported value reaching a Capture slot through a \
+         binder-free `If` must be refused before emission. Checking the capture \
+         child's own top-level shape admits this: {wrapped:?}"
+    );
+    let bare = ac11_compiles(&bare_body_import);
+    assert!(
+        matches!(bare, Err(CraneliftBackendError::Unsupported(_))),
+        "AC-11 -- HOLE B: an imported value reaching the unit's own Result slot \
+         must be refused before emission. It needs no wrapper, and a check that \
+         iterates capture children never sees it: {bare:?}"
+    );
+}
+
 // ─── RT-FNSPLIT-B2F D3 — artifact-static seed material, measured BEHAVIOURALLY ─
 
 /// A program that captures one seed symbol and returns it, compiled against an
