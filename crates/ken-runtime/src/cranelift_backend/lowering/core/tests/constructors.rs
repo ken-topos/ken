@@ -4072,3 +4072,76 @@ fn b2f_d9_one_compiled_body_takes_both_arms_at_runtime() {
         "⛔ the larger value is the one that spills"
     );
 }
+
+/// ⭐⭐ **`D9` — WHY THE THIRD OUTCOME IS NOT PINNED BY A FIXTURE, checked
+/// rather than asserted.**
+///
+/// ⛔ **A mutation deleting `require_i64(status, BOUNDARY_ERR_BOUNDS)` from the
+/// dispatch leaves all three rows above GREEN, and that is measured.** The
+/// honest reading is not *"the controls are weak"* — it is that the arm is
+/// **structurally unreachable through this producer**, and the reason is a
+/// relation between two authority tables that nothing else states:
+///
+/// - `ken_boundary_make_immediate_local` refuses with `BOUNDARY_ERR_SHAPE`
+///   in exactly two situations: a **handle** tag, and a payload outside a
+///   **`Bit`** domain. Every other refusal is `BOUNDARY_ERR_BOUNDS`.
+/// - The dispatch is only ever reached with a tag from a
+///   `RepresentedImmediate { spill: Some(_) }` disposition.
+///
+/// ⇒ If no spillable variant's tag carries the `Bit` domain, `make_immediate`
+/// on this path can answer only `OK` or `ERR_BOUNDS`, and no fixture can drive
+/// the third arm without first changing one of those tables.
+///
+/// **MEASURED:** every `LoweredVariant` whose disposition declares a spill has
+/// an immediate tag present in `BOUNDARY_IMMEDIATE_DOMAIN` with a domain other
+/// than `Bit`.
+/// **CLAIMED:** the dispatch's *"anything else → fail closed"* arm is a backstop
+/// against a future table change, ⛔ not dead code and ⛔ not a live branch some
+/// test forgot to cover.
+/// **THE GAP:** ⚠ this pins the **premise**, not the backstop. If the premise
+/// is ever broken — a spillable tag given the `Bit` domain, or a handle tag
+/// reaching the call — this test reddens and the branch becomes reachable, at
+/// which point it needs a fixture. ⇒ That is the intended coupling: ⛔ the
+/// backstop must never be removed on the grounds that "no test covers it."
+///
+/// ⚠ Promise class: **durable invariant.** It quantifies over
+/// `LoweredVariant::ALL` and reads both tables, so a new spillable variant is
+/// covered without editing this test — and a new one with a `Bit` domain is
+/// exactly the change that should stop the world.
+#[test]
+fn b2f_d9_no_spillable_tag_can_make_the_immediate_producer_answer_shape() {
+    let mut spillable = 0usize;
+    for variant in LoweredVariant::ALL {
+        let BoundaryDisposition::RepresentedImmediate {
+            tag,
+            spill: Some(_),
+        } = variant.boundary_disposition()
+        else {
+            continue;
+        };
+        spillable += 1;
+        let domain = crate::boundary_value::BOUNDARY_IMMEDIATE_DOMAIN
+            .iter()
+            .find(|(candidate, _)| *candidate == tag)
+            .map(|(_, domain)| *domain);
+        // ⛔ Two ways the premise can break, and they are different failures.
+        assert!(
+            domain.is_some(),
+            "⛔ {variant:?}'s immediate tag {tag:?} is absent from \
+             `BOUNDARY_IMMEDIATE_DOMAIN`, so `make_immediate` refuses it as a \
+             HANDLE tag with ERR_SHAPE — the third outcome, reachable"
+        );
+        assert_ne!(
+            domain,
+            Some(crate::boundary_value::BoundaryImmediateDomain::Bit),
+            "⛔ {variant:?} declares a spill and carries the `Bit` domain, so \
+             `make_immediate` can now answer ERR_SHAPE on the dispatch path. \
+             The fail-closed arm is REACHABLE and needs a fixture"
+        );
+    }
+    assert!(
+        spillable > 0,
+        "NON-VACUITY: a loop over zero spillable variants asserts nothing, and \
+         would stay green if the disposition table lost its `spill` arm entirely"
+    );
+}

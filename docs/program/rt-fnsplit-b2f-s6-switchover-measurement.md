@@ -307,3 +307,102 @@ arbitrary-precision `Int` exists to carry.
    which must **still pass** the round-trip and so is caught by review rather
    than by the suite — ⚠ recorded here because that is the evasion this design
    is chosen to prevent, and it is **not** claimed to be mechanically detected.
+
+## ✅ THE DISPATCH AS BUILT — and what its mutations measured
+
+Landed at `eaf37513`+; `ken-runtime` **504 + 26 + 14** green. The design above
+survived contact with the code; three things it did **not** anticipate are
+recorded here rather than absorbed.
+
+### The three-outcome shape, spelled so it cannot become two
+
+```rust
+let status = call make_immediate(tag, payload, out);
+let fits   = icmp_eq(status, BOUNDARY_OK);
+brif fits -> immediate_block, spill_block
+
+immediate_block: word = load(out);              jump join(word)
+spill_block:     require_i64(status, BOUNDARY_ERR_BOUNDS);   // ⭐ outcome 3
+                 alloc(PersistentGround, spill_class, 0)
+                 store_scalar(payload); store_int_tag(marker); jump join(word)
+```
+
+⭐ The third outcome is a **requirement on the not-OK edge**, not an `else`.
+Written that way it cannot be reduced to a two-way branch by an edit that looks
+like a simplification.
+
+### ⚠ FINDING 5 — the third outcome is structurally unreachable, and that is a claim about two tables
+
+**A mutation deleting `require_i64(status, BOUNDARY_ERR_BOUNDS)` leaves every
+behavioural row green.** ⛔ The tempting reading — *"the controls are weak"* — is
+wrong, and the correct one is not visible from the dispatch alone:
+
+- `make_immediate` answers `ERR_SHAPE` in exactly two situations: a **handle**
+  tag, and a payload outside a **`Bit`** domain. Every other refusal is
+  `ERR_BOUNDS`.
+- The dispatch is reached only with a tag from a
+  `RepresentedImmediate { spill: Some(_) }` disposition, and no such tag carries
+  the `Bit` domain.
+
+⇒ On this path `make_immediate` can answer only `OK` or `ERR_BOUNDS`. **No
+fixture can drive the third arm without first changing one of those tables.**
+
+✅ So the arm is pinned at its **premise** instead of by a fixture:
+`b2f_d9_no_spillable_tag_can_make_the_immediate_producer_answer_shape`
+quantifies over `LoweredVariant::ALL` and reads both authorities. ⛔ Its purpose
+is to stop the backstop being deleted on the grounds that *"no test covers it"*
+— the day the premise breaks, that test reddens and the branch needs a fixture.
+Its own positive control is measured: marking the `Bit`-domain variant spillable
+reddens it.
+
+### ⚠ FINDING 6 — the spill arm covers a `Small`-marked magnitude only
+
+`store_int_tag` admits a `NATIVE_INT_BIG_TAG_V1` marker only on a node the
+**invocation arena** owns (`BOUNDARY_INT_MARKER_OWNER`), because that payload is
+a slot in the invocation's `NativeIntArenaV1`. The spill target is
+`PersistentGround` — the tag the ABI's own `ImmediateInt` doc names as the
+overflow representation — whose owner is the persistent store.
+
+⇒ A **region-limbed** magnitude would have to be *copied* into the node's own
+region (`store_int_limbs` / `store_int_limb` / `seal_int`), which this arm does
+not emit. Such a value **fails closed at `store_int_tag`'s own owner guard** —
+⛔ but it is reported as `ERR_ESCAPE`, so a reader who meets it is told the
+wrong thing about why. ⚠ **A residual, not coverage.**
+
+### ⚠ FINDING 7 — the guard was replaced by a MIRROR, not by deletion
+
+`carrier_immediate_tag`'s `spill: Some(_)` refusal **stays**. It did not become
+unnecessary when the dispatch landed; it moved. `carrier_spillable_disposition`
+is its mirror — refusing `spill: None` — and between them the two readers
+partition `RepresentedImmediate`, so neither path is reachable for a value the
+sole authority classified the other way. ⛔ Deleting the old arm would not
+reintroduce a truncation *today*, which is exactly why it must stay: the next
+`RepresentedImmediate` variant is added by someone copying the `Bool` arm.
+
+### The controls, and what each mutation showed
+
+⚠ All four rows drive **one compiled body with the payload as a run-time
+parameter**. Two separate compilations cannot distinguish the dispatch from the
+JIT-time specialization `AC-2` forbids — a body specializing on its constant
+would produce the same two answers.
+
+| mutation, at its production site | outcome | what it establishes |
+|---|---|---|
+| M1 delete the third-outcome requirement | **green** | Finding 5 — unreachable, pinned at its premise instead |
+| M2 always take the immediate arm | red ×2 | rows 2 and 3 measure the spill, not merely "no error" |
+| M3 always take the spill arm | red ×2 | row 1 measures the immediate arm |
+| M4 spill stores a constant, not the payload | red ×2 | ⭐ the **operand** edge, not only the metadata |
+| M5 record the wrong `NativeIntV1` marker | red ×2 | the spill records *how* the word is read |
+| M6 allocate the spill with an undeclared class | red ×2 | the class comes from the disposition |
+| M7 make the `Bit`-domain variant spillable | red ×1 | positive control for the premise pin |
+
+⛔ **M4 is the row that would have been easiest to leave unattempted.** M2, M3
+and M6 all redden through the *tag* of the returned word — bookkeeping the
+spill arm writes on its way past. Only M4 substitutes the value itself, and
+without it *"the spill carries the magnitude"* would have been a claim resting
+on controls that never touched the magnitude.
+
+⚠ **Unchanged from the design: the status-branch evasion is review-caught.**
+Swapping the branch for a hand-written magnitude test still round-trips every
+value, so nothing in this suite reddens. ⛔ Its absence from a green run is not
+evidence about it.
