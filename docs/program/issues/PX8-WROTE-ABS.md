@@ -1,7 +1,7 @@
 ---
 id: PX8-WROTE-ABS
 title: "PX8 clause-(a) evidence gap — interpreter capped-short Wrote lacks an absolute oracle; PR-C error identities unreached"
-status: ready
+status: merged
 owner: verify
 size: S
 gate: none
@@ -10,6 +10,37 @@ blocks: [PX8]
 github: null
 origin: architect PX8 closure-property verdict evt_163mfgjs7fkh8 (2026-07-23); Steward-filed (agents cannot create tracked work per COORDINATION §2)
 ---
+
+> ## ✅ MERGED 2026-07-28 — PR #1142, `origin/main = 45647b51`
+>
+> **Candidate `d5a938c496bbc758d0361711693504bcb673195f`** (tree
+> `42d7109dafcf6aeef913ce56762113fd491ade74`), Decision `dec_7tvjg6e79dnwm`
+> (Architect APPROVE, resolved `2026-07-28T00:12:28Z`). Blob-verified on `main`:
+> `crates/ken-interp/src/eval.rs = 57041e577a18e6c5065c85722b06f97725346e10`.
+> One path, +188 lines, full CI green.
+>
+> **What landed:** the capped-short `Wrote` absolute oracle at the **component
+> boundary** — a test-local `HostEffectBackendV1` short write → the real
+> `dispatch_host_op_v1` (which validates and mints the private
+> `TransferCountV1(2,4)`) → the existing `reify_host_reply_v1` → the LOCKED
+> `§38.1.7.2` literal `remaining = 2`. ⛔ Production unchanged: no seam, no public
+> constructor, no `cfg(test)` production hook, no relaxed visibility.
+>
+> **Both wrong shortcuts are now discriminated** (`AC-1‴`): `effective := count`
+> fails the new short test while capped-full stays green; the raw-request-length
+> substitution fails both. The `ReadSome` arm at `:5303` is untouched and its
+> capped-short read test stays green under both.
+>
+> ⭐ **This closes `A2a` and it is `PX8`'s first blocker to discharge.**
+> ⚠ `A2b` remains as [[PX8-ERRID-SCOPE]], now blocked behind
+> [[PX8-ERRID-ALLOC]] → [[RT-NATIVE-FNSPLIT]].
+>
+> ### ⭐⭐ It also settled a question the size wall had opened
+>
+> `d5a938c4` passed the **same** `rt_parity_native` job that reddened PR #1141
+> (`PX8-ERRID-ALLOC`) on Cranelift `Code for function is too large`. ⇒ **the
+> code-size ceiling is NOT general** — it is specific to native lowering growth
+> from the added resource-error alternative. This WP adds no native alternatives.
 
 ## ⭐⭐ SCOPED AND FRAMED 2026-07-27 — A2a only; A2b split to `PX8-ERRID-SCOPE`
 

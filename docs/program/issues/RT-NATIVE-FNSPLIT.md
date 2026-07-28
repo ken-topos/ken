@@ -11,6 +11,33 @@ github: null
 origin: PX8-SPAN-PROV Phase 2 native reachability wall (runtime-implementer measured repro evt_7qhtk8w489am4; CV option-(c) ruling evt_77q2tc5dh1kzj; Steward scope ruling evt_7c160ej3bwz4; Architect means/layer ruling evt_7gkn3g4tsvgb9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
+> ## ⭐⭐⭐ 2026-07-28 — THIS NODE NOW GATES EVERY REMAINING `PX8` BLOCKER
+>
+> **Steward sequencing call.** `PX8` gates 15 of the ABI program's 19 nodes, and
+> as of PR #1142 its blocker set is:
+>
+> | `PX8` blocker | state |
+> |---|---|
+> | [[PX8-WROTE-ABS]] | ✅ **MERGED** PR #1142 |
+> | [[PX8-F-CAP-41]] Ph2 (folded into [[NATIVE-HANDLE-CARRIER]]) | ⛔ blocked on **this node** |
+> | [[PX8-ERRID-ALLOC]] → [[PX8-ERRID-SCOPE]] | ⛔ blocked on **this node** (new edge, 2026-07-28) |
+>
+> ⇒ ⭐ **Every remaining path to `PX8` runs through here.**
+>
+> **Why the new edge:** `PX8-ERRID-ALLOC` is built, QA-approved and
+> Architect-approved, but PR #1141 died on
+> `Cranelift backend failure: Code for function is too large`
+> (`crates/ken-cli/tests/rt_parity_native.rs:370`, ObjectEmission). Foundation
+> measured that **both** the original and the wire-corrected candidate fail
+> identically against an **unchanged fixture blob** ⇒ allocation growth crossed
+> the wall, not the mapping. The only mapping-preserving reduction
+> (`e65c81b5`, five tags factored into one generated-tag `require_one_of_i64`)
+> was built, controlled, and **still fails**.
+>
+> ⭐ **The ceiling is NOT general** — `PX8-WROTE-ABS` passed the same job. It is
+> specific to per-function native lowering growth, which is exactly this node's
+> subject.
+
 ## ⛔⛔ GOVERNING RULING 2026-07-27 — `#11` STILL BINDS, and the lever is NAMED
 
 **Decision `dec_45aa2gngjc79z` — RESOLVED.** Architect ruling `evt_7ay6s5s79awz8`,
