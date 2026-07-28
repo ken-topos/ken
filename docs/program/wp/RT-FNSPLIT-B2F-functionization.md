@@ -89,12 +89,19 @@ previously stated at `0aa9e53f`, four merges back, and several had moved.
 > | `#9` | ✅ ruled | `evt_842spc7t6js1` + `evt_t4fykh52ncb` | the re-slice → `B2O`, `B2R` |
 > | `#10` | ✅ **ruled** | `evt_28cnmxf6ncghn` | inserted **`B2V`** — ⛔ *not* open |
 > | `#11` | ✅ **ruled** | `evt_7ay6s5s79awz8` (`dec_45aa2gngjc79z`) | retired `B2E`, produced **`C1`** |
+> | `#12` | ▶ **OPEN** | `evt_4mkg2vrted1xn` (2026-07-28 15:54) | the functionized process host-dispatch context has **no declared lane** — Architect lane, routed by `runtime-leader` |
 >
 > ⭐ **Every prerequisite those rulings named has now MERGED:** `B2O`, `B2R`,
 > `B2V`, and **`C1` (PR #1156, `origin/main = feab3cb5`, blob-verified)**.
 > ⇒ `B2F`'s release gate — **a closed `C1` carrier artifact** — is satisfied.
 >
-> **Hard-stop count of record = 11.** ⛔ The stale text below says `10`.
+> **Hard-stop count of record = 12** (`#12` raised 2026-07-28 15:54,
+> `evt_4mkg2vrted1xn`). ⛔ The stale text below says `10`.
+>
+> ⭐ **`#12` fires NO research pull** — the next pull is `#15`, and `#12` is not
+> a multiple of the cadence. ⚠ Recording that explicitly because the cheap error
+> here is the *other* direction: a stop passing an armed multiple unnoticed is
+> how this chain reached **33** with the trigger never firing.
 >
 > ⚠ **NEXT RESEARCH PULL = `#15`.** ⛔ The text below says `#12`; that value was
 > **corrected away from** on 2026-07-25 in favour of the operator override
