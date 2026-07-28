@@ -6933,24 +6933,42 @@ fn the_resolved_call_edge_population_moves_with_the_program() {
 /// Applied at **each of the seven route call sites in turn**, with four fixture
 /// shapes:
 ///
-/// | route site (`core.rs`) | mutation result |
-/// |---|---|
-/// | `:5754` | ⭐ **RED — reached and caught** |
-/// | `:474`, `:754`, `:769`, `:939`, `:5742`, `:5897` | ⛔ **GREEN — unreached, so UNMEASURED** |
+/// ⭐⭐ **The seven sites are not a list — they are `3 operand shapes × 2
+/// lowering contexts + 1 residual`**, and stating them that way is what makes
+/// the gap diagnosable instead of merely counted:
+///
+/// | operand shape | `lower_expr` (ordinary) | `lower_computational_producer_expr` |
+/// |---|---|---|
+/// | `Lowered::Closure` | `:5754` ⭐ **RED — caught** | `:769` ⛔ green |
+/// | `Lowered::DeclarationClosure` | `:5742` ⭐ **RED — caught** | `:754` ⛔ green |
+/// | recursor closure | `:5897` ⛔ green | `:939` ⛔ green |
+///
+/// plus `:474` in `lower_recursor_residual_call` — ⛔ green.
+///
+/// ⇒ **Coverage is 2 of 7, and the missing axis is the CONTEXT, not the shape.**
+/// Both covered cells are in `lower_expr`; the whole computational-producer
+/// column is unreached, and no fixture built from `RuntimeExpr::Call` alone will
+/// reach it — it needs a `ComputationalMatch` whose producer descends into a
+/// retained body.
+///
+/// ⚠ **A correction, kept rather than edited away.** An earlier revision of this
+/// comment said `:769`/`:5897` were *"the seed-provenance `Closure` arms"*
+/// needing a non-empty `NativeSeedEnvironment`. **That was wrong** — re-derived
+/// from the enclosing functions, `:769` is the producer context's `Closure` arm
+/// and `:5897` is the ordinary context's *recursor* arm, and neither has
+/// anything to do with seed provenance. ⛔ The line numbers were right and the
+/// explanation was invented; that is why the table above is keyed on the
+/// enclosing function, which a reader can check.
 ///
 /// ⛔ **This is a partition, not an example, and the discriminator is stated so
 /// the next reader can re-derive it rather than trust it:** bypass one site,
 /// run this test, and a green means that site is not on any fixture's path.
-/// ⚠ Adding fixture shapes did **not** move the number — a nested retention, a
-/// parameterised body and a `Let`-scheduled body all descend through the same
-/// arm as the plain application.
+/// ⚠ Adding *spellings* of one shape never moved it — a nested retention, a
+/// parameterised body and a `Let`-scheduled body all descend the same arm.
+/// Adding a **different operand shape** did, which is the lesson.
 ///
-/// ⇒ ⛔ **NOT CLAIMED: that this test would catch a bypass at the other six
-/// sites.** Reaching them needs shapes this test's helper cannot build —
-/// `:754`/`:5742` are the `DeclarationClosure` arms and need a populated
-/// `declarations` map; `:769`/`:5897` are the seed-provenance `Closure` arms and
-/// need a non-empty `NativeSeedEnvironment`. ⚠ Both are real follow-on work, and
-/// until they exist the coverage is **one route site of seven**.
+/// ⇒ ⛔ **NOT CLAIMED: that this test would catch a bypass at the other five
+/// sites.**
 ///
 /// ⭐ **The mutation is the one `S6` is most likely to introduce by accident**,
 /// because a unit body already holds the plan and resolving its own origin
@@ -6977,6 +6995,31 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
         // reads exactly like the outcome this test wants.
         crate::cranelift_backend::planning::ac4_open_route_window();
         ac11_compiles(expr).expect("fixture compiles");
+        crate::cranelift_backend::planning::ac4_route_counts()
+    }
+
+    // ⭐ The same measurement with a populated `declarations` map — the one
+    // input `ac11_compiles` cannot supply, and the only way to reach the
+    // `DeclarationClosure` operand shape.
+    fn route_counts_with_declarations(
+        expr: &RuntimeExpr,
+        declarations: BTreeMap<&str, &RuntimeDeclaration>,
+    ) -> (usize, usize) {
+        crate::cranelift_backend::planning::ac4_open_route_window();
+        compile_expr_into_module(
+            new_jit_module().expect("jit module"),
+            "b2f_ac4_declaration_probe",
+            Linkage::Local,
+            expr,
+            &NativeSeedEnvironment::empty(),
+            declarations,
+            None,
+            false,
+            None,
+            None,
+            None,
+        )
+        .expect("the declaration fixture compiles");
         crate::cranelift_backend::planning::ac4_route_counts()
     }
 
@@ -7035,6 +7078,53 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
         total_resolutions += resolutions;
         total_invocations += invocations;
     }
+
+    // ⭐⭐ **THE `DeclarationClosure` CELL — a different OPERAND SHAPE, not
+    // another spelling of the one above.** Every `LexicalClosure` fixture,
+    // however nested or parameterised, lowers its callee to `Lowered::Closure`
+    // and descends the same arm; a transparent declaration whose body is a
+    // `RuntimeExpr::Closure` lowers to `Lowered::DeclarationClosure` and takes a
+    // **different** arm of the same match. ⇒ This is what moves the coverage
+    // partition, and it is why the shape list above could not.
+    let identity = "decl:fixture::ac4::identity".to_string();
+    let declaration = RuntimeDeclaration {
+        symbol: identity.clone(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: vec!["x".to_string()],
+                body: Box::new(RuntimeExpr::Var(0)),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    let applied = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: identity.clone(),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+    };
+    let (declaration_resolutions, declaration_invocations) = route_counts_with_declarations(
+        &applied,
+        BTreeMap::from([(identity.as_str(), &declaration)]),
+    );
+    assert!(
+        declaration_resolutions > 0,
+        "NON-VACUITY: the declaration fixture must actually resolve a body \
+         through the route, or this cell adds no coverage and the partition \
+         below is overstated"
+    );
+    assert_eq!(
+        declaration_resolutions, declaration_invocations,
+        "AC-4 -- the DeclarationClosure arm: {declaration_resolutions} \
+         resolutions against {declaration_invocations} route invocations"
+    );
+    total_resolutions += declaration_resolutions;
+    total_invocations += declaration_invocations;
+
     let (resolutions, invocations) = (total_resolutions, total_invocations);
 
     // ⛔ THE NON-VACUITY CONTROL, and the equality below is worthless without
