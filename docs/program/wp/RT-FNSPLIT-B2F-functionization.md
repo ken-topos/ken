@@ -1374,11 +1374,73 @@ it.
 > | slot class | status |
 > |---|---|
 > | `Capture`, `Result` | ✅ clause 1 discharged for the two named binder-free import shapes — ⛔ **not for the shape class** |
-> | `Parameter` | ⛔ **population is EMPTY until `S5`.** ⚠ Vacuous is not passing |
+> | `Parameter` | ⛔ **population is EMPTY until `S6`'s call emission** — ⚠ **not `S5`**, see the correction below. Vacuous is not passing |
 >
 > ⇒ ⛔ **`AC-11` closes only when the `Parameter` population is nonempty and
 > non-vacuous, the `case_body_occurrence` path is either traced or rejected, and
 > both join the same proof as the two named holes.**
+>
+> ### ⛔⛔ CORRECTED AT `S5` — THE `Parameter` POPULATION ARRIVES AT `S6`, NOT `S5`
+>
+> **Runtime measured this against exact `9fe97ea4` and my ordering claim was
+> wrong.** `evt_3sfmpegm4kgxx` (implementer) and `evt_3sbrsh7g19prz` (leader),
+> independently. ⭐ **Their measurement wins.**
+>
+> `D4` derives, projects and resolves `FuncRef` **edges**; it emits **no call
+> instruction**. A unit body loads its result slot and returns, and body emission
+> does not descend until `lower_expr`'s consumers switch over. ⇒ `D4` carries
+> **rejection** authority, not emission authority, and **no `Parameter` transfer
+> exists yet to populate.** That population is created by **`S6`'s
+> switch-over**.
+>
+> ⚠ **Why this correction matters more than the fact it fixes:** the earlier text
+> said the population is empty *"until `S5`"*, which reads as **`S5` will supply
+> it** — ⛔ a stale *"what remains"*, the shape that sends a ring to build
+> something and find nothing there. It would also have let `S6` inherit an
+> `AC-11` clause 1 that looked one step closer to closable than it is.
+>
+> ### ⛔⛔ `D4` FINDING — WHICH UNIT AN EDGE RESOLVES TO IS UNPINNED (`M8`)
+>
+> **Runtime's `M8`: resolve every edge to the CALLER's function instead of the
+> callee's ⇒ ⛔ the ENTIRE suite stayed GREEN** (498 + 26 + 14, zero failures).
+> The `FuncRef` is declared in the caller's `Function` and never *called*, so a
+> wrong target is a reference nobody follows.
+>
+> ⭐ **This is a finding against `D4`, not a missing control** — and ⛔ **it is
+> NOT covered by the edge-population pin.**
+> `the_resolved_call_edge_population_moves_with_the_program` pins the edge
+> **COUNT** and is blind to the edge's **DESTINATION**. ⇒ ⛔ **`S6` must not read
+> the resolved edge set as covered.** The identity-alias defect `UnitBundle`'s own
+> doc comment warns against is undetectable by every test in the crate today.
+>
+> ⚠ `M7` (derivation yields no edges) reds **exactly 1 test of 498** ⇒ the
+> population control is `D4`'s **sole** defender — the same single-defender shape
+> as `M5`/`D3`.
+>
+> ### ⛔ RULED — DO NOT WIDEN THE PLANNER SURFACE TO MEASURE EDGE EXACTNESS
+>
+> Runtime correctly declined to decide this alone: exactness of the emitter's
+> edge population against the planner's `StaticBody` set is **argument, not
+> measurement**, because `SemanticOwner` and the edge list are planner-private by
+> design, so no control in `lowering` can count the planner's edges
+> independently.
+>
+> ⛔ **The widening is already forbidden by this frame, so this is not an open
+> fork.** `D1`'s correction row rules **one narrow lowering-reachable projection,
+> ⛔ not wholesale type promotion, ⛔ no second derivation** — and the pin
+> `the_owner_classification_has_a_closed_production_naming_inventory` **already
+> reddened** when `S5`'s first draft named the owner classification in a third
+> production file. ⇒ ⭐ **That pin firing was the answer arriving early.**
+> ⚠ An exact-count oracle over a private set is also the structural-oracle shape
+> the operator's test policy deprioritizes: controls assert **behaviour**.
+>
+> ⭐ **AND THE TWO GAPS ARE ONE GAP.** `M8`'s unpinned destination and the
+> unmeasurable population-exactness both close with **one behavioural control at
+> `S6`: a program whose answer depends on which unit actually ran.** A wrong
+> destination gives a wrong answer; a **missing** edge means a call is never
+> emitted, which gives a wrong answer too. ⇒ ⛔ **Do not carry these as two
+> residuals** — they are one `S6` deliverable, and it needs **no** surface
+> widening.
 >
 > ### ⭐ Two instrument rules `S5`–`S8` inherit
 >
