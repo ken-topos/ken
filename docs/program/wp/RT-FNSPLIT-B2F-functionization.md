@@ -1097,6 +1097,25 @@ Steward-scoped.** Extend `C1`'s producer over the arms below.
 > work**, and sequencing it as five invites the tails to be done first because
 > they look cheap. The spillable immediate **is** `D9`.
 >
+> ⛔⛔ **AND 63 REDS GOING GREEN DOES NOT COMPLETE THAT ARM.** Ruled explicitly
+> (`evt_79xcj70p0qxjj`): `2de4de62` stays an admissible **green checkpoint**, but
+> **`D9`'s spillable-`Int` producer is INCOMPLETE and ⛔ cannot be approved or
+> folded as coverage** until the persistent **region-limbed `Big`** path and its
+> controls exist — see `AC-13` item 4. ⚠ **The arm's remaining case is the one
+> that fails by silent corruption rather than by a red**, so the count is the
+> worst available progress signal here. ⭐ Same standing rule as `AC-11`: ⛔ **do
+> not total partial populations into a discharge.**
+>
+> ⚠ **`HostResult` is BLOCKED on a representation ruling** (implementer
+> `evt_26sy7sknha9e6`, routed by the leader): `Lowered::HostResult` is
+> **synthesized** by effect lowering, so its `ok`/`err` children are constructed
+> rather than source subexpressions — **the identity is
+> occurrence-INDEPENDENT while the lookup is occurrence-KEYED**, and there is no
+> source occurrence to ask at. ⛔ Not a lookup bug, ⛔ not fixable by passing the
+> parent's origin, and ⛔ not by minting one — the planner surface does not widen.
+> ⚠ It is **1 red of 69**; ⛔ do not let the length of its analysis imply its size.
+> ⭐ **This frame will record the ruling when it lands — once, on the ruling.**
+>
 > ### ⛔⛔ `Trap` IS NOT A PRODUCER GAP — REMOVED FROM THIS DELIVERABLE
 >
 > ⛔ **My own `D9` named it, transcribing the ruling. That was wrong**, and the
@@ -1764,6 +1783,49 @@ substitute for each other:**
    status branch for a hand-written magnitude test **still round-trips**, so the
    suite cannot catch it. ⛔ Do not let its absence from a green run read as
    evidence.
+   ⛔⛔ **AND THIS CLAUSE IS ONLY SOUND ONCE THE OPERAND IS KNOWN TO BE A
+   MAGNITUDE — see item 4, which is a precondition on it, not an addition beside
+   it.**
+4. ⛔⛔ **THE NATIVE MARKER PARTITIONS THE `Int` PATH *BEFORE* `make_immediate` IS
+   ASKED A MAGNITUDE QUESTION** (Architect ruling `evt_79xcj70p0qxjj`).
+   ⚠ **The defect this exists to prevent is silent corruption, not a missing
+   error.** For a native `Big` the payload is an invocation-arena **slot
+   identity**, ⛔ not an integer magnitude — and **slots begin at `1`**. ⇒ A low
+   slot **satisfies the immediate-domain check** and is encoded as the integer
+   `1`. ⭐ **So a real native `Big` takes the apparent-SUCCESS arm with the wrong
+   value**, and item 3's status read is a correct answer to a question about the
+   wrong operand.
+   The ruled production shape:
+   - `NATIVE_INT_SMALL_TAG_V1` — the payload **is** the value; keep item 3's
+     status-derived dispatch exactly.
+   - `NATIVE_INT_BIG_TAG_V1` — ⛔ **do not call `make_immediate` on the slot** and
+     ⛔ **do not store the `Big` marker in a persistent node.** Call the existing
+     authority `ken_native_int_resolve_local(native_arena, marker, payload,
+     out_view)` and **require success** — it already yields canonical `sign`,
+     `len` and `limbs` without re-deriving the native representation.
+   - Then **allocate → region marker → claim → copy → seal**:
+     `PersistentGround`/`BoundaryClass::Int`, `BOUNDARY_INT_REGION_LIMBS` via
+     `store_int_tag`, `store_int_limbs(sign, len)`, every limb by **runtime
+     index** via `store_int_limb`, then ⛔ **`seal_int` before joining or
+     returning the word.** ⭐ The landed emitted wide-`Int` producer already fixes
+     this order — follow it rather than inventing one.
+   - ⛔ **Any other marker fails closed.**
+   ⭐ **The marker branch is a read of the canonical transport tag, ⛔ NOT a
+   sibling magnitude predicate** — so it does not weaken item 3's ban.
+   ⛔ **No represented-unavailable lane, and no new error identity.** A valid
+   region-limbed `Int` **must cross successfully**; `ERR_ESCAPE` is ⛔ not an
+   admissible terminal result for it, because the required operation is an
+   **owned deep copy** into `PersistentGround` — so no borrow escapes. Capacity
+   exhaustion and malformed native pairs keep their existing precise failures.
+   ⛔⛔ **Control — a SYNTHETIC `(Big, large_payload)` PAIR IS INSUFFICIENT**, and
+   this is the whole point: it misses the **low-slot** path, which is the one that
+   corrupts silently. ⇒ One compiled body whose **runtime input produces a real
+   native `Big`** through the native-Int authority, returns it across a unit
+   boundary, and observes **the exact sign and all limbs**. Required production
+   mutations, each of which must red while the existing runtime-parameter
+   `Small`/immediate/spill rows stay green: pass the native `Big` slot to
+   `make_immediate` · persist the `Big` marker/slot instead of region limbs ·
+   drop or substitute one copied limb · change the sign · omit `seal_int`.
 
 ⛔ **The `#[cfg(test)]` trap, and this frame has already been bitten by it once.**
 Correction row 5 above records `D2` pinned to `AbiPlane::shape`/`shapes` — ⛔
