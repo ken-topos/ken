@@ -300,8 +300,8 @@ arm's exact error string.
 - ⛔ **Local builds/tests are TARGETED ONLY** — `scripts/ken-cargo -p ken-runtime`,
   or `--test <name>`. **Never `--workspace`** (`COORDINATION §12`, operator hard
   rule). Workspace-green and `--locked` mean **green in CI**.
-- **Report an unpushed ref and KEEP GOING.** Build seats have no GitHub
-  credential by design; the Steward pushes. Raising it is not gating on it.
+- **Commit, report the exact SHA, and KEEP GOING.** Build seats have no GitHub
+  credential by design; the Steward publishes through the publisher path.
 - **Hard-stop protocol.** `RT-NATIVE-FNSPLIT` count of record is **9**;
   **next research pull = #12**. Symptom inventory is
   `docs/program/issues/RT-NATIVE-FNSPLIT.md` — one line per hard-stop, appended

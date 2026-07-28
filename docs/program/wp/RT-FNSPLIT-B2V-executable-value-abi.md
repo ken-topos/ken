@@ -229,9 +229,8 @@ of `ab11a3d2` (`git merge-base --is-ancestor ab11a3d2 fed42481` exits **1**). �
 commit *distance* is not a fast-forward; check any preservation claim against the
 operation it is meant to protect against, before that operation runs.
 
-⭐ **Both preserved tips are on `origin`, not merely local.** A single local ref is
-zero off-box copies — a preservation claim that names one has not preserved
-anything a force-move can't take.
+⭐ **A preservation claim must name a ref that survives the operation it guards.**
+Naming the very ref you are about to force-move has preserved nothing.
 
 **Why the pre-anchor re-anchor was needed at all**, retained because the reasoning
 still governs your next rebase: the old base predated `RT-VALUE-TOTALITY-P1` and
@@ -873,8 +872,8 @@ inheritance from `C4`.
   operator hard rule). Workspace-green and `--locked` mean **green in CI**.
 - ⚠ **A change to `eval.rs`'s reifier or to `store.rs` needs the full
   `-p ken-interp` / `-p ken-runtime` suite**, not a single targeted test.
-- **Report an unpushed ref and KEEP GOING.** Build seats have no GitHub
-  credential by design; the Steward pushes. Raising it is not gating on it.
+- **Commit, report the exact SHA, and KEEP GOING.** Build seats have no GitHub
+  credential by design; the Steward publishes through the publisher path.
 - **Hard-stop protocol.** Count of record is **10**; **next research pull =
   `#11`**, armed. ⛔ **`#10` is recorded under symptom-inventory entry 2 / the
   prerequisite chain — it is NOT a fourth entry.** Inventory stays at 3 entries;

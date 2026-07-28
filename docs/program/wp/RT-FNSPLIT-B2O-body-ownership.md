@@ -70,7 +70,7 @@ ownership mapping in the semantic plane. Inert — no emitted unit, no call edge
 >
 > ### ⭐ Reuse, do not re-derive, the relocation fixture
 >
-> `runtime-implementer/b2o-fold6-wip` = `11a3b15f` (off-box) already holds the
+> `runtime-implementer/b2o-fold6-wip` = `11a3b15f` already holds the
 > machinery that relocates a direct call into a nested `fn`, and the
 > equal-named-methods-in-two-`impl`s case. **`AC-10`'s control is that same
 > fixture with its verdict inverted.** The tree there is RED for an unrelated
@@ -710,15 +710,14 @@ on any disagreement the parent issue's count line wins).
 
 ⛔ **The next armed research pull is #12.** #9's is consumed.
 
-⚠ When you stop, **preserve your evidence and report the exact SHA.** Build seats
-have no GitHub credential by design; the Steward pushes WP branches. Evidence
-that exists only in your worktree exists on **one local ref with zero off-box
-copies** — that is the state the #9 stop nearly ended in.
+⚠ When you stop, **report the exact SHA of your evidence** so it can be named and
+consumed. A branch living only on a local ref is the normal state and needs no
+repair; ⛔ what it does need is a name nobody will hard-reset.
 
 ## Rebase and handoff discipline
 
 - The WP branch is `wp/RT-FNSPLIT-B2O-body-ownership`, cut from `origin/main` at
-  kickoff. Report the exact SHA on every fold; the Steward pushes it.
+  kickoff. Report the exact SHA on every fold; the Steward publishes it.
 - ⚠ `wp/RT-FNSPLIT-B2F-functionization` at `fbe206a7` is the **#9 evidence ref**,
   based on `3891b7aa` deliberately. ⛔ **Do not merge, squash, rebase, or build on
   it.** It is a droppable evidence object.

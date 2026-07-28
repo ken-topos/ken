@@ -681,7 +681,7 @@ in-flight file set with the Steward before you cut the branch.
 - Cut `wp/RT-VALUE-TOTALITY-P2` **fresh from `origin/main`**. ⛔ P1 was
   squash-merged and its branch deleted on origin — there is nothing to continue.
 - Report the branch cut and your slice plan before building.
-- Report an unpushed ref and keep going; **the Steward pushes.** Agents never
+- Commit and report the exact SHA; **the Steward publishes.** Agents never
   touch GitHub.
 - Wrap markdown at 80 columns.
 - ⛔ **Verify every fixed input at the base rather than taking it from this

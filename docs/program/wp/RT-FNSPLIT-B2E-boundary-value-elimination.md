@@ -170,7 +170,7 @@ store-local interning authority. No parallel name authority.**
 >
 > **Decision `dec_6r447gawdp6hy` — `resolved`.** Ruling `evt_5p1w8vq3b6q5s`,
 > thread `thr_7ya91w7k5keyd`. Architect durable record `1d9a6f86` on
-> `architect/work`, preserved off-box by the Steward. Transcribed here because
+> `architect/work`, preserved by the Steward. Transcribed here because
 > **an in-thread ruling is not a durable deliverable.**
 >
 > ⛔ **THE FRAME'S PREMISE WAS WRONG AND THIS IS THE CORRECTION.** The phrase

@@ -84,12 +84,12 @@ origin: "Architect ruling evt_6tzss92ckj2by (2026-07-27) on the Steward's PX8-ER
 > - ⚠ **Not a QA miss.** Local `-p ken-runtime` runs (468 green) never link
 >   `ken-cli`'s native parity programs. The CI gate worked as designed.
 >
-> ### ⚠ DURABILITY EXPOSURE
+> ### ⚠ DO NOT MOVE THE MEASURED CHILD
 >
-> `763f0a44` is off-box — the publisher pushed `wp/PX8-ERRID-ALLOC` for PR #1141.
-> ⛔ **`e65c81b5` is LOCAL-ONLY**, and this box holds the only copy of a measured,
-> controlled result needed the moment FNSPLIT lands. ⛔ Do not reset, delete, or
-> repoint that branch. ⚠ **A recorded SHA is not a copy.**
+> ⛔ **`e65c81b5` carries a measured, controlled result that is needed the moment
+> FNSPLIT lands.** ⛔ Do not reset, delete, or repoint that branch — the hazard is
+> a hard reset from a handoff gate or a `git reset --hard`, not storage.
+> ⚠ **A recorded SHA is not a copy.**
 >
 > ### Resume when FNSPLIT lands
 >

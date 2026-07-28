@@ -223,5 +223,5 @@ clean table. ⭐ A silent cap reads as complete coverage.
   so itself: *"When the spec dictates an answer, follow it. When it does not,
   reason from these."* It is priors for judgment. Using it as the audit's
   measuring stick without §3's repair inverts its stated purpose.
-- ⚠ Report an unpushed ref and keep going; the Steward pushes. Wrap markdown at
-  80 columns. Targeted builds only — the full gate runs in CI.
+- ⚠ Commit, report the exact SHA, and keep going; the Steward publishes. Wrap
+  markdown at 80 columns. Targeted builds only — the full gate runs in CI.
