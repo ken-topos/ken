@@ -629,7 +629,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 // closed at this generated root boundary: otherwise a recursive
                 // source-machine revisit can emit one case and later classify
                 // that same subtree as dead.
-                compiler.close_statically_unselected_match_cases()?;
+                compiler.validate_recursive_descent_join_disposition()?;
                 compiler.require_complete_join_plan_consumption()?;
                 compiler.require_complete_dynamic_splice_edge_consumption()?;
                 match lowered {
@@ -674,6 +674,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 builder.seal_all_blocks();
                 builder.finalize();
             }
+            compiler.validate_recursive_descent_materialized_dead_join_cfg(&ctx.func)?;
             verify_cranelift_function(&ctx.func, module.isa())?;
             #[cfg(test)]
             scale_b_record_recursive_descent_root(&ctx.func);
@@ -1788,7 +1789,7 @@ impl<'a> Lowering<'a> {
                         .has_continuing_predecessor
                         .then(|| builder.create_block());
                     if let Some(merge) = merge {
-                        Self::append_planned_join_params(builder, merge, &join_plan);
+                        self.append_planned_join_params(builder, merge, &join_plan);
                     }
                     builder.ins().brif(value, true_block, &[], false_block, &[]);
                     let mut merge_kind = None;
@@ -1854,7 +1855,7 @@ impl<'a> Lowering<'a> {
                         .has_continuing_predecessor
                         .then(|| builder.create_block());
                     if let Some(merge) = merge {
-                        Self::append_planned_join_params(builder, merge, &join_plan);
+                        self.append_planned_join_params(builder, merge, &join_plan);
                     }
                     builder.ins().brif(success, ok_block, &[], err_block, &[]);
                     let mut merge_kind = None;
@@ -2079,7 +2080,7 @@ impl<'a> Lowering<'a> {
                     .has_continuing_predecessor
                     .then(|| builder.create_block());
                 if let Some(merge) = merge {
-                    Self::append_planned_join_params(builder, merge, &join_plan);
+                    self.append_planned_join_params(builder, merge, &join_plan);
                 }
                 builder.ins().brif(value, then_block, &[], else_block, &[]);
                 let mut merge_kind = None;
@@ -4235,7 +4236,7 @@ impl<'a> Lowering<'a> {
                     .expect("compiler-private source join identity exhausted");
                 let join_plan = std::rc::Rc::new(self.consumed_join_plan_token(static_origin)?);
                 let merge = builder.create_block();
-                Self::append_planned_join_params(builder, merge, join_plan.as_ref());
+                self.append_planned_join_params(builder, merge, join_plan.as_ref());
                 local_completion = Some((
                     merge,
                     suffix_pending.to_vec(),
@@ -4417,7 +4418,7 @@ impl<'a> Lowering<'a> {
                     .expect("compiler-private source join identity exhausted");
                 let join_plan = std::rc::Rc::new(self.consumed_join_plan_token(static_origin)?);
                 let merge = builder.create_block();
-                Self::append_planned_join_params(builder, merge, join_plan.as_ref());
+                self.append_planned_join_params(builder, merge, join_plan.as_ref());
                 local_completion = Some((
                     merge,
                     suffix_pending.to_vec(),
@@ -4538,7 +4539,7 @@ impl<'a> Lowering<'a> {
                     .expect("compiler-private source join identity exhausted");
                 let join_plan = std::rc::Rc::new(self.consumed_join_plan_token(static_origin)?);
                 let merge = builder.create_block();
-                Self::append_planned_join_params(builder, merge, join_plan.as_ref());
+                self.append_planned_join_params(builder, merge, join_plan.as_ref());
                 local_completion = Some((
                     merge,
                     suffix_pending.to_vec(),
@@ -4806,7 +4807,7 @@ impl<'a> Lowering<'a> {
             .expect("compiler-private source join identity exhausted");
         let join_plan = std::rc::Rc::new(self.consumed_join_plan_token(static_origin)?);
         let merge = builder.create_block();
-        Self::append_planned_join_params(builder, merge, join_plan.as_ref());
+        self.append_planned_join_params(builder, merge, join_plan.as_ref());
         let target = SourceJoinTarget {
             join_id,
             block: merge,
@@ -5513,10 +5514,16 @@ impl<'a> Lowering<'a> {
 
     /// Give one already-planned join exactly the lanes named by its D8 token.
     fn append_planned_join_params(
+        &mut self,
         builder: &mut FunctionBuilder<'_>,
         merge: cranelift_codegen::ir::Block,
         join_plan: &JoinPlanToken,
     ) {
+        self.function_local
+            .materialized_join_blocks
+            .entry(join_plan.origin)
+            .or_default()
+            .insert(merge);
         builder.append_block_param(merge, types::I64);
         if join_plan.representation == JoinResultRepresentation::NativeScalarPair {
             builder.append_block_param(merge, types::I64);
@@ -5780,7 +5787,7 @@ impl<'a> Lowering<'a> {
             .has_continuing_predecessor
             .then(|| builder.create_block());
         if let Some(merge) = merge {
-            Self::append_planned_join_params(builder, merge, &join_plan);
+            self.append_planned_join_params(builder, merge, &join_plan);
         }
         let mut merge_kind = None;
         builder
@@ -5908,7 +5915,7 @@ impl<'a> Lowering<'a> {
                 .has_continuing_predecessor
                 .then(|| builder.create_block());
             if let Some(merge) = merge {
-                Self::append_planned_join_params(builder, merge, join_plan);
+                self.append_planned_join_params(builder, merge, join_plan);
             }
             let mut merge_kind = None;
 
@@ -6039,7 +6046,7 @@ impl<'a> Lowering<'a> {
             .has_continuing_predecessor
             .then(|| builder.create_block());
         if let Some(merge) = merge {
-            Self::append_planned_join_params(builder, merge, join_plan);
+            self.append_planned_join_params(builder, merge, join_plan);
         }
         let mut merge_kind = None;
 
@@ -6747,7 +6754,7 @@ impl<'a> Lowering<'a> {
                     .has_continuing_predecessor
                     .then(|| builder.create_block());
                 if let Some(merge) = merge {
-                    Self::append_planned_join_params(builder, merge, &join_plan);
+                    self.append_planned_join_params(builder, merge, &join_plan);
                 }
                 builder.ins().brif(value, then_block, &[], else_block, &[]);
                 let mut merge_kind = None;
@@ -7011,7 +7018,7 @@ impl<'a> Lowering<'a> {
                         .has_continuing_predecessor
                         .then(|| builder.create_block());
                     if let Some(merge) = merge {
-                        Self::append_planned_join_params(builder, merge, &join_plan);
+                        self.append_planned_join_params(builder, merge, &join_plan);
                     }
                     builder
                         .ins()
@@ -9051,7 +9058,7 @@ impl<'a> Lowering<'a> {
             .has_continuing_predecessor
             .then(|| builder.create_block());
         if let Some(merge) = merge {
-            Self::append_planned_join_params(builder, merge, join_plan);
+            self.append_planned_join_params(builder, merge, join_plan);
         }
         let mut test_block = builder.current_block().expect("borrowed match block");
         let mut merge_kind = None;
@@ -9148,7 +9155,7 @@ impl<'a> Lowering<'a> {
             .has_continuing_predecessor
             .then(|| builder.create_block());
         if let Some(merge) = merge {
-            Self::append_planned_join_params(builder, merge, &join_plan);
+            self.append_planned_join_params(builder, merge, &join_plan);
         }
         let some_block = builder.create_block();
         let none_block = builder.create_block();
@@ -9349,7 +9356,7 @@ impl<'a> Lowering<'a> {
             .has_continuing_predecessor
             .then(|| builder.create_block());
         if let Some(merge) = merge {
-            Self::append_planned_join_params(builder, merge, &join_plan);
+            self.append_planned_join_params(builder, merge, &join_plan);
         }
         let predecessor = nat.predecessor(builder);
         let is_zero =
@@ -9439,7 +9446,7 @@ impl<'a> Lowering<'a> {
         let join_plan = self.consumed_join_plan_token(static_origin)?;
         let merge = join_plan.has_continuing_predecessor.then(|| {
             let merge = builder.create_block();
-            Self::append_planned_join_params(builder, merge, &join_plan);
+            self.append_planned_join_params(builder, merge, &join_plan);
             merge
         });
         let mut test_block = builder
