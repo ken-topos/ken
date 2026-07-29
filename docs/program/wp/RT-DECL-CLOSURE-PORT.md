@@ -485,10 +485,35 @@ Report and stop if `D1` shows residuals beyond `TransparentDeclarationClosure` o
 the fixture, or if the port lands and `AC-1` still fails **on either delta**.
 ⛔ Do not attempt a size reduction in either case.
 
-**§5a count of record: 21**, entries **12**, next predicate check the **15th
-entry**, next research pull **#24** — carried on [[NATIVE-HANDLE-CARRIER]].
+> ### ⛔ §5a — ARMED AND CURRENT AS OF 2026-07-29. Re-read this line at every stop.
+>
+> **Count of record: 24** · entries **15** · **next research pull = `#27`** ·
+> **next predicate check = 18th entry**.
+>
+> ⚠ **This line stood at `21`/`12` for three stops.** #22, #23 and #24 all landed
+> against a stale anchor. ⭐ An armed trigger that is not re-read is not armed —
+> that is the exact lapse `steward.md §5a`'s ⚠ note describes, and it is why both
+> triggers came due simultaneously instead of one at a time.
+>
+> **Discharged at #24 (2026-07-29):** research pull **fired** and the predicate
+> check **asked**, both in `evt_qak9f1thjkw7`, before the Architect ruled.
+> Research confirmed awake (`capture-pane`, §5a duty 3). Cadence re-anchored from
+> #24 ⇒ next pull `#27`, next predicate check the 18th entry.
+
 ⛔ The `NATIVE-HANDLE-CARRIER` stop that reordered this node is **not** #22: it
 routed a red row to the node that already owned it, and no new mechanism failed.
+
+**The three stops on this node's chain, for the predicate check:**
+
+| # | entry | mechanism that failed |
+|---|---|---|
+| 22 | 13 | producer-`Match` carried scrutinee — tree-producing scrutinee not `Bool`/constructor |
+| 23 | 14 | carried closure-capture — `Carried` reaching a consumer built only for specialized shapes |
+| 24 | 15 | **callable as transparent-declaration `CallArgument`** — `StaticOriginId(1031)`, a `LexicalClosure` with no lawful disposition among the ruled five |
+
+⭐ #22 and #23 were already ruled one shape, and folding them is what produced
+`D7` — which is what **found** #24. ⛔ No repair of the two known cells would
+have surfaced it. **The reached set is evidence, never the population.**
 
 ## 8. What landing this closes
 
