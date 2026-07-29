@@ -8020,10 +8020,14 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
         metrics.functionized_root_adapters, 1,
         "one completed governed object must contain one public root adapter"
     );
-    assert!(
-        metrics.native_int_functions > 0 && metrics.boundary_value_functions > 0,
-        "both fixed production helper emitters must be present in the \
-         completed denominator"
+    assert_eq!(
+        metrics.native_int_functions, 7,
+        "the closed native-Int graph must contribute all seven definitions"
+    );
+    assert_eq!(
+        metrics.boundary_value_functions, 29,
+        "the closed boundary-value graph must contribute all twenty-nine \
+         definitions"
     );
     for (name, value) in [
         (
