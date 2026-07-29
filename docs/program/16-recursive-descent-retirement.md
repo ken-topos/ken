@@ -297,6 +297,36 @@ graph LR
 > attribute every future `Closure` refusal"* — so a later refusal with identical
 > text is a fresh question, not a settled one.
 
+> ### ⭐⭐ AND THAT FRESH QUESTION ARRIVED WITHIN THE HOUR — stop `#27`, still no
+> ### node, still the same atomic pair
+>
+> **The population-scope caveat directly above stopped being hypothetical.** The
+> ordering repair was built (`07ce6ef1`, tree `ee3f2bb9…`, parent exact
+> `c45a59a9`, 4 Runtime files, +777/−121, targeted checks green, static-recursor
+> tests 3/3) and then met a **different** `Closure` edge with the **same refusal
+> text**: parent `StaticOriginId(655)` / child `650` / body `641`, arity `1`,
+> captures **`8`**, inside `transfer_constructor_operands` on a carried
+> computational-match path — against the ruled member's worker body `723`,
+> `Carried x7`. **No planner-proved token exists for it** (`evt_4tvysmzr6mfpb`).
+>
+> ⭐ **The caveat is what made the ring stop instead of absorbing it.** "Same text
+> as the thing that just got ruled" is the exact reasoning the population scope
+> forbids, and it was available and declined.
+>
+> ⛔⛔ **STILL NO NODE, NO EDGE, NO DISPOSITION, AND NO SCHEDULE CHANGE.** The pair
+> is still #3-atomic. The campaign's shape is untouched by this stop.
+>
+> ⚠ **What IS different: this is the fifth instance of one shape**, and it landed
+> where `RT-DECL-CLOSURE-PORT` §5a predicted the next one would. That record's
+> `#27` triggers both fired in one pass (`evt_3tx7ndxp5pm4j`) and the question put
+> to the Architect is about the **derivation** — *why does the closure keep failing
+> to be closed?* — ⛔ not *which cell is next*. Read §5a's discriminator table
+> before treating a new cell as the resolution.
+>
+> ⛔ **The §8 bounded-witness protocol is now spent on BOTH known edges.** There is
+> no third charge, so a further refusal outside both populations is an attribution
+> question first, with no diagnostic authorized by default.
+
 > ### ⛔⛔ THE RELEASE POINT IS A **CONDITION**, NOT A NODE NUMBER
 >
 > ⚠ **A draft of this block twice asserted a node id as the release point** —

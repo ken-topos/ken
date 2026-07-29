@@ -797,16 +797,23 @@ the fixture, or if the port lands and `AC-1` still fails **on either delta**.
 
 > ### ⛔ §5a — ARMED AND CURRENT AS OF 2026-07-29. Re-read this line at every stop.
 >
-> **Count of record: 26** · entries **17** · **next research pull = `#27`** ·
-> **next predicate check = 18th entry**. ⇒ ⭐ **Neither trigger is due — but both
-> are now ONE stop away.**
+> **Count of record: 26** · entries **18** · **next research pull = `#30`** ·
+> **next predicate check = 21st entry**. ⇒ ⭐ **Neither trigger is due; they are no
+> longer simultaneous.**
 >
-> ⛔⛔ **BOTH TRIGGERS FIRE TOGETHER AT `#27` / the 18th entry.** That is the
-> simultaneous-due condition this section already records as a past lapse. ⭐ It is
-> foreseen now rather than discovered later: **at the next stop on this chain, run
-> the research pull AND the predicate check, in the same pass.** ⚠ Do not let the
-> next stop's urgency defer either — that is exactly how the line went stale for
-> three stops before.
+> ✅⭐ **BOTH TRIGGERS FIRED TOGETHER AT `#27` / the 18th entry, IN ONE PASS
+> (`evt_3tx7ndxp5pm4j`), BEFORE THE ARCHITECT RULED.** The foreseen
+> simultaneous-due condition arrived exactly as written and was discharged rather
+> than deferred — the research pull went to Research and the predicate check to the
+> Architect in the same post. ⭐ **Cadence re-anchored from `#27`, and deliberately
+> re-staggered** (pull at `#30`, predicate at the 21st entry) so the two do not
+> come due on the same stop again; the simultaneity was the recorded hazard, and
+> nothing requires them to stay locked together.
+>
+> ⚠ **Count of record stays `26`.** Stop `#27` reached an edge with **no** lawful
+> member, and no member has been ruled for it — ⛔ the count moves when the
+> **Architect admits** a cell, never when a stop **finds** one missing. Those are
+> different events and conflating them would inflate the matrix by fiat.
 >
 > **#26 (2026-07-29):** [[RT-RECURSOR-TRANSPORT]] stopped on a recurred ordinary-
 > `Closure` refusal inside the recursor split (`evt_6stmz1wsg17pd` →
@@ -834,7 +841,7 @@ the fixture, or if the port lands and `AC-1` still fails **on either delta**.
 ⛔ The `NATIVE-HANDLE-CARRIER` stop that reordered this node is **not** #22: it
 routed a red row to the node that already owned it, and no new mechanism failed.
 
-**The four stops on this node's chain where a matrix cell was MISSING, for the
+**The FIVE stops on this node's chain where a matrix cell was MISSING, for the
 predicate check:**
 
 | # | entry | mechanism that failed |
@@ -843,26 +850,57 @@ predicate check:**
 | 23 | 14 | carried closure-capture — `Carried` reaching a consumer built only for specialized shapes |
 | 24 | 15 | **callable as transparent-declaration `CallArgument`** — `StaticOriginId(1031)`, a `LexicalClosure` with no lawful disposition among the ruled five |
 | 26 | 17 | **static-recursor-worker residual** — `StaticOriginId(723)`, a `Closure` in the recursor split's `Captures[Carried x7]`, with no lawful **member** among the ruled matrix's cells |
+| **27** | **18** | **constructor-operand closure on a carried computational-match path** — parent `StaticOriginId(655)` / child `650` / body `641`, arity `1`, captures **`8`**, refused inside `transfer_constructor_operands` with **no planner-proved token at all** (`evt_4tvysmzr6mfpb`) |
 
 ⭐ #22 and #23 were already ruled one shape, and folding them is what produced
 `D7` — which is what **found** #24. ⛔ No repair of the two known cells would
 have surfaced it. **The reached set is evidence, never the population.**
 
-> ⚠⚠ **CARRY THIS INTO THE `#27` PREDICATE CHECK — a four-instance pattern is now
-> visible, and naming it is not the same as resolving it.**
+> ✅⚠⚠ **DISCHARGED AT `#27` — and the pattern is now FIVE. The prediction being
+> borne out is itself the evidence.**
 >
-> #22, #23, #24 and #26 are all the **same shape of failure**: a matrix or
-> partition asserted closed, met a **real** edge it had no lawful cell for, and
-> refused **late** rather than at planning. Each was individually ruled a
-> legitimate new cell/member — and that is exactly what makes the pattern easy to
-> keep absorbing one ruling at a time.
+> ⛔ **This block formerly read "CARRY THIS INTO THE `#27` PREDICATE CHECK" and
+> described a four-instance pattern. That instruction is SPENT and that count is
+> RETIRED, not qualified** — the check was asked at `#27` in `evt_3tx7ndxp5pm4j`.
 >
-> ⭐ **The question `#27` owes is not "what is the next cell?" but "why does the
-> closure keep failing to be closed?"** — i.e. whether the derivation that claims
-> exhaustiveness is itself wrong, rather than merely incomplete on a fourth
-> occasion. ⛔ That is an **Architect** question about the derivation, not a
-> Steward re-cut and not a ring's to answer, and ⛔ it is **not** grounds to add a
-> node (operator node gate: interrogate the constraint, do not presume a node).
+> #22, #23, #24, #26 **and now #27** are all the **same shape of failure**: a
+> matrix or partition asserted closed, met a **real** edge it had no lawful cell
+> for, and refused **late** rather than at planning. The first four were each
+> individually ruled a legitimate new cell/member — and that is exactly what makes
+> the pattern easy to keep absorbing one ruling at a time.
+>
+> ⭐⭐ **What `#27` adds is not a fifth data point but a CONFIRMED PREDICTION.**
+> This block was written before `#27` existed and said the next stop would test
+> whether the derivation is wrong rather than incomplete. The next stop then
+> arrived, in the predicted shape, on the predicted chain. ⇒ **"Incomplete on one
+> more occasion" is now the hypothesis with a failed forecast against it**, and
+> the one asserting exhaustiveness owes the stronger account.
+>
+> ⭐ **The question asked (Architect, `evt_3tx7ndxp5pm4j`): not "what is the next
+> cell?" but "why does the closure keep failing to be closed?"** ⛔ An Architect
+> question about the derivation — not a Steward re-cut, not a ring's to answer, and
+> ⛔ **not** grounds to add a node (operator node gate: interrogate the constraint,
+> do not presume a node).
+>
+> ### ⭐⭐ THE DISCRIMINATOR, WRITTEN BEFORE THE ANSWER — so a fifth absorption
+> ### cannot pass as a resolution
+>
+> ⛔ **A ruling that admits a cell for `#27` and stops there does NOT answer the
+> question asked**, and this line exists so that is visible rather than arguable.
+> The two hypotheses differ observably:
+>
+> | | **merely INCOMPLETE** | **the DERIVATION is wrong** |
+> |---|---|---|
+> | where the new cells fall | scattered, unrelated operand kinds | all on one axis the derivation never split on |
+> | what the next stop looks like | unpredictable | predictable from the axis, in advance |
+> | the fix | add the cell | re-derive the partition on that axis |
+> | the refusal site | varies with the operand | keeps landing **late**, at lowering, never at planning |
+>
+> ⚠ **Three of the four columns already read to the right on all five instances**,
+> and the "refused late rather than at planning" property is common to every one of
+> them. ⛔ That is not a ruling — the axis and its soundness are the Architect's —
+> but it means the burden has moved, and a cell-only answer should have to say why
+> the shared late-refusal property is a coincidence.
 >
 > ⚠ **Steward note, flagged as inference not ruling:** #25 is deliberately absent
 > from this table — it was a *boundary* stop with no missing cell, so the table's
