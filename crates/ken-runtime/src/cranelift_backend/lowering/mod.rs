@@ -863,6 +863,7 @@ enum JoinConsumptionMutation {
     OmitSourceMachineComputationalMatchSelection,
     MaterializeFirstUnselectedMatchJoin,
     AttachEntryToFirstMaterializedDead,
+    DispositionDynamicHostResultMerge,
 }
 
 #[cfg(test)]
@@ -1691,7 +1692,8 @@ impl<'a> Lowering<'a> {
             | JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase
             | JoinConsumptionMutation::OmitSourceMachineComputationalMatchSelection
             | JoinConsumptionMutation::MaterializeFirstUnselectedMatchJoin
-            | JoinConsumptionMutation::AttachEntryToFirstMaterializedDead => {}
+            | JoinConsumptionMutation::AttachEntryToFirstMaterializedDead
+            | JoinConsumptionMutation::DispositionDynamicHostResultMerge => {}
         }
         if !self.function_local.consumed_join_origins.insert(origin) {
             return Err(backend_module(
@@ -2093,7 +2095,8 @@ impl<'a> Lowering<'a> {
                 | JoinConsumptionMutation::DuplicateFirst
                 | JoinConsumptionMutation::IncludeStaticallyUnselected
                 | JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase
-                | JoinConsumptionMutation::MaterializeFirstUnselectedMatchJoin => blocks,
+                | JoinConsumptionMutation::MaterializeFirstUnselectedMatchJoin
+                | JoinConsumptionMutation::DispositionDynamicHostResultMerge => blocks,
             };
             for block in blocks {
                 if reachable.contains(&block) {

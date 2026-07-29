@@ -8187,6 +8187,41 @@ fn d8_mixed_host_result_uses_one_uniform_carrier_conversion_per_predecessor() {
     }
 }
 
+/// **MEASURED:** a dynamic HostResult creates its planned merge through the
+/// central materialized-block recorder. A test-only false dead disposition then
+/// reaches completed-CFG validation, which observes the real entry-reachable
+/// merge block and rejects it.
+///
+/// **CLAIMED:** the HostResult merge belongs to the complete population over
+/// which the materialized-but-dead CFG proof quantifies.
+///
+/// **THE GAP:** the false dead disposition is only a reachability witness; it
+/// does not prove population membership by itself. Replacing the recorder call
+/// with direct block-parameter appends recreates the missed production path:
+/// the block list becomes empty, this compile succeeds, and the control reds at
+/// `expect_err`.
+#[test]
+fn d8_dynamic_host_result_merge_enters_materialized_dead_cfg_population() {
+    set_d8_join_consumption_mutation(
+        JoinConsumptionMutation::DispositionDynamicHostResultMerge,
+    );
+    let result = recursive_port_process_compiles(&d8_mixed_host_result_join_fixture(false));
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
+
+    let reachable_dead =
+        result.expect_err("a dispositioned dynamic HostResult merge must reach CFG validation");
+    assert!(
+        matches!(
+            reachable_dead,
+            CraneliftBackendError::Backend(BackendFailure::Module(ref detail))
+                if detail.contains("materialized-but-dead source join")
+                    && detail.contains("retained a reachable block")
+        ),
+        "dynamic HostResult population control reached the wrong boundary: \
+         {reachable_dead:?}"
+    );
+}
+
 #[test]
 fn d8_all_trap_host_result_emits_no_merge_or_predecessor_conversion() {
     let mut expr = d8_mixed_host_result_join_fixture(false);

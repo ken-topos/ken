@@ -9246,9 +9246,14 @@ impl<'a> Lowering<'a> {
         if let Some(merge) = merge {
             #[cfg(test)]
             D8_JOIN_MERGES_CREATED.with(|count| count.set(count.get() + 1));
-            builder.append_block_param(merge, types::I64);
-            if join_plan.representation == JoinResultRepresentation::NativeScalarPair {
-                builder.append_block_param(merge, types::I64);
+            self.append_planned_join_params(builder, merge, &join_plan);
+            #[cfg(test)]
+            if D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get)
+                == JoinConsumptionMutation::DispositionDynamicHostResultMerge
+            {
+                self.function_local
+                    .dispositioned_join_origins
+                    .insert(static_origin);
             }
         }
         let ok_block = builder.create_block();
