@@ -5126,6 +5126,153 @@ fn retained_authority_residual_is_the_typed_selector_accounting() {
 }
 
 #[test]
+fn complete_residual_report_reaches_all_five_without_short_circuiting() {
+    let active_recursor = || RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::d1::Recursive".to_string(),
+            argument_binders: 1,
+            recursive_positions: vec![0],
+            body: RuntimeExpr::Var(0),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D1 active recursor default".to_string(),
+        },
+    };
+    let producer_match = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            }),
+            args: Vec::new(),
+        }),
+        cases: Vec::new(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D1 producer-Match default".to_string(),
+        },
+    };
+    let match_recursor = RuntimeExpr::Match {
+        scrutinee: Box::new(active_recursor()),
+        cases: Vec::new(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D1 recursor-Match default".to_string(),
+        },
+    };
+    let lexical_recursor = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: vec![active_recursor()],
+    };
+    let seed_closure = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Closure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    };
+    let declaration_symbol = "decl:fixture::d1::closure".to_string();
+    let declaration = RuntimeDeclaration {
+        symbol: declaration_symbol.clone(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+
+    // Promise class: durable invariant.
+    //
+    // MEASURED: every closed residual variant has a named source witness, and
+    // one compound input reports their complete union.
+    // CLAIMED: D1 defeats first-hit short-circuiting through the production
+    // classifier while preserving the triggering semantic owner.
+    // THE GAP: the governed deltas are measured separately through the
+    // on-demand diagnostic; these fixtures establish instrument reachability.
+    let witnesses = [
+        (
+            RecursiveDescentResidual::ProducerMatchCall,
+            producer_match.clone(),
+        ),
+        (
+            RecursiveDescentResidual::MatchScrutineeRecursor,
+            match_recursor.clone(),
+        ),
+        (
+            RecursiveDescentResidual::LexicalCallArgumentRecursor,
+            lexical_recursor.clone(),
+        ),
+        (
+            RecursiveDescentResidual::SeedClosureCall,
+            seed_closure.clone(),
+        ),
+    ];
+    for (expected, witness) in witnesses {
+        assert_eq!(
+            recursive_descent_residual_report(&witness, &BTreeMap::new()).variants(),
+            BTreeSet::from([expected]),
+            "D1 did not reach {expected:?}"
+        );
+    }
+    let declarations =
+        BTreeMap::from([(declaration_symbol.as_str(), &declaration)]);
+    let declaration_report = recursive_descent_residual_report(
+        &RuntimeExpr::Value(RuntimeValue::Bool(true)),
+        &declarations,
+    );
+    assert_eq!(
+        declaration_report.variants(),
+        BTreeSet::from([RecursiveDescentResidual::TransparentDeclarationClosure])
+    );
+    assert_eq!(
+        declaration_report.by_owner,
+        BTreeMap::from([(
+            RecursiveDescentResidualOwner::Declaration(declaration_symbol.clone()),
+            BTreeSet::from([RecursiveDescentResidual::TransparentDeclarationClosure]),
+        )])
+    );
+
+    let compound = RuntimeExpr::Record {
+        fields: vec![
+            ("producer".to_string(), producer_match),
+            ("match_recursor".to_string(), match_recursor),
+            ("lexical_recursor".to_string(), lexical_recursor),
+            ("seed".to_string(), seed_closure),
+        ],
+    };
+    assert_eq!(
+        recursive_descent_residual_report(&compound, &declarations).variants(),
+        BTreeSet::from([
+            RecursiveDescentResidual::ProducerMatchCall,
+            RecursiveDescentResidual::MatchScrutineeRecursor,
+            RecursiveDescentResidual::LexicalCallArgumentRecursor,
+            RecursiveDescentResidual::SeedClosureCall,
+            RecursiveDescentResidual::TransparentDeclarationClosure,
+        ]),
+        "D1 retained the selector's first-hit short circuit"
+    );
+    assert_eq!(
+        recursive_descent_residual(&compound),
+        Some(RecursiveDescentResidual::ProducerMatchCall),
+        "the diagnostic changed selector priority"
+    );
+}
+
+#[test]
 fn a_trap_arm_and_its_trap_free_twin_both_functionize() {
     let declarations = BTreeMap::new();
     let fixture = |trap_arm| RuntimeExpr::Match {

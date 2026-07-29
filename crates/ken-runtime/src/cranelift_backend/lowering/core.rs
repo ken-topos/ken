@@ -37,7 +37,7 @@ fn recursive_position_unit_calls() -> usize {
 /// result-directed joins; D7/S4 exercise their corrected governed composition.
 /// S4's completed-emission rows establish collection capability only; they are
 /// not an asymptotic verdict about those rows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum RecursiveDescentResidual {
     /// An ordinary producer match whose scrutinee is directly a call.
     ProducerMatchCall,
@@ -56,118 +56,230 @@ enum RecursiveDescentResidual {
     TransparentDeclarationClosure,
 }
 
-/// Produce the retained reason, if any, from the exhaustive source walk.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum RecursiveDescentResidualOwner {
+    RootExpression,
+    Declaration(String),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct RecursiveDescentResidualReport {
+    by_owner: BTreeMap<RecursiveDescentResidualOwner, BTreeSet<RecursiveDescentResidual>>,
+}
+
+impl RecursiveDescentResidualReport {
+    fn record(
+        &mut self,
+        owner: RecursiveDescentResidualOwner,
+        residual: RecursiveDescentResidual,
+    ) {
+        self.by_owner.entry(owner).or_default().insert(residual);
+    }
+
+    fn variants(&self) -> BTreeSet<RecursiveDescentResidual> {
+        self.by_owner
+            .values()
+            .flat_map(|residuals| residuals.iter().copied())
+            .collect()
+    }
+}
+
+/// Visit every retained reason from the exhaustive source walk.
 ///
 /// Wrapper and child-producing forms propagate a reason from their children.
 /// The exhaustive match is the fail-closed default: a new `RuntimeExpr` form
 /// cannot compile until this production classifier assigns it to the
 /// functionized population or to a typed retained reason.
-fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResidual> {
+///
+/// `visit` returns whether traversal should continue. The selector stops on the
+/// first reason; D1 continues through the same classifier.
+fn walk_recursive_descent_residuals(
+    expr: &RuntimeExpr,
+    visit: &mut impl FnMut(RecursiveDescentResidual) -> bool,
+) -> bool {
     match expr {
         RuntimeExpr::CheckedJoinSite { body, .. }
         | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
         | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
         | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
         | RuntimeExpr::CheckedComputationalIHInvocation { body, .. }
-        | RuntimeExpr::Closure { body, .. } => recursive_descent_residual(body),
+        | RuntimeExpr::Closure { body, .. } => walk_recursive_descent_residuals(body, visit),
         RuntimeExpr::LexicalClosure { captures, body, .. } => captures
             .iter()
-            .find_map(recursive_descent_residual)
-            .or_else(|| recursive_descent_residual(body)),
-        RuntimeExpr::Let { value, body } => {
-            recursive_descent_residual(value).or_else(|| recursive_descent_residual(body))
-        }
+            .all(|capture| walk_recursive_descent_residuals(capture, visit))
+            && walk_recursive_descent_residuals(body, visit),
+        RuntimeExpr::Let { value, body } => walk_recursive_descent_residuals(value, visit)
+            && walk_recursive_descent_residuals(body, visit),
         RuntimeExpr::If {
             scrutinee,
             then_expr,
             else_expr,
-        } => recursive_descent_residual(scrutinee)
-            .or_else(|| recursive_descent_residual(then_expr))
-            .or_else(|| recursive_descent_residual(else_expr)),
+        } => {
+            walk_recursive_descent_residuals(scrutinee, visit)
+                && walk_recursive_descent_residuals(then_expr, visit)
+                && walk_recursive_descent_residuals(else_expr, visit)
+        }
         RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
-            args.iter().find_map(recursive_descent_residual)
+            args.iter()
+                .all(|argument| walk_recursive_descent_residuals(argument, visit))
         }
         RuntimeExpr::Match {
             scrutinee, cases, ..
-        } => matches!(scrutinee.as_ref(), RuntimeExpr::Call { .. })
-            .then_some(RecursiveDescentResidual::ProducerMatchCall)
-            .or_else(|| {
-                matches!(
-                    scrutinee.as_ref(),
-                    RuntimeExpr::ComputationalMatch { cases, .. }
-                        if cases
-                            .iter()
-                            .any(|case| !case.recursive_positions.is_empty())
-                )
-                .then_some(RecursiveDescentResidual::MatchScrutineeRecursor)
-            })
-            .or_else(|| recursive_descent_residual(scrutinee))
-            .or_else(|| {
-                cases
+        } => {
+            if matches!(scrutinee.as_ref(), RuntimeExpr::Call { .. })
+                && !visit(RecursiveDescentResidual::ProducerMatchCall)
+            {
+                return false;
+            }
+            if matches!(
+                scrutinee.as_ref(),
+                RuntimeExpr::ComputationalMatch { cases, .. }
+                    if cases.iter().any(|case| !case.recursive_positions.is_empty())
+            ) && !visit(RecursiveDescentResidual::MatchScrutineeRecursor)
+            {
+                return false;
+            }
+            walk_recursive_descent_residuals(scrutinee, visit)
+                && cases
                     .iter()
-                    .find_map(|case| recursive_descent_residual(&case.body))
-            }),
+                    .all(|case| walk_recursive_descent_residuals(&case.body, visit))
+        }
         RuntimeExpr::ComputationalMatch {
             scrutinee, cases, ..
-        } => recursive_descent_residual(scrutinee).or_else(|| {
-            cases
-                .iter()
-                .find_map(|case| recursive_descent_residual(&case.body))
-        }),
+        } => {
+            walk_recursive_descent_residuals(scrutinee, visit)
+                && cases
+                    .iter()
+                    .all(|case| walk_recursive_descent_residuals(&case.body, visit))
+        }
         RuntimeExpr::Record { fields } => fields
             .iter()
-            .find_map(|(_, value)| recursive_descent_residual(value)),
-        RuntimeExpr::Project { record, .. } => recursive_descent_residual(record),
+            .all(|(_, value)| walk_recursive_descent_residuals(value, visit)),
+        RuntimeExpr::Project { record, .. } => walk_recursive_descent_residuals(record, visit),
         RuntimeExpr::Call { callee, args } => {
-            matches!(callee.as_ref(), RuntimeExpr::Closure { .. })
-                .then_some(RecursiveDescentResidual::SeedClosureCall)
-                .or_else(|| {
-                    (matches!(callee.as_ref(), RuntimeExpr::LexicalClosure { .. })
-                        && args.iter().any(|argument| {
-                            matches!(
-                                argument,
-                                RuntimeExpr::ComputationalMatch { cases, .. }
-                                    if cases
-                                        .iter()
-                                        .any(|case| !case.recursive_positions.is_empty())
-                            )
-                        }))
-                    .then_some(RecursiveDescentResidual::LexicalCallArgumentRecursor)
+            if matches!(callee.as_ref(), RuntimeExpr::Closure { .. })
+                && !visit(RecursiveDescentResidual::SeedClosureCall)
+            {
+                return false;
+            }
+            if matches!(callee.as_ref(), RuntimeExpr::LexicalClosure { .. })
+                && args.iter().any(|argument| {
+                    matches!(
+                        argument,
+                        RuntimeExpr::ComputationalMatch { cases, .. }
+                            if cases.iter().any(|case| !case.recursive_positions.is_empty())
+                    )
                 })
-                .or_else(|| recursive_descent_residual(callee))
-                .or_else(|| args.iter().find_map(recursive_descent_residual))
+                && !visit(RecursiveDescentResidual::LexicalCallArgumentRecursor)
+            {
+                return false;
+            }
+            walk_recursive_descent_residuals(callee, visit)
+                && args
+                    .iter()
+                    .all(|argument| walk_recursive_descent_residuals(argument, visit))
         }
         RuntimeExpr::Effect {
             capability, args, ..
-        } => capability
-            .as_ref()
-            .and_then(|capability| recursive_descent_residual(&capability.value))
-            .or_else(|| args.iter().find_map(recursive_descent_residual)),
+        } => {
+            capability
+                .as_ref()
+                .map_or(true, |capability| {
+                    walk_recursive_descent_residuals(&capability.value, visit)
+                })
+                && args
+                    .iter()
+                    .all(|argument| walk_recursive_descent_residuals(argument, visit))
+        }
         RuntimeExpr::Value(_)
         | RuntimeExpr::Var(_)
         | RuntimeExpr::DeclarationRef { .. }
         | RuntimeExpr::ImportedDeclarationRef { .. }
-        | RuntimeExpr::Trap(_) => None,
+        | RuntimeExpr::Trap(_) => true,
     }
 }
 
-/// Produce the retained reason from the exhaustive declaration-kind route.
-fn declaration_recursive_descent_residual(
+fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResidual> {
+    let mut first = None;
+    walk_recursive_descent_residuals(expr, &mut |residual| {
+        first = Some(residual);
+        false
+    });
+    first
+}
+
+fn walk_declaration_recursive_descent_residuals(
     declaration: &RuntimeDeclaration,
-) -> Option<RecursiveDescentResidual> {
+    visit: &mut impl FnMut(RecursiveDescentResidual) -> bool,
+) -> bool {
     match &declaration.kind {
-        RuntimeDeclarationKind::Transparent { body } => matches!(
-            body,
-            RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
-        )
-        .then_some(RecursiveDescentResidual::TransparentDeclarationClosure)
-        .or_else(|| recursive_descent_residual(body)),
+        RuntimeDeclarationKind::Transparent { body } => {
+            if matches!(
+                body,
+                RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
+            ) && !visit(RecursiveDescentResidual::TransparentDeclarationClosure)
+            {
+                return false;
+            }
+            walk_recursive_descent_residuals(body, visit)
+        }
         RuntimeDeclarationKind::Primitive { .. }
         | RuntimeDeclarationKind::Data { .. }
         | RuntimeDeclarationKind::Record { .. }
         | RuntimeDeclarationKind::RecursiveGroup { .. }
         | RuntimeDeclarationKind::EffectBoundary { .. }
-        | RuntimeDeclarationKind::MetadataOnly => None,
+        | RuntimeDeclarationKind::MetadataOnly => true,
+    }
+}
+
+fn declaration_recursive_descent_residual(
+    declaration: &RuntimeDeclaration,
+) -> Option<RecursiveDescentResidual> {
+    let mut first = None;
+    walk_declaration_recursive_descent_residuals(declaration, &mut |residual| {
+        first = Some(residual);
+        false
+    });
+    first
+}
+
+fn recursive_descent_residual_report(
+    expr: &RuntimeExpr,
+    declarations: &BTreeMap<&str, &RuntimeDeclaration>,
+) -> RecursiveDescentResidualReport {
+    let mut report = RecursiveDescentResidualReport::default();
+    walk_recursive_descent_residuals(expr, &mut |residual| {
+        report.record(RecursiveDescentResidualOwner::RootExpression, residual);
+        true
+    });
+    for declaration in declarations.values() {
+        let owner =
+            RecursiveDescentResidualOwner::Declaration(declaration.symbol.clone());
+        walk_declaration_recursive_descent_residuals(declaration, &mut |residual| {
+            report.record(owner.clone(), residual);
+            true
+        });
+    }
+    report
+}
+
+fn emit_recursive_descent_residual_diagnostic(
+    authority: BodyEmissionAuthority,
+    report: &RecursiveDescentResidualReport,
+) {
+    eprintln!("RT_DECL_CLOSURE_PORT_D1 authority={authority:?}");
+    if report.by_owner.is_empty() {
+        eprintln!("RT_DECL_CLOSURE_PORT_D1 residuals=none");
+        return;
+    }
+    for (owner, residuals) in &report.by_owner {
+        let owner = match owner {
+            RecursiveDescentResidualOwner::RootExpression => "<root>",
+            RecursiveDescentResidualOwner::Declaration(symbol) => symbol,
+        };
+        for residual in residuals {
+            eprintln!("RT_DECL_CLOSURE_PORT_D1 owner={owner} residual={residual:?}");
+        }
     }
 }
 
@@ -292,6 +404,12 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
         oriented_subcontinuation_plan.as_ref(),
     )?;
     let body_emission_authority = select_body_emission_authority(expr, &declarations);
+    if std::env::var_os("KEN_RT_DECL_CLOSURE_PORT_D1").is_some() {
+        emit_recursive_descent_residual_diagnostic(
+            body_emission_authority,
+            &recursive_descent_residual_report(expr, &declarations),
+        );
+    }
     // Boundary A of RT-NATIVE-FNSPLIT: close and validate the factored static
     // graph before Cranelift sees any semantic body. The plan's positional
     // child-origin table is reachable from the lowering, so
