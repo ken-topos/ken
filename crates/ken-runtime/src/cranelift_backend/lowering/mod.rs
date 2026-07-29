@@ -75,9 +75,10 @@ pub(in crate::cranelift_backend) use super::planning::{
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
-    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableCallKind, EmittableUnit, JoinPlanToken,
-    JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
-    SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
+    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableCallKind, EmittableUnit,
+    JoinPlanToken, JoinResultRepresentation, LoweringOnlyOperandEdge, OperandEdgeDisposition,
+    OperandEdgeToken, PredeclaredFunctionId, SourceOperandRole, StaticOriginId,
+    StaticTransitionPlan, SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use super::planning::{
@@ -1220,19 +1221,21 @@ enum Lowered {
     /// re-lowers the resolved term in its own whole configuration — that is
     /// symptom-inventory entry 2, and it stays open for `RT-FNSPLIT-B2F`.
     Closure {
-        captures: Vec<Lowered>,
+        /// Invocation-local operands retain their planner-selected phase. The
+        /// outer callable capsule remains specialized and non-transferable.
+        captures: Vec<LoweringOperand>,
         params: Vec<String>,
         body: StaticOriginId,
     },
     DeclarationClosure {
         reference_origin: StaticOriginId,
         symbol: RuntimeSymbol,
-        captures: Vec<Lowered>,
+        /// Invocation-local operands retain their planner-selected phase.
+        captures: Vec<LoweringOperand>,
         params: Vec<String>,
         body: StaticOriginId,
     },
-    /// ⭐⭐ **The one `Lowered` child position that is a [`LoweringOperand`], by
-    /// the Architect's `AC-C4` SINGLE-FIELD LICENSE — ⛔ not a precedent.**
+    /// A compiler-control capsule with one phase-bearing continuation operand.
     ///
     /// `residual` is the value the saved recursor **continues on**. `§2h`'s
     /// phase closure therefore requires this edge to preserve `Carried`:
@@ -1251,9 +1254,7 @@ enum Lowered {
     /// `Specialized` classifies how *that capsule* is consumed; it never
     /// asserted that every operand edge the capsule owns is itself specialized.
     ///
-    /// ⛔ **The license is this field and nothing else.** `Constructor`,
-    /// `Record`, `Closure`, `DeclarationClosure` and every other child position
-    /// stay `Lowered`. ⛔ No third `LoweringOperand` variant, ⛔ no
+    /// ⛔ No third `LoweringOperand` variant, ⛔ no
     /// `Lowered::Boundary`, ⛔ no `Carried -> Lowered` conversion, ⛔ no durable
     /// closure lane, ⛔ no encoder/decoder row, ⛔ no carrier tag.
     ///
@@ -1452,15 +1453,26 @@ impl LoweringOperand {
     /// `edge` names the call site in the diagnostic. ⚠ It is a **label, not a
     /// mechanism** — it makes a misplaced boundary legible in a failure, and
     /// nothing more.
-    fn specialized_at(self, edge: &'static str) -> Result<Lowered, CraneliftBackendError> {
+    fn specialized_at(self, edge: OperandEdgeToken) -> Result<Lowered, CraneliftBackendError> {
+        if !matches!(
+            edge.disposition(),
+            OperandEdgeDisposition::SemanticEliminator
+                | OperandEdgeDisposition::SpecializedOnlyLeaf
+        ) {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "{} cannot authorize a specialized-only read",
+                edge.label()
+            ))));
+        }
         match self {
             LoweringOperand::Specialized(lowered) => Ok(lowered),
             LoweringOperand::Carried(_) => Err(unsupported(
                 "BoundaryCarrier",
                 format!(
-                    "{edge} is a specialized-only surface and a carried boundary word has no \
+                    "{} is a specialized-only surface and a carried boundary word has no \
                      compile-time template for it to read; the carrier's ruled route is an \
-                     emitted helper call"
+                     emitted helper call",
+                    edge.label()
                 ),
             )),
         }
@@ -1480,14 +1492,24 @@ impl LoweringOperand {
     /// ⚠ Collapsing the two into one helper would be the cheaper diff and the
     /// worse artifact: it would erase, at exactly the sites that need it, the
     /// difference between a boundary that is *final* and one that is *pending*.
-    fn specialized_join_arm(self, join: &'static str) -> Result<Lowered, CraneliftBackendError> {
+    fn specialized_join_arm(
+        self,
+        join: OperandEdgeToken,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if join.disposition() != OperandEdgeDisposition::Forwarding {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "{} cannot authorize a join-forwarding read",
+                join.label()
+            ))));
+        }
         match self {
             LoweringOperand::Specialized(lowered) => Ok(lowered),
             LoweringOperand::Carried(_) => Err(unsupported(
                 "BoundaryCarrier",
                 format!(
-                    "{join} merges native scalar lanes and has no carried lane; a boundary word \
-                     cannot cross it until that join carries the phase"
+                    "{} merges native scalar lanes and has no carried lane; a boundary word \
+                     cannot cross it until that join carries the phase",
+                    join.label()
                 ),
             )),
         }
@@ -1495,15 +1517,29 @@ impl LoweringOperand {
 
     /// [`Self::specialized_at`] without consuming the operand — same ruling,
     /// same prohibitions, for a callee that borrows its template.
-    fn specialized_ref_at(&self, edge: &'static str) -> Result<&Lowered, CraneliftBackendError> {
+    fn specialized_ref_at(
+        &self,
+        edge: OperandEdgeToken,
+    ) -> Result<&Lowered, CraneliftBackendError> {
+        if !matches!(
+            edge.disposition(),
+            OperandEdgeDisposition::SemanticEliminator
+                | OperandEdgeDisposition::SpecializedOnlyLeaf
+        ) {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "{} cannot authorize a specialized-only read",
+                edge.label()
+            ))));
+        }
         match self {
             LoweringOperand::Specialized(lowered) => Ok(lowered),
             LoweringOperand::Carried(_) => Err(unsupported(
                 "BoundaryCarrier",
                 format!(
-                    "{edge} is a specialized-only surface and a carried boundary word has no \
+                    "{} is a specialized-only surface and a carried boundary word has no \
                      compile-time template for it to read; the carrier's ruled route is an \
-                     emitted helper call"
+                     emitted helper call",
+                    edge.label()
                 ),
             )),
         }
@@ -1519,10 +1555,31 @@ impl LoweringOperand {
 /// would multiply the classification instead of sharing it.
 fn specialized_env_at(
     env: &[LoweringOperand],
-    edge: &'static str,
+    edge: OperandEdgeToken,
 ) -> Result<Vec<Lowered>, CraneliftBackendError> {
+    if !matches!(
+        edge.disposition(),
+        OperandEdgeDisposition::SemanticEliminator
+            | OperandEdgeDisposition::SpecializedOnlyLeaf
+    ) {
+        return Err(backend(BackendFailure::PlannerInvariant(format!(
+            "{} cannot authorize a specialized-only environment read",
+            edge.label()
+        ))));
+    }
     env.iter()
-        .map(|operand| operand.specialized_ref_at(edge).cloned())
+        .map(|operand| match operand {
+            LoweringOperand::Specialized(lowered) => Ok(lowered.clone()),
+            LoweringOperand::Carried(_) => Err(unsupported(
+                "BoundaryCarrier",
+                format!(
+                    "{} is a specialized-only surface and a carried boundary word has no \
+                     compile-time template for it to read; the carrier's ruled route is an \
+                     emitted helper call",
+                    edge.label()
+                ),
+            )),
+        })
         .collect()
 }
 
@@ -2224,9 +2281,7 @@ impl<'a> Lowering<'a> {
                 }
                 AbiSlotKind::Trap => {
                     #[cfg(test)]
-                    let zero = match TRAP_CALLER_PROTOCOL_MUTATION
-                        .with(std::cell::Cell::get)
-                    {
+                    let zero = match TRAP_CALLER_PROTOCOL_MUTATION.with(std::cell::Cell::get) {
                         TrapCallerProtocolMutation::LeaveStaleTrap => {
                             builder.ins().iconst(types::I64, 1)
                         }
@@ -2347,12 +2402,10 @@ impl<'a> Lowering<'a> {
         builder.seal_block(failure_block);
         builder.switch_to_block(trap_check_block);
         builder.seal_block(trap_check_block);
-        let trap_offset = trap_offset.ok_or_else(|| {
-            backend_module("callee frame declares no trap slot".to_string())
-        })?;
-        let result_offset = result_offset.ok_or_else(|| {
-            backend_module("callee frame declares no result slot".to_string())
-        })?;
+        let trap_offset = trap_offset
+            .ok_or_else(|| backend_module("callee frame declares no trap slot".to_string()))?;
+        let result_offset = result_offset
+            .ok_or_else(|| backend_module("callee frame declares no result slot".to_string()))?;
         #[cfg(test)]
         if TRAP_CALLER_PROTOCOL_MUTATION.with(std::cell::Cell::get)
             == TrapCallerProtocolMutation::ReadResultBeforeTrap
@@ -2368,7 +2421,9 @@ impl<'a> Lowering<'a> {
         );
         let trap_block = builder.create_block();
         let result_block = builder.create_block();
-        builder.ins().brif(trapped, trap_block, &[], result_block, &[]);
+        builder
+            .ins()
+            .brif(trapped, trap_block, &[], result_block, &[]);
         builder.switch_to_block(trap_block);
         match self.function_local.trap_exit {
             Some(TrapExitAuthority::UnitFrame { slots, trap_offset }) => {
@@ -2409,9 +2464,7 @@ impl<'a> Lowering<'a> {
         builder.switch_to_block(result_block);
         builder.seal_block(result_block);
         let word = builder.ins().stack_load(types::I64, payload, result_offset);
-        Ok(LoweringOperand::Carried(CarriedBoundaryWord {
-            word,
-        }))
+        Ok(LoweringOperand::Carried(CarriedBoundaryWord { word }))
     }
 
     /// The recursive emission step. ⛔ Private, and ⛔ never the entry point —
@@ -3515,10 +3568,9 @@ impl<'a> Lowering<'a> {
             .ok_or_else(|| unsupported("NativeResult", "carried Int has no export function"))?;
         let pointer_type = builder.func.dfg.value_type(boundary_arena);
 
-        let tag = builder.ins().band_imm(
-            target.word,
-            crate::boundary_value::BOUNDARY_TAG_MASK as i64,
-        );
+        let tag = builder
+            .ins()
+            .band_imm(target.word, crate::boundary_value::BOUNDARY_TAG_MASK as i64);
         let persistent = builder.ins().icmp_imm(
             cranelift_codegen::ir::condcodes::IntCC::Equal,
             tag,
@@ -3533,13 +3585,11 @@ impl<'a> Lowering<'a> {
             .brif(persistent, exact_int, &[], immediate, &[]);
 
         builder.switch_to_block(exact_int);
-        let view_slot = builder.create_sized_stack_slot(
-            cranelift_codegen::ir::StackSlotData::new(
-                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-                24,
-                3,
-            ),
-        );
+        let view_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            24,
+            3,
+        ));
         let view = builder.ins().stack_addr(pointer_type, view_slot, 0);
         let call = builder
             .ins()
@@ -4606,11 +4656,19 @@ impl Lowered {
             //
             // ⛔ One exact typed error at every depth, so a nested rejection is
             // not reported as some enclosing variant's failure.
-            Lowered::Closure { .. } | Lowered::DeclarationClosure { .. } => Err(unsupported(
-                "Closure",
-                "a closure cannot cross the boundary: it is runtime-local and \
-                 live-domain only, and it has no durable lane",
-            )),
+            Lowered::Closure { .. } | Lowered::DeclarationClosure { .. } => {
+                let edge = LoweringOnlyOperandEdge::CallableCapsuleEscape.token();
+                if edge.disposition() != OperandEdgeDisposition::EscapeForbidden {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "callable capsule escape edge is not fail-closed".to_string(),
+                    )));
+                }
+                Err(unsupported(
+                    "Closure",
+                    "a closure cannot cross the boundary: it is runtime-local and \
+                     live-domain only, and it has no durable lane",
+                ))
+            }
             Lowered::ComputationalRecursorClosure { .. } => Err(unsupported(
                 "ComputationalMatch",
                 "a computational recursor closure names an in-flight activation, \
@@ -6643,6 +6701,22 @@ enum DynamicConstructorContinuation<'a> {
         eliminators: &'a [EliminatorFrame<'a>],
     },
 }
+#[derive(Clone, Copy)]
+enum CarriedMatchContinuation<'a> {
+    Ordinary {
+        cases: &'a [crate::RuntimeMatchCase],
+        default: &'a RuntimeTrap,
+        env: &'a [LoweringOperand],
+        static_origin: StaticOriginId,
+    },
+    Producer {
+        cases: &'a [crate::RuntimeMatchCase],
+        default: &'a RuntimeTrap,
+        env: &'a [LoweringOperand],
+        static_origin: StaticOriginId,
+        eliminators: &'a [EliminatorFrame<'a>],
+    },
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ScalarMergeKind {
     Int,
@@ -7352,7 +7426,8 @@ impl<'a> Lowering<'a> {
         // ⭐ The marker consumes a **recursor closure template**; a carried
         // boundary word is not one and never becomes one, so this is a
         // specialized-only surface with the ruled fail-closed arm.
-        let mut value = value.specialized_at("a checked computational-IH marker")?;
+        let mut value =
+            value.specialized_at(LoweringOnlyOperandEdge::CheckedComputationalIhMarker.token())?;
         let Some(instance) = self.mint_checked_computational_ih_instance(&mut value)? else {
             return Ok(LoweringOperand::Specialized(value));
         };
@@ -7759,7 +7834,8 @@ impl<'a> Lowering<'a> {
                 "carrier-result join reached a native-only branch merge consumer".to_string(),
             ));
         }
-        let lowered = lowered.specialized_join_arm(construct)?;
+        let _ = construct;
+        let lowered = lowered.specialized_join_arm(LoweringOnlyOperandEdge::JoinArm.token())?;
         let checked_root_exit_representation = self.has_checked_root_exit_representation();
         let lowered = if checked_root_exit_representation {
             Self::unwrap_terminal_ret(lowered)
@@ -7877,7 +7953,8 @@ impl<'a> Lowering<'a> {
                 required_kind,
             ));
         }
-        let lowered = lowered.specialized_join_arm(construct)?;
+        let _ = construct;
+        let lowered = lowered.specialized_join_arm(LoweringOnlyOperandEdge::JoinArm.token())?;
         if required_kind == Some(ScalarMergeKind::ExitCode) {
             let lowered = Self::unwrap_terminal_ret(lowered);
             let zero_tag = builder.ins().iconst(types::I64, 0);
@@ -9165,15 +9242,14 @@ impl<'a> Lowering<'a> {
         match self.function_local.trap_exit {
             Some(TrapExitAuthority::UnitFrame { slots, trap_offset }) => {
                 #[cfg(test)]
-                let identity_word =
-                    match TRAP_IDENTITY_MUTATION.with(std::cell::Cell::get) {
-                        TrapIdentityMutation::Exact => identity.abi_word(),
-                        TrapIdentityMutation::Zero => 0,
-                        TrapIdentityMutation::Substitute => identity
-                            .abi_word()
-                            .checked_add(1)
-                            .expect("planner trap identity fits below i64::MAX"),
-                    };
+                let identity_word = match TRAP_IDENTITY_MUTATION.with(std::cell::Cell::get) {
+                    TrapIdentityMutation::Exact => identity.abi_word(),
+                    TrapIdentityMutation::Zero => 0,
+                    TrapIdentityMutation::Substitute => identity
+                        .abi_word()
+                        .checked_add(1)
+                        .expect("planner trap identity fits below i64::MAX"),
+                };
                 #[cfg(not(test))]
                 let identity_word = identity.abi_word();
                 let word = builder.ins().iconst(types::I64, identity_word);

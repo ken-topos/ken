@@ -4498,7 +4498,7 @@ fn retained_closures_carry_a_static_origin_and_no_body_term() {
     assert_eq!(
         declared_fields(source, "    Closure {"),
         vec![
-            "captures: Vec<Lowered>,",
+            "captures: Vec<LoweringOperand>,",
             "params: Vec<String>,",
             "body: StaticOriginId,",
         ],
@@ -4511,7 +4511,7 @@ fn retained_closures_carry_a_static_origin_and_no_body_term() {
         vec![
             "reference_origin: StaticOriginId,",
             "symbol: RuntimeSymbol,",
-            "captures: Vec<Lowered>,",
+            "captures: Vec<LoweringOperand>,",
             "params: Vec<String>,",
             "body: StaticOriginId,",
         ],
@@ -4541,6 +4541,35 @@ fn retained_closures_carry_a_static_origin_and_no_body_term() {
         "AC-6: ComputationalRecursorClosure is out of the covered population \
          because it declares no body carrier. If it acquires one it JOINS the \
          population, and this test is where that has to be said"
+    );
+}
+
+#[test]
+fn every_specialized_unwrap_requires_a_typed_operand_edge_token() {
+    let support = include_str!("../../mod.rs");
+    let core = include_str!("../core.rs");
+    assert!(
+        support.contains("fn specialized_at(self, edge: OperandEdgeToken)"),
+        "the consuming phase boundary must require planner-owned edge evidence"
+    );
+    assert!(
+        support.contains("edge.disposition()"),
+        "the consuming phase boundary must inspect the closed disposition"
+    );
+    for forbidden in [
+        ".specialized_at(\"",
+        ".specialized_ref_at(\"",
+        ".specialized_join_arm(\"",
+    ] {
+        assert!(
+            !support.contains(forbidden) && !core.contains(forbidden),
+            "a free-form or unbound specialized unwrap remains: {forbidden}"
+        );
+    }
+    assert!(
+        support.contains("LoweringOnlyOperandEdge::")
+            && core.contains("SourceOperandRole::"),
+        "source-child and lowering-only consumer populations must stay separate"
     );
 }
 

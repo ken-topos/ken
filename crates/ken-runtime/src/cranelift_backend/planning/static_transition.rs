@@ -309,6 +309,350 @@ pub(in crate::cranelift_backend) struct JoinPlanToken {
     pub(in crate::cranelift_backend) has_continuing_predecessor: bool,
 }
 
+/// The closed disposition of one edge that receives a [`LoweringOperand`].
+///
+/// This is planner authority, not a diagnostic label. Lowering may consume the
+/// token for an edge, but cannot manufacture a disposition from the value it
+/// happens to observe.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(u8)]
+pub(in crate::cranelift_backend) enum OperandEdgeDisposition {
+    Forwarding,
+    CallableCapture,
+    SemanticEliminator,
+    SpecializedOnlyLeaf,
+    EscapeForbidden,
+}
+
+/// The exhaustive source-child roles that can carry a lowering operand.
+///
+/// Repeated roles are distinguished by their checked child position in
+/// [`PlannedOperandEdge`]. A new `RuntimeExpr` variant must extend the
+/// wildcard-free derivation below before the planner compiles.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(u8)]
+pub(in crate::cranelift_backend) enum SourceOperandRole {
+    WrapperBody,
+    LetValue,
+    LetBody,
+    IfScrutinee,
+    IfArm,
+    PrimitiveArgument,
+    ConstructArgument,
+    MatchScrutinee,
+    MatchArm,
+    RecordField,
+    ProjectRecord,
+    LexicalCapture,
+    CallCallee,
+    CallArgument,
+    EffectCapability,
+    EffectArgument,
+}
+
+impl SourceOperandRole {
+    fn disposition(self) -> OperandEdgeDisposition {
+        match self {
+            Self::WrapperBody
+            | Self::LetValue
+            | Self::LetBody
+            | Self::IfArm
+            | Self::MatchArm
+            | Self::CallArgument => OperandEdgeDisposition::Forwarding,
+            Self::LexicalCapture => OperandEdgeDisposition::CallableCapture,
+            Self::IfScrutinee
+            | Self::PrimitiveArgument
+            | Self::ConstructArgument
+            | Self::MatchScrutinee
+            | Self::RecordField
+            | Self::ProjectRecord
+            | Self::EffectCapability
+            | Self::EffectArgument => OperandEdgeDisposition::SemanticEliminator,
+            Self::CallCallee => OperandEdgeDisposition::SpecializedOnlyLeaf,
+        }
+    }
+}
+
+/// Lowering-only consumer edges have no positional source child. Keeping them
+/// in a separate closed enum prevents a free-form string from becoming a
+/// second, unvalidated consumer inventory.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(u8)]
+pub(in crate::cranelift_backend) enum LoweringOnlyOperandEdge {
+    CheckedComputationalIhMarker,
+    PendingLetRecursorResidual,
+    ProducerCallRecursorResidual,
+    ConstructorArgument,
+    DeferredConstructorPrefix,
+    ComposedComputationalMatchScrutinee,
+    DeferredConstructorField,
+    DeferredConstructorTrailingField,
+    SourceConstructorArgument,
+    EliminatorFrameScrutinee,
+    SourceMachineCallee,
+    SourceCallRecursorResidual,
+    RecursiveSourceDeclarationArgument,
+    JoinArm,
+    DirectCallRecursorResidual,
+    RecursiveDeclarationArgument,
+    DeclarationCaptureSpecialization,
+    CallableCapsuleEscape,
+}
+
+impl LoweringOnlyOperandEdge {
+    pub(in crate::cranelift_backend) fn token(self) -> OperandEdgeToken {
+        let disposition = match self {
+            Self::JoinArm => OperandEdgeDisposition::Forwarding,
+            Self::CallableCapsuleEscape => OperandEdgeDisposition::EscapeForbidden,
+            Self::CheckedComputationalIhMarker
+            | Self::PendingLetRecursorResidual
+            | Self::ProducerCallRecursorResidual
+            | Self::ConstructorArgument
+            | Self::DeferredConstructorPrefix
+            | Self::ComposedComputationalMatchScrutinee
+            | Self::DeferredConstructorField
+            | Self::DeferredConstructorTrailingField
+            | Self::SourceConstructorArgument
+            | Self::EliminatorFrameScrutinee
+            | Self::SourceMachineCallee
+            | Self::SourceCallRecursorResidual
+            | Self::RecursiveSourceDeclarationArgument
+            | Self::DirectCallRecursorResidual
+            | Self::RecursiveDeclarationArgument
+            | Self::DeclarationCaptureSpecialization => OperandEdgeDisposition::SpecializedOnlyLeaf,
+        };
+        OperandEdgeToken {
+            disposition,
+            label: self.label(),
+            parent: None,
+            child: None,
+            position: None,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::CheckedComputationalIhMarker => "a checked computational-IH marker",
+            Self::PendingLetRecursorResidual => "a pending-let recursor residual",
+            Self::ProducerCallRecursorResidual => "a recursor residual in a producer call",
+            Self::ConstructorArgument => "a constructor argument",
+            Self::DeferredConstructorPrefix => "a deferred constructor prefix",
+            Self::ComposedComputationalMatchScrutinee => "a composed computational-match scrutinee",
+            Self::DeferredConstructorField => "a deferred constructor field",
+            Self::DeferredConstructorTrailingField => "a deferred constructor's trailing field",
+            Self::SourceConstructorArgument => "a source constructor argument",
+            Self::EliminatorFrameScrutinee => "an eliminator frame's scrutinee",
+            Self::SourceMachineCallee => "a source-machine call's callee",
+            Self::SourceCallRecursorResidual => "a recursor residual in a source call",
+            Self::RecursiveSourceDeclarationArgument => "a recursive source-declaration argument",
+            Self::JoinArm => "a planned join arm",
+            Self::DirectCallRecursorResidual => "a recursor residual in a direct call",
+            Self::RecursiveDeclarationArgument => "a recursive declaration argument",
+            Self::DeclarationCaptureSpecialization => "a recursive-descent declaration capture",
+            Self::CallableCapsuleEscape => "a whole callable capsule",
+        }
+    }
+}
+
+/// Move-only evidence that one exact consumer edge has a planner-owned
+/// disposition. Construction remains in this module.
+#[derive(Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct OperandEdgeToken {
+    disposition: OperandEdgeDisposition,
+    label: &'static str,
+    parent: Option<StaticOriginId>,
+    child: Option<StaticOriginId>,
+    position: Option<u32>,
+}
+
+impl OperandEdgeToken {
+    pub(in crate::cranelift_backend) fn disposition(&self) -> OperandEdgeDisposition {
+        self.disposition
+    }
+
+    pub(in crate::cranelift_backend) fn label(&self) -> &'static str {
+        self.label
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum SourceChildRole {
+    StaticBody,
+    Operand(SourceOperandRole),
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct PlannedOperandEdge {
+    owner: PredeclaredFunctionId,
+    parent: StaticOriginId,
+    child: StaticOriginId,
+    position: u32,
+    role: SourceOperandRole,
+    disposition: OperandEdgeDisposition,
+}
+
+fn source_child_roles(expr: &RuntimeExpr) -> Vec<SourceChildRole> {
+    match expr {
+        RuntimeExpr::CheckedJoinSite { .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { .. } => {
+            vec![SourceChildRole::Operand(SourceOperandRole::WrapperBody)]
+        }
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => Vec::new(),
+        RuntimeExpr::Let { .. } => vec![
+            SourceChildRole::Operand(SourceOperandRole::LetValue),
+            SourceChildRole::Operand(SourceOperandRole::LetBody),
+        ],
+        RuntimeExpr::If { .. } => vec![
+            SourceChildRole::Operand(SourceOperandRole::IfScrutinee),
+            SourceChildRole::Operand(SourceOperandRole::IfArm),
+            SourceChildRole::Operand(SourceOperandRole::IfArm),
+        ],
+        RuntimeExpr::PrimitiveCall { args, .. } => args
+            .iter()
+            .map(|_| SourceChildRole::Operand(SourceOperandRole::PrimitiveArgument))
+            .collect(),
+        RuntimeExpr::Construct { args, .. } => args
+            .iter()
+            .map(|_| SourceChildRole::Operand(SourceOperandRole::ConstructArgument))
+            .collect(),
+        RuntimeExpr::Match { cases, .. } => {
+            let mut roles = Vec::with_capacity(cases.len() + 1);
+            roles.push(SourceChildRole::Operand(SourceOperandRole::MatchScrutinee));
+            roles.extend(
+                cases
+                    .iter()
+                    .map(|_| SourceChildRole::Operand(SourceOperandRole::MatchArm)),
+            );
+            roles
+        }
+        RuntimeExpr::ComputationalMatch { cases, .. } => {
+            let mut roles = Vec::with_capacity(cases.len() + 1);
+            roles.push(SourceChildRole::Operand(SourceOperandRole::MatchScrutinee));
+            roles.extend(
+                cases
+                    .iter()
+                    .map(|_| SourceChildRole::Operand(SourceOperandRole::MatchArm)),
+            );
+            roles
+        }
+        RuntimeExpr::Record { fields } => fields
+            .iter()
+            .map(|_| SourceChildRole::Operand(SourceOperandRole::RecordField))
+            .collect(),
+        RuntimeExpr::Project { .. } => {
+            vec![SourceChildRole::Operand(SourceOperandRole::ProjectRecord)]
+        }
+        RuntimeExpr::Closure { .. } => vec![SourceChildRole::StaticBody],
+        RuntimeExpr::LexicalClosure { captures, .. } => {
+            let mut roles = Vec::with_capacity(captures.len() + 1);
+            roles.push(SourceChildRole::StaticBody);
+            roles.extend(
+                captures
+                    .iter()
+                    .map(|_| SourceChildRole::Operand(SourceOperandRole::LexicalCapture)),
+            );
+            roles
+        }
+        RuntimeExpr::Call { args, .. } => {
+            let mut roles = Vec::with_capacity(args.len() + 1);
+            roles.push(SourceChildRole::Operand(SourceOperandRole::CallCallee));
+            roles.extend(
+                args.iter()
+                    .map(|_| SourceChildRole::Operand(SourceOperandRole::CallArgument)),
+            );
+            roles
+        }
+        RuntimeExpr::Effect {
+            capability, args, ..
+        } => {
+            let mut roles = Vec::with_capacity(args.len() + usize::from(capability.is_some()));
+            if capability.is_some() {
+                roles.push(SourceChildRole::Operand(
+                    SourceOperandRole::EffectCapability,
+                ));
+            }
+            roles.extend(
+                args.iter()
+                    .map(|_| SourceChildRole::Operand(SourceOperandRole::EffectArgument)),
+            );
+            roles
+        }
+    }
+}
+
+fn source_operand_role_label(role: SourceOperandRole) -> &'static str {
+    match role {
+        SourceOperandRole::WrapperBody => "a checked wrapper body",
+        SourceOperandRole::LetValue => "a let value",
+        SourceOperandRole::LetBody => "a let body",
+        SourceOperandRole::IfScrutinee => "an if scrutinee",
+        SourceOperandRole::IfArm => "an if arm",
+        SourceOperandRole::PrimitiveArgument => "a primitive-call argument",
+        SourceOperandRole::ConstructArgument => "a constructor argument",
+        SourceOperandRole::MatchScrutinee => "a match scrutinee",
+        SourceOperandRole::MatchArm => "a match arm",
+        SourceOperandRole::RecordField => "a record field",
+        SourceOperandRole::ProjectRecord => "a projected record",
+        SourceOperandRole::LexicalCapture => "a lexical closure capture",
+        SourceOperandRole::CallCallee => "a call callee",
+        SourceOperandRole::CallArgument => "a call argument",
+        SourceOperandRole::EffectCapability => "an effect capability",
+        SourceOperandRole::EffectArgument => "an effect argument",
+    }
+}
+
+fn build_operand_edge_matrix(
+    plan: &StaticTransitionPlan<'_>,
+) -> Result<Vec<PlannedOperandEdge>, CraneliftBackendError> {
+    let mut edges = Vec::new();
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        let parent = occurrence.static_origin;
+        let children = plan.semantic.child_origins(parent)?;
+        let roles = source_child_roles(occurrence.expr);
+        if roles.len() != children.len() {
+            return Err(planner_error(
+                "operand-edge role inventory is not exact for positional source children",
+            ));
+        }
+        let owner = plan
+            .semantic
+            .function_owner(parent)?
+            .ok_or_else(|| planner_error("source operand edge has no function owner"))?;
+        for (position, (child, role)) in children.iter().copied().zip(roles).enumerate() {
+            let SourceChildRole::Operand(role) = role else {
+                continue;
+            };
+            let position = u32::try_from(position)
+                .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
+            edges.push(PlannedOperandEdge {
+                owner,
+                parent,
+                child,
+                position,
+                role,
+                disposition: role.disposition(),
+            });
+        }
+    }
+    #[cfg(test)]
+    if D7_OMIT_LEXICAL_CAPTURE_EDGE.with(Cell::get) {
+        if let Some(position) = edges
+            .iter()
+            .position(|edge| edge.role == SourceOperandRole::LexicalCapture)
+        {
+            edges.remove(position);
+        }
+    }
+    Ok(edges)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct PlannedJoinResult {
     representation: JoinResultRepresentation,
@@ -389,6 +733,9 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// The closed result contract for every source occurrence that can create a
     /// lowering join.  Absence is meaningful for non-join occurrences.
     join_results: Vec<Option<PlannedJoinResult>>,
+    /// One planner-derived entry for every operand-bearing positional source
+    /// child. Lowering-only consumers live in [`LoweringOnlyOperandEdge`].
+    operand_edges: Vec<PlannedOperandEdge>,
 }
 
 #[cfg(test)]
@@ -525,6 +872,7 @@ thread_local! {
     static D8_REMOVE_VARIABLE_CALLABLE_SEED: Cell<bool> = const { Cell::new(false) };
     static DECLARATION_CLOSURE_DROP_CALLABLE_PHASE: Cell<bool> =
         const { Cell::new(false) };
+    static D7_OMIT_LEXICAL_CAPTURE_EDGE: Cell<bool> = const { Cell::new(false) };
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -778,9 +1126,7 @@ fn summarize_result_phase(
             // let-value joins still carry their own independently summarized
             // representation.
             if functionized_units {
-                for join_origin in
-                    plan.source_result_origins_in_owner_subtree(scrutinee_origin)?
-                {
+                for join_origin in plan.source_result_origins_in_owner_subtree(scrutinee_origin)? {
                     if joins
                         .get(join_origin.0 as usize)
                         .and_then(Option::as_ref)
@@ -1077,6 +1423,7 @@ impl<'src> Planner<'src> {
                 trap_catalog: Vec::new(),
                 source_occurrences: Vec::new(),
                 join_results: Vec::new(),
+                operand_edges: Vec::new(),
             },
             store_interner: BTreeMap::new(),
             next_source: 0,
@@ -1809,6 +2156,7 @@ impl<'src> Planner<'src> {
             root_ingress,
         )?;
         self.plan.join_results = build_join_result_plan(&self.plan, functionized_units)?;
+        self.plan.operand_edges = build_operand_edge_matrix(&self.plan)?;
         self.plan.validate()?;
         Ok(self.plan)
     }
@@ -2123,6 +2471,44 @@ impl<'src> StaticTransitionPlan<'src> {
         position: usize,
     ) -> Result<StaticOriginId, CraneliftBackendError> {
         self.semantic.child_origin(parent, position)
+    }
+
+    /// Consume the planner-owned disposition for one positional source edge.
+    ///
+    /// The caller must name the role it is implementing. Parent, checked
+    /// position, child, owner and disposition were all closed before emission;
+    /// a second lowering-side edge inventory cannot mint a token.
+    pub(in crate::cranelift_backend) fn operand_edge_token(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        let child = self.semantic.child_origin(parent, position)?;
+        let position = u32::try_from(position)
+            .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
+        let owner = self
+            .semantic
+            .function_owner(parent)?
+            .ok_or_else(|| planner_error("source operand edge has no function owner"))?;
+        let edge = self
+            .operand_edges
+            .iter()
+            .find(|edge| {
+                edge.owner == owner
+                    && edge.parent == parent
+                    && edge.child == child
+                    && edge.position == position
+                    && edge.role == role
+            })
+            .ok_or_else(|| planner_error("source operand edge has no planned disposition"))?;
+        Ok(OperandEdgeToken {
+            disposition: edge.disposition,
+            label: source_operand_role_label(edge.role),
+            parent: Some(edge.parent),
+            child: Some(edge.child),
+            position: Some(edge.position),
+        })
     }
 
     /// Consume the planner-owned result contract for one source join.
@@ -2648,6 +3034,7 @@ impl<'src> StaticTransitionPlan<'src> {
         if self.entries.is_empty() {
             return Err(planner_error("closed graph has no entry"));
         }
+        self.validate_operand_edge_matrix()?;
         if self.evidence.len() != self.edges.len() {
             return Err(planner_error("edge evidence is incomplete"));
         }
@@ -2857,6 +3244,51 @@ impl<'src> StaticTransitionPlan<'src> {
         )?;
         self.validate_source_occurrence_table()?;
         self.validate_join_result_plan()?;
+        Ok(())
+    }
+
+    fn validate_operand_edge_matrix(&self) -> Result<(), CraneliftBackendError> {
+        let mut expected = BTreeSet::new();
+        for occurrence in self.source_occurrences.iter().flatten() {
+            let parent = occurrence.static_origin;
+            let children = self.semantic.child_origins(parent)?;
+            let roles = source_child_roles(occurrence.expr);
+            if roles.len() != children.len() {
+                return Err(planner_error(
+                    "operand-edge role inventory is not exact for positional source children",
+                ));
+            }
+            let owner = self
+                .semantic
+                .function_owner(parent)?
+                .ok_or_else(|| planner_error("source operand edge has no function owner"))?;
+            for (position, (child, role)) in children.iter().copied().zip(roles).enumerate() {
+                let SourceChildRole::Operand(role) = role else {
+                    continue;
+                };
+                let position = u32::try_from(position)
+                    .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
+                expected.insert(PlannedOperandEdge {
+                    owner,
+                    parent,
+                    child,
+                    position,
+                    role,
+                    disposition: role.disposition(),
+                });
+            }
+        }
+        let actual = self.operand_edges.iter().copied().collect::<BTreeSet<_>>();
+        if actual.len() != self.operand_edges.len() {
+            return Err(planner_error(
+                "operand-edge matrix contains a duplicate consumer edge",
+            ));
+        }
+        if actual != expected {
+            return Err(planner_error(
+                "operand-edge matrix is not exact for positional source consumers",
+            ));
+        }
         Ok(())
     }
 
@@ -3530,6 +3962,50 @@ pub(in crate::cranelift_backend) fn governed_nested_resource_bracket(depth: usiz
             constructor: "ctor:prelude::Unit::MkUnit".to_string(),
             args: Vec::new(),
         }
+    }
+
+    #[test]
+    fn d7_operand_edge_matrix_separates_static_bodies_from_callable_captures() {
+        let expr = RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+            params: Vec::new(),
+            body: Box::new(unit()),
+        };
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+        let root = plan.root_occurrence.expect("root occurrence");
+        assert_eq!(plan.operand_edges.len(), 1);
+        let edge = plan
+            .operand_edge_token(root, 1, SourceOperandRole::LexicalCapture)
+            .unwrap();
+        assert_eq!(edge.disposition(), OperandEdgeDisposition::CallableCapture);
+        assert_eq!(edge.parent, Some(root));
+        assert_eq!(edge.position, Some(1));
+        assert_eq!(edge.child, Some(plan.child_static_origin(root, 1).unwrap()));
+        assert!(plan
+            .operand_edge_token(root, 0, SourceOperandRole::LexicalCapture)
+            .is_err());
+    }
+
+    #[test]
+    fn d7_omitting_one_real_callable_capture_edge_rejects_before_emission() {
+        let expr = RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+            params: Vec::new(),
+            body: Box::new(unit()),
+        };
+        D7_OMIT_LEXICAL_CAPTURE_EDGE.with(|mutation| mutation.set(true));
+        let result = plan_static_transition_graph(&expr, &BTreeMap::new());
+        D7_OMIT_LEXICAL_CAPTURE_EDGE.with(|mutation| mutation.set(false));
+        let error = match result {
+            Ok(_) => panic!("omitting a real matrix member must reject"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("operand-edge matrix is not exact for positional source consumers"),
+            "unexpected pre-emission rejection: {error}"
+        );
     }
 
     if depth == 0 {
@@ -7016,10 +7492,9 @@ mod tests {
         );
 
         let mut zero_input = plan.abi.clone();
-        zero_input.descriptors[wrapper_index].definition =
-            AbiUnitDefinition::SchedulingEntry {
-                ingress: AbiSchedulingIngress::Empty,
-            };
+        zero_input.descriptors[wrapper_index].definition = AbiUnitDefinition::SchedulingEntry {
+            ingress: AbiSchedulingIngress::Empty,
+        };
         assert_eq!(
             zero_input
                 .validate(
@@ -9150,8 +9625,8 @@ mod tests {
                 (&functionized, JoinResultRepresentation::CarrierWord),
                 (&retained, JoinResultRepresentation::NativeScalarPair),
             ] {
-                let join = d8_abi_parameter_join_origin(plan)
-                    .expect("closure body join has an origin");
+                let join =
+                    d8_abi_parameter_join_origin(plan).expect("closure body join has an origin");
                 assert_eq!(
                     plan.join_plan_token(join)
                         .expect("nested parameter join has one plan entry")
