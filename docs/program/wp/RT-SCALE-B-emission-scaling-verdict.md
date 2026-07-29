@@ -95,10 +95,40 @@ reports** rather than wedging the box.
 > ⇒ Reporting it as this node's baseline is the fabricated-baseline failure
 > `AC-B8` exists to prevent, wearing a different label.
 
-### `D3` — the differential suite
+### `D3` — differential coverage over the five categories
 
-The exact **normal / abrupt / trap / join / affine** differential suite, re-run
-on the completed representation.
+> ### ⛔ AMENDED 2026-07-29 (Steward) — THERE IS NO FIVE-PROBE SUITE, AND THERE
+> ### NEVER WAS. Runtime's scan is correct; stop looking.
+>
+> The five labels — **normal / abrupt / trap / join / affine** — are **coverage
+> categories**, not the name of an artifact. Their origin is
+> `RT-NATIVE-FNSPLIT-recut-B2a-emission-port.md` §`D4`: *"Exact normal / abrupt
+> / trap / join / affine differential **coverage**, interpreter vs native,
+> asserting identical observable behaviour across the port."* This frame carried
+> it forward as *"the exact … **suite**"* — a definite article that implied a
+> named artifact and named nothing. ⛔ Do not invent a substitute, and ⛔ do not
+> spend another pass in the history.
+
+**What `D3` is: an enumeration and a residual — not a build.**
+
+1. **Per category, name the landed test functions** that exercise it on the
+   completed representation, by file and function. ⭐ The population to search
+   is the interpreter-vs-native parity suites in `crates/ken-cli/tests/` —
+   `rt_parity_native.rs`, `rt_span_prov_native.rs`,
+   `rt_escape_second_resource_native.rs`, `px8f_buffer_native.rs`,
+   `px8l_recursive_decl_native.rs`, `px7f_resource_native.rs`,
+   `px4b_native_production.rs` — plus the runtime-local lanes in
+   `crates/ken-runtime/src/native_execution_differential.rs`. ⚠ That names where
+   to look; it is **not** a claim about what those files cover.
+2. **Run them on the completed representation** and report the result per
+   category.
+3. A category with no landed coverage is recorded **`NO COVERAGE — open
+   residual`**, in that spelling, and routed to [[RT-EFFECT-DIFF]].
+
+⛔ **`D3` does not build a comparator, a fixture schema, or a second corpus.**
+That is `RT-EFFECT-DIFF`'s `D1`–`D3`, held deliberately off this node's critical
+path (`RT-EFFECT-DIFF.md` §7 — nothing is blocked on it). ⇒ A missing category
+is a **residual reported here**, never a build item here.
 
 ### `D4` — the analytical model (**Architect**, research-grounded)
 
@@ -214,15 +244,24 @@ Cranelift emitters the empirical table covers, and for each excluded one, state
 > ⇒ A verdict whose denominator silently excludes a sibling production emitter
 > is measuring the wrong population.
 
-**`AC-B5` — the differential suite is green on the completed representation**,
-with its baseline recipe **in the tree**: base SHA, probe function names, and the
-`git worktree add --detach <sha>` + test invocation.
+**`AC-B5` — the five-category coverage map is in the tree**, one row per
+category: the landed test functions that exercise it, the run result on the
+completed representation, or **`NO COVERAGE — open residual`**.
 
-> ⭐ **Why the recipe is required, not the results:** the asserted property is
-> **equality against committed constants**, so a post-change re-capture produces
-> byte-identical values — **no observation distinguishes a genuine pre-change
-> baseline from a re-recorded one.** Demonstrate the binding; do not testify to
-> it.
+> ### ⛔ AMENDED 2026-07-29 (Steward) — the BASELINE-RECIPE clause is WITHDRAWN
+> ### from this `AC`. It made the `AC` undischargeable by construction.
+>
+> It was carried here from `RT-FNSPLIT-B2A-S` `D7` and `RT-FNSPLIT-B2F` `AC-9`,
+> which govern **constants-equality** differentials. Those have committed
+> constants and real probe names — `b2ac_topology_digest` /
+> `b2ac_topology_fixtures` at base `70bd2c74`, and `B2F`'s at `6534e4a6` — and
+> for them the pristine-detached-SHA recipe is the only thing separating a
+> genuine pre-change baseline from a re-recording.
+>
+> ⭐ **`D3` is a behavioural differential whose oracle is the LIVE interpreter.**
+> There are no committed constants, so there is nothing a base SHA could bind,
+> and no probe-name set to recover. ⚠ The recipe clause remains **correct and
+> binding where it originated** — ⛔ do not read this as retiring it there.
 
 **`AC-B6` — the analytical model is present, research-grounded, and answers the
 operator's binary** (bad constants on O(n) vs. residual super-linearity). ⛔ A
