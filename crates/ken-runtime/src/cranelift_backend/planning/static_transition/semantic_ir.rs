@@ -1436,15 +1436,28 @@ impl SemanticPlane {
         parent: StaticOriginId,
         position: usize,
     ) -> Result<StaticOriginId, CraneliftBackendError> {
+        self.child_origins(parent)?
+            .get(position)
+            .copied()
+            .ok_or_else(|| planner_error("static origin has no child at that source position"))
+    }
+
+    /// Every preallocated positional child of one source occurrence.
+    ///
+    /// The slice is the same validated range used by [`Self::child_origin`].
+    /// Keeping the population projection here lets planner-side structural
+    /// traversals consume the closed child inventory without spelling the
+    /// `RuntimeExpr` variants a second time.
+    pub(super) fn child_origins(
+        &self,
+        parent: StaticOriginId,
+    ) -> Result<&[StaticOriginId], CraneliftBackendError> {
         let record = self.record_for(parent)?;
         plane_slice(
             &self.child_origins,
             record.child_origins,
             "semantic child origin",
-        )?
-        .get(position)
-        .copied()
-        .ok_or_else(|| planner_error("static origin has no child at that source position"))
+        )
     }
 
     /// The validated function-unit owner of one source occurrence.

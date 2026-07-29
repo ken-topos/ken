@@ -602,6 +602,7 @@ impl ArtifactHelpers<'_> {
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
+            dispositioned_join_origins: BTreeSet::new(),
             boundary_carrier: Some(BoundaryCarrierRefs {
                 class: module.declare_func_in_func(self.boundary_value_abi.class, func),
                 tag: module.declare_func_in_func(self.boundary_value_abi.tag, func),
@@ -693,6 +694,13 @@ struct FunctionLocalRefs {
     /// `FunctionLocalRefs` is freshly declared for one generated function, so
     /// this set cannot alias consumption across unit bodies.
     consumed_join_origins: BTreeSet<StaticOriginId>,
+    /// Planned joins under source branches proven statically unselected while
+    /// defining this function.
+    ///
+    /// Keeping these separate from consumed joins makes both mismatches loud:
+    /// entering a dead join rejects, while failing to disposition one leaves
+    /// the generated-function closure check red.
+    dispositioned_join_origins: BTreeSet<StaticOriginId>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -737,6 +745,7 @@ enum JoinConsumptionMutation {
     Exact,
     SkipFirst,
     DuplicateFirst,
+    IncludeStaticallyUnselected,
 }
 
 #[cfg(test)]
@@ -1566,7 +1575,18 @@ impl<'a> Lowering<'a> {
             {
                 self.function_local.consumed_join_origins.insert(origin);
             }
-            JoinConsumptionMutation::SkipFirst | JoinConsumptionMutation::DuplicateFirst => {}
+            JoinConsumptionMutation::SkipFirst
+            | JoinConsumptionMutation::DuplicateFirst
+            | JoinConsumptionMutation::IncludeStaticallyUnselected => {}
+        }
+        if self
+            .function_local
+            .dispositioned_join_origins
+            .contains(&origin)
+        {
+            return Err(backend_module(
+                "statically unselected source join reached emission".to_string(),
+            ));
         }
         if !self.function_local.consumed_join_origins.insert(origin) {
             return Err(backend_module(
@@ -1574,6 +1594,43 @@ impl<'a> Lowering<'a> {
             ));
         }
         Ok(token)
+    }
+
+    /// Disposition every planned join in a statically unselected source branch.
+    ///
+    /// The planner derives the subtree from its validated positional-child
+    /// inventory and stops at declared-unit owner boundaries. Lowering supplies
+    /// only the exact branch root it proved dead; it maintains no second source
+    /// spelling inventory.
+    fn disposition_statically_unselected_source_subtree(
+        &mut self,
+        root: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        #[cfg(test)]
+        if D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get)
+            == JoinConsumptionMutation::IncludeStaticallyUnselected
+        {
+            return Ok(());
+        }
+        let joins = self
+            .static_transition_plan
+            .source_join_origins_in_owner_subtree(root)?;
+        for origin in joins {
+            if self
+                .function_local
+                .consumed_join_origins
+                .contains(&origin)
+            {
+                return Err(backend_module(
+                    "emitted source join was later dispositioned as statically unselected"
+                        .to_string(),
+                ));
+            }
+            self.function_local
+                .dispositioned_join_origins
+                .insert(origin);
+        }
+        Ok(())
     }
 
     /// Enter one planned source occurrence on any lowering traversal.
@@ -1594,6 +1651,14 @@ impl<'a> Lowering<'a> {
         }
         if self.function_local.consumed_join_origins.contains(&origin) {
             self.consumed_join_plan_token(origin)?;
+        } else if self
+            .function_local
+            .dispositioned_join_origins
+            .contains(&origin)
+        {
+            return Err(backend_module(
+                "statically unselected source join reached emission".to_string(),
+            ));
         } else {
             self.consume_join_plan(origin)?;
         }
@@ -1621,8 +1686,9 @@ impl<'a> Lowering<'a> {
     ///
     /// Duplicate consumption already rejects at [`Self::consume_join_plan`].
     /// This equality supplies the missing other direction: every join in the
-    /// planner's closed owner partition must have been consumed, and no join
-    /// owned by another function may appear here.
+    /// planner's closed owner partition must either be reached exactly once by
+    /// emission or be structurally dispositioned under a statically unselected
+    /// branch, and no join owned by another function may appear here.
     fn validate_join_plan_consumption(
         &self,
         function: PredeclaredFunctionId,
@@ -1633,19 +1699,28 @@ impl<'a> Lowering<'a> {
         if let Some(origin) = self
             .function_local
             .consumed_join_origins
-            .difference(&required)
+            .intersection(&self.function_local.dispositioned_join_origins)
             .next()
         {
             return Err(backend_module(format!(
-                "source join {origin:?} was consumed outside its owning function",
+                "source join {origin:?} was both emitted and statically unselected",
             )));
         }
-        if let Some(origin) = required
-            .difference(&self.function_local.consumed_join_origins)
-            .next()
-        {
+        let mut covered = self.function_local.consumed_join_origins.clone();
+        covered.extend(
+            self.function_local
+                .dispositioned_join_origins
+                .iter()
+                .copied(),
+        );
+        if let Some(origin) = covered.difference(&required).next() {
             return Err(backend_module(format!(
-                "function left planned source join {origin:?} unconsumed",
+                "source join {origin:?} was classified outside its owning function",
+            )));
+        }
+        if let Some(origin) = required.difference(&covered).next() {
+            return Err(backend_module(format!(
+                "function left planned source join {origin:?} neither emitted nor statically unselected",
             )));
         }
         Ok(())

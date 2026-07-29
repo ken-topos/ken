@@ -88,6 +88,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
+            dispositioned_join_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     }
@@ -188,6 +189,7 @@ fn run_px8j_malformed_recursor_consumer(
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
+            dispositioned_join_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     };
@@ -2067,6 +2069,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
+            dispositioned_join_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     };
@@ -7801,18 +7804,71 @@ fn d8_join_helpers_have_the_closed_typed_caller_population() {
     );
 }
 
-/// MEASURED: successful FunctionizedUnits emission compares the joins consumed
-/// by each generated function with the complete join population projected from
-/// that function's validated semantic owner.
+fn d8_known_if_with_dead_join_sibling(selected: bool) -> RuntimeExpr {
+    let dead = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(7.into()))),
+            }),
+            args: Vec::new(),
+        }),
+        body: Box::new(RuntimeExpr::If {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(false))),
+            then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(11.into()))),
+            else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(13.into()))),
+        }),
+    };
+    let live = RuntimeExpr::Value(RuntimeValue::Int(3.into()));
+    RuntimeExpr::If {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(selected))),
+        then_expr: Box::new(if selected { live.clone() } else { dead.clone() }),
+        else_expr: Box::new(if selected { dead } else { live }),
+    }
+}
+
+/// MEASURED: successful FunctionizedUnits emission compares each generated
+/// function's complete semantic-owner join population with two disjoint sets:
+/// joins reached by emission and joins under a semantic-child subtree that a
+/// statically known branch selection structurally dispositions.
 ///
 /// CLAIMED: every required planned source join is consumed exactly once.
 ///
-/// GAP: set equality supplies omission and wrong-owner closure; the insertion
+/// GAP: owner equality alone over-approximates emission reachability. The
+/// known-true/known-false pair below places both a `Call` and nested `If` in the
+/// dead sibling; the population-side mutation leaves that subtree classified
+/// as required emission and must red at generated-function closure. Set
+/// equality still supplies omission/wrong-owner closure, while the insertion
 /// guard in `consume_join_plan` supplies the independent duplicate direction.
 #[test]
 fn d8_every_required_join_plan_is_consumed_exactly_once() {
     let expr = d8_mixed_host_result_join_fixture(false);
     recursive_port_process_compiles(&expr).expect("the exact consumption set compiles");
+
+    for selected in [true, false] {
+        recursive_port_process_compiles(&d8_known_if_with_dead_join_sibling(selected))
+            .unwrap_or_else(|error| {
+                panic!(
+                    "known-{selected} If did not disposition its dead Call/nested-If sibling: \
+                     {error}"
+                )
+            });
+    }
+
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::IncludeStaticallyUnselected);
+    let dead_included =
+        recursive_port_process_compiles(&d8_known_if_with_dead_join_sibling(true))
+            .expect_err("including a dead sibling join must fail at function closure");
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
+    assert!(
+        matches!(
+            dead_included,
+            CraneliftBackendError::Backend(BackendFailure::Module(ref detail))
+                if detail.contains("neither emitted nor statically unselected")
+        ),
+        "dead-sibling population mutation reached the wrong boundary: {dead_included:?}"
+    );
 
     // A statically selected `If` still belongs to the planner's closed join
     // population, but no merge helper needs to reborrow its token. Skipping

@@ -1997,6 +1997,61 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(required)
     }
 
+    /// Planned joins in one source subtree that remain in its function owner.
+    ///
+    /// This is the structural population used when lowering proves that a
+    /// branch is statically unselected. The traversal follows the semantic
+    /// plane's validated positional-child inventory, never a second
+    /// `RuntimeExpr` spelling list, and stops at declared-unit owner
+    /// boundaries. A closure body in a dead outer branch is still validated
+    /// when its own generated function is emitted.
+    pub(in crate::cranelift_backend) fn source_join_origins_in_owner_subtree(
+        &self,
+        root: StaticOriginId,
+    ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+        let owner = self
+            .semantic
+            .function_owner(root)?
+            .ok_or_else(|| planner_error("source subtree root has no function owner"))?;
+        let mut pending = vec![root];
+        let mut visited = BTreeSet::new();
+        let mut joins = BTreeSet::new();
+        while let Some(origin) = pending.pop() {
+            if !visited.insert(origin) {
+                continue;
+            }
+            if self.semantic.function_owner(origin)? != Some(owner) {
+                continue;
+            }
+            let index = origin.0 as usize;
+            let occurrence = self
+                .source_occurrences
+                .get(index)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| planner_error("source subtree names no planned occurrence"))?;
+            if occurrence.static_origin != origin {
+                return Err(planner_error(
+                    "source subtree occurrence disagrees with its positional origin",
+                ));
+            }
+            if self
+                .join_results
+                .get(index)
+                .ok_or_else(|| planner_error("source subtree is outside the join plan"))?
+                .is_some()
+            {
+                joins.insert(origin);
+            }
+            pending.extend(
+                self.semantic
+                    .child_origins(origin)?
+                    .iter()
+                    .copied(),
+            );
+        }
+        Ok(joins)
+    }
+
     /// The artifact-static constructor identity of one case of the `Match` /
     /// `ComputationalMatch` occurrence at `origin` (`D1`).
     ///

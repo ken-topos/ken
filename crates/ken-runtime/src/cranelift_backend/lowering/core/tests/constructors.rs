@@ -233,6 +233,7 @@ fn run_dynamic_constructor_dispatch_fixture(
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
+            dispositioned_join_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     };
@@ -1786,6 +1787,7 @@ fn bare_carrier_test_lowering<'src>(
             unit_calls: BTreeMap::new(),
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
+            dispositioned_join_origins: BTreeSet::new(),
             boundary_carrier: None,
         },
     }

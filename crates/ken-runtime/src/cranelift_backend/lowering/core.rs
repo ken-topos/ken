@@ -1939,6 +1939,10 @@ impl<'a> Lowering<'a> {
                     ));
                 };
                 if let Some(known) = known {
+                    let unselected = if known { else_expr } else { then_expr };
+                    self.disposition_statically_unselected_source_subtree(
+                        unselected.static_origin,
+                    )?;
                     return self.lower_computational_producer_expr(
                         builder,
                         if known { then_expr } else { else_expr },
@@ -6513,6 +6517,10 @@ impl<'a> Lowering<'a> {
                     ));
                 };
                 if let Some(scrutinee) = known {
+                    let unselected = if scrutinee { else_expr } else { then_expr };
+                    self.disposition_statically_unselected_source_subtree(
+                        unselected.static_origin,
+                    )?;
                     return if scrutinee {
                         self.lower_expr(builder, then_expr, env)
                     } else {
