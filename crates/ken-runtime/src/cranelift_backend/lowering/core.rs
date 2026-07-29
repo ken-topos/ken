@@ -9151,7 +9151,7 @@ impl<'a> Lowering<'a> {
                             builder,
                             body.static_origin,
                             symbol,
-                            captures,
+                            &captures,
                             lowered_args
                                 .into_iter()
                                 .next()

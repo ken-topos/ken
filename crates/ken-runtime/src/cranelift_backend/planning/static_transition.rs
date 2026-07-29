@@ -397,6 +397,8 @@ pub(in crate::cranelift_backend) enum LoweringOnlyOperandEdge {
     RecursiveDeclarationArgument,
     DeclarationCaptureSpecialization,
     CallableCapsuleEscape,
+    #[cfg(test)]
+    TestFixtureResult,
 }
 
 impl LoweringOnlyOperandEdge {
@@ -420,6 +422,8 @@ impl LoweringOnlyOperandEdge {
             | Self::DirectCallRecursorResidual
             | Self::RecursiveDeclarationArgument
             | Self::DeclarationCaptureSpecialization => OperandEdgeDisposition::SpecializedOnlyLeaf,
+            #[cfg(test)]
+            Self::TestFixtureResult => OperandEdgeDisposition::SpecializedOnlyLeaf,
         };
         OperandEdgeToken {
             disposition,
@@ -450,6 +454,8 @@ impl LoweringOnlyOperandEdge {
             Self::RecursiveDeclarationArgument => "a recursive declaration argument",
             Self::DeclarationCaptureSpecialization => "a recursive-descent declaration capture",
             Self::CallableCapsuleEscape => "a whole callable capsule",
+            #[cfg(test)]
+            Self::TestFixtureResult => "a test fixture result",
         }
     }
 }
@@ -3964,50 +3970,6 @@ pub(in crate::cranelift_backend) fn governed_nested_resource_bracket(depth: usiz
         }
     }
 
-    #[test]
-    fn d7_operand_edge_matrix_separates_static_bodies_from_callable_captures() {
-        let expr = RuntimeExpr::LexicalClosure {
-            captures: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
-            params: Vec::new(),
-            body: Box::new(unit()),
-        };
-        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
-        let root = plan.root_occurrence.expect("root occurrence");
-        assert_eq!(plan.operand_edges.len(), 1);
-        let edge = plan
-            .operand_edge_token(root, 1, SourceOperandRole::LexicalCapture)
-            .unwrap();
-        assert_eq!(edge.disposition(), OperandEdgeDisposition::CallableCapture);
-        assert_eq!(edge.parent, Some(root));
-        assert_eq!(edge.position, Some(1));
-        assert_eq!(edge.child, Some(plan.child_static_origin(root, 1).unwrap()));
-        assert!(plan
-            .operand_edge_token(root, 0, SourceOperandRole::LexicalCapture)
-            .is_err());
-    }
-
-    #[test]
-    fn d7_omitting_one_real_callable_capture_edge_rejects_before_emission() {
-        let expr = RuntimeExpr::LexicalClosure {
-            captures: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
-            params: Vec::new(),
-            body: Box::new(unit()),
-        };
-        D7_OMIT_LEXICAL_CAPTURE_EDGE.with(|mutation| mutation.set(true));
-        let result = plan_static_transition_graph(&expr, &BTreeMap::new());
-        D7_OMIT_LEXICAL_CAPTURE_EDGE.with(|mutation| mutation.set(false));
-        let error = match result {
-            Ok(_) => panic!("omitting a real matrix member must reject"),
-            Err(error) => error,
-        };
-        assert!(
-            error
-                .to_string()
-                .contains("operand-edge matrix is not exact for positional source consumers"),
-            "unexpected pre-emission rejection: {error}"
-        );
-    }
-
     if depth == 0 {
         return unit();
     }
@@ -4118,6 +4080,50 @@ mod tests {
             constructor: "ctor:prelude::Unit::MkUnit".to_string(),
             args: Vec::new(),
         }
+    }
+
+    #[test]
+    fn d7_operand_edge_matrix_separates_static_bodies_from_callable_captures() {
+        let expr = RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+            params: Vec::new(),
+            body: Box::new(unit()),
+        };
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).unwrap();
+        let root = plan.root_occurrence.expect("root occurrence");
+        assert_eq!(plan.operand_edges.len(), 1);
+        let edge = plan
+            .operand_edge_token(root, 1, SourceOperandRole::LexicalCapture)
+            .unwrap();
+        assert_eq!(edge.disposition(), OperandEdgeDisposition::CallableCapture);
+        assert_eq!(edge.parent, Some(root));
+        assert_eq!(edge.position, Some(1));
+        assert_eq!(edge.child, Some(plan.child_static_origin(root, 1).unwrap()));
+        assert!(plan
+            .operand_edge_token(root, 0, SourceOperandRole::LexicalCapture)
+            .is_err());
+    }
+
+    #[test]
+    fn d7_omitting_one_real_callable_capture_edge_rejects_before_emission() {
+        let expr = RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+            params: Vec::new(),
+            body: Box::new(unit()),
+        };
+        D7_OMIT_LEXICAL_CAPTURE_EDGE.with(|mutation| mutation.set(true));
+        let result = plan_static_transition_graph(&expr, &BTreeMap::new());
+        D7_OMIT_LEXICAL_CAPTURE_EDGE.with(|mutation| mutation.set(false));
+        let error = match result {
+            Ok(_) => panic!("omitting a real matrix member must reject"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("operand-edge matrix is not exact for positional source consumers"),
+            "unexpected pre-emission rejection: {error}"
+        );
     }
 
     fn nested_resource_bracket(depth: usize) -> RuntimeExpr {

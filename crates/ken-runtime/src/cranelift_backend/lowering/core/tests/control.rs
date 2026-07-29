@@ -4547,7 +4547,7 @@ fn retained_closures_carry_a_static_origin_and_no_body_term() {
 #[test]
 fn every_specialized_unwrap_requires_a_typed_operand_edge_token() {
     let support = include_str!("../../mod.rs");
-    let core = include_str!("../core.rs");
+    let core = include_str!("../../core.rs");
     assert!(
         support.contains("fn specialized_at(self, edge: OperandEdgeToken)"),
         "the consuming phase boundary must require planner-owned edge evidence"

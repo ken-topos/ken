@@ -20,6 +20,7 @@ pub(super) use static_transition::{
 };
 pub(super) use static_transition::{
     planned_partiality_trap, ConstructorIdentity, JoinPlanToken, JoinResultRepresentation,
+    LoweringOnlyOperandEdge, OperandEdgeDisposition, OperandEdgeToken, SourceOperandRole,
     StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
     SynthesizedFixedConstructorRole,
 };

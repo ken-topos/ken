@@ -284,7 +284,8 @@ fn run_dynamic_constructor_dispatch_fixture(
                 static_origin: match_origin,
             },
         )?;
-        let lowered = lowered.specialized_at("this fixture's result")?;
+        let lowered =
+            lowered.specialized_at(LoweringOnlyOperandEdge::TestFixtureResult.token())?;
         let value = match lowered {
             Lowered::Trap(trap) => {
                 assert_eq!(trap, default);
@@ -2662,15 +2663,18 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
                 builder,
                 CarriedBoundaryWord { word },
                 match match_expr {
-                    RuntimeExpr::Match { ref cases, .. } => cases,
+                    RuntimeExpr::Match {
+                        ref cases,
+                        ref default,
+                        ..
+                    } => CarriedMatchContinuation::Ordinary {
+                        cases,
+                        default,
+                        static_origin: match_origin,
+                        env: &[],
+                    },
                     _ => unreachable!("fixture is a Match"),
                 },
-                &RuntimeTrap {
-                    code: RuntimeTrapCode::PatternMatchFailure,
-                    message: "C2 HostResult default".to_string(),
-                },
-                match_origin,
-                &[],
             )?;
             let LoweringOperand::Carried(observed) = lowered else {
                 return Err(unsupported(
