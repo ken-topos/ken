@@ -19,10 +19,10 @@ origin: discovered under [[PX8-F-CAP-41]] Phase 2 impl (foundation-implementer h
 >
 > | | |
 > |---|---|
-> | **COUNT OF RECORD** | **20** |
-> | ENTRIES | 11 |
-> | NEXT PREDICATE CHECK | 12th entry |
-> | NEXT RESEARCH PULL | **#21 — one hard stop away** |
+> | **COUNT OF RECORD** | **21** |
+> | ENTRIES | 12 |
+> | NEXT PREDICATE CHECK | **DUE NOW — this is the 12th entry** |
+> | NEXT RESEARCH PULL | ✅ **#21 FIRED 2026-07-29** — dispatched `evt_165w63xtakbpb` |
 >
 > **Hard stop #20 (2026-07-29):** Foundation's [[PX8-ERRID-ALLOC]] rebase still
 > failed the native size gate at `checked_process_object`. Architect ruling
@@ -30,8 +30,21 @@ origin: discovered under [[PX8-F-CAP-41]] Phase 2 impl (foundation-implementer h
 > root, so `FunctionizedUnits` never applied. Produced
 > [[RT-DECL-CLOSURE-PORT]].
 >
-> ⚠ **#21 is the next hard stop, and it fires the research pull.** The Architect
-> self-triggers it; the Steward holds the count of record as backstop.
+> **Hard stop #21 (2026-07-29):** this node's own fixture tripped a fail-closed
+> invariant introduced by `RT-FNSPLIT-RECUR-PORT` (`6a451b45`) —
+> `emitted source join StaticOriginId(1000) was later dispositioned as
+> statically unselected` (`lowering/mod.rs:1712`). `rt_span_prov_native`,
+> 5 passed / 1 failed on
+> `sp_a_foreign_span_freeze_rejects_own_span_succeeds_on_both_engines`.
+> ⭐ `main` is GREEN on that row — CI's shard filter excludes only
+> `rt_parity_native`, `px8f_buffer_native`, `px8f_write_partition` — so the
+> candidate is the first program shape to violate the invariant, not an
+> inheritor of a red row.
+>
+> ⇒ **The #21 research pull FIRED and is dispatched** (`evt_165w63xtakbpb`):
+> does a backend emit joins before or after static branch elimination, and is
+> "emit then retract" sound or a smell? Mechanism direction is the Architect's
+> (`evt_7fnxkjz9z6ghw`). ⛔ Runtime holds; no candidate, mutation, or suite run.
 
 
 > ## ⛔ `draft` → `ready` 2026-07-28 — the banner promised what the status withheld
