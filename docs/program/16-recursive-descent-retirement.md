@@ -88,10 +88,10 @@ exists as its own node whose **`D1` may legitimately return "already retired"**,
 at which point it closes for free. ⛔ A node that closes cheaply on evidence is
 correct; a fold that was wrong is expensive.
 
-## 3. ⛔⛔ THE TWO TRAPS THAT BIND EVERY NODE IN THIS CAMPAIGN
+## 3. ⛔⛔ THE THREE TRAPS THAT BIND EVERY NODE IN THIS CAMPAIGN
 
-Both follow from one fact: **the selector short-circuits at the first residual it
-finds**, consulting the expression walk before the declaration walk.
+The first two follow from one fact: **the selector short-circuits at the first
+residual it finds**, consulting the expression walk before the declaration walk.
 
 ### Trap 1 — you cannot measure your own class while an earlier class fires
 
@@ -122,6 +122,31 @@ the earlier ones de-risked them.** They enlarge the exposed population instead.
 ⛔ **Do not treat a hard stop in this campaign as a defect in the node that
 found it.** It is the fail-closed machinery doing its job on a newly reachable
 population. Route it; do not work around it.
+
+### Trap 3 — ⭐⭐ a proof over a recorded population is vacuous for anything never recorded
+
+**Measured 2026-07-29, and it rejected a candidate that was otherwise sound.**
+`RT-JOIN-DISPOSITION`'s `27f9dca2` built a completed-CFG *materialized-but-dead*
+proof — entry reachability, live predecessor input, reachable block-param use —
+quantified over `materialized_join_blocks`. One production site
+(`lower_dynamic_host_result_match`) created a **real** planned CLIF merge and
+appended its parameters **directly**, bypassing `append_planned_join_params`.
+
+⇒ That block was never recorded, so for the whole HostResult class the proof ran
+over an **empty list and passed**. A real merge would have been classified
+"metadata-only materialization," and all three CFG obligations were **vacuous**.
+Architect ruling `evt_24esnraje522r`.
+
+⭐ **The shape generalizes past that node, and this campaign is full of
+population-quantified proofs** — residual enumerations, reached-case unions,
+materialized-block sets, and [`RT-DESCENT-RETIRE`](issues/RT-DESCENT-RETIRE.md)'s
+"no residual fires anywhere."
+
+⛔ **So whenever a node adds a proof over a population, the paired obligation is
+a control that REDS WHEN A MEMBER IS OMITTED FROM THE POPULATION** — not merely
+one that passes when the proof holds. ⚠ The sound-proof-over-incomplete-population
+failure is silent by construction: **every control over it passes**, which is
+exactly why it survives review.
 
 ## 4. Schedule
 

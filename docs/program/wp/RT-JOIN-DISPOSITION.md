@@ -145,14 +145,71 @@ reding is how you find out you lost one — **if you check.**
   its enclosing match selects, whose case is then proved dead — plus a mutation
   that makes the dead join **reachable**, or leaves a **live incoming edge or
   use**. ⭐ **That mutation must red.**
+- **`D8` — ⛔ ADDED 2026-07-29 by Architect ruling `evt_24esnraje522r`, which
+  rejected `27f9dca2` on exactly this. Close the `D4` population.**
+
+  `lower_dynamic_host_result_match` (`core.rs:9243-9252` on the rejected
+  candidate) creates a **real** planned HostResult CLIF merge and appends its
+  I64 parameter(s) **directly**, bypassing `append_planned_join_params`. So
+  `materialized_join_blocks` never records that block. It is the lone direct
+  `join_plan.representation` parameter append; every other `JoinPlanToken`
+  merge already uses the recorder.
+
+  ⇒ ⭐⭐ **`D4`'s proof then runs over an EMPTY block list and passes
+  vacuously** — a real CLIF merge is classified "metadata-only materialization,"
+  and entry-reachability, live-predecessor and reachable-use are **all vacuous
+  for the HostResult class**.
+
+  **Route that merge through the recorder, and add a HostResult
+  population/control whose omission of the recorder REDS.** The control must
+  establish that the completed-CFG materialized-but-dead proof sees the **real
+  block**, ⛔ not an empty list.
+
+  ⛔ Do not widen the mechanism. ⛔ Do not weaken owner / duplicate / omission
+  closure. ⛔ Do not touch `8bc7556a`.
+
+  > ⭐ **The general shape, worth carrying past this node:** *a proof
+  > quantified over a recorded population is vacuous for any member that was
+  > never recorded.* The proof is sound and the population is incomplete, so
+  > every control over it passes — and passes **silently**. ⛔ Whenever this
+  > campaign adds a proof over a population, the paired obligation is a control
+  > that **reds when a member is omitted from the population**, not merely one
+  > that passes when the proof holds.
 
 ## 7. Acceptance criteria
 
-- **`AC-1` (the row that opened the node).**
-  `scripts/ken-cargo test -p ken-cli --test rt_span_prov_native` is **6/6**,
-  including `sp_a_foreign_span_freeze_rejects_own_span_succeeds_on_both_engines`,
-  on a tree carrying this repair. ⚠ Measure it on **this node's own branch
-  first**; the WIP `8bc7556a` is held and is not this node's input.
+- **`AC-1` (the row that opened the node). ⛔ AMENDED 2026-07-29 — the original
+  was vacuous and this replaces it.**
+
+  **`AC-1a`** — `scripts/ken-cargo test -p ken-cli --test rt_span_prov_native`
+  is **6/6** on this node's own branch.
+
+  **`AC-1b` — the downstream discharge, and `AC-1a` does not substitute for
+  it.** In a **detached diagnostic-only worktree**, apply this node's repair
+  over the preserved `NATIVE-HANDLE-CARRIER` WIP `8bc7556a` and run the single
+  row `sp_a_foreign_span_freeze_rejects_own_span_succeeds_on_both_engines`.
+  ⛔ No commit, branch update, candidate, or edit may survive; confirm
+  `8bc7556a` is byte-identical afterward.
+
+  > ### ⛔ WHY THIS WAS AMENDED — the original `AC-1` could pass without
+  > ### demonstrating anything
+  >
+  > `rt_span_prov_native` was **already 6/6 on `main`**. The failing row fails
+  > only with `NATIVE-HANDLE-CARRIER`'s delta applied. ⇒ On this node's own
+  > branch the number is **identical before and after the repair**, so `AC-1a`
+  > alone is a measurement of the pre-existing state.
+  >
+  > ⭐ **The Steward wrote it that way to keep the held WIP untouched. That
+  > instruction was right; the AC built on it did not discharge what it
+  > claimed.** `AC-1b` gets the real answer without touching the WIP — the
+  > detached-worktree move the Architect already used to rule the mechanism.
+  >
+  > ✅ **`AC-1b` RAN AND PASSED for `27f9dca2`** — 1/1, no divergent observable,
+  > the native freeze row reaches its expected successful observation, and
+  > `8bc7556a` verified untouched (`evt_a50rnvp7nhk5`). ⇒ **The three-phase
+  > repair does unblock `NATIVE-HANDLE-CARRIER`.** ⚠ That witness is bound to
+  > `27f9dca2`; **a successor SHA must re-run `AC-1b`** — ⛔ the verdict does
+  > not transfer.
 - **`AC-2`.** `D7`'s causal control passes, and its mutation **reds**. A control
   that passes without a reding mutation proves nothing about a relaxed check.
 - **`AC-3`.** All five `§5` mutations still red, and `D1`'s table records the
