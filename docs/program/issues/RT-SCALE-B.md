@@ -1,7 +1,7 @@
 ---
 id: RT-SCALE-B
 title: "Boundary B — the full n=3..7 emission measurement, the research-grounded analytical model, and the operator scaling verdict that gates RT-NATIVE-FNSPLIT's merge"
-status: ready
+status: merged
 owner: runtime
 size: L
 gate: none
