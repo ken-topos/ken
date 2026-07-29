@@ -281,8 +281,10 @@ impl AbiCaptureProvenance {
 ///
 /// ⛔ Closed, and **derived from the graph**: the two arms are exactly `B2O`'s
 /// two seed classes, which that node already validated to be disjoint and
-/// exhaustive over the partition. A unit that is neither, or both, is a planner
-/// error rather than a defaulted arm.
+/// exhaustive over the partition. `TransparentDeclarationClosure` is a closed
+/// callable subkind of a scheduling entry, not a third seed class. A unit that
+/// is neither seed class, or both, is a planner error rather than a defaulted
+/// arm.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
 pub(in crate::cranelift_backend) enum AbiUnitDefinition {
@@ -291,6 +293,14 @@ pub(in crate::cranelift_backend) enum AbiUnitDefinition {
     /// explicitly recorded process root receives the closed ingress pair.
     SchedulingEntry {
         ingress: AbiSchedulingIngress,
+    },
+    /// A transparent declaration whose scheduling-entry occurrence is a
+    /// closure seed. The declaration is already its own function unit; this
+    /// arm gives that unit the closure's declared inputs and makes its body,
+    /// rather than its callable seed value, the emitted unit body.
+    TransparentDeclarationClosure {
+        defining_origin: StaticOriginId,
+        provenance: AbiCaptureProvenance,
     },
     /// A retained closure body. Its **defining occurrence** is the source of the
     /// unique `StaticBody` edge whose target is this unit's seed
@@ -441,6 +451,9 @@ impl AbiPlane {
         let slots = slot_slice(&self.slots, descriptor.slots)?;
         let (definition_is_closure_body, provenance) = match descriptor.definition {
             AbiUnitDefinition::SchedulingEntry { .. } => (false, None),
+            AbiUnitDefinition::TransparentDeclarationClosure { provenance, .. } => {
+                (false, Some(provenance))
+            }
             AbiUnitDefinition::ClosureBody { provenance, .. } => (true, Some(provenance)),
         };
         Ok(AbiDescriptorShape {
@@ -574,12 +587,16 @@ fn reject_imported_capture_edges(
     definitions: &[AbiUnitDefinition],
 ) -> Result<(), CraneliftBackendError> {
     for definition in definitions {
-        let AbiUnitDefinition::ClosureBody {
-            defining_origin,
-            provenance,
-        } = *definition
-        else {
-            continue;
+        let (defining_origin, provenance) = match *definition {
+            AbiUnitDefinition::ClosureBody {
+                defining_origin,
+                provenance,
+            }
+            | AbiUnitDefinition::TransparentDeclarationClosure {
+                defining_origin,
+                provenance,
+            } => (defining_origin, provenance),
+            AbiUnitDefinition::SchedulingEntry { .. } => continue,
         };
         if provenance != AbiCaptureProvenance::Lexical {
             continue;
@@ -737,16 +754,33 @@ fn unit_definitions(
             .copied()
             .ok_or_else(|| planner_error("function unit seed is outside the planned nodes"))?;
         let definition = match (is_entry, body_edge) {
-            (true, None) => AbiUnitDefinition::SchedulingEntry {
-                ingress: if function.planned_node == root_entry {
-                    match root_ingress {
-                        AbiRootIngress::Value => AbiSchedulingIngress::Empty,
-                        AbiRootIngress::Process => AbiSchedulingIngress::ProcessPair,
+            (true, None) => {
+                if function.planned_node == root_entry {
+                    AbiUnitDefinition::SchedulingEntry {
+                        ingress: match root_ingress {
+                            AbiRootIngress::Value => AbiSchedulingIngress::Empty,
+                            AbiRootIngress::Process => AbiSchedulingIngress::ProcessPair,
+                        },
                     }
                 } else {
-                    AbiSchedulingIngress::Empty
-                },
-            },
+                    let defining_origin = function.origin;
+                    let seed = source_for(sources, defining_origin)?;
+                    match seed.source {
+                        SemanticSourceKind::Expression(RuntimeExprShape::Closure)
+                        | SemanticSourceKind::Expression(RuntimeExprShape::LexicalClosure) => {
+                            AbiUnitDefinition::TransparentDeclarationClosure {
+                                defining_origin,
+                                provenance: closure_provenance(seed.source)?,
+                            }
+                        }
+                        SemanticSourceKind::Expression(_) | SemanticSourceKind::Control(_) => {
+                            AbiUnitDefinition::SchedulingEntry {
+                                ingress: AbiSchedulingIngress::Empty,
+                            }
+                        }
+                    }
+                }
+            }
             (false, Some(from)) => {
                 let defining_origin = StaticOriginId(from.0);
                 let seed = source_for(sources, defining_origin)?;
@@ -797,28 +831,31 @@ fn closure_provenance(
 /// from nothing else. No suffix of any caller's environment is consulted, so
 /// caller depth cannot reach these numbers.
 ///
-/// A `SchedulingEntry` unit declares nothing: the root and a transparent
-/// declaration take no parameters and capture nothing.
+/// An ordinary `SchedulingEntry` declares only its ingress. A transparent
+/// closure declaration instead derives its parameter and capture counts from
+/// the defining closure occurrence.
 fn declared_arity(
     plane: &SemanticPlane,
     sources: &[SemanticSourceSeed],
     definition: AbiUnitDefinition,
 ) -> Result<(u32, u32), CraneliftBackendError> {
-    let AbiUnitDefinition::ClosureBody {
-        defining_origin, ..
-    } = definition
-    else {
-        let AbiUnitDefinition::SchedulingEntry { ingress } = definition else {
-            unreachable!()
-        };
-        return Ok(match ingress {
-            AbiSchedulingIngress::Empty => (0, 0),
-            AbiSchedulingIngress::ProcessPair => (
-                u32::try_from(AbiProcessParameter::ALL.len())
-                    .map_err(|_| planner_capacity_error("process ingress arity exhausted"))?,
-                0,
-            ),
-        });
+    let defining_origin = match definition {
+        AbiUnitDefinition::ClosureBody {
+            defining_origin, ..
+        }
+        | AbiUnitDefinition::TransparentDeclarationClosure {
+            defining_origin, ..
+        } => defining_origin,
+        AbiUnitDefinition::SchedulingEntry { ingress } => {
+            return Ok(match ingress {
+                AbiSchedulingIngress::Empty => (0, 0),
+                AbiSchedulingIngress::ProcessPair => (
+                    u32::try_from(AbiProcessParameter::ALL.len())
+                        .map_err(|_| planner_capacity_error("process ingress arity exhausted"))?,
+                    0,
+                ),
+            });
+        }
     };
 
     let seed = source_for(sources, defining_origin)?;
@@ -900,7 +937,8 @@ fn push_slots(
             }
             None
         }
-        AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
+        AbiUnitDefinition::TransparentDeclarationClosure { provenance, .. }
+        | AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
     };
     if let Some(carrier) = capture_carrier {
         for ordinal in 0..captures {
@@ -1071,6 +1109,10 @@ pub(super) fn validate_emitted_transfers(
         // ⭐ Hole A: each capture, traced through binder-free wrappers rather
         // than read off the child's own top-level shape.
         if let AbiUnitDefinition::ClosureBody {
+            defining_origin,
+            provenance,
+        }
+        | AbiUnitDefinition::TransparentDeclarationClosure {
             defining_origin,
             provenance,
         } = descriptor.definition
@@ -1351,6 +1393,87 @@ impl AbiPlane {
 
         reject_imported_capture_edges(plane, sources, &definitions)?;
         self.validate_boundary_layouts(plane, sources, edges)?;
+        self.validate_declaration_call_layouts(plane, sources, edges)?;
+        Ok(())
+    }
+
+    /// Every declaration-call edge that targets a closure declaration agrees
+    /// with that declaration's separately derived callable frame.
+    ///
+    /// The edge supplies owner and target identity; the target occurrence
+    /// independently supplies provenance and arity. A closure-shaped
+    /// declaration that retained the zero-input scheduling-entry ABI therefore
+    /// fails here before any function is declared.
+    fn validate_declaration_call_layouts(
+        &self,
+        plane: &SemanticPlane,
+        sources: &[SemanticSourceSeed],
+        edges: &[StaticEdge],
+    ) -> Result<(), CraneliftBackendError> {
+        for (_, callee, callee_origin, _) in plane.declaration_call_edges(edges)? {
+            let descriptor = self.descriptors.get(callee.0 as usize).ok_or_else(|| {
+                planner_error(
+                    "declaration call callee is not forward-declared in the abi plane",
+                )
+            })?;
+            if descriptor.origin != callee_origin {
+                return Err(planner_error(
+                    "declaration call target and callee descriptor disagree on origin",
+                ));
+            }
+            let seed = source_for(sources, callee_origin)?;
+            let SemanticSourceKind::Expression(shape) = seed.source else {
+                return Err(planner_error(
+                    "declaration call target is not a source expression",
+                ));
+            };
+            let is_closure =
+                matches!(shape, RuntimeExprShape::Closure | RuntimeExprShape::LexicalClosure);
+            match (is_closure, descriptor.definition) {
+                (
+                    true,
+                    AbiUnitDefinition::TransparentDeclarationClosure {
+                        defining_origin,
+                        provenance,
+                    },
+                ) => {
+                    if defining_origin != callee_origin {
+                        return Err(planner_error(
+                            "declaration closure descriptor names the wrong defining occurrence",
+                        ));
+                    }
+                    if provenance != closure_provenance(seed.source)? {
+                        return Err(planner_error(
+                            "declaration closure descriptor has the wrong capture provenance",
+                        ));
+                    }
+                    let (parameters, captures) =
+                        declared_arity(plane, sources, descriptor.definition)?;
+                    if descriptor.header.parameters != parameters
+                        || descriptor.header.captures != captures
+                    {
+                        return Err(planner_error(
+                            "declaration closure call edge disagrees with the callable input layout",
+                        ));
+                    }
+                }
+                (true, _) => {
+                    return Err(planner_error(
+                        "closure declaration call target has no callable declaration definition",
+                    ));
+                }
+                (false, AbiUnitDefinition::SchedulingEntry { .. }) => {}
+                (
+                    false,
+                    AbiUnitDefinition::TransparentDeclarationClosure { .. }
+                    | AbiUnitDefinition::ClosureBody { .. },
+                ) => {
+                    return Err(planner_error(
+                        "non-closure declaration call target has a closure callable definition",
+                    ));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1551,7 +1674,8 @@ fn validate_slot_run(
 ) -> Result<(), CraneliftBackendError> {
     let capture_carrier = match definition {
         AbiUnitDefinition::SchedulingEntry { .. } => None,
-        AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
+        AbiUnitDefinition::TransparentDeclarationClosure { provenance, .. }
+        | AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
     };
 
     for (position, slot) in slots.iter().enumerate() {

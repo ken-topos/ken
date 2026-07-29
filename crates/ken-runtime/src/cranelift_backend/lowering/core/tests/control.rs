@@ -4516,12 +4516,15 @@ fn retained_closures_carry_a_static_origin_and_no_body_term() {
     assert_eq!(
         declared_fields(source, "    DeclarationClosure {"),
         vec![
+            "reference_origin: StaticOriginId,",
             "symbol: RuntimeSymbol,",
             "captures: Vec<Lowered>,",
             "params: Vec<String>,",
             "body: StaticOriginId,",
         ],
-        "AC-1: `Lowered::DeclarationClosure`'s field inventory changed"
+        "AC-1: `Lowered::DeclarationClosure`'s field inventory changed. The \
+         reference origin is the exact DeclarationCall edge authority; no field \
+         may carry a second body representation"
     );
 
     // AC-6, the EXCLUDED variant, and why — a fact about the declaration rather
@@ -6027,6 +6030,7 @@ fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
 
     let bare = c1_closure(origin);
     let bare_declaration = Lowered::DeclarationClosure {
+        reference_origin: origin,
         symbol: "decl:fixture::f".to_string(),
         captures: Vec::new(),
         params: Vec::new(),
@@ -7635,6 +7639,199 @@ fn computational_match_declaration_ref_emits_and_runs_the_declaration_owned_unit
         compiled.run(None).expect("the emitted call runs").0,
         RuntimeObservation::Returned(RuntimeGroundValue::Int((73).into())),
         "the caller ran some path other than the declaration-owned unit"
+    );
+}
+
+/// RT-DECL-CLOSURE-PORT D2–D5 — a closure declaration crosses two typed unit
+/// boundaries: exact DeclarationRef -> declaration wrapper -> retained body.
+///
+/// Promise class: durable invariant plus mutation proof.
+///
+/// MEASURED: both a returned value and an exact trap cross the declaration
+/// wrapper, and mutating the caller to read result before trap changes the trap
+/// observation.
+/// CLAIMED: the declaration wrapper preserves the result/trap protocol of its
+/// already-owned body unit.
+/// THE GAP: this does not select FunctionizedUnits through the production
+/// residual selector; the scoped guard exists only until D6 removes that
+/// residual, and AC-1 remains the post-D6 behavioural compile.
+#[test]
+fn declaration_closure_unit_preserves_exact_result_and_trap_protocol() {
+    fn declaration(symbol: &str, body: RuntimeExpr) -> RuntimeDeclaration {
+        RuntimeDeclaration {
+            symbol: symbol.to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::Closure {
+                    captures: Vec::new(),
+                    params: vec!["x".to_string()],
+                    body: Box::new(body),
+                },
+            },
+            metadata: RuntimeSymbolMetadata {
+                lowerability: Some(RuntimeLowerabilityStatus::Supported),
+                ..RuntimeSymbolMetadata::empty()
+            },
+        }
+    }
+
+    fn call(symbol: &str) -> RuntimeExpr {
+        RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: symbol.to_string(),
+            }),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int((73).into()))],
+        }
+    }
+
+    fn compile(
+        name: &str,
+        expr: &RuntimeExpr,
+        declaration: &RuntimeDeclaration,
+    ) -> Result<RuntimeObservation, CraneliftBackendError> {
+        let _authority = TestDeclarationClosurePortAuthority::force_functionized();
+        let symbol = declaration.symbol.as_str();
+        let compiled = compile_expr_into_module(
+            new_jit_module()?,
+            name,
+            Linkage::Local,
+            expr,
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::from([(symbol, declaration)]),
+            None,
+            false,
+            None,
+            None,
+            None,
+        )?;
+        Ok(compiled.run(None)?.0)
+    }
+
+    let result_symbol = "decl:fixture::decl_port::result";
+    let result_declaration =
+        declaration(result_symbol, RuntimeExpr::Var(0));
+    assert_eq!(
+        compile(
+            "decl_port_result",
+            &call(result_symbol),
+            &result_declaration,
+        )
+        .expect("the declaration closure result emits and runs"),
+        RuntimeObservation::Returned(RuntimeGroundValue::Int((73).into())),
+    );
+    assert_eq!(
+        crate::cranelift_backend::lowering::units::b2f_last_unit_emission(),
+        (3, 3),
+        "root, declaration wrapper and retained body must all be defined"
+    );
+    assert_eq!(
+        crate::cranelift_backend::lowering::units::b2f_last_call_edge_resolution(),
+        2,
+        "the exact DeclarationRef edge and wrapper StaticBody edge must resolve"
+    );
+
+    let producer_constructor = "ctor:fixture::decl_port::Producer".to_string();
+    let producer_call = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: producer_constructor.clone(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bool(false))],
+        }),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: producer_constructor,
+            argument_binders: 1,
+            recursive_positions: Vec::new(),
+            body: call(result_symbol),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "declaration closure producer fixture is total".to_string(),
+        },
+    };
+    assert_eq!(
+        compile(
+            "decl_port_producer_result",
+            &producer_call,
+            &result_declaration,
+        )
+        .expect("the producer declaration closure result emits and runs"),
+        RuntimeObservation::Returned(RuntimeGroundValue::Int((73).into())),
+        "the computational producer did not route its exact DeclarationRef edge"
+    );
+
+    let capture_symbol = "decl:fixture::decl_port::capture";
+    let capture_declaration = RuntimeDeclaration {
+        symbol: capture_symbol.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+                params: vec!["x".to_string()],
+                body: Box::new(RuntimeExpr::Var(1)),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    assert_eq!(
+        compile(
+            "decl_port_capture",
+            &call(capture_symbol),
+            &capture_declaration,
+        )
+        .expect("the lexical declaration capture emits and runs"),
+        RuntimeObservation::Returned(RuntimeGroundValue::Bool(true)),
+        "the declaration's typed capture did not cross both unit boundaries"
+    );
+
+    let exact_trap = RuntimeTrap {
+        code: RuntimeTrapCode::ExplicitTrap,
+        message: "declaration closure trap".to_string(),
+    };
+    let trap_symbol = "decl:fixture::decl_port::trap";
+    let selected = "ctor:fixture::decl_port::Selected".to_string();
+    let skipped = "ctor:fixture::decl_port::Skipped".to_string();
+    let trap_declaration = declaration(
+        trap_symbol,
+        RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: selected.clone(),
+                args: Vec::new(),
+            }),
+            cases: vec![
+                RuntimeMatchCase {
+                    constructor: selected,
+                    binders: 0,
+                    body: RuntimeExpr::Trap(exact_trap.clone()),
+                },
+                RuntimeMatchCase {
+                    constructor: skipped,
+                    binders: 0,
+                    body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "declaration closure trap default".to_string(),
+            },
+        },
+    );
+    assert_eq!(
+        compile("decl_port_trap", &call(trap_symbol), &trap_declaration)
+            .expect("the declaration closure trap emits and runs"),
+        RuntimeObservation::Trapped(exact_trap.clone()),
+    );
+
+    let _reset = TrapExitMutationReset;
+    set_trap_caller_protocol_mutation(TrapCallerProtocolMutation::ReadResultBeforeTrap);
+    let mutated = compile(
+        "decl_port_trap_result_first",
+        &call(trap_symbol),
+        &trap_declaration,
+    );
+    assert!(
+        !matches!(mutated, Ok(RuntimeObservation::Trapped(trap)) if trap == exact_trap),
+        "reading a declaration result before its trap left the exact trap \
+         observation green, so the protocol control is non-causal"
     );
 }
 

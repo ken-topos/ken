@@ -1225,6 +1225,7 @@ enum Lowered {
         body: StaticOriginId,
     },
     DeclarationClosure {
+        reference_origin: StaticOriginId,
         symbol: RuntimeSymbol,
         captures: Vec<Lowered>,
         params: Vec<String>,
@@ -2162,6 +2163,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         reference_origin: StaticOriginId,
+        inputs: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let target = self
             .function_local
@@ -2176,7 +2178,7 @@ impl<'a> Lowering<'a> {
         self.call_declared_unit_target(
             builder,
             target,
-            &[],
+            inputs,
             #[cfg(test)]
             None,
         )

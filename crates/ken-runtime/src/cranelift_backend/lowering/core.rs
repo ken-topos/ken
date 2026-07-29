@@ -283,6 +283,43 @@ fn emit_recursive_descent_residual_diagnostic(
     }
 }
 
+// Test-only bridge for validating D2–D5 while D6 deliberately retains the
+// production selector residual. The guard is thread-local and restores the
+// exact selector on drop, so no parallel control can inherit the forced arm.
+#[cfg(test)]
+thread_local! {
+    static TEST_DECLARATION_CLOSURE_PORT_AUTHORITY: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+struct TestDeclarationClosurePortAuthority;
+
+#[cfg(test)]
+impl TestDeclarationClosurePortAuthority {
+    fn force_functionized() -> Self {
+        TEST_DECLARATION_CLOSURE_PORT_AUTHORITY.with(|cell| {
+            assert!(
+                !cell.replace(true),
+                "declaration closure port authority was already forced"
+            );
+        });
+        Self
+    }
+}
+
+#[cfg(test)]
+impl Drop for TestDeclarationClosurePortAuthority {
+    fn drop(&mut self) {
+        TEST_DECLARATION_CLOSURE_PORT_AUTHORITY.with(|cell| {
+            assert!(
+                cell.replace(false),
+                "declaration closure port authority was not forced"
+            );
+        });
+    }
+}
+
 /// The one temporary B2F migration selector, evaluated once at compilation
 /// entry from source syntax and declaration kinds only.
 ///
@@ -294,6 +331,10 @@ fn select_body_emission_authority(
     expr: &RuntimeExpr,
     declarations: &BTreeMap<&str, &RuntimeDeclaration>,
 ) -> BodyEmissionAuthority {
+    #[cfg(test)]
+    if TEST_DECLARATION_CLOSURE_PORT_AUTHORITY.with(std::cell::Cell::get) {
+        return BodyEmissionAuthority::FunctionizedUnits;
+    }
     if recursive_descent_residual(expr)
         .or_else(|| {
             declarations
@@ -1258,12 +1299,14 @@ impl<'a> Lowering<'a> {
                 let callee = self.lower_expr(builder, callee, producer_env)?;
                 match callee {
                     LoweringOperand::Specialized(Lowered::DeclarationClosure {
+                        reference_origin,
                         symbol,
                         captures,
                         params,
                         body,
                     }) => self.lower_recursive_declaration_call(
                         builder,
+                        reference_origin,
                         &symbol,
                         &captures,
                         &params,
@@ -5072,6 +5115,7 @@ impl<'a> Lowering<'a> {
                 }))
             }
             Lowered::DeclarationClosure {
+                reference_origin,
                 symbol,
                 captures,
                 params,
@@ -5089,7 +5133,14 @@ impl<'a> Lowering<'a> {
                 }
                 let body = self.machine_body_occurrence(body)?;
                 self.lower_source_declaration_call(
-                    builder, symbol, captures, body, args, env, control,
+                    builder,
+                    reference_origin,
+                    symbol,
+                    captures,
+                    body,
+                    args,
+                    env,
+                    control,
                 )
             }
             mut recursor @ Lowered::ComputationalRecursorClosure { .. } => {
@@ -5280,6 +5331,7 @@ impl<'a> Lowering<'a> {
     fn lower_source_declaration_call<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        reference_origin: StaticOriginId,
         symbol: RuntimeSymbol,
         captures: Vec<Lowered>,
         body: OwnedSourceOccurrence,
@@ -5288,6 +5340,16 @@ impl<'a> Lowering<'a> {
         control: SourceControl<'b>,
     ) -> Result<SourceCallOutcome<'b>, CraneliftBackendError> {
         let _checked_invocation = self.consume_checked_recursive_invocation_call(&symbol)?;
+        if self.body_emission_authority == BodyEmissionAuthority::FunctionizedUnits {
+            let mut inputs = args;
+            inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+            let value =
+                self.call_declared_declaration_unit(builder, reference_origin, &inputs)?;
+            return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
+                value,
+                control,
+            }));
+        }
         if !self.declaration_is_recursive(&symbol) {
             let mut call_env = args;
             extend_specialized(&mut call_env, captures);
@@ -7438,12 +7500,14 @@ impl<'a> Lowering<'a> {
                 let lowered_callee = self.lower_expr(builder, callee, env)?;
                 match lowered_callee {
                     LoweringOperand::Specialized(Lowered::DeclarationClosure {
+                        reference_origin,
                         symbol,
                         captures,
                         params,
                         body,
                     }) => self.lower_recursive_declaration_call(
                         builder,
+                        reference_origin,
                         &symbol,
                         &captures,
                         &params,
@@ -8805,6 +8869,7 @@ impl<'a> Lowering<'a> {
     fn lower_recursive_declaration_call(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        reference_origin: StaticOriginId,
         symbol: &RuntimeSymbol,
         captures: &[Lowered],
         params: &[String],
@@ -8824,6 +8889,26 @@ impl<'a> Lowering<'a> {
                 self.lower_expr(builder, arg, producer_env)
             })
             .collect::<Result<Vec<_>, _>>()?;
+        if self.body_emission_authority == BodyEmissionAuthority::FunctionizedUnits {
+            if params.len() != lowered_args.len() {
+                return Err(unsupported(
+                    "DeclarationRef",
+                    format!(
+                        "declaration {symbol} expects {} args but call provides {}",
+                        params.len(),
+                        lowered_args.len()
+                    ),
+                ));
+            }
+            let mut inputs = lowered_args;
+            inputs.extend(
+                captures
+                    .iter()
+                    .cloned()
+                    .map(LoweringOperand::Specialized),
+            );
+            return self.call_declared_declaration_unit(builder, reference_origin, &inputs);
+        }
         // ⭐ A recursive declaration's arguments are its **loop-header
         // representation**: their shapes are compared across iterations
         // (`same_recursive_argument_shapes`) and lowered into block params. A
@@ -9071,26 +9156,72 @@ impl<'a> Lowering<'a> {
             expr: body,
             static_origin: declaration_origin,
         };
-        if let RuntimeExpr::Closure {
-            captures,
-            params,
-            body,
-        } = body
-        {
-            let body = self.child_occurrence(declaration_origin, 0, body)?;
-            let captures = captures
-                .iter()
-                .map(|capture| self.lower_seed_capture(builder, capture))
-                .collect::<Result<Vec<_>, _>>()?;
-            return Ok(LoweringOperand::Specialized(Lowered::DeclarationClosure {
-                symbol: symbol.clone(),
+        match body {
+            RuntimeExpr::Closure {
                 captures,
-                params: params.clone(),
-                body: body.static_origin,
-            }));
+                params,
+                body,
+            } => {
+                let body = self.child_occurrence(declaration_origin, 0, body)?;
+                let captures = captures
+                    .iter()
+                    .map(|capture| self.lower_seed_capture(builder, capture))
+                    .collect::<Result<Vec<_>, _>>()?;
+                return Ok(LoweringOperand::Specialized(Lowered::DeclarationClosure {
+                    reference_origin,
+                    symbol: symbol.clone(),
+                    captures,
+                    params: params.clone(),
+                    body: body.static_origin,
+                }));
+            }
+            RuntimeExpr::LexicalClosure {
+                captures,
+                params,
+                body,
+            } => {
+                let body = self.child_occurrence(declaration_origin, 0, body)?;
+                let captures = captures
+                    .iter()
+                    .enumerate()
+                    .map(|(position, capture)| {
+                        let capture =
+                            self.child_occurrence(declaration_origin, 1 + position, capture)?;
+                        self.lower_expr(builder, capture, &[])?
+                            .specialized_at("a transparent declaration closure capture")
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                return Ok(LoweringOperand::Specialized(Lowered::DeclarationClosure {
+                    reference_origin,
+                    symbol: symbol.clone(),
+                    captures,
+                    params: params.clone(),
+                    body: body.static_origin,
+                }));
+            }
+            RuntimeExpr::CheckedJoinSite { .. }
+            | RuntimeExpr::CheckedSubcontinuationFrame { .. }
+            | RuntimeExpr::CheckedRecursiveInvocation { .. }
+            | RuntimeExpr::CheckedComputationalIHSlots { .. }
+            | RuntimeExpr::CheckedComputationalIHInvocation { .. }
+            | RuntimeExpr::Value(_)
+            | RuntimeExpr::Var(_)
+            | RuntimeExpr::Let { .. }
+            | RuntimeExpr::If { .. }
+            | RuntimeExpr::PrimitiveCall { .. }
+            | RuntimeExpr::Construct { .. }
+            | RuntimeExpr::Match { .. }
+            | RuntimeExpr::ComputationalMatch { .. }
+            | RuntimeExpr::Record { .. }
+            | RuntimeExpr::Project { .. }
+            | RuntimeExpr::DeclarationRef { .. }
+            | RuntimeExpr::ImportedDeclarationRef { .. }
+            | RuntimeExpr::Call { .. }
+            | RuntimeExpr::Effect { .. }
+            | RuntimeExpr::Trap(_) => {}
         }
         if self.body_emission_authority == BodyEmissionAuthority::FunctionizedUnits {
-            return self.call_declared_declaration_unit(builder, reference_origin);
+            return self.call_declared_declaration_unit(builder, reference_origin, &[]);
         }
         if self.declaration_stack.contains(symbol) {
             return Err(unsupported(

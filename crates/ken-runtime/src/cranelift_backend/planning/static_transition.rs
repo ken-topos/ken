@@ -523,6 +523,8 @@ enum ResultPhase {
 thread_local! {
     static D8_FORCE_VARIABLE_SPECIALIZED: Cell<bool> = const { Cell::new(false) };
     static D8_REMOVE_VARIABLE_CALLABLE_SEED: Cell<bool> = const { Cell::new(false) };
+    static DECLARATION_CLOSURE_DROP_CALLABLE_PHASE: Cell<bool> =
+        const { Cell::new(false) };
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -867,8 +869,63 @@ fn summarize_result_phase(
                 },
             )
         }
+        RuntimeExpr::DeclarationRef { symbol } => {
+            let Some(declaration_origin) =
+                plan.declaration_occurrences.get(symbol.as_str()).copied()
+            else {
+                return Ok(ResultPhaseSummary::SPECIALIZED);
+            };
+            let declaration = plan
+                .source_occurrences
+                .get(declaration_origin.0 as usize)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| {
+                    planner_error(
+                        "declaration reference phase has no planned declaration occurrence",
+                    )
+                })?;
+            match declaration.expr {
+                RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. } => {
+                    #[cfg(test)]
+                    if DECLARATION_CLOSURE_DROP_CALLABLE_PHASE.with(Cell::get) {
+                        ResultPhaseSummary::SPECIALIZED
+                    } else {
+                        ResultPhaseSummary::callable(if functionized_units {
+                            ResultPhase::CarrierRequired
+                        } else {
+                            ResultPhase::SpecializedOnly
+                        })
+                    }
+                    #[cfg(not(test))]
+                    ResultPhaseSummary::callable(if functionized_units {
+                        ResultPhase::CarrierRequired
+                    } else {
+                        ResultPhase::SpecializedOnly
+                    })
+                }
+                RuntimeExpr::CheckedJoinSite { .. }
+                | RuntimeExpr::CheckedSubcontinuationFrame { .. }
+                | RuntimeExpr::CheckedRecursiveInvocation { .. }
+                | RuntimeExpr::CheckedComputationalIHSlots { .. }
+                | RuntimeExpr::CheckedComputationalIHInvocation { .. }
+                | RuntimeExpr::Value(_)
+                | RuntimeExpr::Var(_)
+                | RuntimeExpr::Let { .. }
+                | RuntimeExpr::If { .. }
+                | RuntimeExpr::PrimitiveCall { .. }
+                | RuntimeExpr::Construct { .. }
+                | RuntimeExpr::Match { .. }
+                | RuntimeExpr::ComputationalMatch { .. }
+                | RuntimeExpr::Record { .. }
+                | RuntimeExpr::Project { .. }
+                | RuntimeExpr::DeclarationRef { .. }
+                | RuntimeExpr::ImportedDeclarationRef { .. }
+                | RuntimeExpr::Call { .. }
+                | RuntimeExpr::Effect { .. }
+                | RuntimeExpr::Trap(_) => ResultPhaseSummary::SPECIALIZED,
+            }
+        }
         RuntimeExpr::Value(_)
-        | RuntimeExpr::DeclarationRef { .. }
         | RuntimeExpr::ImportedDeclarationRef { .. }
         | RuntimeExpr::Effect { .. } => ResultPhaseSummary::SPECIALIZED,
     };
@@ -6820,6 +6877,166 @@ mod tests {
         );
     }
 
+    /// RT-DECL-CLOSURE-PORT D2/D3/D5 — the declaration scheduling unit and its
+    /// retained body are distinct owners with one phase-closed callable ABI.
+    #[test]
+    fn declaration_closure_units_derive_callable_layout_owner_and_phase_before_emission() {
+        let symbol = "decl:fixture::decl_port::lexical".to_string();
+        let declaration = RuntimeDeclaration {
+            symbol: symbol.clone(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+                    params: vec!["x".to_string()],
+                    body: Box::new(RuntimeExpr::Var(0)),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        let expr = RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: symbol.clone(),
+            }),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bool(false))],
+        };
+        let declarations = BTreeMap::from([(symbol.as_str(), &declaration)]);
+        let plan = plan_static_transition_graph_with_symbols(
+            &expr,
+            &declarations,
+            &crate::NativeProcessSymbols::legacy_prelude(),
+            AbiRootIngress::Value,
+            true,
+        )
+        .expect("the declaration closure callable plan validates");
+        let declaration_origin = plan
+            .declaration_occurrence_origin(symbol.as_str())
+            .expect("the declaration has one exact occurrence");
+        let units = plan.emittable_units().expect("the units project");
+        let wrapper = units
+            .iter()
+            .copied()
+            .find(|unit| unit.origin() == declaration_origin)
+            .expect("the declaration scheduling entry owns one unit");
+        assert_eq!(
+            wrapper.definition(),
+            AbiUnitDefinition::TransparentDeclarationClosure {
+                defining_origin: declaration_origin,
+                provenance: AbiCaptureProvenance::Lexical,
+            }
+        );
+        assert_eq!(wrapper.header().parameters, 1);
+        assert_eq!(wrapper.header().captures, 1);
+
+        let body_origin = plan
+            .child_static_origin(declaration_origin, 0)
+            .expect("the closure body has one exact origin");
+        let body = units
+            .iter()
+            .copied()
+            .find(|unit| unit.origin() == body_origin)
+            .expect("the retained closure body owns one unit");
+        assert_eq!(
+            body.definition(),
+            AbiUnitDefinition::ClosureBody {
+                defining_origin: declaration_origin,
+                provenance: AbiCaptureProvenance::Lexical,
+            }
+        );
+        assert_eq!(body.header().parameters, wrapper.header().parameters);
+        assert_eq!(body.header().captures, wrapper.header().captures);
+
+        let root = plan.root_static_origin().expect("the call has an origin");
+        assert_eq!(
+            plan.join_plan_token(root)
+                .expect("the call has a phase plan")
+                .representation,
+            JoinResultRepresentation::CarrierWord,
+            "the DeclarationRef callable result did not close through the call phase"
+        );
+
+        DECLARATION_CLOSURE_DROP_CALLABLE_PHASE.with(|cell| cell.set(true));
+        let dropped = plan_static_transition_graph_with_symbols(
+            &expr,
+            &declarations,
+            &crate::NativeProcessSymbols::legacy_prelude(),
+            AbiRootIngress::Value,
+            true,
+        )
+        .expect("the phase mutation remains structurally plannable");
+        DECLARATION_CLOSURE_DROP_CALLABLE_PHASE.with(|cell| cell.set(false));
+        assert_eq!(
+            dropped
+                .join_plan_token(dropped.root_static_origin().expect("mutated call origin"))
+                .expect("the mutated call still has a phase plan")
+                .representation,
+            JoinResultRepresentation::NativeScalarPair,
+            "dropping callable phase left the result plan green, so the phase control is non-causal"
+        );
+
+        let wrapper_index = plan
+            .abi
+            .descriptors
+            .iter()
+            .position(|descriptor| descriptor.origin == declaration_origin)
+            .expect("the wrapper has one descriptor");
+        let mut wrong_owner = plan.abi.clone();
+        wrong_owner.descriptors[wrapper_index].origin = body_origin;
+        assert_eq!(
+            wrong_owner
+                .validate(
+                    &plan.semantic,
+                    &plan.nodes,
+                    &plan.semantic_sources,
+                    &plan.edges,
+                    &plan.entries,
+                    plan.root_entry.expect("root entry"),
+                    plan.root_ingress,
+                )
+                .unwrap_err(),
+            planner_error("abi descriptor is not positional for its function unit"),
+            "a declaration callable assigned to the body owner survived validation"
+        );
+
+        let mut wrong_layout = plan.abi.clone();
+        wrong_layout.descriptors[wrapper_index].header.parameters = 0;
+        assert_eq!(
+            wrong_layout
+                .validate(
+                    &plan.semantic,
+                    &plan.nodes,
+                    &plan.semantic_sources,
+                    &plan.edges,
+                    &plan.entries,
+                    plan.root_entry.expect("root entry"),
+                    plan.root_ingress,
+                )
+                .unwrap_err(),
+            planner_error("abi descriptor parameter count is not its origin's declared arity"),
+            "a declaration callable with the wrong parameter layout survived validation"
+        );
+
+        let mut zero_input = plan.abi.clone();
+        zero_input.descriptors[wrapper_index].definition =
+            AbiUnitDefinition::SchedulingEntry {
+                ingress: AbiSchedulingIngress::Empty,
+            };
+        assert_eq!(
+            zero_input
+                .validate(
+                    &plan.semantic,
+                    &plan.nodes,
+                    &plan.semantic_sources,
+                    &plan.edges,
+                    &plan.entries,
+                    plan.root_entry.expect("root entry"),
+                    plan.root_ingress,
+                )
+                .unwrap_err(),
+            planner_error("abi descriptor definition is not the unit's derived definition"),
+            "restoring the old zero-input scheduling ABI did not fail closed before emission"
+        );
+    }
+
     /// **AC-12 — every semantic child position consumes `.occurrence`.**
     ///
     /// Pinned at the type rather than by auditing call sites: both seed entry
@@ -8544,7 +8761,8 @@ mod tests {
                 AbiUnitDefinition::SchedulingEntry { ingress } => {
                     Some((ingress, unit.header().parameters))
                 }
-                AbiUnitDefinition::ClosureBody { .. } => None,
+                AbiUnitDefinition::TransparentDeclarationClosure { .. }
+                | AbiUnitDefinition::ClosureBody { .. } => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(
@@ -8600,7 +8818,8 @@ mod tests {
             .into_iter()
             .filter_map(|unit| match unit.definition() {
                 AbiUnitDefinition::ClosureBody { .. } => Some(unit.header().captures),
-                AbiUnitDefinition::SchedulingEntry { .. } => None,
+                AbiUnitDefinition::TransparentDeclarationClosure { .. }
+                | AbiUnitDefinition::SchedulingEntry { .. } => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(capture_counts, vec![2]);
@@ -8620,7 +8839,8 @@ mod tests {
             .into_iter()
             .filter_map(|unit| match unit.definition() {
                 AbiUnitDefinition::ClosureBody { .. } => Some(unit.header().captures),
-                AbiUnitDefinition::SchedulingEntry { .. } => None,
+                AbiUnitDefinition::TransparentDeclarationClosure { .. }
+                | AbiUnitDefinition::SchedulingEntry { .. } => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(

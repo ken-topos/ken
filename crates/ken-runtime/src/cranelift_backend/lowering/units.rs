@@ -632,6 +632,7 @@ pub(super) fn define_unit_bodies<M: Module>(
             Ok(OwnedUnitEmission {
                 function: unit.function(),
                 origin: unit.origin(),
+                definition: unit.definition(),
                 header: unit.header(),
                 slots: unit.slots().to_vec(),
                 offsets,
@@ -670,6 +671,7 @@ pub(super) fn define_unit_bodies<M: Module>(
 struct OwnedUnitEmission {
     function: PredeclaredFunctionId,
     origin: StaticOriginId,
+    definition: AbiUnitDefinition,
     header: AbiFrameHeader,
     slots: Vec<AbiSlot>,
     offsets: Vec<u32>,
@@ -913,14 +915,44 @@ fn define_unit_body<M: Module>(
         // source record belongs to the distinct root occurrence.  Body
         // selection therefore uses the recorded occurrence only after the
         // unmintable entry has selected the descriptor.
-        let body_origin = if is_root {
-            compiler.static_transition_plan.root_static_origin()?
-        } else {
-            unit.origin
+        let body_origin = match unit.definition {
+            AbiUnitDefinition::TransparentDeclarationClosure {
+                defining_origin, ..
+            } => {
+                if defining_origin != unit.origin {
+                    return Err(backend_module(
+                        "declaration closure unit definition disagrees with its occurrence"
+                            .to_string(),
+                    ));
+                }
+                compiler
+                    .static_transition_plan
+                    .child_static_origin(defining_origin, 0)?
+            }
+            AbiUnitDefinition::SchedulingEntry { .. } | AbiUnitDefinition::ClosureBody { .. } => {
+                if is_root {
+                    compiler.static_transition_plan.root_static_origin()?
+                } else {
+                    unit.origin
+                }
+            }
         };
         let body = compiler.retained_body_occurrence(body_origin)?;
-        compiler.select_terminal_result_origins(body_origin, body.expr)?;
-        let lowered = compiler.lower_expr(&mut builder, body, &env)?;
+        let lowered = if matches!(
+            unit.definition,
+            AbiUnitDefinition::TransparentDeclarationClosure { .. }
+        ) {
+            compiler.call_declared_unit(
+                &mut builder,
+                body_origin,
+                &env,
+                #[cfg(test)]
+                None,
+            )?
+        } else {
+            compiler.select_terminal_result_origins(body_origin, body.expr)?;
+            compiler.lower_expr(&mut builder, body, &env)?
+        };
         compiler.validate_join_plan_consumption(unit.function)?;
         let (result, outcome) = if is_root {
             match lowered {
