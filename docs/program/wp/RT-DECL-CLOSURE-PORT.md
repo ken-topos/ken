@@ -134,12 +134,53 @@ to widen.
   `TransparentDeclarationClosure` is removed from the retained residual.
 - **`D6`** — Remove the residual variant, and only then re-run `AC-1`.
 
-### ⭐⭐ `D7` — THE CLOSED `Carried`-CONSUMER MATRIX
+### ⭐⭐ `D7` — THE CLOSED BOUNDARY-OPERAND SEMANTIC-CLOSURE MATRIX
 
-**Added 2026-07-29, Architect `evt_6h6vzqw7ydra8`.**
+**Added 2026-07-29, Architect `evt_6h6vzqw7ydra8`. ⭐ RECUT 2026-07-29 at hard
+stop #24, Architect `evt_3ayvrada4c0nj`.**
 
-⛔ **This is one deliverable, not two repairs, and it lands ATOMICALLY with
-`483ef7ab`.** ⛔ **Do not file the two observed refusals as separate nodes.**
+⛔ **This is one deliverable, not three repairs, and it lands ATOMICALLY with
+`483ef7ab`.** ⛔ **Do not file the observed refusals as separate nodes.**
+
+> #### ⛔⛔ RECUT — THE MATRIX WAS NAMED TOO NARROWLY. READ THIS BEFORE THE ROWS.
+>
+> `D7` was framed as a **`Carried`-consumer** matrix. Its own exhaustive
+> derivation then exposed hard stop **#24** — a real edge outside all five
+> dispositions — and the Architect ruled that the *framing*, not just the
+> partition, was wrong.
+>
+> ⭐⭐ **The governing predicate (entry-15 answer — YES, one predicate).** For
+> every operand edge `e` that may cross a function-unit **owner** or lowering
+> **phase**, define:
+>
+> - **`Need(e)`** — what the downstream semantic operation can observe;
+> - **`Avail(e)`** — what the selected ABI/disposition guarantees after crossing.
+>
+> > **The closed obligation is `Need(e) ⊆ Avail(e)`, or planning must ELIMINATE
+> > that runtime edge completely before emission.**
+>
+> This is **owner/phase semantic sufficiency**, and it classifies all three stops
+> as one family:
+>
+> | stop | `Need(e)` | why it failed |
+> |---|---|---|
+> | #22 | constructor identity, field order, arity | specialized-only read had none for a carried scrutinee |
+> | #23 | each capture's value, phase, order, owner, lifetime | the capsule asserted captures were specialized |
+> | #24 | callable **body identity** plus captured state | `Forwarding` can move only the whole capsule — forbidden |
+>
+> ⇒ ⭐ **These are representation-contract defects, not three syntax-site bugs**,
+> and ⛔ they do **not** imply one universal runtime carrier. Some obligations are
+> met by a runtime representation; **#24 is met by proving the callable edge
+> ABSENT from the runtime ABI.**
+>
+> ⛔⛔ **The concrete matrix defect is narrower than "`CallArgument` is wrong":
+> SOURCE-CHILD ROLE ALONE DOES NOT DETERMINE DISPOSITION.** An ordinary value
+> argument and a statically known callable whose identity will be invoked have the
+> **same syntactic role and different semantic needs**. ⇒
+> `SourceOperandRole::disposition(self)` is **insufficient authority**. Planning
+> must derive a typed semantic obligation from the **exact parent, child, callee
+> target, parameter ordinal, and downstream parameter-use closure**. ⭐ Role
+> remains **inventory data, not the verdict**.
 
 **Why the matrix is the unit.** `LoweringOperand::Carried` is **not** new here —
 `C1` introduced it. What this node newly activates is a **production seed**: a
@@ -163,12 +204,16 @@ edge that can receive a lowering operand has **exactly one** disposition; every
 disposition names a **real** edge; each is consumed **exactly once**. ⛔ A
 missing edge must fail **planning/compilation before `ObjectEmission`**.
 
-#### The required partition — names may vary, this partition may not
+#### The required SIX-way partition — names may vary, this partition may not
+
+⛔ **The five-way partition is SUPERSEDED.** The new lane may **not** be
+collapsed into `Forwarding`, `CallableCapture`, or `SpecializedOnlyLeaf`.
 
 | edge | rule |
 |---|---|
 | **Forwarding** | environment insertion, recursive lowering, result propagation, planned join. `Carried` passes **unchanged**; a join keeps using the ruled `JoinResultRepresentation` token — ⛔ do not invent a second phase plan |
 | **Callable-capture** | an **invocation-local compiler control capsule** retains static body/parameter identity while **each captured operand retains its own phase**. ⭐ This is forwarding plus an owner/lifetime invariant — ⛔ **not a value representation** |
+| **`StaticCallableElimination`** ⭐ NEW (#24) | a statically known callable passed as a transparent-declaration argument. ⛔ The callable edge is **eliminated from the runtime ABI** — planner-owned, **out-of-line** callee specialization with **lifted captures**. Lawfulness conditions below; ⛔ this is **not** the prohibited specialized fallback |
 | **Semantic eliminator** | `Match`, `ComputationalMatch`, `Project`, or anything that semantically **reads** the value. `Carried` takes **one** emitted-helper route; `Specialized` keeps its existing route |
 | **Specialized-only leaf** | lawful **only** where the planner **proves** no `Carried` seed can reach that exact edge under the selected authority. ⛔ *"It has not happened in the corpus"* and a fail-closed `specialized_at` are **NOT** such proofs. A reachable `Carried` edge must gain an emitted semantic route **or** remain a **named selector residual** — ⛔ it may not fail late during emission |
 | **Escape-forbidden** | a whole runtime-local closure/control capsule, trap-protocol object, or other non-value **cannot cross a unit/publication boundary**. Refusal occurs **before** allocation, helper invocation, or partial publication |
@@ -189,6 +234,76 @@ definition*:** every planned operand edge exists · every real edge is planned �
 ⭐ **Adding a `RuntimeExpr` form must break the exhaustive planner; adding an
 operand role to an existing form must break the edge/child-role closure or its
 omission control.**
+
+#### ⭐⭐ Row (#24): callable as declaration argument
+
+**The measured edge.** Source occurrence **`StaticOriginId(1031)`**:
+`LexicalClosure { captures: [Var(0)..Var(8)], params: ["arg0"], … }` supplied as
+a transparent declaration `CallArgument`. Classifying it `Forwarding` makes
+`call_declared_unit_target` transfer the **whole capsule** into the declared-unit
+ABI, and `boundary_transfer_admissibility` **correctly** refuses before
+allocation/publication.
+
+**Lawful only when ALL of these are planner-proved before any function
+definition:**
+
+- the call target is **one exact** transparent declaration/callable unit;
+- the callable argument resolves to **one static** `Closure`/`LexicalClosure`
+  body origin — ⛔ **never** to a runtime-observed `Lowered` value;
+- the callable parameter's **complete use-closure** is known: invocation consumes
+  the static binding · forwarding to another transparent specialized call
+  propagates it · an unused binding is **erased** · ⛔ return, storage,
+  construction, effect passage, comparison, or any other value use is **rejected
+  before ABI allocation**;
+- **every** captured operand has a closed **lifted environment**: ordinary
+  captures get typed ABI slots; a statically known callable capture is
+  **recursively** a static binding with its own lifted captures; ⛔ a dynamically
+  selected callable **cannot enter this lane**.
+
+⛔⛔ **This is NOT the prohibited specialized fallback.** It is selected **in the
+static plan**, has a complete emitted body and ABI, ⛔ never invokes
+`specialized_at`, ⛔ never inspects a JIT-time value to choose code, and ⛔ never
+falls back to recursive descent after `FunctionizedUnits` emission has begun.
+
+##### Exact emitted shape
+
+**Interned specialization key — compile-time identities only:**
+
+```text
+(base callee owner/origin,
+ ordered [(parameter ordinal, callable body origin, declared arity, capture provenance) …])
+```
+
+⛔⛔ **Capture VALUES are not in the key.** Each exact call-site edge maps to the
+key; identical keys **may reuse one unit**.
+
+**Runtime ABI of the specialized unit** — separately emitted, **out of line**:
+
+1. the non-callable parameters, **in original parameter order**;
+2. then **lifted capture slots**, grouped by eliminated callable-parameter
+   ordinal and capture declaration order;
+3. the existing result/control/trap/store convention.
+
+⛔ **The callable parameter slot is structurally ABSENT. There is ZERO
+code-pointer, tag, selector, vtable, descriptor, trampoline, closure handle, or
+other callable-identity word.** Inside the unit, a **compiler-only** callable
+binding environment maps that parameter to its static body unit and lifted
+capture slots; invocation emits a **direct declared-unit call** with invocation
+arguments followed by those captures. ⛔ The base declaration body is **not**
+copied into the caller.
+
+**Finite fixed point, ⛔ not clone-on-visit.** Keys range only over finite planned
+declaration origins, parameter ordinals, and static callable body origins.
+**Intern before enqueue**; recursive use of the same key **reuses the same unit**.
+⛔ Checked cardinality/capacity failure is **loud before emission** and never
+changes semantics or selects a fallback.
+
+⚠ **This extends the ABI/unit partition, not only the operand disposition.**
+`AbiUnitDefinition`'s comment claims its **two seed classes are exhaustive**; a
+callable specialization is a planner-derived emitted unit and must become an
+**explicit closed arm** with its own owner, descriptor, call edges, and
+validation. ⛔ **Do not smuggle it through `SchedulingEntry`, `ClosureBody`, or
+`TransparentDeclarationClosure`.**
 
 #### Row: the closure-capture cell (`core.rs:7370`)
 
@@ -241,6 +356,38 @@ second capture transport. ⭐ Their `D1` may find the transport already present.
 merge first with a reaching production witness; and `RT-DECL` **cannot** merge
 first. ⇒ ⭐ **A nominal graph node with no independent safe merge boundary is a
 label, not a node.** One candidate, one merge.
+
+⭐ **#24 does not change this.** It folds atomically into `RT-DECL` + `D7` for the
+same reason: `RT-DECL` remains baseline-red without the closure, and this
+representation is **activated by `RT-DECL`'s unit port**. #24 stays in the
+existing representation-closure subfamily.
+
+#### ⛔⛔ Prohibitions — forbidden at every depth (`evt_3ayvrada4c0nj` §4)
+
+⛔ whole closure/capsule transfer or publication **at any depth** · ⛔ carrier
+tag/codec/template, runtime selector, function pointer, vtable, descriptor,
+trampoline, or hidden side table · ⛔ declaration **inlining** into the caller ·
+⛔ choosing a unit from a **runtime value or capture value** · ⛔ a source-origin
+**whitelist**, residual/selector weakening, specialized-only **late** refusal, or
+**size concession** · ⛔ partial frame allocation **before** the
+specialization/use-closure validates.
+
+⭐ Owner, body origin, parameter ordinal, arity, capture order, phase, storage
+owner, and lifetime must **all** be typed plan material and **revalidated at the
+call edge**. The existing one-way carrier remains the **only** transfer for
+ordinary lifted captures. The whole capsule remains **`EscapeForbidden`** before
+the first allocation/store/publication.
+
+#### ⛔ THE SIXTH BASELINE ROW IS UNRULED — do NOT repair it from this ruling
+
+`buffer_allocate_malformed_capacity_narrows_to_invalid_bounds` independently
+still reaches `Match: scrutinee is not a constructor value`. ⚠ **That text does
+NOT establish its operand phase, origin, or rejecting arm.**
+
+⇒ After the recut is authorized and #24 is implemented, **rerun the exact row and
+attribute it to the real matrix edge BEFORE changing any code.** ⛔ Do not infer
+collateral. ⛔ Do not repair it as part of #24. ⭐ It may or may not be the same
+family — that is a measurement nobody has taken.
 
 ## 5. Acceptance criteria
 
@@ -465,6 +612,56 @@ label, not a node.** One candidate, one merge.
   table existing and being routed to the Steward, not by any value in it.
   ⛔ A regression in either figure is a **reportable finding**, not a licence to
   widen this node's scope.
+
+- **⭐⭐ `AC-24A`–`AC-24F` — the `StaticCallableElimination` discriminators
+  (Architect `evt_3ayvrada4c0nj`). All six. ⛔ These are IN ADDITION to `AC-7`,
+  which remains required in full.**
+
+  - **`AC-24A` — callable identity, THE PRIMARY DISCRIMINATOR.** One program
+    calls the **same** transparent declaration at **two** call sites with two
+    lexical closures having the **same signature, same capture count/types, and
+    identical capture values**, but **different bodies** producing observably
+    different constructor tags. The result must be the **ordered pair** of those
+    tags, and the plan must contain **two distinct** callable-binding
+    keys/body origins. ⭐ **Mutating both call edges to one key, or swapping
+    their body origins, must red this oracle.** ⇒ This is what distinguishes the
+    selected mechanism from one shared body with lost identity, and from one
+    global binding.
+  - **`AC-24B` — captures are runtime INPUTS, not specialization material.** Two
+    calls use the **same** callable body/key with **different capture values**,
+    produce different results, and the specialization census contains **one**
+    interned unit. Swapping capture order, owner, phase, or lifetime must fail
+    validation or the observable oracle. ⛔ **Capture values appearing in the key
+    is a failure.**
+  - **`AC-24C` — exact ABI and out-of-line proof.** For every specialized unit,
+    descriptor slots equal **exactly** the remaining ordinary parameters + the
+    recursively lifted captures + convention slots, and every input slot has
+    typed source provenance. ⛔ Adding one selector/identity slot, transferring a
+    capsule, or deleting one capture must red the exact census. The unit and its
+    graph-derived call edge must exist **independently of the caller** —
+    replacing the call edge with caller-body emission must red the control.
+  - **`AC-24D` — complete use-closure / the negative pair.** Invocation and
+    specialization-forwarding **pass**. Returning, storing, constructing,
+    effect-passing, or otherwise observing the callable parameter **fails in
+    planning before descriptor construction/function definition**. A
+    **runtime-selected** `If`/`Match` between two closures likewise cannot enter
+    this lane and must fail at that **same pre-emission boundary** — ⛔ not at
+    `ObjectEmission`, and ⛔ not through a fallback.
+  - **`AC-24E` — finite recursion.** A recursive transparent declaration reusing
+    the same callable binding produces **one** interned specialization state and
+    **terminates planning**. ⛔ Mutating interning/deduplication so recursion
+    clones the unit must fail the unit census/cycle invariant **before emission**.
+    Multiple static bindings remain distinct and finite.
+  - **`AC-24F` — matrix causality.** Omitting the **real** origin-1031
+    `StaticCallableElimination` member, reclassifying it as `Forwarding`, or
+    deleting its parameter-use obligation must fail the matrix
+    **bijection/use-closure before emission**.
+
+  ⛔ **Everything `AC-7` already required remains required:** the real
+  lexical-capture omission control · producer/ordinary `Match` ·
+  typed-only unwrap · capture perturbations · whole-capsule escape ·
+  baseline **7/7** · the exact Foundation/NHC rows · `C1` controls ·
+  `RT-JOIN-DISPOSITION` controls · `AC-6` · every mutation control.
 
 ## 6. ⛔ Banned scope
 
