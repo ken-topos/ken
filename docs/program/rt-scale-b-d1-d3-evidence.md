@@ -174,6 +174,23 @@ scripts/ken-cargo test -p ken-cli --test rt_escape_second_resource_native -- --t
 scripts/ken-cargo test -p ken-runtime --lib native_execution_differential::tests::trap_observation_is_first_class_unavailable_native_lane -- --exact --test-threads=1
 ```
 
+## D5 terminal verdict
+
+The independent D4 model reconciles the completed D1--D3 evidence as outcome
+**(a)**:
+
+> Outcome (a): the completed FunctionizedUnits representation is empirically
+> affine in every deterministic material and structural population; the
+> independent analytical model predicts Theta(n) emitted material and no
+> inherent semantic product for this governed family. The observed wall-time
+> and peak-RSS samples are noisy and are not used to claim an exponent. The
+> historical n=4 observation remains NON-COMPARABLE. This is a
+> representation-growth verdict, not a completeness or verification claim;
+> RT-EFFECT-DIFF and the recorded trap differential residual remain open.
+
+The D4 constants-reduction plan remains the required follow-on. It is not
+evidence that any historical constant was reproduced.
+
 ## `AC` to control map
 
 | AC | control and evidence |
@@ -185,12 +202,15 @@ scripts/ken-cargo test -p ken-runtime --lib native_execution_differential::tests
 | `AC-B4a` | Typed emitter-category counters, exact 7/29/1/unit counts, and a zero RecursiveDescent count. |
 | `AC-B5` | The five-row D3 coverage map above; trap is explicitly `NO COVERAGE — open residual`. |
 | `AC-B6` | `docs/program/rt-scale-b-d4-analytical-model.md`; Architect-owned D4. |
-| `AC-B7` | **NO CONTROL — open residual.** D5 final routing is not yet complete. |
+| `AC-B7` | Outcome **(a)**, reconciled at `docs/program/rt-scale-b-d4-analytical-model.md`'s D5 boundary and stated verbatim above; wall time and RSS do not establish an exponent. |
 | `AC-B8` | This artifact reports absolute values and labels the historic datum NON-COMPARABLE. |
-| `AC-B9` | This map; open residuals use the frame's exact spelling. |
+| `AC-B9` | This complete map; the D3 trap row retains the frame's exact `NO COVERAGE — open residual` spelling and route. |
 
 The completed governed rows measure recursive lowering frames
 `[18, 23, 28, 33, 38]`. D4 separately consumes RT-SCALE-A's frame measurement
-`[14, 18, 22, 26, 30]`, as the frame requires. Neither series is substituted
-for the other; their source/phase distinction remains explicit pending the
-final D5 reconciliation.
+`[14, 18, 22, 26, 30]`, as the frame requires. Both are genuine production
+stack measurements under the same guard, but their source fixtures differ:
+the completed Scale-B source adds a closure-body `Let`, a direct induction
+hypothesis call, and the canonical four `BufferFreeze` operands. Neither
+series is substituted for the other and their coefficients are not compared;
+the difference is fixture shape, not emission overhead.
