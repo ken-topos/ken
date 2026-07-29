@@ -727,6 +727,16 @@ thread_local! {
         const { std::cell::Cell::new(0) };
     static D8_JOIN_MERGES_CREATED: std::cell::Cell<usize> =
         const { std::cell::Cell::new(0) };
+    static D8_JOIN_CONSUMPTION_MUTATION: std::cell::Cell<JoinConsumptionMutation> =
+        const { std::cell::Cell::new(JoinConsumptionMutation::Exact) };
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum JoinConsumptionMutation {
+    Exact,
+    SkipFirst,
+    DuplicateFirst,
 }
 
 #[cfg(test)]
@@ -747,6 +757,11 @@ fn d8_join_conversion_counts() -> (usize, usize) {
 #[cfg(test)]
 fn d8_join_merge_count() -> usize {
     D8_JOIN_MERGES_CREATED.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn set_d8_join_consumption_mutation(mutation: JoinConsumptionMutation) {
+    D8_JOIN_CONSUMPTION_MUTATION.with(|cell| cell.set(mutation));
 }
 
 #[cfg(test)]
@@ -1524,25 +1539,116 @@ impl<'a> Lowering<'a> {
 
     /// Take the pre-emission result contract for this exact source join.
     ///
-    /// Consumption is recorded before a merge block can be created. Re-entering
-    /// the same occurrence in one generated function is therefore a planner /
-    /// lowering disagreement, not an opportunity to choose another signature.
+    /// Consumption is recorded before a merge block can be created. A second
+    /// call to this method in one generated function is therefore a planner /
+    /// lowering disagreement. Legitimate traversal re-entry goes through
+    /// [`Self::enter_source_occurrence_plan`] and only reborrows the token.
     fn consume_join_plan(
         &mut self,
         origin: StaticOriginId,
     ) -> Result<JoinPlanToken, CraneliftBackendError> {
-        if !self.function_local.consumed_join_origins.insert(origin) {
-            return Err(backend_module(
-                "one source join consumed its static result plan more than once".to_string(),
-            ));
-        }
         let token = self.static_transition_plan.join_plan_token(origin)?;
         if token.origin != origin {
             return Err(backend_module(
                 "source join consumed a result plan for a different origin".to_string(),
             ));
         }
+        #[cfg(test)]
+        match D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get) {
+            JoinConsumptionMutation::Exact => {}
+            JoinConsumptionMutation::SkipFirst
+                if self.function_local.consumed_join_origins.is_empty() =>
+            {
+                return Ok(token);
+            }
+            JoinConsumptionMutation::DuplicateFirst
+                if self.function_local.consumed_join_origins.is_empty() =>
+            {
+                self.function_local.consumed_join_origins.insert(origin);
+            }
+            JoinConsumptionMutation::SkipFirst | JoinConsumptionMutation::DuplicateFirst => {}
+        }
+        if !self.function_local.consumed_join_origins.insert(origin) {
+            return Err(backend_module(
+                "one source join consumed its static result plan more than once".to_string(),
+            ));
+        }
         Ok(token)
+    }
+
+    /// Enter one planned source occurrence on any lowering traversal.
+    ///
+    /// A recursive source-machine route may revisit the same occurrence while
+    /// emitting one function. That is a reborrow of its already-consumed
+    /// contract, not a second population member.
+    fn enter_source_occurrence_plan(
+        &mut self,
+        origin: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        if self
+            .static_transition_plan
+            .join_plan_token_if_planned(origin)?
+            .is_none()
+        {
+            return Ok(());
+        }
+        if self.function_local.consumed_join_origins.contains(&origin) {
+            self.consumed_join_plan_token(origin)?;
+        } else {
+            self.consume_join_plan(origin)?;
+        }
+        Ok(())
+    }
+
+    /// Reborrow a contract after the source traversal has consumed it.
+    ///
+    /// Merge helpers may be reached long after a computational eliminator was
+    /// installed. They do not constitute another source occurrence and must
+    /// therefore neither mint nor consume a second contract.
+    fn consumed_join_plan_token(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<JoinPlanToken, CraneliftBackendError> {
+        if !self.function_local.consumed_join_origins.contains(&origin) {
+            return Err(backend_module(format!(
+                "source join {origin:?} requested its static result plan before consumption",
+            )));
+        }
+        self.static_transition_plan.join_plan_token(origin)
+    }
+
+    /// Close AC-14 at the generated-function boundary.
+    ///
+    /// Duplicate consumption already rejects at [`Self::consume_join_plan`].
+    /// This equality supplies the missing other direction: every join in the
+    /// planner's closed owner partition must have been consumed, and no join
+    /// owned by another function may appear here.
+    fn validate_join_plan_consumption(
+        &self,
+        function: PredeclaredFunctionId,
+    ) -> Result<(), CraneliftBackendError> {
+        let required = self
+            .static_transition_plan
+            .required_join_origins(function)?;
+        if let Some(origin) = self
+            .function_local
+            .consumed_join_origins
+            .difference(&required)
+            .next()
+        {
+            return Err(backend_module(format!(
+                "source join {origin:?} was consumed outside its owning function",
+            )));
+        }
+        if let Some(origin) = required
+            .difference(&self.function_local.consumed_join_origins)
+            .next()
+        {
+            return Err(backend_module(format!(
+                "function left planned source join {origin:?} unconsumed",
+            )));
+        }
+        Ok(())
     }
 
     pub(super) fn call_declared_unit(

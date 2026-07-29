@@ -264,6 +264,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         };
         let (plan, match_origin) = planned_root_occurrence(&source_match);
         compiler.static_transition_plan = plan;
+        compiler.enter_source_occurrence_plan(match_origin)?;
         let lowered = compiler.lower_dynamic_constructor_match(
             &mut builder,
             dynamic,
@@ -2488,6 +2489,7 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
         &seed_env,
         consumer_plan,
         |compiler, builder, word| {
+            compiler.enter_source_occurrence_plan(match_origin)?;
             let lowered = compiler.lower_carried_match(
                 builder,
                 CarriedBoundaryWord { word },

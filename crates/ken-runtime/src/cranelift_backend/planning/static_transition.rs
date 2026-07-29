@@ -505,29 +505,48 @@ enum ResultPhase {
 #[cfg(test)]
 thread_local! {
     static D8_FORCE_VARIABLE_SPECIALIZED: Cell<bool> = const { Cell::new(false) };
+    static D8_REMOVE_VARIABLE_CALLABLE_SEED: Cell<bool> = const { Cell::new(false) };
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ResultPhaseSummary {
+    /// Representation of this value itself. This is the earlier bound-value
+    /// seed: inserting the summary into an environment preserves a carried
+    /// value recovered through `Var`.
     phase: ResultPhase,
     continues: bool,
+    /// Representation produced by invoking this value, when it is callable.
+    /// Keeping this orthogonal to `phase` closes the bound-lexical-closure form
+    /// without weakening the value's specialized closure representation.
+    callable_result: Option<ResultPhase>,
 }
 
 impl ResultPhaseSummary {
     const TRAP: Self = Self {
         phase: ResultPhase::SpecializedOnly,
         continues: false,
+        callable_result: None,
     };
 
     const SPECIALIZED: Self = Self {
         phase: ResultPhase::SpecializedOnly,
         continues: true,
+        callable_result: None,
     };
 
     fn carrier() -> Self {
         Self {
             phase: ResultPhase::CarrierRequired,
             continues: true,
+            callable_result: None,
+        }
+    }
+
+    fn callable(result: ResultPhase) -> Self {
+        Self {
+            phase: ResultPhase::SpecializedOnly,
+            continues: true,
+            callable_result: Some(result),
         }
     }
 
@@ -535,6 +554,7 @@ impl ResultPhaseSummary {
         Self {
             phase: self.phase.max(other.phase),
             continues: self.continues || other.continues,
+            callable_result: self.callable_result.max(other.callable_result),
         }
     }
 
@@ -542,6 +562,9 @@ impl ResultPhaseSummary {
         Self {
             phase: self.phase.max(other.phase),
             continues: self.continues && other.continues,
+            // A sequence returns its right-hand value. Callable provenance is
+            // therefore not an effect to accumulate from the left.
+            callable_result: other.callable_result,
         }
     }
 }
@@ -627,8 +650,8 @@ fn summarize_result_phase(
             let value = summarize_child(0, environment, joins)?;
             let mut body_environment = Vec::with_capacity(1 + environment.len());
             body_environment.push(ResultPhaseSummary {
-                phase: value.phase,
                 continues: true,
+                ..value
             });
             body_environment.extend_from_slice(environment);
             value.sequence(summarize_child(1, &body_environment, joins)?)
@@ -647,8 +670,8 @@ fn summarize_result_phase(
                 let mut case_environment =
                     Vec::with_capacity(case.binders + environment.len());
                 case_environment.extend((0..case.binders).map(|_| ResultPhaseSummary {
-                    phase: scrutinee.phase,
                     continues: true,
+                    ..scrutinee
                 }));
                 case_environment.extend_from_slice(environment);
                 result = result.join(summarize_child(
@@ -683,6 +706,7 @@ fn summarize_result_phase(
                     ResultPhaseSummary {
                         phase: scrutinee_summary.phase,
                         continues: true,
+                        callable_result: scrutinee_summary.callable_result,
                     }
                 }));
                 case_environment.extend_from_slice(environment);
@@ -723,38 +747,42 @@ fn summarize_result_phase(
             }
             result
         }
-        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => (0
-            ..args.len())
-            .try_fold(ResultPhaseSummary::SPECIALIZED, |summary, position| {
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            let mut result = (0..args.len()).try_fold(
+                ResultPhaseSummary::SPECIALIZED,
+                |summary, position| {
                 Ok(summary.sequence(summarize_child(position, environment, joins)?))
-            })?,
-        RuntimeExpr::Record { fields } => (0..fields.len()).try_fold(
-            ResultPhaseSummary::SPECIALIZED,
-            |summary, position| {
-                Ok(summary.sequence(summarize_child(position, environment, joins)?))
-            },
-        )?,
-        RuntimeExpr::Project { .. } => summarize_child(0, environment, joins)?,
-        RuntimeExpr::Call { callee, args } => {
-            let mut result = (0..1 + args.len()).try_fold(
+                },
+            )?;
+            result.callable_result = None;
+            result
+        }
+        RuntimeExpr::Record { fields } => {
+            let mut result = (0..fields.len()).try_fold(
                 ResultPhaseSummary::SPECIALIZED,
                 |summary, position| {
                     Ok(summary.sequence(summarize_child(position, environment, joins)?))
                 },
             )?;
-            let callee_origin = child(0)?;
-            if let RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. } =
-                callee.as_ref()
-            {
-                let body_origin = plan.semantic.child_origin(callee_origin, 0)?;
-                if functionized_units
-                    && plan
-                    .semantic
-                    .crosses_function_owner(callee_origin, body_origin)?
-                {
-                    result.phase = ResultPhase::CarrierRequired;
-                }
+            result.callable_result = None;
+            result
+        }
+        RuntimeExpr::Project { .. } => summarize_child(0, environment, joins)?,
+        RuntimeExpr::Call { args, .. } => {
+            let callee = summarize_child(0, environment, joins)?;
+            let mut result = callee;
+            for position in 0..args.len() {
+                result =
+                    result.sequence(summarize_child(1 + position, environment, joins)?);
             }
+            if functionized_units
+                && callee.callable_result == Some(ResultPhase::CarrierRequired)
+            {
+                result.phase = ResultPhase::CarrierRequired;
+            }
+            // This planner tracks the representation of the call result, not
+            // higher-order provenance of values returned by an opaque call.
+            result.callable_result = None;
             result
         }
         RuntimeExpr::Var(index) => {
@@ -766,14 +794,33 @@ fn summarize_result_phase(
             if D8_FORCE_VARIABLE_SPECIALIZED.with(Cell::get) {
                 ResultPhaseSummary::SPECIALIZED
             } else {
-                phase
+                if D8_REMOVE_VARIABLE_CALLABLE_SEED.with(Cell::get) {
+                    ResultPhaseSummary {
+                        callable_result: None,
+                        ..phase
+                    }
+                } else {
+                    phase
+                }
             }
             #[cfg(not(test))]
             phase
         }
+        RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. } => {
+            let body_origin = child(0)?;
+            ResultPhaseSummary::callable(
+                if functionized_units
+                    && plan
+                        .semantic
+                        .crosses_function_owner(origin, body_origin)?
+                {
+                    ResultPhase::CarrierRequired
+                } else {
+                    ResultPhase::SpecializedOnly
+                },
+            )
+        }
         RuntimeExpr::Value(_)
-        | RuntimeExpr::Closure { .. }
-        | RuntimeExpr::LexicalClosure { .. }
         | RuntimeExpr::DeclarationRef { .. }
         | RuntimeExpr::ImportedDeclarationRef { .. }
         | RuntimeExpr::Effect { .. } => ResultPhaseSummary::SPECIALIZED,
@@ -1895,16 +1942,59 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
         origin: StaticOriginId,
     ) -> Result<JoinPlanToken, CraneliftBackendError> {
+        self.join_plan_token_if_planned(origin)?
+            .ok_or_else(|| planner_error("static origin has no planned source join"))
+    }
+
+    /// Project the authoritative join population onto one traversal entry.
+    ///
+    /// `None` means this validated source occurrence is not a join. Lowering
+    /// therefore never maintains a second spelling inventory of join forms.
+    pub(in crate::cranelift_backend) fn join_plan_token_if_planned(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<Option<JoinPlanToken>, CraneliftBackendError> {
         let planned = self
             .join_results
             .get(origin.0 as usize)
-            .and_then(|slot| *slot)
-            .ok_or_else(|| planner_error("static origin has no planned source join"))?;
-        Ok(JoinPlanToken {
+            .ok_or_else(|| planner_error("static origin is outside the join result plan"))?;
+        Ok(planned.map(|planned| JoinPlanToken {
             origin,
             representation: planned.representation,
             has_continuing_predecessor: planned.has_continuing_predecessor,
-        })
+        }))
+    }
+
+    /// Every source-join contract owned by one generated function.
+    ///
+    /// This is a projection of the already-validated occurrence population and
+    /// semantic owner partition. Lowering uses it only as the closed expected
+    /// set for its end-of-function consumption check; it cannot add or omit a
+    /// join by maintaining a second caller inventory.
+    pub(in crate::cranelift_backend) fn required_join_origins(
+        &self,
+        function: PredeclaredFunctionId,
+    ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+        let mut required = BTreeSet::new();
+        for (index, (occurrence, join)) in self
+            .source_occurrences
+            .iter()
+            .zip(&self.join_results)
+            .enumerate()
+        {
+            let (Some(occurrence), Some(_)) = (occurrence, join) else {
+                continue;
+            };
+            if occurrence.static_origin.0 as usize != index {
+                return Err(planner_error(
+                    "join consumption population is not keyed by source origin",
+                ));
+            }
+            if self.semantic.function_owner(occurrence.static_origin)? == Some(function) {
+                required.insert(occurrence.static_origin);
+            }
+        }
+        Ok(required)
     }
 
     /// The artifact-static constructor identity of one case of the `Match` /
@@ -8182,6 +8272,59 @@ mod tests {
         );
     }
 
+    fn d8_bound_callable_join(swapped: bool) -> RuntimeExpr {
+        let carried_call = RuntimeMatchCase {
+            constructor: "ctor:fixture::D8::Call".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(0)),
+                args: Vec::new(),
+            },
+        };
+        let specialized = RuntimeMatchCase {
+            constructor: "ctor:fixture::D8::Specialized".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+        };
+        RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(11.into()))),
+            }),
+            body: Box::new(RuntimeExpr::Match {
+                scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Constructor {
+                    constructor: "ctor:fixture::D8::Call".to_string(),
+                    args: Vec::new(),
+                })),
+                cases: if swapped {
+                    vec![specialized, carried_call]
+                } else {
+                    vec![carried_call, specialized]
+                },
+                default: trap("D8 bound callable join default"),
+            }),
+        }
+    }
+
+    fn assert_d8_bound_callable_join_is_carrier(swapped: bool) {
+        let expr = d8_bound_callable_join(swapped);
+        let plan = d8_functionized_plan(&expr).expect("bound callable join plans");
+        let root = plan.root_static_origin().expect("root origin");
+        let join = plan
+            .semantic
+            .child_origin(root, 1)
+            .expect("let body origin");
+        let token = plan
+            .join_plan_token(join)
+            .expect("nested bound-callable join has one plan entry");
+        assert_eq!(
+            token.representation,
+            JoinResultRepresentation::CarrierWord,
+            "the exact nested join lost the bound closure's callable result"
+        );
+    }
+
     #[test]
     fn d8_mixed_join_plan_is_carrier_and_arm_order_independent() {
         for swapped in [false, true] {
@@ -8216,6 +8359,22 @@ mod tests {
     fn d8_let_environment_provenance_reaches_the_exact_nested_join() {
         for swapped in [false, true] {
             assert_d8_environment_join_is_carrier(swapped);
+        }
+    }
+
+    /// MEASURED: a lexical closure bound by `Let`, recovered as `Var(0)`, and
+    /// invoked in one mixed-join arm makes that exact join `CarrierWord`
+    /// independently of arm order.
+    ///
+    /// CLAIMED: D8's binder environment retains both a bound value's own phase
+    /// and the phase produced when that value is invoked.
+    ///
+    /// GAP: this is the lexical-binder route. ABI parameters remain governed by
+    /// the adjacent closed-slot control.
+    #[test]
+    fn d8_bound_lexical_callable_provenance_reaches_the_exact_nested_join() {
+        for swapped in [false, true] {
+            assert_d8_bound_callable_join_is_carrier(swapped);
         }
     }
 
@@ -8291,6 +8450,21 @@ mod tests {
         assert!(
             result.is_err(),
             "forcing the rejected variable seed did not red the plan assertion"
+        );
+    }
+
+    /// Reversible population-side mutation: removing only the callable-result
+    /// seed from `Var` must red at the exact plan assertion before lowering.
+    #[test]
+    fn d8_callable_seed_removal_reds_at_the_plan_boundary() {
+        D8_REMOVE_VARIABLE_CALLABLE_SEED.with(|forced| forced.set(true));
+        let result = std::panic::catch_unwind(|| {
+            assert_d8_bound_callable_join_is_carrier(false);
+        });
+        D8_REMOVE_VARIABLE_CALLABLE_SEED.with(|forced| forced.set(false));
+        assert!(
+            result.is_err(),
+            "removing the bound callable seed did not red the plan assertion"
         );
     }
 

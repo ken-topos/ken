@@ -7801,6 +7801,55 @@ fn d8_join_helpers_have_the_closed_typed_caller_population() {
     );
 }
 
+/// MEASURED: successful FunctionizedUnits emission compares the joins consumed
+/// by each generated function with the complete join population projected from
+/// that function's validated semantic owner.
+///
+/// CLAIMED: every required planned source join is consumed exactly once.
+///
+/// GAP: set equality supplies omission and wrong-owner closure; the insertion
+/// guard in `consume_join_plan` supplies the independent duplicate direction.
+#[test]
+fn d8_every_required_join_plan_is_consumed_exactly_once() {
+    let expr = d8_mixed_host_result_join_fixture(false);
+    recursive_port_process_compiles(&expr).expect("the exact consumption set compiles");
+
+    // A statically selected `If` still belongs to the planner's closed join
+    // population, but no merge helper needs to reborrow its token. Skipping
+    // that traversal entry therefore reaches the end-of-function equality
+    // check rather than an earlier token-use guard.
+    let omission_fixture = RuntimeExpr::If {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(3.into()))),
+        else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(5.into()))),
+    };
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::SkipFirst);
+    let omitted = recursive_port_process_compiles(&omission_fixture)
+        .expect_err("skipping one real consumption must fail at function closure");
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
+    assert!(
+        matches!(
+            omitted,
+            CraneliftBackendError::Backend(BackendFailure::Module(ref detail))
+                if detail.contains("left planned source join")
+        ),
+        "omission mutation reached the wrong boundary: {omitted:?}"
+    );
+
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::DuplicateFirst);
+    let duplicate = recursive_port_process_compiles(&expr)
+        .expect_err("consuming one real join twice must fail at token consumption");
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
+    assert!(
+        matches!(
+            duplicate,
+            CraneliftBackendError::Backend(BackendFailure::Module(ref detail))
+                if detail.contains("more than once")
+        ),
+        "duplicate mutation reached the wrong boundary: {duplicate:?}"
+    );
+}
+
 /// **`AC-11` clause 3 — an unrepresentable transfer is refused BEFORE any unit
 /// is declared.**
 ///

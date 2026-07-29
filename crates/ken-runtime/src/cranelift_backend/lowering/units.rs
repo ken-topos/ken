@@ -847,6 +847,7 @@ fn define_unit_body<M: Module>(
         let body = compiler.retained_body_occurrence(body_origin)?;
         compiler.select_terminal_result_origins(body_origin, body.expr)?;
         let lowered = compiler.lower_expr(&mut builder, body, &env)?;
+        compiler.validate_join_plan_consumption(unit.function)?;
         let (result, outcome) = if is_root {
             match lowered {
                 LoweringOperand::Carried(word) if !compiler.process_object => (

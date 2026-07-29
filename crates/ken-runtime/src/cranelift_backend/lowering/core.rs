@@ -883,6 +883,7 @@ impl<'a> Lowering<'a> {
                 return self.resume_active_continuation(builder, value, active);
             }
         }
+        self.enter_source_occurrence_plan(static_origin)?;
         match scrutinee {
             RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
                 self.enter_checked_subcontinuation_frame(*frame_id)?;
@@ -1038,6 +1039,7 @@ impl<'a> Lowering<'a> {
                 )
             }
             RuntimeExpr::Call { callee, args } => {
+                let join_plan = self.consumed_join_plan_token(static_origin)?;
                 let callee = self.child_occurrence(static_origin, 0, callee)?;
                 let callee = self.lower_expr(builder, callee, producer_env)?;
                 match callee {
@@ -1056,6 +1058,7 @@ impl<'a> Lowering<'a> {
                         static_origin,
                         producer_env,
                         Some(eliminators),
+                        join_plan,
                     ),
                     LoweringOperand::Specialized(Lowered::Closure {
                         captures,
@@ -1689,7 +1692,7 @@ impl<'a> Lowering<'a> {
                             eliminators,
                         );
                     }
-                    let join_plan = self.consume_join_plan(static_origin)?;
+                    let join_plan = self.consumed_join_plan_token(static_origin)?;
                     let true_block = builder.create_block();
                     let false_block = builder.create_block();
                     let merge = builder.create_block();
@@ -1742,7 +1745,7 @@ impl<'a> Lowering<'a> {
                     ok_constructor,
                 }) = selected
                 {
-                    let join_plan = self.consume_join_plan(static_origin)?;
+                    let join_plan = self.consumed_join_plan_token(static_origin)?;
                     let ok_block = builder.create_block();
                     let err_block = builder.create_block();
                     let merge = builder.create_block();
@@ -1943,7 +1946,7 @@ impl<'a> Lowering<'a> {
                         eliminators,
                     );
                 }
-                let join_plan = self.consume_join_plan(static_origin)?;
+                let join_plan = self.consumed_join_plan_token(static_origin)?;
                 let then_block = builder.create_block();
                 let else_block = builder.create_block();
                 let merge = builder.create_block();
@@ -2007,6 +2010,17 @@ impl<'a> Lowering<'a> {
                 "nested computational producer has no eliminator",
             ));
         };
+        match eliminator {
+            EliminatorFrame::Computational(frame) => {
+                self.enter_source_occurrence_plan(frame.static_origin)?;
+            }
+            EliminatorFrame::Ordinary(frame) => {
+                self.enter_source_occurrence_plan(frame.static_origin)?;
+            }
+            EliminatorFrame::PendingLet(_)
+            | EliminatorFrame::InvocationReturn
+            | EliminatorFrame::Active(_) => {}
+        }
         // ⭐ The forwarding arm comes FIRST and stays phase-preserving: an
         // invocation return hands the operand straight back, so a `Carried`
         // survives it untouched. Only the composition path below reads a
@@ -2373,7 +2387,7 @@ impl<'a> Lowering<'a> {
                 unreachable!("non-join eliminators returned before bounded-Nat emission")
             }
         };
-        let join_plan = self.consume_join_plan(join_origin)?;
+        let join_plan = self.consumed_join_plan_token(join_origin)?;
 
         let zero_value = builder.ins().iconst(types::I64, 0);
         let zero_nat = if structural {
@@ -2843,7 +2857,13 @@ impl<'a> Lowering<'a> {
                         },
                     env,
                     mut control,
-                } => match expr {
+                } => match {
+                    // The owned source machine is the third traversal route for
+                    // these joins. Record the source occurrence here; later
+                    // continuation helpers may only reborrow its token.
+                    self.enter_source_occurrence_plan(static_origin)?;
+                    expr
+                } {
                     RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
                         self.enter_checked_subcontinuation_frame(frame_id)?;
                         SourceMachineState::Eval {
@@ -3986,7 +4006,7 @@ impl<'a> Lowering<'a> {
                     .checked_add(1)
                     .expect("compiler-private source join identity exhausted");
                 let join_plan =
-                    std::rc::Rc::new(self.consume_join_plan(static_origin)?);
+                    std::rc::Rc::new(self.consumed_join_plan_token(static_origin)?);
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
                 builder.append_block_param(merge, types::I64);
@@ -4167,7 +4187,7 @@ impl<'a> Lowering<'a> {
                     .checked_add(1)
                     .expect("compiler-private source join identity exhausted");
                 let join_plan =
-                    std::rc::Rc::new(self.consume_join_plan(static_origin)?);
+                    std::rc::Rc::new(self.consumed_join_plan_token(static_origin)?);
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
                 builder.append_block_param(merge, types::I64);
@@ -4287,7 +4307,7 @@ impl<'a> Lowering<'a> {
                     .checked_add(1)
                     .expect("compiler-private source join identity exhausted");
                 let join_plan =
-                    std::rc::Rc::new(self.consume_join_plan(static_origin)?);
+                    std::rc::Rc::new(self.consumed_join_plan_token(static_origin)?);
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
                 builder.append_block_param(merge, types::I64);
@@ -4550,7 +4570,7 @@ impl<'a> Lowering<'a> {
             .next_source_join
             .checked_add(1)
             .expect("compiler-private source join identity exhausted");
-        let join_plan = std::rc::Rc::new(self.consume_join_plan(static_origin)?);
+        let join_plan = std::rc::Rc::new(self.consumed_join_plan_token(static_origin)?);
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
         builder.append_block_param(merge, types::I64);
@@ -5485,7 +5505,7 @@ impl<'a> Lowering<'a> {
         static_origin: StaticOriginId,
         env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let join_plan = self.consume_join_plan(static_origin)?;
+        let join_plan = self.consumed_join_plan_token(static_origin)?;
         if cases.is_empty() {
             return Ok(LoweringOperand::Specialized(Lowered::Trap(default.clone())));
         }
@@ -6393,6 +6413,7 @@ impl<'a> Lowering<'a> {
             expr,
             static_origin,
         } = occurrence;
+        self.enter_source_occurrence_plan(static_origin)?;
         match expr {
             RuntimeExpr::Value(value) => self
                 .lower_value(builder, value)
@@ -6647,7 +6668,7 @@ impl<'a> Lowering<'a> {
                     );
                 }
                 if let LoweringOperand::Specialized(Lowered::BorrowedNativeValue { pointer }) = lowered_scrutinee {
-                    let join_plan = self.consume_join_plan(static_origin)?;
+                    let join_plan = self.consumed_join_plan_token(static_origin)?;
                     return self.lower_borrowed_match(
                         builder,
                         pointer,
@@ -6753,7 +6774,7 @@ impl<'a> Lowering<'a> {
                         let body = self.case_body_occurrence(static_origin, index, &case.body)?;
                         return self.lower_expr(builder, body, env);
                     }
-                    let join_plan = self.consume_join_plan(static_origin)?;
+                    let join_plan = self.consumed_join_plan_token(static_origin)?;
                     let true_block = builder.create_block();
                     let false_block = builder.create_block();
                     let merge = builder.create_block();
@@ -6962,6 +6983,7 @@ impl<'a> Lowering<'a> {
                 ),
             )),
             RuntimeExpr::Call { callee, args } => {
+                let join_plan = self.consumed_join_plan_token(static_origin)?;
                 let callee = self.child_occurrence(static_origin, 0, callee)?;
                 if matches!(
                     self.body_emission_authority,
@@ -7039,6 +7061,7 @@ impl<'a> Lowering<'a> {
                         static_origin,
                         env,
                         None,
+                        join_plan,
                     ),
                     LoweringOperand::Specialized(Lowered::Closure {
                         captures,
@@ -8272,7 +8295,7 @@ impl<'a> Lowering<'a> {
         suc_body: SourceOccurrence<'_>,
         producer_env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let join_plan = self.consume_join_plan(join_origin)?;
+        let join_plan = self.consumed_join_plan_token(join_origin)?;
         let (target, structural) = match argument {
             Lowered::StructuralNat(nat) => (nat.value, true),
             Lowered::BoundedNat(nat) => (nat.value, false),
@@ -8401,6 +8424,7 @@ impl<'a> Lowering<'a> {
         call_origin: StaticOriginId,
         producer_env: &[LoweringOperand],
         eliminators: Option<&[EliminatorFrame<'_>]>,
+        join_plan: JoinPlanToken,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let _checked_invocation = self.consume_checked_recursive_invocation_call(symbol)?;
         let lowered_args = args
@@ -8536,7 +8560,6 @@ impl<'a> Lowering<'a> {
             }
         }
 
-        let join_plan = self.consume_join_plan(call_origin)?;
         let header = builder.create_block();
         let done = builder.create_block();
         let mut initial_values = Vec::new();
@@ -8850,7 +8873,7 @@ impl<'a> Lowering<'a> {
         static_origin: StaticOriginId,
         env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let join_plan = self.consume_join_plan(static_origin)?;
+        let join_plan = self.consumed_join_plan_token(static_origin)?;
         let merge = join_plan
             .has_continuing_predecessor
             .then(|| builder.create_block());
@@ -8926,10 +8949,11 @@ impl<'a> Lowering<'a> {
         static_origin: StaticOriginId,
         env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        // D8: consume the origin-keyed contract before creating a block or
-        // lowering either arm.  The specialized HostResult scrutinee is not a
-        // selector for the result representation.
-        let join_plan = self.consume_join_plan(static_origin)?;
+        // D8: the source traversal consumed the origin-keyed contract before
+        // reaching this helper. Reborrow it before creating a block or lowering
+        // either arm. The specialized HostResult scrutinee is not a selector
+        // for the result representation.
+        let join_plan = self.consumed_join_plan_token(static_origin)?;
         let merge = join_plan
             .has_continuing_predecessor
             .then(|| builder.create_block());
@@ -9027,7 +9051,7 @@ impl<'a> Lowering<'a> {
         static_origin: StaticOriginId,
         env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let join_plan = self.consume_join_plan(static_origin)?;
+        let join_plan = self.consumed_join_plan_token(static_origin)?;
         let zero = cases.iter().enumerate().find(|(_, case)| {
             case.constructor == self.process_symbols.nat_zero && case.binders == 0
         });
@@ -9111,7 +9135,7 @@ impl<'a> Lowering<'a> {
             DynamicConstructorContinuation::Ordinary { static_origin, .. }
             | DynamicConstructorContinuation::Producer { static_origin, .. } => static_origin,
         };
-        let join_plan = self.consume_join_plan(static_origin)?;
+        let join_plan = self.consumed_join_plan_token(static_origin)?;
         let has_selected_case = dynamic.alternatives.iter().any(|alternative| {
             source_cases
                 .iter()

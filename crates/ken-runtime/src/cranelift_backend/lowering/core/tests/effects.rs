@@ -198,6 +198,7 @@ fn run_checked_bounded_nat_fixture(
                         }));
                     let (plan, match_origin) = planned_root_occurrence(source_match);
                     compiler.static_transition_plan = plan;
+                    compiler.enter_source_occurrence_plan(match_origin)?;
                     compiler.lower_bounded_nat_match(
                         &mut builder,
                         nat,
@@ -272,6 +273,7 @@ fn run_checked_bounded_nat_fixture(
                         }));
                     let (plan, match_origin) = planned_root_occurrence(source_match);
                     compiler.static_transition_plan = plan;
+                    compiler.enter_source_occurrence_plan(match_origin)?;
                     let frames = [EliminatorFrame::Computational(
                         ComputationalEliminatorFrame {
                             cases: &cases,
