@@ -11,6 +11,12 @@ residual can be retired.**
 **Risk:** high — this is the last B2F migration seam, and its acceptance is a
 *behavioural* compile, not a code-shape assertion.
 
+⛔ **Read `docs/program/16-recursive-descent-retirement.md` first.** This node is
+the **keystone** of that seven-node campaign, and the campaign doc carries the
+three traps that bind every node in it — including **Trap 3**, which this frame's
+`AC-2` now discharges explicitly. This frame predates the campaign doc and does
+not repeat its content.
+
 **Status:** Steward frame, shovel-ready.
 ⛔ **THIRD in Runtime's queue, and do not start it early.** The order is
 **[[RT-JOIN-DISPOSITION]] → [[NATIVE-HANDLE-CARRIER]] resume → this node.**
@@ -128,6 +134,29 @@ to widen.
   the fixture's full set named. If the set is larger than
   `{TransparentDeclarationClosure}`, that is a reportable finding, not a silent
   scope widening.
+
+  ⛔⛔ **"Complete" is asserted here, and it owes TWO POSITIVE CONTROLS.** This
+  AC as written passes on whatever set `D1` happens to emit — including a set
+  that is missing a variant, which is campaign **Trap 3**
+  (`docs/program/16-recursive-descent-retirement.md`).
+  1. **The enumerator must be shown NOT to short-circuit.** Run it on a program
+     that fires **two or more** variants and show it reports **all** of them.
+     ⭐ This is the control that matters most: the enumerator's entire purpose is
+     to defeat the selector's `.or_else(...)` short-circuit, and if it silently
+     retained that behaviour it would report **exactly one** variant — which is
+     precisely the result everyone expects to see, so nothing would look wrong.
+  2. **Each variant must be shown reachable by the instrument.** For every one of
+     the five variants, name a program the enumerator reports it on. A variant no
+     program in the corpus reaches is a **reportable gap in the measurement**, not
+     a variant that does not fire.
+
+  ⚠⚠ **This instrument is the most leveraged object in the campaign.** The
+  campaign doc directs that it be built **once here and reused** by
+  [[RT-SEED-CALL-PORT]], [[RT-PRODUCER-MATCH-PORT]], [[RT-RECURSOR-TRANSPORT]]
+  and [[RT-DESCENT-RETIRE]]. ⇒ A gap in it does not stay local — **every
+  downstream node inherits it**, and [[RT-DESCENT-RETIRE]]'s "no residual fires
+  anywhere" would then be vacuous at exactly the moment it authorizes deleting
+  the lane.
 - **`AC-3`.** `D5`'s owner/phase validation is present and fails closed **before**
   `D6` lands. A commit ordering that removes the residual first fails this AC.
 - **`AC-4` (no-regression).** Workspace green **in CI** — ⛔ never a local
