@@ -6,7 +6,7 @@ owner: runtime
 size: L
 gate: none
 depends_on: []
-blocks: [PX8-ERRID-ALLOC]
+blocks: [PX8-ERRID-ALLOC, RT-SEED-CALL-PORT]
 github: null
 origin: Architect ruling evt_3t7t27e3rv8cx (2026-07-29), outcome 2 on the Steward's PX8-ERRID-ALLOC wall discriminator (evt_s2kv0wttb5f7). Measured by the Architect in a detached scratch worktree with diagnostic-only labels against exact ad7298fb. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
@@ -109,6 +109,16 @@ compile, not a code-shape assertion.
 
 Runtime-owned and **third** in Runtime's queue:
 **[[RT-JOIN-DISPOSITION]] → [[NATIVE-HANDLE-CARRIER]] resume → this node.**
+
+⭐⭐ **This node is now the keystone of a seven-node campaign
+(operator, 2026-07-29): `docs/program/16-recursive-descent-retirement.md`.** It
+retires the first of five residual classes **and builds the closure-seed →
+callable-unit machinery that [[RT-SEED-CALL-PORT]] and
+[[RT-PRODUCER-MATCH-PORT]] reuse.** ⇒ Its `D2`/`D3`/`D4` are not local to this
+node — **build them for generality**, and if the transport turns out not to
+generalize, that is a reportable finding for the successors, not a private
+detail. Successor chain: [[RT-SEED-CALL-PORT]] → [[RT-PRODUCER-MATCH-PORT]] →
+[[RT-RECURSOR-TRANSPORT]] → [[RT-DESCENT-RETIRE]].
 
 ⭐ **On the Linux ABI I critical path** — it is the sole blocker of
 [[PX8-ERRID-ALLOC]], which blocks [[PX8-ERRID-SCOPE]], which blocks [[PX8]];
