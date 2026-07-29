@@ -21,13 +21,53 @@ origin: Architect ruling evt_2w62qa82fxyv (2026-07-29), on the Steward's three-w
 > |---|---|
 > | **COUNT OF RECORD** | **21** |
 > | ENTRIES | 12 |
-> | NEXT PREDICATE CHECK | ⏳ **OWED NOW at the 12th entry** — asked of @architect 2026-07-29, transport-and-framing only |
+> | NEXT PREDICATE CHECK | **15th entry** — ✅ the 12th-entry check is **CONSUMED** (below) |
 > | NEXT RESEARCH PULL | **#24** — #21 fired and is spent (`evt_165w63xtakbpb` → advisory `evt_6nrz0cgqm1hkd`) |
 >
 > **Hard stop #21 (2026-07-29)** is the stop that produced this node. Its
 > advisory is landed durably at
 > `docs/program/rt-join-disposition-research-advisory-21.md` — ⛔ do not cite the
 > `/workspaces/ken/local/` path, which is untracked.
+
+## ✅ §5a 12th-entry predicate check — CONSUMED. Answer: **no single shared predicate.**
+
+**Architect, `evt_6vw2j1c5sqzka`, 2026-07-29.** Landed here because an
+in-thread ruling is not a durable deliverable.
+
+> *"The twelve entries do not justify a representation recut. The recurring
+> subfamilies are real, but their intersection is only the unfalsifiable umbrella
+> 'a lowering/emission boundary failed,' not one mechanism that predicts every
+> stop."*
+
+⇒ **`independent/mixed`, not "one representation is defective."** ⛔ **No recut
+is authorized. No count freeze, no reset.** Keep every proved subfamily and its
+routed repair. Count stays **21**, research pull stays **#24**, and the next
+predicate check advances to the **15th entry**. The append-only inventory
+remains one chain.
+
+### The discriminating partition — ⭐ keep it; it is reusable triage
+
+| entries | subfamily |
+|---|---|
+| 1–3, 10 | an ambient/dynamic property stands in for static code identity or authority — the already-named *"dynamic property naming static code"* predicate |
+| 4–6, + the port aspect of 11 | **executable-boundary closure is incomplete** — a static identity or semantic seat exists, but the `FunctionizedUnits` selector, carrier, consumer, join, or callable-declaration port cannot transport it through complete emission |
+| 7 | a stale contract/control after the representation changed — **contract currency**, not a representation mechanism |
+| 9 | the required static fact is present, but a validator treats its `StaticOriginId` as a raw-walk vector position — **present-but-misindexed** |
+| 12 | materialization and final dead-case disposition are both present, owner-scoped, and keyed to the same static origin; **two valid phase facts were encoded as mutually exclusive** — neither a missing port, a dynamic surrogate, nor a misindex |
+
+⭐⭐ **The second row is independent corroboration of the retirement campaign.**
+*"Executable-boundary closure is incomplete… the `FunctionizedUnits` selector…
+cannot transport it through complete emission"* is exactly what
+`docs/program/16-recursive-descent-retirement.md` exists to close, and the
+Architect reached it by partitioning twelve hard stops rather than from the
+operator's directive. ⇒ The campaign's grounding is now **two independent
+sources**, not one.
+
+⚠ **Entry 11 is why the chain cannot be collapsed wholesale.**
+`TransparentDeclarationClosure` is an **explicit, honest retained residual** that
+correctly selects `RecursiveDescent`; its defect is a *missing callable-declaration
+capability* plus *a false sequencing premise* — ⛔ **not** an incorrect
+representation of a fact already transported.
 
 ## Why this node exists
 

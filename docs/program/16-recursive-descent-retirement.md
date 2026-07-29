@@ -11,6 +11,24 @@ migration selector"* (`lowering/core.rs:174`). It has been temporary long enough
 to grow a per-function code-size wall on the lane it was supposed to be
 retiring.
 
+> ### ⭐⭐ INDEPENDENTLY CORROBORATED — the Architect reached the same conclusion from a different direction
+>
+> The §5a **12th-entry predicate check** (`evt_6vw2j1c5sqzka`, 2026-07-29)
+> partitioned twelve hard stops and found **no single shared predicate** — but it
+> named, as one of five subfamilies covering **entries 4–6 and the port aspect of
+> entry 11**:
+>
+> > *"executable-boundary closure is incomplete. A static identity or semantic
+> > seat exists, but the `FunctionizedUnits` selector, carrier, consumer, join, or
+> > callable-declaration port cannot transport it through complete emission."*
+>
+> ⇒ **That is this campaign's subject, arrived at by partitioning the failure
+> history rather than from the directive.** The campaign's grounding is therefore
+> two independent sources — the operator's directive and the Architect's
+> partition — not one. ⛔ It does **not** authorize a representation recut; the
+> predicate answer was `independent/mixed` and every proved subfamily keeps its
+> own routed repair.
+
 ---
 
 ## 1. What the selector actually does
