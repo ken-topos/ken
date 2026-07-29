@@ -238,6 +238,23 @@ contingency.
   `Resource Buffer` host request and wire ABI; (f) constructor and both
   projections **absent from the public name map**.
 
+  ⛔⛔ **`(c)` and `(f)` are ABSENCE claims and each owes a POSITIVE CONTROL.**
+  Every other axis is a positive or consistency claim that witnesses itself; an
+  absence claim **passes for any reason**, including an instrument pointed at a
+  layer or a phase where the thing is never present. ⇒ For each of `(c)` and
+  `(f)`, show the check **reds** when the name/construct **is** there: for `(f)`,
+  export one of the three names (or aim the census at a symbol known to be
+  public) and show it is reported; for `(c)`, read the same view **before** the
+  erasure stage and show the constructs appear. ⛔ Reporting "not found" without
+  that is not a measurement of the exported surface — it is a measurement that
+  the instrument found nothing.
+
+  ⚠ This is campaign **Trap 3**
+  (`docs/program/16-recursive-descent-retirement.md`), which rejected an
+  otherwise-sound `RT-JOIN-DISPOSITION` candidate on 2026-07-29: a proof
+  quantified over a **recorded population** ran over an empty list and passed,
+  and it was silent precisely because **every control over it passed**.
+
 - **`AC-5`** — the regression that made an honest partial inadmissible is
   repaired. **Control:** `fs_read_at_malformed_offset_narrows_to_invalid_offset`
   — a pre-existing two-bracket native read row that was GREEN before the API
