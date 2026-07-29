@@ -65,10 +65,22 @@ and the successor has no reaching production witness on the pre-`D7` tree."*
 
 | fact | value |
 |---|---|
-| preservation point | `820d3e53014899da50e7d8fab0584b8c267c5874` |
-| tree | `5faee6ef816ce35369a2eadee5f4de305834ad85` |
-| parent | `79029d4c` |
+| ⭐ **resume base** (Architect `evt_5c9ys1my7hr51` §5) | `c45a59a9f7bd6a911441e58ebb5e9e303e1bc7ac` |
+| its tree | `1e3cfe58037f28902d92951f9cbb358b033e468e` |
+| `D7` preservation point (its parent) | `820d3e53014899da50e7d8fab0584b8c267c5874` |
+| that tree | `5faee6ef816ce35369a2eadee5f4de305834ad85` |
 | `D7`-only adjustment | ⛔ **NOT AUTHORIZED** |
+
+> ⛔⛔ **RESUME FROM `c45a59a9`, NOT FROM `820d3e53`.** The first recursor pass is
+> preserved at `c45a59a9` (parent exactly `820d3e53`; 2 files, `lowering/core.rs`
+> and `lowering/mod.rs`, +183/−38; verified by the Steward against the report, not
+> taken from it). It is the tip of branch `wp/RT-DECL-CLOSURE-PORT`.
+>
+> ⭐ **It is preservation-only and it is also the next repair base** — those are
+> not in tension. ⛔ **Do not reset it, do not discard it, and do not route it to
+> QA.** The required adjustment is a continuation **on top of** it.
+> ⚠ Cutting from `820d3e53` instead silently discards a ruled-correct advance:
+> `c45a59a9` is where the recursor refusal was *made to advance*.
 
 ⇒ **[[RT-DECL-CLOSURE-PORT]] and this node land as ONE candidate, in ONE PR, and
 both tracker nodes flip `merged` together.** Neither can go green alone: `D7`'s
@@ -89,18 +101,25 @@ candidate description.
 
 ## 1. Fixed inputs
 
-| path | blob at the `D7` seam `820d3e53` |
+| path | blob at the resume base `c45a59a9` |
 |---|---|
 | `crates/ken-runtime/src/cranelift_backend/lowering/core.rs` | ⚠ **re-pin at pickup** |
+| `crates/ken-runtime/src/cranelift_backend/lowering/mod.rs` | ⚠ **re-pin at pickup** |
 | `crates/ken-runtime/src/cranelift_backend/lowering/units.rs` | ⚠ **re-pin at pickup** |
 | `crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs` | ⚠ **re-pin at pickup** |
 
 ⛔ **The former pins at `origin/main = 14c3c5f7` are RETIRED — do not use them.**
 `D7` rewrote `core.rs`, `units.rs` and `static_transition.rs` on this lineage
-(2658 insertions at `79029d4c`, plus the seam repair at `820d3e53`), so every
-line anchor derived from `14c3c5f7` is stale. ⭐ **Re-pin against `820d3e53`
-before deriving anything**, and ⛔ do not re-pin the numbers and call that a
-re-measurement.
+(2658 insertions at `79029d4c`, plus the seam repair at `820d3e53`), and
+`c45a59a9` then rewrote `core.rs` and `mod.rs` again, so every line anchor
+derived from `14c3c5f7` — **or from `820d3e53`** — is stale. ⭐ **Re-pin against
+`c45a59a9` before deriving anything**, and ⛔ do not re-pin the numbers and call
+that a re-measurement.
+
+⚠ `lowering/mod.rs` joined this list at `c45a59a9`; it was not in the `820d3e53`
+pin set. ⭐ **The pin set is a derivation, not a fixed list** — re-derive it with
+`git diff --stat <your base> <the ruled base>` rather than trusting this table's
+membership.
 
 ## 2. The two classes are one mechanism
 
@@ -188,9 +207,15 @@ descriptor is the failure this outcome exists to forbid.
 - **`D2` — Full-residual enumeration** across the measured programs, including
   the population unmasked by [[RT-PRODUCER-MATCH-PORT]]'s `D4` **if that node has
   landed by pickup**. ⚠ It no longer gates this one — scope against what is
-  measured on `820d3e53`, not against the pre-campaign number.
-- **`D3` — The transport, per outcome (b)'s five steps**, covering **both**
-  syntactic positions. ⛔ Not a runtime carrier; ⛔ not an ABI slot.
+  measured on **`c45a59a9`** (⚠ **not** `820d3e53`, and not the pre-campaign
+  number): the resume base already advanced the recursor edge, so enumerating
+  against the parent would re-count a residual that is no longer there.
+- **`D3` — The transport, per outcome (b)'s five planning steps** (§3), covering
+  **both** syntactic positions. ⛔ Not a runtime carrier; ⛔ not an ABI slot.
+  ⚠ **Two different "five"s — do not conflate them.** §3's five are the
+  **pre-emission planning split**; §8c's five are the **per-edge validation
+  obligations** that must all discharge **before any allocation**. `D3` owes
+  **both sets**, and §8c is the one `c45a59a9` has not closed.
 - **`D4` — Remove both `MatchScrutineeRecursor` and
   `LexicalCallArgumentRecursor`**, and only then re-run `AC-1a` and `AC-1b`.
 - **`D5` — The atomic candidate.** One branch on the `820d3e53` lineage carrying
@@ -252,6 +277,31 @@ the mutation that must **red** it.
   mechanism without absorbing** the separate syntactic-residual retirement owned
   by [[RT-PRODUCER-MATCH-PORT]].
 
+### ⭐⭐ SHARPENED 2026-07-29 (Architect `evt_5c9ys1my7hr51` §4)
+
+⛔⛔ **These are AMENDMENTS to `AC-9`–`AC-16`, not new ACs.** Ruled verbatim:
+*"These sharpen the existing `AC-9`–`AC-16`; they do not create a separate test
+node."* ⇒ ⛔ **Do not open `AC-17`+, and do not file a test node.** Each row below
+adds a required discriminator **inside** the AC named in its first column.
+
+| sharpens | required discriminator |
+|---|---|
+| **`AC-9`** | Exercise a **captured static worker** through **both** ruled recursor positions **where present** — not only the position that first exposed the edge |
+| **`AC-10`** | **Worker identity.** Two recursive workers with the **same arity, capture shape, and capture values** but **different body origins** produce observably **different** results / direct targets. ⛔ Collapsing or swapping body origins must **red** the oracle |
+| **`AC-11`** | **Exact envelope + ABI census.** The environment has **exactly `capture_count`** ordinary fields **in declaration order**; the worker call is ordinary arguments **followed by** those captures. ⛔ Wrong carrier class, count, order, owner, phase, lifetime, or declared arity **rejects before the call**. Census **both** the environment **and** the worker ABI and prove **absence** of body/callable identity and of all activation / cursor / frame / splice / return-hole material |
+| **`AC-13`** | Duplicate or **replay** the projection **or** the affine segment ⇒ **reject before CFG/object emission** |
+| **`AC-14`** | **Captures are inputs, never keys.** The **same** worker with **different capture values** reuses **one** static worker definition and produces **different** results. ⛔ Capture-value **keying**, permutation, omission, or duplication must **red** validation/result evidence |
+| **`AC-15`** ⭐ | **Pre-allocation negative pair — the control that catches §8d.** On body mismatch, arity mismatch, capture-count mismatch, **or one non-ordinary capture**, the environment / parent / descriptor / function / object **allocation and publication counters all stay at ZERO.** ⭐ This is what distinguishes validate-then-allocate from **allocate-then-validate**; an outcome-only assertion cannot |
+| **`AC-15`** ⭐⭐ | **Whole-`Closure` negative control.** The **same closure**, taken **outside** the exact planner-proved recursor residual edge, **still fails** through `CallableCapsuleEscape` **before allocation.** ⭐ Without this the repair is indistinguishable from a **global admission weakening** — it is the control that proves the new member is an exception, not a hole |
+| **`AC-16`** | **Matrix omission.** Omit or reclassify the real static-worker-residual member and **planning fails before function/object emission**. ⛔ It **may not fall through** to the late generic `Closure` refusal — a late refusal is the *wrong* failure and would pass a naive "it still rejects" check |
+
+⚠ **Two of these are load-bearing in a way the other six are not**, so do not
+let them average out in review: `AC-15`'s **counter pair** is the only control
+that can see the ordering defect §8d names, and `AC-15`'s **negative control** is
+the only one that distinguishes a proved per-edge exception from a weakened
+default. ⭐ **The rest assert that the right thing happens; these two assert that
+the wrong thing still cannot.**
+
 ## 6. ⛔ Banned scope
 
 - ⛔ **Retiring only one of the two classes.** They are folded for a stated
@@ -267,8 +317,13 @@ the mutation that must **red** it.
 - ⛔ **Repairing `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds`.**
   It remains **unruled** at `Match: scrutinee is not a constructor value`, and
   ⛔ **nothing in the ruling attributes or authorizes repair of it.**
-- ⛔ **Counting or repairing the transient ordinary-`Closure` refusal** — see §8.
-- ⛔ **A `D7`-only adjustment to `820d3e53`.** Not authorized.
+- ⚠ **REVERSED 2026-07-29 — this line formerly banned counting or repairing the
+  ordinary-`Closure` refusal.** It is now **attributed to this node** and
+  repairing it **is the work** (§8). ⛔ What remains banned is repairing a
+  `Closure` refusal **outside** the exact planner-proved recursor residual edge,
+  and ⛔ weakening the generic `CallableCapsuleEscape` arm to reach it.
+- ⛔ **A `D7`-only adjustment to `820d3e53`.** Not authorized. ⚠ Nor is a
+  `D7`-only adjustment to `c45a59a9` — the continuation is **this node's**.
 - ⛔ **Deleting the selector or the `RecursiveDescent` lane** — that is
   [[RT-DESCENT-RETIRE]].
 - ⛔ **Weakening the `recursive_positions` predicate** to shrink the population.
@@ -283,28 +338,103 @@ re-cut, not the ring's to absorb. ⚠ Per Trap 2, this node exposes the largest
 newly reachable population in the campaign; **expect a fail-closed invariant to
 fire and route it as its own node.**
 
-## 8. ⚠ The transient ordinary-`Closure` refusal — UNATTRIBUTED, do not count it
+## 8. ⭐⭐ ATTRIBUTED 2026-07-29 — the ordinary-`Closure` refusal IS this node's
 
-An earlier refusal on the write-readonly row is recorded in
-`/tmp/rt-d7-parity.log`:
+⛔ **This section formerly read "UNATTRIBUTED, do not count it" and banned
+repairing it. That text is RETIRED, not qualified.** The §8 one-shot bounded
+protocol **fired, and it worked**: the implementer took exactly one
+diagnostic-only witness on one named row, removed the probe, and preserved the
+exact tree (`evt_6stmz1wsg17pd`). The Architect then closed attribution on that
+evidence (`evt_5c9ys1my7hr51`). ⭐ **The protocol is now SPENT for this edge** —
+⛔ do not re-run it here; it was a one-shot and it has been consumed.
+
+### 8a. What the bounded witness proved
 
 ```text
-ObjectEmission / checked_process_object /
-Closure: a closure cannot cross the boundary: it is runtime-local and
-live-domain only, and it has no durable lane
+ComputationalRecursorClosure / static-worker residual / Closure / Captures[Carried x7]
 ```
 
-⛔ **That log is NOT sufficient causal evidence** to assign it to `D7`, to
-recursor transport, or to a new node. ⭐ **The text proves only that the
-admission walk encountered a whole closure at `checked_process_object`** — the
-later terminal variant does **not** identify its former parent edge or
-disposition. ⚠ **A changed visible refusal is not causal attribution**, which is
-the discipline the implementer correctly applied when it declined to classify it.
+with producer `RecursorProducerOriginId(0)`, sibling `1`, generated-unit owner,
+worker `StaticOriginId(723)`, arity `1`, `dynamic_splices=1`,
+`open_obligations=0`, and pre-allocation parent/descriptor counters `0 / 0`.
 
-⇒ ⛔ **Do not count it and do not repair it now.** **If it recurs on a preserved
-exact tree**, take **one diagnostic-only bounded witness before transfer**,
-recording: source origin · owner · parent/child role · disposition token ·
-**complete nested `Lowered` variant path** · pre-allocation side-effect counters.
-Run **one named row**, remove the diagnostic, preserve the exact tree. ⚠ If the
-transient tree cannot be reproduced exactly, **retain the log as unattributed
-evidence and wait for recurrence.**
+⇒ The ordinary `Closure` is **the callable residual inside the recursor split** —
+⛔ not an unrelated `D7` cell and ⛔ not [[RT-PRODUCER-MATCH-PORT]]'s.
+
+> ⚠⚠ **THE ATTRIBUTION IS POPULATION-SCOPED. Ruled verbatim: it *"does not
+> globally attribute every future `Closure` refusal."*** ⛔ Do not cite this
+> section to explain, absorb, or repair a `Closure` refusal arising anywhere
+> outside the exact planner-proved recursor residual edge. A future refusal with
+> the same *text* is a fresh attribution question, and the same bounded protocol
+> is available again **for that edge**, unspent.
+
+### 8b. Ownership and disposition — one new MEMBER, not a new lane
+
+| axis | ruling |
+|---|---|
+| mechanism owner | **this node**, outcome **(b)** |
+| matrix authority | `D7`'s closed boundary-operand matrix ([[RT-DECL-CLOSURE-PORT]]) enumerates one **lowering-only** edge, e.g. `StaticRecursorWorkerResidual` |
+| disposition | **existing `CallableCapture`** |
+| new node? | ⛔ **NO** |
+| seventh disposition? | ⛔ **NO** |
+
+⛔ **It is NOT `StaticCallableElimination`** — there is no callable declaration
+parameter / use-closure here; the recursor plan **already selects the direct
+worker**. ⛔ It is not `Forwarding`, and ⛔ **it does not make the `Closure` a
+value.** It retains body/parameter identity in compiler plan material while the
+ordered captures retain their own phase.
+
+⛔⛔ **The generic whole-capsule rule is UNCHANGED.**
+`LoweringOnlyOperandEdge::CallableCapsuleEscape -> EscapeForbidden` remains
+correct for **every unproved or value-position whole `Closure`**. ⛔ Do not
+relabel or weaken that admission arm — the new member is an *exception proved
+per-edge*, never a softening of the default.
+
+### 8c. Lawful transport — validate FIRST, allocate SECOND
+
+⛔ **Before any carrier / frame / descriptor / object allocation**, the
+recursor-owned split must consume a **planner-issued token for that exact
+residual edge** and prove **all five**:
+
+1. the invocation segment is the **exact checked affine segment** for the parent
+   producer / sibling, and is **consumed once**;
+2. `Closure.body` **equals** the planned worker body origin;
+3. closure **parameter count** equals the planned declared arity, **and** capture
+   count equals the planned capture provenance;
+4. capture **order, phase, owner, and lifetime** equal the plan;
+5. **every runtime capture has an ordinary transferable lane.** ⛔ A nested
+   callable / control capsule is **not ordinary data** and **must fail before
+   allocation** unless an already-ruled static binding eliminates it.
+
+**Only after that complete validation** may lowering erase the `Closure` wrapper
+and create the ordinary ordered environment payload.
+
+**For the measured `Carried x7` case**, an existing carrier `Record` envelope is
+**lawful**: exactly the seven capture words **in declaration order**, and ⛔ **no**
+body origin, code pointer, callable-selecting tag, activation, cursor, splice,
+return hole, or other callable/control identity. At invocation: validate the
+envelope **class** and **exact field count**, project the seven fields
+**positionally**, append them to the ordinary invocation arguments, and call the
+**statically selected out-of-line worker directly**.
+
+⭐ **The worker identity stays compiler-only, and capture VALUES are not
+worker-key material.** ⛔ Unlawful at any depth: `Carried -> Lowered`, a
+reconstructed `Closure`, a runtime-selected worker, a side table, a codec, a
+trampoline, a function pointer, declaration inlining, or admission weakening.
+
+### 8d. ⛔⛔ THE DEFECT IN `c45a59a9` — it allocates before it has proved
+
+**Ruled:** `c45a59a9` is *"directionally correct in introducing
+`StaticRecursorWorker` and direct out-of-line capture inputs, but it is not closed
+yet. In particular, the current terminal split **allocates the environment before
+it has proved every capture is carried**; that ordering is not acceptable."*
+
+⇒ ⭐ **This is the repair, and it is an ORDERING repair, not a new mechanism.**
+Validate the whole residual / environment **first**, then allocate and store.
+⚠ Note what this means for the controls: an allocate-then-validate implementation
+can satisfy every *outcome* assertion and still be wrong, because the wrong state
+is created and then found acceptable. **`AC-15`'s sharpened counter pair is the
+only control that sees it** — see §5.
+
+⛔ **And it must be reached through EVERY governed recursor position** — not only
+the source-machine terminal-constructor route that first exposed it.

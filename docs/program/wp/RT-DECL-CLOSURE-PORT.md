@@ -212,7 +212,7 @@ collapsed into `Forwarding`, `CallableCapture`, or `SpecializedOnlyLeaf`.
 | edge | rule |
 |---|---|
 | **Forwarding** | environment insertion, recursive lowering, result propagation, planned join. `Carried` passes **unchanged**; a join keeps using the ruled `JoinResultRepresentation` token — ⛔ do not invent a second phase plan |
-| **Callable-capture** | an **invocation-local compiler control capsule** retains static body/parameter identity while **each captured operand retains its own phase**. ⭐ This is forwarding plus an owner/lifetime invariant — ⛔ **not a value representation** |
+| **Callable-capture** | an **invocation-local compiler control capsule** retains static body/parameter identity while **each captured operand retains its own phase**. ⭐ This is forwarding plus an owner/lifetime invariant — ⛔ **not a value representation**. ⭐ **Gained one new member #26** (`StaticRecursorWorkerResidual`) on 2026-07-29 — see the row below; ⛔ the member is new, the **disposition is not** |
 | **`StaticCallableElimination`** ⭐ NEW (#24) | a statically known callable passed as a transparent-declaration argument. ⛔ The callable edge is **eliminated from the runtime ABI** — planner-owned, **out-of-line** callee specialization with **lifted captures**. Lawfulness conditions below; ⛔ this is **not** the prohibited specialized fallback |
 | **Semantic eliminator** | `Match`, `ComputationalMatch`, `Project`, or anything that semantically **reads** the value. `Carried` takes **one** emitted-helper route; `Specialized` keeps its existing route |
 | **Specialized-only leaf** | lawful **only** where the planner **proves** no `Carried` seed can reach that exact edge under the selected authority. ⛔ *"It has not happened in the corpus"* and a fail-closed `specialized_at` are **NOT** such proofs. A reachable `Carried` edge must gain an emitted semantic route **or** remain a **named selector residual** — ⛔ it may not fail late during emission |
@@ -349,6 +349,57 @@ an outer merge; ⛔ no reconstructed `Lowered` template.
 ⚠ [[RT-PRODUCER-MATCH-PORT]] and [[RT-SEED-CALL-PORT]] **still own their
 syntactic residual retirements later** — ⛔ but **not** this repair, and ⛔ not a
 second capture transport. ⭐ Their `D1` may find the transport already present.
+
+#### ⭐⭐ Row (#26): the static-recursor-worker residual — a LOWERING-ONLY edge
+
+**Added by Architect ruling `evt_5c9ys1my7hr51` (2026-07-29).** ⛔ **This is ONE
+NEW MEMBER of the already-ruled six-way matrix — not a seventh disposition, not a
+new representation family, and not a new WP.** The partition above is unchanged.
+
+**The measured edge.** Bounded witness on
+`fs_read_at_malformed_offset_narrows_to_invalid_offset`, path:
+
+```text
+ComputationalRecursorClosure / static-worker residual / Closure / Captures[Carried x7]
+```
+
+producer `RecursorProducerOriginId(0)`, sibling `1`, generated-unit owner, worker
+`StaticOriginId(723)`, arity `1`, `dynamic_splices=1`, `open_obligations=0`,
+pre-allocation parent/descriptor counters `0 / 0`.
+
+| axis | value |
+|---|---|
+| edge kind | **lowering-only** — no source child ⇒ it lives in the **separate closed enum**, per *How the population is derived* above |
+| suggested name | `StaticRecursorWorkerResidual` |
+| **disposition** | **existing `CallableCapture`** |
+| keyed by | exact **recursor parent** · **producer origin** · **sibling / recursive position** · **worker body origin** · **declared arity** · **capture provenance** |
+| mechanism owner | ⭐ [[RT-RECURSOR-TRANSPORT]], **not this node** — see its §8 |
+
+⛔ **NOT `StaticCallableElimination`.** There is **no callable declaration
+parameter / use-closure** here; the recursor plan **already selects the direct
+worker**. ⛔ Not `Forwarding`. ⛔ **It does not make the `Closure` a value** — it
+retains body/parameter identity in **compiler plan material** while the ordered
+captures retain their own phase.
+
+⛔⛔ **THE GENERIC ARM IS UNCHANGED.**
+`LoweringOnlyOperandEdge::CallableCapsuleEscape -> EscapeForbidden` remains
+correct for **every unproved or value-position whole `Closure`.** ⛔ Do not
+relabel it, and ⛔ do not weaken it to admit this member. ⭐ **#26 is an exception
+proved per-edge by a planner token, never a softening of the default** — the
+control that holds that line is [[RT-RECURSOR-TRANSPORT]]'s sharpened `AC-15`
+whole-`Closure` negative pair.
+
+**Matrix omission control (this node's obligation).** Omit or reclassify the real
+static-worker-residual member and **planning must fail before function/object
+emission.** ⛔ It **may not fall through** to the late generic `Closure` refusal —
+⭐ a late refusal is the **wrong failure**, and it would satisfy a naive "it still
+rejects" assertion while proving the matrix is *not* closed.
+
+⚠ **The lawful transport for this edge is specified in
+[[RT-RECURSOR-TRANSPORT]] §8c, not here** — five validation obligations that must
+all discharge **before any allocation**, plus the `Carried x7` carrier-`Record`
+envelope rule. ⛔ Do not restate it in this frame; one operative statement, one
+owner.
 
 #### ⛔⛔ Atomicity — why this cannot be a separate node
 
@@ -746,8 +797,24 @@ the fixture, or if the port lands and `AC-1` still fails **on either delta**.
 
 > ### ⛔ §5a — ARMED AND CURRENT AS OF 2026-07-29. Re-read this line at every stop.
 >
-> **Count of record: 25** · entries **16** · **next research pull = `#27`** ·
-> **next predicate check = 18th entry**. ⇒ ⭐ **Neither trigger is due.**
+> **Count of record: 26** · entries **17** · **next research pull = `#27`** ·
+> **next predicate check = 18th entry**. ⇒ ⭐ **Neither trigger is due — but both
+> are now ONE stop away.**
+>
+> ⛔⛔ **BOTH TRIGGERS FIRE TOGETHER AT `#27` / the 18th entry.** That is the
+> simultaneous-due condition this section already records as a past lapse. ⭐ It is
+> foreseen now rather than discovered later: **at the next stop on this chain, run
+> the research pull AND the predicate check, in the same pass.** ⚠ Do not let the
+> next stop's urgency defer either — that is exactly how the line went stale for
+> three stops before.
+>
+> **#26 (2026-07-29):** [[RT-RECURSOR-TRANSPORT]] stopped on a recurred ordinary-
+> `Closure` refusal inside the recursor split (`evt_6stmz1wsg17pd` →
+> `evt_51fnetbggve7s`). Architect ruled `evt_5c9ys1my7hr51`: attribution closed to
+> the existing recursor node, **one new matrix member #26 under the existing
+> `CallableCapture` disposition** (⛔ not a seventh lane, not a new node), and
+> `c45a59a9` is preservation-only **and** the next repair base. ⭐ The §8 one-shot
+> bounded protocol fired and is now **spent for that edge**.
 >
 > **#25 (2026-07-29):** `D7` stopped at the ruled successor boundary
 > (`evt_5pep3tvxb5etv` → `evt_68rfv4fm41nhx`). Architect ruled
@@ -767,17 +834,41 @@ the fixture, or if the port lands and `AC-1` still fails **on either delta**.
 ⛔ The `NATIVE-HANDLE-CARRIER` stop that reordered this node is **not** #22: it
 routed a red row to the node that already owned it, and no new mechanism failed.
 
-**The three stops on this node's chain, for the predicate check:**
+**The four stops on this node's chain where a matrix cell was MISSING, for the
+predicate check:**
 
 | # | entry | mechanism that failed |
 |---|---|---|
 | 22 | 13 | producer-`Match` carried scrutinee — tree-producing scrutinee not `Bool`/constructor |
 | 23 | 14 | carried closure-capture — `Carried` reaching a consumer built only for specialized shapes |
 | 24 | 15 | **callable as transparent-declaration `CallArgument`** — `StaticOriginId(1031)`, a `LexicalClosure` with no lawful disposition among the ruled five |
+| 26 | 17 | **static-recursor-worker residual** — `StaticOriginId(723)`, a `Closure` in the recursor split's `Captures[Carried x7]`, with no lawful **member** among the ruled matrix's cells |
 
 ⭐ #22 and #23 were already ruled one shape, and folding them is what produced
 `D7` — which is what **found** #24. ⛔ No repair of the two known cells would
 have surfaced it. **The reached set is evidence, never the population.**
+
+> ⚠⚠ **CARRY THIS INTO THE `#27` PREDICATE CHECK — a four-instance pattern is now
+> visible, and naming it is not the same as resolving it.**
+>
+> #22, #23, #24 and #26 are all the **same shape of failure**: a matrix or
+> partition asserted closed, met a **real** edge it had no lawful cell for, and
+> refused **late** rather than at planning. Each was individually ruled a
+> legitimate new cell/member — and that is exactly what makes the pattern easy to
+> keep absorbing one ruling at a time.
+>
+> ⭐ **The question `#27` owes is not "what is the next cell?" but "why does the
+> closure keep failing to be closed?"** — i.e. whether the derivation that claims
+> exhaustiveness is itself wrong, rather than merely incomplete on a fourth
+> occasion. ⛔ That is an **Architect** question about the derivation, not a
+> Steward re-cut and not a ring's to answer, and ⛔ it is **not** grounds to add a
+> node (operator node gate: interrogate the constraint, do not presume a node).
+>
+> ⚠ **Steward note, flagged as inference not ruling:** #25 is deliberately absent
+> from this table — it was a *boundary* stop with no missing cell, so the table's
+> "stops where a cell was missing" claim stays exact. ⛔ Do not renumber to make
+> the two sequences line up; the stop count and the entry count measure different
+> things and always have.
 
 ## 8. What landing this closes
 

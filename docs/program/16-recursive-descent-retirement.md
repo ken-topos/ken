@@ -274,6 +274,29 @@ graph LR
 > *the state need not cross*, which is a **stronger** result than the transport
 > this node was originally scoped to build.
 
+> ### ⭐ SECOND RULING, SAME DAY — the base moved; the graph did NOT
+>
+> The atomic pair is **unchanged**: still #3-atomic, still one candidate, still two
+> nodes flipping together. ⛔ **No node was added, no edge changed, and no
+> disposition was created.** What changed is where the work resumes from.
+>
+> | fact | value |
+> |---|---|
+> | ⭐ **resume base** | `c45a59a9f7bd6a911441e58ebb5e9e303e1bc7ac` (tree `1e3cfe58…`) |
+> | its parent | `820d3e53` — so *"the `820d3e53` lineage"* above stays exact |
+> | what it did | made the recursor refusal **advance**, then hit an ordinary-`Closure` refusal **inside** the recursor split's `Captures[Carried x7]` |
+> | ruling | that `Closure` is **`RT-RECURSOR-TRANSPORT`'s**, as **one new member** of `D7`'s matrix under the **existing** `CallableCapture` disposition |
+> | what is owed | an **ordering** repair — validate the whole residual/environment **before** allocating — plus reach through **every** governed recursor position |
+>
+> ⛔ **Cut from `c45a59a9`, not `820d3e53`.** Cutting from the parent discards a
+> ruled-correct advance. `c45a59a9` is preservation-only **and** the repair base;
+> both at once, and neither cancels the other.
+>
+> ⚠ **The one thing here worth reading past the SHAs:** the attribution is
+> **population-scoped**. It settles this recursor edge and ⛔ *"does not globally
+> attribute every future `Closure` refusal"* — so a later refusal with identical
+> text is a fresh question, not a settled one.
+
 > ### ⛔⛔ THE RELEASE POINT IS A **CONDITION**, NOT A NODE NUMBER
 >
 > ⚠ **A draft of this block twice asserted a node id as the release point** —
