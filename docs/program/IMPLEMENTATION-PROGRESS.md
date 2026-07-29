@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-28 21:28:10Z — from 120 issue file(s) in `docs/program/issues/`.
+2026-07-29 09:39:23Z — from 121 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -106,6 +106,7 @@ the committed file matches the generator's output.
 | `Q-CLAIM-COMPARE-ORD` | claim-loss in list_instance_routes... (compare_ord) — both routing claims dropped, replacement only instantiates Bool | merged | runtime | XS | none | — |
 | `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | closed | runtime | S | none | 818 |
 | `RT-AGG-COMPOSE` | escaping two Resources into one aggregate (Prod (Resource _) (Resource _)) fails at erasure — checked endpoints do not compose | draft | runtime | TBD | none | — |
+| `RT-EFFECT-DIFF` | One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can | ready | runtime | L | none | — |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
 | `RT-FNSPLIT-B1R` | RT-NATIVE-FNSPLIT Boundary B1R — encode the occurrence-local semantic material B1 counted but never stored (repair of landed B1) | merged | runtime | L | none | 937 |
 | `RT-FNSPLIT-B2A-C` | plan↔lowering occurrence correspondence — transport the preallocated StaticOriginId to the site where it is out of scope | merged | runtime | L | none | 940 |
@@ -167,6 +168,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `DOC-ATTEST-LIVING` — attesting living tracker files makes every routine WP status flip redden the currency gate
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
+- `RT-EFFECT-DIFF` — One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can
 - `RT-FNSPLIT-B2O-CHECK` — the B2O checking layer advertises more than it enforces — structural closure for the item enumerator and reachability for the validator arms
 
 ## Blockers

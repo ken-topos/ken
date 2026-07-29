@@ -64,6 +64,21 @@ below is what stops that from happening a second time.
 routes to the **operator** through the Steward. Do not close this node with a
 verdict that only the ring has read.
 
+### ⚠ ONE CONSTRAINT ON THE VERDICT'S WORDING — Architect `dec_3tawbngh6k761`
+
+⭐ **This node may run and may measure. It may not claim the representation is
+complete or verified while [[RT-EFFECT-DIFF]] is open.**
+
+That node is the row-3 observation boundary: `RuntimeObservation` is limited to
+returned ground values or traps, so a backend-local run structurally cannot
+observe the `EffectObservation` surface on which native/interpreter divergence
+has twice been caught. ⇒ An empirical table gathered through the narrow
+observation is a **real measurement of what it measures** and is ⛔ **not**
+evidence that the emission port is semantically complete.
+
+⚠ This is a constraint on a **claim**, not a dependency. There is deliberately no
+`depends_on` edge — see `RT-EFFECT-DIFF.md` for why, and ⛔ do not add one.
+
 ## What this node does NOT own
 
 - ⛔ **Boundary A's planner metrics.** Those are [[RT-SCALE-A]]. **Neither
