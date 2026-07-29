@@ -133,7 +133,7 @@ populations is exercised through the new boundary at its full file total.
 **AC-6 — no CLI assertion changed.** `git diff` against the merge-base touches no
 existing `ken-cli` or `ken-verify` test assertion. ⛔ Mechanical and binding.
 
-**AC-7 — no second positioner, no second corpus.** One comparator; the CLI suites
+**AC-7 — no second comparator, no second corpus.** One comparator; the CLI suites
 still exist and still run.
 
 ## 5. Contention check
