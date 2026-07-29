@@ -135,6 +135,26 @@ to widen.
 - **`AC-5`.** The exhaustive-match fail-closed property at `core.rs:59-65` is
   preserved: a new `RuntimeExpr` form must still be unable to compile until the
   classifier assigns it. ⛔ Do not replace the exhaustive match with a wildcard.
+- **`AC-6` — ⭐ MEASURE THE ROOT'S COST. Added 2026-07-29 (operator: this part
+  of the compiler must be both correct *and* efficient).** Record, for the
+  fixture, the **emitted function count** and the **per-function code-size
+  distribution** under each authority — the `RecursiveDescent` root before, and
+  the `FunctionizedUnits` population after. Post the table.
+
+  ⭐ **Why this AC exists:** [[RT-SCALE-B]] returned verdict **(a)** — linear,
+  no exponent — but it was **bounded to the governed recursive resource-bracket
+  populations and excluded the mutually exclusive `RecursiveDescent` root**
+  (Architect, `evt_3t7t27e3rv8cx`). ⇒ **The monolithic root has never been
+  scale-measured.** `"Code for function is too large"` is that unmeasured cost
+  surfacing as a hard ceiling instead of as a curve. This node is the first
+  point where both authorities can be measured on the same program.
+
+  ⛔ **Report the measurement; do not tune to a threshold, and do not pin a
+  number.** No target figure is set here and none may be inferred — a pinned
+  size number would rot at the next merge, and the AC is discharged by the
+  table existing and being routed to the Steward, not by any value in it.
+  ⛔ A regression in either figure is a **reportable finding**, not a licence to
+  widen this node's scope.
 
 ## 6. ⛔ Banned scope
 
