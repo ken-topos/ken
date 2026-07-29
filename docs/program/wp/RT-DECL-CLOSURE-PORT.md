@@ -12,8 +12,18 @@ residual can be retired.**
 *behavioural* compile, not a code-shape assertion.
 
 **Status:** Steward frame, shovel-ready.
-⛔ **SERIALIZED behind [[NATIVE-HANDLE-CARRIER]]** — both own
-`lowering/core.rs`. Do not start until it merges.
+⛔ **THIRD in Runtime's queue, and do not start it early.** The order is
+**[[RT-JOIN-DISPOSITION]] → [[NATIVE-HANDLE-CARRIER]] resume → this node.**
+Both this node and `NATIVE-HANDLE-CARRIER` own `lowering/core.rs`.
+
+⚠ **Why this node waits, stated so it can be reversed cheaply:** it moves whole
+objects off the monolithic `RecursiveDescent` root and onto `FunctionizedUnits`,
+which is exactly the route whose per-generated-function join accounting
+`RT-JOIN-DISPOSITION` is repairing. Landing this port on an unrepaired
+phase-overstrict invariant invites the same hard stop at greater scale, after
+more work is sunk. ⭐ **The cost of waiting is real and is not hidden:** `PX8`
+gates 15 of the ABI program's 19 nodes, and this ordering delays it by two nodes
+while Foundation stays idle.
 
 ⭐ **On the Linux ABI I critical path.** Sole blocker of [[PX8-ERRID-ALLOC]] →
 [[PX8-ERRID-SCOPE]] → [[PX8]]; `PX8` gates 15 of that program's 19 nodes.

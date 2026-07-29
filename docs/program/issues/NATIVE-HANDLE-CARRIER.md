@@ -1,28 +1,51 @@
 ---
 id: NATIVE-HANDLE-CARRIER
 title: "Native build-pipeline completeness — a constructor-private resource-carrying handle fails checked-core body-view lowering (MissingClosureMetadata) when it crosses the higher-order withBuffer normalization boundary"
-status: active
+status: ready
 owner: runtime
 size: M
 gate: none
-depends_on: [RT-NATIVE-FNSPLIT]
+depends_on: [RT-NATIVE-FNSPLIT, RT-JOIN-DISPOSITION]
 blocks: [PX8-F-CAP-41]
 github: null
 origin: discovered under [[PX8-F-CAP-41]] Phase 2 impl (foundation-implementer hard-stop evt_563ss8821n7f); Architect means/representation ruling evt_2zkjr68y1sdgf (thr_570t9qzcthjv9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> ## ⭐ §5a RESEARCH-CONSULT TRIGGER — THE COUNT OF RECORD LIVES HERE NOW
+> # ⛔⛔ HELD 2026-07-29 — bound behind [[RT-JOIN-DISPOSITION]]; resume from the preserved WIP
 >
-> Carried forward from [[RT-NATIVE-FNSPLIT]] when it closed 2026-07-29.
-> ⛔ That node's own §5a section still reads a stale **15**; its closeout says so.
-> ⛔ Do not read the count from any node other than this one.
+> **Architect ruling `evt_2w62qa82fxyv`.** This node's fixture tripped a
+> fail-closed invariant landed by `RT-FNSPLIT-RECUR-PORT` (`6a451b45`) —
+> `emitted source join StaticOriginId(1000) was later dispositioned as
+> statically unselected`. ⭐ **The invariant is phase-overstrict and this
+> candidate is NOT the inconsistent party.** The repair is to landed code, not
+> part of this node's primitive identity closure, so it is a separate Runtime
+> node: **[[RT-JOIN-DISPOSITION]]**.
 >
 > | | |
 > |---|---|
-> | **COUNT OF RECORD** | **21** |
-> | ENTRIES | 12 |
-> | NEXT PREDICATE CHECK | **DUE NOW — this is the 12th entry** |
-> | NEXT RESEARCH PULL | ✅ **#21 FIRED 2026-07-29** — dispatched `evt_165w63xtakbpb` |
+> | preserved WIP | `8bc7556af024886a6db01679f35a2bb063166876` |
+> | tree | `9bbce2f64b32c4948e389e8c3953e762bbc8a6dc` |
+>
+> ⛔ **Hold `8bc7556a` unchanged** — no edits, rebase, mutation, validation, or
+> candidate work. `active` → `ready` plus the new `depends_on` edge keep this
+> node **off** the releasable frontier until the repair merges.
+>
+> ▶ **On resume:** re-run the **full 6/6** `rt_span_prov_native` module plus the
+> already-named CAP-41 / AC-5 / private-public controls and mutations.
+> ⛔ **No honest partial is authorized** (standing Architect ruling).
+>
+> ## ⛔ §5a COUNTER — MOVED. DO NOT READ IT HERE.
+>
+> **The count of record moved to `docs/program/issues/RT-JOIN-DISPOSITION.md`
+> on 2026-07-29**, with the active work. ⛔ Read it there. This block claims
+> nothing; it is retained only so a reader landing here is not left holding a
+> stale number — the exact failure [[RT-NATIVE-FNSPLIT]]'s stale **15**
+> produced.
+>
+> At the moment of the move: count **21**, entries **12**, research pull **#21
+> fired and spent** (`evt_165w63xtakbpb` → advisory `evt_6nrz0cgqm1hkd`, landed
+> durably at `docs/program/rt-join-disposition-research-advisory-21.md`), next
+> pull **#24**, 12th-entry predicate check **owed by the Architect**.
 >
 > **Hard stop #20 (2026-07-29):** Foundation's [[PX8-ERRID-ALLOC]] rebase still
 > failed the native size gate at `checked_process_object`. Architect ruling
