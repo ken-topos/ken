@@ -16,7 +16,7 @@ use super::{
     backend, unsupported, BackendFailure, CraneliftBackendError, RuntimeDeclaration,
     RuntimeDeclarationKind,
 };
-use crate::RuntimeExpr;
+use crate::{RuntimeExpr, RuntimePartiality, RuntimeTrap, RuntimeTrapCode};
 use abi::{build_abi_plane, AbiPlane};
 use semantic_ir::{
     build_semantic_plane, build_synthesized_constructor_inventory, SemanticMaterialArena,
@@ -175,6 +175,7 @@ enum EdgeKind {
     InvokeProducerTail,
     CompleteProducerTail,
     StaticBody,
+    DeclarationCall,
     Trap,
 }
 
@@ -314,6 +315,20 @@ struct PlannedJoinResult {
     has_continuing_predecessor: bool,
 }
 
+/// A nonzero identity for one exact trap value interned by the planner.
+///
+/// The word travels only through [`AbiCarrier::TrapWord`]. It is not a source
+/// value and cannot be constructed by lowering.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub(in crate::cranelift_backend) struct PlannedTrapIdentity(u32);
+
+impl PlannedTrapIdentity {
+    pub(in crate::cranelift_backend) fn abi_word(self) -> i64 {
+        i64::from(self.0)
+    }
+}
+
 #[derive(Clone)]
 pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     entries: Vec<StaticNodeId>,
@@ -355,6 +370,9 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// asymmetric with the two `lower_expr` closure arms
     ///.
     declaration_occurrences: BTreeMap<String, StaticOriginId>,
+    /// Exact trap values interned during the same occurrence visit that records
+    /// their source semantics. Identity zero is reserved for "no trap".
+    trap_catalog: Vec<RuntimeTrap>,
     /// Every planned source occurrence, **dense by origin ordinal**.
     ///
     /// `origin_of` is `StaticOriginId(node.0)`, so a node's origin *is* its index
@@ -577,6 +595,31 @@ fn is_source_join(expr: &RuntimeExpr) -> bool {
             | RuntimeExpr::ComputationalMatch { .. }
             | RuntimeExpr::Call { .. }
     )
+}
+
+pub(in crate::cranelift_backend) fn planned_partiality_trap(
+    primitive: &crate::RuntimePrimitive,
+) -> Option<RuntimeTrap> {
+    match &primitive.partiality {
+        RuntimePartiality::CheckedTrap { obligation } => {
+            let message = if obligation.ends_with(".bounds") {
+                format!("{} bounds obligation failed", primitive.symbol)
+            } else {
+                format!("{} checked partiality trapped", primitive.symbol)
+            };
+            Some(RuntimeTrap {
+                code: RuntimeTrapCode::ExplicitTrap,
+                message,
+            })
+        }
+        RuntimePartiality::TrustedTrap { .. } => Some(RuntimeTrap {
+            code: RuntimeTrapCode::ExplicitTrap,
+            message: format!("{} trusted partiality trapped", primitive.symbol),
+        }),
+        RuntimePartiality::Total
+        | RuntimePartiality::SafeOption { .. }
+        | RuntimePartiality::SafeResult { .. } => None,
+    }
 }
 
 /// Compute the result phase from semantic result edges, never from arm order or
@@ -974,6 +1017,7 @@ impl<'src> Planner<'src> {
                 semantic: SemanticPlane::default(),
                 root_occurrence: None,
                 declaration_occurrences: BTreeMap::new(),
+                trap_catalog: Vec::new(),
                 source_occurrences: Vec::new(),
                 join_results: Vec::new(),
             },
@@ -1066,10 +1110,72 @@ impl<'src> Planner<'src> {
         expr: &'src RuntimeExpr,
         children: &[StaticOriginId],
     ) -> Result<(), CraneliftBackendError> {
+        match expr {
+            RuntimeExpr::Trap(trap)
+            | RuntimeExpr::Match { default: trap, .. }
+            | RuntimeExpr::ComputationalMatch { default: trap, .. } => {
+                self.intern_trap(trap)?;
+            }
+            RuntimeExpr::PrimitiveCall { primitive, .. } => {
+                if let Some(trap) = planned_partiality_trap(primitive) {
+                    self.intern_trap(&trap)?;
+                }
+            }
+            _ => {}
+        }
         let seed =
             SemanticSourceSeed::expression(node, expr, children, &mut self.plan.semantic_material)?;
         self.plan.semantic_sources.push(seed);
         self.record_source_occurrence(node, expr)
+    }
+
+    fn intern_trap(
+        &mut self,
+        trap: &RuntimeTrap,
+    ) -> Result<PlannedTrapIdentity, CraneliftBackendError> {
+        if let Some(index) = self
+            .plan
+            .trap_catalog
+            .iter()
+            .position(|candidate| candidate == trap)
+        {
+            return u32::try_from(index + 1)
+                .map(PlannedTrapIdentity)
+                .map_err(|_| planner_capacity_error("trap identity exhausted"));
+        }
+        self.plan.trap_catalog.push(trap.clone());
+        u32::try_from(self.plan.trap_catalog.len())
+            .map(PlannedTrapIdentity)
+            .map_err(|_| planner_capacity_error("trap identity exhausted"))
+    }
+
+    /// Add the cross-owner edges represented by source `DeclarationRef`
+    /// occurrences after all transparent declaration entries exist.
+    ///
+    /// These are deliberately not `StaticBody` edges: that edge kind is the
+    /// closure-body owner boundary and also seeds a function unit. A transparent
+    /// declaration entry is already a scheduling-entry seed.
+    fn connect_declaration_calls(
+        &mut self,
+        declaration_entries: &BTreeMap<String, StaticNodeId>,
+    ) -> Result<(), CraneliftBackendError> {
+        let calls = self
+            .plan
+            .source_occurrences
+            .iter()
+            .flatten()
+            .filter_map(|occurrence| match occurrence.expr {
+                RuntimeExpr::DeclarationRef { symbol } => declaration_entries
+                    .get(symbol.as_str())
+                    .copied()
+                    .map(|target| (StaticNodeId(occurrence.static_origin.0), target)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        for (caller, callee) in calls {
+            self.edge(caller, callee, EdgeKind::DeclarationCall)?;
+        }
+        Ok(())
     }
 
     /// Files this occurrence's term under the origin the planner just gave it.
@@ -1696,6 +1802,14 @@ pub(in crate::cranelift_backend) struct EmittableCallEdge {
     caller: PredeclaredFunctionId,
     callee: PredeclaredFunctionId,
     callee_origin: StaticOriginId,
+    call_site_origin: StaticOriginId,
+    kind: EmittableCallKind,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum EmittableCallKind {
+    StaticBody,
+    Declaration,
 }
 
 impl EmittableCallEdge {
@@ -1712,6 +1826,20 @@ impl EmittableCallEdge {
 
     pub(in crate::cranelift_backend) fn callee_origin(self) -> StaticOriginId {
         self.callee_origin
+    }
+
+    /// The source occurrence which owns this call operation.
+    ///
+    /// For a closure-body call this is the body target, preserving the
+    /// established lookup. For a declaration call it is the exact
+    /// `DeclarationRef` occurrence, so two references to one declaration remain
+    /// distinct typed edges without emitter-side symbol lookup.
+    pub(in crate::cranelift_backend) fn call_site_origin(self) -> StaticOriginId {
+        self.call_site_origin
+    }
+
+    pub(in crate::cranelift_backend) fn kind(self) -> EmittableCallKind {
+        self.kind
     }
 }
 
@@ -2258,6 +2386,35 @@ impl<'src> StaticTransitionPlan<'src> {
         self.declaration_occurrences.get(symbol).copied()
     }
 
+    pub(in crate::cranelift_backend) fn trap_identity(
+        &self,
+        trap: &RuntimeTrap,
+    ) -> Result<PlannedTrapIdentity, CraneliftBackendError> {
+        self.trap_catalog
+            .iter()
+            .position(|candidate| candidate == trap)
+            .ok_or_else(|| {
+                planner_error(format!(
+                    "trap outcome has no planner-bound identity: {trap:?}"
+                ))
+            })
+            .and_then(|index| {
+                u32::try_from(index + 1)
+                    .map(PlannedTrapIdentity)
+                    .map_err(|_| planner_capacity_error("trap identity exhausted"))
+            })
+    }
+
+    pub(in crate::cranelift_backend) fn trap_catalog(&self) -> Vec<RuntimeTrap> {
+        self.trap_catalog.clone()
+    }
+
+    pub(in crate::cranelift_backend) fn carrier_identity_catalog(
+        &self,
+    ) -> Result<Vec<(String, u64)>, CraneliftBackendError> {
+        self.semantic.carrier_identity_catalog()
+    }
+
     /// **`RT-FNSPLIT-B2F` `D1` — every function unit this artifact must emit, in
     /// unit order.**
     ///
@@ -2331,7 +2488,7 @@ impl<'src> StaticTransitionPlan<'src> {
     pub(in crate::cranelift_backend) fn emittable_call_edges(
         &self,
     ) -> Result<Vec<EmittableCallEdge>, CraneliftBackendError> {
-        Ok(self
+        let mut calls = self
             .semantic
             .static_body_call_edges(&self.edges)?
             .into_iter()
@@ -2339,8 +2496,25 @@ impl<'src> StaticTransitionPlan<'src> {
                 caller,
                 callee,
                 callee_origin,
+                call_site_origin: callee_origin,
+                kind: EmittableCallKind::StaticBody,
             })
-            .collect())
+            .collect::<Vec<_>>();
+        calls.extend(
+            self.semantic
+                .declaration_call_edges(&self.edges)?
+                .into_iter()
+                .map(
+                    |(caller, callee, callee_origin, call_site_origin)| EmittableCallEdge {
+                        caller,
+                        callee,
+                        callee_origin,
+                        call_site_origin,
+                        kind: EmittableCallKind::Declaration,
+                    },
+                ),
+        );
+        Ok(calls)
     }
 
     pub(in crate::cranelift_backend) fn root_emittable_unit(
@@ -3190,6 +3364,7 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'s
     planner.plan.entries.push(root.entry);
     planner.plan.root_entry = Some(root.entry);
     planner.plan.root_occurrence = Some(root.occurrence);
+    let mut declaration_entries = BTreeMap::new();
     for (symbol, declaration) in declarations {
         if let RuntimeDeclarationKind::Transparent { body } = &declaration.kind {
             let planned =
@@ -3209,8 +3384,17 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'s
                     "transparent declaration planned more than one occurrence origin",
                 ));
             }
+            if declaration_entries
+                .insert((*symbol).to_owned(), planned.entry)
+                .is_some()
+            {
+                return Err(planner_error(
+                    "transparent declaration planned more than one scheduling entry",
+                ));
+            }
         }
     }
+    planner.connect_declaration_calls(&declaration_entries)?;
     planner.finish(symbols, root_ingress, functionized_units)
 }
 

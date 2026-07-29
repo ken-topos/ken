@@ -197,7 +197,7 @@ fn select_body_emission_authority(
 }
 
 pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
-    mut module: M,
+    module: M,
     function_name: &str,
     linkage: Linkage,
     // `'a`, not an anonymous borrow: the plan files each planned occurrence's term
@@ -212,6 +212,72 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
     process_symbols: Option<&crate::NativeProcessSymbols>,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     oriented_subcontinuation_plan: Option<crate::OrientedSubcontinuationPlanV1>,
+) -> Result<CompiledModule<M>, CraneliftBackendError> {
+    compile_expr_into_module_with_root_projection(
+        module,
+        function_name,
+        linkage,
+        expr,
+        seed_env,
+        declarations,
+        staged_process_input,
+        process_mode,
+        process_symbols,
+        native_join_plan,
+        oriented_subcontinuation_plan,
+        false,
+        false,
+    )
+}
+
+/// Compile an object entry whose public scalar launcher consumes a scalar,
+/// while generated-unit calls continue to exchange their planner-selected
+/// carrier words internally.
+pub(in crate::cranelift_backend) fn compile_expr_into_object_module<'a, M: Module>(
+    module: M,
+    function_name: &str,
+    linkage: Linkage,
+    expr: &'a RuntimeExpr,
+    seed_env: &'a NativeSeedEnvironment,
+    declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
+    staged_process_input: Option<&RuntimeValue>,
+    process_mode: bool,
+    process_symbols: Option<&crate::NativeProcessSymbols>,
+    native_join_plan: Option<crate::NativeJoinPlanV1>,
+    oriented_subcontinuation_plan: Option<crate::OrientedSubcontinuationPlanV1>,
+) -> Result<CompiledModule<M>, CraneliftBackendError> {
+    compile_expr_into_module_with_root_projection(
+        module,
+        function_name,
+        linkage,
+        expr,
+        seed_env,
+        declarations,
+        staged_process_input,
+        process_mode,
+        process_symbols,
+        native_join_plan,
+        oriented_subcontinuation_plan,
+        !process_mode,
+        process_mode,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compile_expr_into_module_with_root_projection<'a, M: Module>(
+    mut module: M,
+    function_name: &str,
+    linkage: Linkage,
+    expr: &'a RuntimeExpr,
+    seed_env: &'a NativeSeedEnvironment,
+    declarations: BTreeMap<&'a str, &'a RuntimeDeclaration>,
+    staged_process_input: Option<&RuntimeValue>,
+    process_mode: bool,
+    process_symbols: Option<&crate::NativeProcessSymbols>,
+    native_join_plan: Option<crate::NativeJoinPlanV1>,
+    oriented_subcontinuation_plan: Option<crate::OrientedSubcontinuationPlanV1>,
+    project_public_scalar_root: bool,
+    root_trap_process_sentinel: bool,
 ) -> Result<CompiledModule<M>, CraneliftBackendError> {
     #[cfg(test)]
     {
@@ -442,6 +508,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
         unsupported: Vec::new(),
         body_emission_authority,
         process_object: process_mode,
+        root_trap_process_sentinel,
         process_symbols,
         #[cfg(test)]
         native_int_mutation: NATIVE_INT_LOWERING_MUTATION.with(std::cell::Cell::get),
@@ -471,6 +538,7 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
                 unit_bundle,
                 func_id,
                 process_mode,
+                project_public_scalar_root,
             )?;
             root_result
         }
@@ -611,12 +679,18 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
             }
         }
     };
+    let trap_catalog = compiler.static_transition_plan.trap_catalog();
+    let carrier_identity_catalog = compiler
+        .static_transition_plan
+        .carrier_identity_catalog()?;
     let compiled = CompiledModule::from_parts(
         module,
         func_id,
         root_result.decoder,
         compiler.result_table,
         root_result.trap,
+        trap_catalog,
+        carrier_identity_catalog,
         true,
         compiler.assumptions,
         compiler.unsupported,
@@ -1723,7 +1797,7 @@ impl<'a> Lowering<'a> {
                             producer_env,
                             eliminators,
                         )?;
-                        if Self::seal_source_trap_branch(builder, &lowered) {
+                        if self.seal_source_trap_branch(builder, &lowered)? {
                             continue;
                         }
                         let merge = merge.ok_or_else(|| {
@@ -1800,7 +1874,7 @@ impl<'a> Lowering<'a> {
                         } else {
                             LoweringOperand::Specialized(Lowered::Trap(producer_default.clone()))
                         };
-                        if Self::seal_source_trap_branch(builder, &lowered) {
+                        if self.seal_source_trap_branch(builder, &lowered)? {
                             continue;
                         }
                         let merge = merge.ok_or_else(|| {
@@ -2002,6 +2076,7 @@ impl<'a> Lowering<'a> {
                 }
                 builder.ins().brif(value, then_block, &[], else_block, &[]);
                 let mut merge_kind = None;
+                let mut terminal_trap = None;
                 for (block, branch) in [(then_block, then_expr), (else_block, else_expr)] {
                     builder.switch_to_block(block);
                     let lowered = self.lower_computational_producer_expr(
@@ -2010,7 +2085,10 @@ impl<'a> Lowering<'a> {
                         producer_env,
                         eliminators,
                     )?;
-                    if Self::seal_source_trap_branch(builder, &lowered) {
+                    if let LoweringOperand::Specialized(Lowered::Trap(trap)) = &lowered {
+                        terminal_trap.get_or_insert_with(|| trap.clone());
+                    }
+                    if self.seal_source_trap_branch(builder, &lowered)? {
                         continue;
                     }
                     let merge = merge.ok_or_else(|| {
@@ -2033,10 +2111,14 @@ impl<'a> Lowering<'a> {
                 let Some(merge) = merge else {
                     let unreachable = builder.create_block();
                     builder.switch_to_block(unreachable);
-                    return Ok(LoweringOperand::Specialized(Lowered::Trap(RuntimeTrap {
-                        code: RuntimeTrapCode::PatternMatchFailure,
-                        message: "all producer If alternatives trap".to_string(),
-                    })));
+                    let trap = terminal_trap.ok_or_else(|| {
+                        backend_module(
+                            "producer If join omitted both a continuing predecessor and a \
+                             source trap"
+                                .to_string(),
+                        )
+                    })?;
+                    return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
                 };
                 self.finish_planned_join(
                     builder,
@@ -4215,7 +4297,7 @@ impl<'a> Lowering<'a> {
                 arm_env,
                 branch_control,
             )?;
-            if Self::seal_source_trap_branch(builder, &lowered) {
+            if self.seal_source_trap_branch(builder, &lowered)? {
                 // A trap terminates this mutually exclusive predecessor.
             } else if !matches!(
                 lowered,
@@ -4375,7 +4457,7 @@ impl<'a> Lowering<'a> {
                 env.to_vec(),
                 branch_control,
             )?;
-            if Self::seal_source_trap_branch(builder, &lowered) {
+            if self.seal_source_trap_branch(builder, &lowered)? {
                 // A trap terminates this mutually exclusive predecessor.
             } else if !matches!(
                 lowered,
@@ -4524,7 +4606,7 @@ impl<'a> Lowering<'a> {
                     branch_control,
                 )?
             };
-            if Self::seal_source_trap_branch(builder, &lowered) {
+            if self.seal_source_trap_branch(builder, &lowered)? {
                 // A trap terminates this mutually exclusive predecessor.
             } else if !matches!(
                 lowered,
@@ -4672,7 +4754,7 @@ impl<'a> Lowering<'a> {
                 materialize_dynamic_constructor_env(&alternative, env),
                 control,
             )?;
-            if Self::seal_source_trap_branch(builder, &lowered) {
+            if self.seal_source_trap_branch(builder, &lowered)? {
                 // A trap terminates this mutually exclusive predecessor.
             } else if !matches!(
                 lowered,
@@ -4783,7 +4865,7 @@ impl<'a> Lowering<'a> {
                 materialize_dynamic_constructor_env(&alternative, env),
                 control,
             )?;
-            if Self::seal_source_trap_branch(builder, &lowered) {
+            if self.seal_source_trap_branch(builder, &lowered)? {
                 // A trap terminates this mutually exclusive predecessor.
             } else if !matches!(
                 lowered,
@@ -5709,7 +5791,7 @@ impl<'a> Lowering<'a> {
             env,
             &join_plan,
         )?;
-        if Self::seal_source_trap_branch(builder, &borrowed_result) {
+        if self.seal_source_trap_branch(builder, &borrowed_result)? {
             // This runtime representation has no continuing predecessor.
         } else {
             let merge = merge.ok_or_else(|| {
@@ -5738,7 +5820,7 @@ impl<'a> Lowering<'a> {
             env,
             &join_plan,
         )?;
-        if Self::seal_source_trap_branch(builder, &represented_result) {
+        if self.seal_source_trap_branch(builder, &represented_result)? {
             // This runtime representation has no continuing predecessor.
         } else {
             let merge = merge.ok_or_else(|| {
@@ -5870,7 +5952,7 @@ impl<'a> Lowering<'a> {
                 builder.switch_to_block(next);
             }
             let defaulted = LoweringOperand::Specialized(Lowered::Trap(default.clone()));
-            if !Self::seal_source_trap_branch(builder, &defaulted) {
+            if !self.seal_source_trap_branch(builder, &defaulted)? {
                 return Err(unsupported(
                     "Match",
                     "the carried Result match's closed default did not seal its branch",
@@ -5886,7 +5968,7 @@ impl<'a> Lowering<'a> {
                 let body = self.case_body_occurrence(static_origin, index, &case.body)?;
                 let body_origin = body.static_origin;
                 let lowered = self.lower_expr(builder, body, &case_env)?;
-                if Self::seal_source_trap_branch(builder, &lowered) {
+                if self.seal_source_trap_branch(builder, &lowered)? {
                     continue;
                 }
                 let merge = merge.ok_or_else(|| {
@@ -6003,7 +6085,7 @@ impl<'a> Lowering<'a> {
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
             let body_origin = body.static_origin;
             let lowered = self.lower_expr(builder, body, &case_env)?;
-            if Self::seal_source_trap_branch(builder, &lowered) {
+            if self.seal_source_trap_branch(builder, &lowered)? {
                 builder.switch_to_block(next);
                 continue;
             }
@@ -6032,7 +6114,7 @@ impl<'a> Lowering<'a> {
         // ever changes, both move together. A constructor outside the
         // artifact-static case set lands here, at runtime, and returns.
         let defaulted = LoweringOperand::Specialized(Lowered::Trap(default.clone()));
-        if !Self::seal_source_trap_branch(builder, &defaulted) {
+        if !self.seal_source_trap_branch(builder, &defaulted)? {
             return Err(unsupported(
                 "Match",
                 "the carried match's closed default did not seal its branch",
@@ -6464,7 +6546,7 @@ impl<'a> Lowering<'a> {
         }
 
         let defaulted = LoweringOperand::Specialized(Lowered::Trap(eliminator.default.clone()));
-        if !Self::seal_source_trap_branch(builder, &defaulted) {
+        if !self.seal_source_trap_branch(builder, &defaulted)? {
             return Err(unsupported(
                 "ComputationalMatch",
                 "the carried computational match's closed default did not seal its branch",
@@ -6662,10 +6744,14 @@ impl<'a> Lowering<'a> {
                 }
                 builder.ins().brif(value, then_block, &[], else_block, &[]);
                 let mut merge_kind = None;
+                let mut terminal_trap = None;
                 for (block, arm) in [(then_block, then_expr), (else_block, else_expr)] {
                     builder.switch_to_block(block);
                     let lowered = self.lower_expr(builder, arm, env)?;
-                    if Self::seal_source_trap_branch(builder, &lowered) {
+                    if let LoweringOperand::Specialized(Lowered::Trap(trap)) = &lowered {
+                        terminal_trap.get_or_insert_with(|| trap.clone());
+                    }
+                    if self.seal_source_trap_branch(builder, &lowered)? {
                         continue;
                     }
                     let merge = merge.ok_or_else(|| {
@@ -6687,10 +6773,13 @@ impl<'a> Lowering<'a> {
                 let Some(merge) = merge else {
                     let unreachable = builder.create_block();
                     builder.switch_to_block(unreachable);
-                    return Ok(LoweringOperand::Specialized(Lowered::Trap(RuntimeTrap {
-                        code: RuntimeTrapCode::PatternMatchFailure,
-                        message: "all dynamic If alternatives trap".to_string(),
-                    })));
+                    let trap = terminal_trap.ok_or_else(|| {
+                        backend_module(
+                            "If join omitted both a continuing predecessor and a source trap"
+                                .to_string(),
+                        )
+                    })?;
+                    return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
                 };
                 self.finish_planned_join(builder, merge, &join_plan, merge_kind, "If")
             }
@@ -6865,6 +6954,7 @@ impl<'a> Lowering<'a> {
                         &err_constructor,
                         &ok_constructor,
                         cases,
+                        default,
                         static_origin,
                         env,
                     );
@@ -6920,13 +7010,17 @@ impl<'a> Lowering<'a> {
                         .ins()
                         .brif(value, true_block, &[], false_block, &[]);
                     let mut merge_kind = None;
+                    let mut terminal_trap = None;
                     for (block, (index, case)) in
                         [(true_block, true_case), (false_block, false_case)]
                     {
                         builder.switch_to_block(block);
                         let body = self.case_body_occurrence(static_origin, index, &case.body)?;
                         let lowered = self.lower_expr(builder, body, env)?;
-                        if Self::seal_source_trap_branch(builder, &lowered) {
+                        if let LoweringOperand::Specialized(Lowered::Trap(trap)) = &lowered {
+                            terminal_trap.get_or_insert_with(|| trap.clone());
+                        }
+                        if self.seal_source_trap_branch(builder, &lowered)? {
                             continue;
                         }
                         let merge = merge.ok_or_else(|| {
@@ -6949,10 +7043,14 @@ impl<'a> Lowering<'a> {
                     let Some(merge) = merge else {
                         let unreachable = builder.create_block();
                         builder.switch_to_block(unreachable);
-                        return Ok(LoweringOperand::Specialized(Lowered::Trap(RuntimeTrap {
-                            code: RuntimeTrapCode::PatternMatchFailure,
-                            message: "all Bool Match alternatives trap".to_string(),
-                        })));
+                        let trap = terminal_trap.ok_or_else(|| {
+                            backend_module(
+                                "Bool Match join omitted both a continuing predecessor and a \
+                                 source trap"
+                                    .to_string(),
+                            )
+                        })?;
+                        return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
                     };
                     return self.finish_planned_join(
                         builder,
@@ -7130,7 +7228,9 @@ impl<'a> Lowering<'a> {
                     body: body.static_origin,
                 }))
             }
-            RuntimeExpr::DeclarationRef { symbol } => self.lower_declaration_ref(builder, symbol),
+            RuntimeExpr::DeclarationRef { symbol } => {
+                self.lower_declaration_ref(builder, static_origin, symbol)
+            }
             RuntimeExpr::ImportedDeclarationRef {
                 symbol,
                 dependency,
@@ -8800,6 +8900,7 @@ impl<'a> Lowering<'a> {
     fn lower_declaration_ref(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        reference_origin: StaticOriginId,
         symbol: &RuntimeSymbol,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let declaration = self
@@ -8855,6 +8956,9 @@ impl<'a> Lowering<'a> {
                 params: params.clone(),
                 body: body.static_origin,
             }));
+        }
+        if self.body_emission_authority == BodyEmissionAuthority::FunctionizedUnits {
+            return self.call_declared_declaration_unit(builder, reference_origin);
         }
         if self.declaration_stack.contains(symbol) {
             return Err(unsupported(
@@ -8984,7 +9088,7 @@ impl<'a> Lowering<'a> {
             arm_env.extend_from_slice(env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
             let lowered = self.lower_expr(builder, body, &arm_env)?;
-            if !Self::seal_source_trap_branch(builder, &lowered) {
+            if !self.seal_source_trap_branch(builder, &lowered)? {
                 let merge = merge.ok_or_else(|| {
                     backend_module(
                         "join plan omitted a merge despite a continuing predecessor".to_string(),
@@ -9042,6 +9146,7 @@ impl<'a> Lowering<'a> {
         let some_block = builder.create_block();
         let none_block = builder.create_block();
         let mut merge_kind = None;
+        let mut terminal_trap = None;
         builder
             .ins()
             .brif(present, some_block, &[], none_block, &[]);
@@ -9065,7 +9170,10 @@ impl<'a> Lowering<'a> {
             let arm_env = env_with(fields, env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
             let lowered = self.lower_expr(builder, body, &arm_env)?;
-            if Self::seal_source_trap_branch(builder, &lowered) {
+            if let LoweringOperand::Specialized(Lowered::Trap(trap)) = &lowered {
+                terminal_trap.get_or_insert_with(|| trap.clone());
+            }
+            if self.seal_source_trap_branch(builder, &lowered)? {
                 continue;
             }
             let merge = merge.ok_or_else(|| {
@@ -9087,10 +9195,14 @@ impl<'a> Lowering<'a> {
         let Some(merge) = merge else {
             let unreachable_continuation = builder.create_block();
             builder.switch_to_block(unreachable_continuation);
-            return Ok(LoweringOperand::Specialized(Lowered::Trap(RuntimeTrap {
-                code: RuntimeTrapCode::PatternMatchFailure,
-                message: "all borrowed Option alternatives trap".to_string(),
-            })));
+            let trap = terminal_trap.ok_or_else(|| {
+                backend_module(
+                    "borrowed Option join omitted both a continuing predecessor and a source \
+                     trap"
+                        .to_string(),
+                )
+            })?;
+            return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
         };
         self.finish_planned_join(builder, merge, &join_plan, merge_kind, "Match")
     }
@@ -9105,6 +9217,7 @@ impl<'a> Lowering<'a> {
         err_constructor: &str,
         ok_constructor: &str,
         cases: &[crate::RuntimeMatchCase],
+        default: &RuntimeTrap,
         static_origin: StaticOriginId,
         env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
@@ -9145,7 +9258,7 @@ impl<'a> Lowering<'a> {
             let arm_env = env_with([payload], env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
             let lowered = self.lower_expr(builder, body, &arm_env)?;
-            if Self::seal_source_trap_branch(builder, &lowered) {
+            if self.seal_source_trap_branch(builder, &lowered)? {
                 continue;
             }
             let merge = merge.ok_or_else(|| {
@@ -9177,10 +9290,7 @@ impl<'a> Lowering<'a> {
         let Some(merge) = merge else {
             let unreachable_continuation = builder.create_block();
             builder.switch_to_block(unreachable_continuation);
-            return Ok(LoweringOperand::Specialized(Lowered::Trap(RuntimeTrap {
-                code: RuntimeTrapCode::PatternMatchFailure,
-                message: "all HostResult match alternatives trap".to_string(),
-            })));
+            return Ok(LoweringOperand::Specialized(Lowered::Trap(default.clone())));
         };
         builder.switch_to_block(merge);
         match join_plan.representation {
@@ -9241,6 +9351,7 @@ impl<'a> Lowering<'a> {
                 .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, nat.value, 0);
         builder.ins().brif(is_zero, zero_block, &[], suc_block, &[]);
         let mut merge_kind = None;
+        let mut terminal_trap = None;
         for (block, (index, case), predecessor) in [
             (zero_block, zero, None),
             (suc_block, suc, Some(predecessor)),
@@ -9261,7 +9372,10 @@ impl<'a> Lowering<'a> {
             arm_env.extend_from_slice(env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
             let lowered = self.lower_expr(builder, body, &arm_env)?;
-            if Self::seal_source_trap_branch(builder, &lowered) {
+            if let LoweringOperand::Specialized(Lowered::Trap(trap)) = &lowered {
+                terminal_trap.get_or_insert_with(|| trap.clone());
+            }
+            if self.seal_source_trap_branch(builder, &lowered)? {
                 continue;
             }
             let merge = merge.ok_or_else(|| {
@@ -9283,10 +9397,13 @@ impl<'a> Lowering<'a> {
         let Some(merge) = merge else {
             let unreachable = builder.create_block();
             builder.switch_to_block(unreachable);
-            return Ok(LoweringOperand::Specialized(Lowered::Trap(RuntimeTrap {
-                code: RuntimeTrapCode::PatternMatchFailure,
-                message: "all BoundedNat alternatives trap".to_string(),
-            })));
+            let trap = terminal_trap.ok_or_else(|| {
+                backend_module(
+                    "BoundedNat join omitted both a continuing predecessor and a source trap"
+                        .to_string(),
+                )
+            })?;
+            return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
         };
         self.finish_planned_join(builder, merge, &join_plan, merge_kind, "BoundedNat")
     }
@@ -9370,7 +9487,7 @@ impl<'a> Lowering<'a> {
                     self.lower_computational_producer_expr(builder, body, &arm_env, eliminators)?
                 }
             };
-            if Self::seal_source_trap_branch(builder, &lowered) {
+            if self.seal_source_trap_branch(builder, &lowered)? {
                 test_block = next;
                 continue;
             }
@@ -9441,24 +9558,19 @@ impl<'a> Lowering<'a> {
                 self.assumptions.insert(format!(
                     "checked partial obligation {obligation} not discharged"
                 ));
-                let message = if obligation.ends_with(".bounds") {
-                    format!("{} bounds obligation failed", primitive.symbol)
-                } else {
-                    format!("{} checked partiality trapped", primitive.symbol)
-                };
-                return Ok(LoweringOperand::Specialized(Lowered::Trap(RuntimeTrap {
-                    code: RuntimeTrapCode::ExplicitTrap,
-                    message,
-                })));
+                let trap =
+                    crate::cranelift_backend::planning::planned_partiality_trap(primitive)
+                        .expect("CheckedTrap has one planner-derived trap");
+                return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
             }
             RuntimePartiality::TrustedTrap { assumption } => {
                 self.assumptions.insert(format!(
                     "trusted partial assumption {assumption} remains visible"
                 ));
-                return Ok(LoweringOperand::Specialized(Lowered::Trap(RuntimeTrap {
-                    code: RuntimeTrapCode::ExplicitTrap,
-                    message: format!("{} trusted partiality trapped", primitive.symbol),
-                })));
+                let trap =
+                    crate::cranelift_backend::planning::planned_partiality_trap(primitive)
+                        .expect("TrustedTrap has one planner-derived trap");
+                return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
             }
         }
 

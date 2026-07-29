@@ -911,10 +911,10 @@ struct OwnershipPartition {
 /// the edge law unsatisfiable, because that terminal edge is a non-`StaticBody`
 /// edge out of a body-owned node.
 ///
-/// Traversal is over non-`StaticBody` edges only, so a `StaticBody` edge is the
-/// one and only owner boundary. The two shared exits are never owned and never
-/// traversed through — they have no outgoing edges by construction
-/// (`static_transition.rs:1258`).
+/// Traversal excludes both typed call-edge kinds. `StaticBody` seeds a new
+/// closure-body unit; `DeclarationCall` targets an already-seeded scheduling
+/// entry. The two shared exits are never owned and never traversed through —
+/// they have no outgoing edges by construction (`static_transition.rs:1258`).
 fn partition_function_units(
     nodes: &[StaticNode],
     edges: &[StaticEdge],
@@ -972,7 +972,10 @@ fn partition_function_units(
 
     let mut outgoing = vec![Vec::new(); nodes.len()];
     for edge in edges {
-        if edge.kind == EdgeKind::StaticBody {
+        if matches!(
+            edge.kind,
+            EdgeKind::StaticBody | EdgeKind::DeclarationCall
+        ) {
             continue;
         }
         if edge.to.0 as usize >= nodes.len() {
@@ -1211,6 +1214,55 @@ fn opcode_for_source(source: SemanticSourceKind) -> SemanticOpcode {
 }
 
 impl SemanticPlane {
+    /// Closed diagnostic/runtime view of the planner-owned carrier identity
+    /// namespace. The returned words are the existing packed spans; this
+    /// accessor neither interns nor derives an identity.
+    pub(super) fn carrier_identity_catalog(
+        &self,
+    ) -> Result<Vec<(String, u64)>, CraneliftBackendError> {
+        let mut catalog = BTreeMap::<u64, String>::new();
+        let mut record = |span: DenseRange| -> Result<(), CraneliftBackendError> {
+            validate_range(
+                span,
+                self.names.len(),
+                "carrier identity catalog span is outside the closed name arena",
+            )?;
+            let bytes = plane_slice(&self.names, span, "carrier identity spelling")?;
+            let spelling = std::str::from_utf8(bytes)
+                .map_err(|_| planner_error("carrier identity spelling is not UTF-8"))?
+                .to_string();
+            let identity = pack_identity(span)?;
+            if catalog
+                .insert(identity, spelling.clone())
+                .is_some_and(|prior| prior != spelling)
+            {
+                return Err(planner_error(
+                    "one carrier identity names two different spellings",
+                ));
+            }
+            Ok(())
+        };
+        for atom in &self.operands {
+            if matches!(
+                atom.kind,
+                SemanticAtomKind::ConstructorSymbol
+                    | SemanticAtomKind::CaseConstructor
+                    | SemanticAtomKind::RecordFieldName
+                    | SemanticAtomKind::ProjectField
+                    | SemanticAtomKind::ValueConstructor
+            ) {
+                record(atom.content)?;
+            }
+        }
+        for span in self.synthesized_constructor_roles.values().copied() {
+            record(span)?;
+        }
+        Ok(catalog
+            .into_iter()
+            .map(|(identity, spelling)| (spelling, identity))
+            .collect())
+    }
+
     pub(super) fn install_synthesized_constructor_inventory(
         &mut self,
         identities: BTreeMap<SynthesizedConstructorRole, DenseRange>,
@@ -1592,6 +1644,57 @@ impl SemanticPlane {
         Ok(call_edges)
     }
 
+    /// The separately typed call edges from `DeclarationRef` occurrences to
+    /// already-owned transparent-declaration scheduling entries.
+    pub(super) fn declaration_call_edges(
+        &self,
+        edges: &[StaticEdge],
+    ) -> Result<
+        Vec<(
+            PredeclaredFunctionId,
+            PredeclaredFunctionId,
+            StaticOriginId,
+            StaticOriginId,
+        )>,
+        CraneliftBackendError,
+    > {
+        let owner_of = |node: StaticNodeId| -> Result<SemanticOwner, CraneliftBackendError> {
+            self.descriptors
+                .get(node.0 as usize)
+                .map(|descriptor| descriptor.owner)
+                .ok_or_else(|| {
+                    planner_error("declaration call endpoint has no semantic descriptor")
+                })
+        };
+        let mut call_edges = Vec::new();
+        for edge in edges {
+            if edge.kind != EdgeKind::DeclarationCall {
+                continue;
+            }
+            let (SemanticOwner::Function(caller), SemanticOwner::Function(callee)) =
+                (owner_of(edge.from)?, owner_of(edge.to)?)
+            else {
+                return Err(planner_error(
+                    "declaration call edge does not join two function units",
+                ));
+            };
+            let callee_origin = self
+                .functions
+                .get(callee.0 as usize)
+                .ok_or_else(|| {
+                    planner_error("declaration call callee has no function descriptor")
+                })?
+                .origin;
+            call_edges.push((
+                caller,
+                callee,
+                callee_origin,
+                StaticOriginId(edge.from.0),
+            ));
+        }
+        Ok(call_edges)
+    }
+
     pub(super) fn function_for_node(
         &self,
         node: StaticNodeId,
@@ -1613,6 +1716,7 @@ impl SemanticPlane {
         nodes: &[StaticNode],
         edges: &[StaticEdge],
         entries: &[StaticNodeId],
+        sources: &[SemanticSourceSeed],
     ) -> Result<(), CraneliftBackendError> {
         let partition = partition_function_units(nodes, edges, entries)?;
 
@@ -1719,6 +1823,32 @@ impl SemanticPlane {
                         "static body edge target is not its function unit's seed",
                     ));
                 }
+            } else if edge.kind == EdgeKind::DeclarationCall {
+                let SemanticOwner::Function(to_unit) = to else {
+                    return Err(planner_error(
+                        "declaration call edge targets a shared exit",
+                    ));
+                };
+                if to_unit == from_unit {
+                    return Err(planner_error(
+                        "declaration call edge does not cross a function unit boundary",
+                    ));
+                }
+                if !entries.contains(&edge.to) {
+                    return Err(planner_error(
+                        "declaration call edge target is not a scheduling entry",
+                    ));
+                }
+                let source = sources
+                    .get(edge.from.0 as usize)
+                    .ok_or_else(|| planner_error("declaration call source has no semantic seed"))?;
+                if source.source
+                    != SemanticSourceKind::Expression(RuntimeExprShape::DeclarationRef)
+                {
+                    return Err(planner_error(
+                        "declaration call edge source is not a DeclarationRef occurrence",
+                    ));
+                }
             } else {
                 // A non-StaticBody edge stays inside one unit, or exits to a
                 // shared exit — which lowers as this unit's own return or trap,
@@ -1810,7 +1940,7 @@ impl SemanticPlane {
                 "semantic program arena contains a post-origin clone",
             ));
         }
-        self.validate_function_units(nodes, edges, entries)?;
+        self.validate_function_units(nodes, edges, entries, sources)?;
 
         let source_by_node = positioned_sources(nodes, sources)?;
         let expected_operands = source_by_node.iter().try_fold(0usize, |total, source| {

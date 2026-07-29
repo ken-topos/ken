@@ -201,6 +201,8 @@ impl CallEdgeTargets {
 pub(in crate::cranelift_backend) struct ResolvedUnitTarget {
     function: FuncId,
     origin: StaticOriginId,
+    call_site_origin: StaticOriginId,
+    kind: EmittableCallKind,
     header: AbiFrameHeader,
     slots: Vec<AbiSlot>,
     offsets: Vec<u32>,
@@ -209,9 +211,17 @@ pub(in crate::cranelift_backend) struct ResolvedUnitTarget {
 #[derive(Clone)]
 pub(in crate::cranelift_backend) struct DeclaredUnitCall {
     pub(in crate::cranelift_backend) function: FuncRef,
+    pub(in crate::cranelift_backend) origin: StaticOriginId,
     pub(in crate::cranelift_backend) header: AbiFrameHeader,
     pub(in crate::cranelift_backend) slots: Vec<AbiSlot>,
     pub(in crate::cranelift_backend) offsets: Vec<u32>,
+}
+
+pub(in crate::cranelift_backend) struct DeclaredUnitCalls {
+    pub(in crate::cranelift_backend) static_bodies:
+        BTreeMap<StaticOriginId, DeclaredUnitCall>,
+    pub(in crate::cranelift_backend) declarations:
+        BTreeMap<StaticOriginId, DeclaredUnitCall>,
 }
 
 impl CallEdgeTargets {
@@ -220,22 +230,35 @@ impl CallEdgeTargets {
         caller: PredeclaredFunctionId,
         module: &mut M,
         func: &mut Function,
-    ) -> Result<BTreeMap<StaticOriginId, DeclaredUnitCall>, CraneliftBackendError> {
-        let mut calls = BTreeMap::new();
+    ) -> Result<DeclaredUnitCalls, CraneliftBackendError> {
+        let mut static_bodies = BTreeMap::new();
+        let mut declarations = BTreeMap::new();
         for target in self.targets_in(caller) {
             let call = DeclaredUnitCall {
                 function: module.declare_func_in_func(target.function, func),
+                origin: target.origin,
                 header: target.header,
                 slots: target.slots.clone(),
                 offsets: target.offsets.clone(),
             };
-            if calls.insert(target.origin, call).is_some() {
-                return Err(backend_module(
-                    "one caller has two static-body calls to the same body origin".to_string(),
-                ));
+            let (calls, duplicate) = match target.kind {
+                EmittableCallKind::StaticBody => (
+                    &mut static_bodies,
+                    "one caller has two static-body calls to the same body origin",
+                ),
+                EmittableCallKind::Declaration => (
+                    &mut declarations,
+                    "one declaration-reference occurrence has two planner-derived call targets",
+                ),
+            };
+            if calls.insert(target.call_site_origin, call).is_some() {
+                return Err(backend_module(duplicate.to_string()));
             }
         }
-        Ok(calls)
+        Ok(DeclaredUnitCalls {
+            static_bodies,
+            declarations,
+        })
     }
 }
 
@@ -315,6 +338,8 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
             ResolvedUnitTarget {
                 function: target,
                 origin: edge.callee_origin(),
+                call_site_origin: edge.call_site_origin(),
+                kind: edge.kind(),
                 header: unit.header(),
                 slots: unit.slots().to_vec(),
                 offsets,
@@ -411,6 +436,7 @@ pub(super) fn define_root_adapter<M: Module>(
     bundle: &UnitBundle,
     adapter_id: FuncId,
     process_mode: bool,
+    project_public_scalar_root: bool,
 ) -> Result<(), CraneliftBackendError> {
     let root = compiler.static_transition_plan.root_emittable_unit()?;
     let root_id = bundle.function(root.function()).ok_or_else(|| {
@@ -445,6 +471,7 @@ pub(super) fn define_root_adapter<M: Module>(
         root_origin,
         DeclaredUnitCall {
             function: module.declare_func_in_func(root_id, &mut func),
+            origin: root_origin,
             header: root.header(),
             slots: root.slots().to_vec(),
             offsets,
@@ -539,7 +566,12 @@ pub(super) fn define_root_adapter<M: Module>(
                 "the internal root call did not return its result word".to_string(),
             ));
         };
-        builder.ins().return_(&[result.word]);
+        let public_result = if project_public_scalar_root {
+            compiler.emit_public_carrier_scalar(&mut builder, result)?
+        } else {
+            result.word
+        };
+        builder.ins().return_(&[public_result]);
         builder.seal_all_blocks();
         builder.finalize();
     }
@@ -667,6 +699,13 @@ fn define_unit_body<M: Module>(
             // built, and returning a default word would fabricate a result.
             backend_module("unit frame declares no result slot".to_string())
         })?;
+    let trap_offset = unit
+        .slots
+        .iter()
+        .zip(&unit.offsets)
+        .find(|(slot, _)| slot.kind == AbiSlotKind::Trap)
+        .map(|(_, offset)| *offset)
+        .ok_or_else(|| backend_module("unit frame declares no trap slot".to_string()))?;
 
     let sig = unit_signature(module);
     let mut func = Function::with_name_signature(UserFuncName::user(2, id.as_u32()), sig);
@@ -680,8 +719,9 @@ fn define_unit_body<M: Module>(
     // ordinal, no name parsing and no dynamic lookup anywhere on the path. ⚠ An
     // emitted `call` is not claimed and no control here asserts one.
     let mut function_local = helpers.declare_in_func(module, &mut func);
-    function_local.unit_calls =
-        call_edges.declare_in_func(unit.function, module, &mut func)?;
+    let declared_calls = call_edges.declare_in_func(unit.function, module, &mut func)?;
+    function_local.unit_calls = declared_calls.static_bodies;
+    function_local.declaration_calls = declared_calls.declarations;
     let mut func_ctx = FunctionBuilderContext::new();
     let root_outcome;
     {
@@ -723,6 +763,12 @@ fn define_unit_body<M: Module>(
         function_local.services_pointer = Some(services);
         // The two fixed envelope loads are unconditional. Semantic frame
         // accesses below are relative only to the B2R payload base.
+        function_local.activation_slots = Some(slots);
+        function_local.activation_trap_offset = Some(
+            i32::try_from(trap_offset).map_err(|_| {
+                backend_module("abi trap slot offset exceeds addressable range".to_string())
+            })?,
+        );
         compiler.function_local = function_local;
         #[cfg(test)]
         if is_root
@@ -851,7 +897,7 @@ fn define_unit_body<M: Module>(
         let (result, outcome) = if is_root {
             match lowered {
                 LoweringOperand::Carried(word) if !compiler.process_object => (
-                    word.word,
+                    Some(word.word),
                     Some(RootUnitResult {
                         decoder: Some(ResultDecoder::Boundary),
                         trap: None,
@@ -869,7 +915,7 @@ fn define_unit_body<M: Module>(
                     );
                     let status = compiler.emit_carrier_scalar(&mut builder, word)?;
                     (
-                        status,
+                        Some(status),
                         Some(RootUnitResult {
                             decoder: Some(ResultDecoder::ProcessStatus),
                             trap: None,
@@ -885,22 +931,19 @@ fn define_unit_body<M: Module>(
                             },
                         );
                     }
-                    let status = builder.ins().iconst(
-                        types::I64,
-                        if compiler.process_object { -4 } else { 0 },
-                    );
+                    compiler.emit_current_trap(&mut builder, &trap)?;
                     (
-                        status,
+                        None,
                         Some(RootUnitResult {
-                            decoder: None,
-                            trap: Some(trap),
+                            decoder: Some(ResultDecoder::TrapOnly),
+                            trap: None,
                         }),
                     )
                 }
                 LoweringOperand::Specialized(value) => {
                     let (token, decoder) = compiler.emit_result(&mut builder, value)?;
                     (
-                        token,
+                        Some(token),
                         Some(RootUnitResult {
                             decoder: Some(decoder),
                             trap: None,
@@ -910,23 +953,32 @@ fn define_unit_body<M: Module>(
             }
         } else {
             let word = match lowered {
-                LoweringOperand::Carried(word) => word.word,
-                LoweringOperand::Specialized(value) => compiler
-                    .transfer_unit_result_into_carrier(&mut builder, unit.origin, &value)?
-                    .word,
+                LoweringOperand::Carried(word) => Some(word.word),
+                LoweringOperand::Specialized(Lowered::Trap(trap)) => {
+                    compiler.emit_current_trap(&mut builder, &trap)?;
+                    None
+                }
+                LoweringOperand::Specialized(value) => Some(
+                    compiler
+                        .transfer_unit_result_into_carrier(&mut builder, unit.origin, &value)?
+                        .word,
+                ),
             };
             (word, None)
         };
         root_outcome = outcome;
-        builder.ins().store(
-            MemFlags::trusted(),
-            result,
-            slots,
-            i32::try_from(result_offset).map_err(|_| {
-                backend_module("abi result slot offset exceeds addressable range".to_string())
-            })?,
-        );
-        builder.ins().return_(&[result]);
+        if let Some(result) = result {
+            builder.ins().store(
+                MemFlags::trusted(),
+                result,
+                slots,
+                i32::try_from(result_offset).map_err(|_| {
+                    backend_module("abi result slot offset exceeds addressable range".to_string())
+                })?,
+            );
+        }
+        let status = builder.ins().iconst(types::I64, 0);
+        builder.ins().return_(&[status]);
         builder.seal_all_blocks();
         builder.finalize();
     }

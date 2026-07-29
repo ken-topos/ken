@@ -74,7 +74,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
-    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableUnit, JoinPlanToken,
+    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableCallKind, EmittableUnit, JoinPlanToken,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
@@ -588,6 +588,9 @@ impl ArtifactHelpers<'_> {
             native_int_intern: Some(module.declare_func_in_func(self.native_int.intern, func)),
             native_int_narrow: Some(module.declare_func_in_func(self.native_int.narrow, func)),
             native_int_export: Some(module.declare_func_in_func(self.native_int.export, func)),
+            native_int_export_parts: Some(
+                module.declare_func_in_func(self.native_int.export_parts, func),
+            ),
             // ⭐ The **one** exact-`Int` decoder, resolved here so the
             // region-limbed spill copies through the landed representation
             // instead of growing a second one.
@@ -597,6 +600,9 @@ impl ArtifactHelpers<'_> {
             // two structs are separate types rather than one with a `reset()`.
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            declaration_calls: BTreeMap::new(),
+            activation_slots: None,
+            activation_trap_offset: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -632,6 +638,7 @@ impl ArtifactHelpers<'_> {
                 store_int_limb: module
                     .declare_func_in_func(self.boundary_value_abi.store_int_limb, func),
                 seal_int: module.declare_func_in_func(self.boundary_value_abi.seal_int, func),
+                int_view: module.declare_func_in_func(self.boundary_value_abi.int_view, func),
             }),
         }
     }
@@ -670,6 +677,7 @@ struct FunctionLocalRefs {
     native_int_intern: Option<FuncRef>,
     native_int_narrow: Option<FuncRef>,
     native_int_export: Option<FuncRef>,
+    native_int_export_parts: Option<FuncRef>,
     /// `(arena, tag, payload, out_view) -> status` — the sole exact-`Int`
     /// decoder, `ken_native_int_resolve_local`.
     native_int_resolve: Option<FuncRef>,
@@ -684,6 +692,14 @@ struct FunctionLocalRefs {
     /// reaching an emitted call.
     boundary_carrier: Option<BoundaryCarrierRefs>,
     unit_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    declaration_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    /// The current generated unit's closed activation-frame trap lane.
+    ///
+    /// Both fields are present only while lowering a unit body. Root adapters
+    /// have no caller frame, so they translate a callee trap identity into the
+    /// disjoint root token consumed by `CompiledModule`.
+    activation_slots: Option<cranelift_codegen::ir::Value>,
+    activation_trap_offset: Option<i32>,
     /// Source occurrences reached only through the current unit's result
     /// position. Process-exit constructors are normalized only at these
     /// occurrences, never merely because an exit-shaped value appears nested.
@@ -897,6 +913,10 @@ struct Lowering<'a> {
     unsupported: Vec<String>,
     body_emission_authority: BodyEmissionAuthority,
     process_object: bool,
+    /// Object process launchers retain the established terminal-status report.
+    /// JIT/native observation keeps the planner identity token so it can
+    /// reconstruct the exact RuntimeTrap.
+    root_trap_process_sentinel: bool,
     process_symbols: crate::NativeProcessSymbols,
     #[cfg(test)]
     native_int_mutation: NativeIntLoweringMutation,
@@ -1200,6 +1220,8 @@ struct BoundaryCarrierRefs {
     /// canonical and seal it. ⛔ **Until this succeeds the node denotes
     /// nothing**, so it is the last step of the copy and never optional.
     seal_int: FuncRef,
+    /// `(arena, word, out_view) -> status` — canonical exact-`Int` view.
+    int_view: FuncRef,
 }
 
 /// A value that has crossed into the **operational carrier** — nothing but the
@@ -1782,12 +1804,54 @@ impl<'a> Lowering<'a> {
                     "retained body has no graph-derived call target in this unit".to_string(),
                 )
             })?;
+        self.call_declared_unit_target(
+            builder,
+            target,
+            inputs,
+            #[cfg(test)]
+            launch_ingress,
+        )
+    }
+
+    fn call_declared_declaration_unit(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        reference_origin: StaticOriginId,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let target = self
+            .function_local
+            .declaration_calls
+            .get(&reference_origin)
+            .cloned()
+            .ok_or_else(|| {
+                backend_module(
+                    "DeclarationRef has no planner-derived declaration call target".to_string(),
+                )
+            })?;
+        self.call_declared_unit_target(
+            builder,
+            target,
+            &[],
+            #[cfg(test)]
+            None,
+        )
+    }
+
+    fn call_declared_unit_target(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: units::DeclaredUnitCall,
+        inputs: &[LoweringOperand],
+        #[cfg(test)] launch_ingress: Option<cranelift_codegen::ir::Value>,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
         let payload = builder.create_sized_stack_slot(StackSlotData::new(
             StackSlotKind::ExplicitSlot,
             target.header.frame_bytes,
             3,
         ));
         let mut input = 0usize;
+        let mut result_offset = None;
+        let mut trap_offset = None;
         for (slot, offset) in target.slots.iter().zip(&target.offsets) {
             let offset = i32::try_from(*offset).map_err(|_| {
                 backend_module("callee slot offset exceeds addressable range".to_string())
@@ -1800,18 +1864,23 @@ impl<'a> Lowering<'a> {
                     let word = match value {
                         LoweringOperand::Carried(word) => word.word,
                         LoweringOperand::Specialized(value) => {
-                            self.transfer_into_carrier(builder, body_origin, value)?
+                            self.transfer_into_carrier(builder, target.origin, value)?
                                 .word
                         }
                     };
                     builder.ins().stack_store(word, payload, offset);
                     input += 1;
                 }
-                AbiSlotKind::Control | AbiSlotKind::Trap | AbiSlotKind::Store => {
+                AbiSlotKind::Control | AbiSlotKind::Store => {
                     let zero = builder.ins().iconst(types::I64, 0);
                     builder.ins().stack_store(zero, payload, offset);
                 }
-                AbiSlotKind::Result => {}
+                AbiSlotKind::Trap => {
+                    let zero = builder.ins().iconst(types::I64, 0);
+                    builder.ins().stack_store(zero, payload, offset);
+                    trap_offset = Some(offset);
+                }
+                AbiSlotKind::Result => result_offset = Some(offset),
             }
         }
         if input != inputs.len() {
@@ -1888,13 +1957,75 @@ impl<'a> Lowering<'a> {
         );
         let envelope = builder.ins().stack_addr(pointer_type, envelope, 0);
         let call = builder.ins().call(target.function, &[envelope, services]);
-        let [word] = builder.inst_results(call) else {
+        let [unit_status] = builder.inst_results(call) else {
             return Err(backend_module(
                 "internal unit call did not return exactly one word".to_string(),
             ));
         };
+        let unit_status = *unit_status;
+        let failed = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+            unit_status,
+            0,
+        );
+        let failure_block = builder.create_block();
+        let trap_check_block = builder.create_block();
+        builder
+            .ins()
+            .brif(failed, failure_block, &[], trap_check_block, &[]);
+        builder.switch_to_block(failure_block);
+        builder.ins().return_(&[unit_status]);
+        builder.seal_block(failure_block);
+        builder.switch_to_block(trap_check_block);
+        builder.seal_block(trap_check_block);
+        let trap_offset = trap_offset.ok_or_else(|| {
+            backend_module("callee frame declares no trap slot".to_string())
+        })?;
+        let result_offset = result_offset.ok_or_else(|| {
+            backend_module("callee frame declares no result slot".to_string())
+        })?;
+        let trap_word = builder.ins().stack_load(types::I64, payload, trap_offset);
+        let trapped = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+            trap_word,
+            0,
+        );
+        let trap_block = builder.create_block();
+        let result_block = builder.create_block();
+        builder.ins().brif(trapped, trap_block, &[], result_block, &[]);
+        builder.switch_to_block(trap_block);
+        if let (Some(caller_slots), Some(caller_trap_offset)) = (
+            self.function_local.activation_slots,
+            self.function_local.activation_trap_offset,
+        ) {
+            builder.ins().store(
+                MemFlags::trusted(),
+                trap_word,
+                caller_slots,
+                caller_trap_offset,
+            );
+            let no_result = builder.ins().iconst(types::I64, 0);
+            builder.ins().return_(&[no_result]);
+        } else if self.root_trap_process_sentinel {
+            let process_trap = builder.ins().iconst(types::I64, -4);
+            builder.ins().return_(&[process_trap]);
+        } else {
+            let shifted = builder.ins().ishl_imm(
+                trap_word,
+                crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_SHIFT,
+            );
+            let root_token = builder.ins().bor_imm(
+                shifted,
+                crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_TAG,
+            );
+            builder.ins().return_(&[root_token]);
+        }
+        builder.seal_block(trap_block);
+        builder.switch_to_block(result_block);
+        builder.seal_block(result_block);
+        let word = builder.ins().stack_load(types::I64, payload, result_offset);
         Ok(LoweringOperand::Carried(CarriedBoundaryWord {
-            word: *word,
+            word,
         }))
     }
 
@@ -2974,6 +3105,77 @@ impl<'a> Lowering<'a> {
         let call = builder.ins().call(refs.scalar, &[arena, target.word, out]);
         Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
         Ok(builder.ins().stack_load(types::I64, slot, 0))
+    }
+
+    /// Project the object entry's public scalar result.
+    ///
+    /// Immediate carrier words expose their payload through the ordinary
+    /// scalar helper. A persistent exact `Int` instead owns a magnitude in the
+    /// boundary region; export that magnitude through the native-`Int`
+    /// interner/exporter pair so the object launcher observes the same decimal
+    /// value as the direct lowering path.
+    pub(super) fn emit_public_carrier_scalar(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let boundary_arena = self.carrier_arena()?;
+        let native_arena = self.function_local.native_int_arena.ok_or_else(|| {
+            unsupported("NativeResult", "carried Int result has no invocation arena")
+        })?;
+        let export_parts = self
+            .function_local
+            .native_int_export_parts
+            .ok_or_else(|| unsupported("NativeResult", "carried Int has no export function"))?;
+        let pointer_type = builder.func.dfg.value_type(boundary_arena);
+
+        let tag = builder.ins().band_imm(
+            target.word,
+            crate::boundary_value::BOUNDARY_TAG_MASK as i64,
+        );
+        let persistent = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            tag,
+            crate::boundary_value::BoundaryTag::PersistentGround as i64,
+        );
+        let exact_int = builder.create_block();
+        let immediate = builder.create_block();
+        let done = builder.create_block();
+        builder.append_block_param(done, types::I64);
+        builder
+            .ins()
+            .brif(persistent, exact_int, &[], immediate, &[]);
+
+        builder.switch_to_block(exact_int);
+        let view_slot = builder.create_sized_stack_slot(
+            cranelift_codegen::ir::StackSlotData::new(
+                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                24,
+                3,
+            ),
+        );
+        let view = builder.ins().stack_addr(pointer_type, view_slot, 0);
+        let call = builder
+            .ins()
+            .call(refs.int_view, &[boundary_arena, target.word, view]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        let sign = builder.ins().stack_load(types::I64, view_slot, 0);
+        let len = builder.ins().stack_load(types::I64, view_slot, 8);
+        let limbs = builder.ins().stack_load(pointer_type, view_slot, 16);
+        let call = builder
+            .ins()
+            .call(export_parts, &[native_arena, sign, limbs, len]);
+        Self::require_i64(builder, builder.inst_results(call)[0], 0);
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().jump(done, &[zero.into()]);
+
+        builder.switch_to_block(immediate);
+        let scalar = self.emit_carrier_scalar(builder, target)?;
+        builder.ins().jump(done, &[scalar.into()]);
+
+        builder.switch_to_block(done);
+        Ok(builder.block_params(done)[0])
     }
 
     /// `field_count(arena, word, out) -> status` — the child count a case's
@@ -8557,16 +8759,37 @@ impl<'a> Lowering<'a> {
     /// case answers `false` and the branch is left unsealed, which is the same
     /// answer any non-trap specialized value gets.
     fn seal_source_trap_branch(
+        &mut self,
         builder: &mut FunctionBuilder<'_>,
         lowered: &LoweringOperand,
-    ) -> bool {
-        if matches!(lowered, LoweringOperand::Specialized(Lowered::Trap(_))) {
-            let failure = builder.ins().iconst(types::I64, -4);
-            builder.ins().return_(&[failure]);
-            true
-        } else {
-            false
-        }
+    ) -> Result<bool, CraneliftBackendError> {
+        let LoweringOperand::Specialized(Lowered::Trap(trap)) = lowered else {
+            return Ok(false);
+        };
+        self.emit_current_trap(builder, trap)?;
+        let no_result = builder.ins().iconst(types::I64, 0);
+        builder.ins().return_(&[no_result]);
+        Ok(true)
+    }
+
+    fn emit_current_trap(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        trap: &RuntimeTrap,
+    ) -> Result<(), CraneliftBackendError> {
+        let identity = self.static_transition_plan.trap_identity(trap)?;
+        let (slots, offset) = self
+            .function_local
+            .activation_slots
+            .zip(self.function_local.activation_trap_offset)
+            .ok_or_else(|| {
+                backend_module("trap branch has no generated-unit TrapWord lane".to_string())
+            })?;
+        let word = builder.ins().iconst(types::I64, identity.abi_word());
+        builder
+            .ins()
+            .store(MemFlags::trusted(), word, slots, offset);
+        Ok(())
     }
 
     fn planned_active_scalar_cut<'b>(

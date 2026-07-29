@@ -211,6 +211,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
+        root_trap_process_sentinel: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
@@ -229,9 +230,13 @@ fn run_dynamic_constructor_dispatch_fixture(
             native_int_intern: None,
             native_int_narrow: None,
             native_int_export: None,
+            native_int_export_parts: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            declaration_calls: BTreeMap::new(),
+            activation_slots: None,
+            activation_trap_offset: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -295,12 +300,18 @@ fn run_dynamic_constructor_dispatch_fixture(
     module
         .define_function(func_id, &mut context)
         .map_err(|error| backend_module(error.to_string()))?;
+    let trap_catalog = compiler.static_transition_plan.trap_catalog();
+    let carrier_identity_catalog = compiler
+        .static_transition_plan
+        .carrier_identity_catalog()?;
     let compiled = CompiledModule::from_parts(
         module,
         func_id,
         Some(ResultDecoder::ProcessStatus),
         compiler.result_table,
         None,
+        trap_catalog,
+        carrier_identity_catalog,
         true,
         compiler.assumptions,
         compiler.unsupported,
@@ -1872,6 +1883,7 @@ fn bare_carrier_test_lowering<'src>(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
+        root_trap_process_sentinel: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
@@ -1887,9 +1899,13 @@ fn bare_carrier_test_lowering<'src>(
             native_int_intern: None,
             native_int_narrow: None,
             native_int_export: None,
+            native_int_export_parts: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            declaration_calls: BTreeMap::new(),
+            activation_slots: None,
+            activation_trap_offset: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -1897,6 +1913,20 @@ fn bare_carrier_test_lowering<'src>(
             boundary_carrier: None,
         },
     }
+}
+
+fn bind_bare_test_trap_lane(
+    compiler: &mut Lowering<'_>,
+    builder: &mut FunctionBuilder<'_>,
+) {
+    let lane = builder.create_sized_stack_slot(StackSlotData::new(
+        StackSlotKind::ExplicitSlot,
+        8,
+        3,
+    ));
+    compiler.function_local.activation_slots =
+        Some(builder.ins().stack_addr(types::I64, lane, 0));
+    compiler.function_local.activation_trap_offset = Some(0);
 }
 
 /// `RT-FNSPLIT-C1` `D3` — the producer screens the **whole graph** for
@@ -1948,6 +1978,7 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
     let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
     let entry = builder.create_block();
     builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
 
     // ── the inadmissible graph: the closure is one level DOWN ─────────────
     //
@@ -2055,6 +2086,7 @@ fn c1_d3_a_carried_operand_survives_case_env_and_nested_lowering() {
     let mut builder = FunctionBuilder::new(&mut func, &mut function_context);
     let entry = builder.create_block();
     builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
 
     let seeded_word = builder.ins().iconst(types::I64, 0x0c1_d3);
 
@@ -2205,6 +2237,9 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
 
     let mut signature = module.make_signature();
     signature.params.push(AbiParam::new(pointer));
+    if operands == 0 {
+        signature.params.push(AbiParam::new(pointer));
+    }
     for _ in 0..operands {
         signature.params.push(AbiParam::new(types::I64));
     }
@@ -2237,6 +2272,7 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
         store_int_limbs: module.declare_func_in_func(helpers.store_int_limbs, &mut context.func),
         store_int_limb: module.declare_func_in_func(helpers.store_int_limb, &mut context.func),
         seal_int: module.declare_func_in_func(helpers.seal_int, &mut context.func),
+        int_view: module.declare_func_in_func(helpers.int_view, &mut context.func),
     };
 
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
@@ -2262,6 +2298,14 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
         // reinstate the equality the Architect's ruling deletes; the native
         // field is left for the fixtures that bind one.
         compiler.function_local.boundary_arena = Some(parameters[0]);
+        let emitted_operands = if operands == 0 {
+            compiler.function_local.activation_slots = Some(parameters[1]);
+            compiler.function_local.activation_trap_offset = Some(0);
+            &parameters[2..]
+        } else {
+            bind_bare_test_trap_lane(&mut compiler, &mut builder);
+            &parameters[1..]
+        };
         // â  A refusal must still leave a WELL-FORMED function behind, or the
         // failure the caller wanted to observe is replaced by a Cranelift
         // assertion about an unfilled block. â­ Every carrier route refuses
@@ -2269,7 +2313,7 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
         // empty-case check both say so at their sites â so on the error path
         // the entry block is still current and still empty, and returning a
         // constant from it is sound.
-        match emit(&mut compiler, &mut builder, &parameters[1..]) {
+        match emit(&mut compiler, &mut builder, emitted_operands) {
             Ok(result) => {
                 builder.ins().return_(&[result]);
                 builder.seal_all_blocks();
@@ -2310,8 +2354,15 @@ fn ac_c7_compile_edge<'src>(
 }
 
 fn ac_c7_run(code: *const u8, arena: *const u64) -> i64 {
-    let f: extern "C" fn(*const u64) -> i64 = unsafe { std::mem::transmute(code) };
-    f(arena)
+    let f: extern "C" fn(*const u64, *mut i64) -> i64 =
+        unsafe { std::mem::transmute(code) };
+    let mut trap_identity = 0;
+    let result = f(arena, &mut trap_identity);
+    if trap_identity == 0 {
+        result
+    } else {
+        -4
+    }
 }
 
 fn c2_compile_edge_with_arg<'src>(
@@ -2366,6 +2417,7 @@ fn c2_compile_edge_with_arg<'src>(
         store_int_limbs: module.declare_func_in_func(helpers.store_int_limbs, &mut context.func),
         store_int_limb: module.declare_func_in_func(helpers.store_int_limb, &mut context.func),
         seal_int: module.declare_func_in_func(helpers.seal_int, &mut context.func),
+        int_view: module.declare_func_in_func(helpers.int_view, &mut context.func),
     };
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
     compiler.function_local.boundary_carrier = Some(carrier);
@@ -2379,6 +2431,7 @@ fn c2_compile_edge_with_arg<'src>(
         // This rig receives the published boundary arena directly.  Its
         // carrier producer/consumer paths do not use native-Int services.
         compiler.function_local.boundary_arena = Some(parameters[0]);
+        bind_bare_test_trap_lane(&mut compiler, &mut builder);
         let result = emit(&mut compiler, &mut builder, parameters[1])
             .expect("the C2 carrier edge emits");
         builder.ins().return_(&[result]);
@@ -3923,6 +3976,7 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
     let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
     let entry = builder.create_block();
     builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
 
     // A real SSA value, so the carried residual below is a genuine carried word
     // rather than a stand-in.

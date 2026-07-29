@@ -19,8 +19,9 @@ pub(super) use static_transition::{
     governed_nested_resource_bracket, plan_static_transition_graph, ScaleBPlanCensus,
 };
 pub(super) use static_transition::{
-    ConstructorIdentity, JoinPlanToken, JoinResultRepresentation, StaticOriginId,
-    StaticTransitionPlan, SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
+    planned_partiality_trap, ConstructorIdentity, JoinPlanToken, JoinResultRepresentation,
+    StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
+    SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
 pub(super) use static_transition::with_last_io_error_role_omitted;
@@ -41,7 +42,7 @@ pub(super) use static_transition::{
 pub(super) use static_transition::{
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition, EmittableUnit,
-    PredeclaredFunctionId,
+    EmittableCallKind, PredeclaredFunctionId,
 };
 
 pub(super) fn native_join_plan_for_program(

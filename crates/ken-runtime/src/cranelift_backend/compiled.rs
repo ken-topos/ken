@@ -22,6 +22,8 @@ pub(super) struct CompiledModule<M> {
     decoder: Option<ResultDecoder>,
     result_table: BTreeMap<i64, RuntimeGroundValue>,
     trap: Option<RuntimeTrap>,
+    trap_catalog: Vec<RuntimeTrap>,
+    carrier_identity_catalog: Vec<(String, u64)>,
     pub(super) verifier_passed: bool,
     pub(super) assumptions: BTreeSet<String>,
     pub(super) unsupported: Vec<String>,
@@ -36,7 +38,14 @@ pub(super) enum ResultDecoder {
     Bool,
     Boundary,
     Table,
+    TrapOnly,
 }
+
+/// Root/native trap reporting is outside the source-value carrier vocabulary.
+/// The invalid low-byte tag keeps this token disjoint from every BoundaryWord;
+/// the payload is the planner-bound, nonzero trap identity.
+pub(super) const ROOT_TRAP_TOKEN_TAG: i64 = 0xff;
+pub(super) const ROOT_TRAP_TOKEN_SHIFT: i64 = 8;
 
 impl<M> CompiledModule<M> {
     /// Transparent one-to-one packing seam (RT-SPLIT §10.4a). Exists so the
@@ -52,6 +61,8 @@ impl<M> CompiledModule<M> {
         decoder: Option<ResultDecoder>,
         result_table: BTreeMap<i64, RuntimeGroundValue>,
         trap: Option<RuntimeTrap>,
+        trap_catalog: Vec<RuntimeTrap>,
+        carrier_identity_catalog: Vec<(String, u64)>,
         verifier_passed: bool,
         assumptions: BTreeSet<String>,
         unsupported: Vec<String>,
@@ -62,6 +73,8 @@ impl<M> CompiledModule<M> {
             decoder,
             result_table,
             trap,
+            trap_catalog,
+            carrier_identity_catalog,
             verifier_passed,
             assumptions,
             unsupported,
@@ -85,11 +98,18 @@ impl CompiledModule<JITModule> {
         // Named native-code-execution boundary. This is tested/validated JIT
         // execution, never a proof and never a host-ABI syscall boundary.
         let mut store = crate::boundary_value::BoundaryValueStore::default();
+        for (symbol, identity) in &self.carrier_identity_catalog {
+            if !store.issue_carrier_identity(symbol, *identity) {
+                return Err(backend_module(
+                    "compiled carrier identity catalog disagrees with itself".to_string(),
+                ));
+            }
+        }
         let binding = crate::boundary_activation::BoundaryStoreBindingV1::open(
             &mut store,
             crate::boundary_resource_profile::starter_smoke_profile(),
         );
-        let activation = crate::boundary_activation::BoundaryActivationV1::begin(&binding);
+        let mut activation = crate::boundary_activation::BoundaryActivationV1::begin(&binding);
         let process_root = process_root
             .or_else(|| activation.native_frame_ptr())
             .ok_or_else(|| {
@@ -113,6 +133,33 @@ impl CompiledModule<JITModule> {
         let decoder = self
             .decoder
             .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?;
+        let trap_identity = || {
+            let word = token as u64;
+            ((token > 0)
+                && (word & ROOT_TRAP_TOKEN_TAG as u64) == ROOT_TRAP_TOKEN_TAG as u64)
+                .then_some(word >> ROOT_TRAP_TOKEN_SHIFT)
+                .filter(|identity| *identity != 0)
+                .and_then(|identity| usize::try_from(identity - 1).ok())
+        };
+        let decode_trap = |identity: usize| {
+            self.trap_catalog
+                .get(identity)
+                .cloned()
+                .map(|trap| (RuntimeObservation::Trapped(trap), Some(token)))
+        };
+        match decoder {
+            ResultDecoder::Boundary | ResultDecoder::ProcessStatus | ResultDecoder::TrapOnly => {
+                if let Some(trapped) = trap_identity().and_then(decode_trap) {
+                    return Ok(trapped);
+                }
+            }
+            ResultDecoder::Table if !self.result_table.contains_key(&token) => {
+                if let Some(trapped) = trap_identity().and_then(decode_trap) {
+                    return Ok(trapped);
+                }
+            }
+            ResultDecoder::Int | ResultDecoder::Bool | ResultDecoder::Table => {}
+        }
         let ground = match decoder {
             ResultDecoder::Int => RuntimeGroundValue::Int(
                 activation
@@ -134,8 +181,24 @@ impl CompiledModule<JITModule> {
                     RuntimeGroundValue::Int(
                         crate::boundary_value::BoundaryWord(token as u64)
                             .signed_payload()
-                            .into(),
+                        .into(),
                     )
+                }
+                Some(crate::boundary_value::BoundaryTag::PersistentGround) => {
+                    let adopted = activation
+                        .finish(
+                            &mut store,
+                            Some(crate::boundary_value::BoundaryWord(token as u64)),
+                        )
+                        .map_err(|_| {
+                            backend(BackendFailure::NativeResultDecode { token })
+                        })?
+                        .ok_or_else(|| {
+                            backend(BackendFailure::NativeResultDecode { token })
+                        })?;
+                    store.observe_adopted_ground(adopted).ok_or_else(|| {
+                        backend(BackendFailure::NativeResultDecode { token })
+                    })?
                 }
                 _ => {
                     return Err(backend(BackendFailure::NativeResultDecode { token }));
@@ -146,6 +209,9 @@ impl CompiledModule<JITModule> {
                 .get(&token)
                 .cloned()
                 .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?,
+            ResultDecoder::TrapOnly => {
+                return Err(backend(BackendFailure::NativeResultDecode { token }));
+            }
         };
         Ok((RuntimeObservation::Returned(ground), Some(token)))
     }

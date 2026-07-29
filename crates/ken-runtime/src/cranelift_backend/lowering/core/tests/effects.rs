@@ -77,6 +77,7 @@ fn run_checked_bounded_nat_fixture(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
+        root_trap_process_sentinel: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
@@ -95,9 +96,13 @@ fn run_checked_bounded_nat_fixture(
             native_int_intern: None,
             native_int_narrow: None,
             native_int_export: None,
+            native_int_export_parts: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            declaration_calls: BTreeMap::new(),
+            activation_slots: None,
+            activation_trap_offset: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -307,12 +312,18 @@ fn run_checked_bounded_nat_fixture(
     module
         .define_function(func_id, &mut context)
         .map_err(|error| backend_module(error.to_string()))?;
+    let trap_catalog = compiler.static_transition_plan.trap_catalog();
+    let carrier_identity_catalog = compiler
+        .static_transition_plan
+        .carrier_identity_catalog()?;
     let compiled = CompiledModule::from_parts(
         module,
         func_id,
         Some(ResultDecoder::ProcessStatus),
         compiler.result_table,
         None,
+        trap_catalog,
+        carrier_identity_catalog,
         true,
         compiler.assumptions,
         compiler.unsupported,

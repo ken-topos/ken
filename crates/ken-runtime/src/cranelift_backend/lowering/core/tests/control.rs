@@ -65,6 +65,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: true,
+        root_trap_process_sentinel: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
@@ -83,9 +84,13 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
             native_int_intern: None,
             native_int_narrow: None,
             native_int_export: None,
+            native_int_export_parts: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            declaration_calls: BTreeMap::new(),
+            activation_slots: None,
+            activation_trap_offset: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -167,6 +172,7 @@ fn run_px8j_malformed_recursor_consumer(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
+        root_trap_process_sentinel: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
@@ -185,9 +191,13 @@ fn run_px8j_malformed_recursor_consumer(
             native_int_intern: None,
             native_int_narrow: None,
             native_int_export: None,
+            native_int_export_parts: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            declaration_calls: BTreeMap::new(),
+            activation_slots: None,
+            activation_trap_offset: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -2048,6 +2058,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
+        root_trap_process_sentinel: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
@@ -2066,9 +2077,13 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
             native_int_intern: None,
             native_int_narrow: None,
             native_int_export: None,
+            native_int_export_parts: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            declaration_calls: BTreeMap::new(),
+            activation_slots: None,
+            activation_trap_offset: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -7577,10 +7592,10 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
         metrics.production_functions,
         metrics
             .emitted_helpers
-            .checked_add(35)
+            .checked_add(37)
             .expect("the production-function population fits usize"),
         "the completed denominator must contain every unit body, one root \
-         adapter, six native-Int helpers, and twenty-eight boundary helpers"
+         adapter, seven native-Int helpers, and twenty-nine boundary helpers"
     );
     for (name, value) in [
         (

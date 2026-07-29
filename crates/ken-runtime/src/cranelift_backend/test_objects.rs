@@ -56,7 +56,7 @@ pub(crate) fn emit_process_entrypoint_object_with_cranelift(
     entry_symbol: impl Into<String>,
 ) -> Result<CraneliftObjectArtifact, CraneliftBackendError> {
     let entry_symbol = entry_symbol.into();
-    let compiled = compile_expr_into_module(
+    let compiled = compile_expr_into_object_module(
         new_object_module("ken-runtime-process-entrypoint")?,
         &entry_symbol,
         Linkage::Export,
@@ -321,7 +321,7 @@ pub(crate) fn emit_px8tr_nested_post_effect_object(
     PX8TR_TRAP_PROVENANCE.with(|trace| trace.borrow_mut().clear());
     PX8TR_DISABLE_DEFORESTED_ANSWER_ROUTE.set(disable_repair);
     let _reset = Reset;
-    let compiled = compile_expr_into_module(
+    let compiled = compile_expr_into_object_module(
         new_object_module("ken-runtime-px8tr-post-effect")?,
         &entry_symbol,
         Linkage::Export,

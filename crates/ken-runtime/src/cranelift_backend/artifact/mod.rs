@@ -29,7 +29,9 @@ use crate::{RuntimeDeclaration, RuntimeExpr, RuntimeProgram, RuntimeValue};
 // Owner-named sibling imports (§10.3: `artifact -> compiled, lowering::core,
 // planning, surface`). Never through the facade.
 use crate::cranelift_backend::compiled::{CompiledExpr, CompiledModule};
-use crate::cranelift_backend::lowering::core::compile_expr_into_module;
+use crate::cranelift_backend::lowering::core::{
+    compile_expr_into_module, compile_expr_into_object_module,
+};
 use crate::cranelift_backend::planning::{
     native_join_plan_for_program, oriented_subcontinuation_plan_for_program,
 };
@@ -95,7 +97,7 @@ fn compile_program_expr_object(
     seed_env: &NativeSeedEnvironment,
     entry_symbol: &str,
 ) -> Result<CompiledModule<ObjectModule>, CraneliftBackendError> {
-    compile_expr_into_module(
+    compile_expr_into_object_module(
         new_object_module("ken-runtime-cranelift-object")?,
         entry_symbol,
         Linkage::Export,
