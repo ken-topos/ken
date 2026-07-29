@@ -365,8 +365,45 @@ worker `StaticOriginId(723)`, arity `1`, `dynamic_splices=1`,
 > globally attribute every future `Closure` refusal."*** ⛔ Do not cite this
 > section to explain, absorb, or repair a `Closure` refusal arising anywhere
 > outside the exact planner-proved recursor residual edge. A future refusal with
-> the same *text* is a fresh attribution question, and the same bounded protocol
-> is available again **for that edge**, unspent.
+> the same *text* is a fresh attribution question. ⛔ **The bounded protocol is NO
+> LONGER available for one** — it was unspent when this paragraph was written, and
+> the block immediately below records it being consumed on stop `#27`'s edge the
+> same day. **Both charges are gone.**
+>
+> ### ⭐⭐ THAT FUTURE ARRIVED THE SAME DAY — and the population scope is what
+> ### made the ring stop instead of absorbing it
+>
+> **Stop `#27`, 2026-07-29 (`evt_4tvysmzr6mfpb`).** On the authorized row
+> `fs_read_at_malformed_offset_narrows_to_invalid_offset`, a `Closure` refusal
+> with **the same text** was localized to `transfer_constructor_operands` on a
+> carried computational-match path:
+>
+> | | this fresh edge | §8a's ruled member |
+> |---|---|---|
+> | constructor parent | `StaticOriginId(655)` | — |
+> | closure child | `StaticOriginId(650)` | — |
+> | closure body | `StaticOriginId(641)` | worker `StaticOriginId(723)` |
+> | arity | `1` | `1` |
+> | captures | **`8`** | **`Carried x7`** |
+> | planner-proved token | **none exists** | exact static-recursor residual |
+>
+> ⭐ **Same refusal text, different body and capture population, no planner-proved
+> member ⇒ a different edge.** The ring did not admit it, classify it as recursor
+> transport, repair `ProducerMatchCall`, weaken generic admission, relabel
+> `CallableCapsuleEscape -> EscapeForbidden`, or touch buffer-allocate. ⭐ **The
+> population scope above is the clause that produced that restraint** — without
+> it, "same text as the thing we just got ruled" absorbs cleanly and wrongly.
+>
+> ⛔⛔ **THE BOUNDED PROTOCOL IS NOW SPENT ON THIS EDGE TOO.** It fired once here,
+> diagnostic removed before commit, preservation at `07ce6ef1`. ⇒ **It is spent on
+> both known edges and there is no third charge.** A further refusal outside both
+> populations gets **no** new diagnostic under this section — it is an Architect
+> attribution question first, and the section that authorizes a witness would have
+> to be re-opened deliberately.
+>
+> ⚠ Routed to the Architect as a **derivation** question, not a cell request:
+> `evt_3tx7ndxp5pm4j`. See `RT-DECL-CLOSURE-PORT` §5a for the five-instance
+> record that framing rests on.
 
 ### 8b. Ownership and disposition — one new MEMBER, not a new lane
 
