@@ -4,9 +4,9 @@
 
 The governed source and completed-emission mechanism are bound to
 `origin/main` at
-`38e054d47c3f9a01e1adf844b4a632e60087a4c4`. The frame is
+`370281d0519c7503ee38caa6bf132cc0bd929176`. The frame is
 `docs/program/wp/RT-SCALE-B-emission-scaling-verdict.md`, blob
-`d62bab7587121b3ff6c7427aec7bf619f0675977`.
+`1f7ca6e514c550f7c256eb44a89c7641abfec812`.
 
 The historic n=4 figures, including approximately 103 seconds, approximately
 4 GiB, and 1,482/1,525 states/edges, are **NON-COMPARABLE**. They did not use
@@ -146,13 +146,33 @@ records through the same completed-function seam. Misclassifying all seven
 native-Int definitions as boundary-value definitions failed at the exact
 native-Int population assertion and was restored byte-identically.
 
-## D3 differential baseline
+## D3 five-category differential coverage
 
-**NO CONTROL — open residual.** The frame requires the exact pre-existing
-normal/abrupt/trap/join/affine suite and a baseline recipe naming its probe
-functions. Neither the frame nor the merged source identifies that five-probe
-mapping. Runtime has routed the identity gap to the frame/design owner and
-will not invent a substitute suite or fabricate a baseline.
+The five labels are coverage categories, not a named probe suite. Every named
+positive control below compiles and runs the same source through the completed
+native representation and the live interpreter, then compares the relevant
+public observation.
+
+| category | landed test functions | completed-representation result |
+|---|---|---|
+| normal | `px8l_recursive_decl_native.rs::{dynamic_zero_seed_takes_the_base_case,dynamic_multistep_seed_preserves_updated_parameter_order}`; `px8f_buffer_native.rs::linked_checked_write_all_observes_short_progress_and_matches_interpreter` | 3/3 recursive-declaration file and 1/1 checked-buffer file passed |
+| abrupt | `rt_parity_native.rs::{buffer_allocate_malformed_capacity_narrows_to_invalid_bounds,fs_read_at_malformed_offset_narrows_to_invalid_offset,fs_read_at_malformed_window_narrows_to_invalid_bounds,fs_read_at_malformed_offset_without_read_right_narrows_to_invalid_offset,fs_write_at_malformed_offset_narrows_to_invalid_offset,fs_write_at_malformed_offset_without_write_right_narrows_to_invalid_offset}`; `rt_escape_second_resource_native.rs::r2_cross_buffer_freeze_fails_closed_with_invalid_bounds` | 7/7 parity file and 6/6 escape/resource file passed; the named cases agree on exact narrowed errors |
+| trap | **NO COVERAGE — open residual** | runtime-local `native_execution_differential.rs::tests::trap_observation_is_first_class_unavailable_native_lane` passed 1/1, confirming native trap comparison remains first-class unavailable |
+| join | `rt_escape_second_resource_native.rs::{escaped_resource_used_by_fanning_host_op_matches_interpreter,escaped_buffer_used_by_fanning_host_op_matches_interpreter,nat_fanout_escaped_resource_matches_interpreter}` | 6/6 file passed; the named dynamic Result/Nat fan-out controls fork mutually exclusive arms and union at rejoin |
+| affine | `rt_escape_second_resource_native.rs::{escape_one_used_matches_interpreter,escape_resource_plus_plain_matches_interpreter}` | 6/6 file passed; the named controls compare exact bracket observations while preserving checked-frame consumption and sibling isolation |
+
+The trap residual is routed to `RT-EFFECT-DIFF`. This node does not build a
+comparator, fixture schema, or second corpus.
+
+The commands used for the category map were:
+
+```text
+scripts/ken-cargo test -p ken-cli --test px8l_recursive_decl_native -- --test-threads=1
+scripts/ken-cargo test -p ken-cli --test px8f_buffer_native -- --test-threads=1
+scripts/ken-cargo test -p ken-cli --test rt_parity_native -- --test-threads=1
+scripts/ken-cargo test -p ken-cli --test rt_escape_second_resource_native -- --test-threads=1
+scripts/ken-cargo test -p ken-runtime --lib native_execution_differential::tests::trap_observation_is_first_class_unavailable_native_lane -- --exact --test-threads=1
+```
 
 ## `AC` to control map
 
@@ -163,7 +183,7 @@ will not invent a substitute suite or fabricate a baseline.
 | `AC-B3` | The parent parses every row and emits first and second differences for every numeric field. |
 | `AC-B4` | Four independent structural assertions plus this absolute table; no exponent is inferred from the five points. |
 | `AC-B4a` | Typed emitter-category counters, exact 7/29/1/unit counts, and a zero RecursiveDescent count. |
-| `AC-B5` | **NO CONTROL — open residual.** |
+| `AC-B5` | The five-row D3 coverage map above; trap is explicitly `NO COVERAGE — open residual`. |
 | `AC-B6` | `docs/program/rt-scale-b-d4-analytical-model.md`; Architect-owned D4. |
 | `AC-B7` | **NO CONTROL — open residual.** D5 final routing is not yet complete. |
 | `AC-B8` | This artifact reports absolute values and labels the historic datum NON-COMPARABLE. |
