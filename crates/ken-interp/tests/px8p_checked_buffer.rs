@@ -17,6 +17,10 @@ fn env() -> ken_elaborator::ElabEnv {
         "Px8pPrivateResourceRelease".to_string(),
         env.prelude_env.private_resource_release_id,
     );
+    env.globals.insert(
+        "Px8pBufferHandleResource".to_string(),
+        env.prelude_env.buffer_handle_resource_id,
+    );
     env.elaborate_file(
         r#"
 fn px8p_ok_body (_resource : BufferHandle)
@@ -46,7 +50,8 @@ proc px8p_private_release (resource : BufferHandle)
     (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
     (Result ResourceError Unit)
     (InL (FSOp AFull) AmbientOp
-      (Px8pPrivateResourceRelease AFull Buffer resource))
+      (Px8pPrivateResourceRelease AFull Buffer
+        (Px8pBufferHandleResource resource)))
     (\settled. Ret (Coproduct (FSOp AFull) AmbientOp)
       (resp_coproduct (FSOp AFull) AmbientOp (fs_resp AFull) ambient_resp)
       (Result ResourceError Unit) settled)
@@ -92,6 +97,7 @@ proc px8p_escape_then_release (capacity : Int)
     )
     .expect("checked PX8-P interpreter fixtures elaborate");
     env.globals.remove("Px8pPrivateResourceRelease");
+    env.globals.remove("Px8pBufferHandleResource");
     env
 }
 

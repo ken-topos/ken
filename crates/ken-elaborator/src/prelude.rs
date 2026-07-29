@@ -105,6 +105,9 @@ pub fn empty_prelude_env() -> PreludeEnv {
         private_fs_read_at_id: z,
         private_fs_write_at_id: z,
         private_buffer_freeze_id: z,
+        private_buffer_handle_id: z,
+        buffer_handle_resource_id: z,
+        buffer_handle_capacity_id: z,
         private_buffer_span_id: z,
         private_transfer_count_id: z,
         private_resource_release_id: z,
@@ -231,6 +234,9 @@ pub struct PreludeEnv {
     pub private_fs_read_at_id: GlobalId,
     pub private_fs_write_at_id: GlobalId,
     pub private_buffer_freeze_id: GlobalId,
+    pub private_buffer_handle_id: GlobalId,
+    pub buffer_handle_resource_id: GlobalId,
+    pub buffer_handle_capacity_id: GlobalId,
     pub private_buffer_span_id: GlobalId,
     pub private_transfer_count_id: GlobalId,
     pub private_resource_release_id: GlobalId,
@@ -1468,6 +1474,9 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         "fn buffer_handle_capacity (buffer : BufferHandle) : Int = match buffer { PrivateBufferHandle resource capacity |-> capacity }",
     )
     .map_err(|e| ElabError::Internal(format!("prelude buffer_handle_capacity failed: {e}")))?;
+    let private_buffer_handle_id = elab.globals["PrivateBufferHandle"];
+    let buffer_handle_resource_id = elab.globals["buffer_handle_resource"];
+    let buffer_handle_capacity_id = elab.globals["buffer_handle_capacity"];
     elab.elaborate_decl(
         "fn buffer_nat_add (x : Nat) (y : Nat) : Nat = match y { Zero |-> x; Suc rest |-> Suc (buffer_nat_add x rest) }",
     )
@@ -2467,6 +2476,9 @@ pub fn register_prelude(elab: &mut ElabEnv) -> Result<PreludeEnv, ElabError> {
         private_fs_read_at_id,
         private_fs_write_at_id,
         private_buffer_freeze_id,
+        private_buffer_handle_id,
+        buffer_handle_resource_id,
+        buffer_handle_capacity_id,
         private_buffer_span_id,
         private_transfer_count_id,
         private_resource_release_id,

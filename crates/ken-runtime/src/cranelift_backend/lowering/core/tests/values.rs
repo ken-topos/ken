@@ -315,6 +315,26 @@ fn px8i_big_small_big_mul_and_canonical_narrow_are_exact() {
     );
 }
 #[test]
+fn int_to_uint64_raw_preserves_the_exact_big_native_int() {
+    let value = crate::RuntimeIntV1::Big {
+        sign: crate::Sign::NonNegative,
+        limbs: vec![u64::MAX],
+    };
+    let example = RuntimeExample {
+        name: "int-to-uint64-raw-big-identity".to_string(),
+        checked_core_shape: "int_to_uint64_raw preserves the Big Int carrier".to_string(),
+        ir: total_primitive(
+            "int_to_uint64_raw",
+            vec![RuntimeExpr::Value(RuntimeValue::Int(value.clone()))],
+        ),
+        observation: RuntimeObservation::Returned(RuntimeGroundValue::Int(value)),
+    };
+
+    let report = run_example_with_seed_observation(&example, &NativeSeedEnvironment::empty())
+        .expect("the raw UInt64 conversion preserves the exact native Int pair");
+    assert_eq!(report.observation, example.observation);
+}
+#[test]
 fn px8i_comparison_observes_high_limbs_and_dynamic_join_preserves_pair() {
     let lhs = big(crate::Sign::NonNegative, &[7, 1]);
     let rhs = big(crate::Sign::NonNegative, &[7, 2]);

@@ -5990,12 +5990,15 @@ mod px7l_tests {
         )
         .expect("the exact runtime Int carrier accepts values outside i64");
 
+        let RuntimeExpr::Value(RuntimeValue::Int(lowered)) = lowered else {
+            panic!("integer literal erasure must produce one runtime Int value");
+        };
         assert_eq!(
             lowered,
-            RuntimeExpr::Value(RuntimeValue::Int(RuntimeIntV1::Big {
+            RuntimeIntV1::Big {
                 sign: ken_runtime::Sign::NonNegative,
                 limbs: vec![u64::MAX],
-            }))
+            }
         );
     }
 
