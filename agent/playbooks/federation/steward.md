@@ -1856,7 +1856,14 @@ Do **not** let its findings become a shadow gate: the publisher path is unchange
 and merges still turn on QA / CV / Architect §14. The Adversary's leverage is the
 quality of its findings and your triage of them, not a veto. It is a **standing
 seat**, not a per-task dispatch — you do not "kick" it per WP; it is event-driven
-on merge notifications and hunts on its own, escalating findings to you. (Where a
+on merge notifications and hunts on its own, escalating findings to you.
+
+> ⛔ **YOU send those notifications, and the step is §6b `M8`.** ⚠ This paragraph
+> used to state the mechanism and assign it to nobody, so for four merges it was
+> sent by no one. Its findings also do **not** surface in the space-level event
+> read — `M8` carries both halves. ⛔ Do not restate them here; keep one copy.
+
+(Where a
 one-off adversarial pass on a *specific* artifact is wanted, that is either a
 Steward-dispatched adversarial workflow or `/code-review ultra` — distinct from
 the standing seat.)
@@ -2057,6 +2064,128 @@ Refresh it:
   `origin/main`, so a fresh `steward/work` is not required to publish — but a
   stale one **misleads you about what's landed** and is the root of phantom
   "unmerged work" scares. Keep it truthful.
+
+## ⭐ 6b. THE MERGE PROCEDURE — nine steps, in order, every merge
+
+**COORDINATION §14 defines the gate. This is the mechanics.** Run every step;
+none is conditional on how routine the merge feels.
+
+### Before you publish
+
+**M1 — Verify the Decision is `resolved`, read fresh from the object.**
+
+```sh
+# HTTP, your OWN credential. MCP list_decisions is NOT exhaustive.
+# GET {API}/api/spaces/spc_4q7g0se87rgje/decisions?limit=20
+```
+
+⛔ `approved` / `proposed` / `rejected` are **not** `resolved`. ⛔ A Decision you
+watched resolve earlier can be **voided by an intervening publish** — re-read it
+at merge time, never from memory.
+
+**M2 — Verify the exact SHA from the ring's `git_request` exists on origin.**
+
+```sh
+git fetch origin && git cat-file -e <SHA>^{commit} && git rev-parse <SHA>
+```
+
+⛔ **Never `--target HEAD`** — it dies with `src refspec refs/heads/HEAD does not
+match any`. Always an explicit SHA.
+
+**M3 — Cited-source check** (§7c — one command, not a judgment):
+
+```sh
+while IFS= read -r f; do
+  git show origin/main:library/SOURCE-ATTESTATIONS | awk '{print $2}' \
+    | grep -qxF "$f" && echo "CITED: $f"
+done < <(git diff --name-only origin/main...<SHA>)
+```
+
+Hits route to the **Librarian, after the merge**. ⛔ Never into the ring's frame.
+
+### Publish
+
+**M4 — Mint a token. Agents hold no GitHub credential.**
+
+```sh
+export GH_TOKEN="$(/workspaces/ken/.devcontainer/mint-gh-token.sh)"
+```
+
+**M5 — Run the publisher.**
+
+```sh
+scripts/scripted-pr-automerge.sh \
+  --target <SHA> --title <pr-title> \
+  (--description <text> | --description-file <path>) [--doc-only]
+```
+
+- **doc-only** → ~2 min; foreground is fine.
+- **code** → **`run_in_background: true`, always.** It waits 581–718 s before
+  its first poll, which exceeds a foreground tool timeout.
+- ⛔ **Never `git fetch` while it runs** — a lost ref-CAS reads as unverified.
+- ⛔ Never pipe its output through `grep` — block buffering swallows the poll
+  lines.
+
+⭐ **`resolved` is not the last gate. CI is.** Four candidates in one arc cleared
+a `resolved` Decision and still failed CI.
+
+### After it lands
+
+**M6 — Verify by BLOB IDENTITY, every changed path.** Ancestry lies after a
+squash; phrase greps lie on wrapped lines.
+
+```sh
+git fetch origin
+for f in $(git diff --name-only <SHA>^ <SHA>); do
+  r=$(git rev-parse "origin/main:$f" 2>/dev/null); l=$(git rev-parse "<SHA>:$f")
+  [ "$r" = "$l" ] && echo "MATCH  $f" || echo "DIFFER $f"
+done
+```
+
+⛔ The publisher **squashes**. `git reset --hard origin/main` afterwards —
+`steward/work` is stale the instant any publish lands.
+
+**M7 — Flip the node, regenerate the tracker.**
+
+```sh
+sed -i 's/^status: active$/status: merged/' docs/program/issues/<ID>.md
+scripts/gen-progress.sh
+```
+
+Bundle both into your next publish.
+
+**M8 — ⭐ NOTIFY THE ADVERSARY, if the merge carries code. A step, not a
+courtesy.**
+
+⛔ **Doc-only merges do not concern the adversary (operator, 2026-07-29). Do not
+notify it for them.** Frames, tracker flips, node registrations, counters and
+corpus edits are not its surface. **`--doc-only` on the publisher is exactly the
+discriminator** — if you passed it, skip `M8`.
+
+For a code merge, look the id up at post time
+(`scripts/moot-actor-id.sh adversary`) and post:
+
+- the merged SHA **and** the resulting `origin/main`;
+- the code paths, and the size (`git diff --shortstat <SHA>^ <SHA>`), so it can
+  bound its pass;
+- anything you already know is unhunted or excluded.
+
+> ⚠ **Measured 2026-07-29 — this step did not exist and the seat ran blind.**
+> §5b *described* the adversary as "event-driven on merge notifications" with
+> **nobody assigned to send one**. It hunted **four unnotified merges** off its
+> own currency checks and filed two findings, one soundness-adjacent on the
+> kernel gate. ⭐ **A requirement living in a descriptive sentence is never
+> discharged — it needs a numbered step.**
+>
+> ⛔ **The loop has a second half: its reports do NOT appear in the space-level
+> event read.** A 200-event scan returned **zero** adversary posts while both
+> findings were live and fetchable by event id. ⇒ Every watchdog tick, read
+> `GET {API}/api/spaces/{sid}/threads` and open any thread with
+> `unread_count_for_actor > 0`. Notifying it and never reading it back is the
+> same silence.
+
+**M9 — Close the loop with the ring**, then run **§2a-bis**: every node whose
+`depends_on` names this one is `ready` with a shovel-ready frame before you stop.
 
 ## 7. Federation watchdog (the backstop)
 
