@@ -230,8 +230,9 @@ graph LR
   NHC --> DCP[RT-DECL-CLOSURE-PORT]
   DCP --> SCP[RT-SEED-CALL-PORT]
   SCP --> PMP[RT-PRODUCER-MATCH-PORT]
-  PMP --> RXT[RT-RECURSOR-TRANSPORT]
+  DCP === RXT[RT-RECURSOR-TRANSPORT]
   RXT --> RET[RT-DESCENT-RETIRE]
+  PMP --> RET
   DCP --> ALLOC[PX8-ERRID-ALLOC]
   DCP --> NHC2[NATIVE-HANDLE-CARRIER resume]
   ALLOC --> SCOPE[PX8-ERRID-SCOPE]
@@ -245,8 +246,33 @@ graph LR
 | 3 | `RT-DECL-CLOSURE-PORT` | **L+** | **builds the closure-seed → callable-unit machinery** #4/#5 reuse. ✅ mechanism gate discharged on **both** deltas. ⭐ **Now also carries `D7`, the closed `Carried`-consumer matrix, and holds the ABI release** |
 | 4 | `RT-SEED-CALL-PORT` | S–M | cheapest; reuses #3 directly and may close on its own `D1` |
 | 5 | `RT-PRODUCER-MATCH-PORT` | M | its **syntactic** `ProducerMatchCall` retirement only — ⛔ **not** the carried-`Match` transport, which is #3's `D7` |
-| 6 | `RT-RECURSOR-TRANSPORT` | L | **the hard one** — invocation-local scope/return-hole state across a unit boundary |
+| **3-atomic** | `RT-RECURSOR-TRANSPORT` | L | ⭐⭐ **MOVED 2026-07-29 from #6 — it is `D7`'s reached successor and assembles ATOMICALLY with #3.** `D1` is answered: outcome **(b)** |
 | 7 | `RT-DESCENT-RETIRE` | M | delete the selector, enum, authority and lane; bank the win |
+
+> ### ⭐⭐ REORDERED 2026-07-29 — THE HARDEST NODE MOVED FROM #6 TO #3-ATOMIC
+>
+> **Architect ruling `evt_5zr53v2dp86md`, on exact `820d3e53`.** `D7` stopped at a
+> lawful successor seam whose refusal is `RT-RECURSOR-TRANSPORT`'s predicate
+> verbatim (*"a computational recursor closure names an in-flight activation, not a
+> transferable value"*). Three consequences:
+>
+> 1. ⛔ **`RT-PRODUCER-MATCH-PORT` is no longer a prerequisite** for that reached
+>    population — `D7` already supplies enough producer-`Match` path to expose the
+>    recursor boundary. Its `depends_on` edge to #6 is **removed**. ⚠ Its own
+>    `ProducerMatchCall` syntactic retirement remains separate and still owed.
+> 2. ⛔⛔ **#3 and the recursor node assemble ATOMICALLY** on the `820d3e53`
+>    lineage — one branch, **one candidate, one PR**, both nodes flipping `merged`
+>    together. Neither goes green alone: #3's parity gate needs the reached
+>    successor, and the successor has no reaching production witness pre-`D7`.
+>    ⭐ **This breaks a real cycle** (#3 held on its consumers, which depended on
+>    #3), and the cycle was **mechanical** — `rt_parity_native` is its own CI job.
+> 3. ⛔ Atomic assembly **does not relabel** the mechanism as `D7`.
+>
+> ⭐ **The mitigation below worked exactly as designed** — the `D1` probe was
+> pulled forward, run against a measured seam rather than a hypothetical, and the
+> answer re-cut the schedule. ⚠ It did **not** come back (a): it came back **(b)**,
+> *the state need not cross*, which is a **stronger** result than the transport
+> this node was originally scoped to build.
 
 > ### ⛔⛔ THE RELEASE POINT IS A **CONDITION**, NOT A NODE NUMBER
 >
@@ -282,18 +308,28 @@ here is an enumeration of `Carried`-receiving consumers with a control that reds
 when a member is omitted** — the same discipline the residual enumerator gave
 the *producer* side, now owed on the *consumer* side.
 
-### ⚠ The one scheduling risk worth stating plainly
+### ✅ The one scheduling risk worth stating plainly — RETIRED 2026-07-29
 
-**The hardest node is sixth.** If `RT-RECURSOR-TRANSPORT` proves infeasible as
-scoped, we learn it after five nodes of investment — and "half-migrated" is
-exactly the state the operator directed us out of.
+**It read:** *the hardest node is sixth, so if `RT-RECURSOR-TRANSPORT` proves
+infeasible as scoped we learn it after five nodes of investment — and
+"half-migrated" is exactly the state the operator directed us out of.* The stated
+mitigation was that its `D1` is **a feasibility probe runnable at any time**,
+independent of queue position, whose result re-cuts the schedule.
 
-⭐ **The mitigation is cheap and it is a deliverable, not a hope:**
-`RT-RECURSOR-TRANSPORT`'s `D1` is a **feasibility probe that can be pulled
-forward and run at any time**, independently of its position in the queue. If
-the ring or the Architect wants the risk retired early, run that `D1` during #3
-or #4 and re-cut the schedule on the result. ⛔ Do not reorder the *build* work
-to chase it — the transport machinery from #3 is real preparation.
+⭐⭐ **That is what happened, and the risk is now spent.** `D1` was pulled forward
+at `D7`'s hard stop #25 — against a **measured** seam rather than a hypothetical —
+and the Architect answered it **(b): the state need not cross**
+(`evt_5zr53v2dp86md`).
+The node moved from #6 to **#3-atomic** on that result.
+
+⚠ **Two things worth keeping from how this went.** First, the probe was only worth
+anything because it was **reachable**: `D7` had to advance the edge far enough to
+produce a real refusal before the question could be asked at all — a `D1` run
+speculatively at #1 would have had no production witness. ⇒ ⭐ *"Runnable at any
+time"* was true, but *"informative at any time"* was not. Second, the answer came
+back **stronger** than the deliverable was scoped for — the node was framed to
+*build a transport*, and the ruling instead **eliminates the crossing**. ⛔ A frame
+that had only asked "build the transport" would have had no slot for that answer.
 
 ## 5. What "done" means
 

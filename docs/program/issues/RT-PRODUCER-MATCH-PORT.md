@@ -6,7 +6,7 @@ owner: runtime
 size: M
 gate: none
 depends_on: [RT-SEED-CALL-PORT]
-blocks: [RT-RECURSOR-TRANSPORT]
+blocks: [RT-DESCENT-RETIRE]
 github: null
 origin: Operator directive 2026-07-29 — prioritize replacement of RecursiveDescent, migrate the remaining residual classes, do not linger half-migrated. Campaign docs/program/16-recursive-descent-retirement.md. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---

@@ -6,7 +6,7 @@ owner: runtime
 size: L
 gate: none
 depends_on: []
-blocks: [PX8-ERRID-ALLOC, RT-SEED-CALL-PORT, NATIVE-HANDLE-CARRIER]
+blocks: [PX8-ERRID-ALLOC, RT-SEED-CALL-PORT, NATIVE-HANDLE-CARRIER, RT-RECURSOR-TRANSPORT]
 github: null
 origin: Architect ruling evt_3t7t27e3rv8cx (2026-07-29), outcome 2 on the Steward's PX8-ERRID-ALLOC wall discriminator (evt_s2kv0wttb5f7). Measured by the Architect in a detached scratch worktree with diagnostic-only labels against exact ad7298fb. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---

@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-29 18:21:53Z — from 127 issue file(s) in `docs/program/issues/`.
+2026-07-29 21:13:23Z — from 127 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -176,6 +176,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-EFFECT-DIFF` — One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can
 - `RT-FNSPLIT-B2O-CHECK` — the B2O checking layer advertises more than it enforces — structural closure for the item enumerator and reachability for the validator arms
+- `RT-RECURSOR-TRANSPORT` — Active-recursor transport — an active computational recursor's invocation-local scope/return-hole state cannot cross a functionized unit boundary, retaining two residual classes
 
 ## Blockers
 
@@ -217,7 +218,6 @@ is itself not yet `merged`/`closed`:
 - `RT-DESCENT-RETIRE` blocked by `RT-PRODUCER-MATCH-PORT` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-RECURSOR-TRANSPORT` (status: ready)
 - `RT-PRODUCER-MATCH-PORT` blocked by `RT-SEED-CALL-PORT` (status: ready)
-- `RT-RECURSOR-TRANSPORT` blocked by `RT-PRODUCER-MATCH-PORT` (status: ready)
 - `RT-SEED-CALL-PORT` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
 
 ## Gate progress
