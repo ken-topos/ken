@@ -153,6 +153,42 @@ exactly why it survives review.
 Runtime is single-threaded, and **every node here edits `lowering/core.rs`**, so
 this is a strict sequence, not a fan-out.
 
+> ### ⛔⛔ CORRECTED 2026-07-29 — `PX8` IS **NOT** RELEASED AT #3
+>
+> **#3 absorbs a consumer-matrix deliverable instead.**
+>
+> This section previously claimed *"`PX8` is released at #3… Foundation resumes
+> in parallel from #4 onward and this campaign does not hold it."* **That was
+> measured false on 2026-07-29** and the corrected schedule is below.
+>
+> `RT-DECL-CLOSURE-PORT` did exactly what it promised — **both** governed deltas
+> now report `authority=FunctionizedUnits`, `residuals=none`
+> (`evt_69ebt7hwg8508`). But the rows `PX8-ERRID-ALLOC` and
+> `NATIVE-HANDLE-CARRIER` must *compile* then hit a **newly reachable**
+> `FunctionizedUnits` refusal — `ComputationalMatch: tree-producing match
+> scrutinee is not Bool or a constructor` — which the Architect filed under
+> **`RT-PRODUCER-MATCH-PORT`** (`evt_5catd48dv8db6`, hard stop #22).
+> ⇒ **The ABI release gate moved from #3 to `RT-PRODUCER-MATCH-PORT`.**
+>
+> ⭐⭐ **THE MATRIX RULING (`evt_6h6vzqw7ydra8`) SUPERSEDED PER-CELL OWNERSHIP.**
+> The repair is **one closed `Carried`-consumer matrix**, added to **#3** as
+> `D7`, and it **lands atomically with `483ef7ab`**. ⛔ **The two observed
+> refusals are NOT separate nodes**, and #4/#5 are **not** reordered — they keep
+> their syntactic residual retirements and gain nothing here.
+>
+> ⚠ **Why no node could be split off:** #3 alone regresses existing green rows; a
+> consumer node cannot merge first with a reaching production witness; and #3
+> cannot merge first. ⇒ ⭐ **A nominal node with no independent safe merge
+> boundary is a label, not a node.** ⛔ So the ABI release is **#3's own merge**,
+> now carrying `D7`.
+>
+> ⚠ **The lesson, since this is the second time it bit in two days:** the false
+> claim was not a measurement error — it was a **scope inference** ("the ABI
+> campaign needs `TransparentDeclarationClosure` retired **and nothing more**")
+> written as if measured. The identical shape held Foundation for a day on
+> 2026-07-28. ⛔ A release edge asserted from scope reasoning is not a release
+> edge until a row compiles.
+
 ```mermaid
 graph LR
   JD[RT-JOIN-DISPOSITION] --> NHC[NATIVE-HANDLE-CARRIER]
@@ -162,23 +198,54 @@ graph LR
   PMP --> RXT[RT-RECURSOR-TRANSPORT]
   RXT --> RET[RT-DESCENT-RETIRE]
   DCP --> ALLOC[PX8-ERRID-ALLOC]
+  DCP --> NHC2[NATIVE-HANDLE-CARRIER resume]
   ALLOC --> SCOPE[PX8-ERRID-SCOPE]
   SCOPE --> PX8
 ```
 
 | # | node | size | why here |
 |---|---|---|---|
-| 1 | `RT-JOIN-DISPOSITION` | M | in flight; repairs the phase invariant the whole campaign will keep hitting |
-| 2 | `NATIVE-HANDLE-CARRIER` | M | resume from preserved WIP `8bc7556a` |
-| 3 | `RT-DECL-CLOSURE-PORT` | L | **builds the closure-seed → callable-unit machinery** the next two reuse; also releases `PX8` |
+| 1 | `RT-JOIN-DISPOSITION` | M | ✅ merged; repaired the phase invariant the whole campaign kept hitting |
+| 2 | `NATIVE-HANDLE-CARRIER` | M | ⛔ **held at `85dcee25`** — reached #3's ceiling; resumes on #3's merge |
+| 3 | `RT-DECL-CLOSURE-PORT` | **L+** | **builds the closure-seed → callable-unit machinery** #4/#5 reuse. ✅ mechanism gate discharged on **both** deltas. ⭐ **Now also carries `D7`, the closed `Carried`-consumer matrix, and holds the ABI release** |
 | 4 | `RT-SEED-CALL-PORT` | S–M | cheapest; reuses #3 directly and may close on its own `D1` |
-| 5 | `RT-PRODUCER-MATCH-PORT` | M | producer call in scrutinee position |
+| 5 | `RT-PRODUCER-MATCH-PORT` | M | its **syntactic** `ProducerMatchCall` retirement only — ⛔ **not** the carried-`Match` transport, which is #3's `D7` |
 | 6 | `RT-RECURSOR-TRANSPORT` | L | **the hard one** — invocation-local scope/return-hole state across a unit boundary |
 | 7 | `RT-DESCENT-RETIRE` | M | delete the selector, enum, authority and lane; bank the win |
 
-⭐ **`PX8` is released at #3, not at the end.** The ABI campaign needs
-`TransparentDeclarationClosure` retired and nothing more, so Foundation resumes
-in parallel from #4 onward and this campaign does not hold it.
+> ### ⛔⛔ THE RELEASE POINT IS A **CONDITION**, NOT A NODE NUMBER
+>
+> ⚠ **A draft of this block twice asserted a node id as the release point** —
+> first #3, then #4. **Both were the same unmeasured scope inference.** The
+> release is #3's merge only because `D7` was *added to* #3; ⛔ it is not a
+> property of the number.
+>
+> **Measured 2026-07-29 (`evt_1b1v2qjy82epm`):** targeted `rt_parity_native` on
+> clean `483ef7ab` with **neither** delta is **1/7** — five existing-`main` rows
+> hit the producer-`Match` population, and a sixth,
+> `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds`, hits a
+> **distinct carried closure-capture refusal** that the prior ruling does not
+> cover. ⇒ **Two different consumers, not one.**
+>
+> ⭐ **So the release condition is: every consumer that can receive a `Carried`
+> operand eliminates it.** Which node numbers that spans is open until the
+> Architect classifies the second refusal. ⛔ Do not write a release edge against
+> a node id until a row compiles.
+
+⭐⭐ **THE UNDERLYING SHAPE — one incomplete matrix, not N bugs.**
+`RT-DECL-CLOSURE-PORT` introduced a **new representation**: a declaration result
+crossing the callable-unit boundary as `LoweringOperand::Carried`. **It did not
+enumerate the consumers that must eliminate that representation.** Both refusals
+are the same cell type — *a `Carried` value reaching a consumer built only for
+specialized shapes* — found in two different consumers, and found only because
+seven parity rows happened to reach them.
+
+⇒ ⛔ **Fixing the two known cells does not bound the population.** That is
+precisely the failure §3 of this document already names: *a proof over an
+incomplete population, where every control passes.* **The paired obligation
+here is an enumeration of `Carried`-receiving consumers with a control that reds
+when a member is omitted** — the same discipline the residual enumerator gave
+the *producer* side, now owed on the *consumer* side.
 
 ### ⚠ The one scheduling risk worth stating plainly
 

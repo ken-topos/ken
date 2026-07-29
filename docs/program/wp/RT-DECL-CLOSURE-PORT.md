@@ -134,6 +134,114 @@ to widen.
   `TransparentDeclarationClosure` is removed from the retained residual.
 - **`D6`** — Remove the residual variant, and only then re-run `AC-1`.
 
+### ⭐⭐ `D7` — THE CLOSED `Carried`-CONSUMER MATRIX
+
+**Added 2026-07-29, Architect `evt_6h6vzqw7ydra8`.**
+
+⛔ **This is one deliverable, not two repairs, and it lands ATOMICALLY with
+`483ef7ab`.** ⛔ **Do not file the two observed refusals as separate nodes.**
+
+**Why the matrix is the unit.** `LoweringOperand::Carried` is **not** new here —
+`C1` introduced it. What this node newly activates is a **production seed**: a
+declared-unit result now enters the already-ruled phase-bearing lowering graph.
+`C1 §2h`'s governing contract is transitive **full phase closure** across
+environment insertion, recursive call, branch/join forwarding, and result
+propagation, ⛔ **with no reachability whitelist.**
+
+⚠ **The implementation does not mechanically close that population.** At exact
+`483ef7ab` there are **at least 24** explicit calls to `specialized_at`,
+`specialized_ref_at`, `specialized_env_at`, or `specialized_join_arm`, plus
+direct exhaustive `LoweringOperand` matches. Their free-form diagnostic strings
+identify sites but prove **neither population closure nor lawful disposition**.
+
+⭐⭐ **The seven parity rows reached two sites BY ACCIDENT. Two fixes would
+establish only that two witnesses moved.** ⇒ **The reached set is evidence,
+never the population.**
+
+**The ruling:** derive and validate **one closed consumer-edge matrix**. Every
+edge that can receive a lowering operand has **exactly one** disposition; every
+disposition names a **real** edge; each is consumed **exactly once**. ⛔ A
+missing edge must fail **planning/compilation before `ObjectEmission`**.
+
+#### The required partition — names may vary, this partition may not
+
+| edge | rule |
+|---|---|
+| **Forwarding** | environment insertion, recursive lowering, result propagation, planned join. `Carried` passes **unchanged**; a join keeps using the ruled `JoinResultRepresentation` token — ⛔ do not invent a second phase plan |
+| **Callable-capture** | an **invocation-local compiler control capsule** retains static body/parameter identity while **each captured operand retains its own phase**. ⭐ This is forwarding plus an owner/lifetime invariant — ⛔ **not a value representation** |
+| **Semantic eliminator** | `Match`, `ComputationalMatch`, `Project`, or anything that semantically **reads** the value. `Carried` takes **one** emitted-helper route; `Specialized` keeps its existing route |
+| **Specialized-only leaf** | lawful **only** where the planner **proves** no `Carried` seed can reach that exact edge under the selected authority. ⛔ *"It has not happened in the corpus"* and a fail-closed `specialized_at` are **NOT** such proofs. A reachable `Carried` edge must gain an emitted semantic route **or** remain a **named selector residual** — ⛔ it may not fail late during emission |
+| **Escape-forbidden** | a whole runtime-local closure/control capsule, trap-protocol object, or other non-value **cannot cross a unit/publication boundary**. Refusal occurs **before** allocation, helper invocation, or partial publication |
+
+#### How the population is derived — ⛔ not by grep
+
+Derive the **source-edge** population beside the static-origin/child-occurrence
+graph, by an **exhaustive, wildcard-free traversal of every `RuntimeExpr`
+variant and every operand-bearing child role.** Lowering-only edges with no
+source child use a **separate closed enum**. ⛔ Free-form strings remain
+diagnostic labels only. ⭐ **The only route into `specialized_at` /
+`specialized_ref_at` / `specialized_env_at` must consume the exact typed
+disposition for that edge.**
+
+**Validation owes a bijection and exact-once consumption *before function
+definition*:** every planned operand edge exists · every real edge is planned ·
+⛔ no duplicate, wrong owner, wrong phase, omitted edge, or unconsumed token.
+⭐ **Adding a `RuntimeExpr` form must break the exhaustive planner; adding an
+operand role to an existing form must break the edge/child-role closure or its
+omission control.**
+
+#### Row: the closure-capture cell (`core.rs:7370`)
+
+⛔⛔ **This refusal is NOT authority to** restore `PersistentClosure`, mint a
+carried closure, decode a carrier into a closure template, or pass a whole
+closure through the declared-unit ABI. **The closure boundary still forbids all
+four.**
+
+Lawful representation — an **invocation-local compiler control capsule**:
+
+- the outer `Closure` / `DeclarationClosure` stays `LoweringOperand::Specialized`
+  and retains **only** static body origin, params, callable identity;
+- its **`captures` edge becomes phase-bearing** (`LoweringOperand` per capture),
+  so a carried capture **stays carried**;
+- the capsule is **unconditionally non-transferable**, and the admissibility /
+  escape check rejects it **before inspecting or emitting its captures**;
+- on `FunctionizedUnits`, the planner-selected callable target receives
+  parameters **then** captures through the **existing** typed unit-input ABI;
+  carried captures pass as their existing word, specialized captures cross the
+  one-way producer **exactly once**;
+- owner, phase, capture position/order, invocation lifetime, result and trap
+  validation remain **exact**.
+
+⚠ **This is a narrow amendment to `C1`'s former "single-field license".** The
+governing distinction remains **phase identity, not transitive Rust
+containment.** The capture is still a `LoweringOperand`: ⛔ it does **not**
+acquire a `LoweredVariant`, `BoundaryDisposition`, encoding policy, inverse
+conversion, carrier tag, durable slot, or independent callable identity.
+⇒ `C1`'s text saying every `Closure`/`DeclarationClosure` child stays `Lowered`
+is **superseded for capture edges only**, by the newly proved reachable
+population.
+
+#### Row: the producer-`Match` cell
+
+The mechanism from `evt_5catd48dv8db6` **remains correct**, but as **one matrix
+row — not separate ownership.** The carried-`Match` dispatcher gets **ordinary
+and producer continuation modes** sharing class / tag / field-count / case /
+default / arity / static-origin / join handling. Producer mode lowers the
+selected ordinary-`Match` case with `lower_computational_producer_expr` **under
+the complete remaining eliminator stack**. ⛔ No eager ordinary body followed by
+an outer merge; ⛔ no reconstructed `Lowered` template.
+
+⚠ [[RT-PRODUCER-MATCH-PORT]] and [[RT-SEED-CALL-PORT]] **still own their
+syntactic residual retirements later** — ⛔ but **not** this repair, and ⛔ not a
+second capture transport. ⭐ Their `D1` may find the transport already present.
+
+#### ⛔⛔ Atomicity — why this cannot be a separate node
+
+`RT-DECL` alone **regresses existing green rows**; a consumer node **cannot**
+merge first with a reaching production witness; and `RT-DECL` **cannot** merge
+first. ⇒ ⭐ **A nominal graph node with no independent safe merge boundary is a
+label, not a node.** One candidate, one merge.
+
 ## 5. Acceptance criteria
 
 - **`AC-1` (the only one that decides the node).** `scripts/ken-cargo test -p
@@ -177,6 +285,106 @@ to widen.
   delta — two independent deltas is the control; ⭐ **but if either delta needs a
   size concession to pass, that is a reportable finding that this node did not
   remove the ceiling, only lowered the program under it.**
+  ### ⛔⛔ `AC-1` IS FACTORED — 2026-07-29
+
+  On the Architect's recommendation (`evt_5catd48dv8db6`).
+
+  **`AC-1` as written bundles two properties, and only the first is this node's.**
+
+  | | property | owner | state |
+  |---|---|---|---|
+  | **`AC-1a`** | the `RecursiveDescent` ceiling no longer takes these programs — **both** deltas select `FunctionizedUnits` with `residuals=none` | **this node** | ✅ **DISCHARGED** |
+  | **`AC-1b`** | the same two rows **compile and pass** end to end | **this node's `D7` consumer matrix** (below) — it lands **atomically** with `483ef7ab` | ⛔ **not yet discharged** |
+
+  ⚠ **`AC-1b`'s owner was re-ruled on 2026-07-29.** It was briefly filed to
+  [[RT-PRODUCER-MATCH-PORT]] (`evt_5catd48dv8db6`); the matrix ruling
+  (`evt_6h6vzqw7ydra8`) **superseded that on per-cell ownership** and returned it
+  here as `D7`. ⛔ Do not route it to a successor node.
+
+  ### ✅ `AC-1a` DISCHARGED 2026-07-29 at `483ef7ab` (tree `b41794b4`)
+
+  ```text
+  RT_DECL_CLOSURE_PORT_D1 authority=FunctionizedUnits
+  RT_DECL_CLOSURE_PORT_D1 residuals=none
+  ```
+
+  Measured on **both** required deltas — Foundation `ad7298fb` and NHC
+  `85dcee25` (detached, no-commit, no preserved ref moved) — each then reaching
+  the **identical** downstream refusal (`evt_69ebt7hwg8508`).
+
+  ⭐ **Why two deltas agreeing is the point.** One delta would show *one program*
+  got under the ceiling. Two independent deltas, both clearing every residual and
+  both stopping at one shared downstream wall, show **the ceiling moved**. That is
+  exactly what the two-delta amendment above was added to distinguish, and it is
+  the only reason this node can be said to have succeeded at all.
+
+  ⚠ **This is not a code-shape claim.** It is a selector outcome on the exact
+  governed deltas, from an instrument carrying a **causal** mutation control
+  (`AC-2`, below). ⛔ It is equally not a claim that the programs run — that is
+  `AC-1b`, and it is somebody else's.
+
+  ### ⛔⛔ `AC-1b` CANNOT BE DISCHARGED HERE — THE NODE IS HELD
+
+  ⛔ **Do not route `483ef7ab` to QA.**
+
+  **Measured 2026-07-29 (`evt_1b1v2qjy82epm`):** targeted `rt_parity_native` on
+  clean `483ef7ab` with **neither** delta applied is **1/7**.
+
+  - **five** rows that are **green on `main` today** hit the producer-`Match`
+    carried-scrutinee population (Architect-filed under
+    [[RT-PRODUCER-MATCH-PORT]], hard stop **#22**);
+  - one — `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds` — hits a
+    **distinct carried closure-capture** refusal (hard stop **#23**, owner
+    classification open).
+
+  ⇒ ⛔ **The port is NOT additive: it regresses `main`.** `AC-4` (workspace green
+  in CI) is therefore unreachable, and this node **cannot become a candidate**
+  until its consumers are complete. ⛔ No QA route, no fresh review, no approval.
+
+  ⭐ **The baseline proxy that found this was not in the original plan and it
+  changed the outcome.** Every measurement before it carried a delta, so the
+  regression was invisible to all of them — and the factoring above was, before
+  it ran, about to be used to argue this node could land. ⚠ **A port measured only
+  with its consumers' inputs applied has not been measured against `main`.**
+
+  ### ⭐⭐ WHAT THIS NODE OWES ITS SUCCESSORS — the consumer-side enumeration
+
+  This node introduced a **new representation** — a declaration result crossing
+  the callable-unit boundary as `LoweringOperand::Carried` — and **did not
+  enumerate the consumers that must eliminate it.** Both refusals above are the
+  same cell type (*a `Carried` value reaching a consumer built only for
+  specialized shapes*), found in two different consumers, and found **only**
+  because seven parity rows happened to reach them.
+
+  ⛔ **Two cells found by two test rows is not a bounded population.** The
+  producer side got an enumerator with an omission-reds control; ⭐ **the consumer
+  side owes the same discipline and does not yet have it.** See
+  `docs/program/16-recursive-descent-retirement.md` §4.
+
+- **⭐⭐ `AC-7` — `D7`'s evidence net (Architect `evt_6h6vzqw7ydra8`). All eight.**
+  1. Record the **complete static edge matrix** and a **separate** reached-edge
+     trace. ⛔ **Do not equate them.**
+  2. ⭐⭐ **THE LOAD-BEARING CONTROL — omit one *real* member** (closure capture,
+     producer `Match`, **or one internal forwarding edge**) and prove validation
+     **reds before emission.** ⚠ Without this, every other item on this list
+     passes over whatever population the instrument happens to see.
+  3. Replace producer-`Match` producer mode with ordinary mode → recreate the
+     **exact** refusal / wrong continuation.
+  4. Re-specialize a carried closure capture → recreate the **exact**
+     `BoundaryCarrier` refusal.
+  5. Prove carried capture **order, owner, phase, invocation lifetime** —
+     perturb **each independently**.
+  6. Prove invalid carrier class/tag/arity/default **and** whole-closure escape
+     still fail closed **before** side effects or publication.
+  7. Pin that **all current unwrapping sites consume typed dispositions**;
+     adding an unplanned unwrapping **cannot compile or validate**.
+  8. **Baseline targeted parity returns 7/7**, and the exact Foundation and NHC
+     governed rows compile and pass.
+
+  ⛔ **Still separately required and NOT subsumed by the above:** `C1` carrier
+  controls · `RT-JOIN-DISPOSITION` controls · exhaustive residual enumeration ·
+  `AC-6` · the remaining mutations · QA · a **fresh exact-SHA review**.
+
 - **`AC-2`.** `D1`'s complete residual enumeration is recorded in the tree, with
   the fixture's full set named. If the set is larger than
   `{TransparentDeclarationClosure}`, that is a reportable finding, not a silent
