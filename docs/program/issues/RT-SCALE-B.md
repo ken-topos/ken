@@ -98,9 +98,25 @@ lines are the arming, and they are what either party re-reads.
 
 ```text
 SYMPTOM INVENTORY (Architect appends one line per hard-stop; never rewritten)
+COUNT OF RECORD      = 19  (Steward, 2026-07-29; §5a backstop holds it)
 NEXT PREDICATE CHECK = 9th entry, then 12th, 15th, …
 NEXT RESEARCH PULL   = #21, then #24, #27, …   (#18 FIRED 2026-07-29 — spent)
 ```
+
+⛔ **ENTRIES 9 AND 10 ARE OWED — the inventory has not been appended since it was
+armed.** Two hard-stops have landed since: **#18** (the `04cdce4e` `ken-cli` CI
+rejection, `dec_3tawbngh6k761`) and **#19** (the `34177256` trap-exit stop,
+`dec_4kf9wnm0pyvft`). By this block's own header — *one line per hard-stop* —
+those are entries 9 and 10, and ⭐ **entry 9 is the armed predicate check.**
+
+⚠ **This is the same disarming failure the counters exist to prevent**, in its
+other form: not a wrong count, but **a counter nobody advanced.** The research
+pull fired at #18 only because that number was written down and re-read. ⇒ The
+count of record is now written **here**, not only in a Steward resume state.
+
+⛔ **The Steward does not append the entries.** They are the Architect's
+observations; a Steward-written symptom line would make the instrument measure
+the Steward's reading of a ruling rather than the ruling.
 
 ⭐ **#18 fired and is spent.** Hard-stop #18 was the `04cdce4e` CI rejection —
 seven red checks, every one in `ken-cli` and none reachable from the
