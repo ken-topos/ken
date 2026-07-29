@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-29 14:54:22Z — from 127 issue file(s) in `docs/program/issues/`.
+2026-07-29 15:50:29Z — from 127 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -88,7 +88,7 @@ the committed file matches the generator's output.
 | `LOADER-STALE-PREMISE` | \"no disk loader yet\" is stale in 9 places — including already-landed library/ content | merged | doc | S | none | — |
 | `MAP-TRANSPORT-CODEC` | If Map/Set need a portable canonical serialization, it is ordinary package Ken — not a runtime primitive: settle whether a codec is required at all, and if so place it out of trusted_base() | closed | ergo | TBD | none | — |
 | `MODELS-TIER` | agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception | ready | steward | S | none | — |
-| `NATIVE-HANDLE-CARRIER` | Native build-pipeline completeness — a constructor-private resource-carrying handle fails checked-core body-view lowering (MissingClosureMetadata) when it crosses the higher-order withBuffer normalization boundary | ready | runtime | M | none | — |
+| `NATIVE-HANDLE-CARRIER` | Native build-pipeline completeness — a constructor-private resource-carrying handle fails checked-core body-view lowering (MissingClosureMetadata) when it crosses the higher-order withBuffer normalization boundary | active | runtime | M | none | — |
 | `ORACLE-VIS-CHECK` | replace the text-pin oracle in px4b_native_production.rs with a real visibility check | merged | runtime | S | none | — |
 | `ORACLE-VIS-PACKAGING` | replace the text-pin visibility oracle on build_process_starter_executable_artifact | merged | runtime | XS | none | — |
 | `PUB-VERIFY` | scripted-pr-automerge.sh exits 0 on a failed push | closed | steward | S | none | — |
@@ -125,7 +125,7 @@ the committed file matches the generator's output.
 | `RT-FNSPLIT-C2-SYNTH-ID` | closed synthesized-constructor-role identity capability, with the DynamicConstructor producer that consumes it — the identity source compiler-synthesized effect payloads have no occurrence to ask for | merged | runtime | M | none | 1186 |
 | `RT-FNSPLIT-C3-ACTIVATION` | the opaque activation owner — one Rust representation authority in ken-runtime that constructs, publishes and tears down per-invocation boundary storage, with the deployment-supplied capacity profile and the one-argument public adapter seam | merged | runtime | L | none | 1181 |
 | `RT-FNSPLIT-RECUR-PORT` | emission-port completion — the governed nested-bracket family (recursive ComputationalMatch + trap arms) must select FunctionizedUnits, so RT-SCALE-B can measure the completed population | merged | runtime | XL | none | — |
-| `RT-JOIN-DISPOSITION` | Join-disposition phase repair — the landed RECUR-PORT `consumed XOR statically-unselected` invariant conflates structural materialization with semantic reachability and false-rejects a join materialized before its enclosing match selects | active | runtime | M | none | — |
+| `RT-JOIN-DISPOSITION` | Join-disposition phase repair — the landed RECUR-PORT `consumed XOR statically-unselected` invariant conflates structural materialization with semantic reachability and false-rejects a join materialized before its enclosing match selects | merged | runtime | M | none | — |
 | `RT-MATCH-FRAME-FP` | match-frame fingerprints must hash a dedicated closure-free header carrier, not a Debug rendering of closure-capable cases | merged | runtime | M | none | https://github.com/swe-toolkit/ken/pull/1108 |
 | `RT-NATIVE-FNSPLIT` | Native backend: bound per-function lowering growth to O(n) — helper identity is a variable-width whole-configuration key (orig. single-Function VReg::MAX, since fixed) | merged | runtime | TBD | none | — |
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
@@ -198,7 +198,6 @@ is itself not yet `merged`/`closed`:
 - `ABI-S6` blocked by `ABI-S1` (status: draft)
 - `DS-9` blocked by `KERNEL-NESTED-IND` (status: active)
 - `F4` blocked by `A3` (status: draft)
-- `NATIVE-HANDLE-CARRIER` blocked by `RT-JOIN-DISPOSITION` (status: active)
 - `PX10` blocked by `PX9` (status: draft)
 - `PX10` blocked by `ABI-M1` (status: draft)
 - `PX10` blocked by `ABI-S5` (status: draft)
@@ -208,7 +207,7 @@ is itself not yet `merged`/`closed`:
 - `PX12` blocked by `PX11` (status: draft)
 - `PX8-ERRID-ALLOC` blocked by `RT-DECL-CLOSURE-PORT` (status: ready)
 - `PX8-ERRID-SCOPE` blocked by `PX8-ERRID-ALLOC` (status: ready)
-- `PX8-F-CAP-41` blocked by `NATIVE-HANDLE-CARRIER` (status: ready)
+- `PX8-F-CAP-41` blocked by `NATIVE-HANDLE-CARRIER` (status: active)
 - `PX8` blocked by `PX8-F-CAP-41` (status: draft)
 - `PX8` blocked by `PX8-ERRID-SCOPE` (status: ready)
 - `PX9` blocked by `PX8` (status: draft)
