@@ -5326,7 +5326,12 @@ struct PendingLetContinuationFrame<'a> {
     /// `child(call_origin, 1 + i)`.
     call_origin: StaticOriginId,
     env: &'a [LoweringOperand],
-    recursive_unit_body: Option<StaticOriginId>,
+    recursive_worker: Option<StaticRecursorWorker>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct StaticRecursorWorker {
+    body_origin: StaticOriginId,
+    capture_count: usize,
 }
 #[derive(Clone, Copy)]
 struct ActiveContinuationFrame<'a> {
@@ -5372,7 +5377,7 @@ struct RecursorInvocationSegment {
     ///
     /// `None` is the ordinary structural-data IH: it resumes the eliminator
     /// over its carried value and accepts no source arguments.
-    recursive_unit_body: Option<StaticOriginId>,
+    recursive_worker: Option<StaticRecursorWorker>,
     /// Inert handles into `Lowering::dynamic_splice_edges`. Cloning a lowered
     /// recursor can copy a handle, but only one clone can consume the unique
     /// compiler-owned edge; every replay rejects before CFG.
@@ -5558,7 +5563,7 @@ impl RecursorInvocationSegment {
             resume_cursor,
             checked_invocation,
             computational_ih_slot_template_id,
-            recursive_unit_body: None,
+            recursive_worker: None,
             dynamic_splice_edges: Vec::new(),
             open_control_obligations,
         }
@@ -7720,10 +7725,15 @@ impl<'a> Lowering<'a> {
             &SourceSelectedContinuation<'_>,
             &[SourceSelectedContinuation<'_>],
         )>,
-        recursive_unit_body: Option<StaticOriginId>,
+        recursive_worker: Option<StaticRecursorWorker>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let recursive_unit_body = recursive_unit_body.or_else(|| match &recursive {
-            LoweringOperand::Specialized(Lowered::Closure { body, .. }) => Some(*body),
+        let recursive_worker = recursive_worker.or_else(|| match &recursive {
+            LoweringOperand::Specialized(Lowered::Closure { body, captures, .. }) => {
+                Some(StaticRecursorWorker {
+                    body_origin: *body,
+                    capture_count: captures.len(),
+                })
+            }
             LoweringOperand::Specialized(_) | LoweringOperand::Carried(_) => None,
         });
         let (residual, payload) = decompose_computational_recursor(recursive);
@@ -7773,10 +7783,10 @@ impl<'a> Lowering<'a> {
             .as_ref()
             .and_then(|(_, invocation)| invocation.checked_invocation)
             .or(active_instance);
-        let segment_recursive_unit_body = payload
+        let segment_recursive_worker = payload
             .as_ref()
-            .and_then(|(_, invocation)| invocation.recursive_unit_body)
-            .or(recursive_unit_body);
+            .and_then(|(_, invocation)| invocation.recursive_worker)
+            .or(recursive_worker);
         let segment_dynamic_splice_edges = payload
             .as_ref()
             .map(|(_, invocation)| invocation.dynamic_splice_edges.clone())
@@ -7894,7 +7904,7 @@ impl<'a> Lowering<'a> {
             segment_checked_invocation,
             computational_ih_slot_template_id,
         );
-        invocation.recursive_unit_body = segment_recursive_unit_body;
+        invocation.recursive_worker = segment_recursive_worker;
         invocation.dynamic_splice_edges = segment_dynamic_splice_edges;
         Ok(LoweringOperand::Specialized(
             Lowered::ComputationalRecursorClosure {

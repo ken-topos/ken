@@ -879,18 +879,18 @@ impl<'a> Lowering<'a> {
         argument_env: &[LoweringOperand],
         saved_producer_env: &[LoweringOperand],
         outer_eliminators: &[EliminatorFrame<'_>],
-        recursive_unit_body: Option<StaticOriginId>,
+        recursive_worker: Option<StaticRecursorWorker>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         // ⭐⭐ `AC-C4` — the carried residual, taken BEFORE the specialized
         // shapes so a carried word never reaches a template probe.
         if let LoweringOperand::Carried(word) = residual {
-            if let Some(body) = recursive_unit_body.filter(|_| {
+            if let Some(worker) = recursive_worker.filter(|_| {
                 matches!(
                     self.body_emission_authority,
                     BodyEmissionAuthority::FunctionizedUnits
                 )
             }) {
-                let inputs = args
+                let mut inputs = args
                     .iter()
                     .enumerate()
                     .map(|(position, arg)| {
@@ -898,8 +898,12 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, arg, argument_env)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                let returned =
-                    self.call_declared_recursive_position_unit(builder, body, &inputs)?;
+                self.append_static_recursor_worker_captures(builder, *word, worker, &mut inputs)?;
+                let returned = self.call_declared_recursive_position_unit(
+                    builder,
+                    worker.body_origin,
+                    &inputs,
+                )?;
                 return self.lower_computational_match_value_composed(
                     builder,
                     returned,
@@ -1065,7 +1069,7 @@ impl<'a> Lowering<'a> {
                 &continuation_env,
                 continuation.env,
                 &eliminators[1..],
-                continuation.recursive_unit_body,
+                continuation.recursive_worker,
             );
         }
         if let EliminatorFrame::Active(active) = eliminators[0] {
@@ -1157,7 +1161,7 @@ impl<'a> Lowering<'a> {
                                     let (activation, invocation) = boundary.expect(
                                         "recursor closure carries a continuation delimiter",
                                     );
-                                    let recursive_unit_body = invocation.recursive_unit_body;
+                                    let recursive_worker = invocation.recursive_worker;
                                     let resume_cursor = invocation.resume_cursor;
                                     let current =
                                         active_recursor_frame(eliminators).ok_or_else(|| {
@@ -1193,7 +1197,7 @@ impl<'a> Lowering<'a> {
                                             args,
                                             call_origin: body_origin,
                                             env: producer_env,
-                                            recursive_unit_body,
+                                            recursive_worker,
                                         },
                                     ));
                                     composed.extend(frames);
@@ -1400,7 +1404,7 @@ impl<'a> Lowering<'a> {
                             decompose_computational_recursor(LoweringOperand::Specialized(callee));
                         let (activation, invocation) =
                             boundary.expect("recursor closure carries an invocation segment");
-                        let recursive_unit_body = invocation.recursive_unit_body;
+                        let recursive_worker = invocation.recursive_worker;
                         let current = active_recursor_frame(eliminators).ok_or_else(|| {
                             unsupported(
                                 "ComputationalRecursor",
@@ -1434,13 +1438,13 @@ impl<'a> Lowering<'a> {
                         // `BoundedNat` arm below uses. ⛔ Not `specialized_at`,
                         // ⛔ not a reconstructed `Lowered`, ⛔ not the producer.
                         if let LoweringOperand::Carried(word) = base {
-                            if let Some(body) = recursive_unit_body.filter(|_| {
+                            if let Some(worker) = recursive_worker.filter(|_| {
                                 matches!(
                                     self.body_emission_authority,
                                     BodyEmissionAuthority::FunctionizedUnits
                                 )
                             }) {
-                                let inputs = args
+                                let mut inputs = args
                                     .iter()
                                     .enumerate()
                                     .map(|(position, arg)| {
@@ -1452,9 +1456,19 @@ impl<'a> Lowering<'a> {
                                         self.lower_expr(builder, arg, producer_env)
                                     })
                                     .collect::<Result<Vec<_>, _>>()?;
+                                self.append_static_recursor_worker_captures(
+                                    builder,
+                                    word,
+                                    worker,
+                                    &mut inputs,
+                                )?;
                                 self.enter_oriented_semantic_region(installed.checked);
                                 let returned = self
-                                    .call_declared_recursive_position_unit(builder, body, &inputs)
+                                    .call_declared_recursive_position_unit(
+                                        builder,
+                                        worker.body_origin,
+                                        &inputs,
+                                    )
                                     .and_then(|value| {
                                         self.lower_computational_match_value_composed(
                                             builder, value, &composed,
@@ -3921,6 +3935,10 @@ impl<'a> Lowering<'a> {
                                 if lowered.iter().any(|argument| {
                                     matches!(argument, LoweringOperand::Carried(_))
                                 }) {
+                                    let lowered =
+                                        self.split_terminal_recursor_constructor_operands(
+                                            builder, lowered,
+                                        )?;
                                     SourceMachineState::Value {
                                         value: LoweringOperand::Carried(
                                             self.transfer_constructor_operands(
@@ -4588,6 +4606,76 @@ impl<'a> Lowering<'a> {
                 }
             };
         }
+    }
+
+    fn split_terminal_recursor_constructor_operands(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        operands: Vec<LoweringOperand>,
+    ) -> Result<Vec<LoweringOperand>, CraneliftBackendError> {
+        operands
+            .into_iter()
+            .map(|operand| {
+                let LoweringOperand::Specialized(
+                    recursor @ Lowered::ComputationalRecursorClosure { .. },
+                ) = operand
+                else {
+                    return Ok(operand);
+                };
+                let (residual, boundary) =
+                    decompose_computational_recursor(LoweringOperand::Specialized(recursor));
+                let (activation, invocation) =
+                    boundary.expect("matched recursor closure carries its invocation segment");
+                if !recursor_invocation_is_checked(&invocation) {
+                    validate_recursor_invocation_segment(&invocation)?;
+                }
+                let worker = invocation.recursive_worker;
+                let dynamic_splice_edges = self.take_dynamic_splice_edges(&invocation)?;
+                compose_oriented_subcontinuation(
+                    self.oriented_subcontinuation_plan.as_ref(),
+                    None,
+                    activation,
+                    invocation,
+                    dynamic_splice_edges,
+                )?;
+                let Some(worker) = worker else {
+                    return Ok(residual);
+                };
+                let LoweringOperand::Specialized(Lowered::Closure {
+                    captures,
+                    body,
+                    ..
+                }) = residual
+                else {
+                    return Err(unsupported(
+                        "StaticRecursorWorker",
+                        "a callable recursor worker has no closure residual",
+                    ));
+                };
+                if body != worker.body_origin || captures.len() != worker.capture_count {
+                    return Err(unsupported(
+                        "StaticRecursorWorker",
+                        "the residual environment disagrees with its static worker target",
+                    ));
+                }
+                let environment = self.emit_carrier_alloc(
+                    builder,
+                    BoundaryTag::PersistentGround,
+                    BoundaryClass::Record,
+                    worker.capture_count,
+                )?;
+                for (position, capture) in captures.into_iter().enumerate() {
+                    let LoweringOperand::Carried(capture) = capture else {
+                        return Err(unsupported(
+                            "StaticRecursorWorker",
+                            "a static recursor environment capture is not an ordinary carried operand",
+                        ));
+                    };
+                    self.emit_carrier_store_field(builder, environment, position, capture)?;
+                }
+                Ok(LoweringOperand::Carried(environment))
+            })
+            .collect()
     }
 
     fn lower_source_bounded_nat_match<'b>(
@@ -5434,7 +5522,7 @@ impl<'a> Lowering<'a> {
                     decompose_computational_recursor(LoweringOperand::Specialized(recursor));
                 let (activation, invocation) =
                     boundary.expect("recursor closure carries an invocation segment");
-                let recursive_unit_body = invocation.recursive_unit_body;
+                let recursive_worker = invocation.recursive_worker;
                 if source_active_cursor(
                     &control.selected,
                     &control.selected_lineage,
@@ -5478,14 +5566,24 @@ impl<'a> Lowering<'a> {
                         invocation,
                         checked_ih_invocation,
                     )?;
-                    if let Some(body) = recursive_unit_body.filter(|_| {
+                    if let Some(worker) = recursive_worker.filter(|_| {
                         matches!(
                             self.body_emission_authority,
                             BodyEmissionAuthority::FunctionizedUnits
                         )
                     }) {
-                        let value =
-                            self.call_declared_recursive_position_unit(builder, body, &args)?;
+                        let mut inputs = args;
+                        self.append_static_recursor_worker_captures(
+                            builder,
+                            word,
+                            worker,
+                            &mut inputs,
+                        )?;
+                        let value = self.call_declared_recursive_position_unit(
+                            builder,
+                            worker.body_origin,
+                            &inputs,
+                        )?;
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                             value,
                             control: suspended,
@@ -6846,6 +6944,31 @@ impl<'a> Lowering<'a> {
         Ok(result)
     }
 
+    fn append_static_recursor_worker_captures(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        environment: CarriedBoundaryWord,
+        worker: StaticRecursorWorker,
+        inputs: &mut Vec<LoweringOperand>,
+    ) -> Result<(), CraneliftBackendError> {
+        let field_count = self.emit_carrier_field_count(builder, environment)?;
+        let expected = i64::try_from(worker.capture_count).map_err(|_| {
+            unsupported(
+                "StaticRecursorWorker",
+                "the static worker environment exceeds the carrier ABI",
+            )
+        })?;
+        Self::require_i64(builder, field_count, expected);
+        for position in 0..worker.capture_count {
+            inputs.push(LoweringOperand::Carried(self.emit_carrier_field(
+                builder,
+                environment,
+                position,
+            )?));
+        }
+        Ok(())
+    }
+
     /// Resolve the declared body unit of a callable recursive position in the
     /// source form that owns the carried child.
     ///
@@ -6857,7 +6980,7 @@ impl<'a> Lowering<'a> {
         &self,
         eliminator_origin: StaticOriginId,
         position: usize,
-    ) -> Result<Option<StaticOriginId>, CraneliftBackendError> {
+    ) -> Result<Option<StaticRecursorWorker>, CraneliftBackendError> {
         let eliminator = self.retained_body_occurrence(eliminator_origin)?;
         let RuntimeExpr::ComputationalMatch { scrutinee, .. } = eliminator.expr else {
             return Err(backend_module(
@@ -6875,14 +6998,20 @@ impl<'a> Lowering<'a> {
         };
         let argument = self.child_occurrence(scrutinee.static_origin, position, argument)?;
         match argument.expr {
-            RuntimeExpr::LexicalClosure { captures, body, .. } if captures.is_empty() => Ok(Some(
-                self.child_occurrence(argument.static_origin, 0, body)?
+            RuntimeExpr::LexicalClosure { captures, body, .. } if captures.is_empty() => {
+                Ok(Some(StaticRecursorWorker {
+                    body_origin: self
+                        .child_occurrence(argument.static_origin, 0, body)?
+                        .static_origin,
+                    capture_count: 0,
+                }))
+            }
+            RuntimeExpr::Closure { captures, body, .. } => Ok(Some(StaticRecursorWorker {
+                body_origin: self
+                    .child_occurrence(argument.static_origin, 0, body)?
                     .static_origin,
-            )),
-            RuntimeExpr::Closure { body, .. } => Ok(Some(
-                self.child_occurrence(argument.static_origin, 0, body)?
-                    .static_origin,
-            )),
+                capture_count: captures.len(),
+            })),
             RuntimeExpr::Value(_)
             | RuntimeExpr::Var(_)
             | RuntimeExpr::Let { .. }
@@ -8122,7 +8251,7 @@ impl<'a> Lowering<'a> {
                         let (activation, invocation) = boundary.expect(
                             "recursor closure carries an invocation segment",
                         );
-                        let recursive_unit_body = invocation.recursive_unit_body;
+                        let recursive_worker = invocation.recursive_worker;
                         if !recursor_invocation_is_checked(&invocation) {
                             validate_recursor_invocation_segment(&invocation)?;
                         }
@@ -8141,13 +8270,13 @@ impl<'a> Lowering<'a> {
                         // ⭐⭐ `AC-C4` — the carried residual on the direct
                         // `lower_expr` call route.
                         if let LoweringOperand::Carried(word) = base {
-                            if let Some(body) = recursive_unit_body.filter(|_| {
+                            if let Some(worker) = recursive_worker.filter(|_| {
                                 matches!(
                                     self.body_emission_authority,
                                     BodyEmissionAuthority::FunctionizedUnits
                                 )
                             }) {
-                                let inputs = args
+                                let mut inputs = args
                                     .iter()
                                     .enumerate()
                                     .map(|(position, arg)| {
@@ -8159,11 +8288,17 @@ impl<'a> Lowering<'a> {
                                         self.lower_expr(builder, arg, env)
                                     })
                                     .collect::<Result<Vec<_>, _>>()?;
+                                self.append_static_recursor_worker_captures(
+                                    builder,
+                                    word,
+                                    worker,
+                                    &mut inputs,
+                                )?;
                                 self.enter_oriented_semantic_region(installed.checked);
                                 let result = self
                                     .call_declared_recursive_position_unit(
                                         builder,
-                                        body,
+                                        worker.body_origin,
                                         &inputs,
                                     )
                                     .and_then(|value| {
