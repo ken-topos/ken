@@ -1443,8 +1443,20 @@ impl<'a> Lowering<'a> {
                             .find(|(_, case)| case.constructor == *constructor)
                         {
                             Some(selected) => selected,
-                            None => return Ok(LoweringOperand::Specialized(Lowered::Trap(eliminator.default.clone()))),
+                            None => {
+                                self.disposition_statically_unselected_match_cases(
+                                    eliminator.static_origin,
+                                    None,
+                                )?;
+                                return Ok(LoweringOperand::Specialized(Lowered::Trap(
+                                    eliminator.default.clone(),
+                                )));
+                            }
                         };
+                        self.disposition_statically_unselected_match_cases(
+                            eliminator.static_origin,
+                            Some(case_index),
+                        )?;
                         if case.argument_binders != args.len() {
                             return Err(unsupported(
                                 "ComputationalMatch",
@@ -1481,8 +1493,18 @@ impl<'a> Lowering<'a> {
                         let (case_index, case) = match select_ordinary_case(eliminator, constructor)
                         {
                             Ok(selected) => selected,
-                            Err(trap) => return Ok(LoweringOperand::Specialized(Lowered::Trap(trap))),
+                            Err(trap) => {
+                                self.disposition_statically_unselected_match_cases(
+                                    eliminator.static_origin,
+                                    None,
+                                )?;
+                                return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
+                            }
                         };
+                        self.disposition_statically_unselected_match_cases(
+                            eliminator.static_origin,
+                            Some(case_index),
+                        )?;
                         if case.binders != args.len() {
                             return Err(unsupported(
                                 "Match",
@@ -1684,6 +1706,10 @@ impl<'a> Lowering<'a> {
                     };
                     if let Some(known) = known {
                         let (index, case) = if known { true_case } else { false_case };
+                        self.disposition_statically_unselected_match_cases(
+                            static_origin,
+                            Some(index),
+                        )?;
                         let body = self.case_body_occurrence(static_origin, index, &case.body)?;
                         return self.lower_computational_producer_expr(
                             builder,
@@ -1862,8 +1888,16 @@ impl<'a> Lowering<'a> {
                     .enumerate()
                     .find(|(_, case)| case.constructor == constructor)
                 else {
+                    self.disposition_statically_unselected_match_cases(
+                        static_origin,
+                        None,
+                    )?;
                     return Ok(LoweringOperand::Specialized(Lowered::Trap(producer_default.clone())));
                 };
+                self.disposition_statically_unselected_match_cases(
+                    static_origin,
+                    Some(case_index),
+                )?;
                 if producer_case.binders != args.len() {
                     return Err(unsupported(
                         "ComputationalMatch",
@@ -2102,8 +2136,18 @@ impl<'a> Lowering<'a> {
                     &constructor,
                 ) {
                     Ok(selected) => selected,
-                    Err(trap) => return Ok(LoweringOperand::Specialized(Lowered::Trap(trap))),
+                    Err(trap) => {
+                        self.disposition_statically_unselected_match_cases(
+                            eliminator.static_origin,
+                            None,
+                        )?;
+                        return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
+                    }
                 };
+                self.disposition_statically_unselected_match_cases(
+                    eliminator.static_origin,
+                    Some(case_index),
+                )?;
                 if case.argument_binders != args.len() {
                     return Err(unsupported(
                         "ComputationalMatch",
@@ -2256,8 +2300,18 @@ impl<'a> Lowering<'a> {
             EliminatorFrame::Ordinary(eliminator) => {
                 let (case_index, case) = match select_ordinary_case(eliminator, &constructor) {
                     Ok(selected) => selected,
-                    Err(trap) => return Ok(LoweringOperand::Specialized(Lowered::Trap(trap))),
+                    Err(trap) => {
+                        self.disposition_statically_unselected_match_cases(
+                            eliminator.static_origin,
+                            None,
+                        )?;
+                        return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
+                    }
                 };
+                self.disposition_statically_unselected_match_cases(
+                    eliminator.static_origin,
+                    Some(case_index),
+                )?;
                 if case.binders != args.len() {
                     return Err(unsupported(
                         "Match",
@@ -3422,6 +3476,10 @@ impl<'a> Lowering<'a> {
                                     if let Some(selected) = known {
                                         let (index, case) =
                                             if selected { true_case } else { false_case };
+                                        self.disposition_statically_unselected_match_cases(
+                                            static_origin,
+                                            Some(index),
+                                        )?;
                                         SourceMachineState::Eval {
                                             expr: self.owned_case_body_occurrence(
                                                 static_origin,
@@ -3497,8 +3555,16 @@ impl<'a> Lowering<'a> {
                                         .enumerate()
                                         .find(|(_, case)| case.constructor == constructor)
                                     else {
+                                        self.disposition_statically_unselected_match_cases(
+                                            static_origin,
+                                            None,
+                                        )?;
                                         return Ok(LoweringOperand::Specialized(Lowered::Trap(default)));
                                     };
+                                    self.disposition_statically_unselected_match_cases(
+                                        static_origin,
+                                        Some(case_index),
+                                    )?;
                                     if case.binders != args.len() {
                                         return Err(unsupported(
                                             "Match",
@@ -6779,6 +6845,10 @@ impl<'a> Lowering<'a> {
                     };
                     if let Some(selected) = known {
                         let (index, case) = if selected { true_case } else { false_case };
+                        self.disposition_statically_unselected_match_cases(
+                            static_origin,
+                            Some(index),
+                        )?;
                         let body = self.case_body_occurrence(static_origin, index, &case.body)?;
                         return self.lower_expr(builder, body, env);
                     }
@@ -6831,8 +6901,16 @@ impl<'a> Lowering<'a> {
                     .enumerate()
                     .find(|(_, case)| case.constructor == constructor)
                 else {
+                    self.disposition_statically_unselected_match_cases(
+                        static_origin,
+                        None,
+                    )?;
                     return Ok(LoweringOperand::Specialized(Lowered::Trap(default.clone())));
                 };
+                self.disposition_statically_unselected_match_cases(
+                    static_origin,
+                    Some(index),
+                )?;
                 if case.binders != args.len() {
                     return Err(unsupported(
                         "Match",

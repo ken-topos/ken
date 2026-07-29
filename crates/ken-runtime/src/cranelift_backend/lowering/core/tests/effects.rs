@@ -101,6 +101,7 @@ fn run_checked_bounded_nat_fixture(
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
+            emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: None,
         },
     };

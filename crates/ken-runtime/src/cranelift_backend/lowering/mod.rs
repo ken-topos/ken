@@ -603,6 +603,7 @@ impl ArtifactHelpers<'_> {
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
+            emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: Some(BoundaryCarrierRefs {
                 class: module.declare_func_in_func(self.boundary_value_abi.class, func),
                 tag: module.declare_func_in_func(self.boundary_value_abi.tag, func),
@@ -701,6 +702,14 @@ struct FunctionLocalRefs {
     /// entering a dead join rejects, while failing to disposition one leaves
     /// the generated-function closure check red.
     dispositioned_join_origins: BTreeSet<StaticOriginId>,
+    /// Case indices actually reached while emitting each statically selected
+    /// source `Match`.
+    ///
+    /// Selection may revisit one source occurrence through a recursive
+    /// producer and reach a different case later. We therefore close the dead
+    /// population only after emission, from the union of reached indices,
+    /// rather than treating the first observed constructor as globally final.
+    emission_reachable_match_cases: BTreeMap<StaticOriginId, BTreeSet<usize>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -746,6 +755,7 @@ enum JoinConsumptionMutation {
     SkipFirst,
     DuplicateFirst,
     IncludeStaticallyUnselected,
+    OmitFirstStaticallyUnselectedMatchCase,
 }
 
 #[cfg(test)]
@@ -1577,7 +1587,8 @@ impl<'a> Lowering<'a> {
             }
             JoinConsumptionMutation::SkipFirst
             | JoinConsumptionMutation::DuplicateFirst
-            | JoinConsumptionMutation::IncludeStaticallyUnselected => {}
+            | JoinConsumptionMutation::IncludeStaticallyUnselected
+            | JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase => {}
         }
         if self
             .function_local
@@ -1622,13 +1633,87 @@ impl<'a> Lowering<'a> {
                 .contains(&origin)
             {
                 return Err(backend_module(
-                    "emitted source join was later dispositioned as statically unselected"
-                        .to_string(),
+                    format!(
+                        "emitted source join {origin:?} was later dispositioned as statically \
+                         unselected"
+                    ),
                 ));
             }
             self.function_local
                 .dispositioned_join_origins
                 .insert(origin);
+        }
+        Ok(())
+    }
+
+    /// Record one case reached by static `Match` selection.
+    ///
+    /// `Match` lays its validated positional children out as the scrutinee
+    /// followed by every case body. The complete root population comes from the
+    /// planner's checked child inventory; lowering supplies only the reached
+    /// case index. An empty selection records the default/no-match route.
+    ///
+    /// This deliberately defers disposition until generated-function closure.
+    /// A recursive producer can revisit the same source occurrence and select a
+    /// second case, so the emission-reachable population is the union of every
+    /// observed selection, not the first constructor seen.
+    fn disposition_statically_unselected_match_cases(
+        &mut self,
+        match_origin: StaticOriginId,
+        selected_case: Option<usize>,
+    ) -> Result<(), CraneliftBackendError> {
+        let case_count = self
+            .static_transition_plan
+            .source_match_case_body_origins(match_origin)?
+            .len();
+        if selected_case.is_some_and(|index| index >= case_count) {
+            return Err(backend_module(
+                "selected source Match case is outside the validated child population"
+                    .to_string(),
+            ));
+        }
+        let reached = self
+            .function_local
+            .emission_reachable_match_cases
+            .entry(match_origin)
+            .or_default();
+        if let Some(index) = selected_case {
+            reached.insert(index);
+        }
+        Ok(())
+    }
+
+    /// Close every recorded static `Match` selection against its validated
+    /// positional-child population.
+    fn close_statically_unselected_match_cases(
+        &mut self,
+    ) -> Result<(), CraneliftBackendError> {
+        let reached = self
+            .function_local
+            .emission_reachable_match_cases
+            .iter()
+            .map(|(origin, cases)| (*origin, cases.clone()))
+            .collect::<Vec<_>>();
+        for (match_origin, reached_cases) in reached {
+            let case_bodies = self
+                .static_transition_plan
+                .source_match_case_body_origins(match_origin)?;
+            #[cfg(test)]
+            let mut omitted_for_mutation = false;
+            for (index, root) in case_bodies.into_iter().enumerate() {
+                if reached_cases.contains(&index) {
+                    continue;
+                }
+                #[cfg(test)]
+                if !omitted_for_mutation
+                    && D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get)
+                        == JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase
+                {
+                    omitted_for_mutation = true;
+                    continue;
+                }
+                self.disposition_statically_unselected_source_subtree(root)?;
+            }
         }
         Ok(())
     }
@@ -1690,9 +1775,10 @@ impl<'a> Lowering<'a> {
     /// emission or be structurally dispositioned under a statically unselected
     /// branch, and no join owned by another function may appear here.
     fn validate_join_plan_consumption(
-        &self,
+        &mut self,
         function: PredeclaredFunctionId,
     ) -> Result<(), CraneliftBackendError> {
+        self.close_statically_unselected_match_cases()?;
         let required = self
             .static_transition_plan
             .required_join_origins(function)?;

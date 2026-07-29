@@ -89,6 +89,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
+            emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: None,
         },
     }
@@ -190,6 +191,7 @@ fn run_px8j_malformed_recursor_consumer(
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
+            emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: None,
         },
     };
@@ -2070,6 +2072,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
+            emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: None,
         },
     };
@@ -7828,19 +7831,217 @@ fn d8_known_if_with_dead_join_sibling(selected: bool) -> RuntimeExpr {
     }
 }
 
+fn d8_dead_nested_join(value: i64) -> RuntimeExpr {
+    RuntimeExpr::If {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(value.into()))),
+        else_expr: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((value + 1).into()))),
+            }),
+            args: Vec::new(),
+        }),
+    }
+}
+
+fn d8_known_bool_match_with_dead_join_case(selected: bool) -> RuntimeExpr {
+    let live = RuntimeExpr::Value(RuntimeValue::Int(3.into()));
+    let dead = d8_dead_nested_join(5);
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(selected))),
+        cases: vec![
+            RuntimeMatchCase {
+                constructor: "ctor:prelude::Bool::True".to_string(),
+                binders: 0,
+                body: if selected { live.clone() } else { dead.clone() },
+            },
+            RuntimeMatchCase {
+                constructor: "ctor:prelude::Bool::False".to_string(),
+                binders: 0,
+                body: if selected { dead } else { live },
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D8 known Bool match default".to_string(),
+        },
+    }
+}
+
+fn d8_known_constructor_match_with_dead_join_case(matching: bool) -> RuntimeExpr {
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: if matching {
+                "ctor:fixture::D8::Selected".to_string()
+            } else {
+                "ctor:fixture::D8::Missing".to_string()
+            },
+            args: Vec::new(),
+        }),
+        cases: vec![
+            RuntimeMatchCase {
+                constructor: "ctor:fixture::D8::Dead".to_string(),
+                binders: 0,
+                body: d8_dead_nested_join(7),
+            },
+            RuntimeMatchCase {
+                constructor: "ctor:fixture::D8::Selected".to_string(),
+                binders: 0,
+                body: RuntimeExpr::Value(RuntimeValue::Int(3.into())),
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D8 known constructor match default".to_string(),
+        },
+    }
+}
+
+fn d8_producer_match_with_dead_join_case(constructor_scrutinee: bool) -> RuntimeExpr {
+    let selected_constructor = "ctor:fixture::D8::ProducerSelected".to_string();
+    let inner_scrutinee = if constructor_scrutinee {
+        RuntimeExpr::Construct {
+            constructor: selected_constructor.clone(),
+            args: Vec::new(),
+        }
+    } else {
+        RuntimeExpr::Value(RuntimeValue::Bool(true))
+    };
+    let selected_case = RuntimeMatchCase {
+        constructor: if constructor_scrutinee {
+            selected_constructor
+        } else {
+            "ctor:prelude::Bool::True".to_string()
+        },
+        binders: 0,
+        body: RuntimeExpr::Construct {
+            constructor: "ctor:fixture::D8::Wrap".to_string(),
+            args: Vec::new(),
+        },
+    };
+    let dead_case = RuntimeMatchCase {
+        constructor: if constructor_scrutinee {
+            "ctor:fixture::D8::ProducerDead".to_string()
+        } else {
+            "ctor:prelude::Bool::False".to_string()
+        },
+        binders: 0,
+        body: RuntimeExpr::If {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            then_expr: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::D8::Wrap".to_string(),
+                args: Vec::new(),
+            }),
+            else_expr: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::D8::Wrap".to_string(),
+                        args: Vec::new(),
+                    }),
+                }),
+                args: Vec::new(),
+            }),
+        },
+    };
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Match {
+            scrutinee: Box::new(inner_scrutinee),
+            cases: vec![selected_case, dead_case],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "D8 producer match default".to_string(),
+            },
+        }),
+        cases: vec![RuntimeMatchCase {
+            constructor: "ctor:fixture::D8::Wrap".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Value(RuntimeValue::Int(11.into())),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D8 producer consumer default".to_string(),
+        },
+    }
+}
+
+fn d8_producer_no_match_with_dead_join_case() -> RuntimeExpr {
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::D8::ProducerMissing".to_string(),
+                args: Vec::new(),
+            }),
+            cases: vec![RuntimeMatchCase {
+                constructor: "ctor:fixture::D8::ProducerDead".to_string(),
+                binders: 0,
+                body: RuntimeExpr::If {
+                    scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                    then_expr: Box::new(RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::D8::Wrap".to_string(),
+                        args: Vec::new(),
+                    }),
+                    else_expr: Box::new(RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::D8::Wrap".to_string(),
+                        args: Vec::new(),
+                    }),
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "D8 producer no-match default".to_string(),
+            },
+        }),
+        cases: vec![RuntimeMatchCase {
+            constructor: "ctor:fixture::D8::Wrap".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Value(RuntimeValue::Int(11.into())),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D8 producer no-match consumer default".to_string(),
+        },
+    }
+}
+
+fn d8_source_machine_with_match(body: RuntimeExpr) -> RuntimeExpr {
+    RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::D8::Node".to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+        }),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::D8::Node".to_string(),
+            argument_binders: 1,
+            recursive_positions: vec![0],
+            body,
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D8 source-machine match default".to_string(),
+        },
+    }
+}
+
 /// MEASURED: successful FunctionizedUnits emission compares each generated
 /// function's complete semantic-owner join population with two disjoint sets:
 /// joins reached by emission and joins under a semantic-child subtree that a
-/// statically known branch selection structurally dispositions.
+/// statically known branch or case selection structurally dispositions.
 ///
 /// CLAIMED: every required planned source join is consumed exactly once.
 ///
 /// GAP: owner equality alone over-approximates emission reachability. The
-/// known-true/known-false pair below places both a `Call` and nested `If` in the
-/// dead sibling; the population-side mutation leaves that subtree classified
-/// as required emission and must red at generated-function closure. Set
-/// equality still supplies omission/wrong-owner closure, while the insertion
-/// guard in `consume_join_plan` supplies the independent duplicate direction.
+/// known-true/known-false `If` pair plus ordinary and producer `Match`
+/// discriminators place both a `Call` and nested `If` in dead source subtrees.
+/// The population-side mutations leave one such subtree or case classified as
+/// required emission and must red at generated-function closure. Set equality
+/// still supplies omission/wrong-owner closure, while the insertion guard in
+/// `consume_join_plan` supplies the independent duplicate direction.
+///
+/// Promise class: durable invariant.
 #[test]
 fn d8_every_required_join_plan_is_consumed_exactly_once() {
     let expr = d8_mixed_host_result_join_fixture(false);
@@ -7853,6 +8054,56 @@ fn d8_every_required_join_plan_is_consumed_exactly_once() {
                     "known-{selected} If did not disposition its dead Call/nested-If sibling: \
                      {error}"
                 )
+            });
+    }
+
+    for selected in [true, false] {
+        recursive_port_process_compiles(&d8_known_bool_match_with_dead_join_case(selected))
+            .unwrap_or_else(|error| {
+                panic!(
+                    "known-{selected} Bool Match did not disposition its dead nested-join case: \
+                     {error}"
+                )
+            });
+    }
+    recursive_port_process_compiles(&d8_known_constructor_match_with_dead_join_case(true))
+        .expect("known constructor Match dispositions every nonselected case");
+    recursive_port_process_compiles(&d8_known_constructor_match_with_dead_join_case(false))
+        .expect("no-match/default route dispositions every source case");
+    for constructor_scrutinee in [false, true] {
+        recursive_port_process_compiles(&d8_producer_match_with_dead_join_case(
+            constructor_scrutinee,
+        ))
+        .unwrap_or_else(|error| {
+            panic!(
+                "{} producer Match did not disposition its dead nested-join case: {error}",
+                if constructor_scrutinee {
+                    "known-constructor"
+                } else {
+                    "known-Bool"
+                }
+            )
+        });
+    }
+    recursive_port_process_compiles(&d8_producer_no_match_with_dead_join_case())
+        .expect("producer no-match/default route dispositions every source case");
+    for (route, body) in [
+        (
+            "known-Bool",
+            d8_known_bool_match_with_dead_join_case(true),
+        ),
+        (
+            "known-constructor",
+            d8_known_constructor_match_with_dead_join_case(true),
+        ),
+        (
+            "no-match/default",
+            d8_known_constructor_match_with_dead_join_case(false),
+        ),
+    ] {
+        recursive_port_process_compiles(&d8_source_machine_with_match(body))
+            .unwrap_or_else(|error| {
+                panic!("source-machine {route} Match did not disposition dead cases: {error}")
             });
     }
 
@@ -7869,6 +8120,63 @@ fn d8_every_required_join_plan_is_consumed_exactly_once() {
         ),
         "dead-sibling population mutation reached the wrong boundary: {dead_included:?}"
     );
+
+    for (route, expression) in [
+        (
+            "ordinary known-Bool",
+            d8_known_bool_match_with_dead_join_case(true),
+        ),
+        (
+            "ordinary known-constructor",
+            d8_known_constructor_match_with_dead_join_case(true),
+        ),
+        (
+            "ordinary no-match/default",
+            d8_known_constructor_match_with_dead_join_case(false),
+        ),
+        (
+            "producer known-Bool",
+            d8_producer_match_with_dead_join_case(false),
+        ),
+        (
+            "producer known-constructor",
+            d8_producer_match_with_dead_join_case(true),
+        ),
+        (
+            "producer no-match/default",
+            d8_producer_no_match_with_dead_join_case(),
+        ),
+        (
+            "source-machine known-Bool",
+            d8_source_machine_with_match(d8_known_bool_match_with_dead_join_case(true)),
+        ),
+        (
+            "source-machine known-constructor",
+            d8_source_machine_with_match(d8_known_constructor_match_with_dead_join_case(true)),
+        ),
+        (
+            "source-machine no-match/default",
+            d8_source_machine_with_match(d8_known_constructor_match_with_dead_join_case(false)),
+        ),
+    ] {
+        set_d8_join_consumption_mutation(
+            JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase,
+        );
+        let result = recursive_port_process_compiles(&expression);
+        set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
+        let dead_case_omitted = match result {
+            Ok(()) => panic!("{route} accepted an omitted dead Match case"),
+            Err(error) => error,
+        };
+        assert!(
+            matches!(
+                dead_case_omitted,
+                CraneliftBackendError::Backend(BackendFailure::Module(ref detail))
+                    if detail.contains("neither emitted nor statically unselected")
+            ),
+            "{route} dead-case omission reached the wrong boundary: {dead_case_omitted:?}"
+        );
+    }
 
     // A statically selected `If` still belongs to the planner's closed join
     // population, but no merge helper needs to reborrow its token. Skipping

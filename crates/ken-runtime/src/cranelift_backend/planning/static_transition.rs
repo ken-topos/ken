@@ -2052,6 +2052,40 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(joins)
     }
 
+    /// The case-body roots of a source `Match` occurrence.
+    ///
+    /// Both ordinary and computational matches have one scrutinee followed by
+    /// their case bodies in the semantic plane. Static selection consumes this
+    /// validated positional population directly; lowering does not supply or
+    /// recount the source cases.
+    pub(in crate::cranelift_backend) fn source_match_case_body_origins(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<Vec<StaticOriginId>, CraneliftBackendError> {
+        let occurrence = self
+            .source_occurrences
+            .get(origin.0 as usize)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| planner_error("source match names no planned occurrence"))?;
+        if occurrence.static_origin != origin
+            || !matches!(
+                occurrence.expr,
+                RuntimeExpr::Match { .. } | RuntimeExpr::ComputationalMatch { .. }
+            )
+        {
+            return Err(planner_error(
+                "source match population was requested for a different occurrence kind",
+            ));
+        }
+        let children = self.semantic.child_origins(origin)?;
+        let Some((_scrutinee, case_bodies)) = children.split_first() else {
+            return Err(planner_error(
+                "source match occurrence has no validated scrutinee child",
+            ));
+        };
+        Ok(case_bodies.to_vec())
+    }
+
     /// The artifact-static constructor identity of one case of the `Match` /
     /// `ComputationalMatch` occurrence at `origin` (`D1`).
     ///
