@@ -107,7 +107,11 @@ compile, not a code-shape assertion.
 
 ## Sequencing
 
-Runtime-owned, and Runtime is currently building [[NATIVE-HANDLE-CARRIER]]. This
-queues behind it. ⭐ **On the Linux ABI I critical path** — it is now the sole
-blocker of [[PX8-ERRID-ALLOC]], which blocks [[PX8-ERRID-SCOPE]], which blocks
-[[PX8]]; `PX8` gates 15 of that program's 19 nodes.
+Runtime-owned and **third** in Runtime's queue:
+**[[RT-JOIN-DISPOSITION]] → [[NATIVE-HANDLE-CARRIER]] resume → this node.**
+
+⭐ **On the Linux ABI I critical path** — it is the sole blocker of
+[[PX8-ERRID-ALLOC]], which blocks [[PX8-ERRID-SCOPE]], which blocks [[PX8]];
+`PX8` gates 15 of that program's 19 nodes. ⚠ **So this ordering has a real
+cost** and the frame states it plainly rather than burying it: see the frame's
+status block for the grounded reason and for how to reverse the call.
