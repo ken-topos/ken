@@ -41,8 +41,9 @@ pub(in crate::cranelift_backend) use crate::boundary_value::{
     BoundaryClass, BoundaryReferentOwner, BoundaryTag, BOUNDARY_ERR_BOUNDS, BOUNDARY_OK,
 };
 
+pub(in crate::cranelift_backend) use cranelift_codegen::flowgraph::ControlFlowGraph;
 pub(in crate::cranelift_backend) use cranelift_codegen::ir::{
-    types, AbiParam, FuncRef, Function, InstBuilder, MemFlags, StackSlotData, StackSlotKind,
+    types, AbiParam, Block, FuncRef, Function, InstBuilder, MemFlags, StackSlotData, StackSlotKind,
     UserFuncName,
 };
 pub(in crate::cranelift_backend) use cranelift_codegen::verify_function;
@@ -654,6 +655,9 @@ impl ArtifactHelpers<'_> {
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
+            join_disposition_finalized: false,
+            final_reachable_join_origins: BTreeSet::new(),
+            materialized_join_blocks: BTreeMap::new(),
             emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: Some(BoundaryCarrierRefs {
                 class: module.declare_func_in_func(self.boundary_value_abi.class, func),
@@ -771,6 +775,21 @@ struct FunctionLocalRefs {
     /// entering a dead join rejects, while failing to disposition one leaves
     /// the generated-function closure check red.
     dispositioned_join_origins: BTreeSet<StaticOriginId>,
+    /// Whether the owner-bound reachable/dead partition has been closed.
+    ///
+    /// The boolean is separate from either partition because a generated
+    /// function may lawfully own no reachable joins.
+    join_disposition_finalized: bool,
+    /// The final semantically reachable half of the owner-bound join
+    /// population. This is derived only after every reached-case union closes;
+    /// it is not inferred from structural token consumption.
+    final_reachable_join_origins: BTreeSet<StaticOriginId>,
+    /// Actual CLIF merge blocks materialized for each planned source join.
+    ///
+    /// Token consumption can precede semantic selection without producing a
+    /// merge block. Keeping the CFG population separate is what lets closure
+    /// distinguish metadata materialization from a live SSA join.
+    materialized_join_blocks: BTreeMap<StaticOriginId, BTreeSet<Block>>,
     /// Case indices actually reached while emitting each statically selected
     /// source `Match`.
     ///
@@ -842,6 +861,9 @@ enum JoinConsumptionMutation {
     IncludeStaticallyUnselected,
     OmitFirstStaticallyUnselectedMatchCase,
     OmitSourceMachineComputationalMatchSelection,
+    MaterializeFirstUnselectedMatchJoin,
+    AttachEntryToFirstMaterializedDead,
+    DispositionDynamicHostResultMerge,
 }
 
 #[cfg(test)]
@@ -1668,16 +1690,10 @@ impl<'a> Lowering<'a> {
             | JoinConsumptionMutation::DuplicateFirst
             | JoinConsumptionMutation::IncludeStaticallyUnselected
             | JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase
-            | JoinConsumptionMutation::OmitSourceMachineComputationalMatchSelection => {}
-        }
-        if self
-            .function_local
-            .dispositioned_join_origins
-            .contains(&origin)
-        {
-            return Err(backend_module(
-                "statically unselected source join reached emission".to_string(),
-            ));
+            | JoinConsumptionMutation::OmitSourceMachineComputationalMatchSelection
+            | JoinConsumptionMutation::MaterializeFirstUnselectedMatchJoin
+            | JoinConsumptionMutation::AttachEntryToFirstMaterializedDead
+            | JoinConsumptionMutation::DispositionDynamicHostResultMerge => {}
         }
         if !self.function_local.consumed_join_origins.insert(origin) {
             return Err(backend_module(
@@ -1707,12 +1723,6 @@ impl<'a> Lowering<'a> {
             .static_transition_plan
             .source_join_origins_in_owner_subtree(root)?;
         for origin in joins {
-            if self.function_local.consumed_join_origins.contains(&origin) {
-                return Err(backend_module(format!(
-                    "emitted source join {origin:?} was later dispositioned as statically \
-                         unselected"
-                )));
-            }
             self.function_local
                 .dispositioned_join_origins
                 .insert(origin);
@@ -1736,14 +1746,41 @@ impl<'a> Lowering<'a> {
         match_origin: StaticOriginId,
         selected_case: Option<usize>,
     ) -> Result<(), CraneliftBackendError> {
-        let case_count = self
+        let case_bodies = self
             .static_transition_plan
-            .source_match_case_body_origins(match_origin)?
-            .len();
+            .source_match_case_body_origins(match_origin)?;
+        let case_count = case_bodies.len();
         if selected_case.is_some_and(|index| index >= case_count) {
             return Err(backend_module(
                 "selected source Match case is outside the validated child population".to_string(),
             ));
+        }
+        #[cfg(test)]
+        if matches!(
+            D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get),
+            JoinConsumptionMutation::MaterializeFirstUnselectedMatchJoin
+                | JoinConsumptionMutation::AttachEntryToFirstMaterializedDead
+        ) {
+            let mut materialized = None;
+            for (index, root) in case_bodies.iter().copied().enumerate() {
+                if selected_case == Some(index) {
+                    continue;
+                }
+                if let Some(origin) = self
+                    .static_transition_plan
+                    .source_join_origins_in_owner_subtree(root)?
+                    .into_iter()
+                    .next()
+                {
+                    materialized = Some(origin);
+                    break;
+                }
+            }
+            if let Some(origin) = materialized {
+                if !self.function_local.consumed_join_origins.contains(&origin) {
+                    self.consume_join_plan(origin)?;
+                }
+            }
         }
         let reached = self
             .function_local
@@ -1772,6 +1809,10 @@ impl<'a> Lowering<'a> {
         if D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get)
             == JoinConsumptionMutation::OmitSourceMachineComputationalMatchSelection
         {
+            self.function_local
+                .emission_reachable_match_cases
+                .entry(match_origin)
+                .or_default();
             return Ok(());
         }
         self.disposition_statically_unselected_match_cases(match_origin, selected_case)
@@ -1828,14 +1869,6 @@ impl<'a> Lowering<'a> {
         }
         if self.function_local.consumed_join_origins.contains(&origin) {
             self.consumed_join_plan_token(origin)?;
-        } else if self
-            .function_local
-            .dispositioned_join_origins
-            .contains(&origin)
-        {
-            return Err(backend_module(
-                "statically unselected source join reached emission".to_string(),
-            ));
         } else {
             self.consume_join_plan(origin)?;
         }
@@ -1874,16 +1907,53 @@ impl<'a> Lowering<'a> {
         let required = self
             .static_transition_plan
             .required_join_origins(function)?;
-        if let Some(origin) = self
-            .function_local
-            .consumed_join_origins
-            .intersection(&self.function_local.dispositioned_join_origins)
-            .next()
+        self.finalize_join_disposition(&required)
+    }
+
+    /// Close the one RecursiveDescent root over the recorded population it
+    /// materializes or dispositions while deliberately inlining across planner
+    /// owner boundaries.
+    fn validate_recursive_descent_join_disposition(&mut self) -> Result<(), CraneliftBackendError> {
+        self.close_statically_unselected_match_cases()?;
+        let mut required = self.function_local.consumed_join_origins.clone();
+        required.extend(
+            self.function_local
+                .dispositioned_join_origins
+                .iter()
+                .copied(),
+        );
+        self.finalize_join_disposition(&required)
+    }
+
+    fn finalize_join_disposition(
+        &mut self,
+        required: &BTreeSet<StaticOriginId>,
+    ) -> Result<(), CraneliftBackendError> {
+        #[cfg(test)]
         {
-            return Err(backend_module(format!(
-                "source join {origin:?} was both emitted and statically unselected",
-            )));
+            let mutation = D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get);
+            if matches!(
+                mutation,
+                JoinConsumptionMutation::OmitSourceMachineComputationalMatchSelection
+            ) && self
+                .function_local
+                .consumed_join_origins
+                .is_disjoint(&self.function_local.dispositioned_join_origins)
+            {
+                if let Some(origin) = self
+                    .function_local
+                    .consumed_join_origins
+                    .iter()
+                    .next()
+                    .copied()
+                {
+                    self.function_local
+                        .dispositioned_join_origins
+                        .insert(origin);
+                }
+            }
         }
+
         let mut covered = self.function_local.consumed_join_origins.clone();
         covered.extend(
             self.function_local
@@ -1891,7 +1961,7 @@ impl<'a> Lowering<'a> {
                 .iter()
                 .copied(),
         );
-        if let Some(origin) = covered.difference(&required).next() {
+        if let Some(origin) = covered.difference(required).next() {
             return Err(backend_module(format!(
                 "source join {origin:?} was classified outside its owning function",
             )));
@@ -1900,6 +1970,164 @@ impl<'a> Lowering<'a> {
             return Err(backend_module(format!(
                 "function left planned source join {origin:?} neither emitted nor statically unselected",
             )));
+        }
+        if self.function_local.join_disposition_finalized {
+            return Err(backend_module(
+                "generated function finalized its source join disposition more than once"
+                    .to_string(),
+            ));
+        }
+        self.function_local.final_reachable_join_origins = required
+            .difference(&self.function_local.dispositioned_join_origins)
+            .copied()
+            .collect();
+        self.function_local.join_disposition_finalized = true;
+        Ok(())
+    }
+
+    /// Validate the materialized-but-dead half of the final join disposition
+    /// against the completed function CFG.
+    ///
+    /// A consumed token with no recorded merge block is metadata-only
+    /// materialization and has no CFG repair obligation. Every recorded block
+    /// for an origin later classified dead must be unreachable from entry,
+    /// have no live predecessor, and contribute no block parameter to a
+    /// reachable instruction. The ordinary Cranelift verifier subsequently
+    /// closes the remaining SSA dominance and use-def obligations.
+    fn validate_materialized_dead_join_cfg(
+        &self,
+        function: PredeclaredFunctionId,
+        func: &Function,
+    ) -> Result<(), CraneliftBackendError> {
+        let required = self
+            .static_transition_plan
+            .required_join_origins(function)?;
+        self.validate_materialized_dead_join_cfg_for(&required, func)
+    }
+
+    fn validate_recursive_descent_materialized_dead_join_cfg(
+        &self,
+        func: &Function,
+    ) -> Result<(), CraneliftBackendError> {
+        let mut required = self.function_local.final_reachable_join_origins.clone();
+        required.extend(
+            self.function_local
+                .dispositioned_join_origins
+                .iter()
+                .copied(),
+        );
+        self.validate_materialized_dead_join_cfg_for(&required, func)
+    }
+
+    fn validate_materialized_dead_join_cfg_for(
+        &self,
+        required: &BTreeSet<StaticOriginId>,
+        func: &Function,
+    ) -> Result<(), CraneliftBackendError> {
+        if !self.function_local.join_disposition_finalized {
+            return Err(backend_module(
+                "generated function checked materialized joins before final disposition"
+                    .to_string(),
+            ));
+        }
+        let mut final_covered = self.function_local.final_reachable_join_origins.clone();
+        final_covered.extend(
+            self.function_local
+                .dispositioned_join_origins
+                .iter()
+                .copied(),
+        );
+        if &final_covered != required
+            || !self
+                .function_local
+                .final_reachable_join_origins
+                .is_disjoint(&self.function_local.dispositioned_join_origins)
+        {
+            return Err(backend_module(
+                "generated function has an incomplete or overlapping final join disposition"
+                    .to_string(),
+            ));
+        }
+        let cfg = ControlFlowGraph::with_function(func);
+        let entry = func
+            .layout
+            .entry_block()
+            .ok_or_else(|| backend_module("generated function has no entry block".to_string()))?;
+        let mut reachable = BTreeSet::from([entry]);
+        let mut pending = vec![entry];
+        while let Some(block) = pending.pop() {
+            for successor in cfg.succ_iter(block) {
+                if reachable.insert(successor) {
+                    pending.push(successor);
+                }
+            }
+        }
+
+        let overlap = self
+            .function_local
+            .consumed_join_origins
+            .intersection(&self.function_local.dispositioned_join_origins)
+            .copied()
+            .collect::<Vec<_>>();
+        for origin in overlap {
+            if !required.contains(&origin) {
+                return Err(backend_module(format!(
+                    "materialized-but-dead source join {origin:?} escaped its owning function",
+                )));
+            }
+            let blocks = self
+                .function_local
+                .materialized_join_blocks
+                .get(&origin)
+                .into_iter()
+                .flat_map(|blocks| blocks.iter().copied())
+                .collect::<Vec<_>>();
+            #[cfg(test)]
+            let blocks = match D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get) {
+                JoinConsumptionMutation::AttachEntryToFirstMaterializedDead
+                | JoinConsumptionMutation::OmitSourceMachineComputationalMatchSelection => {
+                    let mut blocks = blocks;
+                    blocks.push(entry);
+                    blocks
+                }
+                JoinConsumptionMutation::Exact
+                | JoinConsumptionMutation::SkipFirst
+                | JoinConsumptionMutation::DuplicateFirst
+                | JoinConsumptionMutation::IncludeStaticallyUnselected
+                | JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase
+                | JoinConsumptionMutation::MaterializeFirstUnselectedMatchJoin
+                | JoinConsumptionMutation::DispositionDynamicHostResultMerge => blocks,
+            };
+            for block in blocks {
+                if reachable.contains(&block) {
+                    return Err(backend_module(format!(
+                        "materialized-but-dead source join {origin:?} retained a reachable block",
+                    )));
+                }
+                if cfg
+                    .pred_iter(block)
+                    .any(|predecessor| reachable.contains(&predecessor.block))
+                {
+                    return Err(backend_module(format!(
+                        "materialized-but-dead source join {origin:?} retained a live predecessor",
+                    )));
+                }
+                let params = func.dfg.block_params(block);
+                for reachable_block in &reachable {
+                    for inst in func.layout.block_insts(*reachable_block) {
+                        if func
+                            .dfg
+                            .inst_args(inst)
+                            .iter()
+                            .any(|argument| params.contains(argument))
+                        {
+                            return Err(backend_module(format!(
+                                "materialized-but-dead source join {origin:?} retained a reachable use",
+                            )));
+                        }
+                    }
+                }
+            }
         }
         Ok(())
     }

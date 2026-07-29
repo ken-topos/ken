@@ -92,6 +92,9 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
+            join_disposition_finalized: false,
+            final_reachable_join_origins: BTreeSet::new(),
+            materialized_join_blocks: BTreeMap::new(),
             emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: None,
         },
@@ -197,6 +200,9 @@ fn run_px8j_malformed_recursor_consumer(
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
+            join_disposition_finalized: false,
+            final_reachable_join_origins: BTreeSet::new(),
+            materialized_join_blocks: BTreeMap::new(),
             emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: None,
         },
@@ -2081,6 +2087,9 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
+            join_disposition_finalized: false,
+            final_reachable_join_origins: BTreeSet::new(),
+            materialized_join_blocks: BTreeMap::new(),
             emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: None,
         },
@@ -8178,6 +8187,41 @@ fn d8_mixed_host_result_uses_one_uniform_carrier_conversion_per_predecessor() {
     }
 }
 
+/// **MEASURED:** a dynamic HostResult creates its planned merge through the
+/// central materialized-block recorder. A test-only false dead disposition then
+/// reaches completed-CFG validation, which observes the real entry-reachable
+/// merge block and rejects it.
+///
+/// **CLAIMED:** the HostResult merge belongs to the complete population over
+/// which the materialized-but-dead CFG proof quantifies.
+///
+/// **THE GAP:** the false dead disposition is only a reachability witness; it
+/// does not prove population membership by itself. Replacing the recorder call
+/// with direct block-parameter appends recreates the missed production path:
+/// the block list becomes empty, this compile succeeds, and the control reds at
+/// `expect_err`.
+#[test]
+fn d8_dynamic_host_result_merge_enters_materialized_dead_cfg_population() {
+    set_d8_join_consumption_mutation(
+        JoinConsumptionMutation::DispositionDynamicHostResultMerge,
+    );
+    let result = recursive_port_process_compiles(&d8_mixed_host_result_join_fixture(false));
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
+
+    let reachable_dead =
+        result.expect_err("a dispositioned dynamic HostResult merge must reach CFG validation");
+    assert!(
+        matches!(
+            reachable_dead,
+            CraneliftBackendError::Backend(BackendFailure::Module(ref detail))
+                if detail.contains("materialized-but-dead source join")
+                    && detail.contains("retained a reachable block")
+        ),
+        "dynamic HostResult population control reached the wrong boundary: \
+         {reachable_dead:?}"
+    );
+}
+
 #[test]
 fn d8_all_trap_host_result_emits_no_merge_or_predecessor_conversion() {
     let mut expr = d8_mixed_host_result_join_fixture(false);
@@ -8503,29 +8547,35 @@ fn d8_recursive_computational_revisit_with_join() -> RuntimeExpr {
     host_result_closure_match(recursive_computational_result_depth(2, later_case_body))
 }
 
-/// MEASURED: successful FunctionizedUnits emission compares each generated
-/// function's complete semantic-owner join population with two disjoint sets:
-/// joins reached by emission and joins under a semantic-child subtree that a
-/// statically known branch or case selection structurally dispositions. The
-/// explicit active-recursor RecursiveDescent residual closes the same recorded
-/// case population at its generated root boundary, without applying
-/// function-owner equality across the owner boundaries it deliberately inlines.
-/// Its population fixture recursively revisits one ComputationalMatch and puts
-/// a source join in the second selected case.
+/// MEASURED: successful FunctionizedUnits emission closes two facts separately.
+/// Each generated function consumes each owner-bound join token at most once,
+/// then, after its reached-case union closes, partitions its complete semantic
+/// owner population exactly once into reachable and statically unselected
+/// joins. A token-only materialization may later be classified dead. If the
+/// mutation attaches that dead materialization to the entry block, completed
+/// CFG validation rejects it as reachable. The explicit active-recursor
+/// RecursiveDescent residual closes the same recorded case population at its
+/// generated root boundary without applying function-owner equality across the
+/// owner boundaries it deliberately inlines. Its population fixture recursively
+/// revisits one ComputationalMatch and puts a source join in the second selected
+/// case.
 ///
-/// CLAIMED: every required planned FunctionizedUnits source join is consumed
-/// exactly once, and the retained active-recursor lane cannot emit a case join
-/// and later disposition that case as statically unselected.
+/// CLAIMED: every required planned FunctionizedUnits source join has
+/// owner-bound, exactly-once materialization and final semantic disposition.
+/// Materialized-then-dead is lawful only when no generated merge block remains
+/// entry-reachable, has a live predecessor, or contributes a reachable use.
 ///
-/// THE GAP: owner equality alone over-approximates emission reachability. The
-/// known-true/known-false `If` pair plus ordinary and producer `Match`
-/// discriminators place both a `Call` and nested `If` in dead source subtrees.
-/// The population-side mutations leave one such subtree or case classified as
-/// required emission and must red at generated-function closure. Set equality
-/// still supplies omission/wrong-owner closure. A route-specific reached-edge
-/// removal mutation proves that recursive source-machine selections contribute
-/// to the same union: removing the revisit record must red at the
-/// emitted/dispositioned overlap boundary. The insertion guard in
+/// THE GAP: owner equality and token consumption do not establish semantic
+/// reachability. The known-true/known-false `If` pair plus ordinary and producer
+/// `Match` discriminators place both a `Call` and nested `If` in dead source
+/// subtrees. Population-side mutations leave one such subtree or case
+/// unclassified and red at generated-function closure. Set equality still
+/// supplies omission/wrong-owner closure. A route-specific reached-edge removal
+/// mutation proves that recursive source-machine selections contribute to the
+/// same union; it now pairs the false dead classification with a reachable
+/// materialization and reds at completed-CFG validation. The token-only
+/// materialized/dead fixture and its entry-attachment mutation distinguish the
+/// lawful ordering from a live block. The insertion guard in
 /// `consume_join_plan` supplies the independent duplicate direction.
 ///
 /// Promise class: durable invariant.
@@ -8608,8 +8658,8 @@ fn d8_every_required_join_plan_is_consumed_exactly_once() {
         matches!(
             recursive_revisit_omitted,
             CraneliftBackendError::Backend(BackendFailure::Module(ref detail))
-                if detail.contains("emitted source join")
-                    && detail.contains("later dispositioned as statically unselected")
+                if detail.contains("materialized-but-dead source join")
+                    && detail.contains("retained a reachable block")
         ),
         "recursive-revisit reached-edge mutation reached the wrong boundary: \
          {recursive_revisit_omitted:?}"
@@ -8695,6 +8745,36 @@ fn d8_every_required_join_plan_is_consumed_exactly_once() {
         then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(3.into()))),
         else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(5.into()))),
     };
+
+    set_d8_join_consumption_mutation(
+        JoinConsumptionMutation::MaterializeFirstUnselectedMatchJoin,
+    );
+    let materialized_then_dead =
+        recursive_port_process_compiles(&d8_known_bool_match_with_dead_join_case(true));
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
+    materialized_then_dead.expect(
+        "token-only materialization may become dead after final semantic selection",
+    );
+
+    set_d8_join_consumption_mutation(
+        JoinConsumptionMutation::AttachEntryToFirstMaterializedDead,
+    );
+    let reachable_dead_result =
+        recursive_port_process_compiles(&d8_known_bool_match_with_dead_join_case(true));
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
+    let reachable_dead = reachable_dead_result
+        .expect_err("an entry-reachable materialized-but-dead join must fail");
+    assert!(
+        matches!(
+            reachable_dead,
+            CraneliftBackendError::Backend(BackendFailure::Module(ref detail))
+                if detail.contains("materialized-but-dead source join")
+                    && detail.contains("retained a reachable block")
+        ),
+        "materialized-dead reachability mutation reached the wrong boundary: \
+         {reachable_dead:?}"
+    );
+
     set_d8_join_consumption_mutation(JoinConsumptionMutation::SkipFirst);
     let omitted = recursive_port_process_compiles(&omission_fixture)
         .expect_err("skipping one real consumption must fail at function closure");

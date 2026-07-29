@@ -1010,6 +1010,7 @@ fn define_unit_body<M: Module>(
         builder.seal_all_blocks();
         builder.finalize();
     }
+    compiler.validate_materialized_dead_join_cfg(unit.function, &func)?;
     verify_cranelift_function(&func, module.isa())?;
     #[cfg(test)]
     scale_b_record_unit_body(&func);
