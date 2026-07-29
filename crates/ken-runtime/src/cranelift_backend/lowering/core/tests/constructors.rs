@@ -13,6 +13,7 @@ use crate::nc5_seed_examples;
 // `native_platform_target_name` is an `artifact` private after slice 7, so it
 // arrives through its owner-adjacent adapter (§10.5a′), aliased back to the
 // original name so the moved body's call token is unchanged.
+use crate::cranelift_backend::artifact::native_isa_for_lowering_tests as native_isa;
 use crate::cranelift_backend::artifact::native_platform_target_name_for_lowering_tests as native_platform_target_name;
 use crate::fnv1a_64;
 
@@ -500,6 +501,119 @@ fn cranelift_runs_constructor_match_and_record_projection_seeds() {
     }
 }
 
+extern "C" fn final_kind_discriminator_host_probe(
+    host_context: *const std::ffi::c_void,
+    operation: i64,
+    _request: *const std::ffi::c_void,
+    _request_size: i64,
+    reply: *mut std::ffi::c_void,
+) -> i64 {
+    if host_context.is_null() || reply.is_null() {
+        return -1;
+    }
+    // SAFETY: `run_final_kind_discriminator_fixture` supplies this exact
+    // call-scoped `u64` as the direct host context.
+    let observation = host_context.cast::<u64>().cast_mut();
+    // Mark the exact call-scoped selector as observed. The caller checks this
+    // after execution so a lost host-context edge cannot masquerade as a
+    // discriminator result.
+    unsafe {
+        *observation |= 2;
+    }
+    let Ok(operation) = ken_host::HostOpV1::try_from(operation as u16) else {
+        return -1;
+    };
+    let Ok(layout) = ken_host::host_effect_wire_layout_v1(operation) else {
+        return -1;
+    };
+    // SAFETY: the generated caller supplies the target-C-sized reply record.
+    unsafe {
+        std::ptr::write_bytes(reply.cast::<u8>(), 0, layout.reply_size as usize);
+        let reply_tag = reply
+            .cast::<u8>()
+            .add(layout.reply_tag_offset as usize)
+            .cast::<u64>();
+        let reply_detail = reply
+            .cast::<u8>()
+            .add(layout.reply_detail_offset as usize)
+            .cast::<u64>();
+        match operation {
+            ken_host::HostOpV1::ConsoleWrite => {
+                *reply_tag = layout.reply_unit_tag;
+            }
+            ken_host::HostOpV1::ConsoleIsTerminal => {
+                *reply_tag = layout.reply_bool_tag;
+                *reply_detail = 1;
+            }
+            _ => return -1,
+        }
+        *observation |= 4;
+    }
+    0
+}
+
+fn run_final_kind_discriminator_fixture(fixture: &RuntimeExpr, symbol: &str) -> i64 {
+    let isa = native_isa().expect("native ISA");
+    let mut jit =
+        cranelift_jit::JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
+    jit.symbol(
+        "ken_host_dispatch_v1",
+        final_kind_discriminator_host_probe as *const u8,
+    );
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let compiled = compile_expr_into_module(
+        cranelift_jit::JITModule::new(jit),
+        symbol,
+        Linkage::Local,
+        fixture,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(&symbols),
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .expect("the CarrierWord final-kind fixture emits");
+    let process_input = 0_u8;
+    let mut host_observation = 0_u64;
+    let ingress = crate::boundary_activation::GeneratedRootIngressV1 {
+        process_input: (&process_input as *const u8).cast(),
+        host_dispatch_context: (&mut host_observation as *mut u64).cast(),
+        capability: 1_u64 << 32,
+    };
+    let status = compiled
+        .run(Some(
+            (&ingress as *const crate::boundary_activation::GeneratedRootIngressV1).cast(),
+        ))
+        .expect("the CarrierWord final-kind fixture runs")
+        .1
+        .expect("the process root returns a status");
+    assert_eq!(
+        host_observation, 6,
+        "the direct host context must complete the intended runtime scalar arm"
+    );
+    status
+}
+
+fn assert_runtime_final_kind_discriminator_rejects_scalar(fixture: &RuntimeExpr, symbol: &str) {
+    // Promise class: durable invariant. CarrierWord may change storage, but the
+    // process root must still reject an Int-tagged word as an exit status.
+    //
+    // MEASURED: the same source fixture emits, then a runtime host reply selects
+    // its scalar alternative; the process root returns the wrong-tag guard -1.
+    // CLAIMED: the heterogeneous CarrierWord join defers final-kind validation
+    // to the emitted process-root discriminator without accepting Int as status.
+    // THE GAP: this pin observes the wrong-tag arm only. The companion object
+    // emission above establishes that the heterogeneous source population is
+    // accepted; this assertion does not re-prove every well-tagged exit route.
+    let scalar_status = run_final_kind_discriminator_fixture(fixture, &format!("{symbol}_scalar"));
+    assert_eq!(
+        scalar_status, -1,
+        "the emitted process-root discriminator must reject the wrong Int tag"
+    );
+}
+
 #[test]
 fn dynamic_host_result_producer_wrong_arity_rejects_specifically() {
     let err = emit_process_entrypoint_object_with_cranelift(
@@ -516,19 +630,14 @@ fn dynamic_host_result_producer_wrong_arity_rejects_specifically() {
     ));
 }
 #[test]
-fn dynamic_host_result_producer_result_kind_mismatch_rejects_specifically() {
-    let err = emit_process_entrypoint_object_with_cranelift(
-        &host_result_computational_fixture(1, true, true),
-        "ken_px7m_kind_mismatch",
-    )
-    .expect_err("scalar and ExitCode branches must not merge");
-    assert!(matches!(
-        err,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "ComputationalMatch",
-            reason,
-        }) if reason == "dynamic native arms disagree on scalar versus ExitCode result"
-    ));
+fn dynamic_host_result_producer_carrier_final_kind_is_runtime_guarded() {
+    let fixture = host_result_computational_fixture(1, true, true);
+    emit_process_entrypoint_object_with_cranelift(&fixture, "ken_px7m_kind_mismatch")
+        .expect("the CarrierWord result join emits its runtime final-kind discriminator");
+    assert_runtime_final_kind_discriminator_rejects_scalar(
+        &fixture,
+        "ken_px7m_kind_mismatch_runtime",
+    );
 }
 #[test]
 fn dynamic_host_result_producer_well_formed_control_emits() {
@@ -577,19 +686,14 @@ fn nested_computational_malformed_recursive_position_rejects_specifically() {
     ));
 }
 #[test]
-fn nested_computational_final_merge_kind_rejects_specifically() {
-    let err = emit_process_entrypoint_object_with_cranelift(
-        &nested_computational_fixture(1, Vec::new(), true, true),
-        "ken_px7n_final_kind_mismatch",
-    )
-    .expect_err("the final scalar and ExitCode arms must not merge");
-    assert!(matches!(
-        err,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "ComputationalMatch",
-            reason,
-        }) if reason == "dynamic native arms disagree on scalar versus ExitCode result"
-    ));
+fn nested_computational_carrier_final_kind_is_runtime_guarded() {
+    let fixture = nested_computational_fixture(1, Vec::new(), true, true);
+    emit_process_entrypoint_object_with_cranelift(&fixture, "ken_px7n_final_kind_mismatch")
+        .expect("the CarrierWord result join emits its runtime final-kind discriminator");
+    assert_runtime_final_kind_discriminator_rejects_scalar(
+        &fixture,
+        "ken_px7n_final_kind_mismatch_runtime",
+    );
 }
 #[test]
 fn nested_computational_payload_kind_rejects_specifically() {
