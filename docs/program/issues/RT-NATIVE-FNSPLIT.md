@@ -1,7 +1,7 @@
 ---
 id: RT-NATIVE-FNSPLIT
 title: "Native backend: bound per-function lowering growth to O(n) — helper identity is a variable-width whole-configuration key (orig. single-Function VReg::MAX, since fixed)"
-status: active
+status: merged
 owner: runtime
 size: TBD
 gate: none
@@ -10,6 +10,47 @@ blocks: [NATIVE-HANDLE-CARRIER]
 github: null
 origin: PX8-SPAN-PROV Phase 2 native reachability wall (runtime-implementer measured repro evt_7qhtk8w489am4; CV option-(c) ruling evt_77q2tc5dh1kzj; Steward scope ruling evt_7c160ej3bwz4; Architect means/layer ruling evt_7gkn3g4tsvgb9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
+
+> # ✅✅ CLOSED 2026-07-29 — `merged`. THE SCALING GATE RETURNED OUTCOME (a).
+>
+> **Everything below is history.** Nothing in this file is an open obligation on
+> any ring. ⛔ Do not re-open it, and do not read a section further down as live
+> work — several were written while the gate was open and read as if it still is.
+>
+> **How it closed.** The merge condition was the three-part scaling gate at
+> §"SCALING GATE" below. Both boundary nodes landed and the verdict is **(a)**:
+>
+> | | node | landed |
+> |---|---|---|
+> | Boundary **A** — planner census | [[RT-SCALE-A]] | `merged` |
+> | Boundary **B** — emission + model + verdict | [[RT-SCALE-B]] | `merged`, PR #1222, `main=66030a7d` |
+>
+> **The verdict, stated as it must be stated.** Affine in every *deterministic
+> material and structural* population (constant first differences, zero second
+> differences, all four `AC-B4` invariants); analytically **Θ(n)** emitted
+> material with no inherent semantic product. ⚠ **The wall-time and peak-RSS
+> samples are noisy and claim NO exponent in either direction** — the historical
+> ~103 s / ~4 GB @ n=4 observation remains **NON-COMPARABLE**. Outcome **(b)
+> never fired**, so no operator ceiling decision was required. The
+> constants-reduction plan in `RT-SCALE-B` `D4` is live follow-on, not a debt of
+> this node.
+>
+> **No residual build work.** Runtime Leader re-derived the recut frame's Phase-3
+> acceptance against `origin/main=aea86361` and confirmed every concrete
+> deliverable landed through the child line — factored representation/planner and
+> static identities, functionized semantic port, runtime carrier/eliminators and
+> activation, governed recursive/trap emission port, functionized differential/CI
+> closure, and the n=3..7 measurement. Every child node is `merged` or `closed`.
+>
+> **What this releases:** [[NATIVE-HANDLE-CARRIER]] and [[PX8-ERRID-ALLOC]] —
+> and through them every remaining `PX8` blocker (see the block directly below,
+> which is now discharged rather than pending).
+>
+> ⭐ **§5a counter of record does NOT die here.** The number in the
+> `ARMED §5a RESEARCH-CONSULT TRIGGER` section below is **stale (15)**. The
+> durable count at closure is **19**, entries **10**, next predicate check at the
+> **12th** entry, next research pull **#21** — carried on [[RT-SCALE-B]] and
+> moving forward to [[NATIVE-HANDLE-CARRIER]] as the successor Runtime node.
 
 > ## ⭐⭐⭐ 2026-07-28 — THIS NODE NOW GATES EVERY REMAINING `PX8` BLOCKER
 >
