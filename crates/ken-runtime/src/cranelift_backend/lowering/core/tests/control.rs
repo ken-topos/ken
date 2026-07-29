@@ -2545,7 +2545,7 @@ enum Px8jRecursorMalformation {
 }
 
 #[test]
-fn recursive_declaration_shape_change_hits_typed_boundary() {
+fn recursive_declaration_shape_change_crosses_typed_carrier_boundary() {
     let symbol = "decl:fixture::Loop::run".to_string();
     let declaration = RuntimeDeclaration {
         symbol: symbol.clone(),
@@ -2579,7 +2579,7 @@ fn recursive_declaration_shape_change_hits_typed_boundary() {
         }],
     };
     let declarations = BTreeMap::from([(symbol.as_str(), &declaration)]);
-    let result = compile_expr_into_module(
+    compile_expr_into_module(
         new_object_module("px8l-recursive-shape").unwrap(),
         "ken_px8l_recursive_shape",
         Linkage::Export,
@@ -2591,18 +2591,11 @@ fn recursive_declaration_shape_change_hits_typed_boundary() {
         None,
         Some(test_only_distinguished_root_join_plan()),
         None,
+    )
+    .expect(
+        "the typed declaration-call carrier must transport one semantic Option \
+         across its None and Some native representations",
     );
-    let error = match result {
-        Ok(_) => panic!("a changing recursive native representation must fail closed"),
-        Err(error) => error,
-    };
-    assert!(matches!(
-        error,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "DeclarationRef",
-            reason,
-        }) if reason.contains("changes its native argument representation")
-    ));
 }
 #[test]
 fn checked_join_marker_without_exact_plan_site_rejects_before_emission() {
