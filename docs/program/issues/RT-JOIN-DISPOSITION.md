@@ -1,7 +1,7 @@
 ---
 id: RT-JOIN-DISPOSITION
 title: "Join-disposition phase repair — the landed RECUR-PORT `consumed XOR statically-unselected` invariant conflates structural materialization with semantic reachability and false-rejects a join materialized before its enclosing match selects"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none
