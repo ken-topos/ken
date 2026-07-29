@@ -13,6 +13,7 @@ use crate::nc5_seed_examples;
 // `native_platform_target_name` is an `artifact` private after slice 7, so it
 // arrives through its owner-adjacent adapter (§10.5a′), aliased back to the
 // original name so the moved body's call token is unchanged.
+use crate::cranelift_backend::artifact::native_isa_for_lowering_tests as native_isa;
 use crate::cranelift_backend::artifact::native_platform_target_name_for_lowering_tests as native_platform_target_name;
 use crate::fnv1a_64;
 
@@ -33,6 +34,7 @@ fn c2_ac2_closed_roles_are_injective_by_spelling_and_canonical_for_duplicates() 
         &BTreeMap::new(),
         &symbols,
         AbiRootIngress::Value,
+        true,
     )
     .expect("the distinct-role fixture plans");
     let file_error = distinct
@@ -67,6 +69,7 @@ fn c2_ac2_closed_roles_are_injective_by_spelling_and_canonical_for_duplicates() 
         &BTreeMap::new(),
         &duplicate_symbols,
         AbiRootIngress::Value,
+        true,
     )
     .expect("the duplicate-spelling fixture plans");
     let duplicate_file_error = duplicate
@@ -226,10 +229,16 @@ fn run_dynamic_constructor_dispatch_fixture(
             native_int_intern: None,
             native_int_narrow: None,
             native_int_export: None,
+            native_int_export_parts: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            declaration_calls: BTreeMap::new(),
+            trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
+            consumed_join_origins: BTreeSet::new(),
+            dispositioned_join_origins: BTreeSet::new(),
+            emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: None,
         },
     };
@@ -261,6 +270,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         };
         let (plan, match_origin) = planned_root_occurrence(&source_match);
         compiler.static_transition_plan = plan;
+        compiler.enter_source_occurrence_plan(match_origin)?;
         let lowered = compiler.lower_dynamic_constructor_match(
             &mut builder,
             dynamic,
@@ -288,12 +298,18 @@ fn run_dynamic_constructor_dispatch_fixture(
     module
         .define_function(func_id, &mut context)
         .map_err(|error| backend_module(error.to_string()))?;
+    let trap_catalog = compiler.static_transition_plan.trap_catalog();
+    let carrier_identity_catalog = compiler
+        .static_transition_plan
+        .carrier_identity_catalog()?;
     let compiled = CompiledModule::from_parts(
         module,
         func_id,
         Some(ResultDecoder::ProcessStatus),
         compiler.result_table,
         None,
+        trap_catalog,
+        carrier_identity_catalog,
         true,
         compiler.assumptions,
         compiler.unsupported,
@@ -494,6 +510,119 @@ fn cranelift_runs_constructor_match_and_record_projection_seeds() {
     }
 }
 
+extern "C" fn final_kind_discriminator_host_probe(
+    host_context: *const std::ffi::c_void,
+    operation: i64,
+    _request: *const std::ffi::c_void,
+    _request_size: i64,
+    reply: *mut std::ffi::c_void,
+) -> i64 {
+    if host_context.is_null() || reply.is_null() {
+        return -1;
+    }
+    // SAFETY: `run_final_kind_discriminator_fixture` supplies this exact
+    // call-scoped `u64` as the direct host context.
+    let observation = host_context.cast::<u64>().cast_mut();
+    // Mark the exact call-scoped selector as observed. The caller checks this
+    // after execution so a lost host-context edge cannot masquerade as a
+    // discriminator result.
+    unsafe {
+        *observation |= 2;
+    }
+    let Ok(operation) = ken_host::HostOpV1::try_from(operation as u16) else {
+        return -1;
+    };
+    let Ok(layout) = ken_host::host_effect_wire_layout_v1(operation) else {
+        return -1;
+    };
+    // SAFETY: the generated caller supplies the target-C-sized reply record.
+    unsafe {
+        std::ptr::write_bytes(reply.cast::<u8>(), 0, layout.reply_size as usize);
+        let reply_tag = reply
+            .cast::<u8>()
+            .add(layout.reply_tag_offset as usize)
+            .cast::<u64>();
+        let reply_detail = reply
+            .cast::<u8>()
+            .add(layout.reply_detail_offset as usize)
+            .cast::<u64>();
+        match operation {
+            ken_host::HostOpV1::ConsoleWrite => {
+                *reply_tag = layout.reply_unit_tag;
+            }
+            ken_host::HostOpV1::ConsoleIsTerminal => {
+                *reply_tag = layout.reply_bool_tag;
+                *reply_detail = 1;
+            }
+            _ => return -1,
+        }
+        *observation |= 4;
+    }
+    0
+}
+
+fn run_final_kind_discriminator_fixture(fixture: &RuntimeExpr, symbol: &str) -> i64 {
+    let isa = native_isa().expect("native ISA");
+    let mut jit =
+        cranelift_jit::JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
+    jit.symbol(
+        "ken_host_dispatch_v1",
+        final_kind_discriminator_host_probe as *const u8,
+    );
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let compiled = compile_expr_into_module(
+        cranelift_jit::JITModule::new(jit),
+        symbol,
+        Linkage::Local,
+        fixture,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(&symbols),
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .expect("the CarrierWord final-kind fixture emits");
+    let process_input = 0_u8;
+    let mut host_observation = 0_u64;
+    let ingress = crate::boundary_activation::GeneratedRootIngressV1 {
+        process_input: (&process_input as *const u8).cast(),
+        host_dispatch_context: (&mut host_observation as *mut u64).cast(),
+        capability: 1_u64 << 32,
+    };
+    let status = compiled
+        .run(Some(
+            (&ingress as *const crate::boundary_activation::GeneratedRootIngressV1).cast(),
+        ))
+        .expect("the CarrierWord final-kind fixture runs")
+        .1
+        .expect("the process root returns a status");
+    assert_eq!(
+        host_observation, 6,
+        "the direct host context must complete the intended runtime scalar arm"
+    );
+    status
+}
+
+fn assert_runtime_final_kind_discriminator_rejects_scalar(fixture: &RuntimeExpr, symbol: &str) {
+    // Promise class: durable invariant. CarrierWord may change storage, but the
+    // process root must still reject an Int-tagged word as an exit status.
+    //
+    // MEASURED: the same source fixture emits, then a runtime host reply selects
+    // its scalar alternative; the process root returns the wrong-tag guard -1.
+    // CLAIMED: the heterogeneous CarrierWord join defers final-kind validation
+    // to the emitted process-root discriminator without accepting Int as status.
+    // THE GAP: this pin observes the wrong-tag arm only. The companion object
+    // emission above establishes that the heterogeneous source population is
+    // accepted; this assertion does not re-prove every well-tagged exit route.
+    let scalar_status = run_final_kind_discriminator_fixture(fixture, &format!("{symbol}_scalar"));
+    assert_eq!(
+        scalar_status, -1,
+        "the emitted process-root discriminator must reject the wrong Int tag"
+    );
+}
+
 #[test]
 fn dynamic_host_result_producer_wrong_arity_rejects_specifically() {
     let err = emit_process_entrypoint_object_with_cranelift(
@@ -510,19 +639,14 @@ fn dynamic_host_result_producer_wrong_arity_rejects_specifically() {
     ));
 }
 #[test]
-fn dynamic_host_result_producer_result_kind_mismatch_rejects_specifically() {
-    let err = emit_process_entrypoint_object_with_cranelift(
-        &host_result_computational_fixture(1, true, true),
-        "ken_px7m_kind_mismatch",
-    )
-    .expect_err("scalar and ExitCode branches must not merge");
-    assert!(matches!(
-        err,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "ComputationalMatch",
-            reason,
-        }) if reason == "dynamic native arms disagree on scalar versus ExitCode result"
-    ));
+fn dynamic_host_result_producer_carrier_final_kind_is_runtime_guarded() {
+    let fixture = host_result_computational_fixture(1, true, true);
+    emit_process_entrypoint_object_with_cranelift(&fixture, "ken_px7m_kind_mismatch")
+        .expect("the CarrierWord result join emits its runtime final-kind discriminator");
+    assert_runtime_final_kind_discriminator_rejects_scalar(
+        &fixture,
+        "ken_px7m_kind_mismatch_runtime",
+    );
 }
 #[test]
 fn dynamic_host_result_producer_well_formed_control_emits() {
@@ -571,19 +695,14 @@ fn nested_computational_malformed_recursive_position_rejects_specifically() {
     ));
 }
 #[test]
-fn nested_computational_final_merge_kind_rejects_specifically() {
-    let err = emit_process_entrypoint_object_with_cranelift(
-        &nested_computational_fixture(1, Vec::new(), true, true),
-        "ken_px7n_final_kind_mismatch",
-    )
-    .expect_err("the final scalar and ExitCode arms must not merge");
-    assert!(matches!(
-        err,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "ComputationalMatch",
-            reason,
-        }) if reason == "dynamic native arms disagree on scalar versus ExitCode result"
-    ));
+fn nested_computational_carrier_final_kind_is_runtime_guarded() {
+    let fixture = nested_computational_fixture(1, Vec::new(), true, true);
+    emit_process_entrypoint_object_with_cranelift(&fixture, "ken_px7n_final_kind_mismatch")
+        .expect("the CarrierWord result join emits its runtime final-kind discriminator");
+    assert_runtime_final_kind_discriminator_rejects_scalar(
+        &fixture,
+        "ken_px7n_final_kind_mismatch_runtime",
+    );
 }
 #[test]
 fn nested_computational_payload_kind_rejects_specifically() {
@@ -1777,13 +1896,35 @@ fn bare_carrier_test_lowering<'src>(
             native_int_intern: None,
             native_int_narrow: None,
             native_int_export: None,
+            native_int_export_parts: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            declaration_calls: BTreeMap::new(),
+            trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
+            consumed_join_origins: BTreeSet::new(),
+            dispositioned_join_origins: BTreeSet::new(),
+            emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: None,
         },
     }
+}
+
+fn bind_bare_test_trap_lane(
+    compiler: &mut Lowering<'_>,
+    builder: &mut FunctionBuilder<'_>,
+) {
+    let lane = builder.create_sized_stack_slot(StackSlotData::new(
+        StackSlotKind::ExplicitSlot,
+        8,
+        3,
+    ));
+    compiler.function_local.trap_exit = None;
+    compiler
+        .function_local
+        .bind_unit_trap_frame(builder.ins().stack_addr(types::I64, lane, 0), 0)
+        .expect("the bare fixture owns its synthetic unit trap lane");
 }
 
 /// `RT-FNSPLIT-C1` `D3` — the producer screens the **whole graph** for
@@ -1835,6 +1976,7 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
     let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
     let entry = builder.create_block();
     builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
 
     // ── the inadmissible graph: the closure is one level DOWN ─────────────
     //
@@ -1942,6 +2084,7 @@ fn c1_d3_a_carried_operand_survives_case_env_and_nested_lowering() {
     let mut builder = FunctionBuilder::new(&mut func, &mut function_context);
     let entry = builder.create_block();
     builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
 
     let seeded_word = builder.ins().iconst(types::I64, 0x0c1_d3);
 
@@ -2092,6 +2235,9 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
 
     let mut signature = module.make_signature();
     signature.params.push(AbiParam::new(pointer));
+    if operands == 0 {
+        signature.params.push(AbiParam::new(pointer));
+    }
     for _ in 0..operands {
         signature.params.push(AbiParam::new(types::I64));
     }
@@ -2124,6 +2270,7 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
         store_int_limbs: module.declare_func_in_func(helpers.store_int_limbs, &mut context.func),
         store_int_limb: module.declare_func_in_func(helpers.store_int_limb, &mut context.func),
         seal_int: module.declare_func_in_func(helpers.seal_int, &mut context.func),
+        int_view: module.declare_func_in_func(helpers.int_view, &mut context.func),
     };
 
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
@@ -2149,6 +2296,17 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
         // reinstate the equality the Architect's ruling deletes; the native
         // field is left for the fixtures that bind one.
         compiler.function_local.boundary_arena = Some(parameters[0]);
+        let emitted_operands = if operands == 0 {
+            compiler.function_local.trap_exit = None;
+            compiler
+                .function_local
+                .bind_unit_trap_frame(parameters[1], 0)
+                .expect("the zero-operand fixture owns its unit trap lane");
+            &parameters[2..]
+        } else {
+            bind_bare_test_trap_lane(&mut compiler, &mut builder);
+            &parameters[1..]
+        };
         // â  A refusal must still leave a WELL-FORMED function behind, or the
         // failure the caller wanted to observe is replaced by a Cranelift
         // assertion about an unfilled block. â­ Every carrier route refuses
@@ -2156,7 +2314,7 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
         // empty-case check both say so at their sites â so on the error path
         // the entry block is still current and still empty, and returning a
         // constant from it is sound.
-        match emit(&mut compiler, &mut builder, &parameters[1..]) {
+        match emit(&mut compiler, &mut builder, emitted_operands) {
             Ok(result) => {
                 builder.ins().return_(&[result]);
                 builder.seal_all_blocks();
@@ -2197,8 +2355,15 @@ fn ac_c7_compile_edge<'src>(
 }
 
 fn ac_c7_run(code: *const u8, arena: *const u64) -> i64 {
-    let f: extern "C" fn(*const u64) -> i64 = unsafe { std::mem::transmute(code) };
-    f(arena)
+    let f: extern "C" fn(*const u64, *mut i64) -> i64 =
+        unsafe { std::mem::transmute(code) };
+    let mut trap_identity = 0;
+    let result = f(arena, &mut trap_identity);
+    if trap_identity == 0 {
+        result
+    } else {
+        -4
+    }
 }
 
 fn c2_compile_edge_with_arg<'src>(
@@ -2253,6 +2418,7 @@ fn c2_compile_edge_with_arg<'src>(
         store_int_limbs: module.declare_func_in_func(helpers.store_int_limbs, &mut context.func),
         store_int_limb: module.declare_func_in_func(helpers.store_int_limb, &mut context.func),
         seal_int: module.declare_func_in_func(helpers.seal_int, &mut context.func),
+        int_view: module.declare_func_in_func(helpers.int_view, &mut context.func),
     };
     let mut compiler = bare_carrier_test_lowering(seed_env, plan);
     compiler.function_local.boundary_carrier = Some(carrier);
@@ -2266,6 +2432,7 @@ fn c2_compile_edge_with_arg<'src>(
         // This rig receives the published boundary arena directly.  Its
         // carrier producer/consumer paths do not use native-Int services.
         compiler.function_local.boundary_arena = Some(parameters[0]);
+        bind_bare_test_trap_lane(&mut compiler, &mut builder);
         let result = emit(&mut compiler, &mut builder, parameters[1])
             .expect("the C2 carrier edge emits");
         builder.ins().return_(&[result]);
@@ -2336,7 +2503,17 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
         }],
     };
     let planned_fixture = RuntimeExpr::Let {
-        value: Box::new(ordinary_producer_expr),
+        // The separate producer is a declared unit, so its result reaches the
+        // consumer through the carrier ABI. Keep that source fact in the plan
+        // instead of relying on the test rig's later manual carrier injection.
+        value: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(ordinary_producer_expr),
+            }),
+            args: Vec::new(),
+        }),
         body: Box::new(match_expr.clone()),
     };
     let plan = plan_static_transition_graph_with_symbols(
@@ -2344,12 +2521,19 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
         &BTreeMap::new(),
         &symbols,
         AbiRootIngress::Value,
+        true,
     )
     .expect("the C2 producer/consumer fixture plans");
     let root = plan.root_static_origin().expect("root occurrence exists");
-    let ordinary_producer_origin = plan
+    let producer_call_origin = plan
         .child_static_origin(root, 0)
-        .expect("the ordinary Result producer occurrence exists");
+        .expect("the ordinary Result producer call exists");
+    let producer_closure_origin = plan
+        .child_static_origin(producer_call_origin, 0)
+        .expect("the ordinary Result producer closure exists");
+    let ordinary_producer_origin = plan
+        .child_static_origin(producer_closure_origin, 0)
+        .expect("the ordinary Result producer body exists");
     let match_origin = plan
         .child_static_origin(root, 1)
         .expect("the shared Result consumer occurrence exists");
@@ -2467,6 +2651,7 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
         &seed_env,
         consumer_plan,
         |compiler, builder, word| {
+            compiler.enter_source_occurrence_plan(match_origin)?;
             let lowered = compiler.lower_carried_match(
                 builder,
                 CarriedBoundaryWord { word },
@@ -2543,6 +2728,7 @@ fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
         &BTreeMap::new(),
         &symbols,
         AbiRootIngress::Value,
+        true,
     )
     .expect("the C2 covered-class fixture plans");
     let origin = plan.root_static_origin().expect("root occurrence exists");
@@ -2840,10 +3026,12 @@ const AC_C7_TRAP_STATUS: i64 = -4;
 
 /// Drive one carried `Match` end to end.
 ///
-/// The fixture is `Let { Wrap(Inner), Match Var(0) { Left x -> x, Right x -> Sentinel } }`
-/// with `Wrap` supplied by the caller, so ONE helper produces all three
-/// interesting outcomes: selecting the first case, selecting the second, and
-/// reaching the closed default.
+/// The fixture is
+/// `Let { Call { || Wrap(Inner) }, Match Var(0) { Left x -> x, Right x ->
+/// Sentinel } }` with `Wrap` supplied by the caller, so ONE helper produces all
+/// three interesting outcomes: selecting the first case, selecting the second,
+/// and reaching the closed default. The zero-argument lexical call makes the
+/// fixture's source agree with the carrier result the focused JIT rig injects.
 ///
 /// ⭐ **Case 0's body is `Var(0)` — the projected child.** That makes its
 /// returned identity the *child's*, so a green result requires all four emitted
@@ -2861,7 +3049,14 @@ const AC_C7_TRAP_STATUS: i64 = -4;
 /// which is the whole reason that control is mandated.
 fn ac_c7_match_edge(scrutinee: &str, inner: &str) -> (i64, u64, u64) {
     let fixture = RuntimeExpr::Let {
-        value: Box::new(ac_c7_wrap(scrutinee, inner)),
+        value: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(ac_c7_wrap(scrutinee, inner)),
+            }),
+            args: Vec::new(),
+        }),
         body: Box::new(RuntimeExpr::Match {
             scrutinee: Box::new(RuntimeExpr::Var(0)),
             cases: vec![
@@ -2885,10 +3080,26 @@ fn ac_c7_match_edge(scrutinee: &str, inner: &str) -> (i64, u64, u64) {
     else {
         unreachable!("the fixture is a `Let`")
     };
-    let (plan, root) = planned_root_occurrence(&fixture);
-    let scrutinee_origin = plan
+    let plan = plan_static_transition_graph_with_symbols(
+        &fixture,
+        &BTreeMap::new(),
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .expect("the functionized carrier fixture plans");
+    let root = plan
+        .root_static_origin()
+        .expect("the functionized carrier fixture has a root occurrence");
+    let producer_call_origin = plan
         .child_static_origin(root, 0)
         .expect("a `Let`'s value is child 0");
+    let producer_closure_origin = plan
+        .child_static_origin(producer_call_origin, 0)
+        .expect("the producer call's callee is child 0");
+    let scrutinee_origin = plan
+        .child_static_origin(producer_closure_origin, 0)
+        .expect("the producer closure's body is child 0");
     let match_origin = plan
         .child_static_origin(root, 1)
         .expect("a `Let`'s body is child 1");
@@ -3266,65 +3477,6 @@ fn c1_d3_ac_c4_a_carried_recursive_position_builds_its_hypothesis_and_eliminates
         "`AC-C4`: with the induction hypothesis at index 0, `Var(1)` is the bound \
          carried child, so eliminating `Wrap(Leaf)` must yield `Leaf`. Any other \
          case-environment layout shifts this read; got {observed}"
-    );
-}
-
-/// ⛔⛔ **TRANSITION SENTINEL — invoking a carried induction hypothesis is
-/// REFUSED here because ⭐ `RT-FNSPLIT-B2F` OWNS THAT HALF.**
-///
-/// ⭐ **This is a boundary, not a bug, and the reason is structural.** A
-/// *specialized* recursive elimination terminates because its residual is a
-/// compile-time value that strictly shrinks. A **carried** residual is a runtime
-/// word: nothing shrinks at compile time, so emitting the recursive case emits
-/// its IH invocation, which re-enters the same eliminator, which emits the
-/// recursive case again — without bound. ⚠ Measured, not theorised: before the
-/// guard existed this fixture **overflowed the compiler's stack**.
-///
-/// ⛔ **`AC-C4` SPLIT — Steward decision, 2026-07-28 (`C1 §2g-i`'s amendment
-/// block).** Widening `residual` to a `LoweringOperand` is what lets the
-/// hypothesis *exist* over a carried child, and the test above proves it does.
-/// Making it **callable** needs the only general execution vehicle there is — a
-/// per-static-origin callable target — and ⛔ `C1`'s own `AC-C10` forbids
-/// target-function population. ⇒ **`C1` keeps the representation half; the
-/// runtime invocation is `RT-FNSPLIT-B2F`'s**, inside its existing atomic
-/// target/switch boundary.
-///
-/// ⚠ Promise class: **transition sentinel**, named for the boundary rather than
-/// the current behaviour. ⭐ **The obligation that retires it is `B2F`'s
-/// `INHERITED 2026-07-28` section** — *"one closed, recursively callable
-/// Cranelift target per static computational-eliminator origin,"* with a
-/// zero-argument structural IH emitting a **direct call to that same target**
-/// on the projected child word.
-///
-/// ⛔ **`B2F`'s implementer: this test is yours to delete, and its replacement
-/// must be NON-TAIL.** Make the case body something like `Suc(IH(x))` rather
-/// than the bare `Call { Var(0), [] }` below — ⚠ a tail-only fixture passes a
-/// strict subset, which is exactly why `B2F` rejects the CFG-backedge
-/// alternative on merits. ⛔ Also rejected there, do not re-open:
-/// `Lowered::RecursiveBackedge` as a carried value (it reopens the phase
-/// identity `§2g-i` closed) and an explicit heap continuation / work stack.
-#[test]
-fn c1_d3_ac_c4_invoking_a_carried_hypothesis_refuses_rather_than_unrolling_unbounded() {
-    let refused = ac_c4_recursive_edge(RuntimeExpr::Call {
-        callee: Box::new(RuntimeExpr::Var(0)),
-        args: Vec::new(),
-    })
-    .expect_err("inlining a carried recursion cannot terminate, so it must refuse");
-    let CraneliftBackendError::Unsupported(UnsupportedLowering {
-        construct: "BoundaryCarrier",
-        reason,
-        ..
-    }) = &refused
-    else {
-        panic!(
-            "the refusal must come from the carrier's termination guard, not from \
-             whatever the unroll would have hit first: got {refused:?}"
-        );
-    };
-    assert!(
-        reason.contains("cannot terminate"),
-        "the diagnostic must say WHY it refuses, so the next reader inherits the \
-         mechanism rather than rediscovering the stack overflow: got {reason}"
     );
 }
 
@@ -3825,6 +3977,7 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
     let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
     let entry = builder.create_block();
     builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
 
     // A real SSA value, so the carried residual below is a genuine carried word
     // rather than a stand-in.

@@ -911,10 +911,10 @@ struct OwnershipPartition {
 /// the edge law unsatisfiable, because that terminal edge is a non-`StaticBody`
 /// edge out of a body-owned node.
 ///
-/// Traversal is over non-`StaticBody` edges only, so a `StaticBody` edge is the
-/// one and only owner boundary. The two shared exits are never owned and never
-/// traversed through — they have no outgoing edges by construction
-/// (`static_transition.rs:1258`).
+/// Traversal excludes both typed call-edge kinds. `StaticBody` seeds a new
+/// closure-body unit; `DeclarationCall` targets an already-seeded scheduling
+/// entry. The two shared exits are never owned and never traversed through —
+/// they have no outgoing edges by construction (`static_transition.rs:1258`).
 fn partition_function_units(
     nodes: &[StaticNode],
     edges: &[StaticEdge],
@@ -972,7 +972,10 @@ fn partition_function_units(
 
     let mut outgoing = vec![Vec::new(); nodes.len()];
     for edge in edges {
-        if edge.kind == EdgeKind::StaticBody {
+        if matches!(
+            edge.kind,
+            EdgeKind::StaticBody | EdgeKind::DeclarationCall
+        ) {
             continue;
         }
         if edge.to.0 as usize >= nodes.len() {
@@ -1211,6 +1214,55 @@ fn opcode_for_source(source: SemanticSourceKind) -> SemanticOpcode {
 }
 
 impl SemanticPlane {
+    /// Closed diagnostic/runtime view of the planner-owned carrier identity
+    /// namespace. The returned words are the existing packed spans; this
+    /// accessor neither interns nor derives an identity.
+    pub(super) fn carrier_identity_catalog(
+        &self,
+    ) -> Result<Vec<(String, u64)>, CraneliftBackendError> {
+        let mut catalog = BTreeMap::<u64, String>::new();
+        let mut record = |span: DenseRange| -> Result<(), CraneliftBackendError> {
+            validate_range(
+                span,
+                self.names.len(),
+                "carrier identity catalog span is outside the closed name arena",
+            )?;
+            let bytes = plane_slice(&self.names, span, "carrier identity spelling")?;
+            let spelling = std::str::from_utf8(bytes)
+                .map_err(|_| planner_error("carrier identity spelling is not UTF-8"))?
+                .to_string();
+            let identity = pack_identity(span)?;
+            if catalog
+                .insert(identity, spelling.clone())
+                .is_some_and(|prior| prior != spelling)
+            {
+                return Err(planner_error(
+                    "one carrier identity names two different spellings",
+                ));
+            }
+            Ok(())
+        };
+        for atom in &self.operands {
+            if matches!(
+                atom.kind,
+                SemanticAtomKind::ConstructorSymbol
+                    | SemanticAtomKind::CaseConstructor
+                    | SemanticAtomKind::RecordFieldName
+                    | SemanticAtomKind::ProjectField
+                    | SemanticAtomKind::ValueConstructor
+            ) {
+                record(atom.content)?;
+            }
+        }
+        for span in self.synthesized_constructor_roles.values().copied() {
+            record(span)?;
+        }
+        Ok(catalog
+            .into_iter()
+            .map(|(identity, spelling)| (spelling, identity))
+            .collect())
+    }
+
     pub(super) fn install_synthesized_constructor_inventory(
         &mut self,
         identities: BTreeMap<SynthesizedConstructorRole, DenseRange>,
@@ -1436,15 +1488,75 @@ impl SemanticPlane {
         parent: StaticOriginId,
         position: usize,
     ) -> Result<StaticOriginId, CraneliftBackendError> {
+        self.child_origins(parent)?
+            .get(position)
+            .copied()
+            .ok_or_else(|| planner_error("static origin has no child at that source position"))
+    }
+
+    /// Every preallocated positional child of one source occurrence.
+    ///
+    /// The slice is the same validated range used by [`Self::child_origin`].
+    /// Keeping the population projection here lets planner-side structural
+    /// traversals consume the closed child inventory without spelling the
+    /// `RuntimeExpr` variants a second time.
+    pub(super) fn child_origins(
+        &self,
+        parent: StaticOriginId,
+    ) -> Result<&[StaticOriginId], CraneliftBackendError> {
         let record = self.record_for(parent)?;
         plane_slice(
             &self.child_origins,
             record.child_origins,
             "semantic child origin",
-        )?
-        .get(position)
-        .copied()
-        .ok_or_else(|| planner_error("static origin has no child at that source position"))
+        )
+    }
+
+    /// The validated function-unit owner of one source occurrence.
+    ///
+    /// Result-phase planning uses this capability rather than exposing the
+    /// descriptor arena: an owner transition is a declared-unit boundary, but
+    /// neither the lowering nor the phase planner may derive an owner from an
+    /// origin ordinal.
+    pub(super) fn owner(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<SemanticOwner, CraneliftBackendError> {
+        let descriptor = self
+            .descriptors
+            .get(origin.0 as usize)
+            .ok_or_else(|| planner_error("static origin is outside the semantic descriptors"))?;
+        if descriptor.origin != origin {
+            return Err(planner_error(
+                "descriptor origin is not its preallocated positional identity",
+            ));
+        }
+        Ok(descriptor.owner)
+    }
+
+    pub(super) fn function_owner(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<Option<PredeclaredFunctionId>, CraneliftBackendError> {
+        Ok(match self.owner(origin)? {
+            SemanticOwner::Function(function) => Some(function),
+            SemanticOwner::Terminal | SemanticOwner::TrapTerminal => None,
+        })
+    }
+
+    /// Whether a result edge crosses between two distinct function units.
+    ///
+    /// The closed owner vocabulary stays private to this module; consumers ask
+    /// the semantic plane the one question phase propagation needs.
+    pub(super) fn crosses_function_owner(
+        &self,
+        from: StaticOriginId,
+        to: StaticOriginId,
+    ) -> Result<bool, CraneliftBackendError> {
+        Ok(matches!(
+            (self.owner(from)?, self.owner(to)?),
+            (SemanticOwner::Function(left), SemanticOwner::Function(right)) if left != right
+        ))
     }
 
     /// The function-unit population, the ownership partition, and the edge laws
@@ -1532,6 +1644,57 @@ impl SemanticPlane {
         Ok(call_edges)
     }
 
+    /// The separately typed call edges from `DeclarationRef` occurrences to
+    /// already-owned transparent-declaration scheduling entries.
+    pub(super) fn declaration_call_edges(
+        &self,
+        edges: &[StaticEdge],
+    ) -> Result<
+        Vec<(
+            PredeclaredFunctionId,
+            PredeclaredFunctionId,
+            StaticOriginId,
+            StaticOriginId,
+        )>,
+        CraneliftBackendError,
+    > {
+        let owner_of = |node: StaticNodeId| -> Result<SemanticOwner, CraneliftBackendError> {
+            self.descriptors
+                .get(node.0 as usize)
+                .map(|descriptor| descriptor.owner)
+                .ok_or_else(|| {
+                    planner_error("declaration call endpoint has no semantic descriptor")
+                })
+        };
+        let mut call_edges = Vec::new();
+        for edge in edges {
+            if edge.kind != EdgeKind::DeclarationCall {
+                continue;
+            }
+            let (SemanticOwner::Function(caller), SemanticOwner::Function(callee)) =
+                (owner_of(edge.from)?, owner_of(edge.to)?)
+            else {
+                return Err(planner_error(
+                    "declaration call edge does not join two function units",
+                ));
+            };
+            let callee_origin = self
+                .functions
+                .get(callee.0 as usize)
+                .ok_or_else(|| {
+                    planner_error("declaration call callee has no function descriptor")
+                })?
+                .origin;
+            call_edges.push((
+                caller,
+                callee,
+                callee_origin,
+                StaticOriginId(edge.from.0),
+            ));
+        }
+        Ok(call_edges)
+    }
+
     pub(super) fn function_for_node(
         &self,
         node: StaticNodeId,
@@ -1553,6 +1716,7 @@ impl SemanticPlane {
         nodes: &[StaticNode],
         edges: &[StaticEdge],
         entries: &[StaticNodeId],
+        node_indexed_sources: &[SemanticSourceSeed],
     ) -> Result<(), CraneliftBackendError> {
         let partition = partition_function_units(nodes, edges, entries)?;
 
@@ -1659,6 +1823,32 @@ impl SemanticPlane {
                         "static body edge target is not its function unit's seed",
                     ));
                 }
+            } else if edge.kind == EdgeKind::DeclarationCall {
+                let SemanticOwner::Function(to_unit) = to else {
+                    return Err(planner_error(
+                        "declaration call edge targets a shared exit",
+                    ));
+                };
+                if to_unit == from_unit {
+                    return Err(planner_error(
+                        "declaration call edge does not cross a function unit boundary",
+                    ));
+                }
+                if !entries.contains(&edge.to) {
+                    return Err(planner_error(
+                        "declaration call edge target is not a scheduling entry",
+                    ));
+                }
+                let source = node_indexed_sources
+                    .get(edge.from.0 as usize)
+                    .ok_or_else(|| planner_error("declaration call source has no semantic seed"))?;
+                if source.source
+                    != SemanticSourceKind::Expression(RuntimeExprShape::DeclarationRef)
+                {
+                    return Err(planner_error(
+                        "declaration call edge source is not a DeclarationRef occurrence",
+                    ));
+                }
             } else {
                 // A non-StaticBody edge stays inside one unit, or exits to a
                 // shared exit — which lowers as this unit's own return or trap,
@@ -1694,9 +1884,14 @@ impl SemanticPlane {
         nodes: &[StaticNode],
         edges: &[StaticEdge],
         entries: &[StaticNodeId],
-        sources: &[SemanticSourceSeed],
+        semantic_sources: &[SemanticSourceSeed],
         arena: &SemanticMaterialArena,
     ) -> Result<(), CraneliftBackendError> {
+        // `semantic_sources` is recorded in walk order. Position it exactly once
+        // before any validator indexes the population by `StaticOriginId`, then
+        // reuse that canonical view for every node-indexed check below.
+        let node_indexed_sources = positioned_sources(nodes, semantic_sources)?;
+
         let mut seen_nodes = vec![false; nodes.len()];
         let mut seen_origins = vec![false; nodes.len()];
         for descriptor in &self.descriptors {
@@ -1750,22 +1945,29 @@ impl SemanticPlane {
                 "semantic program arena contains a post-origin clone",
             ));
         }
-        self.validate_function_units(nodes, edges, entries)?;
+        self.validate_function_units(nodes, edges, entries, &node_indexed_sources)?;
 
-        let source_by_node = positioned_sources(nodes, sources)?;
-        let expected_operands = source_by_node.iter().try_fold(0usize, |total, source| {
-            total
-                .checked_add(source.source_material_elements as usize)
-                .ok_or_else(|| planner_capacity_error("semantic operand count exhausted"))
-        })?;
+        let expected_operands =
+            node_indexed_sources
+                .iter()
+                .try_fold(0usize, |total, source| {
+                    total
+                        .checked_add(source.source_material_elements as usize)
+                        .ok_or_else(|| planner_capacity_error("semantic operand count exhausted"))
+                })?;
         // D4.4 — one-visit affine bound over the WHOLE material: this
         // occurrence's atoms plus its child references. The budget is unchanged
         // by the atom/child partition, so a superlinear arena still fails here.
-        let expected_child_origins = source_by_node.iter().try_fold(0usize, |total, source| {
-            total
-                .checked_add(source.children.len as usize)
-                .ok_or_else(|| planner_capacity_error("semantic child origin count exhausted"))
-        })?;
+        let expected_child_origins =
+            node_indexed_sources
+                .iter()
+                .try_fold(0usize, |total, source| {
+                    total
+                        .checked_add(source.children.len as usize)
+                        .ok_or_else(|| {
+                            planner_capacity_error("semantic child origin count exhausted")
+                        })
+                })?;
         let expected_atoms = expected_operands
             .checked_sub(expected_child_origins)
             .ok_or_else(|| {
@@ -1832,11 +2034,14 @@ impl SemanticPlane {
                 "semantic material does not partition the one-visit source-material budget",
             ));
         }
-        let expected_capture_slots = source_by_node.iter().try_fold(0usize, |total, source| {
-            total
-                .checked_add(source.capture_slots as usize)
-                .ok_or_else(|| planner_capacity_error("capture slot count exhausted"))
-        })?;
+        let expected_capture_slots =
+            node_indexed_sources
+                .iter()
+                .try_fold(0usize, |total, source| {
+                    total
+                        .checked_add(source.capture_slots as usize)
+                        .ok_or_else(|| planner_capacity_error("capture slot count exhausted"))
+                })?;
         if self.capture_slots.len() != expected_capture_slots {
             return Err(planner_error(
                 "capture layout does not flatten each source capture exactly once",
@@ -1862,7 +2067,7 @@ impl SemanticPlane {
             let program = self.programs[position];
             let record = self.records[position];
             let layout = self.capture_layouts[position];
-            let source = source_by_node[position];
+            let source = node_indexed_sources[position];
             if descriptor.planned_node != node
                 || descriptor.origin != source.origin
                 || descriptor.program != SemanticProgramId(node.0)

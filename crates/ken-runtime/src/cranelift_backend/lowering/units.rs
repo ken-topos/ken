@@ -201,6 +201,8 @@ impl CallEdgeTargets {
 pub(in crate::cranelift_backend) struct ResolvedUnitTarget {
     function: FuncId,
     origin: StaticOriginId,
+    call_site_origin: StaticOriginId,
+    kind: EmittableCallKind,
     header: AbiFrameHeader,
     slots: Vec<AbiSlot>,
     offsets: Vec<u32>,
@@ -209,9 +211,17 @@ pub(in crate::cranelift_backend) struct ResolvedUnitTarget {
 #[derive(Clone)]
 pub(in crate::cranelift_backend) struct DeclaredUnitCall {
     pub(in crate::cranelift_backend) function: FuncRef,
+    pub(in crate::cranelift_backend) origin: StaticOriginId,
     pub(in crate::cranelift_backend) header: AbiFrameHeader,
     pub(in crate::cranelift_backend) slots: Vec<AbiSlot>,
     pub(in crate::cranelift_backend) offsets: Vec<u32>,
+}
+
+pub(in crate::cranelift_backend) struct DeclaredUnitCalls {
+    pub(in crate::cranelift_backend) static_bodies:
+        BTreeMap<StaticOriginId, DeclaredUnitCall>,
+    pub(in crate::cranelift_backend) declarations:
+        BTreeMap<StaticOriginId, DeclaredUnitCall>,
 }
 
 impl CallEdgeTargets {
@@ -220,22 +230,35 @@ impl CallEdgeTargets {
         caller: PredeclaredFunctionId,
         module: &mut M,
         func: &mut Function,
-    ) -> Result<BTreeMap<StaticOriginId, DeclaredUnitCall>, CraneliftBackendError> {
-        let mut calls = BTreeMap::new();
+    ) -> Result<DeclaredUnitCalls, CraneliftBackendError> {
+        let mut static_bodies = BTreeMap::new();
+        let mut declarations = BTreeMap::new();
         for target in self.targets_in(caller) {
             let call = DeclaredUnitCall {
                 function: module.declare_func_in_func(target.function, func),
+                origin: target.origin,
                 header: target.header,
                 slots: target.slots.clone(),
                 offsets: target.offsets.clone(),
             };
-            if calls.insert(target.origin, call).is_some() {
-                return Err(backend_module(
-                    "one caller has two static-body calls to the same body origin".to_string(),
-                ));
+            let (calls, duplicate) = match target.kind {
+                EmittableCallKind::StaticBody => (
+                    &mut static_bodies,
+                    "one caller has two static-body calls to the same body origin",
+                ),
+                EmittableCallKind::Declaration => (
+                    &mut declarations,
+                    "one declaration-reference occurrence has two planner-derived call targets",
+                ),
+            };
+            if calls.insert(target.call_site_origin, call).is_some() {
+                return Err(backend_module(duplicate.to_string()));
             }
         }
-        Ok(calls)
+        Ok(DeclaredUnitCalls {
+            static_bodies,
+            declarations,
+        })
     }
 }
 
@@ -315,6 +338,8 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
             ResolvedUnitTarget {
                 function: target,
                 origin: edge.callee_origin(),
+                call_site_origin: edge.call_site_origin(),
+                kind: edge.kind(),
                 header: unit.header(),
                 slots: unit.slots().to_vec(),
                 offsets,
@@ -411,6 +436,7 @@ pub(super) fn define_root_adapter<M: Module>(
     bundle: &UnitBundle,
     adapter_id: FuncId,
     process_mode: bool,
+    project_public_scalar_root: bool,
 ) -> Result<(), CraneliftBackendError> {
     let root = compiler.static_transition_plan.root_emittable_unit()?;
     let root_id = bundle.function(root.function()).ok_or_else(|| {
@@ -439,12 +465,20 @@ pub(super) fn define_root_adapter<M: Module>(
     let sig = unit_signature(module);
     let mut func =
         Function::with_name_signature(UserFuncName::user(0, adapter_id.as_u32()), sig);
-    let mut function_local = helpers.declare_in_func(module, &mut func);
+    let mut function_local = helpers.declare_in_func(
+        module,
+        &mut func,
+        Some(TrapExitAuthority::Root {
+            process_sentinel: process_mode,
+            source_authorized: false,
+        }),
+    );
     let root_origin = root.origin();
     function_local.unit_calls.insert(
         root_origin,
         DeclaredUnitCall {
             function: module.declare_func_in_func(root_id, &mut func),
+            origin: root_origin,
             header: root.header(),
             slots: root.slots().to_vec(),
             offsets,
@@ -539,11 +573,18 @@ pub(super) fn define_root_adapter<M: Module>(
                 "the internal root call did not return its result word".to_string(),
             ));
         };
-        builder.ins().return_(&[result.word]);
+        let public_result = if project_public_scalar_root {
+            compiler.emit_public_carrier_scalar(&mut builder, result)?
+        } else {
+            result.word
+        };
+        builder.ins().return_(&[public_result]);
         builder.seal_all_blocks();
         builder.finalize();
     }
     verify_cranelift_function(&func, module.isa())?;
+    #[cfg(test)]
+    scale_b_record_root_adapter(&func);
     let mut ctx = module.make_context();
     std::mem::swap(&mut ctx.func, &mut func);
     module
@@ -665,6 +706,13 @@ fn define_unit_body<M: Module>(
             // built, and returning a default word would fabricate a result.
             backend_module("unit frame declares no result slot".to_string())
         })?;
+    let trap_offset = unit
+        .slots
+        .iter()
+        .zip(&unit.offsets)
+        .find(|(slot, _)| slot.kind == AbiSlotKind::Trap)
+        .map(|(_, offset)| *offset)
+        .ok_or_else(|| backend_module("unit frame declares no trap slot".to_string()))?;
 
     let sig = unit_signature(module);
     let mut func = Function::with_name_signature(UserFuncName::user(2, id.as_u32()), sig);
@@ -677,9 +725,24 @@ fn define_unit_body<M: Module>(
     // resolved from a validated call edge through the declared bundle, with no
     // ordinal, no name parsing and no dynamic lookup anywhere on the path. ⚠ An
     // emitted `call` is not claimed and no control here asserts one.
-    let mut function_local = helpers.declare_in_func(module, &mut func);
-    function_local.unit_calls =
-        call_edges.declare_in_func(unit.function, module, &mut func)?;
+    #[cfg(test)]
+    let unit_trap_authority =
+        match TRAP_FRAME_BINDING_MUTATION.with(std::cell::Cell::get) {
+            TrapFrameBindingMutation::MisclassifyUnitAsRoot => Some(TrapExitAuthority::Root {
+                process_sentinel: false,
+                source_authorized: false,
+            }),
+            TrapFrameBindingMutation::Exact | TrapFrameBindingMutation::DeleteUnitLane => {
+                None
+            }
+        };
+    #[cfg(not(test))]
+    let unit_trap_authority = None;
+    let mut function_local =
+        helpers.declare_in_func(module, &mut func, unit_trap_authority);
+    let declared_calls = call_edges.declare_in_func(unit.function, module, &mut func)?;
+    function_local.unit_calls = declared_calls.static_bodies;
+    function_local.declaration_calls = declared_calls.declarations;
     let mut func_ctx = FunctionBuilderContext::new();
     let root_outcome;
     {
@@ -721,6 +784,19 @@ fn define_unit_body<M: Module>(
         function_local.services_pointer = Some(services);
         // The two fixed envelope loads are unconditional. Semantic frame
         // accesses below are relative only to the B2R payload base.
+        #[cfg(test)]
+        let bind_unit_trap_frame = TRAP_FRAME_BINDING_MUTATION.with(std::cell::Cell::get)
+            != TrapFrameBindingMutation::DeleteUnitLane;
+        #[cfg(not(test))]
+        let bind_unit_trap_frame = true;
+        if bind_unit_trap_frame {
+            function_local.bind_unit_trap_frame(
+                slots,
+                i32::try_from(trap_offset).map_err(|_| {
+                    backend_module("abi trap slot offset exceeds addressable range".to_string())
+                })?,
+            )?;
+        }
         compiler.function_local = function_local;
         #[cfg(test)]
         if is_root
@@ -778,7 +854,41 @@ fn define_unit_body<M: Module>(
                     base,
                     offset,
                 );
-                env.push(LoweringOperand::Carried(CarriedBoundaryWord { word }));
+                let carried = CarriedBoundaryWord { word };
+                // The process root's two ABI ordinals are closed semantic
+                // roles, not generic ValueWord inputs. Recovering them here
+                // prevents a borrowed process-input body from being emitted
+                // twice behind a runtime carried-representation split.
+                let operand = if is_root
+                    && compiler.process_object
+                    && slot.kind == AbiSlotKind::Parameter
+                {
+                    let value = compiler.emit_carrier_scalar(&mut builder, carried)?;
+                    match slot.ordinal {
+                        ordinal
+                            if ordinal == AbiProcessParameter::ProcessInput.ordinal() =>
+                        {
+                            LoweringOperand::Specialized(Lowered::BorrowedNativeValue {
+                                pointer: value,
+                            })
+                        }
+                        ordinal
+                            if ordinal == AbiProcessParameter::Capability.ordinal() =>
+                        {
+                            LoweringOperand::Specialized(Lowered::CapabilityToken {
+                                value,
+                            })
+                        }
+                        _ => {
+                            return Err(backend_module(
+                                "the process root has an unknown parameter role".to_string(),
+                            ));
+                        }
+                    }
+                } else {
+                    LoweringOperand::Carried(carried)
+                };
+                env.push(operand);
             }
         }
         // The in-process validation API historically stages one ground
@@ -811,10 +921,11 @@ fn define_unit_body<M: Module>(
         let body = compiler.retained_body_occurrence(body_origin)?;
         compiler.select_terminal_result_origins(body_origin, body.expr)?;
         let lowered = compiler.lower_expr(&mut builder, body, &env)?;
+        compiler.validate_join_plan_consumption(unit.function)?;
         let (result, outcome) = if is_root {
             match lowered {
                 LoweringOperand::Carried(word) if !compiler.process_object => (
-                    word.word,
+                    Some(word.word),
                     Some(RootUnitResult {
                         decoder: Some(ResultDecoder::Boundary),
                         trap: None,
@@ -832,7 +943,7 @@ fn define_unit_body<M: Module>(
                     );
                     let status = compiler.emit_carrier_scalar(&mut builder, word)?;
                     (
-                        status,
+                        Some(status),
                         Some(RootUnitResult {
                             decoder: Some(ResultDecoder::ProcessStatus),
                             trap: None,
@@ -848,22 +959,19 @@ fn define_unit_body<M: Module>(
                             },
                         );
                     }
-                    let status = builder.ins().iconst(
-                        types::I64,
-                        if compiler.process_object { -4 } else { 0 },
-                    );
+                    compiler.emit_current_trap(&mut builder, &trap)?;
                     (
-                        status,
+                        None,
                         Some(RootUnitResult {
-                            decoder: None,
-                            trap: Some(trap),
+                            decoder: Some(ResultDecoder::TrapOnly),
+                            trap: None,
                         }),
                     )
                 }
                 LoweringOperand::Specialized(value) => {
                     let (token, decoder) = compiler.emit_result(&mut builder, value)?;
                     (
-                        token,
+                        Some(token),
                         Some(RootUnitResult {
                             decoder: Some(decoder),
                             trap: None,
@@ -873,27 +981,38 @@ fn define_unit_body<M: Module>(
             }
         } else {
             let word = match lowered {
-                LoweringOperand::Carried(word) => word.word,
-                LoweringOperand::Specialized(value) => compiler
-                    .transfer_unit_result_into_carrier(&mut builder, unit.origin, &value)?
-                    .word,
+                LoweringOperand::Carried(word) => Some(word.word),
+                LoweringOperand::Specialized(Lowered::Trap(trap)) => {
+                    compiler.emit_current_trap(&mut builder, &trap)?;
+                    None
+                }
+                LoweringOperand::Specialized(value) => Some(
+                    compiler
+                        .transfer_unit_result_into_carrier(&mut builder, unit.origin, &value)?
+                        .word,
+                ),
             };
             (word, None)
         };
         root_outcome = outcome;
-        builder.ins().store(
-            MemFlags::trusted(),
-            result,
-            slots,
-            i32::try_from(result_offset).map_err(|_| {
-                backend_module("abi result slot offset exceeds addressable range".to_string())
-            })?,
-        );
-        builder.ins().return_(&[result]);
+        if let Some(result) = result {
+            builder.ins().store(
+                MemFlags::trusted(),
+                result,
+                slots,
+                i32::try_from(result_offset).map_err(|_| {
+                    backend_module("abi result slot offset exceeds addressable range".to_string())
+                })?,
+            );
+        }
+        let status = builder.ins().iconst(types::I64, 0);
+        builder.ins().return_(&[status]);
         builder.seal_all_blocks();
         builder.finalize();
     }
     verify_cranelift_function(&func, module.isa())?;
+    #[cfg(test)]
+    scale_b_record_unit_body(&func);
     let mut ctx = module.make_context();
     std::mem::swap(&mut ctx.func, &mut func);
     module

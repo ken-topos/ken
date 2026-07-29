@@ -95,10 +95,16 @@ fn run_checked_bounded_nat_fixture(
             native_int_intern: None,
             native_int_narrow: None,
             native_int_export: None,
+            native_int_export_parts: None,
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            declaration_calls: BTreeMap::new(),
+            trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
+            consumed_join_origins: BTreeSet::new(),
+            dispositioned_join_origins: BTreeSet::new(),
+            emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: None,
         },
     };
@@ -197,6 +203,7 @@ fn run_checked_bounded_nat_fixture(
                         }));
                     let (plan, match_origin) = planned_root_occurrence(source_match);
                     compiler.static_transition_plan = plan;
+                    compiler.enter_source_occurrence_plan(match_origin)?;
                     compiler.lower_bounded_nat_match(
                         &mut builder,
                         nat,
@@ -271,6 +278,7 @@ fn run_checked_bounded_nat_fixture(
                         }));
                     let (plan, match_origin) = planned_root_occurrence(source_match);
                     compiler.static_transition_plan = plan;
+                    compiler.enter_source_occurrence_plan(match_origin)?;
                     let frames = [EliminatorFrame::Computational(
                         ComputationalEliminatorFrame {
                             cases: &cases,
@@ -302,12 +310,18 @@ fn run_checked_bounded_nat_fixture(
     module
         .define_function(func_id, &mut context)
         .map_err(|error| backend_module(error.to_string()))?;
+    let trap_catalog = compiler.static_transition_plan.trap_catalog();
+    let carrier_identity_catalog = compiler
+        .static_transition_plan
+        .carrier_identity_catalog()?;
     let compiled = CompiledModule::from_parts(
         module,
         func_id,
         Some(ResultDecoder::ProcessStatus),
         compiler.result_table,
         None,
+        trap_catalog,
+        carrier_identity_catalog,
         true,
         compiler.assumptions,
         compiler.unsupported,
@@ -1020,7 +1034,20 @@ fn borrowed_ingress_bytes_at_preserves_safe_none_bounds() {
                         RuntimeMatchCase {
                             constructor: none.to_string(),
                             binders: 0,
-                            body: RuntimeExpr::Value(RuntimeValue::Int((7).into())),
+                            // D8: make this predecessor a declared-unit result.
+                            // The borrowed Option eliminator must consume the
+                            // precomputed CarrierWord plan rather than forcing
+                            // its historical two-native-word merge.
+                            body: RuntimeExpr::Call {
+                                callee: Box::new(RuntimeExpr::LexicalClosure {
+                                    captures: Vec::new(),
+                                    params: Vec::new(),
+                                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(
+                                        (7).into(),
+                                    ))),
+                                }),
+                                args: Vec::new(),
+                            },
                         },
                         RuntimeMatchCase {
                             constructor: some.to_string(),

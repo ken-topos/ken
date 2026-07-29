@@ -95,6 +95,7 @@ pub const BOUNDARY_LOCAL_HELPERS: &[&str] = &[
     "ken_boundary_int_sign_local",
     "ken_boundary_int_len_local",
     "ken_boundary_int_limb_local",
+    "ken_boundary_int_view_local",
 ];
 
 // ⛔ There is deliberately NO `ken_boundary_store_slot_local`.
@@ -197,6 +198,9 @@ pub(crate) struct BoundaryLocalFuncs {
     pub int_len: FuncId,
     /// `(arena, word, index, out) -> status` — a spilled `Int`'s limb.
     pub int_limb: FuncId,
+    /// `(arena, word, out_view) -> status` — a spilled `Int`'s canonical
+    /// `{sign, len, limbs}` view.
+    pub int_view: FuncId,
 }
 
 #[derive(Clone, Copy)]
@@ -229,6 +233,7 @@ struct Graph {
     int_sign: FuncId,
     int_len: FuncId,
     int_limb: FuncId,
+    int_view: FuncId,
     /// `ken_native_int_resolve_local`, declared into this module by the
     /// native-`Int` graph that is emitted before this one.
     native_int_resolve: FuncId,
@@ -273,6 +278,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     let int_sign = declare(module, "ken_boundary_int_sign_local", 3)?;
     let int_len = declare(module, "ken_boundary_int_len_local", 3)?;
     let int_limb = declare(module, "ken_boundary_int_limb_local", 4)?;
+    let int_view = declare(module, "ken_boundary_int_view_local", 3)?;
     let graph = Graph {
         resolve,
         class,
@@ -302,6 +308,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         int_sign,
         int_len,
         int_limb,
+        int_view,
         native_int_resolve: native_int.resolve,
     };
 
@@ -333,6 +340,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     define_int_part(module, graph, graph.int_sign, IntPart::Sign, plan)?;
     define_int_part(module, graph, graph.int_len, IntPart::Len, plan)?;
     define_int_part(module, graph, graph.int_limb, IntPart::Limb, plan)?;
+    define_int_part(module, graph, graph.int_view, IntPart::View, plan)?;
 
     Ok(BoundaryLocalFuncs {
         class,
@@ -362,6 +370,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         int_sign,
         int_len,
         int_limb,
+        int_view,
     })
 }
 
@@ -441,6 +450,8 @@ fn finish<M: Module>(
             functions.push(func.display().to_string());
         }
     });
+    #[cfg(test)]
+    crate::cranelift_backend::scale_b_record_fixed_helper(&func);
     let mut ctx = module.make_context();
     std::mem::swap(&mut ctx.func, &mut func);
     module
@@ -2649,6 +2660,7 @@ enum IntPart {
     Sign,
     Len,
     Limb,
+    View,
 }
 
 /// `(arena, word, [index,] out) -> status` — one part of a spilled `Int`.
@@ -2839,6 +2851,11 @@ fn define_int_part<M: Module>(
                 let address = b.ins().iadd(limbs, offset);
                 let limb = b.ins().load(types::I64, MemFlags::trusted(), address, 0);
                 b.ins().store(MemFlags::trusted(), limb, out, 0);
+            }
+            IntPart::View => {
+                b.ins().store(MemFlags::trusted(), sign, out, 0);
+                b.ins().store(MemFlags::trusted(), len, out, 8);
+                b.ins().store(MemFlags::trusted(), limbs, out, 16);
             }
         }
         let z = b.ins().iconst(types::I64, BOUNDARY_OK);
@@ -3621,7 +3638,7 @@ pub(crate) mod tests {
             );
             assert_eq!(
                 BOUNDARY_LOCAL_HELPERS.len(),
-                28,
+                29,
                 "the helper population must not move with the value population"
             );
         }
@@ -5172,6 +5189,7 @@ pub(crate) mod tests {
         "ken_boundary_int_sign_local",
         "ken_boundary_int_len_local",
         "ken_boundary_int_limb_local",
+        "ken_boundary_int_view_local",
     ];
 
     #[test]
@@ -6606,12 +6624,11 @@ pub(crate) mod tests {
         // ⚠ POSITIVE CONTROL — an acyclic graph of the same shape adopts, so
         // the refusal is about the cycle and not about aggregates.
         let mut clean = c1_d2_store();
-        // ⚠ The constructor ids must be REAL interned symbols: a node naming an
-        // id the store never interned has no canonical image, and adoption
-        // correctly refuses it. Interning first keeps this control about the
-        // cycle.
-        let leaf_id = clean.intern_symbol("ctor:fixture::Cycle::Leaf");
-        let root_id = clean.intern_symbol("ctor:fixture::Cycle::Root");
+        // ⚠ The constructor ids must be the fixture authority's issued words:
+        // a node naming an unissued id has no canonical image. Using those
+        // words keeps this control about the cycle.
+        let leaf_id = c1_d2_issued_identity("ctor:fixture::Cycle::Leaf");
+        let root_id = c1_d2_issued_identity("ctor:fixture::Cycle::Root");
         let g = bind_with(
             &mut clean,
             BoundaryArenaBuilder::new(),
@@ -6788,7 +6805,7 @@ pub(crate) mod tests {
 
         let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
         let mut store = c1_d2_store();
-        let tag_id = store.intern_symbol("ctor:fixture::Seal::Node");
+        let tag_id = c1_d2_issued_identity("ctor:fixture::Seal::Node");
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -6885,7 +6902,7 @@ pub(crate) mod tests {
         let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
 
         let mut store = c1_d2_store();
-        let tag_id = store.intern_symbol("ctor:fixture::Unsealed::Node");
+        let tag_id = c1_d2_issued_identity("ctor:fixture::Unsealed::Node");
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -6935,7 +6952,7 @@ pub(crate) mod tests {
         };
 
         let mut store = c1_d2_store();
-        let tag_id = store.intern_symbol("ctor:fixture::Partial::Node");
+        let tag_id = c1_d2_issued_identity("ctor:fixture::Partial::Node");
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -6971,7 +6988,7 @@ pub(crate) mod tests {
 
         // ⚠ POSITIVE CONTROL — the acyclic twin mints every node.
         let mut clean = c1_d2_store();
-        let clean_id = clean.intern_symbol("ctor:fixture::Partial::Node");
+        let clean_id = c1_d2_issued_identity("ctor:fixture::Partial::Node");
         let g = bind_with(
             &mut clean,
             BoundaryArenaBuilder::new(),
@@ -7195,7 +7212,7 @@ pub(crate) mod tests {
         let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
         let mut store = c1_d2_store();
         store.bind_artifact(fixture_artifact("refused", 3));
-        let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
+        let tag_id = c1_d2_issued_identity("ctor:fixture::Ground::Leaf");
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -7225,7 +7242,7 @@ pub(crate) mod tests {
 
         let mut store = c1_d2_store();
         store.bind_artifact(fixture_artifact("refused", 3));
-        let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
+        let tag_id = c1_d2_issued_identity("ctor:fixture::Ground::Leaf");
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -7263,7 +7280,7 @@ pub(crate) mod tests {
 
         let mut store = c1_d2_store();
         store.bind_artifact(fixture_artifact("refused", 3));
-        let tag_id = store.intern_symbol("ctor:fixture::Ground::Leaf");
+        let tag_id = c1_d2_issued_identity("ctor:fixture::Ground::Leaf");
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -7391,7 +7408,7 @@ pub(crate) mod tests {
         let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
         let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
         let mut store = c1_d2_store();
-        let tag_id = store.intern_symbol("ctor:fixture::Deep::Link");
+        let tag_id = c1_d2_issued_identity("ctor:fixture::Deep::Link");
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -7446,7 +7463,7 @@ pub(crate) mod tests {
         let (_am, alloc_ctor) = compile_producer(3, emit_ctor_node);
         let (_sm, store_field) = compile_producer(4, emit_store_field_probe);
         let mut store = c1_d2_store();
-        let tag_id = store.intern_symbol("ctor:fixture::Deep::Link");
+        let tag_id = c1_d2_issued_identity("ctor:fixture::Deep::Link");
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -7485,7 +7502,7 @@ pub(crate) mod tests {
 
         // ── a three-node cycle: a -> b -> c -> a ────────────────────────────
         let mut store = c1_d2_store();
-        let tag_id = store.intern_symbol("ctor:fixture::Ring::Link");
+        let tag_id = c1_d2_issued_identity("ctor:fixture::Ring::Link");
         let f = bind_with(
             &mut store,
             BoundaryArenaBuilder::new(),
@@ -7517,8 +7534,8 @@ pub(crate) mod tests {
 
         // ── the DAG: one child reached by TWO parents ───────────────────────
         let mut dag = c1_d2_store();
-        let parent_id = dag.intern_symbol("ctor:fixture::Dag::Parent");
-        let shared_id = dag.intern_symbol("ctor:fixture::Dag::Shared");
+        let parent_id = c1_d2_issued_identity("ctor:fixture::Dag::Parent");
+        let shared_id = c1_d2_issued_identity("ctor:fixture::Dag::Shared");
         let g = bind_with(&mut dag, BoundaryArenaBuilder::new(), (8, 16, 0), (0, 0, 0));
         let shared = BoundaryWord(run3(alloc_ctor, g.base, BoundaryWord(shared_id), 1) as u64);
         let leaf = BoundaryWord::immediate(BoundaryTag::ImmediateInt, 3);

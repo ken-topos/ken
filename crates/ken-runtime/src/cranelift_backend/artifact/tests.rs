@@ -46,39 +46,40 @@ fn px8i_jit_and_object_construct_identical_local_helper_clif() {
     assert!(!jit_clif.is_empty());
     // Rework (Q-RESIDUE, 2026-07-21): the bare `5` was unverified
     // provenance. Grounded against `emit_native_int_local_graph`, which
-    // calls exactly six `define_*` helpers (resolve, intern, compare,
-    // narrow, export, binop); `capture_native_int_local_graph` joins
+    // calls exactly seven `define_*` helpers (resolve, intern, compare,
+    // narrow, export, export-parts, binop); `capture_native_int_local_graph` joins
     // their captured CLIF bodies with "-- helper --", so N helpers yield
     // N-1 separators. This is a fixed property of the compiler's own
     // small, deliberately-enumerated local-helper set, not an external or
     // growable corpus -- pinning it here catches a helper silently
     // failing to emit a body.
-    const LOCAL_HELPER_COUNT: usize = 6;
+    const LOCAL_HELPER_COUNT: usize = 7;
     assert_eq!(
         jit_clif.matches("-- helper --").count(),
         LOCAL_HELPER_COUNT - 1,
-        "expected all {LOCAL_HELPER_COUNT} native-Int local helpers (resolve, intern, compare, narrow, export, binop) to emit a captured CLIF body"
+        "expected all {LOCAL_HELPER_COUNT} native-Int local helpers (resolve, intern, compare, narrow, export, export-parts, binop) to emit a captured CLIF body"
     );
 }
 
 /// **`RT-FNSPLIT-B2F` `AC-8`(b) — the native-`Int` module's DECLARED inventory
-/// is exactly eight functions, pinned as a SET rather than as a count.**
+/// is exactly nine functions, pinned as a SET rather than as a count.**
 ///
-/// ⭐ **`AC-8` records the measurement as *"6 definitions / 8 declarations,
+/// ⭐ **The completed carrier export path measures *"7 definitions / 9
+/// declarations,
 /// Θ(1) per native module"* and says the definitions are already pinned
 /// (`LOCAL_HELPER_COUNT`, above) while ⛔ **the declarations are genuinely
 /// unpinned.** This is that pin.
 ///
-/// ## Why a set and not the number 8
+/// ## Why a set and not the number 9
 ///
-/// ⛔ A count is satisfied by any eight names, so swapping a helper for a
+/// ⛔ A count is satisfied by any nine names, so swapping a helper for a
 /// different import keeps it green. `pin-a-property` §5: assert the **exact
 /// permitted inventory**, so that *any* addition reddens — including one nobody
 /// imagined — and so that a removal reddens as the same failure rather than as a
 /// different one.
 ///
 /// ⚠ **And the two linkages are asserted separately on purpose.** `malloc` and
-/// `free` are `Import`s the host supplies; the six helpers are `Local`
+/// `free` are `Import`s the host supplies; the seven helpers are `Local`
 /// definitions this module owns. Collapsing them into one name set would accept
 /// a helper silently demoted to an import — which is precisely how a body that
 /// stopped being emitted would look from a name census.
@@ -97,7 +98,7 @@ fn px8i_jit_and_object_construct_identical_local_helper_clif() {
 /// native-`Int` ABI publishes into every module, and changing one is a contract
 /// decision, not a refactor.
 #[test]
-fn b2f_ac8_the_native_int_module_declares_exactly_its_eight_functions() {
+fn b2f_ac8_the_native_int_module_declares_exactly_its_nine_functions() {
     let mut module = new_jit_module().expect("JIT module constructs");
     crate::native_int_clif::emit_native_int_local_graph(&mut module, false)
         .expect("local helper graph emits");
@@ -111,12 +112,16 @@ fn b2f_ac8_the_native_int_module_declares_exactly_its_eight_functions() {
             ("ken_native_int_binop_local".to_string(), Linkage::Local),
             ("ken_native_int_compare_local".to_string(), Linkage::Local),
             ("ken_native_int_export_local".to_string(), Linkage::Local),
+            (
+                "ken_native_int_export_parts_local".to_string(),
+                Linkage::Local,
+            ),
             ("ken_native_int_intern_local".to_string(), Linkage::Local),
             ("ken_native_int_narrow_local".to_string(), Linkage::Local),
             ("ken_native_int_resolve_local".to_string(), Linkage::Local),
             ("malloc".to_string(), Linkage::Import),
         ],
-        "the native-Int module's declared inventory moved; AC-8's `8 declarations` \
+        "the native-Int module's declared inventory moved; the `9 declarations` \
          is a claim about THIS set, not about the number"
     );
 }

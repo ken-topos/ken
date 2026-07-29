@@ -114,7 +114,8 @@ pub use surface::{
 // taken over the INTERSECTION of both — gate rather than choose a side.
 #[cfg(test)]
 pub(crate) use lowering::{
-    NativeIntLoweringMutation, Px8trTrapProvenanceEvent, NATIVE_INT_LOWERING_MUTATION,
+    scale_b_record_fixed_helper, NativeIntLoweringMutation,
+    Px8trTrapProvenanceEvent, NATIVE_INT_LOWERING_MUTATION,
 };
 #[cfg(test)]
 pub(crate) use test_objects::{

@@ -27,7 +27,7 @@ use crate::{
 
 // Owner-named sibling imports (§10.3: `artifact::api -> artifact, planning,
 // surface`). Never through the facade.
-use crate::cranelift_backend::lowering::core::compile_expr_into_module;
+use crate::cranelift_backend::lowering::core::compile_expr_into_object_module;
 use crate::cranelift_backend::planning::{
     native_join_plan_for_program, oriented_subcontinuation_plan_for_program,
 };
@@ -259,7 +259,7 @@ pub(crate) fn emit_bound_process_program_object_with_cranelift(
 ) -> Result<CraneliftObjectArtifact, CraneliftBackendError> {
     let entry_symbol = entry_symbol.into();
     reject_program_blockers(program)?;
-    let compiled = compile_expr_into_module(
+    let compiled = compile_expr_into_object_module(
         new_object_module("ken-runtime-bound-process-entrypoint")?,
         &entry_symbol,
         Linkage::Export,

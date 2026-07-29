@@ -15,9 +15,12 @@ mod static_transition;
 
 pub(super) use static_transition::plan_static_transition_graph_with_symbols;
 #[cfg(test)]
-pub(super) use static_transition::plan_static_transition_graph;
 pub(super) use static_transition::{
-    ConstructorIdentity, StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
+    governed_nested_resource_bracket, plan_static_transition_graph, ScaleBPlanCensus,
+};
+pub(super) use static_transition::{
+    planned_partiality_trap, ConstructorIdentity, JoinPlanToken, JoinResultRepresentation,
+    StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
     SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
@@ -39,7 +42,7 @@ pub(super) use static_transition::{
 pub(super) use static_transition::{
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition, EmittableUnit,
-    PredeclaredFunctionId,
+    EmittableCallKind, PredeclaredFunctionId,
 };
 
 pub(super) fn native_join_plan_for_program(

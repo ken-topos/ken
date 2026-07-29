@@ -74,13 +74,13 @@ pub(in crate::cranelift_backend) use super::planning::{
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
-    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableUnit, PredeclaredFunctionId,
-    StaticOriginId, StaticTransitionPlan,
+    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableCallKind, EmittableUnit, JoinPlanToken,
+    JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use super::planning::{
-    plan_static_transition_graph, with_last_io_error_role_omitted,
+    plan_static_transition_graph, with_last_io_error_role_omitted, ScaleBPlanCensus,
 };
 pub(in crate::cranelift_backend) use super::surface::{
     backend, backend_module, unsupported, BackendFailure, CraneliftBackendError,
@@ -91,6 +91,123 @@ pub(in crate::cranelift_backend) use super::surface::{
 // build, which the test build cannot show you.
 #[cfg(test)]
 pub(in crate::cranelift_backend) use crate::RuntimeMatchCase;
+
+/// One completed FunctionizedUnits emission row for RT-SCALE-B.
+///
+/// The fixed native-Int and boundary-value graphs, every unit body, and the
+/// public root adapter all record through the same function seam.  Imports and
+/// test-only probes never call that seam.
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub(in crate::cranelift_backend) struct ScaleBEmissionMetrics {
+    pub(in crate::cranelift_backend) plan: ScaleBPlanCensus,
+    pub(in crate::cranelift_backend) authority_functionized: bool,
+    pub(in crate::cranelift_backend) emitted_helpers: usize,
+    pub(in crate::cranelift_backend) production_functions: usize,
+    pub(in crate::cranelift_backend) clif_instructions: usize,
+    pub(in crate::cranelift_backend) clif_bytes: usize,
+    pub(in crate::cranelift_backend) total_dfg_values: usize,
+    pub(in crate::cranelift_backend) total_instructions: usize,
+    pub(in crate::cranelift_backend) total_blocks: usize,
+}
+
+#[cfg(test)]
+#[derive(Clone, Debug)]
+struct ScaleBEmissionAttempt {
+    metrics: ScaleBEmissionMetrics,
+    complete: bool,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SCALE_B_EMISSION_ATTEMPT:
+        std::cell::RefCell<Option<ScaleBEmissionAttempt>> =
+            const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn scale_b_reset_emission_attempt() {
+    SCALE_B_EMISSION_ATTEMPT.with(|attempt| *attempt.borrow_mut() = None);
+}
+
+#[cfg(test)]
+fn scale_b_begin_emission_attempt(plan: &StaticTransitionPlan<'_>, authority_functionized: bool) {
+    SCALE_B_EMISSION_ATTEMPT.with(|attempt| {
+        *attempt.borrow_mut() = Some(ScaleBEmissionAttempt {
+            metrics: ScaleBEmissionMetrics {
+                plan: plan.scale_b_census(),
+                authority_functionized,
+                emitted_helpers: 0,
+                production_functions: 0,
+                clif_instructions: 0,
+                clif_bytes: 0,
+                total_dfg_values: 0,
+                total_instructions: 0,
+                total_blocks: 0,
+            },
+            complete: false,
+        });
+    });
+}
+
+#[cfg(test)]
+fn scale_b_finish_emission_attempt() {
+    SCALE_B_EMISSION_ATTEMPT.with(|attempt| {
+        if let Some(attempt) = attempt.borrow_mut().as_mut() {
+            attempt.complete = true;
+        }
+    });
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn scale_b_last_emission_metrics() -> Option<ScaleBEmissionMetrics>
+{
+    SCALE_B_EMISSION_ATTEMPT.with(|attempt| {
+        attempt
+            .borrow()
+            .as_ref()
+            .filter(|attempt| attempt.complete)
+            .map(|attempt| attempt.metrics.clone())
+    })
+}
+
+#[cfg(test)]
+fn scale_b_record_function(function: &Function, emitted_helper: bool) {
+    SCALE_B_EMISSION_ATTEMPT.with(|attempt| {
+        let mut attempt = attempt.borrow_mut();
+        let Some(attempt) = attempt.as_mut() else {
+            return;
+        };
+        if attempt.complete {
+            return;
+        }
+        let instructions = function.dfg.num_insts();
+        attempt.metrics.production_functions += 1;
+        attempt.metrics.clif_instructions += instructions;
+        attempt.metrics.clif_bytes += function.display().to_string().len();
+        attempt.metrics.total_dfg_values += function.dfg.num_values();
+        attempt.metrics.total_instructions += instructions;
+        attempt.metrics.total_blocks += function.dfg.num_blocks();
+        if emitted_helper {
+            attempt.metrics.emitted_helpers += 1;
+        }
+    });
+}
+
+#[cfg(test)]
+pub(crate) fn scale_b_record_fixed_helper(function: &Function) {
+    scale_b_record_function(function, false);
+}
+
+#[cfg(test)]
+fn scale_b_record_root_adapter(function: &Function) {
+    scale_b_record_function(function, false);
+}
+
+#[cfg(test)]
+fn scale_b_record_unit_body(function: &Function) {
+    scale_b_record_function(function, true);
+}
 
 const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 13] = [
     ken_host::HostOpV1::ConsoleWrite,
@@ -435,9 +552,12 @@ impl OwnedSourceOccurrence {
 /// is about a population of one. ⚠ It is *not* claimed that this suffices for a
 /// unit body: the two `ir::Value` fields are **not** resolvable from here,
 /// because they are results of a function's own dataflow rather than identities,
-/// and `declare_in_func` leaves them `None` for each caller to derive. ⭐ That
-/// gap is measured, not assumed — see
-/// `docs/program/rt-fnsplit-b2f-s6-switchover-measurement.md`.
+/// and `declare_in_func` leaves them `None` for each caller to derive.
+///
+/// **THE TRAP DATAFLOW BOUNDARY:** a root's closed [`TrapExitAuthority`] is
+/// supplied at construction. A unit's `slots` value is loaded from that
+/// function's own envelope, so its authority is absent until
+/// [`FunctionLocalRefs::bind_unit_trap_frame`] binds the exact frame.
 #[derive(Clone, Copy)]
 struct ArtifactHelpers<'h> {
     seed_material: &'h seed_material::SeedMaterial,
@@ -452,7 +572,12 @@ impl ArtifactHelpers<'_> {
     /// ⛔ **Call this once per `Function`, and never reuse the result.** The
     /// returned handles are function-scoped; see [`FunctionLocalRefs`] for what
     /// each of the three kinds does when it crosses a function boundary.
-    fn declare_in_func<M: Module>(self, module: &mut M, func: &mut Function) -> FunctionLocalRefs {
+    fn declare_in_func<M: Module>(
+        self,
+        module: &mut M,
+        func: &mut Function,
+        trap_exit: Option<TrapExitAuthority>,
+    ) -> FunctionLocalRefs {
         FunctionLocalRefs {
             seed_material: self.seed_material.declare_in_func(module, func),
             host_dispatch: self
@@ -471,6 +596,9 @@ impl ArtifactHelpers<'_> {
             native_int_intern: Some(module.declare_func_in_func(self.native_int.intern, func)),
             native_int_narrow: Some(module.declare_func_in_func(self.native_int.narrow, func)),
             native_int_export: Some(module.declare_func_in_func(self.native_int.export, func)),
+            native_int_export_parts: Some(
+                module.declare_func_in_func(self.native_int.export_parts, func),
+            ),
             // ⭐ The **one** exact-`Int` decoder, resolved here so the
             // region-limbed spill copies through the landed representation
             // instead of growing a second one.
@@ -480,7 +608,12 @@ impl ArtifactHelpers<'_> {
             // two structs are separate types rather than one with a `reset()`.
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            declaration_calls: BTreeMap::new(),
+            trap_exit,
             terminal_result_origins: BTreeSet::new(),
+            consumed_join_origins: BTreeSet::new(),
+            dispositioned_join_origins: BTreeSet::new(),
+            emission_reachable_match_cases: BTreeMap::new(),
             boundary_carrier: Some(BoundaryCarrierRefs {
                 class: module.declare_func_in_func(self.boundary_value_abi.class, func),
                 tag: module.declare_func_in_func(self.boundary_value_abi.tag, func),
@@ -512,9 +645,22 @@ impl ArtifactHelpers<'_> {
                 store_int_limb: module
                     .declare_func_in_func(self.boundary_value_abi.store_int_limb, func),
                 seal_int: module.declare_func_in_func(self.boundary_value_abi.seal_int, func),
+                int_view: module.declare_func_in_func(self.boundary_value_abi.int_view, func),
             }),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TrapExitAuthority {
+    UnitFrame {
+        slots: cranelift_codegen::ir::Value,
+        trap_offset: i32,
+    },
+    Root {
+        process_sentinel: bool,
+        source_authorized: bool,
+    },
 }
 
 struct FunctionLocalRefs {
@@ -550,6 +696,7 @@ struct FunctionLocalRefs {
     native_int_intern: Option<FuncRef>,
     native_int_narrow: Option<FuncRef>,
     native_int_export: Option<FuncRef>,
+    native_int_export_parts: Option<FuncRef>,
     /// `(arena, tag, payload, out_view) -> status` — the sole exact-`Int`
     /// decoder, `ken_native_int_resolve_local`.
     native_int_resolve: Option<FuncRef>,
@@ -564,10 +711,49 @@ struct FunctionLocalRefs {
     /// reaching an emitted call.
     boundary_carrier: Option<BoundaryCarrierRefs>,
     unit_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    declaration_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    /// The current function's closed trap-exit authority. Absence is an error
+    /// state, never an implicit Root.
+    trap_exit: Option<TrapExitAuthority>,
     /// Source occurrences reached only through the current unit's result
     /// position. Process-exit constructors are normalized only at these
     /// occurrences, never merely because an exit-shaped value appears nested.
     terminal_result_origins: BTreeSet<StaticOriginId>,
+    /// Join-plan entries consumed while defining this function.  Each
+    /// `FunctionLocalRefs` is freshly declared for one generated function, so
+    /// this set cannot alias consumption across unit bodies.
+    consumed_join_origins: BTreeSet<StaticOriginId>,
+    /// Planned joins under source branches proven statically unselected while
+    /// defining this function.
+    ///
+    /// Keeping these separate from consumed joins makes both mismatches loud:
+    /// entering a dead join rejects, while failing to disposition one leaves
+    /// the generated-function closure check red.
+    dispositioned_join_origins: BTreeSet<StaticOriginId>,
+    /// Case indices actually reached while emitting each statically selected
+    /// source `Match`.
+    ///
+    /// Selection may revisit one source occurrence through a recursive
+    /// producer and reach a different case later. We therefore close the dead
+    /// population only after emission, from the union of reached indices,
+    /// rather than treating the first observed constructor as globally final.
+    emission_reachable_match_cases: BTreeMap<StaticOriginId, BTreeSet<usize>>,
+}
+
+impl FunctionLocalRefs {
+    fn bind_unit_trap_frame(
+        &mut self,
+        slots: cranelift_codegen::ir::Value,
+        trap_offset: i32,
+    ) -> Result<(), CraneliftBackendError> {
+        if self.trap_exit.is_some() {
+            return Err(backend_module(
+                "unit trap frame was bound to a function without unit authority".to_string(),
+            ));
+        }
+        self.trap_exit = Some(TrapExitAuthority::UnitFrame { slots, trap_offset });
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -595,6 +781,54 @@ thread_local! {
 }
 
 #[cfg(test)]
+thread_local! {
+    static D8_CARRIED_JOIN_UNCHANGED: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+    static D8_SPECIALIZED_JOIN_PRODUCTIONS: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+    static D8_JOIN_MERGES_CREATED: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+    static D8_JOIN_CONSUMPTION_MUTATION: std::cell::Cell<JoinConsumptionMutation> =
+        const { std::cell::Cell::new(JoinConsumptionMutation::Exact) };
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum JoinConsumptionMutation {
+    Exact,
+    SkipFirst,
+    DuplicateFirst,
+    IncludeStaticallyUnselected,
+    OmitFirstStaticallyUnselectedMatchCase,
+    OmitSourceMachineComputationalMatchSelection,
+}
+
+#[cfg(test)]
+fn reset_d8_join_conversion_counts() {
+    D8_CARRIED_JOIN_UNCHANGED.with(|count| count.set(0));
+    D8_SPECIALIZED_JOIN_PRODUCTIONS.with(|count| count.set(0));
+    D8_JOIN_MERGES_CREATED.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+fn d8_join_conversion_counts() -> (usize, usize) {
+    (
+        D8_CARRIED_JOIN_UNCHANGED.with(std::cell::Cell::get),
+        D8_SPECIALIZED_JOIN_PRODUCTIONS.with(std::cell::Cell::get),
+    )
+}
+
+#[cfg(test)]
+fn d8_join_merge_count() -> usize {
+    D8_JOIN_MERGES_CREATED.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+fn set_d8_join_consumption_mutation(mutation: JoinConsumptionMutation) {
+    D8_JOIN_CONSUMPTION_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
 fn set_host_context_propagation_mutation(mutation: HostContextPropagationMutation) {
     HOST_CONTEXT_PROPAGATION_MUTATION.with(|cell| cell.set(mutation));
 }
@@ -618,6 +852,55 @@ thread_local! {
 #[cfg(test)]
 fn set_process_slot_mutation(mutation: ProcessSlotMutation) {
     PROCESS_SLOT_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TrapFrameBindingMutation {
+    Exact,
+    DeleteUnitLane,
+    MisclassifyUnitAsRoot,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TrapIdentityMutation {
+    Exact,
+    Zero,
+    Substitute,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TrapCallerProtocolMutation {
+    Exact,
+    LeaveStaleTrap,
+    ReadResultBeforeTrap,
+}
+
+#[cfg(test)]
+thread_local! {
+    static TRAP_FRAME_BINDING_MUTATION: std::cell::Cell<TrapFrameBindingMutation> =
+        const { std::cell::Cell::new(TrapFrameBindingMutation::Exact) };
+    static TRAP_IDENTITY_MUTATION: std::cell::Cell<TrapIdentityMutation> =
+        const { std::cell::Cell::new(TrapIdentityMutation::Exact) };
+    static TRAP_CALLER_PROTOCOL_MUTATION: std::cell::Cell<TrapCallerProtocolMutation> =
+        const { std::cell::Cell::new(TrapCallerProtocolMutation::Exact) };
+}
+
+#[cfg(test)]
+fn set_trap_frame_binding_mutation(mutation: TrapFrameBindingMutation) {
+    TRAP_FRAME_BINDING_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
+fn set_trap_identity_mutation(mutation: TrapIdentityMutation) {
+    TRAP_IDENTITY_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
+fn set_trap_caller_protocol_mutation(mutation: TrapCallerProtocolMutation) {
+    TRAP_CALLER_PROTOCOL_MUTATION.with(|cell| cell.set(mutation));
 }
 
 struct Lowering<'a> {
@@ -691,7 +974,7 @@ struct Lowering<'a> {
     /// has already established a **finite acyclic carrier graph** and the call
     /// rides a **declared recursive child edge** — so its measure is strict
     /// descent in that validated graph, ⛔ never compile-time shrinkage.
-    active_carried_computational_eliminations: Vec<StaticOriginId>,
+    active_carried_computational_eliminations: Vec<(StaticOriginId, cranelift_codegen::ir::Block)>,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     consumed_join_sites: BTreeSet<u64>,
     root_terminal_authority: Option<RootTerminalAnswerAuthority>,
@@ -1013,6 +1296,8 @@ struct BoundaryCarrierRefs {
     /// canonical and seal it. ⛔ **Until this succeeds the node denotes
     /// nothing**, so it is the last step of the copy and never optional.
     seal_int: FuncRef,
+    /// `(arena, word, out_view) -> status` — canonical exact-`Int` view.
+    int_view: FuncRef,
 }
 
 /// A value that has crossed into the **operational carrier** — nothing but the
@@ -1301,69 +1586,281 @@ impl<'a> Lowering<'a> {
     pub(super) fn select_terminal_result_origins(
         &mut self,
         origin: StaticOriginId,
-        expr: &RuntimeExpr,
+        _expr: &RuntimeExpr,
     ) -> Result<(), CraneliftBackendError> {
-        fn collect(
-            plan: &StaticTransitionPlan<'_>,
-            origin: StaticOriginId,
-            expr: &RuntimeExpr,
-            selected: &mut BTreeSet<StaticOriginId>,
-        ) -> Result<(), CraneliftBackendError> {
-            selected.insert(origin);
-            let result_child = |position| plan.child_static_origin(origin, position);
-            match expr {
-                RuntimeExpr::CheckedJoinSite { body, .. }
-                | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
-                | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
-                | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
-                | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
-                    collect(plan, result_child(0)?, body, selected)?;
-                }
-                RuntimeExpr::Let { body, .. } => {
-                    collect(plan, result_child(1)?, body, selected)?;
-                }
-                RuntimeExpr::If {
-                    then_expr,
-                    else_expr,
-                    ..
-                } => {
-                    collect(plan, result_child(1)?, then_expr, selected)?;
-                    collect(plan, result_child(2)?, else_expr, selected)?;
-                }
-                RuntimeExpr::Match { cases, .. } => {
-                    for (index, case) in cases.iter().enumerate() {
-                        collect(plan, result_child(1 + index)?, &case.body, selected)?;
-                    }
-                }
-                RuntimeExpr::ComputationalMatch { cases, .. } => {
-                    for (index, case) in cases.iter().enumerate() {
-                        collect(plan, result_child(1 + index)?, &case.body, selected)?;
-                    }
-                }
-                RuntimeExpr::Value(_)
-                | RuntimeExpr::Var(_)
-                | RuntimeExpr::PrimitiveCall { .. }
-                | RuntimeExpr::Construct { .. }
-                | RuntimeExpr::Record { .. }
-                | RuntimeExpr::Project { .. }
-                | RuntimeExpr::Closure { .. }
-                | RuntimeExpr::LexicalClosure { .. }
-                | RuntimeExpr::DeclarationRef { .. }
-                | RuntimeExpr::ImportedDeclarationRef { .. }
-                | RuntimeExpr::Call { .. }
-                | RuntimeExpr::Effect { .. }
-                | RuntimeExpr::Trap(_) => {}
-            }
-            Ok(())
-        }
+        self.function_local.terminal_result_origins = self
+            .static_transition_plan
+            .source_result_origins_in_owner_subtree(origin)?;
+        Ok(())
+    }
 
-        self.function_local.terminal_result_origins.clear();
-        collect(
-            &self.static_transition_plan,
-            origin,
-            expr,
-            &mut self.function_local.terminal_result_origins,
-        )
+    /// Take the pre-emission result contract for this exact source join.
+    ///
+    /// Consumption is recorded before a merge block can be created. A second
+    /// call to this method in one generated function is therefore a planner /
+    /// lowering disagreement. Legitimate traversal re-entry goes through
+    /// [`Self::enter_source_occurrence_plan`] and only reborrows the token.
+    fn consume_join_plan(
+        &mut self,
+        origin: StaticOriginId,
+    ) -> Result<JoinPlanToken, CraneliftBackendError> {
+        let token = self.static_transition_plan.join_plan_token(origin)?;
+        if token.origin != origin {
+            return Err(backend_module(
+                "source join consumed a result plan for a different origin".to_string(),
+            ));
+        }
+        #[cfg(test)]
+        match D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get) {
+            JoinConsumptionMutation::Exact => {}
+            JoinConsumptionMutation::SkipFirst
+                if self.function_local.consumed_join_origins.is_empty() =>
+            {
+                return Ok(token);
+            }
+            JoinConsumptionMutation::DuplicateFirst
+                if self.function_local.consumed_join_origins.is_empty() =>
+            {
+                self.function_local.consumed_join_origins.insert(origin);
+            }
+            JoinConsumptionMutation::SkipFirst
+            | JoinConsumptionMutation::DuplicateFirst
+            | JoinConsumptionMutation::IncludeStaticallyUnselected
+            | JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase
+            | JoinConsumptionMutation::OmitSourceMachineComputationalMatchSelection => {}
+        }
+        if self
+            .function_local
+            .dispositioned_join_origins
+            .contains(&origin)
+        {
+            return Err(backend_module(
+                "statically unselected source join reached emission".to_string(),
+            ));
+        }
+        if !self.function_local.consumed_join_origins.insert(origin) {
+            return Err(backend_module(
+                "one source join consumed its static result plan more than once".to_string(),
+            ));
+        }
+        Ok(token)
+    }
+
+    /// Disposition every planned join in a statically unselected source branch.
+    ///
+    /// The planner derives the subtree from its validated positional-child
+    /// inventory and stops at declared-unit owner boundaries. Lowering supplies
+    /// only the exact branch root it proved dead; it maintains no second source
+    /// spelling inventory.
+    fn disposition_statically_unselected_source_subtree(
+        &mut self,
+        root: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        #[cfg(test)]
+        if D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get)
+            == JoinConsumptionMutation::IncludeStaticallyUnselected
+        {
+            return Ok(());
+        }
+        let joins = self
+            .static_transition_plan
+            .source_join_origins_in_owner_subtree(root)?;
+        for origin in joins {
+            if self.function_local.consumed_join_origins.contains(&origin) {
+                return Err(backend_module(format!(
+                    "emitted source join {origin:?} was later dispositioned as statically \
+                         unselected"
+                )));
+            }
+            self.function_local
+                .dispositioned_join_origins
+                .insert(origin);
+        }
+        Ok(())
+    }
+
+    /// Record one case reached by static `Match` selection.
+    ///
+    /// `Match` lays its validated positional children out as the scrutinee
+    /// followed by every case body. The complete root population comes from the
+    /// planner's checked child inventory; lowering supplies only the reached
+    /// case index. An empty selection records the default/no-match route.
+    ///
+    /// This deliberately defers disposition until generated-function closure.
+    /// A recursive producer can revisit the same source occurrence and select a
+    /// second case, so the emission-reachable population is the union of every
+    /// observed selection, not the first constructor seen.
+    fn disposition_statically_unselected_match_cases(
+        &mut self,
+        match_origin: StaticOriginId,
+        selected_case: Option<usize>,
+    ) -> Result<(), CraneliftBackendError> {
+        let case_count = self
+            .static_transition_plan
+            .source_match_case_body_origins(match_origin)?
+            .len();
+        if selected_case.is_some_and(|index| index >= case_count) {
+            return Err(backend_module(
+                "selected source Match case is outside the validated child population".to_string(),
+            ));
+        }
+        let reached = self
+            .function_local
+            .emission_reachable_match_cases
+            .entry(match_origin)
+            .or_default();
+        if let Some(index) = selected_case {
+            reached.insert(index);
+        }
+        Ok(())
+    }
+
+    /// Record a specialized/default selection made after the source-machine
+    /// continuation resumes a computational match.
+    ///
+    /// The separate seam is test-visible because an initial constructor
+    /// selection and a recursive revisit use different lowering routes. A
+    /// mutation must be able to remove only the revisit edge while preserving
+    /// the initial population entry and the generated-function closure check.
+    fn record_source_machine_computational_match_selection(
+        &mut self,
+        match_origin: StaticOriginId,
+        selected_case: Option<usize>,
+    ) -> Result<(), CraneliftBackendError> {
+        #[cfg(test)]
+        if D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get)
+            == JoinConsumptionMutation::OmitSourceMachineComputationalMatchSelection
+        {
+            return Ok(());
+        }
+        self.disposition_statically_unselected_match_cases(match_origin, selected_case)
+    }
+
+    /// Close every recorded static `Match` selection against its validated
+    /// positional-child population.
+    fn close_statically_unselected_match_cases(&mut self) -> Result<(), CraneliftBackendError> {
+        let reached = self
+            .function_local
+            .emission_reachable_match_cases
+            .iter()
+            .map(|(origin, cases)| (*origin, cases.clone()))
+            .collect::<Vec<_>>();
+        for (match_origin, reached_cases) in reached {
+            let case_bodies = self
+                .static_transition_plan
+                .source_match_case_body_origins(match_origin)?;
+            #[cfg(test)]
+            let mut omitted_for_mutation = false;
+            for (index, root) in case_bodies.into_iter().enumerate() {
+                if reached_cases.contains(&index) {
+                    continue;
+                }
+                #[cfg(test)]
+                if !omitted_for_mutation
+                    && D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get)
+                        == JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase
+                {
+                    omitted_for_mutation = true;
+                    continue;
+                }
+                self.disposition_statically_unselected_source_subtree(root)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Enter one planned source occurrence on any lowering traversal.
+    ///
+    /// A recursive source-machine route may revisit the same occurrence while
+    /// emitting one function. That is a reborrow of its already-consumed
+    /// contract, not a second population member.
+    fn enter_source_occurrence_plan(
+        &mut self,
+        origin: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        if self
+            .static_transition_plan
+            .join_plan_token_if_planned(origin)?
+            .is_none()
+        {
+            return Ok(());
+        }
+        if self.function_local.consumed_join_origins.contains(&origin) {
+            self.consumed_join_plan_token(origin)?;
+        } else if self
+            .function_local
+            .dispositioned_join_origins
+            .contains(&origin)
+        {
+            return Err(backend_module(
+                "statically unselected source join reached emission".to_string(),
+            ));
+        } else {
+            self.consume_join_plan(origin)?;
+        }
+        Ok(())
+    }
+
+    /// Reborrow a contract after the source traversal has consumed it.
+    ///
+    /// Merge helpers may be reached long after a computational eliminator was
+    /// installed. They do not constitute another source occurrence and must
+    /// therefore neither mint nor consume a second contract.
+    fn consumed_join_plan_token(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<JoinPlanToken, CraneliftBackendError> {
+        if !self.function_local.consumed_join_origins.contains(&origin) {
+            return Err(backend_module(format!(
+                "source join {origin:?} requested its static result plan before consumption",
+            )));
+        }
+        self.static_transition_plan.join_plan_token(origin)
+    }
+
+    /// Close AC-14 at the generated-function boundary.
+    ///
+    /// Duplicate consumption already rejects at [`Self::consume_join_plan`].
+    /// This equality supplies the missing other direction: every join in the
+    /// planner's closed owner partition must either be reached exactly once by
+    /// emission or be structurally dispositioned under a statically unselected
+    /// branch, and no join owned by another function may appear here.
+    fn validate_join_plan_consumption(
+        &mut self,
+        function: PredeclaredFunctionId,
+    ) -> Result<(), CraneliftBackendError> {
+        self.close_statically_unselected_match_cases()?;
+        let required = self
+            .static_transition_plan
+            .required_join_origins(function)?;
+        if let Some(origin) = self
+            .function_local
+            .consumed_join_origins
+            .intersection(&self.function_local.dispositioned_join_origins)
+            .next()
+        {
+            return Err(backend_module(format!(
+                "source join {origin:?} was both emitted and statically unselected",
+            )));
+        }
+        let mut covered = self.function_local.consumed_join_origins.clone();
+        covered.extend(
+            self.function_local
+                .dispositioned_join_origins
+                .iter()
+                .copied(),
+        );
+        if let Some(origin) = covered.difference(&required).next() {
+            return Err(backend_module(format!(
+                "source join {origin:?} was classified outside its owning function",
+            )));
+        }
+        if let Some(origin) = required.difference(&covered).next() {
+            return Err(backend_module(format!(
+                "function left planned source join {origin:?} neither emitted nor statically unselected",
+            )));
+        }
+        Ok(())
     }
 
     pub(super) fn call_declared_unit(
@@ -1371,8 +1868,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         body_origin: StaticOriginId,
         inputs: &[LoweringOperand],
-        #[cfg(test)]
-        launch_ingress: Option<cranelift_codegen::ir::Value>,
+        #[cfg(test)] launch_ingress: Option<cranelift_codegen::ir::Value>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let target = self
             .function_local
@@ -1384,12 +1880,54 @@ impl<'a> Lowering<'a> {
                     "retained body has no graph-derived call target in this unit".to_string(),
                 )
             })?;
+        self.call_declared_unit_target(
+            builder,
+            target,
+            inputs,
+            #[cfg(test)]
+            launch_ingress,
+        )
+    }
+
+    fn call_declared_declaration_unit(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        reference_origin: StaticOriginId,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let target = self
+            .function_local
+            .declaration_calls
+            .get(&reference_origin)
+            .cloned()
+            .ok_or_else(|| {
+                backend_module(
+                    "DeclarationRef has no planner-derived declaration call target".to_string(),
+                )
+            })?;
+        self.call_declared_unit_target(
+            builder,
+            target,
+            &[],
+            #[cfg(test)]
+            None,
+        )
+    }
+
+    fn call_declared_unit_target(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: units::DeclaredUnitCall,
+        inputs: &[LoweringOperand],
+        #[cfg(test)] launch_ingress: Option<cranelift_codegen::ir::Value>,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
         let payload = builder.create_sized_stack_slot(StackSlotData::new(
             StackSlotKind::ExplicitSlot,
             target.header.frame_bytes,
             3,
         ));
         let mut input = 0usize;
+        let mut result_offset = None;
+        let mut trap_offset = None;
         for (slot, offset) in target.slots.iter().zip(&target.offsets) {
             let offset = i32::try_from(*offset).map_err(|_| {
                 backend_module("callee slot offset exceeds addressable range".to_string())
@@ -1402,17 +1940,45 @@ impl<'a> Lowering<'a> {
                     let word = match value {
                         LoweringOperand::Carried(word) => word.word,
                         LoweringOperand::Specialized(value) => {
-                            self.transfer_into_carrier(builder, body_origin, value)?.word
+                            self.transfer_into_carrier(builder, target.origin, value)?
+                                .word
                         }
                     };
                     builder.ins().stack_store(word, payload, offset);
                     input += 1;
                 }
-                AbiSlotKind::Control | AbiSlotKind::Trap | AbiSlotKind::Store => {
+                AbiSlotKind::Control | AbiSlotKind::Store => {
                     let zero = builder.ins().iconst(types::I64, 0);
                     builder.ins().stack_store(zero, payload, offset);
                 }
-                AbiSlotKind::Result => {}
+                AbiSlotKind::Trap => {
+                    #[cfg(test)]
+                    let zero = match TRAP_CALLER_PROTOCOL_MUTATION
+                        .with(std::cell::Cell::get)
+                    {
+                        TrapCallerProtocolMutation::LeaveStaleTrap => {
+                            builder.ins().iconst(types::I64, 1)
+                        }
+                        TrapCallerProtocolMutation::Exact
+                        | TrapCallerProtocolMutation::ReadResultBeforeTrap => {
+                            builder.ins().iconst(types::I64, 0)
+                        }
+                    };
+                    #[cfg(not(test))]
+                    let zero = builder.ins().iconst(types::I64, 0);
+                    builder.ins().stack_store(zero, payload, offset);
+                    trap_offset = Some(offset);
+                }
+                AbiSlotKind::Result => {
+                    #[cfg(test)]
+                    if TRAP_CALLER_PROTOCOL_MUTATION.with(std::cell::Cell::get)
+                        == TrapCallerProtocolMutation::ReadResultBeforeTrap
+                    {
+                        let false_word = builder.ins().iconst(types::I64, 0);
+                        builder.ins().stack_store(false_word, payload, offset);
+                    }
+                    result_offset = Some(offset);
+                }
             }
         }
         if input != inputs.len() {
@@ -1457,25 +2023,17 @@ impl<'a> Lowering<'a> {
         } else {
             HOST_CONTEXT_PROPAGATION_MUTATION.with(|cell| match cell.get() {
                 HostContextPropagationMutation::Exact => exact_host_dispatch_context,
-                HostContextPropagationMutation::ServicesPointer
-                    if launch_ingress.is_none() =>
-                {
+                HostContextPropagationMutation::ServicesPointer if launch_ingress.is_none() => {
                     services
                 }
-                HostContextPropagationMutation::NativeIntArena
-                    if launch_ingress.is_none() =>
-                {
-                    self.function_local
-                        .native_int_arena
-                        .expect("unit native-int arena is bound")
-                }
-                HostContextPropagationMutation::BoundaryArena
-                    if launch_ingress.is_none() =>
-                {
-                    self.function_local
-                        .boundary_arena
-                        .expect("unit boundary arena is bound")
-                }
+                HostContextPropagationMutation::NativeIntArena if launch_ingress.is_none() => self
+                    .function_local
+                    .native_int_arena
+                    .expect("unit native-int arena is bound"),
+                HostContextPropagationMutation::BoundaryArena if launch_ingress.is_none() => self
+                    .function_local
+                    .boundary_arena
+                    .expect("unit boundary arena is bound"),
                 HostContextPropagationMutation::Null if launch_ingress.is_none() => {
                     builder.ins().iconst(pointer_type, 0)
                 }
@@ -1496,15 +2054,93 @@ impl<'a> Lowering<'a> {
             crate::activation_services::UNIT_CALL_FRAME_HOST_DISPATCH_CONTEXT,
         );
         let envelope = builder.ins().stack_addr(pointer_type, envelope, 0);
-        let call = builder
-            .ins()
-            .call(target.function, &[envelope, services]);
-        let [word] = builder.inst_results(call) else {
+        let call = builder.ins().call(target.function, &[envelope, services]);
+        let [unit_status] = builder.inst_results(call) else {
             return Err(backend_module(
                 "internal unit call did not return exactly one word".to_string(),
             ));
         };
-        Ok(LoweringOperand::Carried(CarriedBoundaryWord { word: *word }))
+        let unit_status = *unit_status;
+        let failed = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+            unit_status,
+            0,
+        );
+        let failure_block = builder.create_block();
+        let trap_check_block = builder.create_block();
+        builder
+            .ins()
+            .brif(failed, failure_block, &[], trap_check_block, &[]);
+        builder.switch_to_block(failure_block);
+        builder.ins().return_(&[unit_status]);
+        builder.seal_block(failure_block);
+        builder.switch_to_block(trap_check_block);
+        builder.seal_block(trap_check_block);
+        let trap_offset = trap_offset.ok_or_else(|| {
+            backend_module("callee frame declares no trap slot".to_string())
+        })?;
+        let result_offset = result_offset.ok_or_else(|| {
+            backend_module("callee frame declares no result slot".to_string())
+        })?;
+        #[cfg(test)]
+        if TRAP_CALLER_PROTOCOL_MUTATION.with(std::cell::Cell::get)
+            == TrapCallerProtocolMutation::ReadResultBeforeTrap
+        {
+            let word = builder.ins().stack_load(types::I64, payload, result_offset);
+            return Ok(LoweringOperand::Carried(CarriedBoundaryWord { word }));
+        }
+        let trap_word = builder.ins().stack_load(types::I64, payload, trap_offset);
+        let trapped = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+            trap_word,
+            0,
+        );
+        let trap_block = builder.create_block();
+        let result_block = builder.create_block();
+        builder.ins().brif(trapped, trap_block, &[], result_block, &[]);
+        builder.switch_to_block(trap_block);
+        match self.function_local.trap_exit {
+            Some(TrapExitAuthority::UnitFrame { slots, trap_offset }) => {
+                builder
+                    .ins()
+                    .store(MemFlags::trusted(), trap_word, slots, trap_offset);
+                let no_result = builder.ins().iconst(types::I64, 0);
+                builder.ins().return_(&[no_result]);
+            }
+            Some(TrapExitAuthority::Root {
+                process_sentinel: true,
+                ..
+            }) => {
+                let process_trap = builder.ins().iconst(types::I64, -4);
+                builder.ins().return_(&[process_trap]);
+            }
+            Some(TrapExitAuthority::Root {
+                process_sentinel: false,
+                ..
+            }) => {
+                let shifted = builder.ins().ishl_imm(
+                    trap_word,
+                    crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_SHIFT,
+                );
+                let root_token = builder.ins().bor_imm(
+                    shifted,
+                    crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_TAG,
+                );
+                builder.ins().return_(&[root_token]);
+            }
+            None => {
+                return Err(backend_module(
+                    "trap branch has no generated-unit TrapWord lane".to_string(),
+                ));
+            }
+        }
+        builder.seal_block(trap_block);
+        builder.switch_to_block(result_block);
+        builder.seal_block(result_block);
+        let word = builder.ins().stack_load(types::I64, payload, result_offset);
+        Ok(LoweringOperand::Carried(CarriedBoundaryWord {
+            word,
+        }))
     }
 
     /// The recursive emission step. ⛔ Private, and ⛔ never the entry point —
@@ -1542,7 +2178,10 @@ impl<'a> Lowering<'a> {
             // the tag and the spill class, so the only thing that differs
             // between them is where the payload word and its `NativeIntV1`
             // marker come from.
-            Lowered::Int { value: payload, known } => {
+            Lowered::Int {
+                value: payload,
+                known,
+            } => {
                 let (tag, spill) = Self::carrier_spillable_disposition(value)?;
                 // ⛔ The marker travels with the payload; see
                 // `carrier_small_marker` for why this is not a constant.
@@ -1683,11 +2322,7 @@ impl<'a> Lowering<'a> {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
                 let word = self.emit_carrier_alloc(builder, tag, class, 1)?;
                 self.emit_carrier_store_scalar(builder, word, *pointer)?;
-                let len = self.emit_carrier_immediate(
-                    builder,
-                    BoundaryTag::ImmediateInt,
-                    *len,
-                )?;
+                let len = self.emit_carrier_immediate(builder, BoundaryTag::ImmediateInt, *len)?;
                 self.emit_carrier_store_field(builder, word, 0, len)?;
                 Ok(word)
             }
@@ -1885,7 +2520,10 @@ impl<'a> Lowering<'a> {
     fn carrier_out_slot(
         builder: &mut FunctionBuilder<'_>,
         pointer_type: types::Type,
-    ) -> (cranelift_codegen::ir::StackSlot, cranelift_codegen::ir::Value) {
+    ) -> (
+        cranelift_codegen::ir::StackSlot,
+        cranelift_codegen::ir::Value,
+    ) {
         let slot =
             builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
         let address = builder.ins().stack_addr(pointer_type, slot, 0);
@@ -2105,7 +2743,10 @@ impl<'a> Lowering<'a> {
             cranelift_codegen::ir::condcodes::IntCC::Equal,
             marker,
             i64::try_from(crate::NATIVE_INT_SMALL_TAG_V1).map_err(|_| {
-                unsupported("BoundaryCarrier", "the native `Small` marker is not an ABI word")
+                unsupported(
+                    "BoundaryCarrier",
+                    "the native `Small` marker is not an ABI word",
+                )
             })?,
         );
         let small_block = builder.create_block();
@@ -2115,7 +2756,8 @@ impl<'a> Lowering<'a> {
         builder.ins().brif(small, small_block, &[], wide_block, &[]);
 
         builder.switch_to_block(small_block);
-        let immediate = self.emit_carrier_spillable_immediate(builder, tag, spill, payload, marker)?;
+        let immediate =
+            self.emit_carrier_spillable_immediate(builder, tag, spill, payload, marker)?;
         builder.ins().jump(join, &[immediate.word.into()]);
 
         builder.switch_to_block(wide_block);
@@ -2165,7 +2807,10 @@ impl<'a> Lowering<'a> {
             builder,
             marker,
             i64::try_from(crate::NATIVE_INT_BIG_TAG_V1).map_err(|_| {
-                unsupported("BoundaryCarrier", "the native `Big` marker is not an ABI word")
+                unsupported(
+                    "BoundaryCarrier",
+                    "the native `Big` marker is not an ABI word",
+                )
             })?,
         );
 
@@ -2207,12 +2852,18 @@ impl<'a> Lowering<'a> {
             .ins()
             .call(decoder, &[native_arena, marker, payload, view]);
         Self::require_i64(builder, builder.inst_results(decoded)[0], 0);
-        let sign = builder
-            .ins()
-            .load(types::I64, MemFlags::trusted(), view, crate::native_int_clif::VIEW_SIGN);
-        let length = builder
-            .ins()
-            .load(types::I64, MemFlags::trusted(), view, crate::native_int_clif::VIEW_LEN);
+        let sign = builder.ins().load(
+            types::I64,
+            MemFlags::trusted(),
+            view,
+            crate::native_int_clif::VIEW_SIGN,
+        );
+        let length = builder.ins().load(
+            types::I64,
+            MemFlags::trusted(),
+            view,
+            crate::native_int_clif::VIEW_LEN,
+        );
         let source = builder.ins().load(
             pointer_type,
             MemFlags::trusted(),
@@ -2236,9 +2887,10 @@ impl<'a> Lowering<'a> {
             .call(refs.store_int_tag, &[arena, word.word, region]);
         Self::require_i64(builder, builder.inst_results(marked)[0], BOUNDARY_OK);
         let (_span_slot, span) = Self::carrier_out_slot(builder, pointer_type);
-        let claim = builder
-            .ins()
-            .call(refs.store_int_limbs, &[arena, word.word, sign, length, span]);
+        let claim = builder.ins().call(
+            refs.store_int_limbs,
+            &[arena, word.word, sign, length, span],
+        );
         Self::require_i64(builder, builder.inst_results(claim)[0], BOUNDARY_OK);
 
         let head = builder.create_block();
@@ -2410,19 +3062,13 @@ impl<'a> Lowering<'a> {
             builder.ins().brif(matches, selected, &[], next, &[]);
 
             builder.switch_to_block(selected);
-            let disposition =
-                Lowered::DynamicConstructor(DynamicConstructorV1 {
-                    discriminator: dynamic.discriminator,
-                    alternatives: vec![alternative.clone()],
-                });
+            let disposition = Lowered::DynamicConstructor(DynamicConstructorV1 {
+                discriminator: dynamic.discriminator,
+                alternatives: vec![alternative.clone()],
+            });
             let (tag, class) = Self::carrier_handle_disposition(&disposition)?;
-            let word =
-                self.emit_carrier_alloc(builder, tag, class, alternative.fields.len())?;
-            self.emit_carrier_store_tag_id(
-                builder,
-                word,
-                alternative.identity.tag_abi_word()?,
-            )?;
+            let word = self.emit_carrier_alloc(builder, tag, class, alternative.fields.len())?;
+            self.emit_carrier_store_tag_id(builder, word, alternative.identity.tag_abi_word()?)?;
             for (position, field) in alternative.fields.iter().enumerate() {
                 let field = self.emit_carrier_transfer(builder, origin, field)?;
                 self.emit_carrier_store_field(builder, word, position, field)?;
@@ -2573,6 +3219,77 @@ impl<'a> Lowering<'a> {
         let call = builder.ins().call(refs.scalar, &[arena, target.word, out]);
         Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
         Ok(builder.ins().stack_load(types::I64, slot, 0))
+    }
+
+    /// Project the object entry's public scalar result.
+    ///
+    /// Immediate carrier words expose their payload through the ordinary
+    /// scalar helper. A persistent exact `Int` instead owns a magnitude in the
+    /// boundary region; export that magnitude through the native-`Int`
+    /// interner/exporter pair so the object launcher observes the same decimal
+    /// value as the direct lowering path.
+    pub(super) fn emit_public_carrier_scalar(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let refs = self.carrier_refs()?;
+        let boundary_arena = self.carrier_arena()?;
+        let native_arena = self.function_local.native_int_arena.ok_or_else(|| {
+            unsupported("NativeResult", "carried Int result has no invocation arena")
+        })?;
+        let export_parts = self
+            .function_local
+            .native_int_export_parts
+            .ok_or_else(|| unsupported("NativeResult", "carried Int has no export function"))?;
+        let pointer_type = builder.func.dfg.value_type(boundary_arena);
+
+        let tag = builder.ins().band_imm(
+            target.word,
+            crate::boundary_value::BOUNDARY_TAG_MASK as i64,
+        );
+        let persistent = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            tag,
+            crate::boundary_value::BoundaryTag::PersistentGround as i64,
+        );
+        let exact_int = builder.create_block();
+        let immediate = builder.create_block();
+        let done = builder.create_block();
+        builder.append_block_param(done, types::I64);
+        builder
+            .ins()
+            .brif(persistent, exact_int, &[], immediate, &[]);
+
+        builder.switch_to_block(exact_int);
+        let view_slot = builder.create_sized_stack_slot(
+            cranelift_codegen::ir::StackSlotData::new(
+                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                24,
+                3,
+            ),
+        );
+        let view = builder.ins().stack_addr(pointer_type, view_slot, 0);
+        let call = builder
+            .ins()
+            .call(refs.int_view, &[boundary_arena, target.word, view]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        let sign = builder.ins().stack_load(types::I64, view_slot, 0);
+        let len = builder.ins().stack_load(types::I64, view_slot, 8);
+        let limbs = builder.ins().stack_load(pointer_type, view_slot, 16);
+        let call = builder
+            .ins()
+            .call(export_parts, &[native_arena, sign, limbs, len]);
+        Self::require_i64(builder, builder.inst_results(call)[0], 0);
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().jump(done, &[zero.into()]);
+
+        builder.switch_to_block(immediate);
+        let scalar = self.emit_carrier_scalar(builder, target)?;
+        builder.ins().jump(done, &[scalar.into()]);
+
+        builder.switch_to_block(done);
+        Ok(builder.block_params(done)[0])
     }
 
     /// `field_count(arena, word, out) -> status` — the child count a case's
@@ -3957,9 +4674,9 @@ impl<'a> Lowering<'a> {
                     constructor: constructor.clone(),
                     identity: self
                         .static_transition_plan
-                        .synthesized_constructor_identity(
-                            SynthesizedConstructorRole::IoError(*role),
-                        )?,
+                        .synthesized_constructor_identity(SynthesizedConstructorRole::IoError(
+                            *role,
+                        ))?,
                     fields: (tag == last)
                         .then(|| vec![payload.clone()])
                         .unwrap_or_default(),
@@ -4048,7 +4765,8 @@ fn materialize_dynamic_constructor_env(
 fn console_stream_tag(value: &Lowered) -> Option<i64> {
     let Lowered::Constructor {
         constructor, args, ..
-    } = value else {
+    } = value
+    else {
         return None;
     };
     if !args.is_empty() {
@@ -4067,7 +4785,8 @@ fn console_stream_tag(value: &Lowered) -> Option<i64> {
 fn create_policy_tag(value: &Lowered) -> Option<i64> {
     let Lowered::Constructor {
         constructor, args, ..
-    } = value else {
+    } = value
+    else {
         return None;
     };
     if !args.is_empty() {
@@ -4086,7 +4805,8 @@ fn create_policy_tag(value: &Lowered) -> Option<i64> {
 fn resource_open_mode_tag(value: &Lowered) -> Option<i64> {
     let Lowered::Constructor {
         constructor, args, ..
-    } = value else {
+    } = value
+    else {
         return None;
     };
     if constructor.ends_with("::ResourceRead") && args.is_empty() {
@@ -4102,7 +4822,8 @@ fn resource_open_mode_tag(value: &Lowered) -> Option<i64> {
 fn lowered_char_list(value: &Lowered) -> Option<Vec<u8>> {
     let Lowered::Constructor {
         constructor, args, ..
-    } = value else {
+    } = value
+    else {
         return None;
     };
     if constructor.ends_with("::Nil") && args.is_empty() {
@@ -4185,6 +4906,7 @@ struct PendingLetContinuationFrame<'a> {
     /// `child(call_origin, 1 + i)`.
     call_origin: StaticOriginId,
     env: &'a [LoweringOperand],
+    recursive_unit_body: Option<StaticOriginId>,
 }
 #[derive(Clone, Copy)]
 struct ActiveContinuationFrame<'a> {
@@ -4226,6 +4948,11 @@ struct RecursorInvocationSegment {
     resume_cursor: ContinuationCursorId,
     checked_invocation: Option<CheckedRecursiveInvocationInstance>,
     computational_ih_slot_template_id: Option<u64>,
+    /// The declared retained-body unit for a callable recursive position.
+    ///
+    /// `None` is the ordinary structural-data IH: it resumes the eliminator
+    /// over its carried value and accepts no source arguments.
+    recursive_unit_body: Option<StaticOriginId>,
     /// Inert handles into `Lowering::dynamic_splice_edges`. Cloning a lowered
     /// recursor can copy a handle, but only one clone can consume the unique
     /// compiler-owned edge; every replay rejects before CFG.
@@ -4411,6 +5138,7 @@ impl RecursorInvocationSegment {
             resume_cursor,
             checked_invocation,
             computational_ih_slot_template_id,
+            recursive_unit_body: None,
             dynamic_splice_edges: Vec::new(),
             open_control_obligations,
         }
@@ -5426,6 +6154,8 @@ struct SourceJoinTarget<'a> {
     block: cranelift_codegen::ir::Block,
     expected_outer: ContinuationCursorId,
     required_kind: ScalarMergeKind,
+    join_plan: std::rc::Rc<JoinPlanToken>,
+    result_origin: StaticOriginId,
     terminal_active_prefix: Vec<EliminatorFrame<'a>>,
 }
 /// An affine capability for one mutually exclusive predecessor of a checked
@@ -5754,8 +6484,11 @@ fn reaches_environment_computational_recursor(
         .iter()
         .enumerate()
         .filter_map(|(index, value)| {
-            matches!(value, LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure { .. }))
-                .then_some(index + introduced_binders)
+            matches!(
+                value,
+                LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure { .. })
+            )
+            .then_some(index + introduced_binders)
         })
         .collect();
     produces_deforestable_aggregate_with_ih(expr, &recursive_hypotheses)
@@ -6550,7 +7283,12 @@ impl<'a> Lowering<'a> {
             &SourceSelectedContinuation<'_>,
             &[SourceSelectedContinuation<'_>],
         )>,
+        recursive_unit_body: Option<StaticOriginId>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let recursive_unit_body = recursive_unit_body.or_else(|| match &recursive {
+            LoweringOperand::Specialized(Lowered::Closure { body, .. }) => Some(*body),
+            LoweringOperand::Specialized(_) | LoweringOperand::Carried(_) => None,
+        });
         let (residual, payload) = decompose_computational_recursor(recursive);
         let active_instance = self.active_recursive_invocations.last().copied();
         // ⛔ **The frame identity is TRANSPORTED, never inferred**
@@ -6598,6 +7336,10 @@ impl<'a> Lowering<'a> {
             .as_ref()
             .and_then(|(_, invocation)| invocation.checked_invocation)
             .or(active_instance);
+        let segment_recursive_unit_body = payload
+            .as_ref()
+            .and_then(|(_, invocation)| invocation.recursive_unit_body)
+            .or(recursive_unit_body);
         let segment_dynamic_splice_edges = payload
             .as_ref()
             .map(|(_, invocation)| invocation.dynamic_splice_edges.clone())
@@ -6715,12 +7457,15 @@ impl<'a> Lowering<'a> {
             segment_checked_invocation,
             computational_ih_slot_template_id,
         );
+        invocation.recursive_unit_body = segment_recursive_unit_body;
         invocation.dynamic_splice_edges = segment_dynamic_splice_edges;
-        Ok(LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure {
-            residual: Box::new(residual),
-            activation,
-            invocation,
-        }))
+        Ok(LoweringOperand::Specialized(
+            Lowered::ComputationalRecursorClosure {
+                residual: Box::new(residual),
+                activation,
+                invocation,
+            },
+        ))
     }
 
     /// ⭐ **A JOIN — `§2h` calls branch/join forwarding phase-bearing, so the
@@ -6734,9 +7479,15 @@ impl<'a> Lowering<'a> {
     fn merge_branch_value(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        join_plan: &JoinPlanToken,
         lowered: LoweringOperand,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, bool), CraneliftBackendError> {
+        if join_plan.representation != JoinResultRepresentation::NativeScalarPair {
+            return Err(backend_module(
+                "carrier-result join reached a native-only branch merge consumer".to_string(),
+            ));
+        }
         let lowered = lowered.specialized_join_arm(construct)?;
         let checked_root_exit_representation = self.has_checked_root_exit_representation();
         let lowered = if checked_root_exit_representation {
@@ -6785,10 +7536,108 @@ impl<'a> Lowering<'a> {
     fn merge_scalar_branch(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        join_plan: &JoinPlanToken,
         lowered: LoweringOperand,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
+        if join_plan.representation != JoinResultRepresentation::NativeScalarPair {
+            return Err(backend_module(
+                "carrier-result join reached a native-only scalar merge consumer".to_string(),
+            ));
+        }
+        self.merge_scalar_operand(builder, lowered, None, construct)
+    }
+
+    /// Consume one scalar-valued operand at a private typed CFG boundary.
+    ///
+    /// The surrounding source join may use `CarrierWord` storage. Once the
+    /// consumer has established the scalar kind from a specialized arm, a
+    /// carried sibling can be decoded back to that exact kind without changing
+    /// constructor meaning. This is intentionally separate from
+    /// [`Self::merge_scalar_branch`]: callers that own an ordinary source join
+    /// must still obey its planned representation.
+    fn merge_scalar_operand(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        lowered: LoweringOperand,
+        required_kind: Option<ScalarMergeKind>,
+        construct: &'static str,
+    ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
+        if let LoweringOperand::Carried(word) = lowered {
+            let required_kind = required_kind.ok_or_else(|| {
+                backend_module(
+                    "a carried scalar reached an untyped private merge consumer".to_string(),
+                )
+            })?;
+            let boundary_tag = builder
+                .ins()
+                .band_imm(word.word, crate::boundary_value::BOUNDARY_TAG_MASK as i64);
+            let (expected_tag, native_tag) = match required_kind {
+                ScalarMergeKind::Int => (
+                    BoundaryTag::ImmediateInt,
+                    Self::carrier_small_marker(builder),
+                ),
+                ScalarMergeKind::Bool => (
+                    BoundaryTag::ImmediateBool,
+                    builder.ins().iconst(types::I64, 0),
+                ),
+                ScalarMergeKind::StructuralNat => (
+                    BoundaryTag::ImmediateStructuralNat,
+                    builder.ins().iconst(types::I64, 0),
+                ),
+                ScalarMergeKind::ExitCode => (
+                    BoundaryTag::ImmediateExitStatus,
+                    builder.ins().iconst(types::I64, 0),
+                ),
+                ScalarMergeKind::RecursiveBackedge => {
+                    return Err(unsupported(
+                        construct,
+                        "a carried word cannot mint a recursive-backedge control marker",
+                    ));
+                }
+            };
+            Self::require_i64(builder, boundary_tag, expected_tag as i64);
+            let payload = self.emit_carrier_scalar(builder, word)?;
+            return Ok((
+                NativeScalarPairV1 {
+                    tag: native_tag,
+                    payload,
+                },
+                required_kind,
+            ));
+        }
         let lowered = lowered.specialized_join_arm(construct)?;
+        if required_kind == Some(ScalarMergeKind::ExitCode) {
+            let lowered = Self::unwrap_terminal_ret(lowered);
+            let zero_tag = builder.ins().iconst(types::I64, 0);
+            return match lowered {
+                Lowered::RecursiveBackedge => Ok((
+                    NativeScalarPairV1 {
+                        tag: zero_tag,
+                        payload: builder.ins().iconst(types::I64, 0),
+                    },
+                    ScalarMergeKind::RecursiveBackedge,
+                )),
+                Lowered::ProcessExitStatus { value } => Ok((
+                    NativeScalarPairV1 {
+                        tag: zero_tag,
+                        payload: value,
+                    },
+                    ScalarMergeKind::ExitCode,
+                )),
+                lowered if self.process_object => Ok((
+                    NativeScalarPairV1 {
+                        tag: zero_tag,
+                        payload: self.emit_process_exit_status(builder, lowered),
+                    },
+                    ScalarMergeKind::ExitCode,
+                )),
+                _ => Err(unsupported(
+                    construct,
+                    "checked ExitCode join is unavailable outside process-object lowering",
+                )),
+            };
+        }
         let checked_root_exit_representation = self.has_checked_root_exit_representation();
         let lowered = if checked_root_exit_representation {
             Self::unwrap_terminal_ret(lowered)
@@ -6827,10 +7676,9 @@ impl<'a> Lowering<'a> {
             )),
             Lowered::Constructor {
                 constructor, args, ..
-            }
-                if args.is_empty()
-                    && (constructor == self.process_symbols.bool_true
-                        || constructor == self.process_symbols.bool_false) =>
+            } if args.is_empty()
+                && (constructor == self.process_symbols.bool_true
+                    || constructor == self.process_symbols.bool_false) =>
             {
                 Ok((
                     NativeScalarPairV1 {
@@ -6982,43 +7830,17 @@ impl<'a> Lowering<'a> {
     fn merge_planned_scalar_branch(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        join_plan: &JoinPlanToken,
         lowered: LoweringOperand,
         required_kind: ScalarMergeKind,
         construct: &'static str,
     ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
-        let lowered = lowered.specialized_join_arm(construct)?;
-        if required_kind == ScalarMergeKind::ExitCode {
-            let lowered = Self::unwrap_terminal_ret(lowered);
-            let zero_tag = builder.ins().iconst(types::I64, 0);
-            return match lowered {
-                Lowered::RecursiveBackedge => Ok((
-                    NativeScalarPairV1 {
-                        tag: zero_tag,
-                        payload: builder.ins().iconst(types::I64, 0),
-                    },
-                    ScalarMergeKind::RecursiveBackedge,
-                )),
-                Lowered::ProcessExitStatus { value } => Ok((
-                    NativeScalarPairV1 {
-                        tag: zero_tag,
-                        payload: value,
-                    },
-                    ScalarMergeKind::ExitCode,
-                )),
-                lowered if self.process_object => Ok((
-                    NativeScalarPairV1 {
-                        tag: zero_tag,
-                        payload: self.emit_process_exit_status(builder, lowered),
-                    },
-                    ScalarMergeKind::ExitCode,
-                )),
-                _ => Err(unsupported(
-                    construct,
-                    "checked ExitCode join is unavailable outside process-object lowering",
-                )),
-            };
+        if join_plan.representation != JoinResultRepresentation::NativeScalarPair {
+            return Err(backend_module(
+                "carrier-result join reached a native checked-plan merge consumer".to_string(),
+            ));
         }
-        self.merge_scalar_branch(builder, LoweringOperand::Specialized(lowered), construct)
+        self.merge_scalar_operand(builder, lowered, Some(required_kind), construct)
     }
 
     fn record_merge_kind(
@@ -7046,7 +7868,9 @@ impl<'a> Lowering<'a> {
     ) -> Lowered {
         match kind {
             ScalarMergeKind::Int => {
-                self.function_local.native_int_tags.insert(pair.payload, pair.tag);
+                self.function_local
+                    .native_int_tags
+                    .insert(pair.payload, pair.tag);
                 Lowered::Int {
                     value: pair.payload,
                     known: None,
@@ -8048,16 +8872,72 @@ impl<'a> Lowering<'a> {
     /// refusal, and the producer refuses to transfer one — so the `Carried`
     /// case answers `false` and the branch is left unsealed, which is the same
     /// answer any non-trap specialized value gets.
-    fn seal_source_trap_branch(builder: &mut FunctionBuilder<'_>, lowered: &LoweringOperand) -> bool {
-        if matches!(
-            lowered,
-            LoweringOperand::Specialized(Lowered::Trap(_))
-        ) {
-            let failure = builder.ins().iconst(types::I64, -4);
-            builder.ins().return_(&[failure]);
-            true
-        } else {
-            false
+    fn seal_source_trap_branch(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        lowered: &LoweringOperand,
+    ) -> Result<bool, CraneliftBackendError> {
+        let LoweringOperand::Specialized(Lowered::Trap(trap)) = lowered else {
+            return Ok(false);
+        };
+        let status = self.emit_current_trap(builder, trap)?;
+        builder.ins().return_(&[status]);
+        Ok(true)
+    }
+
+    fn emit_current_trap(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        trap: &RuntimeTrap,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let identity = self.static_transition_plan.trap_identity(trap)?;
+        match self.function_local.trap_exit {
+            Some(TrapExitAuthority::UnitFrame { slots, trap_offset }) => {
+                #[cfg(test)]
+                let identity_word =
+                    match TRAP_IDENTITY_MUTATION.with(std::cell::Cell::get) {
+                        TrapIdentityMutation::Exact => identity.abi_word(),
+                        TrapIdentityMutation::Zero => 0,
+                        TrapIdentityMutation::Substitute => identity
+                            .abi_word()
+                            .checked_add(1)
+                            .expect("planner trap identity fits below i64::MAX"),
+                    };
+                #[cfg(not(test))]
+                let identity_word = identity.abi_word();
+                let word = builder.ins().iconst(types::I64, identity_word);
+                builder
+                    .ins()
+                    .store(MemFlags::trusted(), word, slots, trap_offset);
+                Ok(builder.ins().iconst(types::I64, 0))
+            }
+            Some(TrapExitAuthority::Root {
+                process_sentinel,
+                source_authorized: true,
+            }) => {
+                if process_sentinel {
+                    Ok(builder.ins().iconst(types::I64, -4))
+                } else {
+                    let word = builder.ins().iconst(types::I64, identity.abi_word());
+                    let shifted = builder.ins().ishl_imm(
+                        word,
+                        crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_SHIFT,
+                    );
+                    Ok(builder.ins().bor_imm(
+                        shifted,
+                        crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_TAG,
+                    ))
+                }
+            }
+            None => Err(backend_module(
+                "trap branch has no generated-unit TrapWord lane".to_string(),
+            )),
+            Some(TrapExitAuthority::Root {
+                source_authorized: false,
+                ..
+            }) => Err(backend_module(
+                "generated function has no source-trap authority".to_string(),
+            )),
         }
     }
 
@@ -8214,7 +9094,8 @@ impl<'a> Lowering<'a> {
         let Lowered::Int { value, known } = value else {
             return Err(unsupported("Effect", "host-width operand is not Int"));
         };
-        let arena = self.function_local
+        let arena = self
+            .function_local
             .native_int_arena
             .ok_or_else(|| unsupported("Effect", "host-width Int has no invocation arena"))?;
         let helper = self.function_local.native_int_narrow.ok_or_else(|| {
@@ -8718,7 +9599,8 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         symbol: &str,
     ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
-        self.function_local.seed_material
+        self.function_local
+            .seed_material
             .payload_word(builder, symbol)
             .ok_or_else(|| {
                 unsupported(
@@ -8793,10 +9675,14 @@ impl<'a> Lowering<'a> {
         let output =
             builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
         let pointer_type = builder.func.dfg.value_type(
-            self.function_local.native_int_arena
+            self.function_local
+                .native_int_arena
                 .ok_or_else(|| unsupported("RuntimeValue::Int", "Big Int has no arena"))?,
         );
-        let arena = self.function_local.native_int_arena.expect("Big Int arena was checked");
+        let arena = self
+            .function_local
+            .native_int_arena
+            .expect("Big Int arena was checked");
         let helper = self.function_local.native_int_intern.ok_or_else(|| {
             unsupported("RuntimeValue::Int", "Big Int has no local intern helper")
         })?;
@@ -9509,7 +10395,8 @@ impl<'a> Lowering<'a> {
     ) -> cranelift_codegen::ir::Value {
         let Lowered::Constructor {
             constructor, args, ..
-        } = value else {
+        } = value
+        else {
             return builder.ins().iconst(types::I64, -2);
         };
         if constructor == self.process_symbols.exit_success {

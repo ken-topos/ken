@@ -49,6 +49,9 @@ pub(crate) struct NativeIntLocalFuncs {
     pub intern: FuncId,
     pub narrow: FuncId,
     pub export: FuncId,
+    /// `(arena, sign, limbs, len) -> status` — export one canonical magnitude
+    /// view through the same interner and exporter as an ordinary native Int.
+    pub export_parts: FuncId,
     /// `(arena, tag, payload, out_view) -> status` — decode a `NativeIntV1`
     /// pair into `{sign, len, limbs, small}`.
     ///
@@ -69,6 +72,7 @@ struct NativeIntLocalGraph {
     compare: FuncId,
     narrow: FuncId,
     export: FuncId,
+    export_parts: FuncId,
     wrapping_mutation: bool,
 }
 
@@ -95,6 +99,7 @@ pub(crate) fn emit_native_int_local_graph<M: Module>(
     let compare = declare(module, "ken_native_int_compare_local", 6, 1)?;
     let narrow = declare(module, "ken_native_int_narrow_local", 4, 1)?;
     let export = declare(module, "ken_native_int_export_local", 3, 1)?;
+    let export_parts = declare(module, "ken_native_int_export_parts_local", 4, 1)?;
     let graph = NativeIntLocalGraph {
         malloc,
         free,
@@ -104,6 +109,7 @@ pub(crate) fn emit_native_int_local_graph<M: Module>(
         compare,
         narrow,
         export,
+        export_parts,
         wrapping_mutation,
     };
     define_resolve(module, graph)?;
@@ -111,6 +117,7 @@ pub(crate) fn emit_native_int_local_graph<M: Module>(
     define_compare(module, graph)?;
     define_narrow(module, graph)?;
     define_export(module, graph)?;
+    define_export_parts(module, graph)?;
     define_binop(module, graph)?;
     Ok(NativeIntLocalFuncs {
         binop,
@@ -118,6 +125,7 @@ pub(crate) fn emit_native_int_local_graph<M: Module>(
         intern,
         narrow,
         export,
+        export_parts,
         resolve,
     })
 }
@@ -181,6 +189,8 @@ fn finish<M: Module>(
             functions.push(func.display().to_string());
         }
     });
+    #[cfg(test)]
+    crate::cranelift_backend::scale_b_record_fixed_helper(&func);
     let mut ctx = module.make_context();
     std::mem::swap(&mut ctx.func, &mut func);
     module
@@ -688,6 +698,48 @@ fn define_export<M: Module>(
     graph: NativeIntLocalGraph,
 ) -> Result<(), CraneliftBackendError> {
     define_view_consumer(module, graph, graph.export, false)
+}
+
+fn define_export_parts<M: Module>(
+    module: &mut M,
+    graph: NativeIntLocalGraph,
+) -> Result<(), CraneliftBackendError> {
+    let ptr = module.target_config().pointer_type();
+    let mut func = begin(module, graph.export_parts, 4);
+    let intern = module.declare_func_in_func(graph.intern, &mut func);
+    let export = module.declare_func_in_func(graph.export, &mut func);
+    let mut fctx = FunctionBuilderContext::new();
+    {
+        let mut b = FunctionBuilder::new(&mut func, &mut fctx);
+        let entry = b.create_block();
+        b.append_block_params_for_function_params(entry);
+        b.switch_to_block(entry);
+        let p = b.block_params(entry).to_vec();
+        let pair_slot =
+            b.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
+        let pair = b.ins().stack_addr(ptr, pair_slot, 0);
+        let call = b.ins().call(intern, &[p[0], p[1], p[2], p[3], pair]);
+        let status = b.inst_results(call)[0];
+        let valid = b.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            status,
+            0,
+        );
+        let emit = b.create_block();
+        let fail = b.create_block();
+        b.ins().brif(valid, emit, &[], fail, &[]);
+        b.switch_to_block(fail);
+        b.ins().return_(&[status]);
+        b.switch_to_block(emit);
+        let tag = b.ins().stack_load(types::I64, pair_slot, 0);
+        let payload = b.ins().stack_load(types::I64, pair_slot, 8);
+        let call = b.ins().call(export, &[p[0], tag, payload]);
+        let status = b.inst_results(call)[0];
+        b.ins().return_(&[status]);
+        b.seal_all_blocks();
+        b.finalize();
+    }
+    finish(module, graph.export_parts, func)
 }
 fn define_view_consumer<M: Module>(
     module: &mut M,

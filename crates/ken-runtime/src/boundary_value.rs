@@ -2578,22 +2578,20 @@ impl BoundaryValueStore {
                 Ok(Value::String(text))
             }
             BoundaryClass::Constructor => {
-                // ⭐ The node's own `NODE_TAG_ID` *is* the interned constructor
-                // id — read it rather than round-tripping through the symbol
-                // name and re-interning, which would be a second authority for
-                // the same number.
-                let constructor_id = u32::try_from(
-                    self.image
-                        .0
-                        .node_field(index, NODE_TAG_ID)
-                        .ok_or(BOUNDARY_ERR_BOUNDS)?,
-                )
-                .map_err(|_| BOUNDARY_ERR_SHAPE)?;
-                if self.symbol(u64::from(constructor_id)).is_none() {
-                    // A constructor id this store never interned names nothing,
-                    // so the node has no canonical image.
-                    return Err(BOUNDARY_ERR_SHAPE);
-                }
+                // The node stores the planner's artifact-local carrier
+                // identity, not this store's dense canonical-value symbol id.
+                // Resolve through the planner-issued reverse view, then intern
+                // only into the store's distinct canonical-value namespace.
+                let identity = self
+                    .image
+                    .0
+                    .node_field(index, NODE_TAG_ID)
+                    .ok_or(BOUNDARY_ERR_BOUNDS)?;
+                let constructor = self
+                    .carrier_symbol(identity)
+                    .ok_or(BOUNDARY_ERR_SHAPE)?
+                    .to_string();
+                let constructor_id = self.intern_symbol(&constructor) as u32;
                 let args = self.child_images(at, count, images)?;
                 Ok(Value::Constructor {
                     constructor_id,
@@ -2612,7 +2610,11 @@ impl BoundaryValueStore {
                         .0
                         .name_at(at + offset)
                         .ok_or(BOUNDARY_ERR_BOUNDS)?;
-                    names.push(self.symbol(id).ok_or(BOUNDARY_ERR_SHAPE)?.to_string());
+                    names.push(
+                        self.carrier_symbol(id)
+                            .ok_or(BOUNDARY_ERR_SHAPE)?
+                            .to_string(),
+                    );
                 }
                 let type_id = self.intern_symbol(&format!("record:{}", names.join(","))) as u32;
                 let fields = self.child_images(at, count, images)?;
@@ -2785,6 +2787,98 @@ impl BoundaryValueStore {
     /// The value a persistent slot owns, if this store owns that slot.
     pub fn resident(&self, slot: SlotId) -> Option<&RuntimeGroundValue> {
         self.resident.get(&slot)
+    }
+
+    /// Recover the exact ground value of a store-owned boundary result after
+    /// adoption. This is the native-observation inverse of materialization,
+    /// not a lowering conversion: generated code still never converts a
+    /// carried word back into a specialized value.
+    pub(crate) fn observe_adopted_ground(
+        &self,
+        word: BoundaryWord,
+    ) -> Option<RuntimeGroundValue> {
+        match word.tag()? {
+            BoundaryTag::ImmediateBool => {
+                Some(RuntimeGroundValue::Bool(word.payload() != 0))
+            }
+            BoundaryTag::ImmediateInt => Some(RuntimeGroundValue::Int(
+                word.signed_payload().into(),
+            )),
+            BoundaryTag::PersistentGround => {
+                let slot = self.image.0.node_field(word.payload(), NODE_SLOT)?;
+                if slot == NULL_SLOT {
+                    return None;
+                }
+                self.ground_from_canonical(&self.decode_slot(slot)?)
+            }
+            BoundaryTag::ImmediateExitStatus
+            | BoundaryTag::ImmediateBoundedNat
+            | BoundaryTag::ImmediateStructuralNat
+            | BoundaryTag::PersistentClosure
+            | BoundaryTag::InvocationBorrowed
+            | BoundaryTag::InvocationHostResult => None,
+        }
+    }
+
+    fn ground_from_canonical(&self, value: &Value) -> Option<RuntimeGroundValue> {
+        Some(match value {
+            Value::Bool(value) => RuntimeGroundValue::Bool(*value),
+            Value::SmallInt(value) => RuntimeGroundValue::Int((*value).into()),
+            Value::BigInt { sign, limbs } => RuntimeGroundValue::Int(
+                crate::RuntimeIntV1::from_canonical_parts(*sign, limbs.clone()),
+            ),
+            Value::Bytes(value) => RuntimeGroundValue::Bytes(value.clone()),
+            Value::String(value) => RuntimeGroundValue::String(value.clone()),
+            Value::Constructor {
+                constructor_id,
+                args,
+            } => RuntimeGroundValue::Constructor {
+                constructor: self.symbol(u64::from(*constructor_id))?.to_string(),
+                args: args
+                    .iter()
+                    .map(|arg| self.ground_from_canonical(arg))
+                    .collect::<Option<Vec<_>>>()?,
+            },
+            Value::Record { type_id, fields } => {
+                let identity = self.symbol(u64::from(*type_id))?;
+                let names = identity.strip_prefix("record:")?;
+                let names = if names.is_empty() {
+                    Vec::new()
+                } else {
+                    names.split(',').map(str::to_string).collect::<Vec<_>>()
+                };
+                if names.len() != fields.len() {
+                    return None;
+                }
+                RuntimeGroundValue::Record {
+                    fields: names
+                        .into_iter()
+                        .zip(fields.iter())
+                        .map(|(name, value)| {
+                            self.ground_from_canonical(value)
+                                .map(|value| (name, value))
+                        })
+                        .collect::<Option<Vec<_>>>()?,
+                }
+            }
+            Value::Char(_)
+            | Value::Float(_)
+            | Value::Float32(_)
+            | Value::Int8(_)
+            | Value::Int16(_)
+            | Value::Int32(_)
+            | Value::Int64(_)
+            | Value::UInt8(_)
+            | Value::UInt16(_)
+            | Value::UInt32(_)
+            | Value::UInt64(_)
+            | Value::SmallDecimal { .. }
+            | Value::BigDecimal { .. }
+            | Value::Array { .. }
+            | Value::Map { .. }
+            | Value::Set { .. }
+            | Value::Unknown => return None,
+        })
     }
 
     /// Resolve a slot through the **store's own** read-back path:
