@@ -1,7 +1,7 @@
 ---
 id: PX8-ERRID-SCOPE
 title: "PX8 clause-(a) A2b — five PR-C error identities have no independent production-reaching evidence; Architect ruled all five inside the closure"
-status: draft
+status: ready
 owner: verify
 size: L
 gate: none
