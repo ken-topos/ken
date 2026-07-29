@@ -74,8 +74,8 @@ pub(in crate::cranelift_backend) use super::planning::{
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
-    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableUnit, PredeclaredFunctionId,
-    JoinPlanToken, JoinResultRepresentation, StaticOriginId, StaticTransitionPlan,
+    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableUnit, JoinPlanToken,
+    JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
@@ -131,10 +131,7 @@ fn scale_b_reset_emission_attempt() {
 }
 
 #[cfg(test)]
-fn scale_b_begin_emission_attempt(
-    plan: &StaticTransitionPlan<'_>,
-    authority_functionized: bool,
-) {
+fn scale_b_begin_emission_attempt(plan: &StaticTransitionPlan<'_>, authority_functionized: bool) {
     SCALE_B_EMISSION_ATTEMPT.with(|attempt| {
         *attempt.borrow_mut() = Some(ScaleBEmissionAttempt {
             metrics: ScaleBEmissionMetrics {
@@ -163,8 +160,8 @@ fn scale_b_finish_emission_attempt() {
 }
 
 #[cfg(test)]
-pub(in crate::cranelift_backend) fn scale_b_last_emission_metrics(
-) -> Option<ScaleBEmissionMetrics> {
+pub(in crate::cranelift_backend) fn scale_b_last_emission_metrics() -> Option<ScaleBEmissionMetrics>
+{
     SCALE_B_EMISSION_ATTEMPT.with(|attempt| {
         attempt
             .borrow()
@@ -881,8 +878,7 @@ struct Lowering<'a> {
     /// has already established a **finite acyclic carrier graph** and the call
     /// rides a **declared recursive child edge** — so its measure is strict
     /// descent in that validated graph, ⛔ never compile-time shrinkage.
-    active_carried_computational_eliminations:
-        Vec<(StaticOriginId, cranelift_codegen::ir::Block)>,
+    active_carried_computational_eliminations: Vec<(StaticOriginId, cranelift_codegen::ir::Block)>,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     consumed_join_sites: BTreeSet<u64>,
     root_terminal_authority: Option<RootTerminalAnswerAuthority>,
@@ -1492,69 +1488,12 @@ impl<'a> Lowering<'a> {
     pub(super) fn select_terminal_result_origins(
         &mut self,
         origin: StaticOriginId,
-        expr: &RuntimeExpr,
+        _expr: &RuntimeExpr,
     ) -> Result<(), CraneliftBackendError> {
-        fn collect(
-            plan: &StaticTransitionPlan<'_>,
-            origin: StaticOriginId,
-            expr: &RuntimeExpr,
-            selected: &mut BTreeSet<StaticOriginId>,
-        ) -> Result<(), CraneliftBackendError> {
-            selected.insert(origin);
-            let result_child = |position| plan.child_static_origin(origin, position);
-            match expr {
-                RuntimeExpr::CheckedJoinSite { body, .. }
-                | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
-                | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
-                | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
-                | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
-                    collect(plan, result_child(0)?, body, selected)?;
-                }
-                RuntimeExpr::Let { body, .. } => {
-                    collect(plan, result_child(1)?, body, selected)?;
-                }
-                RuntimeExpr::If {
-                    then_expr,
-                    else_expr,
-                    ..
-                } => {
-                    collect(plan, result_child(1)?, then_expr, selected)?;
-                    collect(plan, result_child(2)?, else_expr, selected)?;
-                }
-                RuntimeExpr::Match { cases, .. } => {
-                    for (index, case) in cases.iter().enumerate() {
-                        collect(plan, result_child(1 + index)?, &case.body, selected)?;
-                    }
-                }
-                RuntimeExpr::ComputationalMatch { cases, .. } => {
-                    for (index, case) in cases.iter().enumerate() {
-                        collect(plan, result_child(1 + index)?, &case.body, selected)?;
-                    }
-                }
-                RuntimeExpr::Value(_)
-                | RuntimeExpr::Var(_)
-                | RuntimeExpr::PrimitiveCall { .. }
-                | RuntimeExpr::Construct { .. }
-                | RuntimeExpr::Record { .. }
-                | RuntimeExpr::Project { .. }
-                | RuntimeExpr::Closure { .. }
-                | RuntimeExpr::LexicalClosure { .. }
-                | RuntimeExpr::DeclarationRef { .. }
-                | RuntimeExpr::ImportedDeclarationRef { .. }
-                | RuntimeExpr::Call { .. }
-                | RuntimeExpr::Effect { .. }
-                | RuntimeExpr::Trap(_) => {}
-            }
-            Ok(())
-        }
-
-        self.function_local.terminal_result_origins.clear();
-        collect(
-            &self.static_transition_plan,
-            origin,
-            expr,
-            &mut self.function_local.terminal_result_origins,
-        )
+        self.function_local.terminal_result_origins = self
+            .static_transition_plan
+            .source_result_origins_in_owner_subtree(origin)?;
+        Ok(())
     }
 
     /// Take the pre-emission result contract for this exact source join.
@@ -1629,17 +1568,11 @@ impl<'a> Lowering<'a> {
             .static_transition_plan
             .source_join_origins_in_owner_subtree(root)?;
         for origin in joins {
-            if self
-                .function_local
-                .consumed_join_origins
-                .contains(&origin)
-            {
-                return Err(backend_module(
-                    format!(
-                        "emitted source join {origin:?} was later dispositioned as statically \
+            if self.function_local.consumed_join_origins.contains(&origin) {
+                return Err(backend_module(format!(
+                    "emitted source join {origin:?} was later dispositioned as statically \
                          unselected"
-                    ),
-                ));
+                )));
             }
             self.function_local
                 .dispositioned_join_origins
@@ -1670,8 +1603,7 @@ impl<'a> Lowering<'a> {
             .len();
         if selected_case.is_some_and(|index| index >= case_count) {
             return Err(backend_module(
-                "selected source Match case is outside the validated child population"
-                    .to_string(),
+                "selected source Match case is outside the validated child population".to_string(),
             ));
         }
         let reached = self
@@ -1708,9 +1640,7 @@ impl<'a> Lowering<'a> {
 
     /// Close every recorded static `Match` selection against its validated
     /// positional-child population.
-    fn close_statically_unselected_match_cases(
-        &mut self,
-    ) -> Result<(), CraneliftBackendError> {
+    fn close_statically_unselected_match_cases(&mut self) -> Result<(), CraneliftBackendError> {
         let reached = self
             .function_local
             .emission_reachable_match_cases
@@ -1840,8 +1770,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         body_origin: StaticOriginId,
         inputs: &[LoweringOperand],
-        #[cfg(test)]
-        launch_ingress: Option<cranelift_codegen::ir::Value>,
+        #[cfg(test)] launch_ingress: Option<cranelift_codegen::ir::Value>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let target = self
             .function_local
@@ -1871,7 +1800,8 @@ impl<'a> Lowering<'a> {
                     let word = match value {
                         LoweringOperand::Carried(word) => word.word,
                         LoweringOperand::Specialized(value) => {
-                            self.transfer_into_carrier(builder, body_origin, value)?.word
+                            self.transfer_into_carrier(builder, body_origin, value)?
+                                .word
                         }
                     };
                     builder.ins().stack_store(word, payload, offset);
@@ -1926,25 +1856,17 @@ impl<'a> Lowering<'a> {
         } else {
             HOST_CONTEXT_PROPAGATION_MUTATION.with(|cell| match cell.get() {
                 HostContextPropagationMutation::Exact => exact_host_dispatch_context,
-                HostContextPropagationMutation::ServicesPointer
-                    if launch_ingress.is_none() =>
-                {
+                HostContextPropagationMutation::ServicesPointer if launch_ingress.is_none() => {
                     services
                 }
-                HostContextPropagationMutation::NativeIntArena
-                    if launch_ingress.is_none() =>
-                {
-                    self.function_local
-                        .native_int_arena
-                        .expect("unit native-int arena is bound")
-                }
-                HostContextPropagationMutation::BoundaryArena
-                    if launch_ingress.is_none() =>
-                {
-                    self.function_local
-                        .boundary_arena
-                        .expect("unit boundary arena is bound")
-                }
+                HostContextPropagationMutation::NativeIntArena if launch_ingress.is_none() => self
+                    .function_local
+                    .native_int_arena
+                    .expect("unit native-int arena is bound"),
+                HostContextPropagationMutation::BoundaryArena if launch_ingress.is_none() => self
+                    .function_local
+                    .boundary_arena
+                    .expect("unit boundary arena is bound"),
                 HostContextPropagationMutation::Null if launch_ingress.is_none() => {
                     builder.ins().iconst(pointer_type, 0)
                 }
@@ -1965,15 +1887,15 @@ impl<'a> Lowering<'a> {
             crate::activation_services::UNIT_CALL_FRAME_HOST_DISPATCH_CONTEXT,
         );
         let envelope = builder.ins().stack_addr(pointer_type, envelope, 0);
-        let call = builder
-            .ins()
-            .call(target.function, &[envelope, services]);
+        let call = builder.ins().call(target.function, &[envelope, services]);
         let [word] = builder.inst_results(call) else {
             return Err(backend_module(
                 "internal unit call did not return exactly one word".to_string(),
             ));
         };
-        Ok(LoweringOperand::Carried(CarriedBoundaryWord { word: *word }))
+        Ok(LoweringOperand::Carried(CarriedBoundaryWord {
+            word: *word,
+        }))
     }
 
     /// The recursive emission step. ⛔ Private, and ⛔ never the entry point —
@@ -2011,7 +1933,10 @@ impl<'a> Lowering<'a> {
             // the tag and the spill class, so the only thing that differs
             // between them is where the payload word and its `NativeIntV1`
             // marker come from.
-            Lowered::Int { value: payload, known } => {
+            Lowered::Int {
+                value: payload,
+                known,
+            } => {
                 let (tag, spill) = Self::carrier_spillable_disposition(value)?;
                 // ⛔ The marker travels with the payload; see
                 // `carrier_small_marker` for why this is not a constant.
@@ -2152,11 +2077,7 @@ impl<'a> Lowering<'a> {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
                 let word = self.emit_carrier_alloc(builder, tag, class, 1)?;
                 self.emit_carrier_store_scalar(builder, word, *pointer)?;
-                let len = self.emit_carrier_immediate(
-                    builder,
-                    BoundaryTag::ImmediateInt,
-                    *len,
-                )?;
+                let len = self.emit_carrier_immediate(builder, BoundaryTag::ImmediateInt, *len)?;
                 self.emit_carrier_store_field(builder, word, 0, len)?;
                 Ok(word)
             }
@@ -2354,7 +2275,10 @@ impl<'a> Lowering<'a> {
     fn carrier_out_slot(
         builder: &mut FunctionBuilder<'_>,
         pointer_type: types::Type,
-    ) -> (cranelift_codegen::ir::StackSlot, cranelift_codegen::ir::Value) {
+    ) -> (
+        cranelift_codegen::ir::StackSlot,
+        cranelift_codegen::ir::Value,
+    ) {
         let slot =
             builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
         let address = builder.ins().stack_addr(pointer_type, slot, 0);
@@ -2574,7 +2498,10 @@ impl<'a> Lowering<'a> {
             cranelift_codegen::ir::condcodes::IntCC::Equal,
             marker,
             i64::try_from(crate::NATIVE_INT_SMALL_TAG_V1).map_err(|_| {
-                unsupported("BoundaryCarrier", "the native `Small` marker is not an ABI word")
+                unsupported(
+                    "BoundaryCarrier",
+                    "the native `Small` marker is not an ABI word",
+                )
             })?,
         );
         let small_block = builder.create_block();
@@ -2584,7 +2511,8 @@ impl<'a> Lowering<'a> {
         builder.ins().brif(small, small_block, &[], wide_block, &[]);
 
         builder.switch_to_block(small_block);
-        let immediate = self.emit_carrier_spillable_immediate(builder, tag, spill, payload, marker)?;
+        let immediate =
+            self.emit_carrier_spillable_immediate(builder, tag, spill, payload, marker)?;
         builder.ins().jump(join, &[immediate.word.into()]);
 
         builder.switch_to_block(wide_block);
@@ -2634,7 +2562,10 @@ impl<'a> Lowering<'a> {
             builder,
             marker,
             i64::try_from(crate::NATIVE_INT_BIG_TAG_V1).map_err(|_| {
-                unsupported("BoundaryCarrier", "the native `Big` marker is not an ABI word")
+                unsupported(
+                    "BoundaryCarrier",
+                    "the native `Big` marker is not an ABI word",
+                )
             })?,
         );
 
@@ -2676,12 +2607,18 @@ impl<'a> Lowering<'a> {
             .ins()
             .call(decoder, &[native_arena, marker, payload, view]);
         Self::require_i64(builder, builder.inst_results(decoded)[0], 0);
-        let sign = builder
-            .ins()
-            .load(types::I64, MemFlags::trusted(), view, crate::native_int_clif::VIEW_SIGN);
-        let length = builder
-            .ins()
-            .load(types::I64, MemFlags::trusted(), view, crate::native_int_clif::VIEW_LEN);
+        let sign = builder.ins().load(
+            types::I64,
+            MemFlags::trusted(),
+            view,
+            crate::native_int_clif::VIEW_SIGN,
+        );
+        let length = builder.ins().load(
+            types::I64,
+            MemFlags::trusted(),
+            view,
+            crate::native_int_clif::VIEW_LEN,
+        );
         let source = builder.ins().load(
             pointer_type,
             MemFlags::trusted(),
@@ -2705,9 +2642,10 @@ impl<'a> Lowering<'a> {
             .call(refs.store_int_tag, &[arena, word.word, region]);
         Self::require_i64(builder, builder.inst_results(marked)[0], BOUNDARY_OK);
         let (_span_slot, span) = Self::carrier_out_slot(builder, pointer_type);
-        let claim = builder
-            .ins()
-            .call(refs.store_int_limbs, &[arena, word.word, sign, length, span]);
+        let claim = builder.ins().call(
+            refs.store_int_limbs,
+            &[arena, word.word, sign, length, span],
+        );
         Self::require_i64(builder, builder.inst_results(claim)[0], BOUNDARY_OK);
 
         let head = builder.create_block();
@@ -2879,19 +2817,13 @@ impl<'a> Lowering<'a> {
             builder.ins().brif(matches, selected, &[], next, &[]);
 
             builder.switch_to_block(selected);
-            let disposition =
-                Lowered::DynamicConstructor(DynamicConstructorV1 {
-                    discriminator: dynamic.discriminator,
-                    alternatives: vec![alternative.clone()],
-                });
+            let disposition = Lowered::DynamicConstructor(DynamicConstructorV1 {
+                discriminator: dynamic.discriminator,
+                alternatives: vec![alternative.clone()],
+            });
             let (tag, class) = Self::carrier_handle_disposition(&disposition)?;
-            let word =
-                self.emit_carrier_alloc(builder, tag, class, alternative.fields.len())?;
-            self.emit_carrier_store_tag_id(
-                builder,
-                word,
-                alternative.identity.tag_abi_word()?,
-            )?;
+            let word = self.emit_carrier_alloc(builder, tag, class, alternative.fields.len())?;
+            self.emit_carrier_store_tag_id(builder, word, alternative.identity.tag_abi_word()?)?;
             for (position, field) in alternative.fields.iter().enumerate() {
                 let field = self.emit_carrier_transfer(builder, origin, field)?;
                 self.emit_carrier_store_field(builder, word, position, field)?;
@@ -4426,9 +4358,9 @@ impl<'a> Lowering<'a> {
                     constructor: constructor.clone(),
                     identity: self
                         .static_transition_plan
-                        .synthesized_constructor_identity(
-                            SynthesizedConstructorRole::IoError(*role),
-                        )?,
+                        .synthesized_constructor_identity(SynthesizedConstructorRole::IoError(
+                            *role,
+                        ))?,
                     fields: (tag == last)
                         .then(|| vec![payload.clone()])
                         .unwrap_or_default(),
@@ -4517,7 +4449,8 @@ fn materialize_dynamic_constructor_env(
 fn console_stream_tag(value: &Lowered) -> Option<i64> {
     let Lowered::Constructor {
         constructor, args, ..
-    } = value else {
+    } = value
+    else {
         return None;
     };
     if !args.is_empty() {
@@ -4536,7 +4469,8 @@ fn console_stream_tag(value: &Lowered) -> Option<i64> {
 fn create_policy_tag(value: &Lowered) -> Option<i64> {
     let Lowered::Constructor {
         constructor, args, ..
-    } = value else {
+    } = value
+    else {
         return None;
     };
     if !args.is_empty() {
@@ -4555,7 +4489,8 @@ fn create_policy_tag(value: &Lowered) -> Option<i64> {
 fn resource_open_mode_tag(value: &Lowered) -> Option<i64> {
     let Lowered::Constructor {
         constructor, args, ..
-    } = value else {
+    } = value
+    else {
         return None;
     };
     if constructor.ends_with("::ResourceRead") && args.is_empty() {
@@ -4571,7 +4506,8 @@ fn resource_open_mode_tag(value: &Lowered) -> Option<i64> {
 fn lowered_char_list(value: &Lowered) -> Option<Vec<u8>> {
     let Lowered::Constructor {
         constructor, args, ..
-    } = value else {
+    } = value
+    else {
         return None;
     };
     if constructor.ends_with("::Nil") && args.is_empty() {
@@ -5903,6 +5839,7 @@ struct SourceJoinTarget<'a> {
     expected_outer: ContinuationCursorId,
     required_kind: ScalarMergeKind,
     join_plan: std::rc::Rc<JoinPlanToken>,
+    result_origin: StaticOriginId,
     terminal_active_prefix: Vec<EliminatorFrame<'a>>,
 }
 /// An affine capability for one mutually exclusive predecessor of a checked
@@ -6231,8 +6168,11 @@ fn reaches_environment_computational_recursor(
         .iter()
         .enumerate()
         .filter_map(|(index, value)| {
-            matches!(value, LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure { .. }))
-                .then_some(index + introduced_binders)
+            matches!(
+                value,
+                LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure { .. })
+            )
+            .then_some(index + introduced_binders)
         })
         .collect();
     produces_deforestable_aggregate_with_ih(expr, &recursive_hypotheses)
@@ -7203,11 +7143,13 @@ impl<'a> Lowering<'a> {
         );
         invocation.recursive_unit_body = segment_recursive_unit_body;
         invocation.dynamic_splice_edges = segment_dynamic_splice_edges;
-        Ok(LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure {
-            residual: Box::new(residual),
-            activation,
-            invocation,
-        }))
+        Ok(LoweringOperand::Specialized(
+            Lowered::ComputationalRecursorClosure {
+                residual: Box::new(residual),
+                activation,
+                invocation,
+            },
+        ))
     }
 
     /// ⭐ **A JOIN — `§2h` calls branch/join forwarding phase-bearing, so the
@@ -7287,7 +7229,99 @@ impl<'a> Lowering<'a> {
                 "carrier-result join reached a native-only scalar merge consumer".to_string(),
             ));
         }
+        self.merge_scalar_operand(builder, lowered, None, construct)
+    }
+
+    /// Consume one scalar-valued operand at a private typed CFG boundary.
+    ///
+    /// The surrounding source join may use `CarrierWord` storage. Once the
+    /// consumer has established the scalar kind from a specialized arm, a
+    /// carried sibling can be decoded back to that exact kind without changing
+    /// constructor meaning. This is intentionally separate from
+    /// [`Self::merge_scalar_branch`]: callers that own an ordinary source join
+    /// must still obey its planned representation.
+    fn merge_scalar_operand(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        lowered: LoweringOperand,
+        required_kind: Option<ScalarMergeKind>,
+        construct: &'static str,
+    ) -> Result<(NativeScalarPairV1, ScalarMergeKind), CraneliftBackendError> {
+        if let LoweringOperand::Carried(word) = lowered {
+            let required_kind = required_kind.ok_or_else(|| {
+                backend_module(
+                    "a carried scalar reached an untyped private merge consumer".to_string(),
+                )
+            })?;
+            let boundary_tag = builder
+                .ins()
+                .band_imm(word.word, crate::boundary_value::BOUNDARY_TAG_MASK as i64);
+            let (expected_tag, native_tag) = match required_kind {
+                ScalarMergeKind::Int => (
+                    BoundaryTag::ImmediateInt,
+                    Self::carrier_small_marker(builder),
+                ),
+                ScalarMergeKind::Bool => (
+                    BoundaryTag::ImmediateBool,
+                    builder.ins().iconst(types::I64, 0),
+                ),
+                ScalarMergeKind::StructuralNat => (
+                    BoundaryTag::ImmediateStructuralNat,
+                    builder.ins().iconst(types::I64, 0),
+                ),
+                ScalarMergeKind::ExitCode => (
+                    BoundaryTag::ImmediateExitStatus,
+                    builder.ins().iconst(types::I64, 0),
+                ),
+                ScalarMergeKind::RecursiveBackedge => {
+                    return Err(unsupported(
+                        construct,
+                        "a carried word cannot mint a recursive-backedge control marker",
+                    ));
+                }
+            };
+            Self::require_i64(builder, boundary_tag, expected_tag as i64);
+            let payload = self.emit_carrier_scalar(builder, word)?;
+            return Ok((
+                NativeScalarPairV1 {
+                    tag: native_tag,
+                    payload,
+                },
+                required_kind,
+            ));
+        }
         let lowered = lowered.specialized_join_arm(construct)?;
+        if required_kind == Some(ScalarMergeKind::ExitCode) {
+            let lowered = Self::unwrap_terminal_ret(lowered);
+            let zero_tag = builder.ins().iconst(types::I64, 0);
+            return match lowered {
+                Lowered::RecursiveBackedge => Ok((
+                    NativeScalarPairV1 {
+                        tag: zero_tag,
+                        payload: builder.ins().iconst(types::I64, 0),
+                    },
+                    ScalarMergeKind::RecursiveBackedge,
+                )),
+                Lowered::ProcessExitStatus { value } => Ok((
+                    NativeScalarPairV1 {
+                        tag: zero_tag,
+                        payload: value,
+                    },
+                    ScalarMergeKind::ExitCode,
+                )),
+                lowered if self.process_object => Ok((
+                    NativeScalarPairV1 {
+                        tag: zero_tag,
+                        payload: self.emit_process_exit_status(builder, lowered),
+                    },
+                    ScalarMergeKind::ExitCode,
+                )),
+                _ => Err(unsupported(
+                    construct,
+                    "checked ExitCode join is unavailable outside process-object lowering",
+                )),
+            };
+        }
         let checked_root_exit_representation = self.has_checked_root_exit_representation();
         let lowered = if checked_root_exit_representation {
             Self::unwrap_terminal_ret(lowered)
@@ -7326,10 +7360,9 @@ impl<'a> Lowering<'a> {
             )),
             Lowered::Constructor {
                 constructor, args, ..
-            }
-                if args.is_empty()
-                    && (constructor == self.process_symbols.bool_true
-                        || constructor == self.process_symbols.bool_false) =>
+            } if args.is_empty()
+                && (constructor == self.process_symbols.bool_true
+                    || constructor == self.process_symbols.bool_false) =>
             {
                 Ok((
                     NativeScalarPairV1 {
@@ -7491,44 +7524,7 @@ impl<'a> Lowering<'a> {
                 "carrier-result join reached a native checked-plan merge consumer".to_string(),
             ));
         }
-        let lowered = lowered.specialized_join_arm(construct)?;
-        if required_kind == ScalarMergeKind::ExitCode {
-            let lowered = Self::unwrap_terminal_ret(lowered);
-            let zero_tag = builder.ins().iconst(types::I64, 0);
-            return match lowered {
-                Lowered::RecursiveBackedge => Ok((
-                    NativeScalarPairV1 {
-                        tag: zero_tag,
-                        payload: builder.ins().iconst(types::I64, 0),
-                    },
-                    ScalarMergeKind::RecursiveBackedge,
-                )),
-                Lowered::ProcessExitStatus { value } => Ok((
-                    NativeScalarPairV1 {
-                        tag: zero_tag,
-                        payload: value,
-                    },
-                    ScalarMergeKind::ExitCode,
-                )),
-                lowered if self.process_object => Ok((
-                    NativeScalarPairV1 {
-                        tag: zero_tag,
-                        payload: self.emit_process_exit_status(builder, lowered),
-                    },
-                    ScalarMergeKind::ExitCode,
-                )),
-                _ => Err(unsupported(
-                    construct,
-                    "checked ExitCode join is unavailable outside process-object lowering",
-                )),
-            };
-        }
-        self.merge_scalar_branch(
-            builder,
-            join_plan,
-            LoweringOperand::Specialized(lowered),
-            construct,
-        )
+        self.merge_scalar_operand(builder, lowered, Some(required_kind), construct)
     }
 
     fn record_merge_kind(
@@ -7556,7 +7552,9 @@ impl<'a> Lowering<'a> {
     ) -> Lowered {
         match kind {
             ScalarMergeKind::Int => {
-                self.function_local.native_int_tags.insert(pair.payload, pair.tag);
+                self.function_local
+                    .native_int_tags
+                    .insert(pair.payload, pair.tag);
                 Lowered::Int {
                     value: pair.payload,
                     known: None,
@@ -8558,11 +8556,11 @@ impl<'a> Lowering<'a> {
     /// refusal, and the producer refuses to transfer one — so the `Carried`
     /// case answers `false` and the branch is left unsealed, which is the same
     /// answer any non-trap specialized value gets.
-    fn seal_source_trap_branch(builder: &mut FunctionBuilder<'_>, lowered: &LoweringOperand) -> bool {
-        if matches!(
-            lowered,
-            LoweringOperand::Specialized(Lowered::Trap(_))
-        ) {
+    fn seal_source_trap_branch(
+        builder: &mut FunctionBuilder<'_>,
+        lowered: &LoweringOperand,
+    ) -> bool {
+        if matches!(lowered, LoweringOperand::Specialized(Lowered::Trap(_))) {
             let failure = builder.ins().iconst(types::I64, -4);
             builder.ins().return_(&[failure]);
             true
@@ -8724,7 +8722,8 @@ impl<'a> Lowering<'a> {
         let Lowered::Int { value, known } = value else {
             return Err(unsupported("Effect", "host-width operand is not Int"));
         };
-        let arena = self.function_local
+        let arena = self
+            .function_local
             .native_int_arena
             .ok_or_else(|| unsupported("Effect", "host-width Int has no invocation arena"))?;
         let helper = self.function_local.native_int_narrow.ok_or_else(|| {
@@ -9228,7 +9227,8 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         symbol: &str,
     ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
-        self.function_local.seed_material
+        self.function_local
+            .seed_material
             .payload_word(builder, symbol)
             .ok_or_else(|| {
                 unsupported(
@@ -9303,10 +9303,14 @@ impl<'a> Lowering<'a> {
         let output =
             builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
         let pointer_type = builder.func.dfg.value_type(
-            self.function_local.native_int_arena
+            self.function_local
+                .native_int_arena
                 .ok_or_else(|| unsupported("RuntimeValue::Int", "Big Int has no arena"))?,
         );
-        let arena = self.function_local.native_int_arena.expect("Big Int arena was checked");
+        let arena = self
+            .function_local
+            .native_int_arena
+            .expect("Big Int arena was checked");
         let helper = self.function_local.native_int_intern.ok_or_else(|| {
             unsupported("RuntimeValue::Int", "Big Int has no local intern helper")
         })?;
@@ -10019,7 +10023,8 @@ impl<'a> Lowering<'a> {
     ) -> cranelift_codegen::ir::Value {
         let Lowered::Constructor {
             constructor, args, ..
-        } = value else {
+        } = value
+        else {
             return builder.ins().iconst(types::I64, -2);
         };
         if constructor == self.process_symbols.exit_success {
