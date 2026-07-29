@@ -5076,7 +5076,7 @@ fn retained_authority_residual_is_the_typed_selector_accounting() {
         BodyEmissionAuthority::RecursiveDescent
     );
 
-    let symbol = "decl:fixture::d5::closure".to_string();
+    let symbol = "decl:fixture::d6::closure".to_string();
     let declaration = RuntimeDeclaration {
         symbol: symbol.clone(),
         kind: RuntimeDeclarationKind::Transparent {
@@ -5093,13 +5093,52 @@ fn retained_authority_residual_is_the_typed_selector_accounting() {
     };
     assert_eq!(
         declaration_recursive_descent_residual(&declaration),
-        Some(RecursiveDescentResidual::TransparentDeclarationClosure)
+        None,
+        "the completed transparent-declaration port remained in the residual"
     );
     let declarations = BTreeMap::from([(symbol.as_str(), &declaration)]);
     assert_eq!(
         select_body_emission_authority(
             &RuntimeExpr::Value(RuntimeValue::Bool(true)),
             &declarations,
+        ),
+        BodyEmissionAuthority::FunctionizedUnits
+    );
+
+    let nested_retained_symbol = "decl:fixture::d6::nested_retained".to_string();
+    let nested_retained_declaration = RuntimeDeclaration {
+        symbol: nested_retained_symbol.clone(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Closure {
+                        captures: Vec::new(),
+                        params: Vec::new(),
+                        body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                    }),
+                    args: Vec::new(),
+                }),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    assert_eq!(
+        declaration_recursive_descent_residual(&nested_retained_declaration),
+        Some(RecursiveDescentResidual::SeedClosureCall),
+        "retiring the declaration-closure reason hid a retained body reason"
+    );
+    assert_eq!(
+        select_body_emission_authority(
+            &RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            &BTreeMap::from([(
+                nested_retained_symbol.as_str(),
+                &nested_retained_declaration,
+            )]),
         ),
         BodyEmissionAuthority::RecursiveDescent
     );
@@ -5129,7 +5168,7 @@ fn retained_authority_residual_is_the_typed_selector_accounting() {
 }
 
 #[test]
-fn complete_residual_report_reaches_all_five_without_short_circuiting() {
+fn complete_residual_report_reaches_all_four_without_short_circuiting() {
     let active_recursor = || RuntimeExpr::ComputationalMatch {
         scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
         cases: vec![crate::RuntimeComputationalMatchCase {
@@ -5182,22 +5221,6 @@ fn complete_residual_report_reaches_all_five_without_short_circuiting() {
         }),
         args: Vec::new(),
     };
-    let declaration_symbol = "decl:fixture::d1::closure".to_string();
-    let declaration = RuntimeDeclaration {
-        symbol: declaration_symbol.clone(),
-        kind: RuntimeDeclarationKind::Transparent {
-            body: RuntimeExpr::LexicalClosure {
-                captures: Vec::new(),
-                params: Vec::new(),
-                body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
-            },
-        },
-        metadata: RuntimeSymbolMetadata {
-            lowerability: Some(RuntimeLowerabilityStatus::Supported),
-            ..RuntimeSymbolMetadata::empty()
-        },
-    };
-
     // Promise class: durable invariant.
     //
     // MEASURED: every closed residual variant has a named source witness, and
@@ -5231,23 +5254,6 @@ fn complete_residual_report_reaches_all_five_without_short_circuiting() {
             "D1 did not reach {expected:?}"
         );
     }
-    let declarations =
-        BTreeMap::from([(declaration_symbol.as_str(), &declaration)]);
-    let declaration_report = recursive_descent_residual_report(
-        &RuntimeExpr::Value(RuntimeValue::Bool(true)),
-        &declarations,
-    );
-    assert_eq!(
-        declaration_report.variants(),
-        BTreeSet::from([RecursiveDescentResidual::TransparentDeclarationClosure])
-    );
-    assert_eq!(
-        declaration_report.by_owner,
-        BTreeMap::from([(
-            RecursiveDescentResidualOwner::Declaration(declaration_symbol.clone()),
-            BTreeSet::from([RecursiveDescentResidual::TransparentDeclarationClosure]),
-        )])
-    );
 
     let compound = RuntimeExpr::Record {
         fields: vec![
@@ -5258,13 +5264,12 @@ fn complete_residual_report_reaches_all_five_without_short_circuiting() {
         ],
     };
     assert_eq!(
-        recursive_descent_residual_report(&compound, &declarations).variants(),
+        recursive_descent_residual_report(&compound, &BTreeMap::new()).variants(),
         BTreeSet::from([
             RecursiveDescentResidual::ProducerMatchCall,
             RecursiveDescentResidual::MatchScrutineeRecursor,
             RecursiveDescentResidual::LexicalCallArgumentRecursor,
             RecursiveDescentResidual::SeedClosureCall,
-            RecursiveDescentResidual::TransparentDeclarationClosure,
         ]),
         "D1 retained the selector's first-hit short circuit"
     );
@@ -7642,7 +7647,7 @@ fn computational_match_declaration_ref_emits_and_runs_the_declaration_owned_unit
     );
 }
 
-/// RT-DECL-CLOSURE-PORT D2–D5 — a closure declaration crosses two typed unit
+/// RT-DECL-CLOSURE-PORT D2–D6 — a closure declaration crosses two typed unit
 /// boundaries: exact DeclarationRef -> declaration wrapper -> retained body.
 ///
 /// Promise class: durable invariant plus mutation proof.
@@ -7652,9 +7657,8 @@ fn computational_match_declaration_ref_emits_and_runs_the_declaration_owned_unit
 /// observation.
 /// CLAIMED: the declaration wrapper preserves the result/trap protocol of its
 /// already-owned body unit.
-/// THE GAP: this does not select FunctionizedUnits through the production
-/// residual selector; the scoped guard exists only until D6 removes that
-/// residual, and AC-1 remains the post-D6 behavioural compile.
+/// THE GAP: this exercises the production authority selector on local fixtures;
+/// AC-1 separately compiles the two independently preserved semantic deltas.
 #[test]
 fn declaration_closure_unit_preserves_exact_result_and_trap_protocol() {
     fn declaration(symbol: &str, body: RuntimeExpr) -> RuntimeDeclaration {
@@ -7688,7 +7692,6 @@ fn declaration_closure_unit_preserves_exact_result_and_trap_protocol() {
         expr: &RuntimeExpr,
         declaration: &RuntimeDeclaration,
     ) -> Result<RuntimeObservation, CraneliftBackendError> {
-        let _authority = TestDeclarationClosurePortAuthority::force_functionized();
         let symbol = declaration.symbol.as_str();
         let compiled = compile_expr_into_module(
             new_jit_module()?,

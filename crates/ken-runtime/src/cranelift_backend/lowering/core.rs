@@ -52,8 +52,6 @@ enum RecursiveDescentResidual {
     LexicalCallArgumentRecursor,
     /// A call whose callee is the retained non-lexical closure form.
     SeedClosureCall,
-    /// A transparent declaration whose body is a closure seed.
-    TransparentDeclarationClosure,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -214,13 +212,6 @@ fn walk_declaration_recursive_descent_residuals(
 ) -> bool {
     match &declaration.kind {
         RuntimeDeclarationKind::Transparent { body } => {
-            if matches!(
-                body,
-                RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
-            ) && !visit(RecursiveDescentResidual::TransparentDeclarationClosure)
-            {
-                return false;
-            }
             walk_recursive_descent_residuals(body, visit)
         }
         RuntimeDeclarationKind::Primitive { .. }
@@ -283,43 +274,6 @@ fn emit_recursive_descent_residual_diagnostic(
     }
 }
 
-// Test-only bridge for validating D2–D5 while D6 deliberately retains the
-// production selector residual. The guard is thread-local and restores the
-// exact selector on drop, so no parallel control can inherit the forced arm.
-#[cfg(test)]
-thread_local! {
-    static TEST_DECLARATION_CLOSURE_PORT_AUTHORITY: std::cell::Cell<bool> =
-        const { std::cell::Cell::new(false) };
-}
-
-#[cfg(test)]
-struct TestDeclarationClosurePortAuthority;
-
-#[cfg(test)]
-impl TestDeclarationClosurePortAuthority {
-    fn force_functionized() -> Self {
-        TEST_DECLARATION_CLOSURE_PORT_AUTHORITY.with(|cell| {
-            assert!(
-                !cell.replace(true),
-                "declaration closure port authority was already forced"
-            );
-        });
-        Self
-    }
-}
-
-#[cfg(test)]
-impl Drop for TestDeclarationClosurePortAuthority {
-    fn drop(&mut self) {
-        TEST_DECLARATION_CLOSURE_PORT_AUTHORITY.with(|cell| {
-            assert!(
-                cell.replace(false),
-                "declaration closure port authority was not forced"
-            );
-        });
-    }
-}
-
 /// The one temporary B2F migration selector, evaluated once at compilation
 /// entry from source syntax and declaration kinds only.
 ///
@@ -331,10 +285,6 @@ fn select_body_emission_authority(
     expr: &RuntimeExpr,
     declarations: &BTreeMap<&str, &RuntimeDeclaration>,
 ) -> BodyEmissionAuthority {
-    #[cfg(test)]
-    if TEST_DECLARATION_CLOSURE_PORT_AUTHORITY.with(std::cell::Cell::get) {
-        return BodyEmissionAuthority::FunctionizedUnits;
-    }
     if recursive_descent_residual(expr)
         .or_else(|| {
             declarations
