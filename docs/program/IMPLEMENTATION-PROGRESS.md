@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-29 14:14:27Z — from 123 issue file(s) in `docs/program/issues/`.
+2026-07-29 14:36:11Z — from 127 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -107,6 +107,7 @@ the committed file matches the generator's output.
 | `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | closed | runtime | S | none | 818 |
 | `RT-AGG-COMPOSE` | escaping two Resources into one aggregate (Prod (Resource _) (Resource _)) fails at erasure — checked endpoints do not compose | draft | runtime | TBD | none | — |
 | `RT-DECL-CLOSURE-PORT` | Transparent-declaration-closure emission port — a retained TransparentDeclarationClosure residual forces the whole object onto the monolithic RecursiveDescent root, which exceeds Cranelift's per-function ceiling | ready | runtime | L | none | — |
+| `RT-DESCENT-RETIRE` | Retire RecursiveDescent — delete the migration selector, the residual enum, the authority variant, and the recursive-descent emission lane | ready | runtime | M | none | — |
 | `RT-EFFECT-DIFF` | One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can | ready | runtime | L | none | — |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
 | `RT-FNSPLIT-B1R` | RT-NATIVE-FNSPLIT Boundary B1R — encode the occurrence-local semantic material B1 counted but never stored (repair of landed B1) | merged | runtime | L | none | 937 |
@@ -130,8 +131,11 @@ the committed file matches the generator's output.
 | `RT-PARITY` | interpreter/native parity erratum (adversary F5 + F6) | closed | runtime | M | none | — |
 | `RT-PLANNER-ATTRIB-K` | Boundary A planner: fixed K is a design invariant — move the K-exceeded rejection off the capacity channel | merged | runtime | XS | none | https://github.com/swe-toolkit/ken/pull/935 |
 | `RT-PLANNER-DIAGNOSTIC-K` | Boundary A planner: report planner-invariant failures as planner defects, and assert fixed_k CONSTANT rather than merely affine | merged | runtime | S | none | https://github.com/swe-toolkit/ken/pull/929 |
+| `RT-PRODUCER-MATCH-PORT` | Producer-match call port — an ordinary Match whose scrutinee is directly a Call routes the whole object to RecursiveDescent | ready | runtime | M | none | — |
+| `RT-RECURSOR-TRANSPORT` | Active-recursor transport — an active computational recursor's invocation-local scope/return-hole state cannot cross a functionized unit boundary, retaining two residual classes | ready | runtime | L | none | — |
 | `RT-SCALE-A` | Boundary A — re-derive the planner census for n=3..7 against the COMPLETED factored representation, superseding the provisional outer-planner numbers | merged | runtime | M | none | — |
 | `RT-SCALE-B` | Boundary B — the full n=3..7 emission measurement, the research-grounded analytical model, and the operator scaling verdict that gates RT-NATIVE-FNSPLIT's merge | merged | runtime | L | none | — |
+| `RT-SEED-CALL-PORT` | Seed-closure call port — a Call whose callee is the retained non-lexical closure form routes the whole object to RecursiveDescent | ready | runtime | M | none | — |
 | `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
 | `RT-SYMLINK-LANE` | SymlinkPolicy is honoured by the interpreter lane and unreachable in the native lane — FollowWithinScope has no native behaviour | draft | runtime | TBD | none | — |
@@ -209,6 +213,13 @@ is itself not yet `merged`/`closed`:
 - `PX8` blocked by `PX8-ERRID-SCOPE` (status: ready)
 - `PX9` blocked by `PX8` (status: draft)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
+- `RT-DESCENT-RETIRE` blocked by `RT-DECL-CLOSURE-PORT` (status: ready)
+- `RT-DESCENT-RETIRE` blocked by `RT-SEED-CALL-PORT` (status: ready)
+- `RT-DESCENT-RETIRE` blocked by `RT-PRODUCER-MATCH-PORT` (status: ready)
+- `RT-DESCENT-RETIRE` blocked by `RT-RECURSOR-TRANSPORT` (status: ready)
+- `RT-PRODUCER-MATCH-PORT` blocked by `RT-SEED-CALL-PORT` (status: ready)
+- `RT-RECURSOR-TRANSPORT` blocked by `RT-PRODUCER-MATCH-PORT` (status: ready)
+- `RT-SEED-CALL-PORT` blocked by `RT-DECL-CLOSURE-PORT` (status: ready)
 
 ## Gate progress
 
