@@ -10,7 +10,7 @@ closure-seed → callable-unit machinery at the call site.**
 this is its second application point.
 
 ⛔ **Read `docs/program/16-recursive-descent-retirement.md` first.** It carries
-the campaign's two binding traps and the schedule. This frame does not repeat
+the campaign's three binding traps and the schedule. This frame does not repeat
 them.
 
 ⭐ **This node may close for free on `D1`, and that is a success, not a failure
@@ -53,6 +53,12 @@ general, little or nothing remains here.
 
 ## 3. Deliverables
 
+- **⭐ `D0` — the delta-free regression baseline.** Before applying any delta,
+  run the target suite on the base and record which rows are green. That set is
+  what `AC-1b` holds you to. ⛔ A measurement carrying your own delta cannot
+  produce it — see the campaign doc's **Trap 2**, where this cost
+  [[RT-DECL-CLOSURE-PORT]] a candidate. ⭐ If `D1` closes this node for free, no
+  delta is ever applied and `D0` is moot; run it only if you proceed to build.
 - **`D1` — Measure before building, and be willing to stop.** Using the
   full-residual enumeration built by [[RT-DECL-CLOSURE-PORT]]'s `D1`, report
   whether `SeedClosureCall` still fires on any measured program.
@@ -84,12 +90,18 @@ general, little or nothing remains here.
   ⛔ **If a second transport mechanism appears necessary, stop and report** —
   that is a finding about the first one's generality, and it re-cuts this node.
 - **`D3` — Remove `SeedClosureCall`** from `RecursiveDescentResidual`, and only
-  then re-run `AC-1`.
+  then re-run `AC-1a` and `AC-1b`.
 
 ## 4. Acceptance criteria
 
-- **`AC-1`.** Every program `D1` named as firing this class **compiles and
-  passes** its existing suite. ⛔ Not "the residual is gone" — the objects build.
+- **`AC-1a` — the ceiling moved.** The selector reports
+  `authority=FunctionizedUnits` / `residuals=none` on every program `D1` named
+  as firing this class.
+- **`AC-1b` — the objects still build.** Those programs **compile and pass**
+  their existing suites, **and every row green in `D0` is still green**. ⛔ Not
+  "the residual is gone" — the objects build. ⚠ `AC-1a` does **not** discharge
+  this: it quantifies over the firing set, and the regression population is its
+  complement (campaign doc, Trap 2).
 - **`AC-2`.** `D1`'s enumeration is recorded in the tree with the class's full
   population named. ⛔ **If the node closes on an empty population, `D1a`'s
   positive control is recorded too.** A close-on-absence without it is not a

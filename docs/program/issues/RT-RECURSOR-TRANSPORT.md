@@ -62,6 +62,6 @@ route it; it is the fail-closed machinery working, not a defect in this node.**
 
 ## ▶ THE FRAME IS WRITTEN
 
-`docs/program/wp/RT-RECURSOR-TRANSPORT.md`. ⭐ Campaign context, the two traps
+`docs/program/wp/RT-RECURSOR-TRANSPORT.md`. ⭐ Campaign context, the three traps
 that bind every node in this arc, and the full schedule:
 `docs/program/16-recursive-descent-retirement.md` — **read it before the frame.**
