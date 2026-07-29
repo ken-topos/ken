@@ -554,6 +554,14 @@ pub(in crate::cranelift_backend) fn compile_expr_into_module<'a, M: Module>(
                 let root = compiler.retained_body_occurrence(root_origin)?;
                 let lowered =
                     compiler.lower_expr(&mut builder, root, &initial_env)?;
+                // RecursiveDescent still owns the explicit active-recursor
+                // residual. It inlines across generated-unit owner boundaries,
+                // so the function-owner equality used by FunctionizedUnits is
+                // inapplicable here. Static Match reachability is nevertheless
+                // closed at this generated root boundary: otherwise a recursive
+                // source-machine revisit can emit one case and later classify
+                // that same subtree as dead.
+                compiler.close_statically_unselected_match_cases()?;
                 compiler.require_complete_join_plan_consumption()?;
                 compiler.require_complete_dynamic_splice_edge_consumption()?;
                 let lowered =
@@ -3672,6 +3680,10 @@ impl<'a> Lowering<'a> {
                                 _ => None,
                             };
                             let (case_index, case) = if let Some(selected) = selected {
+                                self.record_source_machine_computational_match_selection(
+                                    static_origin,
+                                    Some(selected.0),
+                                )?;
                                 selected
                             } else if answer_route
                                 == SourceComputationalAnswerRoute::CheckedSelectedRecursor
@@ -3699,6 +3711,10 @@ impl<'a> Lowering<'a> {
                                             )
                                     })
                                 else {
+                                    self.record_source_machine_computational_match_selection(
+                                        static_origin,
+                                        None,
+                                    )?;
                                     #[cfg(test)]
                                     px8tr_record_trap_provenance(
                                         Px8trTrapProvenanceEvent::CheckedRecursorDefault {
@@ -3720,6 +3736,10 @@ impl<'a> Lowering<'a> {
                                         return_constructor: return_case.constructor.clone(),
                                     },
                                 );
+                                self.record_source_machine_computational_match_selection(
+                                    static_origin,
+                                    Some(return_index),
+                                )?;
                                 let case_env = env_with_operands([retained], &env);
                                 control.continuation = *next;
                                 let body = self.owned_case_body_occurrence(
@@ -3740,6 +3760,10 @@ impl<'a> Lowering<'a> {
                                         "source scrutinee is not a constructor value",
                                     ));
                                 }
+                                self.record_source_machine_computational_match_selection(
+                                    static_origin,
+                                    None,
+                                )?;
                                 #[cfg(test)]
                                 if answer_route
                                     == SourceComputationalAnswerRoute::CheckedSelectedRecursor

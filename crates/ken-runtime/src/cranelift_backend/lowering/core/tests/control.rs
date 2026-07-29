@@ -8026,19 +8026,52 @@ fn d8_source_machine_with_match(body: RuntimeExpr) -> RuntimeExpr {
     }
 }
 
+fn d8_recursive_computational_revisit_with_join() -> RuntimeExpr {
+    let aggregate = RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Result::Ok".to_string(),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let later_case_body = RuntimeExpr::If {
+        scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        then_expr: Box::new(aggregate.clone()),
+        else_expr: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(aggregate),
+            }),
+            args: Vec::new(),
+        }),
+    };
+    host_result_closure_match(recursive_computational_result_depth(2, later_case_body))
+}
+
 /// MEASURED: successful FunctionizedUnits emission compares each generated
 /// function's complete semantic-owner join population with two disjoint sets:
 /// joins reached by emission and joins under a semantic-child subtree that a
-/// statically known branch or case selection structurally dispositions.
+/// statically known branch or case selection structurally dispositions. The
+/// explicit active-recursor RecursiveDescent residual closes the same recorded
+/// case population at its generated root boundary, without applying
+/// function-owner equality across the owner boundaries it deliberately inlines.
+/// Its population fixture recursively revisits one ComputationalMatch and puts
+/// a source join in the second selected case.
 ///
-/// CLAIMED: every required planned source join is consumed exactly once.
+/// CLAIMED: every required planned FunctionizedUnits source join is consumed
+/// exactly once, and the retained active-recursor lane cannot emit a case join
+/// and later disposition that case as statically unselected.
 ///
-/// GAP: owner equality alone over-approximates emission reachability. The
+/// THE GAP: owner equality alone over-approximates emission reachability. The
 /// known-true/known-false `If` pair plus ordinary and producer `Match`
 /// discriminators place both a `Call` and nested `If` in dead source subtrees.
 /// The population-side mutations leave one such subtree or case classified as
 /// required emission and must red at generated-function closure. Set equality
-/// still supplies omission/wrong-owner closure, while the insertion guard in
+/// still supplies omission/wrong-owner closure. A route-specific reached-edge
+/// removal mutation proves that recursive source-machine selections contribute
+/// to the same union: removing the revisit record must red at the
+/// emitted/dispositioned overlap boundary. The insertion guard in
 /// `consume_join_plan` supplies the independent duplicate direction.
 ///
 /// Promise class: durable invariant.
@@ -8106,6 +8139,27 @@ fn d8_every_required_join_plan_is_consumed_exactly_once() {
                 panic!("source-machine {route} Match did not disposition dead cases: {error}")
             });
     }
+    recursive_port_process_compiles(&d8_recursive_computational_revisit_with_join())
+        .expect("a recursive computational revisit unions its later selected case");
+
+    set_d8_join_consumption_mutation(
+        JoinConsumptionMutation::OmitSourceMachineComputationalMatchSelection,
+    );
+    let recursive_revisit_result =
+        recursive_port_process_compiles(&d8_recursive_computational_revisit_with_join());
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
+    let recursive_revisit_omitted = recursive_revisit_result
+        .expect_err("omitting a recursive revisit selection must fail at function closure");
+    assert!(
+        matches!(
+            recursive_revisit_omitted,
+            CraneliftBackendError::Backend(BackendFailure::Module(ref detail))
+                if detail.contains("emitted source join")
+                    && detail.contains("later dispositioned as statically unselected")
+        ),
+        "recursive-revisit reached-edge mutation reached the wrong boundary: \
+         {recursive_revisit_omitted:?}"
+    );
 
     set_d8_join_consumption_mutation(JoinConsumptionMutation::IncludeStaticallyUnselected);
     let dead_included =

@@ -756,6 +756,7 @@ enum JoinConsumptionMutation {
     DuplicateFirst,
     IncludeStaticallyUnselected,
     OmitFirstStaticallyUnselectedMatchCase,
+    OmitSourceMachineComputationalMatchSelection,
 }
 
 #[cfg(test)]
@@ -1588,7 +1589,8 @@ impl<'a> Lowering<'a> {
             JoinConsumptionMutation::SkipFirst
             | JoinConsumptionMutation::DuplicateFirst
             | JoinConsumptionMutation::IncludeStaticallyUnselected
-            | JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase => {}
+            | JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase
+            | JoinConsumptionMutation::OmitSourceMachineComputationalMatchSelection => {}
         }
         if self
             .function_local
@@ -1681,6 +1683,27 @@ impl<'a> Lowering<'a> {
             reached.insert(index);
         }
         Ok(())
+    }
+
+    /// Record a specialized/default selection made after the source-machine
+    /// continuation resumes a computational match.
+    ///
+    /// The separate seam is test-visible because an initial constructor
+    /// selection and a recursive revisit use different lowering routes. A
+    /// mutation must be able to remove only the revisit edge while preserving
+    /// the initial population entry and the generated-function closure check.
+    fn record_source_machine_computational_match_selection(
+        &mut self,
+        match_origin: StaticOriginId,
+        selected_case: Option<usize>,
+    ) -> Result<(), CraneliftBackendError> {
+        #[cfg(test)]
+        if D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get)
+            == JoinConsumptionMutation::OmitSourceMachineComputationalMatchSelection
+        {
+            return Ok(());
+        }
+        self.disposition_statically_unselected_match_cases(match_origin, selected_case)
     }
 
     /// Close every recorded static `Match` selection against its validated
