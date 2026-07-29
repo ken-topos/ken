@@ -1,7 +1,7 @@
 ---
 id: NATIVE-HANDLE-CARRIER
 title: "Native build-pipeline completeness — a constructor-private resource-carrying handle fails checked-core body-view lowering (MissingClosureMetadata) when it crosses the higher-order withBuffer normalization boundary"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none
@@ -10,6 +10,29 @@ blocks: [PX8-F-CAP-41]
 github: null
 origin: discovered under [[PX8-F-CAP-41]] Phase 2 impl (foundation-implementer hard-stop evt_563ss8821n7f); Architect means/representation ruling evt_2zkjr68y1sdgf (thr_570t9qzcthjv9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
+
+> ## ⭐ §5a RESEARCH-CONSULT TRIGGER — THE COUNT OF RECORD LIVES HERE NOW
+>
+> Carried forward from [[RT-NATIVE-FNSPLIT]] when it closed 2026-07-29.
+> ⛔ That node's own §5a section still reads a stale **15**; its closeout says so.
+> ⛔ Do not read the count from any node other than this one.
+>
+> | | |
+> |---|---|
+> | **COUNT OF RECORD** | **20** |
+> | ENTRIES | 11 |
+> | NEXT PREDICATE CHECK | 12th entry |
+> | NEXT RESEARCH PULL | **#21 — one hard stop away** |
+>
+> **Hard stop #20 (2026-07-29):** Foundation's [[PX8-ERRID-ALLOC]] rebase still
+> failed the native size gate at `checked_process_object`. Architect ruling
+> `evt_3t7t27e3rv8cx` — the object routes to the monolithic `RecursiveDescent`
+> root, so `FunctionizedUnits` never applied. Produced
+> [[RT-DECL-CLOSURE-PORT]].
+>
+> ⚠ **#21 is the next hard stop, and it fires the research pull.** The Architect
+> self-triggers it; the Steward holds the count of record as backstop.
+
 
 > ## ⛔ `draft` → `ready` 2026-07-28 — the banner promised what the status withheld
 >

@@ -1,15 +1,44 @@
 ---
 id: PX8-ERRID-ALLOC
 title: "ResourceErrorV1 has no allocation-failure identity and buffer allocation is infallible, so PX8's allocation-distinct-from-BufferLimit row cannot be produced at all"
-status: active
+status: ready
 owner: foundation
 size: M
 gate: none
-depends_on: [RT-NATIVE-FNSPLIT]
+depends_on: [RT-NATIVE-FNSPLIT, RT-DECL-CLOSURE-PORT]
 blocks: [PX8-ERRID-SCOPE]
 github: null
 origin: "Architect ruling evt_6tzss92ckj2by (2026-07-27) on the Steward's PX8-ERRID-SCOPE partition question. Split out because the Architect ruled this row 'inside, but currently not representable' and named it a prerequisite to the evidence work."
 ---
+
+> # ⛔⛔ HELD 2026-07-29 — THE FNSPLIT WALL WAS NEVER THIS NODE'S TO CLEAR
+>
+> **The rebase was done and the gate still fails.** Foundation rebased the
+> preserved candidate onto current `main` and re-ran the exact command that
+> killed PR #1141:
+>
+> - rebased candidate `ad7298fb80128d43e430d427b71f8aa16a9336aa`, tree `77ece013`
+> - base `origin/main = eef0cb06`, `main` an ancestor, worktree clean
+> - protected `preserved/PX8-ERRID-ALLOC-e65c81b` = `e65c81b5`, tree `102c54f8`
+> - 0 passed / 1 failed after **135.28 s** — `rt_parity_native.rs:370`,
+>   ObjectEmission at field `checked_process_object`,
+>   `Cranelift … Code for function is too large`
+>
+> **Architect ruling `evt_3t7t27e3rv8cx` — outcome 2.** The oversized function is
+> the monolithic `RecursiveDescent` root; `FunctionizedUnits` defines **zero**
+> semantic units on this route. ⇒ The wall belongs to a **different mechanism**,
+> now tracked as [[RT-DECL-CLOSURE-PORT]] (Runtime), which is this node's new
+> and only blocker.
+>
+> ⭐ **THE FEATURE DELTA IS EXONERATED.** ⛔ A second size reduction is **not
+> authorized** — shrinking the identity mapping would trade semantics for bytes.
+> Foundation correctly stopped without attempting one, and **owes no restart
+> until the port lands.**
+>
+> ⚠ **The 2026-07-28 edge onto [[RT-NATIVE-FNSPLIT]] was a Steward scope
+> inference that was never measured.** It is retained in `depends_on` as history
+> — that node is `merged` and no longer gates anything here.
+
 
 > ## ⛔ `draft` → `ready` 2026-07-28 — a re-cut is IMPLEMENTATION work, not framing
 >
