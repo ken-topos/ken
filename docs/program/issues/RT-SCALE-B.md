@@ -99,24 +99,10 @@ lines are the arming, and they are what either party re-reads.
 ```text
 SYMPTOM INVENTORY (Architect appends one line per hard-stop; never rewritten)
 COUNT OF RECORD      = 19  (Steward, 2026-07-29; §5a backstop holds it)
-NEXT PREDICATE CHECK = 9th entry, then 12th, 15th, …
+ENTRIES              = 10
+NEXT PREDICATE CHECK = 12th entry   (9th CONSUMED — answered below)
 NEXT RESEARCH PULL   = #21, then #24, #27, …   (#18 FIRED 2026-07-29 — spent)
 ```
-
-⛔ **ENTRIES 9 AND 10 ARE OWED — the inventory has not been appended since it was
-armed.** Two hard-stops have landed since: **#18** (the `04cdce4e` `ken-cli` CI
-rejection, `dec_3tawbngh6k761`) and **#19** (the `34177256` trap-exit stop,
-`dec_4kf9wnm0pyvft`). By this block's own header — *one line per hard-stop* —
-those are entries 9 and 10, and ⭐ **entry 9 is the armed predicate check.**
-
-⚠ **This is the same disarming failure the counters exist to prevent**, in its
-other form: not a wrong count, but **a counter nobody advanced.** The research
-pull fired at #18 only because that number was written down and re-read. ⇒ The
-count of record is now written **here**, not only in a Steward resume state.
-
-⛔ **The Steward does not append the entries.** They are the Architect's
-observations; a Steward-written symptom line would make the instrument measure
-the Steward's reading of a ruling rather than the ruling.
 
 ⭐ **#18 fired and is spent.** Hard-stop #18 was the `04cdce4e` CI rejection —
 seven red checks, every one in `ken-cli` and none reachable from the
@@ -148,10 +134,36 @@ copying CLI assertions into a second runtime-local corpus is the wrong repair.
    in-thread record — re-derive from the thread if a specific one is needed;
    ⛔ the **count**, not the prose, is what arms the trigger.
 
+**Entries appended after arming:**
+
+9. `DeclarationCall` source validation treated `StaticOriginId` as an index
+   into raw walk-ordered `semantic_sources`, even though the exact source,
+   origin, owner, target, and typed edge were already present.
+10. trap-exit selection treated absent optional unit-frame handles as root
+    authority, so a missing unit lane named the root's static exit path even
+    though every emitted unit already had its fixed `TrapWord` ABI slot.
+
 ⭐ **The shared predicate already named for entries 1–4: a dynamic property
 naming static code.** ⚠ If a new entry reduces to that same predicate, the
 **emission port** is incomplete — it routes back to the port work and ⛔ does
 **not** become a verdict of super-linearity.
+
+### ✅ THE 9TH-ENTRY PREDICATE CHECK — MIXED; ENTRY 10 RECURS
+
+**Entry 9 does not reduce to the shared predicate.** Its static name and all
+facts needed to validate it already existed. The validator mishandled that name
+as a position in a differently ordered collection. That is the
+present-but-misindexed case: a localized validator representation defect, not a
+dynamic surrogate for static code and not evidence of scaling behavior.
+
+**Entry 10 does reduce to the shared predicate.** Absence of optional
+unit-frame handles is an ambient construction property, not a generated
+function's static role. Using it to choose the root exit makes that dynamic
+absence name static root code and fails open: a malformed unit silently
+acquires root authority. The repair therefore belongs to the existing
+`RT-FNSPLIT-RECUR-PORT` emission-port work: bind an explicit closed root-versus-
+unit trap-exit authority at function construction. It is ⛔ **not** a
+super-linearity verdict and does not create an `RT-EFFECT-DIFF` obligation.
 
 ⚠ **Why both counters start mid-sequence.** This chain ran to **33 hard-stops
 with the research trigger never fired**, because the count lived only as prose in
