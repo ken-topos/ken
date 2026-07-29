@@ -104,6 +104,11 @@ pub(in crate::cranelift_backend) struct ScaleBEmissionMetrics {
     pub(in crate::cranelift_backend) authority_functionized: bool,
     pub(in crate::cranelift_backend) emitted_helpers: usize,
     pub(in crate::cranelift_backend) production_functions: usize,
+    pub(in crate::cranelift_backend) native_int_functions: usize,
+    pub(in crate::cranelift_backend) boundary_value_functions: usize,
+    pub(in crate::cranelift_backend) recursive_descent_roots: usize,
+    pub(in crate::cranelift_backend) functionized_root_adapters: usize,
+    pub(in crate::cranelift_backend) functionized_unit_bodies: usize,
     pub(in crate::cranelift_backend) clif_instructions: usize,
     pub(in crate::cranelift_backend) clif_bytes: usize,
     pub(in crate::cranelift_backend) total_dfg_values: usize,
@@ -139,6 +144,11 @@ fn scale_b_begin_emission_attempt(plan: &StaticTransitionPlan<'_>, authority_fun
                 authority_functionized,
                 emitted_helpers: 0,
                 production_functions: 0,
+                native_int_functions: 0,
+                boundary_value_functions: 0,
+                recursive_descent_roots: 0,
+                functionized_root_adapters: 0,
+                functionized_unit_bodies: 0,
                 clif_instructions: 0,
                 clif_bytes: 0,
                 total_dfg_values: 0,
@@ -172,7 +182,17 @@ pub(in crate::cranelift_backend) fn scale_b_last_emission_metrics() -> Option<Sc
 }
 
 #[cfg(test)]
-fn scale_b_record_function(function: &Function, emitted_helper: bool) {
+#[derive(Clone, Copy)]
+enum ScaleBEmitter {
+    NativeInt,
+    BoundaryValue,
+    RecursiveDescentRoot,
+    FunctionizedRootAdapter,
+    FunctionizedUnitBody,
+}
+
+#[cfg(test)]
+fn scale_b_record_function(function: &Function, emitter: ScaleBEmitter) {
     SCALE_B_EMISSION_ATTEMPT.with(|attempt| {
         let mut attempt = attempt.borrow_mut();
         let Some(attempt) = attempt.as_mut() else {
@@ -188,25 +208,46 @@ fn scale_b_record_function(function: &Function, emitted_helper: bool) {
         attempt.metrics.total_dfg_values += function.dfg.num_values();
         attempt.metrics.total_instructions += instructions;
         attempt.metrics.total_blocks += function.dfg.num_blocks();
-        if emitted_helper {
-            attempt.metrics.emitted_helpers += 1;
+        match emitter {
+            ScaleBEmitter::NativeInt => attempt.metrics.native_int_functions += 1,
+            ScaleBEmitter::BoundaryValue => attempt.metrics.boundary_value_functions += 1,
+            ScaleBEmitter::RecursiveDescentRoot => {
+                attempt.metrics.recursive_descent_roots += 1;
+            }
+            ScaleBEmitter::FunctionizedRootAdapter => {
+                attempt.metrics.functionized_root_adapters += 1;
+            }
+            ScaleBEmitter::FunctionizedUnitBody => {
+                attempt.metrics.functionized_unit_bodies += 1;
+                attempt.metrics.emitted_helpers += 1;
+            }
         }
     });
 }
 
 #[cfg(test)]
-pub(crate) fn scale_b_record_fixed_helper(function: &Function) {
-    scale_b_record_function(function, false);
+pub(crate) fn scale_b_record_native_int(function: &Function) {
+    scale_b_record_function(function, ScaleBEmitter::NativeInt);
 }
 
 #[cfg(test)]
-fn scale_b_record_root_adapter(function: &Function) {
-    scale_b_record_function(function, false);
+pub(crate) fn scale_b_record_boundary_value(function: &Function) {
+    scale_b_record_function(function, ScaleBEmitter::BoundaryValue);
+}
+
+#[cfg(test)]
+fn scale_b_record_recursive_descent_root(function: &Function) {
+    scale_b_record_function(function, ScaleBEmitter::RecursiveDescentRoot);
+}
+
+#[cfg(test)]
+fn scale_b_record_functionized_root_adapter(function: &Function) {
+    scale_b_record_function(function, ScaleBEmitter::FunctionizedRootAdapter);
 }
 
 #[cfg(test)]
 fn scale_b_record_unit_body(function: &Function) {
-    scale_b_record_function(function, true);
+    scale_b_record_function(function, ScaleBEmitter::FunctionizedUnitBody);
 }
 
 const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 13] = [

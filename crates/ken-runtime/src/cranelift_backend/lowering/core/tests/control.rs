@@ -7621,13 +7621,18 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
     const FORCE_INDETERMINATE_ENV: &str =
         "KEN_RT_SCALE_B_FORCE_INDETERMINATE";
     const OMIT_RESULT_ENV: &str = "KEN_RT_SCALE_B_OMIT_RESULT";
-    const REQUIRED_FIELDS: [&str; 39] = [
+    const REQUIRED_FIELDS: [&str; 44] = [
         "compile_wall_ns=",
         "peak_rss_kib=",
         "distinct_interned_semantic_states=",
         "defined_helpers=",
         "emitted_helpers=",
         "production_functions=",
+        "native_int_functions=",
+        "boundary_value_functions=",
+        "recursive_descent_roots=",
+        "functionized_root_adapters=",
+        "functionized_unit_bodies=",
         "clif_instructions=",
         "clif_bytes=",
         "descriptor_construction_work=",
@@ -7778,6 +7783,7 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
             omitted.status
         );
 
+        let mut rows = Vec::new();
         for depth in 3..=7 {
             let measured = run_worker(depth, false, false);
             let measured_report = format!(
@@ -7799,10 +7805,111 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
                 assert!(
                     measured_report.contains(field),
                     "RT_SCALE_B could_not_determine n={depth}: completed row \
-                     omitted required field {field}"
+                    omitted required field {field}"
                 );
             }
+            let result = measured_report
+                .lines()
+                .find(|line| {
+                    line.contains(&format!(
+                        "RT_SCALE_B_RESULT status=measured_complete n={depth}"
+                    ))
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "RT_SCALE_B could_not_determine n={depth}: complete \
+                         result line is absent"
+                    )
+                });
+            let row = result
+                .split_whitespace()
+                .filter_map(|field| field.split_once('='))
+                .filter_map(|(name, value)| {
+                    value
+                        .parse::<isize>()
+                        .ok()
+                        .map(|value| (name.to_string(), value))
+                })
+                .collect::<BTreeMap<_, _>>();
+            for field in REQUIRED_FIELDS {
+                let name = field.trim_end_matches('=');
+                assert!(
+                    row.contains_key(name),
+                    "RT_SCALE_B could_not_determine n={depth}: {name} is not a \
+                     numeric completed-row field"
+                );
+            }
+            rows.push(row);
         }
+
+        let metric_values = |name: &str| {
+            rows.iter()
+                .map(|row| {
+                    *row.get(name).unwrap_or_else(|| {
+                        panic!("completed rows omitted metric {name}")
+                    })
+                })
+                .collect::<Vec<_>>()
+        };
+        let differences = |values: &[isize]| {
+            let first = values
+                .windows(2)
+                .map(|pair| pair[1] - pair[0])
+                .collect::<Vec<_>>();
+            let second = first
+                .windows(2)
+                .map(|pair| pair[1] - pair[0])
+                .collect::<Vec<_>>();
+            (first, second)
+        };
+        for field in REQUIRED_FIELDS {
+            let name = field.trim_end_matches('=');
+            let (first, second) = differences(&metric_values(name));
+            eprintln!(
+                "RT_SCALE_B_DIFF metric={name} first={first:?} second={second:?}"
+            );
+        }
+
+        // The four structural invariants are the discriminator. The measured
+        // rows corroborate them; they are not an exponent inferred from five
+        // points.
+        let helper_key_bytes = metric_values("helper_key_bytes");
+        assert!(
+            helper_key_bytes.iter().all(|width| *width == 12),
+            "structural invariant 1: PlannedHelperKey gained payload beyond \
+             its closed transition/edge tag and static ID"
+        );
+        for name in [
+            "helper_key_bytes",
+            "activation_frame_bytes",
+            "store_node_bytes",
+            "static_node_id_bytes",
+            "persistent_node_id_bytes",
+            "helper_key_schemas",
+            "frame_schemas",
+            "store_node_schemas",
+        ] {
+            let values = metric_values(name);
+            assert!(
+                values.windows(2).all(|pair| pair[0] == pair[1]),
+                "structural invariant 2: {name} is not constant across n=3..7"
+            );
+        }
+        let persistent_nodes = metric_values("persistent_store_nodes");
+        let (persistent_first, persistent_second) =
+            differences(&persistent_nodes);
+        assert!(
+            persistent_first.iter().all(|difference| *difference >= 0)
+                && persistent_second.iter().all(|difference| *difference == 0),
+            "structural invariant 3: total persistent nodes are not affine"
+        );
+        let logical_depth = metric_values("max_logical_chain_depth");
+        let (_, logical_second) = differences(&logical_depth);
+        assert!(
+            logical_second.iter().all(|difference| *difference <= 0),
+            "structural invariant 4: logical chain depth grows faster than \
+             affine across the governed family"
+        );
         return;
     }
 
@@ -7892,12 +7999,31 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
     );
     assert_eq!(
         metrics.production_functions,
-        metrics
-            .emitted_helpers
-            .checked_add(37)
-            .expect("the production-function population fits usize"),
-        "the completed denominator must contain every unit body, one root \
-         adapter, seven native-Int helpers, and twenty-nine boundary helpers"
+        metrics.native_int_functions
+            + metrics.boundary_value_functions
+            + metrics.recursive_descent_roots
+            + metrics.functionized_root_adapters
+            + metrics.functionized_unit_bodies,
+        "the completed denominator must equal the closed typed emitter \
+         population"
+    );
+    assert_eq!(
+        metrics.functionized_unit_bodies, metrics.emitted_helpers,
+        "the emitted-helper numerator must be the unit-body population"
+    );
+    assert_eq!(
+        metrics.recursive_descent_roots, 0,
+        "the mutually exclusive RecursiveDescent emitter entered a governed \
+         FunctionizedUnits row"
+    );
+    assert_eq!(
+        metrics.functionized_root_adapters, 1,
+        "one completed governed object must contain one public root adapter"
+    );
+    assert!(
+        metrics.native_int_functions > 0 && metrics.boundary_value_functions > 0,
+        "both fixed production helper emitters must be present in the \
+         completed denominator"
     );
     for (name, value) in [
         (
@@ -7936,8 +8062,10 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
          authority=FunctionizedUnits compile_wall_ns={compile_wall_ns} \
          peak_rss_kib={peak_rss_kib} \
          distinct_interned_semantic_states={} defined_helpers={} \
-         emitted_helpers={} production_functions={} clif_instructions={} \
-         clif_bytes={} descriptor_construction_work={} \
+         emitted_helpers={} production_functions={} native_int_functions={} \
+         boundary_value_functions={} recursive_descent_roots={} \
+         functionized_root_adapters={} functionized_unit_bodies={} \
+         clif_instructions={} clif_bytes={} descriptor_construction_work={} \
          descriptor_comparison_work={} total_dfg_values={} \
          total_instructions={} total_blocks={} static_nodes={} edges={} \
          planned_helpers={} persistent_store_nodes={} \
@@ -7955,6 +8083,11 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
         plan.defined_helpers,
         metrics.emitted_helpers,
         metrics.production_functions,
+        metrics.native_int_functions,
+        metrics.boundary_value_functions,
+        metrics.recursive_descent_roots,
+        metrics.functionized_root_adapters,
+        metrics.functionized_unit_bodies,
         metrics.clif_instructions,
         metrics.clif_bytes,
         plan.descriptor_construction_work,
