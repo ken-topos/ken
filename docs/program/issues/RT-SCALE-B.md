@@ -84,8 +84,28 @@ lines are the arming, and they are what either party re-reads.
 ```text
 SYMPTOM INVENTORY (Architect appends one line per hard-stop; never rewritten)
 NEXT PREDICATE CHECK = 9th entry, then 12th, 15th, …
-NEXT RESEARCH PULL   = #18, then #21, #24, …
+NEXT RESEARCH PULL   = #21, then #24, #27, …   (#18 FIRED 2026-07-29 — spent)
 ```
+
+⭐ **#18 fired and is spent.** Hard-stop #18 was the `04cdce4e` CI rejection —
+seven red checks, every one in `ken-cli` and none reachable from the
+`ken-runtime` validation set that had just returned 562/0. The pull was
+dispatched (`evt_65xt5kzp8t704`) and the advisory returned
+(`evt_6980s92jgvf4h`), durable at
+`local/rt-fnsplit-recur-port-hard-stop-18-differential-oracle-advisory.md`.
+⚠ **The advisory did not settle the fork and was not asked to** — it stated the
+discriminator (*is the required semantic fact erased before observation, or
+present and mishandled?*) and left the ruling to the Architect.
+
+⭐ **Its one durable finding, independent of which way the fork goes:** the
+`ken-runtime` differential and the `ken-cli` parity suites **are not asking the
+same observational question.** `RuntimeObservation` is limited to returned
+ground values or traps, and the packaged decoder handles only scalar Int/Bool,
+while the dependent suites compare against the full `EffectObservation` surface
+(stdout, stderr, filesystem delta, terminal error, canonical effect trace,
+terminal class, exit status). ⇒ ⛔ **The crate boundary is incidental**; a
+`-p ken-runtime` green is not evidence about the richer observation, and
+copying CLI assertions into a second runtime-local corpus is the wrong repair.
 
 **Entries carried forward from the held chain (count of record = 8):**
 
