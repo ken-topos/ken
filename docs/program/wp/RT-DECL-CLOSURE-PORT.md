@@ -144,10 +144,23 @@ to widen.
   ⛔⛔ **AMENDED 2026-07-29 — `AC-1` NOW REQUIRES THIS ROW GREEN ON *TWO*
   INDEPENDENT DELTAS, NOT ONE.** As originally written it read *"on a tree
   carrying `ad7298fb`'s semantic delta"* — **Foundation's delta only.**
-  1. A tree carrying **`ad7298fb`**'s semantic delta ([[PX8-ERRID-ALLOC]],
-     preserved at `e65c81b5`).
+  1. A tree carrying **`ad7298fb`**'s semantic delta ([[PX8-ERRID-ALLOC]]).
   2. A tree carrying **`85dcee25`**'s semantic delta ([[NATIVE-HANDLE-CARRIER]],
      the `Resource Buffer → BufferHandle` carrier migration).
+
+  ⭐ **`ad7298fb` IS the measurement object for delta 1 — `e65c81b5` is NOT to be
+  run, and that is settled, not a shortcut.** `e65c81b5` is the pre-rebase
+  Foundation WIP; it sits on a **pre-repair** tree, and applying the `D1`
+  enumerator to it conflicts in `core.rs`. ⛔ **Do not hand-resolve that conflict
+  to "complete" this AC** — a resolution chosen so a row passes measures the
+  resolver, which is the defect that rejected `27f9dca2`.
+  ⇒ Equivalence was **measured, not asserted**: `git range-diff
+  5404108a..e65c81b5 eef0cb06..ad7298fb` maps the three-commit series in order
+  with final `e65c81b5 = ad7298fb` **patch-equivalent** (`D1` report,
+  `evt_24dbrgg36w6by`, 2026-07-29). ⭐ Recorded here because an in-thread
+  justification is not a durable deliverable, and without it a later reader
+  checking `AC-1` against `e65c81b5` literally would block on work that was
+  correctly done.
 
   ⭐ **Why the second one was added, and why omitting it would have made the
   reorder worthless.** Both deltas reach this same ceiling independently, and
@@ -191,6 +204,32 @@ to widen.
   downstream node inherits it**, and [[RT-DESCENT-RETIRE]]'s "no residual fires
   anywhere" would then be vacuous at exactly the moment it authorizes deleting
   the lane.
+
+  ### ✅ `AC-2` DISCHARGED 2026-07-29 at `93a6903b` (tree `c11bb8b0`)
+
+  `D1` report `evt_24dbrgg36w6by`, accepted by `runtime-leader`
+  `evt_3a595dcnam7f8`. **Both positive controls landed, and the first is
+  *causal*, not asserted:**
+
+  1. **Does not short-circuit** — the control exercises all five individual
+     witnesses **plus a compound all-five population**, `1/1` green. Mutating the
+     `report` visitor to short-circuit (`continue true → stops false`) turns it
+     **red at the compound assertion**, observing only
+     `{ProducerMatchCall, TransparentDeclarationClosure}` instead of five. Exited
+     101; restored byte-identically.
+  2. **All five variants reachable** — each has a named witness in the control.
+
+  ⭐ **This is the campaign's shared instrument, now controlled.** Downstream
+  nodes ([[RT-SEED-CALL-PORT]], [[RT-PRODUCER-MATCH-PORT]],
+  [[RT-RECURSOR-TRANSPORT]], [[RT-DESCENT-RETIRE]]) inherit it **and this
+  evidence** — ⚠ but re-prove it cheaply at each point of use, since `D2`–`D6`
+  rewrite `core.rs` underneath it.
+
+  **Scope fork result — the hard stop did NOT fire.** Both governed deltas select
+  `authority = RecursiveDescent` and report **only**
+  `TransparentDeclarationClosure`, on `buffer_nat_to_int` and `main`, then reach
+  the known size failure. ⇒ ⭐ **This node is confirmed as the fix for both held
+  candidates**, which is what the reorder assumed and did not wait for.
 - **`AC-3`.** `D5`'s owner/phase validation is present and fails closed **before**
   `D6` lands. A commit ordering that removes the residual first fails this AC.
 - **`AC-4` (no-regression).** Workspace green **in CI** — ⛔ never a local
