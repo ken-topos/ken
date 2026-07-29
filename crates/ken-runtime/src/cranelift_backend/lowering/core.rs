@@ -470,7 +470,15 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
         native_int: &native_int,
         boundary_value_abi: &boundary_value_abi,
     };
-    let root_function_local = helpers.declare_in_func(&mut module, &mut ctx.func);
+    let root_trap_exit = match body_emission_authority {
+        BodyEmissionAuthority::RecursiveDescent => Some(TrapExitAuthority::Root {
+            process_sentinel: root_trap_process_sentinel,
+            source_authorized: true,
+        }),
+        BodyEmissionAuthority::FunctionizedUnits => None,
+    };
+    let root_function_local =
+        helpers.declare_in_func(&mut module, &mut ctx.func, root_trap_exit);
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
         seed_env,
@@ -508,7 +516,6 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
         unsupported: Vec::new(),
         body_emission_authority,
         process_object: process_mode,
-        root_trap_process_sentinel,
         process_symbols,
         #[cfg(test)]
         native_int_mutation: NATIVE_INT_LOWERING_MUTATION.with(std::cell::Cell::get),

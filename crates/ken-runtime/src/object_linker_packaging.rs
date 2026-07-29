@@ -2900,6 +2900,35 @@ mod tests {
         );
         assert_eq!(trapped.status.code(), Some(1));
         assert!(String::from_utf8_lossy(&trapped.stderr).contains("explicit entry trap"));
+
+        // This producer Match is the retained RecursiveDescent sibling. Its
+        // runtime-reached default takes the root-only `-4` process sentinel.
+        let retained_root_trap = run(
+            "px4-retained-root-trap",
+            RuntimeExpr::Match {
+                scrutinee: Box::new(RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::LexicalClosure {
+                        captures: Vec::new(),
+                        params: Vec::new(),
+                        body: Box::new(RuntimeExpr::Construct {
+                            constructor: "ctor:fixture::RetainedProcessRoot::Miss".to_string(),
+                            args: Vec::new(),
+                        }),
+                    }),
+                    args: Vec::new(),
+                }),
+                cases: Vec::new(),
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::ExplicitTrap,
+                    message: "retained process root trap".to_string(),
+                },
+            },
+        );
+        assert_eq!(retained_root_trap.status.code(), Some(1));
+        assert!(
+            String::from_utf8_lossy(&retained_root_trap.stderr)
+                .contains("explicit entry trap")
+        );
     }
 
     #[cfg(target_os = "linux")]

@@ -65,7 +65,6 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: true,
-        root_trap_process_sentinel: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
@@ -89,8 +88,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
-            activation_slots: None,
-            activation_trap_offset: None,
+            trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -172,7 +170,6 @@ fn run_px8j_malformed_recursor_consumer(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
-        root_trap_process_sentinel: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
@@ -196,8 +193,7 @@ fn run_px8j_malformed_recursor_consumer(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
-            activation_slots: None,
-            activation_trap_offset: None,
+            trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -2058,7 +2054,6 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
-        root_trap_process_sentinel: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
@@ -2082,8 +2077,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
-            activation_slots: None,
-            activation_trap_offset: None,
+            trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -5247,6 +5241,240 @@ fn a_trap_arm_and_its_trap_free_twin_both_functionize() {
     );
     ac11_compiles(&all_trap)
         .unwrap_or_else(|error| panic!("all-trap carried match emitted a merge: {error}"));
+}
+
+fn trap_exit_fixture(trapping: bool) -> RuntimeExample {
+    let selected = "ctor:fixture::TrapExit::Selected".to_string();
+    let skipped = "ctor:fixture::TrapExit::Skipped".to_string();
+    let exact_trap = RuntimeTrap {
+        code: RuntimeTrapCode::ExplicitTrap,
+        message: "functionized nested unit trap identity".to_string(),
+    };
+    let selected_body = if trapping {
+        RuntimeExpr::Trap(exact_trap.clone())
+    } else {
+        RuntimeExpr::Value(RuntimeValue::Bool(false))
+    };
+    RuntimeExample {
+        name: if trapping {
+            "functionized-nested-trap"
+        } else {
+            "functionized-trap-free-sibling"
+        }
+        .to_string(),
+        checked_core_shape: "D2 typed trap-exit authority fixture".to_string(),
+        ir: RuntimeExpr::Let {
+            // The trap lives in the lexical body's unit. Its return crosses
+            // that unit's caller and then the root adapter.
+            value: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Match {
+                        scrutinee: Box::new(RuntimeExpr::Construct {
+                            constructor: selected.clone(),
+                            args: Vec::new(),
+                        }),
+                        cases: vec![
+                            crate::RuntimeMatchCase {
+                                constructor: selected,
+                                binders: 0,
+                                body: selected_body,
+                            },
+                            crate::RuntimeMatchCase {
+                                constructor: skipped,
+                                binders: 0,
+                                body: RuntimeExpr::Value(RuntimeValue::Bool(true)),
+                            },
+                        ],
+                        default: RuntimeTrap {
+                            code: RuntimeTrapCode::PatternMatchFailure,
+                            message: "functionized trap-exit default".to_string(),
+                        },
+                    }),
+                }),
+                args: Vec::new(),
+            }),
+            body: Box::new(RuntimeExpr::Var(0)),
+        },
+        observation: if trapping {
+            RuntimeObservation::Trapped(exact_trap)
+        } else {
+            RuntimeObservation::Returned(RuntimeGroundValue::Bool(false))
+        },
+    }
+}
+
+struct TrapExitMutationReset;
+
+impl Drop for TrapExitMutationReset {
+    fn drop(&mut self) {
+        set_trap_frame_binding_mutation(TrapFrameBindingMutation::Exact);
+        set_trap_identity_mutation(TrapIdentityMutation::Exact);
+        set_trap_caller_protocol_mutation(TrapCallerProtocolMutation::Exact);
+    }
+}
+
+fn run_trap_exit_fixture(
+    fixture: &RuntimeExample,
+    frame: TrapFrameBindingMutation,
+    identity: TrapIdentityMutation,
+    protocol: TrapCallerProtocolMutation,
+) -> Result<crate::CraneliftRunReport, CraneliftBackendError> {
+    let _reset = TrapExitMutationReset;
+    set_trap_frame_binding_mutation(frame);
+    set_trap_identity_mutation(identity);
+    set_trap_caller_protocol_mutation(protocol);
+    run_example_with_seed_observation(fixture, &NativeSeedEnvironment::empty())
+}
+
+#[test]
+fn typed_trap_exit_preserves_the_planner_identity_across_two_unit_calls() {
+    let fixture = trap_exit_fixture(true);
+    let plan = plan_static_transition_graph_with_symbols(
+        &fixture.ir,
+        &BTreeMap::new(),
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .expect("nested trap fixture plans");
+    let exact_trap = match &fixture.observation {
+        RuntimeObservation::Trapped(trap) => trap,
+        _ => unreachable!("the trapping fixture has a trap observation"),
+    };
+    assert!(
+        plan.trap_identity(exact_trap)
+            .expect("the selected trap is inventoried")
+            .abi_word()
+            > 0
+    );
+    assert_eq!(
+        select_body_emission_authority(&fixture.ir, &BTreeMap::new()),
+        BodyEmissionAuthority::FunctionizedUnits
+    );
+    let report = run_trap_exit_fixture(
+        &fixture,
+        TrapFrameBindingMutation::Exact,
+        TrapIdentityMutation::Exact,
+        TrapCallerProtocolMutation::Exact,
+    )
+    .expect("the nested unit trap reaches the JIT root");
+    assert_eq!(report.observation, fixture.observation);
+}
+
+#[test]
+fn typed_trap_exit_rejects_a_deleted_or_root_misclassified_unit_lane() {
+    let fixture = trap_exit_fixture(true);
+    let deleted = run_trap_exit_fixture(
+        &fixture,
+        TrapFrameBindingMutation::DeleteUnitLane,
+        TrapIdentityMutation::Exact,
+        TrapCallerProtocolMutation::Exact,
+    )
+    .expect_err("deleting a unit lane must fail before root translation");
+    assert!(deleted
+        .to_string()
+        .contains("trap branch has no generated-unit TrapWord lane"));
+
+    let misclassified = run_trap_exit_fixture(
+        &fixture,
+        TrapFrameBindingMutation::MisclassifyUnitAsRoot,
+        TrapIdentityMutation::Exact,
+        TrapCallerProtocolMutation::Exact,
+    )
+    .expect_err("a unit must not acquire root authority");
+    assert!(misclassified
+        .to_string()
+        .contains("unit trap frame was bound to a function without unit authority"));
+}
+
+#[test]
+fn typed_trap_exit_identity_and_caller_protocol_mutations_are_discriminating() {
+    let trapping = trap_exit_fixture(true);
+    for identity in [TrapIdentityMutation::Zero, TrapIdentityMutation::Substitute] {
+        let mutated = run_trap_exit_fixture(
+            &trapping,
+            TrapFrameBindingMutation::Exact,
+            identity,
+            TrapCallerProtocolMutation::Exact,
+        );
+        assert!(
+            mutated
+                .map(|report| report.observation != trapping.observation)
+                .unwrap_or(true),
+            "{identity:?} still reconstructed the selected RuntimeTrap"
+        );
+    }
+    let reversed = run_trap_exit_fixture(
+        &trapping,
+        TrapFrameBindingMutation::Exact,
+        TrapIdentityMutation::Exact,
+        TrapCallerProtocolMutation::ReadResultBeforeTrap,
+    );
+    assert!(
+        reversed
+            .map(|report| report.observation != trapping.observation)
+            .unwrap_or(true),
+        "reading Result before TrapWord preserved a trapping observation"
+    );
+
+    let trap_free = trap_exit_fixture(false);
+    let exact = run_trap_exit_fixture(
+        &trap_free,
+        TrapFrameBindingMutation::Exact,
+        TrapIdentityMutation::Exact,
+        TrapCallerProtocolMutation::Exact,
+    )
+    .expect("the trap-free sibling returns normally");
+    assert_eq!(exact.observation, trap_free.observation);
+    let stale = run_trap_exit_fixture(
+        &trap_free,
+        TrapFrameBindingMutation::Exact,
+        TrapIdentityMutation::Exact,
+        TrapCallerProtocolMutation::LeaveStaleTrap,
+    );
+    assert!(
+        stale
+            .map(|report| report.observation != trap_free.observation)
+            .unwrap_or(true),
+        "omitting the callee TrapWord clear preserved the trap-free result"
+    );
+}
+
+#[test]
+fn recursive_descent_root_translates_a_runtime_reached_trap_exactly() {
+    let trap = RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "retained producer Match root trap".to_string(),
+    };
+    let fixture = RuntimeExample {
+        name: "recursive-descent-root-trap".to_string(),
+        checked_core_shape: "D2 retained root trap translation fixture".to_string(),
+        ir: RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::RetainedRoot::Miss".to_string(),
+                        args: Vec::new(),
+                    }),
+                }),
+                args: Vec::new(),
+            }),
+            cases: Vec::new(),
+            default: trap.clone(),
+        },
+        observation: RuntimeObservation::Trapped(trap),
+    };
+    assert_eq!(
+        select_body_emission_authority(&fixture.ir, &BTreeMap::new()),
+        BodyEmissionAuthority::RecursiveDescent
+    );
+    let report = run_example_with_seed_observation(&fixture, &NativeSeedEnvironment::empty())
+        .expect("the retained source root translates its planner trap identity");
+    assert_eq!(report.observation, fixture.observation);
 }
 
 #[test]

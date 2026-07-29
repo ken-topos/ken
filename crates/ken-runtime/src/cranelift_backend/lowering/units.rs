@@ -465,7 +465,14 @@ pub(super) fn define_root_adapter<M: Module>(
     let sig = unit_signature(module);
     let mut func =
         Function::with_name_signature(UserFuncName::user(0, adapter_id.as_u32()), sig);
-    let mut function_local = helpers.declare_in_func(module, &mut func);
+    let mut function_local = helpers.declare_in_func(
+        module,
+        &mut func,
+        Some(TrapExitAuthority::Root {
+            process_sentinel: process_mode,
+            source_authorized: false,
+        }),
+    );
     let root_origin = root.origin();
     function_local.unit_calls.insert(
         root_origin,
@@ -718,7 +725,21 @@ fn define_unit_body<M: Module>(
     // resolved from a validated call edge through the declared bundle, with no
     // ordinal, no name parsing and no dynamic lookup anywhere on the path. ⚠ An
     // emitted `call` is not claimed and no control here asserts one.
-    let mut function_local = helpers.declare_in_func(module, &mut func);
+    #[cfg(test)]
+    let unit_trap_authority =
+        match TRAP_FRAME_BINDING_MUTATION.with(std::cell::Cell::get) {
+            TrapFrameBindingMutation::MisclassifyUnitAsRoot => Some(TrapExitAuthority::Root {
+                process_sentinel: false,
+                source_authorized: false,
+            }),
+            TrapFrameBindingMutation::Exact | TrapFrameBindingMutation::DeleteUnitLane => {
+                None
+            }
+        };
+    #[cfg(not(test))]
+    let unit_trap_authority = None;
+    let mut function_local =
+        helpers.declare_in_func(module, &mut func, unit_trap_authority);
     let declared_calls = call_edges.declare_in_func(unit.function, module, &mut func)?;
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
@@ -763,12 +784,19 @@ fn define_unit_body<M: Module>(
         function_local.services_pointer = Some(services);
         // The two fixed envelope loads are unconditional. Semantic frame
         // accesses below are relative only to the B2R payload base.
-        function_local.activation_slots = Some(slots);
-        function_local.activation_trap_offset = Some(
-            i32::try_from(trap_offset).map_err(|_| {
-                backend_module("abi trap slot offset exceeds addressable range".to_string())
-            })?,
-        );
+        #[cfg(test)]
+        let bind_unit_trap_frame = TRAP_FRAME_BINDING_MUTATION.with(std::cell::Cell::get)
+            != TrapFrameBindingMutation::DeleteUnitLane;
+        #[cfg(not(test))]
+        let bind_unit_trap_frame = true;
+        if bind_unit_trap_frame {
+            function_local.bind_unit_trap_frame(
+                slots,
+                i32::try_from(trap_offset).map_err(|_| {
+                    backend_module("abi trap slot offset exceeds addressable range".to_string())
+                })?,
+            )?;
+        }
         compiler.function_local = function_local;
         #[cfg(test)]
         if is_root

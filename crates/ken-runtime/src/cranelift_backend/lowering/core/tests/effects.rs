@@ -77,7 +77,6 @@ fn run_checked_bounded_nat_fixture(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
-        root_trap_process_sentinel: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
@@ -101,8 +100,7 @@ fn run_checked_bounded_nat_fixture(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
-            activation_slots: None,
-            activation_trap_offset: None,
+            trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),

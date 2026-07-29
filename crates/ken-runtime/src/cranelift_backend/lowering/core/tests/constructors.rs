@@ -211,7 +211,6 @@ fn run_dynamic_constructor_dispatch_fixture(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
-        root_trap_process_sentinel: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
         // no callable carrier refs. The `Carried` routes fail closed on this
@@ -235,8 +234,7 @@ fn run_dynamic_constructor_dispatch_fixture(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
-            activation_slots: None,
-            activation_trap_offset: None,
+            trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -1883,7 +1881,6 @@ fn bare_carrier_test_lowering<'src>(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         process_object: false,
-        root_trap_process_sentinel: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
@@ -1904,8 +1901,7 @@ fn bare_carrier_test_lowering<'src>(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
-            activation_slots: None,
-            activation_trap_offset: None,
+            trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -1924,9 +1920,11 @@ fn bind_bare_test_trap_lane(
         8,
         3,
     ));
-    compiler.function_local.activation_slots =
-        Some(builder.ins().stack_addr(types::I64, lane, 0));
-    compiler.function_local.activation_trap_offset = Some(0);
+    compiler.function_local.trap_exit = None;
+    compiler
+        .function_local
+        .bind_unit_trap_frame(builder.ins().stack_addr(types::I64, lane, 0), 0)
+        .expect("the bare fixture owns its synthetic unit trap lane");
 }
 
 /// `RT-FNSPLIT-C1` `D3` — the producer screens the **whole graph** for
@@ -2299,8 +2297,11 @@ fn ac_c7_try_compile_edge_with_operands<'src>(
         // field is left for the fixtures that bind one.
         compiler.function_local.boundary_arena = Some(parameters[0]);
         let emitted_operands = if operands == 0 {
-            compiler.function_local.activation_slots = Some(parameters[1]);
-            compiler.function_local.activation_trap_offset = Some(0);
+            compiler.function_local.trap_exit = None;
+            compiler
+                .function_local
+                .bind_unit_trap_frame(parameters[1], 0)
+                .expect("the zero-operand fixture owns its unit trap lane");
             &parameters[2..]
         } else {
             bind_bare_test_trap_lane(&mut compiler, &mut builder);

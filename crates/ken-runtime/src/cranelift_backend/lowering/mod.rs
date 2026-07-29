@@ -552,9 +552,12 @@ impl OwnedSourceOccurrence {
 /// is about a population of one. ⚠ It is *not* claimed that this suffices for a
 /// unit body: the two `ir::Value` fields are **not** resolvable from here,
 /// because they are results of a function's own dataflow rather than identities,
-/// and `declare_in_func` leaves them `None` for each caller to derive. ⭐ That
-/// gap is measured, not assumed — see
-/// `docs/program/rt-fnsplit-b2f-s6-switchover-measurement.md`.
+/// and `declare_in_func` leaves them `None` for each caller to derive.
+///
+/// **THE TRAP DATAFLOW BOUNDARY:** a root's closed [`TrapExitAuthority`] is
+/// supplied at construction. A unit's `slots` value is loaded from that
+/// function's own envelope, so its authority is absent until
+/// [`FunctionLocalRefs::bind_unit_trap_frame`] binds the exact frame.
 #[derive(Clone, Copy)]
 struct ArtifactHelpers<'h> {
     seed_material: &'h seed_material::SeedMaterial,
@@ -569,7 +572,12 @@ impl ArtifactHelpers<'_> {
     /// ⛔ **Call this once per `Function`, and never reuse the result.** The
     /// returned handles are function-scoped; see [`FunctionLocalRefs`] for what
     /// each of the three kinds does when it crosses a function boundary.
-    fn declare_in_func<M: Module>(self, module: &mut M, func: &mut Function) -> FunctionLocalRefs {
+    fn declare_in_func<M: Module>(
+        self,
+        module: &mut M,
+        func: &mut Function,
+        trap_exit: Option<TrapExitAuthority>,
+    ) -> FunctionLocalRefs {
         FunctionLocalRefs {
             seed_material: self.seed_material.declare_in_func(module, func),
             host_dispatch: self
@@ -601,8 +609,7 @@ impl ArtifactHelpers<'_> {
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
-            activation_slots: None,
-            activation_trap_offset: None,
+            trap_exit,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
             dispositioned_join_origins: BTreeSet::new(),
@@ -642,6 +649,18 @@ impl ArtifactHelpers<'_> {
             }),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TrapExitAuthority {
+    UnitFrame {
+        slots: cranelift_codegen::ir::Value,
+        trap_offset: i32,
+    },
+    Root {
+        process_sentinel: bool,
+        source_authorized: bool,
+    },
 }
 
 struct FunctionLocalRefs {
@@ -693,13 +712,9 @@ struct FunctionLocalRefs {
     boundary_carrier: Option<BoundaryCarrierRefs>,
     unit_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     declaration_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
-    /// The current generated unit's closed activation-frame trap lane.
-    ///
-    /// Both fields are present only while lowering a unit body. Root adapters
-    /// have no caller frame, so they translate a callee trap identity into the
-    /// disjoint root token consumed by `CompiledModule`.
-    activation_slots: Option<cranelift_codegen::ir::Value>,
-    activation_trap_offset: Option<i32>,
+    /// The current function's closed trap-exit authority. Absence is an error
+    /// state, never an implicit Root.
+    trap_exit: Option<TrapExitAuthority>,
     /// Source occurrences reached only through the current unit's result
     /// position. Process-exit constructors are normalized only at these
     /// occurrences, never merely because an exit-shaped value appears nested.
@@ -723,6 +738,22 @@ struct FunctionLocalRefs {
     /// population only after emission, from the union of reached indices,
     /// rather than treating the first observed constructor as globally final.
     emission_reachable_match_cases: BTreeMap<StaticOriginId, BTreeSet<usize>>,
+}
+
+impl FunctionLocalRefs {
+    fn bind_unit_trap_frame(
+        &mut self,
+        slots: cranelift_codegen::ir::Value,
+        trap_offset: i32,
+    ) -> Result<(), CraneliftBackendError> {
+        if self.trap_exit.is_some() {
+            return Err(backend_module(
+                "unit trap frame was bound to a function without unit authority".to_string(),
+            ));
+        }
+        self.trap_exit = Some(TrapExitAuthority::UnitFrame { slots, trap_offset });
+        Ok(())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -823,6 +854,55 @@ fn set_process_slot_mutation(mutation: ProcessSlotMutation) {
     PROCESS_SLOT_MUTATION.with(|cell| cell.set(mutation));
 }
 
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TrapFrameBindingMutation {
+    Exact,
+    DeleteUnitLane,
+    MisclassifyUnitAsRoot,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TrapIdentityMutation {
+    Exact,
+    Zero,
+    Substitute,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TrapCallerProtocolMutation {
+    Exact,
+    LeaveStaleTrap,
+    ReadResultBeforeTrap,
+}
+
+#[cfg(test)]
+thread_local! {
+    static TRAP_FRAME_BINDING_MUTATION: std::cell::Cell<TrapFrameBindingMutation> =
+        const { std::cell::Cell::new(TrapFrameBindingMutation::Exact) };
+    static TRAP_IDENTITY_MUTATION: std::cell::Cell<TrapIdentityMutation> =
+        const { std::cell::Cell::new(TrapIdentityMutation::Exact) };
+    static TRAP_CALLER_PROTOCOL_MUTATION: std::cell::Cell<TrapCallerProtocolMutation> =
+        const { std::cell::Cell::new(TrapCallerProtocolMutation::Exact) };
+}
+
+#[cfg(test)]
+fn set_trap_frame_binding_mutation(mutation: TrapFrameBindingMutation) {
+    TRAP_FRAME_BINDING_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
+fn set_trap_identity_mutation(mutation: TrapIdentityMutation) {
+    TRAP_IDENTITY_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
+fn set_trap_caller_protocol_mutation(mutation: TrapCallerProtocolMutation) {
+    TRAP_CALLER_PROTOCOL_MUTATION.with(|cell| cell.set(mutation));
+}
+
 struct Lowering<'a> {
     seed_env: &'a NativeSeedEnvironment,
     /// Everything resolved into the ONE generated function this `Lowering`
@@ -913,10 +993,6 @@ struct Lowering<'a> {
     unsupported: Vec<String>,
     body_emission_authority: BodyEmissionAuthority,
     process_object: bool,
-    /// Object process launchers retain the established terminal-status report.
-    /// JIT/native observation keeps the planner identity token so it can
-    /// reconstruct the exact RuntimeTrap.
-    root_trap_process_sentinel: bool,
     process_symbols: crate::NativeProcessSymbols,
     #[cfg(test)]
     native_int_mutation: NativeIntLoweringMutation,
@@ -1876,11 +1952,33 @@ impl<'a> Lowering<'a> {
                     builder.ins().stack_store(zero, payload, offset);
                 }
                 AbiSlotKind::Trap => {
+                    #[cfg(test)]
+                    let zero = match TRAP_CALLER_PROTOCOL_MUTATION
+                        .with(std::cell::Cell::get)
+                    {
+                        TrapCallerProtocolMutation::LeaveStaleTrap => {
+                            builder.ins().iconst(types::I64, 1)
+                        }
+                        TrapCallerProtocolMutation::Exact
+                        | TrapCallerProtocolMutation::ReadResultBeforeTrap => {
+                            builder.ins().iconst(types::I64, 0)
+                        }
+                    };
+                    #[cfg(not(test))]
                     let zero = builder.ins().iconst(types::I64, 0);
                     builder.ins().stack_store(zero, payload, offset);
                     trap_offset = Some(offset);
                 }
-                AbiSlotKind::Result => result_offset = Some(offset),
+                AbiSlotKind::Result => {
+                    #[cfg(test)]
+                    if TRAP_CALLER_PROTOCOL_MUTATION.with(std::cell::Cell::get)
+                        == TrapCallerProtocolMutation::ReadResultBeforeTrap
+                    {
+                        let false_word = builder.ins().iconst(types::I64, 0);
+                        builder.ins().stack_store(false_word, payload, offset);
+                    }
+                    result_offset = Some(offset);
+                }
             }
         }
         if input != inputs.len() {
@@ -1984,6 +2082,13 @@ impl<'a> Lowering<'a> {
         let result_offset = result_offset.ok_or_else(|| {
             backend_module("callee frame declares no result slot".to_string())
         })?;
+        #[cfg(test)]
+        if TRAP_CALLER_PROTOCOL_MUTATION.with(std::cell::Cell::get)
+            == TrapCallerProtocolMutation::ReadResultBeforeTrap
+        {
+            let word = builder.ins().stack_load(types::I64, payload, result_offset);
+            return Ok(LoweringOperand::Carried(CarriedBoundaryWord { word }));
+        }
         let trap_word = builder.ins().stack_load(types::I64, payload, trap_offset);
         let trapped = builder.ins().icmp_imm(
             cranelift_codegen::ir::condcodes::IntCC::NotEqual,
@@ -1994,31 +2099,40 @@ impl<'a> Lowering<'a> {
         let result_block = builder.create_block();
         builder.ins().brif(trapped, trap_block, &[], result_block, &[]);
         builder.switch_to_block(trap_block);
-        if let (Some(caller_slots), Some(caller_trap_offset)) = (
-            self.function_local.activation_slots,
-            self.function_local.activation_trap_offset,
-        ) {
-            builder.ins().store(
-                MemFlags::trusted(),
-                trap_word,
-                caller_slots,
-                caller_trap_offset,
-            );
-            let no_result = builder.ins().iconst(types::I64, 0);
-            builder.ins().return_(&[no_result]);
-        } else if self.root_trap_process_sentinel {
-            let process_trap = builder.ins().iconst(types::I64, -4);
-            builder.ins().return_(&[process_trap]);
-        } else {
-            let shifted = builder.ins().ishl_imm(
-                trap_word,
-                crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_SHIFT,
-            );
-            let root_token = builder.ins().bor_imm(
-                shifted,
-                crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_TAG,
-            );
-            builder.ins().return_(&[root_token]);
+        match self.function_local.trap_exit {
+            Some(TrapExitAuthority::UnitFrame { slots, trap_offset }) => {
+                builder
+                    .ins()
+                    .store(MemFlags::trusted(), trap_word, slots, trap_offset);
+                let no_result = builder.ins().iconst(types::I64, 0);
+                builder.ins().return_(&[no_result]);
+            }
+            Some(TrapExitAuthority::Root {
+                process_sentinel: true,
+                ..
+            }) => {
+                let process_trap = builder.ins().iconst(types::I64, -4);
+                builder.ins().return_(&[process_trap]);
+            }
+            Some(TrapExitAuthority::Root {
+                process_sentinel: false,
+                ..
+            }) => {
+                let shifted = builder.ins().ishl_imm(
+                    trap_word,
+                    crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_SHIFT,
+                );
+                let root_token = builder.ins().bor_imm(
+                    shifted,
+                    crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_TAG,
+                );
+                builder.ins().return_(&[root_token]);
+            }
+            None => {
+                return Err(backend_module(
+                    "trap branch has no generated-unit TrapWord lane".to_string(),
+                ));
+            }
         }
         builder.seal_block(trap_block);
         builder.switch_to_block(result_block);
@@ -8766,9 +8880,8 @@ impl<'a> Lowering<'a> {
         let LoweringOperand::Specialized(Lowered::Trap(trap)) = lowered else {
             return Ok(false);
         };
-        self.emit_current_trap(builder, trap)?;
-        let no_result = builder.ins().iconst(types::I64, 0);
-        builder.ins().return_(&[no_result]);
+        let status = self.emit_current_trap(builder, trap)?;
+        builder.ins().return_(&[status]);
         Ok(true)
     }
 
@@ -8776,20 +8889,56 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         trap: &RuntimeTrap,
-    ) -> Result<(), CraneliftBackendError> {
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
         let identity = self.static_transition_plan.trap_identity(trap)?;
-        let (slots, offset) = self
-            .function_local
-            .activation_slots
-            .zip(self.function_local.activation_trap_offset)
-            .ok_or_else(|| {
-                backend_module("trap branch has no generated-unit TrapWord lane".to_string())
-            })?;
-        let word = builder.ins().iconst(types::I64, identity.abi_word());
-        builder
-            .ins()
-            .store(MemFlags::trusted(), word, slots, offset);
-        Ok(())
+        match self.function_local.trap_exit {
+            Some(TrapExitAuthority::UnitFrame { slots, trap_offset }) => {
+                #[cfg(test)]
+                let identity_word =
+                    match TRAP_IDENTITY_MUTATION.with(std::cell::Cell::get) {
+                        TrapIdentityMutation::Exact => identity.abi_word(),
+                        TrapIdentityMutation::Zero => 0,
+                        TrapIdentityMutation::Substitute => identity
+                            .abi_word()
+                            .checked_add(1)
+                            .expect("planner trap identity fits below i64::MAX"),
+                    };
+                #[cfg(not(test))]
+                let identity_word = identity.abi_word();
+                let word = builder.ins().iconst(types::I64, identity_word);
+                builder
+                    .ins()
+                    .store(MemFlags::trusted(), word, slots, trap_offset);
+                Ok(builder.ins().iconst(types::I64, 0))
+            }
+            Some(TrapExitAuthority::Root {
+                process_sentinel,
+                source_authorized: true,
+            }) => {
+                if process_sentinel {
+                    Ok(builder.ins().iconst(types::I64, -4))
+                } else {
+                    let word = builder.ins().iconst(types::I64, identity.abi_word());
+                    let shifted = builder.ins().ishl_imm(
+                        word,
+                        crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_SHIFT,
+                    );
+                    Ok(builder.ins().bor_imm(
+                        shifted,
+                        crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_TAG,
+                    ))
+                }
+            }
+            None => Err(backend_module(
+                "trap branch has no generated-unit TrapWord lane".to_string(),
+            )),
+            Some(TrapExitAuthority::Root {
+                source_authorized: false,
+                ..
+            }) => Err(backend_module(
+                "generated function has no source-trap authority".to_string(),
+            )),
+        }
     }
 
     fn planned_active_scalar_cut<'b>(
