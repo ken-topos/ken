@@ -61,18 +61,35 @@ int_to_uint64_raw is not in the supported native set
 `grep -rn 'int_to_uint64_raw' crates/ken-runtime/src/` returns **nothing**. The
 primitive is absent from the native lowering entirely.
 
-> ✅ **RESIDUAL RE-MEASURED AND STILL TRUE at `origin/main = dca1b793`**
-> (Steward, 2026-07-28). `int_to_uint64_raw` is **still absent** from
-> `crates/ken-runtime/src/`; on `main` it occurs only in
-> `crates/ken-interp/src/eval.rs` — the interp half this frame already records as
-> **GREEN**. ⇒ ⭐ **No sibling merge has quietly built this deliverable**, so the
-> node still has its subject and no re-framing pass is owed before you start.
+> ✅ **RESIDUAL RE-MEASURED AND STILL TRUE at `origin/main = 06cb2964`**
+> (Steward, 2026-07-29 — supersedes the `dca1b793` and `5404108a` measurements).
+> `int_to_uint64_raw` is **still absent** from `crates/ken-runtime/src/` — zero
+> occurrences — and on `main` it appears only in `crates/ken-interp/src/eval.rs`,
+> the interp half this frame already records as **GREEN**.
+>
+> ⭐⭐ **This re-measurement is worth more than the two before it.** Between them
+> the **entire `RT-NATIVE-FNSPLIT` arc landed and closed** — `RT-FNSPLIT-RECUR-PORT`
+> plus the Scale nodes rewrote `crates/ken-runtime/src/cranelift_backend/`
+> wholesale (`lowering/core.rs` **+3899/−1022**, `lowering/mod.rs` **+3654/−156**).
+> ⇒ **A rewrite of exactly the subsystem that owes this primitive did not build
+> it.** The node still has its subject; no re-framing pass is owed.
+>
+> ✅ **Both input refs still resolve on `origin`** (checked, not assumed):
+> `preserved/native-handle-carrier-c07e63c2` → `c07e63c2`, and
+> `preserved/px8-f-cap-41-p2-buffer-handle-f0eb65ce` → `f0eb65ce`.
 >
 > ⚠ **The one number that rotted:** `§3` says `main` is **215** commits ahead of
-> `8ebe370a`; it is now **246**. ⛔ Do not re-pin that figure — the **derivation**
+> `8ebe370a`; it is now **303**. ⛔ Do not re-pin that figure — the **derivation**
 > is the pin (`git rev-list --count 8ebe370a..origin/main`) and it grows with
 > every merge. It moved in the direction that makes `§3`'s argument *stronger*,
 > not weaker: the rebase is more of a deliverable now, not less.
+>
+> ⛔ **`§3`'s churn table is now an UNDERSTATEMENT, and that matters.** It was
+> measured when the collision was elaborator-only. The FNSPLIT arc has since
+> rewritten the native lowering you must add the primitive to, so `§4`'s native
+> arm lands in a **different mechanism** than the one it was written against.
+> ⇒ Re-derive `§4` against current `main` at pickup. The *ruling* stands; the
+> code it points at does not.
 
 ---
 
