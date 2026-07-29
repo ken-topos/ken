@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-29 11:26:12Z — from 121 issue file(s) in `docs/program/issues/`.
+2026-07-29 13:03:07Z — from 121 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -129,7 +129,7 @@ the committed file matches the generator's output.
 | `RT-PLANNER-ATTRIB-K` | Boundary A planner: fixed K is a design invariant — move the K-exceeded rejection off the capacity channel | merged | runtime | XS | none | https://github.com/swe-toolkit/ken/pull/935 |
 | `RT-PLANNER-DIAGNOSTIC-K` | Boundary A planner: report planner-invariant failures as planner defects, and assert fixed_k CONSTANT rather than merely affine | merged | runtime | S | none | https://github.com/swe-toolkit/ken/pull/929 |
 | `RT-SCALE-A` | Boundary A — re-derive the planner census for n=3..7 against the COMPLETED factored representation, superseding the provisional outer-planner numbers | merged | runtime | M | none | — |
-| `RT-SCALE-B` | Boundary B — the full n=3..7 emission measurement, the research-grounded analytical model, and the operator scaling verdict that gates RT-NATIVE-FNSPLIT's merge | ready | runtime | L | none | — |
+| `RT-SCALE-B` | Boundary B — the full n=3..7 emission measurement, the research-grounded analytical model, and the operator scaling verdict that gates RT-NATIVE-FNSPLIT's merge | merged | runtime | L | none | — |
 | `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
 | `RT-SYMLINK-LANE` | SymlinkPolicy is honoured by the interpreter lane and unreachable in the native lane — FollowWithinScope has no native behaviour | draft | runtime | TBD | none | — |
@@ -170,7 +170,6 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-EFFECT-DIFF` — One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can
 - `RT-FNSPLIT-B2O-CHECK` — the B2O checking layer advertises more than it enforces — structural closure for the item enumerator and reachability for the validator arms
-- `RT-SCALE-B` — Boundary B — the full n=3..7 emission measurement, the research-grounded analytical model, and the operator scaling verdict that gates RT-NATIVE-FNSPLIT's merge
 
 ## Blockers
 
@@ -207,7 +206,6 @@ is itself not yet `merged`/`closed`:
 - `PX8` blocked by `PX8-ERRID-SCOPE` (status: draft)
 - `PX9` blocked by `PX8` (status: draft)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
-- `RT-NATIVE-FNSPLIT` blocked by `RT-SCALE-B` (status: ready)
 
 ## Gate progress
 
