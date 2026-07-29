@@ -23,8 +23,8 @@ pub(super) use static_transition::{
 pub(super) use static_transition::{
     planned_partiality_trap, ConstructorIdentity, JoinPlanToken, JoinResultRepresentation,
     LoweringOnlyOperandEdge, OperandEdgeDisposition, OperandEdgeToken, SourceOperandRole,
-    StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
-    SynthesizedFixedConstructorRole,
+    StaticOriginId, StaticRecursorWorkerResidualId, StaticTransitionPlan,
+    SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 // `RT-FNSPLIT-B2A-S` `AC-4` — the route counters behind
 // `every_origin_to_expression_resolution_goes_through_the_single_route`.

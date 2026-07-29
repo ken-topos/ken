@@ -1180,6 +1180,8 @@ impl<'a> Lowering<'a> {
                                     if !recursor_invocation_is_checked(&invocation) {
                                         validate_recursor_invocation_segment(&invocation)?;
                                     }
+                                    let prepared_residual = self
+                                        .prepare_static_recursor_residual(residual, &invocation)?;
                                     let dynamic_splice_edges =
                                         self.take_dynamic_splice_edges(&invocation)?;
                                     let installed = compose_oriented_subcontinuation(
@@ -1188,6 +1190,10 @@ impl<'a> Lowering<'a> {
                                         activation,
                                         invocation,
                                         dynamic_splice_edges,
+                                    )?;
+                                    let residual = self.materialize_static_recursor_residual(
+                                        builder,
+                                        prepared_residual,
                                     )?;
                                     let frames = installed_oriented_eliminator_frames(&installed);
                                     let mut composed = Vec::with_capacity(frames.len() + 2);
@@ -1421,6 +1427,7 @@ impl<'a> Lowering<'a> {
                         if !recursor_invocation_is_checked(&invocation) {
                             validate_recursor_invocation_segment(&invocation)?;
                         }
+                        let prepared = self.prepare_static_recursor_residual(base, &invocation)?;
                         let dynamic_splice_edges = self.take_dynamic_splice_edges(&invocation)?;
                         let installed = compose_oriented_subcontinuation(
                             self.oriented_subcontinuation_plan.as_ref(),
@@ -1430,6 +1437,7 @@ impl<'a> Lowering<'a> {
                             invocation,
                             dynamic_splice_edges,
                         )?;
+                        let base = self.materialize_static_recursor_residual(builder, prepared)?;
                         let mut composed = installed_oriented_eliminator_frames(&installed);
                         composed.push(EliminatorFrame::InvocationReturn);
                         // ⭐⭐ `AC-C4` — the carried residual resumes the SAME
@@ -2432,8 +2440,7 @@ impl<'a> Lowering<'a> {
 
                 let ih_slots =
                     self.computational_ih_slots_for_case(case, frame.checked_frame_id)?;
-                let mut induction_hypotheses =
-                    Vec::with_capacity(case.recursive_positions.len());
+                let mut induction_hypotheses = Vec::with_capacity(case.recursive_positions.len());
                 for position in case.recursive_positions.iter().rev().copied() {
                     let slot_template_id = case
                         .recursive_positions
@@ -2461,10 +2468,7 @@ impl<'a> Lowering<'a> {
                         None,
                     )?;
                     #[cfg(test)]
-                    px8j_record_recursor_carrier(
-                        Px8jProducerPath::Composed,
-                        &induction_hypothesis,
-                    );
+                    px8j_record_recursor_carrier(Px8jProducerPath::Composed, &induction_hypothesis);
                     induction_hypotheses.push(induction_hypothesis);
                 }
                 let mut case_env = induction_hypotheses;
@@ -2478,12 +2482,7 @@ impl<'a> Lowering<'a> {
                 if remaining.is_empty() {
                     self.lower_expr(builder, body, &case_env)
                 } else {
-                    self.lower_computational_producer_expr(
-                        builder,
-                        body,
-                        &case_env,
-                        remaining,
-                    )
+                    self.lower_computational_producer_expr(builder, body, &case_env, remaining)
                 }
             }
             EliminatorFrame::Ordinary(frame) => {
@@ -2525,12 +2524,7 @@ impl<'a> Lowering<'a> {
                 if remaining.is_empty() {
                     self.lower_expr(builder, body, &case_env)
                 } else {
-                    self.lower_computational_producer_expr(
-                        builder,
-                        body,
-                        &case_env,
-                        remaining,
-                    )
+                    self.lower_computational_producer_expr(builder, body, &case_env, remaining)
                 }
             }
             EliminatorFrame::PendingLet(_)
@@ -3936,7 +3930,7 @@ impl<'a> Lowering<'a> {
                                     matches!(argument, LoweringOperand::Carried(_))
                                 }) {
                                     let lowered =
-                                        self.split_terminal_recursor_constructor_operands(
+                                        self.split_static_recursor_worker_operands(
                                             builder, lowered,
                                         )?;
                                     SourceMachineState::Value {
@@ -4608,7 +4602,138 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    fn split_terminal_recursor_constructor_operands(
+    fn prepare_static_recursor_residual(
+        &self,
+        residual: LoweringOperand,
+        invocation: &RecursorInvocationSegment,
+    ) -> Result<PreparedStaticRecursorResidual, CraneliftBackendError> {
+        let Some(worker) = invocation.recursive_worker else {
+            return Ok(PreparedStaticRecursorResidual::Passthrough(residual));
+        };
+        if worker.parent_origin != invocation.selection.static_origin
+            || worker.sibling_position != invocation.sibling_position
+        {
+            return Err(unsupported(
+                "StaticRecursorWorker",
+                "the recursor invocation disagrees with its static worker edge",
+            ));
+        }
+        self.prepare_planned_static_recursor_worker(residual, worker)
+    }
+
+    fn prepare_planned_static_recursor_worker(
+        &self,
+        residual: LoweringOperand,
+        worker: StaticRecursorWorker,
+    ) -> Result<PreparedStaticRecursorResidual, CraneliftBackendError> {
+        let LoweringOperand::Specialized(Lowered::Closure {
+            captures,
+            params,
+            body,
+        }) = residual
+        else {
+            return Err(unsupported(
+                "StaticRecursorWorker",
+                "a callable recursor worker has no closure residual",
+            ));
+        };
+        let token = self
+            .static_transition_plan
+            .static_recursor_worker_residual_token(
+                worker.parent_origin,
+                worker.sibling_position,
+                worker.body_origin,
+            )?
+            .ok_or_else(|| {
+                backend(BackendFailure::PlannerInvariant(
+                    "static recursor worker residual token disappeared".to_string(),
+                ))
+            })?;
+        if token.disposition() != OperandEdgeDisposition::CallableCapture
+            || token.id != worker.residual_id
+            || token.parent_origin != worker.parent_origin
+            || token.sibling_position as usize != worker.sibling_position
+            || token.closure_origin != worker.closure_origin
+            || token.body_origin != worker.body_origin
+            || token.declared_arity as usize != worker.declared_arity
+            || token.capture_count as usize != worker.capture_count
+            || body != worker.body_origin
+            || params.len() != worker.declared_arity
+            || captures.len() != worker.capture_count
+        {
+            return Err(unsupported(
+                "StaticRecursorWorker",
+                "the residual environment disagrees with its static worker target",
+            ));
+        }
+        let captures = captures
+            .into_iter()
+            .map(|capture| {
+                let LoweringOperand::Carried(capture) = capture else {
+                    return Err(unsupported(
+                        "StaticRecursorWorker",
+                        "a static recursor environment capture is not an ordinary carried operand",
+                    ));
+                };
+                Ok(capture)
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+        Ok(PreparedStaticRecursorResidual::Worker { worker, captures })
+    }
+
+    fn prepare_static_recursor_constructor_residual(
+        &self,
+        closure_origin: StaticOriginId,
+        residual: LoweringOperand,
+    ) -> Result<Option<PreparedStaticRecursorResidual>, CraneliftBackendError> {
+        let Some(token) = self
+            .static_transition_plan
+            .static_recursor_worker_residual_token_for_closure(closure_origin)?
+        else {
+            return Ok(None);
+        };
+        if token.disposition() != OperandEdgeDisposition::CallableCapture {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "static recursor constructor residual is not callable-capture".to_string(),
+            )));
+        }
+        let worker = StaticRecursorWorker {
+            residual_id: token.id,
+            parent_origin: token.parent_origin,
+            sibling_position: token.sibling_position as usize,
+            closure_origin: token.closure_origin,
+            body_origin: token.body_origin,
+            declared_arity: token.declared_arity as usize,
+            capture_count: token.capture_count as usize,
+        };
+        self.prepare_planned_static_recursor_worker(residual, worker)
+            .map(Some)
+    }
+
+    fn materialize_static_recursor_residual(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        prepared: PreparedStaticRecursorResidual,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let PreparedStaticRecursorResidual::Worker { worker, captures } = prepared else {
+            let PreparedStaticRecursorResidual::Passthrough(residual) = prepared else {
+                unreachable!("prepared residual has two closed variants")
+            };
+            return Ok(residual);
+        };
+        let environment = self.emit_carrier_alloc(
+            builder,
+            BoundaryTag::PersistentGround,
+            BoundaryClass::Record,
+            worker.capture_count,
+        )?;
+        for (position, capture) in captures.into_iter().enumerate() {
+            self.emit_carrier_store_field(builder, environment, position, capture)?;
+        }
+        Ok(LoweringOperand::Carried(environment))
+    }
+
+    pub(super) fn split_static_recursor_worker_operands(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         operands: Vec<LoweringOperand>,
@@ -4629,7 +4754,7 @@ impl<'a> Lowering<'a> {
                 if !recursor_invocation_is_checked(&invocation) {
                     validate_recursor_invocation_segment(&invocation)?;
                 }
-                let worker = invocation.recursive_worker;
+                let prepared = self.prepare_static_recursor_residual(residual, &invocation)?;
                 let dynamic_splice_edges = self.take_dynamic_splice_edges(&invocation)?;
                 compose_oriented_subcontinuation(
                     self.oriented_subcontinuation_plan.as_ref(),
@@ -4638,42 +4763,7 @@ impl<'a> Lowering<'a> {
                     invocation,
                     dynamic_splice_edges,
                 )?;
-                let Some(worker) = worker else {
-                    return Ok(residual);
-                };
-                let LoweringOperand::Specialized(Lowered::Closure {
-                    captures,
-                    body,
-                    ..
-                }) = residual
-                else {
-                    return Err(unsupported(
-                        "StaticRecursorWorker",
-                        "a callable recursor worker has no closure residual",
-                    ));
-                };
-                if body != worker.body_origin || captures.len() != worker.capture_count {
-                    return Err(unsupported(
-                        "StaticRecursorWorker",
-                        "the residual environment disagrees with its static worker target",
-                    ));
-                }
-                let environment = self.emit_carrier_alloc(
-                    builder,
-                    BoundaryTag::PersistentGround,
-                    BoundaryClass::Record,
-                    worker.capture_count,
-                )?;
-                for (position, capture) in captures.into_iter().enumerate() {
-                    let LoweringOperand::Carried(capture) = capture else {
-                        return Err(unsupported(
-                            "StaticRecursorWorker",
-                            "a static recursor environment capture is not an ordinary carried operand",
-                        ));
-                    };
-                    self.emit_carrier_store_field(builder, environment, position, capture)?;
-                }
-                Ok(LoweringOperand::Carried(environment))
+                self.materialize_static_recursor_residual(builder, prepared)
             })
             .collect()
     }
@@ -5523,6 +5613,7 @@ impl<'a> Lowering<'a> {
                 let (activation, invocation) =
                     boundary.expect("recursor closure carries an invocation segment");
                 let recursive_worker = invocation.recursive_worker;
+                let prepared = self.prepare_static_recursor_residual(base, &invocation)?;
                 if source_active_cursor(
                     &control.selected,
                     &control.selected_lineage,
@@ -5553,6 +5644,39 @@ impl<'a> Lowering<'a> {
                         "armed invocation endpoint changed selected cursor",
                     ));
                 }
+                if matches!(prepared, PreparedStaticRecursorResidual::Worker { .. }) {
+                    let mut suspended = armed.suspended;
+                    suspended.continuation = self.install_recursor_invocation(
+                        suspended.continuation,
+                        activation,
+                        invocation,
+                        checked_ih_invocation,
+                    )?;
+                    let base = self.materialize_static_recursor_residual(builder, prepared)?;
+                    let LoweringOperand::Carried(word) = base else {
+                        unreachable!("a prepared worker materializes one carried environment")
+                    };
+                    let worker = recursive_worker.expect("prepared worker retains static identity");
+                    let mut inputs = args;
+                    self.append_static_recursor_worker_captures(
+                        builder,
+                        word,
+                        worker,
+                        &mut inputs,
+                    )?;
+                    let value = self.call_declared_recursive_position_unit(
+                        builder,
+                        worker.body_origin,
+                        &inputs,
+                    )?;
+                    return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
+                        value,
+                        control: suspended,
+                    }));
+                }
+                let PreparedStaticRecursorResidual::Passthrough(base) = prepared else {
+                    unreachable!("worker residual returned above")
+                };
                 // ⭐⭐ `AC-C4` — the carried residual on the source-machine
                 // route. ⚠ This is the site where "installs the ALREADY-CHECKED
                 // invocation segment" is literal: the refusal below runs
@@ -6148,6 +6272,60 @@ impl<'a> Lowering<'a> {
                 return self.transfer_carried_failure_exit_status(builder, *code);
             }
         }
+        // Preflight the complete child graph before allocating either a child
+        // environment or the parent constructor. An exact recursive-position
+        // closure is the sole exception to whole-closure transfer: its planner
+        // token proves the static worker and its captures are all ordinary.
+        let mut prepared_recursor_residuals = Vec::with_capacity(args.len());
+        for (position, argument) in args.iter().enumerate() {
+            let child_origin = self
+                .static_transition_plan
+                .child_static_origin(origin, position)?;
+            let prepared = match argument {
+                LoweringOperand::Specialized(value @ Lowered::Closure { .. }) => {
+                    match self.prepare_static_recursor_constructor_residual(
+                        child_origin,
+                        LoweringOperand::Specialized(value.clone()),
+                    )? {
+                        Some(prepared) => Some(prepared),
+                        None => {
+                            value.boundary_transfer_admissibility()?;
+                            None
+                        }
+                    }
+                }
+                LoweringOperand::Specialized(value) => {
+                    value.boundary_transfer_admissibility()?;
+                    None
+                }
+                LoweringOperand::Carried(_) => None,
+            };
+            prepared_recursor_residuals.push(prepared);
+        }
+        let mut children = Vec::with_capacity(args.len());
+        for (position, (argument, prepared)) in
+            args.iter().zip(prepared_recursor_residuals).enumerate()
+        {
+            let child_origin = self
+                .static_transition_plan
+                .child_static_origin(origin, position)?;
+            let child = if let Some(prepared) = prepared {
+                let LoweringOperand::Carried(child) =
+                    self.materialize_static_recursor_residual(builder, prepared)?
+                else {
+                    unreachable!("a planned recursor residual materializes one environment")
+                };
+                child
+            } else {
+                match argument {
+                    LoweringOperand::Carried(child) => *child,
+                    LoweringOperand::Specialized(value) => {
+                        self.transfer_into_carrier(builder, child_origin, value)?
+                    }
+                }
+            };
+            children.push(child);
+        }
         let identity = self
             .static_transition_plan
             .constructor_symbol_identity(origin)?
@@ -6159,16 +6337,7 @@ impl<'a> Lowering<'a> {
             args.len(),
         )?;
         self.emit_carrier_store_tag_id(builder, word, identity)?;
-        for (position, argument) in args.iter().enumerate() {
-            let child_origin = self
-                .static_transition_plan
-                .child_static_origin(origin, position)?;
-            let child = match argument {
-                LoweringOperand::Carried(child) => *child,
-                LoweringOperand::Specialized(value) => {
-                    self.transfer_into_carrier(builder, child_origin, value)?
-                }
-            };
+        for (position, child) in children.into_iter().enumerate() {
             self.emit_carrier_store_field(builder, word, position, child)?;
         }
         Ok(word)
@@ -6951,6 +7120,14 @@ impl<'a> Lowering<'a> {
         worker: StaticRecursorWorker,
         inputs: &mut Vec<LoweringOperand>,
     ) -> Result<(), CraneliftBackendError> {
+        if inputs.len() != worker.declared_arity {
+            return Err(unsupported(
+                "StaticRecursorWorker",
+                "the direct worker invocation disagrees with its declared arity",
+            ));
+        }
+        let class = self.emit_carrier_class(builder, environment)?;
+        Self::require_i64(builder, class, BoundaryClass::Record as i64);
         let field_count = self.emit_carrier_field_count(builder, environment)?;
         let expected = i64::try_from(worker.capture_count).map_err(|_| {
             unsupported(
@@ -6983,57 +7160,46 @@ impl<'a> Lowering<'a> {
     ) -> Result<Option<StaticRecursorWorker>, CraneliftBackendError> {
         let eliminator = self.retained_body_occurrence(eliminator_origin)?;
         let RuntimeExpr::ComputationalMatch { scrutinee, .. } = eliminator.expr else {
-            return Err(backend_module(
+            return Err(backend(BackendFailure::PlannerInvariant(
                 "recursive-position metadata names a non-computational eliminator".to_string(),
-            ));
+            )));
         };
         let scrutinee = self.child_occurrence(eliminator_origin, 0, scrutinee)?;
         let RuntimeExpr::Construct { args, .. } = scrutinee.expr else {
             return Ok(None);
         };
         let Some(argument) = args.get(position) else {
-            return Err(backend_module(
+            return Err(backend(BackendFailure::PlannerInvariant(
                 "recursive position is outside its source constructor".to_string(),
-            ));
+            )));
         };
         let argument = self.child_occurrence(scrutinee.static_origin, position, argument)?;
-        match argument.expr {
-            RuntimeExpr::LexicalClosure { captures, body, .. } if captures.is_empty() => {
-                Ok(Some(StaticRecursorWorker {
-                    body_origin: self
-                        .child_occurrence(argument.static_origin, 0, body)?
-                        .static_origin,
-                    capture_count: 0,
-                }))
+        let body = match argument.expr {
+            RuntimeExpr::Closure { body, .. } | RuntimeExpr::LexicalClosure { body, .. } => {
+                self.child_occurrence(argument.static_origin, 0, body)?
+                    .static_origin
             }
-            RuntimeExpr::Closure { captures, body, .. } => Ok(Some(StaticRecursorWorker {
-                body_origin: self
-                    .child_occurrence(argument.static_origin, 0, body)?
-                    .static_origin,
-                capture_count: captures.len(),
-            })),
-            RuntimeExpr::Value(_)
-            | RuntimeExpr::Var(_)
-            | RuntimeExpr::Let { .. }
-            | RuntimeExpr::If { .. }
-            | RuntimeExpr::PrimitiveCall { .. }
-            | RuntimeExpr::Construct { .. }
-            | RuntimeExpr::Match { .. }
-            | RuntimeExpr::ComputationalMatch { .. }
-            | RuntimeExpr::Record { .. }
-            | RuntimeExpr::Project { .. }
-            | RuntimeExpr::LexicalClosure { .. }
-            | RuntimeExpr::DeclarationRef { .. }
-            | RuntimeExpr::ImportedDeclarationRef { .. }
-            | RuntimeExpr::Call { .. }
-            | RuntimeExpr::Effect { .. }
-            | RuntimeExpr::Trap(_)
-            | RuntimeExpr::CheckedJoinSite { .. }
-            | RuntimeExpr::CheckedSubcontinuationFrame { .. }
-            | RuntimeExpr::CheckedRecursiveInvocation { .. }
-            | RuntimeExpr::CheckedComputationalIHSlots { .. }
-            | RuntimeExpr::CheckedComputationalIHInvocation { .. } => Ok(None),
+            _ => return Ok(None),
+        };
+        self.static_transition_plan
+            .static_recursor_worker_residual_token(eliminator_origin, position, body)?
+            .map(|token| {
+                if token.disposition() != OperandEdgeDisposition::CallableCapture {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "static recursor worker residual is not callable-capture".to_string(),
+                    )));
         }
+                Ok(StaticRecursorWorker {
+                    residual_id: token.id,
+                    parent_origin: token.parent_origin,
+                    sibling_position: token.sibling_position as usize,
+                    closure_origin: token.closure_origin,
+                    body_origin: token.body_origin,
+                    declared_arity: token.declared_arity as usize,
+                    capture_count: token.capture_count as usize,
+                })
+            })
+            .transpose()
     }
 
     /// ⭐⭐ **`D3` — `ComputationalMatch` eliminating a carried value.**
@@ -8255,6 +8421,8 @@ impl<'a> Lowering<'a> {
                         if !recursor_invocation_is_checked(&invocation) {
                             validate_recursor_invocation_segment(&invocation)?;
                         }
+                        let prepared =
+                            self.prepare_static_recursor_residual(base, &invocation)?;
                         let dynamic_splice_edges =
                             self.take_dynamic_splice_edges(&invocation)?;
                         let installed = compose_oriented_subcontinuation(
@@ -8265,6 +8433,8 @@ impl<'a> Lowering<'a> {
                             invocation,
                             dynamic_splice_edges,
                         )?;
+                        let base =
+                            self.materialize_static_recursor_residual(builder, prepared)?;
                         let mut frames = installed_oriented_eliminator_frames(&installed);
                         frames.push(EliminatorFrame::InvocationReturn);
                         // ⭐⭐ `AC-C4` — the carried residual on the direct

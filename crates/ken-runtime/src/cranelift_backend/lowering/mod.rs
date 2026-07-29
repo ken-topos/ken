@@ -80,8 +80,8 @@ pub(in crate::cranelift_backend) use super::planning::{
     EmittableStaticCallableCall, EmittableStaticCallableCapture, EmittableStaticCallableUnit,
     EmittableUnit, JoinPlanToken, JoinResultRepresentation, LoweringOnlyOperandEdge,
     OperandEdgeDisposition, OperandEdgeToken, PredeclaredFunctionId, SourceOperandRole,
-    StaticCallableSpecializationId, StaticOriginId, StaticTransitionPlan,
-    SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
+    StaticCallableSpecializationId, StaticOriginId, StaticRecursorWorkerResidualId,
+    StaticTransitionPlan, SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use super::planning::{
@@ -2321,6 +2321,7 @@ impl<'a> Lowering<'a> {
         inputs: &[LoweringOperand],
         #[cfg(test)] launch_ingress: Option<cranelift_codegen::ir::Value>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let inputs = self.split_static_recursor_worker_operands(builder, inputs.to_vec())?;
         let declared_inputs = target
             .slots
             .iter()
@@ -2334,7 +2335,7 @@ impl<'a> Lowering<'a> {
         // D7/#24: close the whole input graph before the first frame allocation
         // or store. In particular a callable capsule is rejected here without
         // descending into or publishing any of its phase-bearing captures.
-        for input in inputs {
+        for input in &inputs {
             if let LoweringOperand::Specialized(value) = input {
                 value.boundary_transfer_admissibility()?;
             }
@@ -2359,7 +2360,7 @@ impl<'a> Lowering<'a> {
                     let word = match value {
                         LoweringOperand::Carried(word) => word.word,
                         LoweringOperand::Specialized(value) => {
-                            self.transfer_into_carrier(builder, target.origin, value)?
+                            self.transfer_into_carrier(builder, target.origin, &value)?
                                 .word
                         }
                     };
@@ -5330,8 +5331,20 @@ struct PendingLetContinuationFrame<'a> {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct StaticRecursorWorker {
+    residual_id: StaticRecursorWorkerResidualId,
+    parent_origin: StaticOriginId,
+    sibling_position: usize,
+    closure_origin: StaticOriginId,
     body_origin: StaticOriginId,
+    declared_arity: usize,
     capture_count: usize,
+}
+enum PreparedStaticRecursorResidual {
+    Passthrough(LoweringOperand),
+    Worker {
+        worker: StaticRecursorWorker,
+        captures: Vec<CarriedBoundaryWord>,
+    },
 }
 #[derive(Clone, Copy)]
 struct ActiveContinuationFrame<'a> {
@@ -7727,15 +7740,43 @@ impl<'a> Lowering<'a> {
         )>,
         recursive_worker: Option<StaticRecursorWorker>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let recursive_worker = recursive_worker.or_else(|| match &recursive {
-            LoweringOperand::Specialized(Lowered::Closure { body, captures, .. }) => {
+        let recursive_worker = match &recursive {
+            LoweringOperand::Specialized(Lowered::Closure {
+                body,
+                params,
+                captures,
+            }) => {
+                let token = self
+                    .static_transition_plan
+                    .static_recursor_worker_residual_token(static_origin, sibling_position, *body)?
+                    .ok_or_else(|| {
+                        backend(BackendFailure::PlannerInvariant(
+                            "callable recursor residual has no planned matrix member".to_string(),
+                        ))
+                    })?;
+                if token.disposition() != OperandEdgeDisposition::CallableCapture
+                    || token.parent_origin != static_origin
+                    || token.sibling_position as usize != sibling_position
+                    || token.body_origin != *body
+                    || token.declared_arity as usize != params.len()
+                    || token.capture_count as usize != captures.len()
+                {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "callable recursor residual disagrees with its planner token".to_string(),
+                    )));
+                }
                 Some(StaticRecursorWorker {
-                    body_origin: *body,
-                    capture_count: captures.len(),
+                    residual_id: token.id,
+                    parent_origin: token.parent_origin,
+                    sibling_position: token.sibling_position as usize,
+                    closure_origin: token.closure_origin,
+                    body_origin: token.body_origin,
+                    declared_arity: token.declared_arity as usize,
+                    capture_count: token.capture_count as usize,
                 })
             }
-            LoweringOperand::Specialized(_) | LoweringOperand::Carried(_) => None,
-        });
+            LoweringOperand::Specialized(_) | LoweringOperand::Carried(_) => recursive_worker,
+        };
         let (residual, payload) = decompose_computational_recursor(recursive);
         let active_instance = self.active_recursive_invocations.last().copied();
         // ⛔ **The frame identity is TRANSPORTED, never inferred**

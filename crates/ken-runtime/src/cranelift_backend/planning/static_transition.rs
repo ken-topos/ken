@@ -16,7 +16,7 @@ use super::{
     backend, unsupported, BackendFailure, CraneliftBackendError, RuntimeDeclaration,
     RuntimeDeclarationKind,
 };
-use crate::{RuntimeExpr, RuntimePartiality, RuntimeTrap, RuntimeTrapCode};
+use crate::{RuntimeExpr, RuntimePartiality, RuntimeSymbol, RuntimeTrap, RuntimeTrapCode};
 use abi::{build_abi_plane, extend_static_callable_abi, AbiPlane};
 use semantic_ir::{
     build_semantic_plane, build_synthesized_constructor_inventory, SemanticMaterialArena,
@@ -401,6 +401,7 @@ pub(in crate::cranelift_backend) enum LoweringOnlyOperandEdge {
     DirectCallRecursorResidual,
     RecursiveDeclarationArgument,
     DeclarationCaptureSpecialization,
+    StaticRecursorWorkerResidual,
     CallableCapsuleEscape,
     #[cfg(test)]
     TestFixtureResult,
@@ -410,6 +411,7 @@ impl LoweringOnlyOperandEdge {
     pub(in crate::cranelift_backend) fn token(self) -> OperandEdgeToken {
         let disposition = match self {
             Self::JoinArm => OperandEdgeDisposition::Forwarding,
+            Self::StaticRecursorWorkerResidual => OperandEdgeDisposition::CallableCapture,
             Self::CallableCapsuleEscape => OperandEdgeDisposition::EscapeForbidden,
             Self::CheckedComputationalIhMarker
             | Self::PendingLetRecursorResidual
@@ -458,6 +460,7 @@ impl LoweringOnlyOperandEdge {
             Self::DirectCallRecursorResidual => "a recursor residual in a direct call",
             Self::RecursiveDeclarationArgument => "a recursive declaration argument",
             Self::DeclarationCaptureSpecialization => "a recursive-descent declaration capture",
+            Self::StaticRecursorWorkerResidual => "a planned static recursor worker residual",
             Self::CallableCapsuleEscape => "a whole callable capsule",
             #[cfg(test)]
             Self::TestFixtureResult => "a test fixture result",
@@ -483,6 +486,64 @@ impl OperandEdgeToken {
 
     pub(in crate::cranelift_backend) fn label(&self) -> &'static str {
         self.label
+    }
+}
+
+/// Dense identity of one planner-proved callable residual owned by a
+/// computational recursor edge.
+///
+/// Capture values are deliberately absent. The identity is static source
+/// provenance only.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub(in crate::cranelift_backend) struct StaticRecursorWorkerResidualId(u32);
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum StaticRecursorCaptureSource {
+    Seed(RuntimeSymbol),
+    Lexical(StaticOriginId),
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct StaticRecursorCaptureProvenance {
+    ordinal: u32,
+    owner: PredeclaredFunctionId,
+    closure_origin: StaticOriginId,
+    source: StaticRecursorCaptureSource,
+    phase: OperandEdgeDisposition,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct PlannedStaticRecursorWorkerResidual {
+    id: StaticRecursorWorkerResidualId,
+    parent_origin: StaticOriginId,
+    sibling_position: u32,
+    closure_origin: StaticOriginId,
+    body_origin: StaticOriginId,
+    declared_arity: u32,
+    captures: Vec<StaticRecursorCaptureProvenance>,
+    disposition: OperandEdgeDisposition,
+}
+
+/// Move-only planner evidence for one exact static-worker residual edge.
+///
+/// Lowering can inspect this token only after naming the parent and recursive
+/// position. It cannot construct or reclassify one.
+#[derive(Debug)]
+pub(in crate::cranelift_backend) struct StaticRecursorWorkerResidualToken {
+    pub(in crate::cranelift_backend) id: StaticRecursorWorkerResidualId,
+    pub(in crate::cranelift_backend) parent_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) sibling_position: u32,
+    pub(in crate::cranelift_backend) closure_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) body_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) declared_arity: u32,
+    pub(in crate::cranelift_backend) capture_count: u32,
+    disposition: OperandEdgeDisposition,
+}
+
+impl StaticRecursorWorkerResidualToken {
+    pub(in crate::cranelift_backend) fn disposition(&self) -> OperandEdgeDisposition {
+        self.disposition
     }
 }
 
@@ -1968,6 +2029,9 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     static_callable_specializations: Vec<PlannedStaticCallableSpecialization>,
     /// One exact call-site edge per use of an interned specialization.
     static_callable_calls: Vec<PlannedStaticCallableCall>,
+    /// The closed lowering-only matrix member for a planner-proved static
+    /// recursor worker residual. `None` is never valid after planning.
+    static_recursor_worker_residual_disposition: Option<OperandEdgeDisposition>,
 }
 
 #[cfg(test)]
@@ -2099,12 +2163,23 @@ enum ResultPhase {
 }
 
 #[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StaticRecursorResidualMatrixMutation {
+    Exact,
+    OmitFirst,
+    ReclassifyFirst,
+}
+
+#[cfg(test)]
 thread_local! {
     static D8_FORCE_VARIABLE_SPECIALIZED: Cell<bool> = const { Cell::new(false) };
     static D8_REMOVE_VARIABLE_CALLABLE_SEED: Cell<bool> = const { Cell::new(false) };
     static DECLARATION_CLOSURE_DROP_CALLABLE_PHASE: Cell<bool> =
         const { Cell::new(false) };
     static D7_OMIT_LEXICAL_CAPTURE_EDGE: Cell<bool> = const { Cell::new(false) };
+    static STATIC_RECURSOR_RESIDUAL_MATRIX_MUTATION:
+        Cell<StaticRecursorResidualMatrixMutation> =
+        const { Cell::new(StaticRecursorResidualMatrixMutation::Exact) };
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2658,6 +2733,7 @@ impl<'src> Planner<'src> {
                 operand_edges: Vec::new(),
                 static_callable_specializations: Vec::new(),
                 static_callable_calls: Vec::new(),
+                static_recursor_worker_residual_disposition: None,
             },
             store_interner: BTreeMap::new(),
             next_source: 0,
@@ -3403,6 +3479,22 @@ impl<'src> Planner<'src> {
             &self.plan.static_callable_specializations,
         )?;
         self.plan.operand_edges = build_operand_edge_matrix(&self.plan)?;
+        self.plan.static_recursor_worker_residual_disposition = Some(
+            LoweringOnlyOperandEdge::StaticRecursorWorkerResidual
+                .token()
+                .disposition(),
+        );
+        #[cfg(test)]
+        STATIC_RECURSOR_RESIDUAL_MATRIX_MUTATION.with(|mutation| match mutation.get() {
+            StaticRecursorResidualMatrixMutation::Exact => {}
+            StaticRecursorResidualMatrixMutation::OmitFirst => {
+                self.plan.static_recursor_worker_residual_disposition = None;
+            }
+            StaticRecursorResidualMatrixMutation::ReclassifyFirst => {
+                self.plan.static_recursor_worker_residual_disposition =
+                    Some(OperandEdgeDisposition::Forwarding);
+            }
+        });
         self.plan.validate()?;
         Ok(self.plan)
     }
@@ -3932,6 +4024,212 @@ impl<'src> StaticTransitionPlan<'src> {
             child: Some(edge.child),
             position: Some(edge.position),
         })
+    }
+
+    /// Consume the planner-owned callable-capture disposition for one exact
+    /// computational-recursor worker residual.
+    pub(in crate::cranelift_backend) fn static_recursor_worker_residual_token(
+        &self,
+        parent_origin: StaticOriginId,
+        sibling_position: usize,
+        body_origin: StaticOriginId,
+    ) -> Result<Option<StaticRecursorWorkerResidualToken>, CraneliftBackendError> {
+        let parent = self
+            .source_occurrences
+            .get(parent_origin.0 as usize)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| planner_error("static recursor parent has no source occurrence"))?;
+        let RuntimeExpr::ComputationalMatch { cases, .. } = parent.expr else {
+            return Err(planner_error(
+                "static recursor parent is not a computational match",
+            ));
+        };
+        if !cases
+            .iter()
+            .any(|case| case.recursive_positions.contains(&sibling_position))
+        {
+            return Ok(None);
+        }
+        let sibling_position = u32::try_from(sibling_position)
+            .map_err(|_| planner_capacity_error("static recursor sibling exhausted"))?;
+        let mut closures = self
+            .source_occurrences
+            .iter()
+            .flatten()
+            .filter(|occurrence| {
+                matches!(
+                    occurrence.expr,
+                    RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
+                ) && self
+                    .semantic
+                    .child_origin(occurrence.static_origin, 0)
+                    .is_ok_and(|candidate| candidate == body_origin)
+            });
+        let Some(closure) = closures.next() else {
+            return Ok(None);
+        };
+        if closures.next().is_some() {
+            return Err(planner_error(
+                "static recursor worker body has two closure owners",
+            ));
+        }
+        let closure_origin = closure.static_origin;
+        let closure_owner = self
+            .semantic
+            .function_owner(closure_origin)?
+            .ok_or_else(|| planner_error("static recursor closure has no owner"))?;
+        let (params, captures) = match closure.expr {
+            RuntimeExpr::Closure {
+                captures, params, ..
+            } => {
+                let captures = captures
+                    .iter()
+                    .enumerate()
+                    .map(|(ordinal, symbol)| {
+                        Ok(StaticRecursorCaptureProvenance {
+                            ordinal: u32::try_from(ordinal).map_err(|_| {
+                                planner_capacity_error("static recursor capture ordinal exhausted")
+                            })?,
+                            owner: closure_owner,
+                            closure_origin,
+                            source: StaticRecursorCaptureSource::Seed(symbol.clone()),
+                            phase: OperandEdgeDisposition::CallableCapture,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+                (params, captures)
+            }
+            RuntimeExpr::LexicalClosure {
+                captures, params, ..
+            } => {
+                let captures = captures
+                    .iter()
+                    .enumerate()
+                    .map(|(ordinal, _)| {
+                        let position = 1 + ordinal;
+                        let capture_origin =
+                            self.semantic.child_origin(closure_origin, position)?;
+                        let edge = self
+                            .operand_edges
+                            .iter()
+                            .find(|edge| {
+                                edge.parent == closure_origin
+                                    && edge.child == capture_origin
+                                    && edge.position as usize == position
+                                    && edge.role == SourceOperandRole::LexicalCapture
+                            })
+                            .ok_or_else(|| {
+                                planner_error(
+                                    "static recursor capture has no planned callable edge",
+                                )
+                            })?;
+                        if edge.disposition != OperandEdgeDisposition::CallableCapture {
+                            return Err(planner_error(
+                                "static recursor capture is not callable-capture phase",
+                            ));
+                        }
+                        Ok(StaticRecursorCaptureProvenance {
+                            ordinal: u32::try_from(ordinal).map_err(|_| {
+                                planner_capacity_error("static recursor capture ordinal exhausted")
+                            })?,
+                            owner: edge.owner,
+                            closure_origin,
+                            source: StaticRecursorCaptureSource::Lexical(capture_origin),
+                            phase: edge.disposition,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+                (params, captures)
+            }
+            _ => unreachable!("closure source was filtered above"),
+        };
+        let disposition = self
+            .static_recursor_worker_residual_disposition
+            .ok_or_else(|| planner_error("static recursor residual matrix member is absent"))?;
+        let residual = PlannedStaticRecursorWorkerResidual {
+            id: StaticRecursorWorkerResidualId(closure_origin.0),
+            parent_origin,
+            sibling_position,
+            closure_origin,
+            body_origin,
+            declared_arity: u32::try_from(params.len())
+                .map_err(|_| planner_capacity_error("static recursor arity exhausted"))?,
+            captures,
+            disposition,
+        };
+        Ok(Some(StaticRecursorWorkerResidualToken {
+            id: residual.id,
+            parent_origin: residual.parent_origin,
+            sibling_position: residual.sibling_position,
+            closure_origin: residual.closure_origin,
+            body_origin: residual.body_origin,
+            declared_arity: residual.declared_arity,
+            capture_count: u32::try_from(residual.captures.len())
+                .map_err(|_| planner_capacity_error("static recursor capture count exhausted"))?,
+            disposition: residual.disposition,
+        }))
+    }
+
+    /// Recover the exact recursor-owned residual edge from its closure source
+    /// occurrence.
+    ///
+    /// This reverse projection is used only while constructing the source
+    /// constructor that owns the recursive position. It follows the same
+    /// planned parent/scrutinee/position relation as the forward token lookup;
+    /// a closure that is not such a child has no exception to whole-capsule
+    /// rejection.
+    pub(in crate::cranelift_backend) fn static_recursor_worker_residual_token_for_closure(
+        &self,
+        closure_origin: StaticOriginId,
+    ) -> Result<Option<StaticRecursorWorkerResidualToken>, CraneliftBackendError> {
+        let closure = self
+            .source_occurrences
+            .get(closure_origin.0 as usize)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| planner_error("static recursor closure has no source occurrence"))?;
+        if !matches!(
+            closure.expr,
+            RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
+        ) {
+            return Ok(None);
+        }
+        let body_origin = self.semantic.child_origin(closure_origin, 0)?;
+        let mut candidates = BTreeSet::new();
+        for parent in self.source_occurrences.iter().flatten() {
+            let RuntimeExpr::ComputationalMatch { cases, .. } = parent.expr else {
+                continue;
+            };
+            let scrutinee_origin = self.semantic.child_origin(parent.static_origin, 0)?;
+            let Some(scrutinee) = self
+                .source_occurrences
+                .get(scrutinee_origin.0 as usize)
+                .and_then(Option::as_ref)
+            else {
+                return Err(planner_error(
+                    "static recursor scrutinee has no source occurrence",
+                ));
+            };
+            if !matches!(scrutinee.expr, RuntimeExpr::Construct { .. }) {
+                continue;
+            }
+            for position in cases
+                .iter()
+                .flat_map(|case| case.recursive_positions.iter().copied())
+            {
+                if self.semantic.child_origin(scrutinee_origin, position)? == closure_origin {
+                    candidates.insert((parent.static_origin, position));
+                }
+            }
+        }
+        let Some((parent_origin, sibling_position)) = candidates.pop_first() else {
+            return Ok(None);
+        };
+        if !candidates.is_empty() {
+            return Err(planner_error(
+                "static recursor closure belongs to two recursive-position edges",
+            ));
+        }
+        self.static_recursor_worker_residual_token(parent_origin, sibling_position, body_origin)
     }
 
     /// Consume the planner-owned result contract for one source join.
@@ -4776,6 +5074,7 @@ impl<'src> StaticTransitionPlan<'src> {
             return Err(planner_error("closed graph has no entry"));
         }
         self.validate_operand_edge_matrix()?;
+        self.validate_static_recursor_worker_residuals()?;
         self.validate_static_callable_specializations()?;
         if self.evidence.len() != self.edges.len() {
             return Err(planner_error("edge evidence is incomplete"));
@@ -5263,6 +5562,17 @@ impl<'src> StaticTransitionPlan<'src> {
         if actual != expected {
             return Err(planner_error(
                 "operand-edge matrix is not exact for positional source consumers",
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_static_recursor_worker_residuals(&self) -> Result<(), CraneliftBackendError> {
+        if self.static_recursor_worker_residual_disposition
+            != Some(OperandEdgeDisposition::CallableCapture)
+        {
+            return Err(planner_error(
+                "static recursor worker residual matrix is not exact",
             ));
         }
         Ok(())
@@ -6160,8 +6470,7 @@ mod tests {
         }
 
         let mut selector_slot = plan.clone();
-        let descriptor_index =
-            selector_slot.static_callable_specializations[0].function.0 as usize;
+        let descriptor_index = selector_slot.static_callable_specializations[0].function.0 as usize;
         selector_slot.abi.descriptors[descriptor_index]
             .header
             .parameters += 1;
@@ -6508,6 +6817,142 @@ mod tests {
                 .contains("operand-edge matrix is not exact for positional source consumers"),
             "unexpected pre-emission rejection: {error}"
         );
+    }
+
+    fn static_recursor_worker_fixture(body_constructor: &str) -> RuntimeExpr {
+        let constructor = "ctor:fixture::StaticRecursor::Node".to_string();
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: constructor.clone(),
+                args: vec![RuntimeExpr::Closure {
+                    captures: vec![
+                        "seed:fixture::left".to_string(),
+                        "seed:fixture::right".to_string(),
+                    ],
+                    params: vec!["argument".to_string()],
+                    body: Box::new(RuntimeExpr::Construct {
+                        constructor: body_constructor.to_string(),
+                        args: vec![RuntimeExpr::Var(0)],
+                    }),
+                }],
+            }),
+            cases: vec![RuntimeComputationalMatchCase {
+                constructor,
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![RuntimeExpr::Var(1)],
+                },
+            }],
+            default: trap("static recursor fixture"),
+        }
+    }
+
+    #[test]
+    fn static_recursor_worker_residual_is_an_exact_callable_capture_member() {
+        // Promise class: durable invariant.
+        //
+        // MEASURED: the pre-emission plan returns one token keyed by the
+        // computational parent and recursive position, with the fixture's
+        // arity and ordered capture count.
+        // CLAIMED: a static recursor worker is admitted only through the new
+        // lowering-only CallableCapture member.
+        // THE GAP: the token must also be consumed against the affine
+        // invocation segment and runtime capture phases; lowering owns those
+        // independent checks.
+        let expr = static_recursor_worker_fixture("ctor:fixture::Worker::Left");
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+            .expect("captured static recursor worker plans");
+        let parent = plan.root_occurrence.expect("fixture has a root occurrence");
+        let scrutinee = plan.child_static_origin(parent, 0).unwrap();
+        let closure = plan.child_static_origin(scrutinee, 0).unwrap();
+        let body = plan.child_static_origin(closure, 0).unwrap();
+        let token = plan
+            .static_recursor_worker_residual_token(parent, 0, body)
+            .expect("token lookup is valid")
+            .expect("the exact residual member exists");
+        assert_eq!(token.disposition(), OperandEdgeDisposition::CallableCapture);
+        assert_eq!(token.parent_origin, parent);
+        assert_eq!(token.sibling_position, 0);
+        assert_eq!(token.declared_arity, 1);
+        assert_eq!(token.capture_count, 2);
+        assert_eq!(
+            LoweringOnlyOperandEdge::CallableCapsuleEscape
+                .token()
+                .disposition(),
+            OperandEdgeDisposition::EscapeForbidden,
+            "the per-edge exception must not weaken whole-closure rejection"
+        );
+    }
+
+    #[test]
+    fn static_recursor_worker_residual_matrix_omission_and_reclassification_fail_planning() {
+        // Promise class: durable invariant with population-side mutation.
+        //
+        // MEASURED: deleting or reclassifying the real member makes plan
+        // construction return the exact matrix-closure error.
+        // CLAIMED: omission cannot fall through to lowering's late Closure
+        // refusal.
+        // THE GAP: the fixture must actually contribute a member; the positive
+        // control above and the pre-mutation assertion below establish that.
+        let expr = static_recursor_worker_fixture("ctor:fixture::Worker::Left");
+        for mutation in [
+            StaticRecursorResidualMatrixMutation::OmitFirst,
+            StaticRecursorResidualMatrixMutation::ReclassifyFirst,
+        ] {
+            STATIC_RECURSOR_RESIDUAL_MATRIX_MUTATION.with(|cell| cell.set(mutation));
+            let result = plan_static_transition_graph(&expr, &BTreeMap::new());
+            STATIC_RECURSOR_RESIDUAL_MATRIX_MUTATION
+                .with(|cell| cell.set(StaticRecursorResidualMatrixMutation::Exact));
+            let error = match result {
+                Ok(_) => panic!("the real static recursor member mutation survived planning"),
+                Err(error) => error,
+            };
+            assert!(
+                error
+                    .to_string()
+                    .contains("static recursor worker residual matrix is not exact"),
+                "unexpected pre-emission rejection: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn same_shape_static_recursor_workers_keep_distinct_body_targets() {
+        // Promise class: durable invariant.
+        //
+        // MEASURED: two same-arity, same-capture-shape workers in one plan have
+        // distinct body origins and residual identities.
+        // CLAIMED: body identity, not capture shape or values, selects the
+        // direct worker target.
+        // THE GAP: emitted result parity independently proves those distinct
+        // static targets are called.
+        let expr = RuntimeExpr::If {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            then_expr: Box::new(static_recursor_worker_fixture("ctor:fixture::Worker::Left")),
+            else_expr: Box::new(static_recursor_worker_fixture(
+                "ctor:fixture::Worker::Right",
+            )),
+        };
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+            .expect("both static recursor workers plan");
+        let root = plan.root_occurrence.expect("if has a root occurrence");
+        let worker = |position| {
+            let parent = plan.child_static_origin(root, position).unwrap();
+            let scrutinee = plan.child_static_origin(parent, 0).unwrap();
+            let closure = plan.child_static_origin(scrutinee, 0).unwrap();
+            let body = plan.child_static_origin(closure, 0).unwrap();
+            plan.static_recursor_worker_residual_token(parent, 0, body)
+                .unwrap()
+                .unwrap()
+        };
+        let left = worker(1);
+        let right = worker(2);
+        assert_eq!(left.declared_arity, right.declared_arity);
+        assert_eq!(left.capture_count, right.capture_count);
+        assert_ne!(left.body_origin, right.body_origin);
+        assert_ne!(left.id, right.id);
     }
 
     fn nested_resource_bracket(depth: usize) -> RuntimeExpr {
