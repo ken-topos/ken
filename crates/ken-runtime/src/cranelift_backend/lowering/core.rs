@@ -1239,6 +1239,31 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::Call { callee, args } => {
                 let join_plan = self.consumed_join_plan_token(static_origin)?;
                 let callee = self.child_occurrence(static_origin, 0, callee)?;
+                if matches!(
+                    self.body_emission_authority,
+                    BodyEmissionAuthority::FunctionizedUnits
+                ) {
+                    if let Some(call) = self
+                        .function_local
+                        .static_callable_calls
+                        .get(&static_origin)
+                        .cloned()
+                    {
+                        let value = self.lower_static_callable_specialization_call(
+                            builder,
+                            static_origin,
+                            callee,
+                            args,
+                            producer_env,
+                            call,
+                        )?;
+                        return self.lower_computational_match_value_composed(
+                            builder,
+                            value,
+                            eliminators,
+                        );
+                    }
+                }
                 let callee = self.lower_expr(builder, callee, producer_env)?;
                 match callee {
                     LoweringOperand::Specialized(Lowered::DeclarationClosure {
@@ -5997,6 +6022,175 @@ impl<'a> Lowering<'a> {
         Ok(operand)
     }
 
+    fn lower_static_callable_specialization_call(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        call_origin: StaticOriginId,
+        callee: SourceOccurrence<'_>,
+        args: &[RuntimeExpr],
+        env: &[LoweringOperand],
+        call: units::DeclaredStaticCallableCall,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        if call.plan.arguments().len() != args.len() {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "static callable call plan does not cover every parameter".to_string(),
+            )));
+        }
+        let mut ordinary = Vec::new();
+        let mut lifted = Vec::new();
+        for (position, argument_plan) in call.plan.arguments().iter().enumerate() {
+            if argument_plan.parameter_ordinal() as usize != position {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "static callable argument plan is not in parameter order".to_string(),
+                )));
+            }
+            let argument = self.child_occurrence(call_origin, 1 + position, &args[position])?;
+            if argument.static_origin != argument_plan.argument_origin() {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "static callable argument origin changed after planning".to_string(),
+                )));
+            }
+            match argument_plan.kind() {
+                EmittableStaticCallableArgumentKind::Ordinary => {
+                    let edge = self.static_transition_plan.operand_edge_token(
+                        call_origin,
+                        1 + position,
+                        SourceOperandRole::CallArgument,
+                    )?;
+                    if edge.disposition() != OperandEdgeDisposition::Forwarding {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "ordinary specialization argument is not forwarding".to_string(),
+                        )));
+                    }
+                    ordinary.push(self.lower_expr(builder, argument, env)?);
+                }
+                EmittableStaticCallableArgumentKind::Erased => {
+                    let edge = self.static_transition_plan.operand_edge_token(
+                        call_origin,
+                        1 + position,
+                        SourceOperandRole::CallArgument,
+                    )?;
+                    if edge.disposition() != OperandEdgeDisposition::StaticCallableElimination {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "erased static callable argument lost its elimination disposition"
+                                .to_string(),
+                        )));
+                    }
+                }
+                EmittableStaticCallableArgumentKind::Direct { closure_origin } => {
+                    if closure_origin != argument.static_origin {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "static callable binding names the wrong closure occurrence"
+                                .to_string(),
+                        )));
+                    }
+                    let edge = self.static_transition_plan.operand_edge_token(
+                        call_origin,
+                        1 + position,
+                        SourceOperandRole::CallArgument,
+                    )?;
+                    if edge.disposition() != OperandEdgeDisposition::StaticCallableElimination {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "static callable argument did not consume the sixth disposition"
+                                .to_string(),
+                        )));
+                    }
+                    let binding = argument_plan.binding().ok_or_else(|| {
+                        backend(BackendFailure::PlannerInvariant(
+                            "direct static callable argument has no recursive binding".to_string(),
+                        ))
+                    })?;
+                    let callable = self.lower_expr(builder, argument, env)?;
+                    Self::lift_static_callable_binding(binding, callable, &mut lifted)?;
+                }
+                EmittableStaticCallableArgumentKind::Forwarded {
+                    body_origin,
+                    declared_arity,
+                } => {
+                    let edge = self.static_transition_plan.operand_edge_token(
+                        call_origin,
+                        1 + position,
+                        SourceOperandRole::CallArgument,
+                    )?;
+                    if edge.disposition() != OperandEdgeDisposition::StaticCallableElimination {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "forwarded callable argument lost its elimination disposition"
+                                .to_string(),
+                        )));
+                    }
+                    let binding = argument_plan.binding().ok_or_else(|| {
+                        backend(BackendFailure::PlannerInvariant(
+                            "forwarded static callable argument has no recursive binding"
+                                .to_string(),
+                        ))
+                    })?;
+                    if binding.body_origin() != body_origin
+                        || binding.declared_arity() != declared_arity
+                    {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "forwarded static callable identity changed after planning".to_string(),
+                        )));
+                    }
+                    let callable = self.lower_expr(builder, argument, env)?;
+                    Self::lift_static_callable_binding(binding, callable, &mut lifted)?;
+                }
+            }
+        }
+        let lowered_callee = self.lower_expr(builder, callee, env)?;
+        let LoweringOperand::Specialized(Lowered::DeclarationClosure { captures, .. }) =
+            lowered_callee
+        else {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "static callable specialization target is not a declaration closure".to_string(),
+            )));
+        };
+        let mut inputs = ordinary;
+        inputs.extend(lifted);
+        inputs.extend(captures);
+        self.call_declared_unit_target(
+            builder,
+            call.target,
+            &inputs,
+            #[cfg(test)]
+            None,
+        )
+    }
+
+    fn lift_static_callable_binding(
+        binding: &EmittableStaticCallableBinding,
+        callable: LoweringOperand,
+        lifted: &mut Vec<LoweringOperand>,
+    ) -> Result<(), CraneliftBackendError> {
+        let LoweringOperand::Specialized(Lowered::Closure {
+            captures,
+            params,
+            body,
+        }) = callable
+        else {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "static callable binding is not a compiler-only closure".to_string(),
+            )));
+        };
+        if body != binding.body_origin()
+            || params.len() as u32 != binding.declared_arity()
+            || captures.len() != binding.captures().len()
+        {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "static callable binding changed body, arity, or capture shape after planning"
+                    .to_string(),
+            )));
+        }
+        for (capture, capture_binding) in captures.into_iter().zip(binding.captures()) {
+            match capture_binding {
+                EmittableStaticCallableCapture::Value => lifted.push(capture),
+                EmittableStaticCallableCapture::Callable(binding) => {
+                    Self::lift_static_callable_binding(binding, capture, lifted)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn lower_carried_match(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -7562,6 +7756,21 @@ impl<'a> Lowering<'a> {
                     self.body_emission_authority,
                     BodyEmissionAuthority::FunctionizedUnits
                 ) {
+                    if let Some(call) = self
+                        .function_local
+                        .static_callable_calls
+                        .get(&static_origin)
+                        .cloned()
+                    {
+                        return self.lower_static_callable_specialization_call(
+                            builder,
+                            static_origin,
+                            callee,
+                            args,
+                            env,
+                            call,
+                        );
+                    }
                     if let RuntimeExpr::LexicalClosure {
                         captures,
                         params,
@@ -9320,11 +9529,7 @@ impl<'a> Lowering<'a> {
                         let capture =
                             self.child_occurrence(declaration_origin, 1 + position, capture)?;
                         let lowered = self.lower_expr(builder, capture, &[])?;
-                        self.retain_callable_capture(
-                            declaration_origin,
-                            1 + position,
-                            lowered,
-                        )
+                        self.retain_callable_capture(declaration_origin, 1 + position, lowered)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 return Ok(LoweringOperand::Specialized(Lowered::DeclarationClosure {

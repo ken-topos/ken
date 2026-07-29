@@ -206,6 +206,7 @@ pub(in crate::cranelift_backend) struct ResolvedUnitTarget {
     header: AbiFrameHeader,
     slots: Vec<AbiSlot>,
     offsets: Vec<u32>,
+    static_callable: Option<EmittableStaticCallableCall>,
 }
 
 #[derive(Clone)]
@@ -217,11 +218,45 @@ pub(in crate::cranelift_backend) struct DeclaredUnitCall {
     pub(in crate::cranelift_backend) offsets: Vec<u32>,
 }
 
+#[derive(Clone)]
+pub(in crate::cranelift_backend) struct DeclaredStaticCallableCall {
+    pub(in crate::cranelift_backend) target: DeclaredUnitCall,
+    pub(in crate::cranelift_backend) plan: EmittableStaticCallableCall,
+}
+
 pub(in crate::cranelift_backend) struct DeclaredUnitCalls {
-    pub(in crate::cranelift_backend) static_bodies:
-        BTreeMap<StaticOriginId, DeclaredUnitCall>,
-    pub(in crate::cranelift_backend) declarations:
-        BTreeMap<StaticOriginId, DeclaredUnitCall>,
+    pub(in crate::cranelift_backend) static_bodies: BTreeMap<StaticOriginId, DeclaredUnitCall>,
+    pub(in crate::cranelift_backend) declarations: BTreeMap<StaticOriginId, DeclaredUnitCall>,
+    pub(in crate::cranelift_backend) static_callables:
+        BTreeMap<StaticOriginId, DeclaredStaticCallableCall>,
+}
+
+fn rebuild_static_callable_binding(
+    binding: &EmittableStaticCallableBinding,
+    lifted: &mut impl Iterator<Item = LoweringOperand>,
+) -> Result<LoweringOperand, CraneliftBackendError> {
+    let captures = binding
+        .captures()
+        .iter()
+        .map(|capture| match capture {
+            EmittableStaticCallableCapture::Value => lifted.next().ok_or_else(|| {
+                backend_module("specialization ABI omits a recursively lifted capture".to_string())
+            }),
+            EmittableStaticCallableCapture::Callable(binding) => {
+                rebuild_static_callable_binding(binding, lifted)
+            }
+        })
+        .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+    Ok(LoweringOperand::Specialized(Lowered::Closure {
+        captures,
+        params: vec![
+            String::new();
+            usize::try_from(binding.declared_arity()).map_err(|_| {
+                backend_module("static callable arity exceeds usize".to_string())
+            })?
+        ],
+        body: binding.body_origin(),
+    }))
 }
 
 impl CallEdgeTargets {
@@ -233,6 +268,7 @@ impl CallEdgeTargets {
     ) -> Result<DeclaredUnitCalls, CraneliftBackendError> {
         let mut static_bodies = BTreeMap::new();
         let mut declarations = BTreeMap::new();
+        let mut static_callables = BTreeMap::new();
         for target in self.targets_in(caller) {
             let call = DeclaredUnitCall {
                 function: module.declare_func_in_func(target.function, func),
@@ -250,6 +286,26 @@ impl CallEdgeTargets {
                     &mut declarations,
                     "one declaration-reference occurrence has two planner-derived call targets",
                 ),
+                EmittableCallKind::StaticCallableSpecialization => {
+                    let plan = target.static_callable.clone().ok_or_else(|| {
+                        backend_module(
+                            "static callable call edge has no compiler binding plan".to_string(),
+                        )
+                    })?;
+                    if static_callables
+                        .insert(
+                            target.call_site_origin,
+                            DeclaredStaticCallableCall { target: call, plan },
+                        )
+                        .is_some()
+                    {
+                        return Err(backend_module(
+                            "one call occurrence has two static callable specializations"
+                                .to_string(),
+                        ));
+                    }
+                    continue;
+                }
             };
             if calls.insert(target.call_site_origin, call).is_some() {
                 return Err(backend_module(duplicate.to_string()));
@@ -258,6 +314,7 @@ impl CallEdgeTargets {
         Ok(DeclaredUnitCalls {
             static_bodies,
             declarations,
+            static_callables,
         })
     }
 }
@@ -343,6 +400,21 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
                 header: unit.header(),
                 slots: unit.slots().to_vec(),
                 offsets,
+                static_callable: if edge.kind() == EmittableCallKind::StaticCallableSpecialization {
+                    Some(
+                        plan.emittable_static_callable_call(
+                            edge.caller(),
+                            edge.call_site_origin(),
+                        )?
+                        .ok_or_else(|| {
+                            backend_module(
+                                "static callable edge has no exact call-site plan".to_string(),
+                            )
+                        })?,
+                    )
+                } else {
+                    None
+                },
             },
         ));
     }
@@ -457,14 +529,15 @@ pub(super) fn define_root_adapter<M: Module>(
                 .static_transition_plan
                 .process_parameter_slot(role)?
                 .ok_or_else(|| {
-                    backend_module("process root has no declared role-keyed ingress slot".to_string())
+                    backend_module(
+                        "process root has no declared role-keyed ingress slot".to_string(),
+                    )
                 })?;
         }
     }
 
     let sig = unit_signature(module);
-    let mut func =
-        Function::with_name_signature(UserFuncName::user(0, adapter_id.as_u32()), sig);
+    let mut func = Function::with_name_signature(UserFuncName::user(0, adapter_id.as_u32()), sig);
     let mut function_local = helpers.declare_in_func(
         module,
         &mut func,
@@ -535,11 +608,9 @@ pub(super) fn define_root_adapter<M: Module>(
                 crate::boundary_activation::ROOT_INGRESS_CAPABILITY,
             );
             function_local.host_dispatch_context = Some(host_dispatch_context);
-            inputs.push(LoweringOperand::Specialized(
-                Lowered::BorrowedNativeValue {
-                    pointer: process_input,
-                },
-            ));
+            inputs.push(LoweringOperand::Specialized(Lowered::BorrowedNativeValue {
+                pointer: process_input,
+            }));
             inputs.push(LoweringOperand::Specialized(Lowered::CapabilityToken {
                 value: capability,
             }));
@@ -556,8 +627,7 @@ pub(super) fn define_root_adapter<M: Module>(
                 }
             });
         } else {
-            function_local.host_dispatch_context =
-                Some(builder.ins().iconst(pointer_type, 0));
+            function_local.host_dispatch_context = Some(builder.ins().iconst(pointer_type, 0));
         }
 
         compiler.function_local = function_local;
@@ -621,7 +691,10 @@ pub(super) fn define_unit_bodies<M: Module>(
     call_edges: &CallEdgeTargets,
     staged_root_value: Option<&RuntimeValue>,
 ) -> Result<RootUnitResult, CraneliftBackendError> {
-    let root = compiler.static_transition_plan.root_emittable_unit()?.function();
+    let root = compiler
+        .static_transition_plan
+        .root_emittable_unit()?
+        .function();
     let mut root_result = None;
     let emissions = compiler
         .static_transition_plan
@@ -728,23 +801,20 @@ fn define_unit_body<M: Module>(
     // ordinal, no name parsing and no dynamic lookup anywhere on the path. ⚠ An
     // emitted `call` is not claimed and no control here asserts one.
     #[cfg(test)]
-    let unit_trap_authority =
-        match TRAP_FRAME_BINDING_MUTATION.with(std::cell::Cell::get) {
-            TrapFrameBindingMutation::MisclassifyUnitAsRoot => Some(TrapExitAuthority::Root {
-                process_sentinel: false,
-                source_authorized: false,
-            }),
-            TrapFrameBindingMutation::Exact | TrapFrameBindingMutation::DeleteUnitLane => {
-                None
-            }
-        };
+    let unit_trap_authority = match TRAP_FRAME_BINDING_MUTATION.with(std::cell::Cell::get) {
+        TrapFrameBindingMutation::MisclassifyUnitAsRoot => Some(TrapExitAuthority::Root {
+            process_sentinel: false,
+            source_authorized: false,
+        }),
+        TrapFrameBindingMutation::Exact | TrapFrameBindingMutation::DeleteUnitLane => None,
+    };
     #[cfg(not(test))]
     let unit_trap_authority = None;
-    let mut function_local =
-        helpers.declare_in_func(module, &mut func, unit_trap_authority);
+    let mut function_local = helpers.declare_in_func(module, &mut func, unit_trap_authority);
     let declared_calls = call_edges.declare_in_func(unit.function, module, &mut func)?;
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
+    function_local.static_callable_calls = declared_calls.static_callables;
     let mut func_ctx = FunctionBuilderContext::new();
     let root_outcome;
     {
@@ -847,51 +917,110 @@ fn define_unit_body<M: Module>(
                 let (base, offset) = (
                     slots,
                     i32::try_from(*offset).map_err(|_| {
-                        backend_module("abi input slot offset exceeds addressable range".to_string())
+                        backend_module(
+                            "abi input slot offset exceeds addressable range".to_string(),
+                        )
                     })?,
                 );
-                let word = builder.ins().load(
-                    types::I64,
-                    MemFlags::trusted(),
-                    base,
-                    offset,
-                );
+                let word = builder
+                    .ins()
+                    .load(types::I64, MemFlags::trusted(), base, offset);
                 let carried = CarriedBoundaryWord { word };
                 // The process root's two ABI ordinals are closed semantic
                 // roles, not generic ValueWord inputs. Recovering them here
                 // prevents a borrowed process-input body from being emitted
                 // twice behind a runtime carried-representation split.
-                let operand = if is_root
-                    && compiler.process_object
-                    && slot.kind == AbiSlotKind::Parameter
-                {
-                    let value = compiler.emit_carrier_scalar(&mut builder, carried)?;
-                    match slot.ordinal {
-                        ordinal
-                            if ordinal == AbiProcessParameter::ProcessInput.ordinal() =>
-                        {
-                            LoweringOperand::Specialized(Lowered::BorrowedNativeValue {
-                                pointer: value,
-                            })
+                let operand =
+                    if is_root && compiler.process_object && slot.kind == AbiSlotKind::Parameter {
+                        let value = compiler.emit_carrier_scalar(&mut builder, carried)?;
+                        match slot.ordinal {
+                            ordinal if ordinal == AbiProcessParameter::ProcessInput.ordinal() => {
+                                LoweringOperand::Specialized(Lowered::BorrowedNativeValue {
+                                    pointer: value,
+                                })
+                            }
+                            ordinal if ordinal == AbiProcessParameter::Capability.ordinal() => {
+                                LoweringOperand::Specialized(Lowered::CapabilityToken { value })
+                            }
+                            _ => {
+                                return Err(backend_module(
+                                    "the process root has an unknown parameter role".to_string(),
+                                ));
+                            }
                         }
-                        ordinal
-                            if ordinal == AbiProcessParameter::Capability.ordinal() =>
-                        {
-                            LoweringOperand::Specialized(Lowered::CapabilityToken {
-                                value,
-                            })
-                        }
-                        _ => {
-                            return Err(backend_module(
-                                "the process root has an unknown parameter role".to_string(),
-                            ));
-                        }
-                    }
-                } else {
-                    LoweringOperand::Carried(carried)
-                };
+                    } else {
+                        LoweringOperand::Carried(carried)
+                    };
                 env.push(operand);
             }
+        }
+        if let AbiUnitDefinition::StaticCallableSpecialization { specialization, .. } =
+            unit.definition
+        {
+            let binding = compiler
+                .static_transition_plan
+                .emittable_static_callable_unit(specialization)?;
+            let parameter_count = usize::try_from(binding.parameter_count()).map_err(|_| {
+                backend_module("specialization parameter count exceeds usize".to_string())
+            })?;
+            let ordinary_count = unit.header.parameters as usize;
+            let capture_count = unit.header.captures as usize;
+            if env.len()
+                != ordinary_count.checked_add(capture_count).ok_or_else(|| {
+                    backend_module("specialization input population exceeds usize".to_string())
+                })?
+            {
+                return Err(backend_module(
+                    "specialization input environment disagrees with its ABI".to_string(),
+                ));
+            }
+            let mut ordinary = env[..ordinary_count].iter().cloned();
+            let captures = &env[ordinary_count..];
+            let declaration_captures =
+                usize::try_from(binding.declaration_captures()).map_err(|_| {
+                    backend_module(
+                        "specialization declaration capture count exceeds usize".to_string(),
+                    )
+                })?;
+            if declaration_captures > captures.len() {
+                return Err(backend_module(
+                    "specialization ABI omits declaration captures".to_string(),
+                ));
+            }
+            let callable_capture_end = captures.len() - declaration_captures;
+            let mut callable_captures = captures[..callable_capture_end].iter().cloned();
+            let mut rebuilt = Vec::with_capacity(
+                parameter_count
+                    .checked_add(declaration_captures)
+                    .ok_or_else(|| {
+                        backend_module("specialization environment size exceeds usize".to_string())
+                    })?,
+            );
+            for parameter_ordinal in 0..parameter_count {
+                if let Some(static_binding) = binding
+                    .bindings()
+                    .iter()
+                    .find(|candidate| candidate.parameter_ordinal() as usize == parameter_ordinal)
+                {
+                    rebuilt.push(rebuild_static_callable_binding(
+                        static_binding,
+                        &mut callable_captures,
+                    )?);
+                } else {
+                    rebuilt.push(ordinary.next().ok_or_else(|| {
+                        backend_module(
+                            "specialization ABI is missing an ordinary parameter".to_string(),
+                        )
+                    })?);
+                }
+            }
+            if ordinary.next().is_some() || callable_captures.next().is_some() {
+                return Err(backend_module(
+                    "specialization ABI input partition is not exact".to_string(),
+                ));
+            }
+            rebuilt.extend_from_slice(&captures[callable_capture_end..]);
+            env = rebuilt;
         }
         // The in-process validation API historically stages one ground
         // `RuntimeValue` as the root environment.  It is compile-time material,
@@ -936,6 +1065,10 @@ fn define_unit_body<M: Module>(
                     unit.origin
                 }
             }
+            AbiUnitDefinition::StaticCallableSpecialization { specialization, .. } => compiler
+                .static_transition_plan
+                .emittable_static_callable_unit(specialization)?
+                .base_body_origin(),
         };
         let body = compiler.retained_body_occurrence(body_origin)?;
         let lowered = if matches!(
@@ -964,10 +1097,9 @@ fn define_unit_body<M: Module>(
                     }),
                 ),
                 LoweringOperand::Carried(word) => {
-                    let tag = builder.ins().band_imm(
-                        word.word,
-                        crate::boundary_value::BOUNDARY_TAG_MASK as i64,
-                    );
+                    let tag = builder
+                        .ins()
+                        .band_imm(word.word, crate::boundary_value::BOUNDARY_TAG_MASK as i64);
                     Lowering::require_i64(
                         &mut builder,
                         tag,
@@ -986,9 +1118,7 @@ fn define_unit_body<M: Module>(
                     #[cfg(test)]
                     if compiler.process_object {
                         px8tr_record_trap_provenance(
-                            Px8trTrapProvenanceEvent::FinalProcessObjectTrap {
-                                trap: trap.clone(),
-                            },
+                            Px8trTrapProvenanceEvent::FinalProcessObjectTrap { trap: trap.clone() },
                         );
                     }
                     compiler.emit_current_trap(&mut builder, &trap)?;

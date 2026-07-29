@@ -23,8 +23,9 @@ use super::semantic_ir::{
 };
 use super::{
     planner_capacity_error, planner_error, unsupported, CraneliftBackendError, EdgeKind,
-    SemanticPlane, SemanticSourceKind, SemanticSourceSeed, StaticEdge, StaticEdgeId, StaticNode,
-    StaticNodeId, StaticOriginId, TransitionKind,
+    PlannedStaticCallableSpecialization, SemanticPlane, SemanticSourceKind, SemanticSourceSeed,
+    StaticCallableSpecializationId, StaticEdge, StaticEdgeId, StaticNode, StaticNodeId,
+    StaticOriginId, TransitionKind,
 };
 
 /// The exclusive end of a dense range, with its overflow named.
@@ -279,21 +280,18 @@ impl AbiCaptureProvenance {
 
 /// How a function unit came to be a function unit.
 ///
-/// ⛔ Closed, and **derived from the graph**: the two arms are exactly `B2O`'s
-/// two seed classes, which that node already validated to be disjoint and
-/// exhaustive over the partition. `TransparentDeclarationClosure` is a closed
-/// callable subkind of a scheduling entry, not a third seed class. A unit that
-/// is neither seed class, or both, is a planner error rather than a defaulted
-/// arm.
+/// ⛔ Closed. The graph-derived arms are exactly `B2O`'s two seed classes,
+/// already validated disjoint and exhaustive over that partition.
+/// `TransparentDeclarationClosure` is a closed callable subkind of a scheduling
+/// entry. `StaticCallableSpecialization` is the one planner-interned extension:
+/// it is neither smuggled through a graph seed nor inferred by the emitter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
 pub(in crate::cranelift_backend) enum AbiUnitDefinition {
     /// A top-level scheduling entry — the root, or a transparent declaration.
     /// It has no defining closure occurrence and no captures. Only the
     /// explicitly recorded process root receives the closed ingress pair.
-    SchedulingEntry {
-        ingress: AbiSchedulingIngress,
-    },
+    SchedulingEntry { ingress: AbiSchedulingIngress },
     /// A transparent declaration whose scheduling-entry occurrence is a
     /// closure seed. The declaration is already its own function unit; this
     /// arm gives that unit the closure's declared inputs and makes its body,
@@ -309,6 +307,14 @@ pub(in crate::cranelift_backend) enum AbiUnitDefinition {
     ClosureBody {
         defining_origin: StaticOriginId,
         provenance: AbiCaptureProvenance,
+    },
+    /// A planner-derived, out-of-line specialization of one transparent
+    /// declaration. Callable parameter identity is absent from its runtime ABI;
+    /// the opaque id resolves only to compile-time binding material retained by
+    /// the static plan.
+    StaticCallableSpecialization {
+        specialization: StaticCallableSpecializationId,
+        base_origin: StaticOriginId,
     },
 }
 
@@ -455,6 +461,7 @@ impl AbiPlane {
                 (false, Some(provenance))
             }
             AbiUnitDefinition::ClosureBody { provenance, .. } => (true, Some(provenance)),
+            AbiUnitDefinition::StaticCallableSpecialization { .. } => (false, None),
         };
         Ok(AbiDescriptorShape {
             definition_is_closure_body,
@@ -503,8 +510,7 @@ pub(super) fn build_abi_plane(
     let sources = positioned_sources(nodes, sources_in)?;
     let sources = sources.as_slice();
 
-    let definitions =
-        unit_definitions(plane, sources, edges, entries, root_entry, root_ingress)?;
+    let definitions = unit_definitions(plane, sources, edges, entries, root_entry, root_ingress)?;
 
     // `C4`, and deliberately before any descriptor is minted: an imported edge
     // must receive **no** callable descriptor at all, so the exclusion runs
@@ -518,7 +524,9 @@ pub(super) fn build_abi_plane(
                 .map_err(|_| planner_capacity_error("abi descriptor identity exhausted"))?,
         );
         if function.id != id {
-            return Err(planner_error("abi descriptor is not positional for its function unit"));
+            return Err(planner_error(
+                "abi descriptor is not positional for its function unit",
+            ));
         }
         let definition = definitions[ordinal];
         let (parameters, captures) = declared_arity(plane, sources, definition)?;
@@ -551,8 +559,89 @@ pub(super) fn build_abi_plane(
         entries,
         root_entry,
         root_ingress,
+        &[],
     )?;
     Ok(abi)
+}
+
+/// Append the finite planner-interned callable specializations after the
+/// graph-seeded unit partition.
+///
+/// No descriptor is appended until the complete specialization population and
+/// every use-closure have been derived. Function ids are checked dense across
+/// the combined population, and each specialization receives an explicit
+/// definition arm rather than masquerading as a graph seed.
+pub(super) fn extend_static_callable_abi(
+    abi: &mut AbiPlane,
+    plane: &SemanticPlane,
+    specializations: &[PlannedStaticCallableSpecialization],
+) -> Result<(), CraneliftBackendError> {
+    if abi.descriptors.len() != plane.functions.len() {
+        return Err(planner_error(
+            "static callable ABI extension requires the complete base descriptor population",
+        ));
+    }
+    for specialization in specializations {
+        let ordinal = abi.descriptors.len();
+        let function = PredeclaredFunctionId(
+            u32::try_from(ordinal)
+                .map_err(|_| planner_capacity_error("specialization descriptor exhausted"))?,
+        );
+        if specialization.function != function {
+            return Err(planner_error(
+                "static callable specialization function identity is not dense",
+            ));
+        }
+        let base = plane
+            .functions
+            .get(specialization.base_function.0 as usize)
+            .ok_or_else(|| planner_error("specialization base function is absent"))?;
+        if base.origin != specialization.base_origin {
+            return Err(planner_error(
+                "specialization base owner and origin disagree",
+            ));
+        }
+        let body = plane
+            .functions
+            .get(specialization.body_function.0 as usize)
+            .ok_or_else(|| planner_error("specialization body function is absent"))?;
+        if body.origin != specialization.base_body_origin {
+            return Err(planner_error(
+                "specialization body owner and origin disagree",
+            ));
+        }
+        let definition = AbiUnitDefinition::StaticCallableSpecialization {
+            specialization: specialization.id,
+            base_origin: specialization.base_origin,
+        };
+        let slot_start = abi.slots.len();
+        push_slots(
+            &mut abi.slots,
+            definition,
+            specialization.ordinary_parameters,
+            specialization.lifted_captures,
+        )?;
+        let slots = DenseRange {
+            start: u32::try_from(slot_start)
+                .map_err(|_| planner_capacity_error("abi slot identity exhausted"))?,
+            len: u32::try_from(abi.slots.len() - slot_start)
+                .map_err(|_| planner_capacity_error("abi slot range exhausted"))?,
+        };
+        let header = frame_header(
+            &abi.slots[slot_start..],
+            specialization.ordinary_parameters,
+            specialization.lifted_captures,
+        )?;
+        abi.descriptors.push(AbiDescriptor {
+            function,
+            planned_node: body.planned_node,
+            origin: specialization.base_origin,
+            definition,
+            header,
+            slots,
+        });
+    }
+    Ok(())
 }
 
 /// **`C4`/`AC-5` — cross-module linking is a CHECKED exclusion.**
@@ -596,7 +685,8 @@ fn reject_imported_capture_edges(
                 defining_origin,
                 provenance,
             } => (defining_origin, provenance),
-            AbiUnitDefinition::SchedulingEntry { .. } => continue,
+            AbiUnitDefinition::SchedulingEntry { .. }
+            | AbiUnitDefinition::StaticCallableSpecialization { .. } => continue,
         };
         if provenance != AbiCaptureProvenance::Lexical {
             continue;
@@ -856,6 +946,11 @@ fn declared_arity(
                 ),
             });
         }
+        AbiUnitDefinition::StaticCallableSpecialization { .. } => {
+            return Err(planner_error(
+                "static callable specialization arity requires its interned plan",
+            ));
+        }
     };
 
     let seed = source_for(sources, defining_origin)?;
@@ -939,6 +1034,7 @@ fn push_slots(
         }
         AbiUnitDefinition::TransparentDeclarationClosure { provenance, .. }
         | AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
+        AbiUnitDefinition::StaticCallableSpecialization { .. } => Some(AbiCarrier::ValueWord),
     };
     if let Some(carrier) = capture_carrier {
         for ordinal in 0..captures {
@@ -1299,14 +1395,21 @@ impl AbiPlane {
         entries: &[StaticNodeId],
         root_entry: StaticNodeId,
         root_ingress: AbiRootIngress,
+        specializations: &[PlannedStaticCallableSpecialization],
     ) -> Result<(), CraneliftBackendError> {
         let sources = positioned_sources(nodes, sources)?;
         let sources = sources.as_slice();
 
         // `AC-1`, direction 1 — every function unit has exactly one descriptor.
-        if self.descriptors.len() != plane.functions.len() {
+        let expected_descriptors = plane
+            .functions
+            .len()
+            .checked_add(specializations.len())
+            .ok_or_else(|| planner_capacity_error("abi descriptor population exhausted"))?;
+        if self.descriptors.len() != expected_descriptors {
             return Err(planner_error(
-                "abi descriptor population is not exact for the function unit partition",
+                "abi descriptor population is not exact for graph units plus static callable \
+                 specializations",
             ));
         }
 
@@ -1314,6 +1417,75 @@ impl AbiPlane {
             unit_definitions(plane, sources, edges, entries, root_entry, root_ingress)?;
 
         for (ordinal, descriptor) in self.descriptors.iter().enumerate() {
+            if ordinal >= plane.functions.len() {
+                let specialization = specializations
+                    .get(ordinal - plane.functions.len())
+                    .ok_or_else(|| {
+                        planner_error("abi descriptor names an unknown callable specialization")
+                    })?;
+                let id =
+                    PredeclaredFunctionId(u32::try_from(ordinal).map_err(|_| {
+                        planner_capacity_error("abi descriptor identity exhausted")
+                    })?);
+                let base = plane
+                    .functions
+                    .get(specialization.base_function.0 as usize)
+                    .ok_or_else(|| planner_error("specialization base function is absent"))?;
+                let body = plane
+                    .functions
+                    .get(specialization.body_function.0 as usize)
+                    .ok_or_else(|| planner_error("specialization body function is absent"))?;
+                let expected_definition = AbiUnitDefinition::StaticCallableSpecialization {
+                    specialization: specialization.id,
+                    base_origin: specialization.base_origin,
+                };
+                if descriptor.function != id
+                    || descriptor.function != specialization.function
+                    || base.origin != specialization.base_origin
+                    || body.origin != specialization.base_body_origin
+                    || descriptor.planned_node != body.planned_node
+                    || descriptor.origin != specialization.base_origin
+                    || descriptor.definition != expected_definition
+                {
+                    return Err(planner_error(
+                        "static callable ABI descriptor disagrees with its interned state",
+                    ));
+                }
+                if descriptor.header.parameters != specialization.ordinary_parameters
+                    || descriptor.header.captures != specialization.lifted_captures
+                {
+                    return Err(planner_error(
+                        "static callable ABI descriptor does not eliminate exactly its callable \
+                         parameters and lift exactly its captures",
+                    ));
+                }
+                let slots = slot_slice(&self.slots, descriptor.slots)?;
+                let mut expected = Vec::new();
+                push_slots(
+                    &mut expected,
+                    expected_definition,
+                    specialization.ordinary_parameters,
+                    specialization.lifted_captures,
+                )?;
+                if slots != expected.as_slice() {
+                    return Err(planner_error(
+                        "static callable ABI slot run is not ordinary parameters then lifted \
+                         captures then convention",
+                    ));
+                }
+                if descriptor.header
+                    != frame_header(
+                        slots,
+                        specialization.ordinary_parameters,
+                        specialization.lifted_captures,
+                    )?
+                {
+                    return Err(planner_error(
+                        "static callable ABI header is not derived from its exact slot run",
+                    ));
+                }
+                continue;
+            }
             // `AC-1`, direction 2 — every descriptor names a member of the
             // partition, positionally. A one-directional check passes happily on
             // an orphan, so both directions are asserted.
@@ -1412,9 +1584,7 @@ impl AbiPlane {
     ) -> Result<(), CraneliftBackendError> {
         for (_, callee, callee_origin, _) in plane.declaration_call_edges(edges)? {
             let descriptor = self.descriptors.get(callee.0 as usize).ok_or_else(|| {
-                planner_error(
-                    "declaration call callee is not forward-declared in the abi plane",
-                )
+                planner_error("declaration call callee is not forward-declared in the abi plane")
             })?;
             if descriptor.origin != callee_origin {
                 return Err(planner_error(
@@ -1427,8 +1597,10 @@ impl AbiPlane {
                     "declaration call target is not a source expression",
                 ));
             };
-            let is_closure =
-                matches!(shape, RuntimeExprShape::Closure | RuntimeExprShape::LexicalClosure);
+            let is_closure = matches!(
+                shape,
+                RuntimeExprShape::Closure | RuntimeExprShape::LexicalClosure
+            );
             match (is_closure, descriptor.definition) {
                 (
                     true,
@@ -1466,7 +1638,8 @@ impl AbiPlane {
                 (
                     false,
                     AbiUnitDefinition::TransparentDeclarationClosure { .. }
-                    | AbiUnitDefinition::ClosureBody { .. },
+                    | AbiUnitDefinition::ClosureBody { .. }
+                    | AbiUnitDefinition::StaticCallableSpecialization { .. },
                 ) => {
                     return Err(planner_error(
                         "non-closure declaration call target has a closure callable definition",
@@ -1617,10 +1790,10 @@ fn boundary_signatures(
         let captures = match provenance {
             // A lexical closure's captures are planned syntax children, laid out
             // after the body child.
-            AbiCaptureProvenance::Lexical => u32::try_from(
-                lexical_capture_origins(plane, defining_origin)?.len(),
-            )
-            .map_err(|_| planner_capacity_error("boundary capture count exhausted"))?,
+            AbiCaptureProvenance::Lexical => {
+                u32::try_from(lexical_capture_origins(plane, defining_origin)?.len())
+                    .map_err(|_| planner_capacity_error("boundary capture count exhausted"))?
+            }
             // A seed closure's captures are interned symbols, one atom each.
             AbiCaptureProvenance::Seed => capture_atoms,
         };
@@ -1676,6 +1849,7 @@ fn validate_slot_run(
         AbiUnitDefinition::SchedulingEntry { .. } => None,
         AbiUnitDefinition::TransparentDeclarationClosure { provenance, .. }
         | AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
+        AbiUnitDefinition::StaticCallableSpecialization { .. } => Some(AbiCarrier::ValueWord),
     };
 
     for (position, slot) in slots.iter().enumerate() {
@@ -1697,7 +1871,9 @@ fn validate_slot_run(
         };
 
         if slot.kind != expected_kind {
-            return Err(planner_error("abi frame slot is not in canonical kind order"));
+            return Err(planner_error(
+                "abi frame slot is not in canonical kind order",
+            ));
         }
         if slot.carrier != expected_carrier {
             return Err(planner_error(
@@ -1705,7 +1881,9 @@ fn validate_slot_run(
             ));
         }
         if slot.ordinal != expected_ordinal {
-            return Err(planner_error("abi frame slot is not positional in its kind run"));
+            return Err(planner_error(
+                "abi frame slot is not positional in its kind run",
+            ));
         }
         // `D2` — every slot carries a declared kind, width, alignment and
         // ownership mode, and each is the carrier's own declaration rather than

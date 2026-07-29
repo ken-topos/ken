@@ -75,10 +75,13 @@ pub(in crate::cranelift_backend) use super::planning::{
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
-    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableCallKind, EmittableUnit,
-    JoinPlanToken, JoinResultRepresentation, LoweringOnlyOperandEdge, OperandEdgeDisposition,
-    OperandEdgeToken, PredeclaredFunctionId, SourceOperandRole, StaticOriginId,
-    StaticTransitionPlan, SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
+    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableCallKind,
+    EmittableStaticCallableArgumentKind, EmittableStaticCallableBinding,
+    EmittableStaticCallableCall, EmittableStaticCallableCapture, EmittableStaticCallableUnit,
+    EmittableUnit, JoinPlanToken, JoinResultRepresentation, LoweringOnlyOperandEdge,
+    OperandEdgeDisposition, OperandEdgeToken, PredeclaredFunctionId, SourceOperandRole,
+    StaticCallableSpecializationId, StaticOriginId, StaticTransitionPlan,
+    SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use super::planning::{
@@ -652,6 +655,7 @@ impl ArtifactHelpers<'_> {
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
+            static_callable_calls: BTreeMap::new(),
             trap_exit,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
@@ -758,6 +762,7 @@ struct FunctionLocalRefs {
     boundary_carrier: Option<BoundaryCarrierRefs>,
     unit_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     declaration_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    static_callable_calls: BTreeMap<StaticOriginId, units::DeclaredStaticCallableCall>,
     /// The current function's closed trap-exit authority. Absence is an error
     /// state, never an implicit Root.
     trap_exit: Option<TrapExitAuthority>,
@@ -1559,8 +1564,7 @@ fn specialized_env_at(
 ) -> Result<Vec<Lowered>, CraneliftBackendError> {
     if !matches!(
         edge.disposition(),
-        OperandEdgeDisposition::SemanticEliminator
-            | OperandEdgeDisposition::SpecializedOnlyLeaf
+        OperandEdgeDisposition::SemanticEliminator | OperandEdgeDisposition::SpecializedOnlyLeaf
     ) {
         return Err(backend(BackendFailure::PlannerInvariant(format!(
             "{} cannot authorize a specialized-only environment read",
@@ -2248,6 +2252,24 @@ impl<'a> Lowering<'a> {
         inputs: &[LoweringOperand],
         #[cfg(test)] launch_ingress: Option<cranelift_codegen::ir::Value>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let declared_inputs = target
+            .slots
+            .iter()
+            .filter(|slot| matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture))
+            .count();
+        if declared_inputs != inputs.len() {
+            return Err(backend_module(
+                "caller inputs do not exactly match the callee descriptor".to_string(),
+            ));
+        }
+        // D7/#24: close the whole input graph before the first frame allocation
+        // or store. In particular a callable capsule is rejected here without
+        // descending into or publishing any of its phase-bearing captures.
+        for input in inputs {
+            if let LoweringOperand::Specialized(value) = input {
+                value.boundary_transfer_admissibility()?;
+            }
+        }
         let payload = builder.create_sized_stack_slot(StackSlotData::new(
             StackSlotKind::ExplicitSlot,
             target.header.frame_bytes,

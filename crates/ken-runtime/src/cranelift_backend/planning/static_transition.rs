@@ -17,7 +17,7 @@ use super::{
     RuntimeDeclarationKind,
 };
 use crate::{RuntimeExpr, RuntimePartiality, RuntimeTrap, RuntimeTrapCode};
-use abi::{build_abi_plane, AbiPlane};
+use abi::{build_abi_plane, extend_static_callable_abi, AbiPlane};
 use semantic_ir::{
     build_semantic_plane, build_synthesized_constructor_inventory, SemanticMaterialArena,
     SemanticPlane, SemanticSourceKind, SemanticSourceSeed,
@@ -319,6 +319,7 @@ pub(in crate::cranelift_backend) struct JoinPlanToken {
 pub(in crate::cranelift_backend) enum OperandEdgeDisposition {
     Forwarding,
     CallableCapture,
+    StaticCallableElimination,
     SemanticEliminator,
     SpecializedOnlyLeaf,
     EscapeForbidden,
@@ -350,27 +351,31 @@ pub(in crate::cranelift_backend) enum SourceOperandRole {
     EffectArgument,
 }
 
-impl SourceOperandRole {
-    fn disposition(self) -> OperandEdgeDisposition {
-        match self {
-            Self::WrapperBody
-            | Self::LetValue
-            | Self::LetBody
-            | Self::IfArm
-            | Self::MatchArm
-            | Self::CallArgument => OperandEdgeDisposition::Forwarding,
-            Self::LexicalCapture => OperandEdgeDisposition::CallableCapture,
-            Self::IfScrutinee
-            | Self::PrimitiveArgument
-            | Self::ConstructArgument
-            | Self::MatchScrutinee
-            | Self::RecordField
-            | Self::ProjectRecord
-            | Self::EffectCapability
-            | Self::EffectArgument => OperandEdgeDisposition::SemanticEliminator,
-            Self::CallCallee => OperandEdgeDisposition::SpecializedOnlyLeaf,
+fn role_only_disposition(
+    role: SourceOperandRole,
+) -> Result<OperandEdgeDisposition, CraneliftBackendError> {
+    Ok(match role {
+        SourceOperandRole::WrapperBody
+        | SourceOperandRole::LetValue
+        | SourceOperandRole::LetBody
+        | SourceOperandRole::IfArm
+        | SourceOperandRole::MatchArm => OperandEdgeDisposition::Forwarding,
+        SourceOperandRole::LexicalCapture => OperandEdgeDisposition::CallableCapture,
+        SourceOperandRole::IfScrutinee
+        | SourceOperandRole::PrimitiveArgument
+        | SourceOperandRole::ConstructArgument
+        | SourceOperandRole::MatchScrutinee
+        | SourceOperandRole::RecordField
+        | SourceOperandRole::ProjectRecord
+        | SourceOperandRole::EffectCapability
+        | SourceOperandRole::EffectArgument => OperandEdgeDisposition::SemanticEliminator,
+        SourceOperandRole::CallCallee => OperandEdgeDisposition::SpecializedOnlyLeaf,
+        SourceOperandRole::CallArgument => {
+            return Err(planner_error(
+                "call-argument disposition requires exact callee, parameter, and use-closure",
+            ));
         }
-    }
+    })
 }
 
 /// Lowering-only consumer edges have no positional source child. Keeping them
@@ -497,6 +502,162 @@ struct PlannedOperandEdge {
     disposition: OperandEdgeDisposition,
 }
 
+/// Dense identity of one planner-interned static callable specialization.
+///
+/// Capture values cannot enter this identity. The full key is retained in the
+/// planner and consists only of source owners/origins, parameter ordinals,
+/// callable body origins, arities, and capture provenance.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub(in crate::cranelift_backend) struct StaticCallableSpecializationId(u32);
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum StaticCallableCapturePhase {
+    SpecializedOnly,
+    CarrierRequired,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct StaticCallableCaptureProvenance {
+    owner: PredeclaredFunctionId,
+    closure_origin: StaticOriginId,
+    capture_origin: StaticOriginId,
+    ordinal: u32,
+    phase: StaticCallableCapturePhase,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct StaticCallableBindingKey {
+    parameter_ordinal: u32,
+    closure_origin: StaticOriginId,
+    body_origin: StaticOriginId,
+    declared_arity: u32,
+    captures: Vec<StaticCallableCaptureBinding>,
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum StaticCallableCaptureBinding {
+    Value(StaticCallableCaptureProvenance),
+    Callable(Box<StaticCallableBindingKey>),
+}
+
+impl StaticCallableBindingKey {
+    fn lifted_capture_count(&self) -> Result<u32, CraneliftBackendError> {
+        self.captures.iter().try_fold(0u32, |total, capture| {
+            let count = match capture {
+                StaticCallableCaptureBinding::Value(_) => 1,
+                StaticCallableCaptureBinding::Callable(binding) => {
+                    binding.lifted_capture_count()?
+                }
+            };
+            total.checked_add(count).ok_or_else(|| {
+                planner_capacity_error("recursive lifted callable capture count exhausted")
+            })
+        })
+    }
+}
+
+fn validate_static_callable_binding(
+    plan: &StaticTransitionPlan<'_>,
+    binding: &StaticCallableBindingKey,
+) -> Result<u32, CraneliftBackendError> {
+    let body_owner = plan
+        .semantic
+        .function_owner(binding.body_origin)?
+        .ok_or_else(|| planner_error("static callable body has no owner"))?;
+    let body_unit = plan
+        .semantic
+        .functions
+        .get(body_owner.0 as usize)
+        .ok_or_else(|| planner_error("static callable body owner is absent"))?;
+    if body_unit.origin != binding.body_origin {
+        return Err(planner_error(
+            "static callable body origin does not name its unit",
+        ));
+    }
+    let mut lifted = 0u32;
+    for (ordinal, capture) in binding.captures.iter().enumerate() {
+        let ordinal = u32::try_from(ordinal)
+            .map_err(|_| planner_capacity_error("static callable capture ordinal exhausted"))?;
+        let count = match capture {
+            StaticCallableCaptureBinding::Value(capture) => {
+                if capture.closure_origin != binding.closure_origin || capture.ordinal != ordinal {
+                    return Err(planner_error(
+                        "static callable capture provenance is not ordered and closed",
+                    ));
+                }
+                if plan.semantic.function_owner(capture.capture_origin)? != Some(capture.owner) {
+                    return Err(planner_error(
+                        "static callable capture provenance has the wrong owner",
+                    ));
+                }
+                1
+            }
+            StaticCallableCaptureBinding::Callable(nested) => {
+                if nested.parameter_ordinal != ordinal {
+                    return Err(planner_error(
+                        "recursive static callable capture is not in declaration order",
+                    ));
+                }
+                validate_static_callable_binding(plan, nested)?
+            }
+        };
+        lifted = lifted.checked_add(count).ok_or_else(|| {
+            planner_capacity_error("recursive lifted capture population exhausted")
+        })?;
+    }
+    Ok(lifted)
+}
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct StaticCallableSpecializationKey {
+    base_owner: PredeclaredFunctionId,
+    base_origin: StaticOriginId,
+    bindings: Vec<StaticCallableBindingKey>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum StaticCallableArgumentKind {
+    Ordinary,
+    Erased,
+    Direct {
+        closure_origin: StaticOriginId,
+    },
+    Forwarded {
+        body_origin: StaticOriginId,
+        declared_arity: u32,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct StaticCallableArgument {
+    parameter_ordinal: u32,
+    argument_origin: StaticOriginId,
+    kind: StaticCallableArgumentKind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PlannedStaticCallableSpecialization {
+    id: StaticCallableSpecializationId,
+    function: PredeclaredFunctionId,
+    base_function: PredeclaredFunctionId,
+    body_function: PredeclaredFunctionId,
+    base_origin: StaticOriginId,
+    base_body_origin: StaticOriginId,
+    key: StaticCallableSpecializationKey,
+    ordinary_parameters: u32,
+    lifted_captures: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PlannedStaticCallableCall {
+    caller: PredeclaredFunctionId,
+    call_origin: StaticOriginId,
+    callee_reference_origin: StaticOriginId,
+    specialization: StaticCallableSpecializationId,
+    arguments: Vec<StaticCallableArgument>,
+}
+
 fn source_child_roles(expr: &RuntimeExpr) -> Vec<SourceChildRole> {
     match expr {
         RuntimeExpr::CheckedJoinSite { .. }
@@ -614,6 +775,939 @@ fn source_operand_role_label(role: SourceOperandRole) -> &'static str {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct CallableParameterUse {
+    invoked: bool,
+    forwarded: bool,
+    observed_as_value: bool,
+}
+
+impl CallableParameterUse {
+    const UNUSED: Self = Self {
+        invoked: false,
+        forwarded: false,
+        observed_as_value: false,
+    };
+
+    fn combine(&mut self, other: Self) {
+        self.invoked |= other.invoked;
+        self.forwarded |= other.forwarded;
+        self.observed_as_value |= other.observed_as_value;
+    }
+
+    fn is_callable(self) -> bool {
+        self.invoked || self.forwarded
+    }
+}
+
+/// Classify every occurrence of one declaration parameter.
+///
+/// The target is a de Bruijn index in the current environment. Binder-producing
+/// forms shift it explicitly. A parameter is callable only when every use is a
+/// direct invocation or exact forwarding argument to another transparent
+/// declaration. Any other occurrence is a value observation and makes static
+/// elimination unlawful before an ABI descriptor can be added.
+fn classify_callable_parameter_use(
+    expr: &RuntimeExpr,
+    target: u32,
+) -> Result<CallableParameterUse, CraneliftBackendError> {
+    fn observed(
+        expr: &RuntimeExpr,
+        target: u32,
+    ) -> Result<CallableParameterUse, CraneliftBackendError> {
+        let mut use_ = CallableParameterUse::UNUSED;
+        collect(expr, target, &mut use_)?;
+        if use_.invoked || use_.forwarded {
+            use_.observed_as_value = true;
+        }
+        Ok(use_)
+    }
+
+    fn shifted(target: u32, binders: usize) -> Result<u32, CraneliftBackendError> {
+        target
+            .checked_add(
+                u32::try_from(binders)
+                    .map_err(|_| planner_capacity_error("callable binder depth exhausted"))?,
+            )
+            .ok_or_else(|| planner_capacity_error("callable binder depth exhausted"))
+    }
+
+    fn collect(
+        expr: &RuntimeExpr,
+        target: u32,
+        use_: &mut CallableParameterUse,
+    ) -> Result<(), CraneliftBackendError> {
+        match expr {
+            RuntimeExpr::Var(index) => {
+                if *index == target {
+                    use_.observed_as_value = true;
+                }
+            }
+            RuntimeExpr::CheckedJoinSite { body, .. }
+            | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+            | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+            | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+            | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
+                collect(body, target, use_)?;
+            }
+            RuntimeExpr::Let { value, body } => {
+                collect(value, target, use_)?;
+                collect(body, shifted(target, 1)?, use_)?;
+            }
+            RuntimeExpr::If {
+                scrutinee,
+                then_expr,
+                else_expr,
+            } => {
+                use_.combine(observed(scrutinee, target)?);
+                collect(then_expr, target, use_)?;
+                collect(else_expr, target, use_)?;
+            }
+            RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+                for arg in args {
+                    use_.combine(observed(arg, target)?);
+                }
+            }
+            RuntimeExpr::Match {
+                scrutinee, cases, ..
+            } => {
+                use_.combine(observed(scrutinee, target)?);
+                for case in cases {
+                    collect(&case.body, shifted(target, case.binders)?, use_)?;
+                }
+            }
+            RuntimeExpr::ComputationalMatch {
+                scrutinee, cases, ..
+            } => {
+                use_.combine(observed(scrutinee, target)?);
+                for case in cases {
+                    let binders = case
+                        .argument_binders
+                        .saturating_add(case.recursive_positions.len());
+                    collect(&case.body, shifted(target, binders)?, use_)?;
+                }
+            }
+            RuntimeExpr::Record { fields } => {
+                for (_, field) in fields {
+                    use_.combine(observed(field, target)?);
+                }
+            }
+            RuntimeExpr::Project { record, .. } => {
+                use_.combine(observed(record, target)?);
+            }
+            RuntimeExpr::Closure { .. } => {}
+            RuntimeExpr::LexicalClosure { captures, .. } => {
+                for capture in captures {
+                    use_.combine(observed(capture, target)?);
+                }
+            }
+            RuntimeExpr::Call { callee, args } => {
+                match callee.as_ref() {
+                    RuntimeExpr::Var(index) if *index == target => {
+                        use_.invoked = true;
+                    }
+                    other => collect(other, target, use_)?,
+                }
+                let transparent = matches!(callee.as_ref(), RuntimeExpr::DeclarationRef { .. });
+                for arg in args {
+                    match arg {
+                        RuntimeExpr::Var(index) if *index == target && transparent => {
+                            use_.forwarded = true;
+                        }
+                        other => collect(other, target, use_)?,
+                    }
+                }
+            }
+            RuntimeExpr::Effect {
+                capability, args, ..
+            } => {
+                if let Some(capability) = capability {
+                    use_.combine(observed(&capability.value, target)?);
+                }
+                for arg in args {
+                    use_.combine(observed(arg, target)?);
+                }
+            }
+            RuntimeExpr::Value(_)
+            | RuntimeExpr::DeclarationRef { .. }
+            | RuntimeExpr::ImportedDeclarationRef { .. }
+            | RuntimeExpr::Trap(_) => {}
+        }
+        Ok(())
+    }
+
+    let mut use_ = CallableParameterUse::UNUSED;
+    collect(expr, target, &mut use_)?;
+    Ok(use_)
+}
+
+#[derive(Clone)]
+struct CallableDeclarationPlan {
+    origin: StaticOriginId,
+    function: PredeclaredFunctionId,
+    body_function: PredeclaredFunctionId,
+    body_origin: StaticOriginId,
+    parameter_uses: Vec<CallableParameterUse>,
+    declaration_captures: u32,
+}
+
+fn callable_declaration_plan(
+    plan: &StaticTransitionPlan<'_>,
+    symbol: &str,
+) -> Result<Option<CallableDeclarationPlan>, CraneliftBackendError> {
+    let Some(origin) = plan.declaration_occurrences.get(symbol).copied() else {
+        return Ok(None);
+    };
+    let occurrence = plan
+        .source_occurrences
+        .get(origin.0 as usize)
+        .and_then(Option::as_ref)
+        .ok_or_else(|| planner_error("transparent declaration has no source occurrence"))?;
+    let (params, body, declaration_captures) = match occurrence.expr {
+        RuntimeExpr::Closure {
+            captures,
+            params,
+            body,
+        } => (
+            params,
+            body.as_ref(),
+            u32::try_from(captures.len())
+                .map_err(|_| planner_capacity_error("declaration capture count exhausted"))?,
+        ),
+        RuntimeExpr::LexicalClosure {
+            captures,
+            params,
+            body,
+        } => (
+            params,
+            body.as_ref(),
+            u32::try_from(captures.len())
+                .map_err(|_| planner_capacity_error("declaration capture count exhausted"))?,
+        ),
+        _ => return Ok(None),
+    };
+    let body_origin = plan.semantic.child_origin(origin, 0)?;
+    let function = plan
+        .semantic
+        .function_owner(origin)?
+        .ok_or_else(|| planner_error("transparent declaration has no function owner"))?;
+    let body_function = plan
+        .semantic
+        .function_owner(body_origin)?
+        .ok_or_else(|| planner_error("transparent declaration body has no function owner"))?;
+    let parameter_uses = (0..params.len())
+        .map(|ordinal| {
+            u32::try_from(ordinal)
+                .and_then(|ordinal| classify_callable_parameter_use(body, ordinal))
+                .map_err(|_| planner_capacity_error("callable parameter ordinal exhausted"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Some(CallableDeclarationPlan {
+        origin,
+        function,
+        body_function,
+        body_origin,
+        parameter_uses,
+        declaration_captures,
+    }))
+}
+
+fn static_binding_from_closure(
+    plan: &StaticTransitionPlan<'_>,
+    parameter_ordinal: u32,
+    closure_origin: StaticOriginId,
+    environment: &[Option<StaticCallableBindingKey>],
+) -> Result<Option<StaticCallableBindingKey>, CraneliftBackendError> {
+    let occurrence = plan
+        .source_occurrences
+        .get(closure_origin.0 as usize)
+        .and_then(Option::as_ref)
+        .ok_or_else(|| planner_error("static callable argument has no source occurrence"))?;
+    let (declared_arity, capture_origins) = match occurrence.expr {
+        RuntimeExpr::Closure {
+            captures, params, ..
+        } => {
+            let captures = (0..captures.len())
+                .map(|ordinal| {
+                    let ordinal = u32::try_from(ordinal).map_err(|_| {
+                        planner_capacity_error("static callable capture ordinal exhausted")
+                    })?;
+                    Ok(StaticCallableCaptureBinding::Value(
+                        StaticCallableCaptureProvenance {
+                            owner: plan.semantic.function_owner(closure_origin)?.ok_or_else(
+                                || planner_error("static callable closure has no owner"),
+                            )?,
+                            closure_origin,
+                            capture_origin: closure_origin,
+                            ordinal,
+                            phase: StaticCallableCapturePhase::SpecializedOnly,
+                        },
+                    ))
+                })
+                .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+            (
+                u32::try_from(params.len())
+                    .map_err(|_| planner_capacity_error("callable arity exhausted"))?,
+                captures,
+            )
+        }
+        RuntimeExpr::LexicalClosure {
+            captures, params, ..
+        } => {
+            let environment = result_phase_environment_for_owner(plan, closure_origin, true)?;
+            let mut joins = plan.join_results.clone();
+            let mut provenance = Vec::with_capacity(captures.len());
+            for (ordinal, capture) in captures.iter().enumerate() {
+                let capture_origin = plan.semantic.child_origin(closure_origin, 1 + ordinal)?;
+                let capture_ordinal = u32::try_from(ordinal).map_err(|_| {
+                    planner_capacity_error("static callable capture ordinal exhausted")
+                })?;
+                let callable = match capture {
+                    RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. } => {
+                        static_binding_from_closure(
+                            plan,
+                            capture_ordinal,
+                            capture_origin,
+                            environment,
+                        )?
+                    }
+                    RuntimeExpr::Var(index) => environment
+                        .get(*index as usize)
+                        .and_then(Clone::clone)
+                        .map(|mut binding| {
+                            binding.parameter_ordinal = capture_ordinal;
+                            binding
+                        }),
+                    _ => None,
+                };
+                if let Some(binding) = callable {
+                    provenance.push(StaticCallableCaptureBinding::Callable(Box::new(binding)));
+                    continue;
+                }
+                let summary =
+                    summarize_result_phase(plan, capture_origin, true, &environment, &mut joins)?;
+                if summary.callable_result.is_some() {
+                    return Err(planner_error(
+                        "dynamically selected callable capture cannot enter static callable \
+                         elimination",
+                    ));
+                }
+                provenance.push(StaticCallableCaptureBinding::Value(
+                    StaticCallableCaptureProvenance {
+                        owner: plan
+                            .semantic
+                            .function_owner(capture_origin)?
+                            .ok_or_else(|| planner_error("static callable capture has no owner"))?,
+                        closure_origin,
+                        capture_origin,
+                        ordinal: capture_ordinal,
+                        phase: match summary.phase {
+                            ResultPhase::SpecializedOnly => {
+                                StaticCallableCapturePhase::SpecializedOnly
+                            }
+                            ResultPhase::CarrierRequired => {
+                                StaticCallableCapturePhase::CarrierRequired
+                            }
+                        },
+                    },
+                ));
+            }
+            (
+                u32::try_from(params.len())
+                    .map_err(|_| planner_capacity_error("callable arity exhausted"))?,
+                provenance,
+            )
+        }
+        _ => return Ok(None),
+    };
+    let body_origin = plan.semantic.child_origin(closure_origin, 0)?;
+    Ok(Some(StaticCallableBindingKey {
+        parameter_ordinal,
+        closure_origin,
+        body_origin,
+        declared_arity,
+        captures: capture_origins,
+    }))
+}
+
+fn intern_static_callable_specialization(
+    plan: &StaticTransitionPlan<'_>,
+    key: StaticCallableSpecializationKey,
+    declaration: &CallableDeclarationPlan,
+    interned: &mut BTreeMap<StaticCallableSpecializationKey, StaticCallableSpecializationId>,
+    specializations: &mut Vec<PlannedStaticCallableSpecialization>,
+) -> Result<StaticCallableSpecializationId, CraneliftBackendError> {
+    if let Some(id) = interned.get(&key).copied() {
+        return Ok(id);
+    }
+    let id = StaticCallableSpecializationId(
+        u32::try_from(specializations.len())
+            .map_err(|_| planner_capacity_error("static callable specialization exhausted"))?,
+    );
+    // Intern before enqueue. Recursive discovery of this same key observes the
+    // entry and cannot clone the state.
+    interned.insert(key.clone(), id);
+    let function_ordinal = plan
+        .semantic
+        .functions
+        .len()
+        .checked_add(specializations.len())
+        .ok_or_else(|| planner_capacity_error("specialization function identity exhausted"))?;
+    let function = PredeclaredFunctionId(
+        u32::try_from(function_ordinal)
+            .map_err(|_| planner_capacity_error("specialization function identity exhausted"))?,
+    );
+    let eliminated = u32::try_from(key.bindings.len())
+        .map_err(|_| planner_capacity_error("eliminated callable count exhausted"))?;
+    let total_parameters = u32::try_from(declaration.parameter_uses.len())
+        .map_err(|_| planner_capacity_error("declaration parameter count exhausted"))?;
+    let ordinary_parameters = total_parameters
+        .checked_sub(eliminated)
+        .ok_or_else(|| planner_error("callable binding population exceeds declaration arity"))?;
+    let lifted_callable_captures = key.bindings.iter().try_fold(0u32, |total, binding| {
+        total
+            .checked_add(binding.lifted_capture_count()?)
+            .ok_or_else(|| planner_capacity_error("lifted callable capture count exhausted"))
+    })?;
+    let lifted_captures = lifted_callable_captures
+        .checked_add(declaration.declaration_captures)
+        .ok_or_else(|| planner_capacity_error("specialization capture count exhausted"))?;
+    specializations.push(PlannedStaticCallableSpecialization {
+        id,
+        function,
+        base_function: declaration.function,
+        body_function: declaration.body_function,
+        base_origin: declaration.origin,
+        base_body_origin: declaration.body_origin,
+        key,
+        ordinary_parameters,
+        lifted_captures,
+    });
+    Ok(id)
+}
+
+fn plan_static_callable_call(
+    plan: &StaticTransitionPlan<'_>,
+    call_origin: StaticOriginId,
+    caller: PredeclaredFunctionId,
+    environment: &[Option<StaticCallableBindingKey>],
+    declarations: &BTreeMap<String, CallableDeclarationPlan>,
+    interned: &mut BTreeMap<StaticCallableSpecializationKey, StaticCallableSpecializationId>,
+    specializations: &mut Vec<PlannedStaticCallableSpecialization>,
+) -> Result<Option<PlannedStaticCallableCall>, CraneliftBackendError> {
+    let occurrence = plan
+        .source_occurrences
+        .get(call_origin.0 as usize)
+        .and_then(Option::as_ref)
+        .ok_or_else(|| planner_error("static callable call has no source occurrence"))?;
+    let RuntimeExpr::Call { args, .. } = occurrence.expr else {
+        return Err(planner_error(
+            "static callable call planner received a non-call occurrence",
+        ));
+    };
+    let callee_reference_origin = plan.semantic.child_origin(call_origin, 0)?;
+    let callee = plan
+        .source_occurrences
+        .get(callee_reference_origin.0 as usize)
+        .and_then(Option::as_ref)
+        .ok_or_else(|| planner_error("call callee has no source occurrence"))?;
+    let RuntimeExpr::DeclarationRef { symbol } = callee.expr else {
+        return Ok(None);
+    };
+    let Some(declaration) = declarations.get(symbol.as_str()) else {
+        return Ok(None);
+    };
+    if args.len() != declaration.parameter_uses.len() {
+        return Err(planner_error(
+            "transparent declaration call arity disagrees with its declared closure",
+        ));
+    }
+
+    let mut bindings = Vec::new();
+    let mut arguments = Vec::with_capacity(args.len());
+    for (ordinal, (argument, use_)) in args.iter().zip(&declaration.parameter_uses).enumerate() {
+        let parameter_ordinal = u32::try_from(ordinal)
+            .map_err(|_| planner_capacity_error("callable parameter ordinal exhausted"))?;
+        let argument_origin = plan.semantic.child_origin(call_origin, 1 + ordinal)?;
+        let mut binding = match argument {
+            RuntimeExpr::Var(index) => {
+                environment
+                    .get(*index as usize)
+                    .and_then(Clone::clone)
+                    .map(|mut binding| {
+                        binding.parameter_ordinal = parameter_ordinal;
+                        binding
+                    })
+            }
+            RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. } => {
+                static_binding_from_closure(plan, parameter_ordinal, argument_origin, environment)?
+            }
+            _ => None,
+        };
+        if let Some(binding) = binding.take() {
+            if use_.observed_as_value {
+                return Err(planner_error(
+                    "callable parameter is returned, stored, constructed, effect-passed, compared, \
+                     or otherwise observed as a runtime value",
+                ));
+            }
+            let kind = if !use_.is_callable() {
+                binding.captures.clear();
+                StaticCallableArgumentKind::Erased
+            } else {
+                match argument {
+                    RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. } => {
+                        StaticCallableArgumentKind::Direct {
+                            closure_origin: argument_origin,
+                        }
+                    }
+                    RuntimeExpr::Var(_) => StaticCallableArgumentKind::Forwarded {
+                        body_origin: binding.body_origin,
+                        declared_arity: binding.declared_arity,
+                    },
+                    _ => {
+                        return Err(planner_error(
+                            "static callable binding source is not closed",
+                        ));
+                    }
+                }
+            };
+            arguments.push(StaticCallableArgument {
+                parameter_ordinal,
+                argument_origin,
+                kind,
+            });
+            bindings.push(binding);
+        } else {
+            if use_.is_callable() {
+                return Err(planner_error(
+                    "callable parameter does not resolve to one static closure body",
+                ));
+            }
+            arguments.push(StaticCallableArgument {
+                parameter_ordinal,
+                argument_origin,
+                kind: StaticCallableArgumentKind::Ordinary,
+            });
+        }
+    }
+    if bindings.is_empty() {
+        return Ok(None);
+    }
+    bindings.sort_by_key(|binding| binding.parameter_ordinal);
+    let key = StaticCallableSpecializationKey {
+        base_owner: declaration.function,
+        base_origin: declaration.origin,
+        bindings,
+    };
+    let specialization =
+        intern_static_callable_specialization(plan, key, declaration, interned, specializations)?;
+    Ok(Some(PlannedStaticCallableCall {
+        caller,
+        call_origin,
+        callee_reference_origin,
+        specialization,
+        arguments,
+    }))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn discover_specialized_body_calls(
+    plan: &StaticTransitionPlan<'_>,
+    origin: StaticOriginId,
+    caller: PredeclaredFunctionId,
+    environment: &[Option<StaticCallableBindingKey>],
+    declarations: &BTreeMap<String, CallableDeclarationPlan>,
+    interned: &mut BTreeMap<StaticCallableSpecializationKey, StaticCallableSpecializationId>,
+    specializations: &mut Vec<PlannedStaticCallableSpecialization>,
+    calls: &mut Vec<PlannedStaticCallableCall>,
+) -> Result<(), CraneliftBackendError> {
+    let occurrence = plan
+        .source_occurrences
+        .get(origin.0 as usize)
+        .and_then(Option::as_ref)
+        .ok_or_else(|| planner_error("specialized body walk has no source occurrence"))?;
+    if matches!(occurrence.expr, RuntimeExpr::Call { .. }) {
+        if let Some(call) = plan_static_callable_call(
+            plan,
+            origin,
+            caller,
+            environment,
+            declarations,
+            interned,
+            specializations,
+        )? {
+            calls.push(call);
+        }
+    }
+    let child = |position| plan.semantic.child_origin(origin, position);
+    match occurrence.expr {
+        RuntimeExpr::CheckedJoinSite { .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { .. } => {
+            discover_specialized_body_calls(
+                plan,
+                child(0)?,
+                caller,
+                environment,
+                declarations,
+                interned,
+                specializations,
+                calls,
+            )?;
+        }
+        RuntimeExpr::Let { .. } => {
+            discover_specialized_body_calls(
+                plan,
+                child(0)?,
+                caller,
+                environment,
+                declarations,
+                interned,
+                specializations,
+                calls,
+            )?;
+            let mut body_environment = Vec::with_capacity(environment.len() + 1);
+            body_environment.push(None);
+            body_environment.extend_from_slice(environment);
+            discover_specialized_body_calls(
+                plan,
+                child(1)?,
+                caller,
+                &body_environment,
+                declarations,
+                interned,
+                specializations,
+                calls,
+            )?;
+        }
+        RuntimeExpr::If { .. } => {
+            for position in 0..3 {
+                discover_specialized_body_calls(
+                    plan,
+                    child(position)?,
+                    caller,
+                    environment,
+                    declarations,
+                    interned,
+                    specializations,
+                    calls,
+                )?;
+            }
+        }
+        RuntimeExpr::Match { cases, .. } => {
+            discover_specialized_body_calls(
+                plan,
+                child(0)?,
+                caller,
+                environment,
+                declarations,
+                interned,
+                specializations,
+                calls,
+            )?;
+            for (index, case) in cases.iter().enumerate() {
+                let mut case_environment = Vec::with_capacity(case.binders + environment.len());
+                case_environment.extend((0..case.binders).map(|_| None));
+                case_environment.extend_from_slice(environment);
+                discover_specialized_body_calls(
+                    plan,
+                    child(1 + index)?,
+                    caller,
+                    &case_environment,
+                    declarations,
+                    interned,
+                    specializations,
+                    calls,
+                )?;
+            }
+        }
+        RuntimeExpr::ComputationalMatch { cases, .. } => {
+            discover_specialized_body_calls(
+                plan,
+                child(0)?,
+                caller,
+                environment,
+                declarations,
+                interned,
+                specializations,
+                calls,
+            )?;
+            for (index, case) in cases.iter().enumerate() {
+                let binders = case
+                    .argument_binders
+                    .checked_add(case.recursive_positions.len())
+                    .ok_or_else(|| planner_capacity_error("callable case arity exhausted"))?;
+                let mut case_environment = Vec::with_capacity(binders + environment.len());
+                case_environment.extend((0..binders).map(|_| None));
+                case_environment.extend_from_slice(environment);
+                discover_specialized_body_calls(
+                    plan,
+                    child(1 + index)?,
+                    caller,
+                    &case_environment,
+                    declarations,
+                    interned,
+                    specializations,
+                    calls,
+                )?;
+            }
+        }
+        RuntimeExpr::Closure { .. } => {}
+        RuntimeExpr::LexicalClosure { captures, .. } => {
+            for position in 0..captures.len() {
+                discover_specialized_body_calls(
+                    plan,
+                    child(1 + position)?,
+                    caller,
+                    environment,
+                    declarations,
+                    interned,
+                    specializations,
+                    calls,
+                )?;
+            }
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            for position in 0..args.len() {
+                discover_specialized_body_calls(
+                    plan,
+                    child(position)?,
+                    caller,
+                    environment,
+                    declarations,
+                    interned,
+                    specializations,
+                    calls,
+                )?;
+            }
+        }
+        RuntimeExpr::Record { fields } => {
+            for position in 0..fields.len() {
+                discover_specialized_body_calls(
+                    plan,
+                    child(position)?,
+                    caller,
+                    environment,
+                    declarations,
+                    interned,
+                    specializations,
+                    calls,
+                )?;
+            }
+        }
+        RuntimeExpr::Project { .. } => {
+            discover_specialized_body_calls(
+                plan,
+                child(0)?,
+                caller,
+                environment,
+                declarations,
+                interned,
+                specializations,
+                calls,
+            )?;
+        }
+        RuntimeExpr::Call { args, .. } => {
+            discover_specialized_body_calls(
+                plan,
+                child(0)?,
+                caller,
+                environment,
+                declarations,
+                interned,
+                specializations,
+                calls,
+            )?;
+            for position in 0..args.len() {
+                let argument_origin = child(1 + position)?;
+                let argument = plan
+                    .source_occurrences
+                    .get(argument_origin.0 as usize)
+                    .and_then(Option::as_ref)
+                    .ok_or_else(|| planner_error("call argument has no source occurrence"))?;
+                match argument.expr {
+                    RuntimeExpr::Closure { .. } => {}
+                    RuntimeExpr::LexicalClosure { captures, .. } => {
+                        for capture in 0..captures.len() {
+                            discover_specialized_body_calls(
+                                plan,
+                                plan.semantic.child_origin(argument_origin, 1 + capture)?,
+                                caller,
+                                environment,
+                                declarations,
+                                interned,
+                                specializations,
+                                calls,
+                            )?;
+                        }
+                    }
+                    _ => discover_specialized_body_calls(
+                        plan,
+                        argument_origin,
+                        caller,
+                        environment,
+                        declarations,
+                        interned,
+                        specializations,
+                        calls,
+                    )?,
+                }
+            }
+        }
+        RuntimeExpr::Effect {
+            capability, args, ..
+        } => {
+            let child_count = args.len() + usize::from(capability.is_some());
+            for position in 0..child_count {
+                discover_specialized_body_calls(
+                    plan,
+                    child(position)?,
+                    caller,
+                    environment,
+                    declarations,
+                    interned,
+                    specializations,
+                    calls,
+                )?;
+            }
+        }
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => {}
+    }
+    Ok(())
+}
+
+fn build_static_callable_specializations(
+    plan: &StaticTransitionPlan<'_>,
+) -> Result<
+    (
+        Vec<PlannedStaticCallableSpecialization>,
+        Vec<PlannedStaticCallableCall>,
+    ),
+    CraneliftBackendError,
+> {
+    let mut declarations = BTreeMap::new();
+    for symbol in plan.declaration_occurrences.keys() {
+        if let Some(declaration) = callable_declaration_plan(plan, symbol)? {
+            declarations.insert(symbol.clone(), declaration);
+        }
+    }
+    let callable_base_functions = declarations
+        .values()
+        .filter(|declaration| {
+            declaration
+                .parameter_uses
+                .iter()
+                .any(|use_| use_.is_callable())
+        })
+        .flat_map(|declaration| [declaration.function, declaration.body_function])
+        .collect::<BTreeSet<_>>();
+
+    let mut interned = BTreeMap::new();
+    let mut specializations = Vec::new();
+    let mut calls = Vec::new();
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        let RuntimeExpr::Call { args, .. } = occurrence.expr else {
+            continue;
+        };
+        let owner = plan
+            .semantic
+            .function_owner(occurrence.static_origin)?
+            .ok_or_else(|| planner_error("call occurrence has no function owner"))?;
+        let has_direct_callable = args.iter().any(|argument| {
+            matches!(
+                argument,
+                RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
+            )
+        });
+        if !has_direct_callable && callable_base_functions.contains(&owner) {
+            continue;
+        }
+        if let Some(call) = plan_static_callable_call(
+            plan,
+            occurrence.static_origin,
+            owner,
+            &[],
+            &declarations,
+            &mut interned,
+            &mut specializations,
+        )? {
+            calls.push(call);
+        }
+    }
+
+    let mut cursor = 0usize;
+    while cursor < specializations.len() {
+        let specialization = specializations[cursor].clone();
+        let declaration = declarations
+            .values()
+            .find(|declaration| declaration.origin == specialization.base_origin)
+            .ok_or_else(|| planner_error("specialization base declaration is absent"))?;
+        let mut environment = vec![None; declaration.parameter_uses.len()];
+        for binding in &specialization.key.bindings {
+            let slot = environment
+                .get_mut(binding.parameter_ordinal as usize)
+                .ok_or_else(|| planner_error("specialization binding exceeds base arity"))?;
+            *slot = Some(binding.clone());
+        }
+        environment.extend((0..declaration.declaration_captures).map(|_| None));
+        discover_specialized_body_calls(
+            plan,
+            specialization.base_body_origin,
+            specialization.function,
+            &environment,
+            &declarations,
+            &mut interned,
+            &mut specializations,
+            &mut calls,
+        )?;
+        cursor += 1;
+    }
+
+    calls.sort_by_key(|call| (call.caller, call.call_origin));
+    if calls
+        .windows(2)
+        .any(|pair| pair[0].caller == pair[1].caller && pair[0].call_origin == pair[1].call_origin)
+    {
+        return Err(planner_error(
+            "one caller has two static callable targets for one call occurrence",
+        ));
+    }
+    Ok((specializations, calls))
+}
+
+fn derive_operand_edge_disposition(
+    plan: &StaticTransitionPlan<'_>,
+    parent: StaticOriginId,
+    position: u32,
+    role: SourceOperandRole,
+) -> Result<OperandEdgeDisposition, CraneliftBackendError> {
+    if role != SourceOperandRole::CallArgument {
+        return role_only_disposition(role);
+    }
+    let parameter_ordinal = position
+        .checked_sub(1)
+        .ok_or_else(|| planner_error("call argument occupies the callee position"))?;
+    let eliminated = plan.static_callable_calls.iter().any(|call| {
+        call.call_origin == parent
+            && call.arguments.iter().any(|argument| {
+                argument.parameter_ordinal == parameter_ordinal
+                    && argument.kind != StaticCallableArgumentKind::Ordinary
+            })
+    });
+    Ok(if eliminated {
+        OperandEdgeDisposition::StaticCallableElimination
+    } else {
+        OperandEdgeDisposition::Forwarding
+    })
+}
+
 fn build_operand_edge_matrix(
     plan: &StaticTransitionPlan<'_>,
 ) -> Result<Vec<PlannedOperandEdge>, CraneliftBackendError> {
@@ -643,7 +1737,7 @@ fn build_operand_edge_matrix(
                 child,
                 position,
                 role,
-                disposition: role.disposition(),
+                disposition: derive_operand_edge_disposition(plan, parent, position, role)?,
             });
         }
     }
@@ -742,6 +1836,11 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// One planner-derived entry for every operand-bearing positional source
     /// child. Lowering-only consumers live in [`LoweringOnlyOperandEdge`].
     operand_edges: Vec<PlannedOperandEdge>,
+    /// The finite, interned population of out-of-line units that eliminate a
+    /// statically known callable parameter from a transparent declaration ABI.
+    static_callable_specializations: Vec<PlannedStaticCallableSpecialization>,
+    /// One exact call-site edge per use of an interned specialization.
+    static_callable_calls: Vec<PlannedStaticCallableCall>,
 }
 
 #[cfg(test)]
@@ -1430,6 +2529,8 @@ impl<'src> Planner<'src> {
                 source_occurrences: Vec::new(),
                 join_results: Vec::new(),
                 operand_edges: Vec::new(),
+                static_callable_specializations: Vec::new(),
+                static_callable_calls: Vec::new(),
             },
             store_interner: BTreeMap::new(),
             next_source: 0,
@@ -2162,6 +3263,18 @@ impl<'src> Planner<'src> {
             root_ingress,
         )?;
         self.plan.join_results = build_join_result_plan(&self.plan, functionized_units)?;
+        let (specializations, calls) = if functionized_units {
+            build_static_callable_specializations(&self.plan)?
+        } else {
+            (Vec::new(), Vec::new())
+        };
+        self.plan.static_callable_specializations = specializations;
+        self.plan.static_callable_calls = calls;
+        extend_static_callable_abi(
+            &mut self.plan.abi,
+            &self.plan.semantic,
+            &self.plan.static_callable_specializations,
+        )?;
         self.plan.operand_edges = build_operand_edge_matrix(&self.plan)?;
         self.plan.validate()?;
         Ok(self.plan)
@@ -2221,6 +3334,7 @@ pub(in crate::cranelift_backend) struct EmittableCallEdge {
 pub(in crate::cranelift_backend) enum EmittableCallKind {
     StaticBody,
     Declaration,
+    StaticCallableSpecialization,
 }
 
 impl EmittableCallEdge {
@@ -2251,6 +3365,147 @@ impl EmittableCallEdge {
 
     pub(in crate::cranelift_backend) fn kind(self) -> EmittableCallKind {
         self.kind
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum EmittableStaticCallableArgumentKind {
+    Ordinary,
+    Erased,
+    Direct {
+        closure_origin: StaticOriginId,
+    },
+    Forwarded {
+        body_origin: StaticOriginId,
+        declared_arity: u32,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct EmittableStaticCallableArgument {
+    parameter_ordinal: u32,
+    argument_origin: StaticOriginId,
+    kind: EmittableStaticCallableArgumentKind,
+    binding: Option<EmittableStaticCallableBinding>,
+}
+
+impl EmittableStaticCallableArgument {
+    pub(in crate::cranelift_backend) fn parameter_ordinal(&self) -> u32 {
+        self.parameter_ordinal
+    }
+
+    pub(in crate::cranelift_backend) fn argument_origin(&self) -> StaticOriginId {
+        self.argument_origin
+    }
+
+    pub(in crate::cranelift_backend) fn kind(&self) -> EmittableStaticCallableArgumentKind {
+        self.kind
+    }
+
+    pub(in crate::cranelift_backend) fn binding(&self) -> Option<&EmittableStaticCallableBinding> {
+        self.binding.as_ref()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct EmittableStaticCallableCall {
+    arguments: Vec<EmittableStaticCallableArgument>,
+}
+
+impl EmittableStaticCallableCall {
+    pub(in crate::cranelift_backend) fn arguments(&self) -> &[EmittableStaticCallableArgument] {
+        &self.arguments
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum EmittableStaticCallableCapture {
+    Value,
+    Callable(EmittableStaticCallableBinding),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct EmittableStaticCallableBinding {
+    parameter_ordinal: u32,
+    body_origin: StaticOriginId,
+    declared_arity: u32,
+    capture_count: u32,
+    captures: Vec<EmittableStaticCallableCapture>,
+}
+
+impl EmittableStaticCallableBinding {
+    pub(in crate::cranelift_backend) fn parameter_ordinal(&self) -> u32 {
+        self.parameter_ordinal
+    }
+
+    pub(in crate::cranelift_backend) fn body_origin(&self) -> StaticOriginId {
+        self.body_origin
+    }
+
+    pub(in crate::cranelift_backend) fn declared_arity(&self) -> u32 {
+        self.declared_arity
+    }
+
+    pub(in crate::cranelift_backend) fn capture_count(&self) -> u32 {
+        self.capture_count
+    }
+
+    pub(in crate::cranelift_backend) fn captures(&self) -> &[EmittableStaticCallableCapture] {
+        &self.captures
+    }
+}
+
+fn emittable_static_callable_binding(
+    binding: &StaticCallableBindingKey,
+) -> Result<EmittableStaticCallableBinding, CraneliftBackendError> {
+    Ok(EmittableStaticCallableBinding {
+        parameter_ordinal: binding.parameter_ordinal,
+        body_origin: binding.body_origin,
+        declared_arity: binding.declared_arity,
+        capture_count: binding.lifted_capture_count()?,
+        captures: binding
+            .captures
+            .iter()
+            .map(|capture| match capture {
+                StaticCallableCaptureBinding::Value(_) => Ok(EmittableStaticCallableCapture::Value),
+                StaticCallableCaptureBinding::Callable(binding) => {
+                    Ok(EmittableStaticCallableCapture::Callable(
+                        emittable_static_callable_binding(binding)?,
+                    ))
+                }
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?,
+    })
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct EmittableStaticCallableUnit {
+    base_origin: StaticOriginId,
+    base_body_origin: StaticOriginId,
+    parameter_count: u32,
+    declaration_captures: u32,
+    bindings: Vec<EmittableStaticCallableBinding>,
+}
+
+impl EmittableStaticCallableUnit {
+    pub(in crate::cranelift_backend) fn base_origin(&self) -> StaticOriginId {
+        self.base_origin
+    }
+
+    pub(in crate::cranelift_backend) fn base_body_origin(&self) -> StaticOriginId {
+        self.base_body_origin
+    }
+
+    pub(in crate::cranelift_backend) fn parameter_count(&self) -> u32 {
+        self.parameter_count
+    }
+
+    pub(in crate::cranelift_backend) fn declaration_captures(&self) -> u32 {
+        self.declaration_captures
+    }
+
+    pub(in crate::cranelift_backend) fn bindings(&self) -> &[EmittableStaticCallableBinding] {
+        &self.bindings
     }
 }
 
@@ -2416,6 +3671,26 @@ pub(in crate::cranelift_backend) fn ac4_route_counts() -> (usize, usize) {
 }
 
 impl<'src> StaticTransitionPlan<'src> {
+    fn callable_base_functions(
+        &self,
+    ) -> Result<BTreeSet<PredeclaredFunctionId>, CraneliftBackendError> {
+        let mut functions = BTreeSet::new();
+        for symbol in self.declaration_occurrences.keys() {
+            let Some(declaration) = callable_declaration_plan(self, symbol)? else {
+                continue;
+            };
+            if declaration
+                .parameter_uses
+                .iter()
+                .any(|use_| use_.is_callable())
+            {
+                functions.insert(declaration.function);
+                functions.insert(declaration.body_function);
+            }
+        }
+        Ok(functions)
+    }
+
     /// Resolves a static origin to the source term the planner filed under it.
     ///
     /// ⭐ **This is the sole `origin -> expression` route in the backend**, and it
@@ -2558,6 +3833,11 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
         function: PredeclaredFunctionId,
     ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+        let source_function = self
+            .static_callable_specializations
+            .iter()
+            .find(|specialization| specialization.function == function)
+            .map_or(function, |specialization| specialization.body_function);
         let mut required = BTreeSet::new();
         for (index, (occurrence, join)) in self
             .source_occurrences
@@ -2573,7 +3853,7 @@ impl<'src> StaticTransitionPlan<'src> {
                     "join consumption population is not keyed by source origin",
                 ));
             }
-            if self.semantic.function_owner(occurrence.static_origin)? == Some(function) {
+            if self.semantic.function_owner(occurrence.static_origin)? == Some(source_function) {
                 required.insert(occurrence.static_origin);
             }
         }
@@ -2937,10 +4217,29 @@ impl<'src> StaticTransitionPlan<'src> {
     pub(in crate::cranelift_backend) fn emittable_call_edges(
         &self,
     ) -> Result<Vec<EmittableCallEdge>, CraneliftBackendError> {
+        let specialized_bases = self.callable_base_functions()?;
+        let mut eliminated_literal_bodies = BTreeSet::new();
+        for call in &self.static_callable_calls {
+            for argument in &call.arguments {
+                if matches!(
+                    argument.kind,
+                    StaticCallableArgumentKind::Direct { .. } | StaticCallableArgumentKind::Erased
+                ) {
+                    eliminated_literal_bodies.insert((
+                        call.caller,
+                        self.semantic.child_origin(argument.argument_origin, 0)?,
+                    ));
+                }
+            }
+        }
         let mut calls = self
             .semantic
             .static_body_call_edges(&self.edges)?
             .into_iter()
+            .filter(|(caller, _, callee_origin)| {
+                !specialized_bases.contains(caller)
+                    && !eliminated_literal_bodies.contains(&(*caller, *callee_origin))
+            })
             .map(|(caller, callee, callee_origin)| EmittableCallEdge {
                 caller,
                 callee,
@@ -2953,6 +4252,13 @@ impl<'src> StaticTransitionPlan<'src> {
             self.semantic
                 .declaration_call_edges(&self.edges)?
                 .into_iter()
+                .filter(|(caller, _, _, call_site_origin)| {
+                    !specialized_bases.contains(caller)
+                        && !self.static_callable_calls.iter().any(|call| {
+                            call.caller == *caller
+                                && call.callee_reference_origin == *call_site_origin
+                        })
+                })
                 .map(
                     |(caller, callee, callee_origin, call_site_origin)| EmittableCallEdge {
                         caller,
@@ -2963,7 +4269,205 @@ impl<'src> StaticTransitionPlan<'src> {
                     },
                 ),
         );
+        for specialization in &self.static_callable_specializations {
+            let base_declaration = self
+                .declaration_occurrences
+                .iter()
+                .find_map(|(symbol, origin)| {
+                    (*origin == specialization.base_origin).then_some(symbol.as_str())
+                })
+                .ok_or_else(|| planner_error("specialization base has no declaration symbol"))
+                .and_then(|symbol| {
+                    callable_declaration_plan(self, symbol)?
+                        .ok_or_else(|| planner_error("specialization base is not callable"))
+                })?;
+            for binding in &specialization.key.bindings {
+                if !base_declaration
+                    .parameter_uses
+                    .get(binding.parameter_ordinal as usize)
+                    .is_some_and(|use_| use_.invoked)
+                {
+                    continue;
+                }
+                let callee = self
+                    .semantic
+                    .function_owner(binding.body_origin)?
+                    .ok_or_else(|| planner_error("static callable body has no function owner"))?;
+                calls.push(EmittableCallEdge {
+                    caller: specialization.function,
+                    callee,
+                    callee_origin: binding.body_origin,
+                    call_site_origin: binding.body_origin,
+                    kind: EmittableCallKind::StaticBody,
+                });
+            }
+            for (caller, callee, callee_origin) in
+                self.semantic.static_body_call_edges(&self.edges)?
+            {
+                let eliminated_literal =
+                    eliminated_literal_bodies.contains(&(specialization.function, callee_origin));
+                if caller == specialization.body_function && !eliminated_literal {
+                    calls.push(EmittableCallEdge {
+                        caller: specialization.function,
+                        callee,
+                        callee_origin,
+                        call_site_origin: callee_origin,
+                        kind: EmittableCallKind::StaticBody,
+                    });
+                }
+            }
+            for (caller, callee, callee_origin, call_site_origin) in
+                self.semantic.declaration_call_edges(&self.edges)?
+            {
+                if caller == specialization.body_function
+                    && !self.static_callable_calls.iter().any(|call| {
+                        call.caller == specialization.function
+                            && call.callee_reference_origin == call_site_origin
+                    })
+                {
+                    calls.push(EmittableCallEdge {
+                        caller: specialization.function,
+                        callee,
+                        callee_origin,
+                        call_site_origin,
+                        kind: EmittableCallKind::Declaration,
+                    });
+                }
+            }
+        }
+        for call in &self.static_callable_calls {
+            let specialization = self
+                .static_callable_specializations
+                .get(call.specialization.0 as usize)
+                .ok_or_else(|| planner_error("static callable call names no specialization"))?;
+            calls.push(EmittableCallEdge {
+                caller: call.caller,
+                callee: specialization.function,
+                callee_origin: specialization.base_origin,
+                call_site_origin: call.call_origin,
+                kind: EmittableCallKind::StaticCallableSpecialization,
+            });
+        }
+        calls.sort();
+        calls.dedup();
+        let mut sites = BTreeSet::new();
+        for call in &calls {
+            if !sites.insert((call.caller, call.call_site_origin, call.kind)) {
+                return Err(planner_error(
+                    "one generated function has two targets for one typed call edge",
+                ));
+            }
+        }
         Ok(calls)
+    }
+
+    pub(in crate::cranelift_backend) fn emittable_static_callable_call(
+        &self,
+        caller: PredeclaredFunctionId,
+        call_origin: StaticOriginId,
+    ) -> Result<Option<EmittableStaticCallableCall>, CraneliftBackendError> {
+        self.static_callable_calls
+            .iter()
+            .find(|call| call.caller == caller && call.call_origin == call_origin)
+            .map(|call| {
+                let specialization = self
+                    .static_callable_specializations
+                    .get(call.specialization.0 as usize)
+                    .ok_or_else(|| planner_error("static callable call names no specialization"))?;
+                Ok(EmittableStaticCallableCall {
+                    arguments: call
+                        .arguments
+                        .iter()
+                        .map(|argument| {
+                            Ok(EmittableStaticCallableArgument {
+                                parameter_ordinal: argument.parameter_ordinal,
+                                argument_origin: argument.argument_origin,
+                                kind: match argument.kind {
+                                    StaticCallableArgumentKind::Ordinary => {
+                                        EmittableStaticCallableArgumentKind::Ordinary
+                                    }
+                                    StaticCallableArgumentKind::Erased => {
+                                        EmittableStaticCallableArgumentKind::Erased
+                                    }
+                                    StaticCallableArgumentKind::Direct { closure_origin } => {
+                                        EmittableStaticCallableArgumentKind::Direct {
+                                            closure_origin,
+                                        }
+                                    }
+                                    StaticCallableArgumentKind::Forwarded {
+                                        body_origin,
+                                        declared_arity,
+                                    } => EmittableStaticCallableArgumentKind::Forwarded {
+                                        body_origin,
+                                        declared_arity,
+                                    },
+                                },
+                                binding: specialization
+                                    .key
+                                    .bindings
+                                    .iter()
+                                    .find(|binding| {
+                                        binding.parameter_ordinal == argument.parameter_ordinal
+                                    })
+                                    .map(emittable_static_callable_binding)
+                                    .transpose()?,
+                            })
+                        })
+                        .collect::<Result<Vec<_>, CraneliftBackendError>>()?,
+                })
+            })
+            .transpose()
+    }
+
+    pub(in crate::cranelift_backend) fn emittable_static_callable_unit(
+        &self,
+        id: StaticCallableSpecializationId,
+    ) -> Result<EmittableStaticCallableUnit, CraneliftBackendError> {
+        let specialization = self
+            .static_callable_specializations
+            .get(id.0 as usize)
+            .ok_or_else(|| planner_error("callable specialization id is outside the plan"))?;
+        if specialization.id != id {
+            return Err(planner_error(
+                "callable specialization is not keyed by its dense identity",
+            ));
+        }
+        let declaration = self
+            .source_occurrences
+            .get(specialization.base_origin.0 as usize)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| planner_error("specialization base has no source occurrence"))?;
+        let (parameter_count, declaration_captures) = match declaration.expr {
+            RuntimeExpr::Closure {
+                captures, params, ..
+            }
+            | RuntimeExpr::LexicalClosure {
+                captures, params, ..
+            } => (
+                u32::try_from(params.len())
+                    .map_err(|_| planner_capacity_error("specialization arity exhausted"))?,
+                u32::try_from(captures.len()).map_err(|_| {
+                    planner_capacity_error("specialization declaration captures exhausted")
+                })?,
+            ),
+            _ => {
+                return Err(planner_error(
+                    "specialization base is not a transparent closure declaration",
+                ));
+            }
+        };
+        Ok(EmittableStaticCallableUnit {
+            base_origin: specialization.base_origin,
+            base_body_origin: specialization.base_body_origin,
+            parameter_count,
+            declaration_captures,
+            bindings: specialization
+                .key
+                .bindings
+                .iter()
+                .map(emittable_static_callable_binding)
+                .collect::<Result<Vec<_>, CraneliftBackendError>>()?,
+        })
     }
 
     pub(in crate::cranelift_backend) fn root_emittable_unit(
@@ -2982,9 +4486,17 @@ impl<'src> StaticTransitionPlan<'src> {
     pub(in crate::cranelift_backend) fn emittable_units(
         &self,
     ) -> Result<Vec<EmittableUnit<'_>>, CraneliftBackendError> {
+        let specialized_bases = self.callable_base_functions()?;
         self.abi
             .descriptors
             .iter()
+            .filter(|descriptor| {
+                !specialized_bases.contains(&descriptor.function)
+                    || matches!(
+                        descriptor.definition,
+                        AbiUnitDefinition::StaticCallableSpecialization { .. }
+                    )
+            })
             .map(|descriptor| {
                 let start = descriptor.slots.start as usize;
                 let end = start
@@ -3041,6 +4553,7 @@ impl<'src> StaticTransitionPlan<'src> {
             return Err(planner_error("closed graph has no entry"));
         }
         self.validate_operand_edge_matrix()?;
+        self.validate_static_callable_specializations()?;
         if self.evidence.len() != self.edges.len() {
             return Err(planner_error("edge evidence is incomplete"));
         }
@@ -3247,9 +4760,223 @@ impl<'src> StaticTransitionPlan<'src> {
             self.root_entry
                 .ok_or_else(|| planner_error("plan has no root scheduling entry"))?,
             self.root_ingress,
+            &self.static_callable_specializations,
         )?;
         self.validate_source_occurrence_table()?;
         self.validate_join_result_plan()?;
+        Ok(())
+    }
+
+    fn validate_static_callable_specializations(&self) -> Result<(), CraneliftBackendError> {
+        let base_count = self.semantic.functions.len();
+        let mut keys = BTreeSet::new();
+        for (ordinal, specialization) in self.static_callable_specializations.iter().enumerate() {
+            let id =
+                StaticCallableSpecializationId(u32::try_from(ordinal).map_err(|_| {
+                    planner_capacity_error("static callable specialization exhausted")
+                })?);
+            let function = PredeclaredFunctionId(
+                u32::try_from(base_count.checked_add(ordinal).ok_or_else(|| {
+                    planner_capacity_error("static callable function population exhausted")
+                })?)
+                .map_err(|_| {
+                    planner_capacity_error("static callable function identity exhausted")
+                })?,
+            );
+            if specialization.id != id || specialization.function != function {
+                return Err(planner_error(
+                    "static callable specialization is not densely interned",
+                ));
+            }
+            if !keys.insert(specialization.key.clone()) {
+                return Err(planner_error(
+                    "static callable specialization key was cloned instead of reused",
+                ));
+            }
+            if specialization.key.base_owner != specialization.base_function
+                || specialization.key.base_origin != specialization.base_origin
+            {
+                return Err(planner_error(
+                    "static callable specialization key lost its base owner/origin",
+                ));
+            }
+            if self
+                .semantic
+                .function_owner(specialization.base_body_origin)?
+                != Some(specialization.body_function)
+            {
+                return Err(planner_error(
+                    "static callable specialization lost its body owner/origin",
+                ));
+            }
+            let mut last_parameter = None;
+            let mut lifted = 0u32;
+            for binding in &specialization.key.bindings {
+                if last_parameter.is_some_and(|last| last >= binding.parameter_ordinal) {
+                    return Err(planner_error(
+                        "static callable bindings are not strictly ordered by parameter",
+                    ));
+                }
+                last_parameter = Some(binding.parameter_ordinal);
+                lifted = lifted
+                    .checked_add(validate_static_callable_binding(self, binding)?)
+                    .ok_or_else(|| planner_capacity_error("lifted capture population exhausted"))?;
+            }
+            if lifted > specialization.lifted_captures {
+                return Err(planner_error(
+                    "static callable descriptor omits a lifted capture",
+                ));
+            }
+        }
+        let mut call_sites = BTreeSet::new();
+        for call in &self.static_callable_calls {
+            if !call_sites.insert((call.caller, call.call_origin)) {
+                return Err(planner_error(
+                    "static callable call-site mapping is not one-to-one",
+                ));
+            }
+            let specialization = self
+                .static_callable_specializations
+                .get(call.specialization.0 as usize)
+                .ok_or_else(|| {
+                    planner_error("static callable call names no interned specialization")
+                })?;
+            let caller_environment = if let Some(caller_specialization) = self
+                .static_callable_specializations
+                .iter()
+                .find(|specialization| specialization.function == call.caller)
+            {
+                let declaration = self
+                    .source_occurrences
+                    .get(caller_specialization.base_origin.0 as usize)
+                    .and_then(Option::as_ref)
+                    .ok_or_else(|| planner_error("caller specialization base has no occurrence"))?;
+                let (parameter_count, capture_count) = match declaration.expr {
+                    RuntimeExpr::Closure {
+                        params, captures, ..
+                    }
+                    | RuntimeExpr::LexicalClosure {
+                        params, captures, ..
+                    } => (params.len(), captures.len()),
+                    _ => {
+                        return Err(planner_error("caller specialization base is not a closure"));
+                    }
+                };
+                let mut environment = vec![None; parameter_count];
+                for binding in &caller_specialization.key.bindings {
+                    let slot = environment
+                        .get_mut(binding.parameter_ordinal as usize)
+                        .ok_or_else(|| {
+                            planner_error("caller specialization binding exceeds declaration arity")
+                        })?;
+                    *slot = Some(binding.clone());
+                }
+                environment.extend((0..capture_count).map(|_| None));
+                environment
+            } else {
+                Vec::new()
+            };
+            let occurrence = self
+                .source_occurrences
+                .get(call.call_origin.0 as usize)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| planner_error("static callable call has no source occurrence"))?;
+            let RuntimeExpr::Call { args, .. } = occurrence.expr else {
+                return Err(planner_error(
+                    "static callable call-site mapping names a non-call",
+                ));
+            };
+            if call.arguments.len() != args.len()
+                || call
+                    .arguments
+                    .iter()
+                    .enumerate()
+                    .any(|(ordinal, argument)| {
+                        argument.parameter_ordinal as usize != ordinal
+                            || self
+                                .semantic
+                                .child_origin(call.call_origin, 1 + ordinal)
+                                .ok()
+                                != Some(argument.argument_origin)
+                    })
+            {
+                return Err(planner_error(
+                    "static callable call-site argument mapping is not exact",
+                ));
+            }
+            let eliminated = call
+                .arguments
+                .iter()
+                .filter(|argument| argument.kind != StaticCallableArgumentKind::Ordinary)
+                .map(|argument| argument.parameter_ordinal)
+                .collect::<Vec<_>>();
+            let keyed = specialization
+                .key
+                .bindings
+                .iter()
+                .map(|binding| binding.parameter_ordinal)
+                .collect::<Vec<_>>();
+            if eliminated != keyed {
+                return Err(planner_error(
+                    "static callable call-site use closure disagrees with its interned key",
+                ));
+            }
+            for argument in &call.arguments {
+                let Some(binding) = specialization
+                    .key
+                    .bindings
+                    .iter()
+                    .find(|binding| binding.parameter_ordinal == argument.parameter_ordinal)
+                else {
+                    continue;
+                };
+                match argument.kind {
+                    StaticCallableArgumentKind::Direct { closure_origin } => {
+                        let derived = static_binding_from_closure(
+                            self,
+                            argument.parameter_ordinal,
+                            closure_origin,
+                            &caller_environment,
+                        )?
+                        .ok_or_else(|| {
+                            planner_error(
+                                "direct callable argument no longer resolves to a closure",
+                            )
+                        })?;
+                        if &derived != binding {
+                            return Err(planner_error(
+                                "direct callable argument disagrees with its body/arity/capture \
+                                 provenance key",
+                            ));
+                        }
+                    }
+                    StaticCallableArgumentKind::Erased => {
+                        if !binding.captures.is_empty() {
+                            return Err(planner_error(
+                                "unused callable binding retained runtime captures",
+                            ));
+                        }
+                    }
+                    StaticCallableArgumentKind::Forwarded {
+                        body_origin,
+                        declared_arity,
+                    } => {
+                        if binding.body_origin != body_origin
+                            || binding.declared_arity != declared_arity
+                        {
+                            return Err(planner_error(
+                                "forwarded callable binding changed body identity or arity",
+                            ));
+                        }
+                    }
+                    StaticCallableArgumentKind::Ordinary => {
+                        return Err(planner_error(
+                            "ordinary argument appears in the callable binding key",
+                        ));
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -3280,7 +5007,7 @@ impl<'src> StaticTransitionPlan<'src> {
                     child,
                     position,
                     role,
-                    disposition: role.disposition(),
+                    disposition: derive_operand_edge_disposition(self, parent, position, role)?,
                 });
             }
         }
@@ -4080,6 +5807,255 @@ mod tests {
             constructor: "ctor:prelude::Unit::MkUnit".to_string(),
             args: Vec::new(),
         }
+    }
+
+    fn d7_functionized_plan<'a>(
+        entry: &'a RuntimeExpr,
+        declarations: &BTreeMap<&str, &'a RuntimeDeclaration>,
+    ) -> Result<StaticTransitionPlan<'a>, CraneliftBackendError> {
+        plan_static_transition_graph_with_symbols(
+            entry,
+            declarations,
+            &crate::NativeProcessSymbols::legacy_prelude(),
+            AbiRootIngress::Value,
+            true,
+        )
+    }
+
+    fn d7_callable_declaration(symbol: &str, body: RuntimeExpr) -> RuntimeDeclaration {
+        RuntimeDeclaration {
+            symbol: symbol.to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["callable".to_string()],
+                    body: Box::new(body),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        }
+    }
+
+    fn d7_static_closure(tag: &str) -> RuntimeExpr {
+        RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Construct {
+                constructor: tag.to_string(),
+                args: Vec::new(),
+            }),
+        }
+    }
+
+    fn d7_declaration_call(symbol: &str, argument: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: symbol.to_string(),
+            }),
+            args: vec![argument],
+        }
+    }
+
+    #[test]
+    fn d7_static_callable_identity_keys_distinct_bodies_and_no_identity_slot() {
+        let symbol = "decl:fixture::d7::identity";
+        let declaration = d7_callable_declaration(
+            symbol,
+            RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(0)),
+                args: Vec::new(),
+            },
+        );
+        let entry = RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Pair".to_string(),
+            args: vec![
+                d7_declaration_call(symbol, d7_static_closure("ctor:fixture::Left")),
+                d7_declaration_call(symbol, d7_static_closure("ctor:fixture::Right")),
+            ],
+        };
+        let declarations = BTreeMap::from([(symbol, &declaration)]);
+        let plan = d7_functionized_plan(&entry, &declarations)
+            .expect("two static callable bodies plan out of line");
+        assert_eq!(plan.static_callable_specializations.len(), 2);
+        let body_origins = plan
+            .static_callable_specializations
+            .iter()
+            .map(|specialization| {
+                assert_eq!(specialization.ordinary_parameters, 0);
+                assert_eq!(specialization.lifted_captures, 0);
+                specialization.key.bindings[0].body_origin
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            body_origins.len(),
+            2,
+            "different callable bodies aliased to one specialization key"
+        );
+        for specialization in &plan.static_callable_specializations {
+            let descriptor = &plan.abi.descriptors[specialization.function.0 as usize];
+            assert!(matches!(
+                descriptor.definition,
+                AbiUnitDefinition::StaticCallableSpecialization { .. }
+            ));
+            assert_eq!(descriptor.header.parameters, 0);
+            assert_eq!(descriptor.header.captures, 0);
+            assert_eq!(
+                descriptor.slots.len, 4,
+                "callable identity leaked into the specialization ABI"
+            );
+        }
+    }
+
+    #[test]
+    fn d7_static_callable_capture_values_do_not_enter_the_key() {
+        let target_symbol = "decl:fixture::d7::capture_target";
+        let outer_symbol = "decl:fixture::d7::capture_outer";
+        let target = d7_callable_declaration(
+            target_symbol,
+            RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(0)),
+                args: Vec::new(),
+            },
+        );
+        let outer = RuntimeDeclaration {
+            symbol: outer_symbol.to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["value".to_string()],
+                    body: Box::new(d7_declaration_call(
+                        target_symbol,
+                        RuntimeExpr::LexicalClosure {
+                            captures: vec![RuntimeExpr::Var(0)],
+                            params: Vec::new(),
+                            body: Box::new(RuntimeExpr::Var(0)),
+                        },
+                    )),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        let entry = RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Pair".to_string(),
+            args: vec![
+                RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::DeclarationRef {
+                        symbol: outer_symbol.to_string(),
+                    }),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Bool(false))],
+                },
+                RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::DeclarationRef {
+                        symbol: outer_symbol.to_string(),
+                    }),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+                },
+            ],
+        };
+        let declarations = BTreeMap::from([(target_symbol, &target), (outer_symbol, &outer)]);
+        let plan = d7_functionized_plan(&entry, &declarations)
+            .expect("one body with runtime capture inputs plans once");
+        assert_eq!(plan.static_callable_specializations.len(), 1);
+        let specialization = &plan.static_callable_specializations[0];
+        assert_eq!(specialization.ordinary_parameters, 0);
+        assert_eq!(specialization.lifted_captures, 1);
+        assert_eq!(
+            specialization.key.bindings[0]
+                .lifted_capture_count()
+                .expect("capture count is finite"),
+            1
+        );
+    }
+
+    #[test]
+    fn d7_static_callable_use_closure_and_runtime_selection_reject_pre_emission() {
+        let returned_symbol = "decl:fixture::d7::returned";
+        let returned = d7_callable_declaration(returned_symbol, RuntimeExpr::Var(0));
+        let returned_entry =
+            d7_declaration_call(returned_symbol, d7_static_closure("ctor:fixture::Body"));
+        let returned_declarations = BTreeMap::from([(returned_symbol, &returned)]);
+        assert!(
+            d7_functionized_plan(&returned_entry, &returned_declarations).is_err(),
+            "returning a callable parameter entered specialization"
+        );
+
+        let invoked_symbol = "decl:fixture::d7::selected";
+        let invoked = d7_callable_declaration(
+            invoked_symbol,
+            RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(0)),
+                args: Vec::new(),
+            },
+        );
+        let selected = RuntimeExpr::If {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            then_expr: Box::new(d7_static_closure("ctor:fixture::Left")),
+            else_expr: Box::new(d7_static_closure("ctor:fixture::Right")),
+        };
+        let selected_entry = d7_declaration_call(invoked_symbol, selected);
+        let selected_declarations = BTreeMap::from([(invoked_symbol, &invoked)]);
+        assert!(
+            d7_functionized_plan(&selected_entry, &selected_declarations).is_err(),
+            "a runtime-selected callable entered specialization"
+        );
+    }
+
+    #[test]
+    fn d7_static_callable_recursion_interns_before_enqueue() {
+        let symbol = "decl:fixture::d7::recursive";
+        let declaration = d7_callable_declaration(
+            symbol,
+            RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::DeclarationRef {
+                    symbol: symbol.to_string(),
+                }),
+                args: vec![RuntimeExpr::Var(0)],
+            },
+        );
+        let entry = d7_declaration_call(symbol, d7_static_closure("ctor:fixture::Body"));
+        let declarations = BTreeMap::from([(symbol, &declaration)]);
+        let plan = d7_functionized_plan(&entry, &declarations)
+            .expect("recursive static binding reaches a finite fixed point");
+        assert_eq!(plan.static_callable_specializations.len(), 1);
+        assert_eq!(plan.static_callable_calls.len(), 2);
+        assert_eq!(
+            plan.static_callable_calls[0].specialization,
+            plan.static_callable_calls[1].specialization
+        );
+    }
+
+    #[test]
+    fn d7_static_callable_matrix_mutations_fail_validation() {
+        let symbol = "decl:fixture::d7::matrix";
+        let declaration = d7_callable_declaration(
+            symbol,
+            RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(0)),
+                args: Vec::new(),
+            },
+        );
+        let entry = d7_declaration_call(symbol, d7_static_closure("ctor:fixture::Body"));
+        let declarations = BTreeMap::from([(symbol, &declaration)]);
+        let plan =
+            d7_functionized_plan(&entry, &declarations).expect("static callable fixture plans");
+        let edge_index = plan
+            .operand_edges
+            .iter()
+            .position(|edge| edge.disposition == OperandEdgeDisposition::StaticCallableElimination)
+            .expect("the real static callable edge is present");
+
+        let mut omitted = plan.clone();
+        omitted.operand_edges.remove(edge_index);
+        assert!(omitted.validate().is_err());
+
+        let mut reclassified = plan.clone();
+        reclassified.operand_edges[edge_index].disposition = OperandEdgeDisposition::Forwarding;
+        assert!(reclassified.validate().is_err());
+
+        let mut deleted_use_closure = plan;
+        deleted_use_closure.static_callable_calls[0].arguments[0].kind =
+            StaticCallableArgumentKind::Ordinary;
+        assert!(deleted_use_closure.validate().is_err());
     }
 
     #[test]
@@ -8402,6 +10378,7 @@ mod tests {
                 &plan.entries,
                 plan.root_entry.expect("root entry"),
                 plan.root_ingress,
+                &plan.static_callable_specializations,
             )
             .expect_err("AC-1: dropping a descriptor must be refused");
         // ⛔ The EXACT failure, not `is_err()`. A control that reddens does not
@@ -8987,6 +10964,7 @@ mod tests {
             &lexical_plan.entries,
             lexical_plan.root_entry.expect("root entry"),
             lexical_plan.root_ingress,
+            &lexical_plan.static_callable_specializations,
         ) {
             Ok(()) => "NO WITNESS -- the layout skew was accepted".to_string(),
             Err(err) => format!("{err:?}"),
@@ -9243,7 +11221,8 @@ mod tests {
                     Some((ingress, unit.header().parameters))
                 }
                 AbiUnitDefinition::TransparentDeclarationClosure { .. }
-                | AbiUnitDefinition::ClosureBody { .. } => None,
+                | AbiUnitDefinition::ClosureBody { .. }
+                | AbiUnitDefinition::StaticCallableSpecialization { .. } => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(
@@ -9300,7 +11279,8 @@ mod tests {
             .filter_map(|unit| match unit.definition() {
                 AbiUnitDefinition::ClosureBody { .. } => Some(unit.header().captures),
                 AbiUnitDefinition::TransparentDeclarationClosure { .. }
-                | AbiUnitDefinition::SchedulingEntry { .. } => None,
+                | AbiUnitDefinition::SchedulingEntry { .. }
+                | AbiUnitDefinition::StaticCallableSpecialization { .. } => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(capture_counts, vec![2]);
@@ -9321,7 +11301,8 @@ mod tests {
             .filter_map(|unit| match unit.definition() {
                 AbiUnitDefinition::ClosureBody { .. } => Some(unit.header().captures),
                 AbiUnitDefinition::TransparentDeclarationClosure { .. }
-                | AbiUnitDefinition::SchedulingEntry { .. } => None,
+                | AbiUnitDefinition::SchedulingEntry { .. }
+                | AbiUnitDefinition::StaticCallableSpecialization { .. } => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(

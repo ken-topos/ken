@@ -15,6 +15,8 @@ mod static_transition;
 
 pub(super) use static_transition::plan_static_transition_graph_with_symbols;
 #[cfg(test)]
+pub(super) use static_transition::with_last_io_error_role_omitted;
+#[cfg(test)]
 pub(super) use static_transition::{
     governed_nested_resource_bracket, plan_static_transition_graph, ScaleBPlanCensus,
 };
@@ -24,8 +26,6 @@ pub(super) use static_transition::{
     StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
     SynthesizedFixedConstructorRole,
 };
-#[cfg(test)]
-pub(super) use static_transition::with_last_io_error_role_omitted;
 // `RT-FNSPLIT-B2A-S` `AC-4` — the route counters behind
 // `every_origin_to_expression_resolution_goes_through_the_single_route`.
 // ⛔ `#[cfg(test)]`: these are probe infrastructure and must not be reachable
@@ -42,8 +42,10 @@ pub(super) use static_transition::{
 // construct the plane nor reach the pre-emission validator to bypass it.
 pub(super) use static_transition::{
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
-    AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition, EmittableUnit,
-    EmittableCallKind, PredeclaredFunctionId,
+    AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition, EmittableCallKind,
+    EmittableStaticCallableArgumentKind, EmittableStaticCallableBinding,
+    EmittableStaticCallableCall, EmittableStaticCallableCapture, EmittableStaticCallableUnit,
+    EmittableUnit, PredeclaredFunctionId, StaticCallableSpecializationId,
 };
 
 pub(super) fn native_join_plan_for_program(
