@@ -472,6 +472,37 @@ family — that is a measurement nobody has taken.
 
   ### ⛔⛔ `AC-1b` CANNOT BE DISCHARGED HERE — THE NODE IS HELD
 
+  > #### ⭐⭐ SUPERSEDED 2026-07-29 BY ATOMIC ASSEMBLY — Architect `evt_5zr53v2dp86md`
+  >
+  > **The hold below was correct and its resolution is now ruled.** ⛔ It is no
+  > longer *"until its consumers are complete"* — that reading was a **cycle**:
+  > this node waited on [[RT-PRODUCER-MATCH-PORT]], which waited on
+  > [[RT-SEED-CALL-PORT]], which waited on this node. ⚠ And not a merely
+  > procedural one — `rt_parity_native` is its own CI job, so the publisher gate
+  > is **mechanical**.
+  >
+  > ⇒ **Ruled resolution: assemble ATOMICALLY with [[RT-RECURSOR-TRANSPORT]] on
+  > this `D7` lineage** — one branch on `820d3e53`, **one candidate, one PR**, and
+  > **both tracker nodes flip `merged` together.** Neither can go green alone:
+  > `D7`'s parity gate needs the reached successor, and the successor has **no
+  > reaching production witness** on the pre-`D7` tree.
+  >
+  > ⛔ **Atomic assembly does NOT relabel the recursor mechanism as `D7`.** It is
+  > owned, reviewed and accepted as [[RT-RECURSOR-TRANSPORT]]. ⛔ Do not fold its
+  > ACs into this frame's, and ⛔ do not describe recursor code as a `D7`
+  > deliverable in the candidate description.
+  >
+  > ⛔ **`AC-1` IS NOT DISCHARGEABLE BY THIS NODE ALONE.** The row it names,
+  > `fs_write_at_malformed_offset_narrows_to_invalid_offset`, is **measured** in
+  > the per-row `D0` below as failing on the base with the `ComputationalMatch`
+  > refusal — i.e. it is in the successor's population. ⇒ `AC-1` is discharged
+  > **on the atomic candidate**, never on a `D7`-only tree. ⚠ Read this before
+  > treating a red `AC-1` row as a `D7` defect.
+  >
+  > ⛔ **No `D7`-only adjustment to `820d3e53` is authorized.** Preservation
+  > point: `820d3e53014899da50e7d8fab0584b8c267c5874`, tree
+  > `5faee6ef816ce35369a2eadee5f4de305834ad85`, parent `79029d4c`.
+
   ⛔ **Do not route `483ef7ab` to QA.**
 
   **Measured 2026-07-29 (`evt_1b1v2qjy82epm`):** targeted `rt_parity_native` on
@@ -483,6 +514,37 @@ family — that is a measurement nobody has taken.
   - one — `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds` — hits a
     **distinct carried closure-capture** refusal (hard stop **#23**, owner
     classification open).
+
+  #### ⭐⭐ THE EXACT PER-ROW `D0` — measured, and it replaces the aggregate
+
+  **`evt_3tc0zm7smx9h2`, on detached `483ef7ab`** (no active ref moved, scratch
+  worktree removed, log `/tmp/rt-d0-483ef7ab.log`). Still exactly **1/7**, now
+  **with the named population**:
+
+  | row | base result |
+  |---|---|
+  | `buffer_freeze_malformed_span_is_unconstructible_at_the_landed_surface` | **PASS** |
+  | `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds` | FAIL — `BoundaryCarrier: a closure capture is a specialized-only surface…` |
+  | `fs_read_at_malformed_offset_narrows_to_invalid_offset` | FAIL — `ComputationalMatch: tree-producing match scrutinee is not Bool or a constructor` |
+  | `fs_read_at_malformed_offset_without_read_right_narrows_to_invalid_offset` | FAIL — same |
+  | `fs_read_at_malformed_window_narrows_to_invalid_bounds` | FAIL — same |
+  | `fs_write_at_malformed_offset_narrows_to_invalid_offset` | FAIL — same |
+  | `fs_write_at_malformed_offset_without_write_right_narrows_to_invalid_offset` | FAIL — same |
+
+  ⭐⭐ **Why the aggregate was not enough, and this is the general lesson.**
+  `AC-1b` is a **per-row** property — *every row green in `D0` is still green*. The
+  prior record was the scalar `1/7`, and a `1/7`-then vs `1/7`-now agreement is
+  **count** agreement: ⛔ **one of six contributors can defect underneath a total
+  that holds.** ⚠ The scalar also could not settle which rows belonged to which
+  owner — deriving that mapping by elimination against `AC-1` produced a
+  **contradiction**, and only the row map resolved it. ⇒ ⛔ **Never record a
+  baseline as a count.**
+
+  ⚠ **Attribution correction.** The five `fs_*` rows' **base** refusal is the
+  `ComputationalMatch` producer-shape text above, but the edge they **reach after
+  the `D7` delta** is [[RT-RECURSOR-TRANSPORT]]'s recursor boundary, not
+  [[RT-PRODUCER-MATCH-PORT]]'s syntactic residual (Architect
+  `evt_5zr53v2dp86md`). ⛔ Do not read the base text as the owner.
 
   ⇒ ⛔ **The port is NOT additive: it regresses `main`.** `AC-4` (workspace green
   in CI) is therefore unreachable, and this node **cannot become a candidate**
@@ -684,8 +746,13 @@ the fixture, or if the port lands and `AC-1` still fails **on either delta**.
 
 > ### ⛔ §5a — ARMED AND CURRENT AS OF 2026-07-29. Re-read this line at every stop.
 >
-> **Count of record: 24** · entries **15** · **next research pull = `#27`** ·
-> **next predicate check = 18th entry**.
+> **Count of record: 25** · entries **16** · **next research pull = `#27`** ·
+> **next predicate check = 18th entry**. ⇒ ⭐ **Neither trigger is due.**
+>
+> **#25 (2026-07-29):** `D7` stopped at the ruled successor boundary
+> (`evt_5pep3tvxb5etv` → `evt_68rfv4fm41nhx`). Architect ruled
+> `evt_5zr53v2dp86md`: the edge is [[RT-RECURSOR-TRANSPORT]]'s existing
+> predicate, `D1` = outcome **(b)**, `820d3e53` remains the preservation point.
 >
 > ⚠ **This line stood at `21`/`12` for three stops.** #22, #23 and #24 all landed
 > against a stale anchor. ⭐ An armed trigger that is not re-read is not armed —
