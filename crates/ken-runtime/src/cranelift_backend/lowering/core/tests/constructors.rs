@@ -218,7 +218,9 @@ fn run_dynamic_constructor_dispatch_fixture(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
-            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            seed_material:
+                crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(
+                ),
             host_dispatch: None,
             host_dispatch_context: None,
             services_pointer: None,
@@ -234,6 +236,7 @@ fn run_dynamic_constructor_dispatch_fixture(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
+            static_callable_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
@@ -284,8 +287,7 @@ fn run_dynamic_constructor_dispatch_fixture(
                 static_origin: match_origin,
             },
         )?;
-        let lowered =
-            lowered.specialized_at(LoweringOnlyOperandEdge::TestFixtureResult.token())?;
+        let lowered = lowered.specialized_at(LoweringOnlyOperandEdge::TestFixtureResult.token())?;
         let value = match lowered {
             Lowered::Trap(trap) => {
                 assert_eq!(trap, default);
@@ -303,9 +305,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         .define_function(func_id, &mut context)
         .map_err(|error| backend_module(error.to_string()))?;
     let trap_catalog = compiler.static_transition_plan.trap_catalog();
-    let carrier_identity_catalog = compiler
-        .static_transition_plan
-        .carrier_identity_catalog()?;
+    let carrier_identity_catalog = compiler.static_transition_plan.carrier_identity_catalog()?;
     let compiled = CompiledModule::from_parts(
         module,
         func_id,
@@ -1889,7 +1889,9 @@ fn bare_carrier_test_lowering<'src>(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
-            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            seed_material:
+                crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(
+                ),
             host_dispatch: None,
             host_dispatch_context: None,
             services_pointer: None,
@@ -1905,6 +1907,7 @@ fn bare_carrier_test_lowering<'src>(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
+            static_callable_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
@@ -1918,15 +1921,9 @@ fn bare_carrier_test_lowering<'src>(
     }
 }
 
-fn bind_bare_test_trap_lane(
-    compiler: &mut Lowering<'_>,
-    builder: &mut FunctionBuilder<'_>,
-) {
-    let lane = builder.create_sized_stack_slot(StackSlotData::new(
-        StackSlotKind::ExplicitSlot,
-        8,
-        3,
-    ));
+fn bind_bare_test_trap_lane(compiler: &mut Lowering<'_>, builder: &mut FunctionBuilder<'_>) {
+    let lane =
+        builder.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 8, 3));
     compiler.function_local.trap_exit = None;
     compiler
         .function_local
@@ -2362,8 +2359,7 @@ fn ac_c7_compile_edge<'src>(
 }
 
 fn ac_c7_run(code: *const u8, arena: *const u64) -> i64 {
-    let f: extern "C" fn(*const u64, *mut i64) -> i64 =
-        unsafe { std::mem::transmute(code) };
+    let f: extern "C" fn(*const u64, *mut i64) -> i64 = unsafe { std::mem::transmute(code) };
     let mut trap_identity = 0;
     let result = f(arena, &mut trap_identity);
     if trap_identity == 0 {
@@ -2440,8 +2436,8 @@ fn c2_compile_edge_with_arg<'src>(
         // carrier producer/consumer paths do not use native-Int services.
         compiler.function_local.boundary_arena = Some(parameters[0]);
         bind_bare_test_trap_lane(&mut compiler, &mut builder);
-        let result = emit(&mut compiler, &mut builder, parameters[1])
-            .expect("the C2 carrier edge emits");
+        let result =
+            emit(&mut compiler, &mut builder, parameters[1]).expect("the C2 carrier edge emits");
         builder.ins().return_(&[result]);
         builder.seal_all_blocks();
         builder.finalize();
@@ -2455,8 +2451,7 @@ fn c2_compile_edge_with_arg<'src>(
 }
 
 fn c2_run_edge_with_arg(code: *const u8, arena: *const u64, argument: i64) -> i64 {
-    let function: extern "C" fn(*const u64, i64) -> i64 =
-        unsafe { std::mem::transmute(code) };
+    let function: extern "C" fn(*const u64, i64) -> i64 = unsafe { std::mem::transmute(code) };
     function(arena, argument)
 }
 
@@ -2574,8 +2569,8 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
             let true_word = builder.ins().iconst(types::I64, 1);
             let false_word = builder.ins().iconst(types::I64, 0);
             let discriminator = builder.ins().iconst(types::I64, 0);
-            let ok_identity = compiler
-                .synthesized_fixed_identity(SynthesizedFixedConstructorRole::ReadSome)?;
+            let ok_identity =
+                compiler.synthesized_fixed_identity(SynthesizedFixedConstructorRole::ReadSome)?;
             let ok = Lowered::DynamicConstructor(DynamicConstructorV1 {
                 discriminator,
                 alternatives: vec![DynamicConstructorAlternativeV1 {
@@ -2643,11 +2638,7 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
                 }],
             };
             Ok(compiler
-                .transfer_into_carrier(
-                    builder,
-                    ordinary_producer_origin,
-                    &ordinary_result,
-                )?
+                .transfer_into_carrier(builder, ordinary_producer_origin, &ordinary_result)?
                 .word)
         },
     );
@@ -2691,11 +2682,9 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
     let success_word = c2_run_edge_with_arg(producer, base, 1);
     let success_observed = c2_run_edge_with_arg(consumer, base, success_word);
     let true_boundary_word =
-        (1u64 << crate::boundary_value::BOUNDARY_TAG_BITS)
-            | BoundaryTag::ImmediateBool as u64;
+        (1u64 << crate::boundary_value::BOUNDARY_TAG_BITS) | BoundaryTag::ImmediateBool as u64;
     assert_eq!(
-        success_observed as u64,
-        true_boundary_word,
+        success_observed as u64, true_boundary_word,
         "runtime success must select the DynamicConstructor payload, preserve \
          its D2 identity, match it through the ordinary tag helper, and project \
          its field"
@@ -2754,8 +2743,7 @@ fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
         producer_plan,
         move |compiler, builder, success| {
             let resource = builder.ins().iconst(types::I64, resource);
-            let response_pointer =
-                builder.ins().iconst(types::I64, response_pointer);
+            let response_pointer = builder.ins().iconst(types::I64, response_pointer);
             let response_len = builder.ins().iconst(types::I64, response_len);
             let result = Lowered::HostResult {
                 success,
@@ -2779,10 +2767,8 @@ fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
         &seed_env,
         resource_plan,
         |compiler, builder, word| {
-            let payload = compiler.emit_carrier_host_payload(
-                builder,
-                CarriedBoundaryWord { word },
-            )?;
+            let payload =
+                compiler.emit_carrier_host_payload(builder, CarriedBoundaryWord { word })?;
             compiler.emit_carrier_scalar(builder, payload)
         },
     );
@@ -2792,10 +2778,8 @@ fn c2_ac6_host_result_covers_resource_token_and_response_bytes_payloads() {
         &seed_env,
         plan,
         |compiler, builder, word| {
-            let payload = compiler.emit_carrier_host_payload(
-                builder,
-                CarriedBoundaryWord { word },
-            )?;
+            let payload =
+                compiler.emit_carrier_host_payload(builder, CarriedBoundaryWord { word })?;
             let pointer = compiler.emit_carrier_scalar(builder, payload)?;
             let len = compiler.emit_carrier_field(builder, payload, 0)?;
             let len = compiler.emit_carrier_scalar(builder, len)?;
@@ -3695,7 +3679,10 @@ fn ac_c4_ownership_edge_with_case_body(
 #[test]
 fn c1_d3_ac_c4_the_recursive_positions_ownership_comes_from_the_frame() {
     let (observed, alpha, leaf, trace) = ac_c4_ownership_edge();
-    assert_ne!(alpha, leaf, "NON-VACUITY: the two children must be distinguishable");
+    assert_ne!(
+        alpha, leaf,
+        "NON-VACUITY: the two children must be distinguishable"
+    );
 
     let mints: Vec<_> = trace
         .iter()
@@ -3809,7 +3796,10 @@ fn c1_d3_ac_c4_the_residual_holds_the_declared_positions_projected_child() {
         })
         .collect();
     assert_eq!(
-        projections.iter().map(|(position, _)| *position).collect::<Vec<_>>(),
+        projections
+            .iter()
+            .map(|(position, _)| *position)
+            .collect::<Vec<_>>(),
         (0..ARGUMENT_BINDERS).collect::<Vec<_>>(),
         "the recursive case projects exactly its {ARGUMENT_BINDERS} binders, in \
          order, and the `Leaf` case projects none: {trace:#?}"
@@ -3875,10 +3865,8 @@ fn c1_d3_ac_c4_the_residual_holds_the_declared_positions_projected_child() {
 /// ⚠ Promise class: **durable invariant**.
 #[test]
 fn c1_d3_ac_c4_each_case_binder_reads_its_own_constructor_field() {
-    let (first, alpha, leaf, _trace) =
-        ac_c4_ownership_edge_with_case_body(RuntimeExpr::Var(1));
-    let (second, _alpha, _leaf, _trace) =
-        ac_c4_ownership_edge_with_case_body(RuntimeExpr::Var(2));
+    let (first, alpha, leaf, _trace) = ac_c4_ownership_edge_with_case_body(RuntimeExpr::Var(1));
+    let (second, _alpha, _leaf, _trace) = ac_c4_ownership_edge_with_case_body(RuntimeExpr::Var(2));
     assert_ne!(
         alpha, leaf,
         "NON-VACUITY: the two children must be distinguishable identities"
@@ -4078,11 +4066,8 @@ fn b2f_d9_dispatch(payloads: &[i64]) -> Vec<crate::boundary_value::BoundaryWord>
     let fixture = ac_c7_ctor("Alpha");
     let (plan, root) = planned_root_occurrence(&fixture);
     let seed_env = NativeSeedEnvironment::empty();
-    let (_module, code) = ac_c7_try_compile_edge_with_operands(
-        &seed_env,
-        plan,
-        1,
-        |compiler, builder, operands| {
+    let (_module, code) =
+        ac_c7_try_compile_edge_with_operands(&seed_env, plan, 1, |compiler, builder, operands| {
             let payload = operands[0];
             let marker = builder
                 .ins()
@@ -4096,9 +4081,8 @@ fn b2f_d9_dispatch(payloads: &[i64]) -> Vec<crate::boundary_value::BoundaryWord>
                 known: None,
             };
             Ok(compiler.transfer_into_carrier(builder, root, &value)?.word)
-        },
-    )
-    .expect("the magnitude dispatch emits");
+        })
+        .expect("the magnitude dispatch emits");
 
     let run: extern "C" fn(*const u64, i64) -> i64 = unsafe { std::mem::transmute(code) };
     payloads
@@ -4115,7 +4099,9 @@ fn b2f_d9_dispatch(payloads: &[i64]) -> Vec<crate::boundary_value::BoundaryWord>
             if word.tag() == Some(BoundaryTag::PersistentGround) {
                 let image = store.image();
                 assert_eq!(
-                    image.0.node_field(word.payload(), crate::boundary_value::NODE_CLASS),
+                    image
+                        .0
+                        .node_field(word.payload(), crate::boundary_value::NODE_CLASS),
                     Some(BoundaryClass::Int as u64),
                     "the spill arm must allocate the class the disposition \
                      declares in `spill: Some(_)`"
@@ -4336,12 +4322,16 @@ fn b2f_d9_no_spillable_tag_can_make_the_immediate_producer_answer_shape() {
 /// and that class is the axis `store_bytes_len` and `store_byte` guard on. ⛔ A
 /// `Bytes`-only fixture leaves `String`'s guard arm unreached — the defect
 /// `boundary_value_clif`'s own history records.
-fn b2f_d9_bytes_edge(literal: Lowered) -> (crate::boundary_value::BoundaryWord, Option<u64>, Vec<u8>) {
+fn b2f_d9_bytes_edge(
+    literal: Lowered,
+) -> (crate::boundary_value::BoundaryWord, Option<u64>, Vec<u8>) {
     let fixture = ac_c7_ctor("Alpha");
     let (plan, root) = planned_root_occurrence(&fixture);
     let seed_env = NativeSeedEnvironment::empty();
     let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
-        Ok(compiler.transfer_into_carrier(builder, root, &literal)?.word)
+        Ok(compiler
+            .transfer_into_carrier(builder, root, &literal)?
+            .word)
     });
     let mut store = crate::boundary_value::BoundaryValueStore::new();
     let (_arena, base) = ac_c7_bind_arena(&mut store);
@@ -4490,11 +4480,8 @@ fn b2f_d9_wide_int(
     let fixture = ac_c7_ctor("Alpha");
     let (plan, root) = planned_root_occurrence(&fixture);
     let seed_env = NativeSeedEnvironment::empty();
-    let (_module, code) = ac_c7_try_compile_edge_with_operands(
-        &seed_env,
-        plan,
-        2,
-        |compiler, builder, operands| {
+    let (_module, code) =
+        ac_c7_try_compile_edge_with_operands(&seed_env, plan, 2, |compiler, builder, operands| {
             let arena = compiler
                 .function_local
                 .boundary_arena
@@ -4545,17 +4532,15 @@ fn b2f_d9_wide_int(
                 known: None,
             };
             Ok(compiler.transfer_into_carrier(builder, root, &value)?.word)
-        },
-    )
-    .expect("the wide-Int producer emits");
+        })
+        .expect("the wide-Int producer emits");
 
     let run: extern "C" fn(*const u64, i64, i64) -> i64 = unsafe { std::mem::transmute(code) };
     let native = crate::native_int::NativeIntArenaV1::default();
     let mut store = crate::boundary_value::BoundaryValueStore::new();
     let (_arena, base) = b2f_d9_bind_wide_arena(&mut store, &native);
-    let word = crate::boundary_value::BoundaryWord(
-        run(base, limbs[0] as i64, limbs[1] as i64) as u64,
-    );
+    let word =
+        crate::boundary_value::BoundaryWord(run(base, limbs[0] as i64, limbs[1] as i64) as u64);
     let image = store.image();
     let copied = image.0.node_limbs(word.payload()).map(<[u64]>::to_vec);
     let sign = image
@@ -4714,16 +4699,12 @@ fn b2f_d9_a_no_pair_spillable_crosses_on_its_own_tag() {
     let fixture = ac_c7_ctor("Alpha");
     let (plan, root) = planned_root_occurrence(&fixture);
     let seed_env = NativeSeedEnvironment::empty();
-    let (_module, code) = ac_c7_try_compile_edge_with_operands(
-        &seed_env,
-        plan,
-        1,
-        |compiler, builder, operands| {
+    let (_module, code) =
+        ac_c7_try_compile_edge_with_operands(&seed_env, plan, 1, |compiler, builder, operands| {
             let status = Lowered::ProcessExitStatus { value: operands[0] };
             Ok(compiler.transfer_into_carrier(builder, root, &status)?.word)
-        },
-    )
-    .expect("the no-pair spillable emits");
+        })
+        .expect("the no-pair spillable emits");
     let run: extern "C" fn(*const u64, i64) -> i64 = unsafe { std::mem::transmute(code) };
     let mut store = crate::boundary_value::BoundaryValueStore::new();
     let (_arena, base) = ac_c7_bind_arena(&mut store);

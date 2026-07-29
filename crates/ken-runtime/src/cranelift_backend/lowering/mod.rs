@@ -1426,6 +1426,41 @@ enum LoweringOperand {
     Carried(CarriedBoundaryWord),
 }
 
+fn lift_static_callable_binding(
+    binding: &EmittableStaticCallableBinding,
+    callable: &LoweringOperand,
+    lifted: &mut Vec<LoweringOperand>,
+) -> Result<(), CraneliftBackendError> {
+    let LoweringOperand::Specialized(Lowered::Closure {
+        captures,
+        params,
+        body,
+    }) = callable
+    else {
+        return Err(backend(BackendFailure::PlannerInvariant(
+            "static callable binding is not a compiler-only closure".to_string(),
+        )));
+    };
+    if *body != binding.body_origin()
+        || params.len() as u32 != binding.declared_arity()
+        || captures.len() != binding.captures().len()
+    {
+        return Err(backend(BackendFailure::PlannerInvariant(
+            "static callable binding changed body, arity, or capture shape after planning"
+                .to_string(),
+        )));
+    }
+    for (capture, capture_binding) in captures.iter().zip(binding.captures()) {
+        match capture_binding {
+            EmittableStaticCallableCapture::Value => lifted.push(capture.clone()),
+            EmittableStaticCallableCapture::Callable(binding) => {
+                lift_static_callable_binding(binding, capture, lifted)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 impl LoweringOperand {
     /// ⭐ **THE RULED TYPED PHASE BOUNDARY** in front of a specialized-only
     /// helper — `§2h` ¶2, verbatim: *"Every edge from `LoweringOperand` into
@@ -2211,6 +2246,40 @@ impl<'a> Lowering<'a> {
                     "retained body has no graph-derived call target in this unit".to_string(),
                 )
             })?;
+        let flattened_inputs;
+        let inputs = if let Some(binding) = target.static_callable_body.as_ref() {
+            let arity = usize::try_from(binding.declared_arity()).map_err(|_| {
+                backend_module("static callable body arity exceeds usize".to_string())
+            })?;
+            if inputs.len() < arity {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "static callable body call omits an ordinary argument".to_string(),
+                )));
+            }
+            let captures = &inputs[arity..];
+            if captures.len() != binding.captures().len() {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "static callable body capture shape changed after planning".to_string(),
+                )));
+            }
+            flattened_inputs = {
+                let mut flattened = inputs[..arity].to_vec();
+                for (capture, capture_binding) in captures.iter().zip(binding.captures()) {
+                    match capture_binding {
+                        EmittableStaticCallableCapture::Value => {
+                            flattened.push(capture.clone());
+                        }
+                        EmittableStaticCallableCapture::Callable(binding) => {
+                            lift_static_callable_binding(binding, capture, &mut flattened)?;
+                        }
+                    }
+                }
+                flattened
+            };
+            flattened_inputs.as_slice()
+        } else {
+            inputs
+        };
         self.call_declared_unit_target(
             builder,
             target,
@@ -6435,7 +6504,7 @@ enum SourceContinuation<'a> {
         constructor: RuntimeSymbol,
         static_origin: StaticOriginId,
         remaining: Vec<OwnedSourceOccurrence>,
-        lowered: Vec<Lowered>,
+        lowered: Vec<LoweringOperand>,
         env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
@@ -6562,7 +6631,7 @@ enum SourcePrefixTemplate {
         constructor: RuntimeSymbol,
         static_origin: StaticOriginId,
         remaining: Vec<OwnedSourceOccurrence>,
-        lowered: Vec<Lowered>,
+        lowered: Vec<LoweringOperand>,
         env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },

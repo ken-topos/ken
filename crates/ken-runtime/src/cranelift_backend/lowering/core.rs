@@ -1860,36 +1860,35 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, arg, producer_env)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                let produced = if lowered_args
+                if lowered_args
                     .iter()
                     .any(|argument| matches!(argument, LoweringOperand::Carried(_)))
                 {
-                    LoweringOperand::Carried(self.transfer_constructor_operands(
+                    return self.lower_known_constructor_operands_composed(
                         builder,
-                        static_origin,
                         constructor,
+                        lowered_args,
+                        eliminators,
+                    );
+                }
+                let produced = LoweringOperand::Specialized(Lowered::Constructor {
+                    constructor: constructor.clone(),
+                    // Carry the plan's already-resolved source identity with
+                    // the template.  A later unit boundary may receive this
+                    // result after nested producer traversal, where the caller
+                    // occurrence is not the constructor occurrence and
+                    // therefore cannot lawfully re-query its atom.
+                    synthesized_identity: Some(
+                        self.static_transition_plan
+                            .constructor_symbol_identity(static_origin)?,
+                    ),
+                    args: self.specialized_source_env_at(
                         &lowered_args,
-                    )?)
-                } else {
-                    LoweringOperand::Specialized(Lowered::Constructor {
-                        constructor: constructor.clone(),
-                        // Carry the plan's already-resolved source identity with
-                        // the template.  A later unit boundary may receive this
-                        // result after nested producer traversal, where the
-                        // caller occurrence is not the constructor occurrence
-                        // and therefore cannot lawfully re-query its atom.
-                        synthesized_identity: Some(
-                            self.static_transition_plan
-                                .constructor_symbol_identity(static_origin)?,
-                        ),
-                        args: self.specialized_source_env_at(
-                            &lowered_args,
-                            static_origin,
-                            0,
-                            SourceOperandRole::ConstructArgument,
-                        )?,
-                    })
-                };
+                        static_origin,
+                        0,
+                        SourceOperandRole::ConstructArgument,
+                    )?,
+                });
                 self.lower_computational_match_value_composed(builder, produced, eliminators)
             }
             RuntimeExpr::Match {
@@ -2301,6 +2300,231 @@ impl<'a> Lowering<'a> {
                 let value = self.lower_expr(builder, occurrence, producer_env)?;
                 self.lower_computational_match_value_composed(builder, value, eliminators)
             }
+        }
+    }
+
+    fn lower_known_constructor_operands_composed(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        constructor: &str,
+        args: Vec<LoweringOperand>,
+        eliminators: &[EliminatorFrame<'_>],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let eliminator = eliminators[0];
+        let remaining = &eliminators[1..];
+        match eliminator {
+            EliminatorFrame::Computational(frame) => {
+                if frame.retained_scrutinee_index.is_some()
+                    || frame.deferred_constructor_case.is_some()
+                {
+                    return Err(unsupported(
+                        "BoundaryCarrier",
+                        "a mixed-phase known constructor reached an eliminator that retains or \
+                         rebuilds its whole scrutinee",
+                    ));
+                }
+                let (case_index, case) = frame
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, case)| case.constructor == constructor)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "ComputationalMatch",
+                            "the selected known constructor has no computational case",
+                        )
+                    })?;
+                if case.argument_binders != args.len() {
+                    return Err(unsupported(
+                        "ComputationalMatch",
+                        format!(
+                            "case {} expects {} constructor arguments but value has {}",
+                            case.constructor,
+                            case.argument_binders,
+                            args.len()
+                        ),
+                    ));
+                }
+                let mut seen = BTreeSet::new();
+                for position in case.recursive_positions.iter().copied() {
+                    if !seen.insert(position) || position >= args.len() {
+                        return Err(unsupported(
+                            "ComputationalMatch",
+                            format!(
+                                "case {} has malformed recursive position {position}",
+                                case.constructor
+                            ),
+                        ));
+                    }
+                }
+
+                let splice_caller = active_recursor_frame(remaining);
+                let mut selected_ancestry = splice_caller
+                    .map(|active| active.selected_ancestry.to_vec())
+                    .unwrap_or_default();
+                selected_ancestry.push(frame.provenance);
+                let mut pending: Vec<_> = remaining
+                    .iter()
+                    .copied()
+                    .filter(|frame| !matches!(frame, EliminatorFrame::Active(_)))
+                    .collect();
+                if let Some(active) = splice_caller {
+                    pending.extend_from_slice(active.pending);
+                }
+                let activation = self.mint_continuation_activation();
+                let cursor = self.mint_continuation_cursor();
+                let producer_origin = self.mint_recursor_producer_origin();
+                let selected_scope = OwnedSelectedScope {
+                    scope_origin: producer_origin,
+                    parent_scope: splice_caller
+                        .and_then(|active| active.selected_scope)
+                        .map(|scope| scope.scope_origin),
+                    frame: ComputationalRecursorFramePayload {
+                        cases: frame.cases.to_vec(),
+                        default: frame.default.clone(),
+                        outer_env: frame.env.to_vec(),
+                        static_origin: frame.static_origin,
+                        provenance: frame.provenance,
+                        checked_frame_id: frame.checked_frame_id,
+                        checked_invocation_id: frame.checked_invocation_id,
+                        checked_invocation_source: frame.checked_invocation_source,
+                        checked_invocation_depth: frame.checked_invocation_depth,
+                    },
+                };
+                let selected_scope = Some(selected_scope);
+                let active_state = ActiveContinuationFrame {
+                    activation,
+                    cursor,
+                    parent: splice_caller.and_then(|active| active.parent),
+                    pending: &pending,
+                    selected_ancestry: &selected_ancestry,
+                    source_lineage: splice_caller
+                        .map(|active| active.source_lineage)
+                        .unwrap_or(&[]),
+                    source_selected_cursor: splice_caller
+                        .and_then(|active| active.source_selected_cursor),
+                    selected_scope: selected_scope.as_ref(),
+                };
+                #[cfg(test)]
+                px8j_record_source_event(Px8jSourceTraceEvent::Mint {
+                    path: Px8jProducerPath::Composed,
+                    origin: producer_origin,
+                    cursor,
+                    siblings: case.recursive_positions.len(),
+                    parent_scope: splice_caller
+                        .and_then(|active| active.selected_scope)
+                        .map(|scope| scope.scope_origin),
+                });
+
+                let ih_slots =
+                    self.computational_ih_slots_for_case(case, frame.checked_frame_id)?;
+                let mut induction_hypotheses =
+                    Vec::with_capacity(case.recursive_positions.len());
+                for position in case.recursive_positions.iter().rev().copied() {
+                    let slot_template_id = case
+                        .recursive_positions
+                        .iter()
+                        .position(|candidate| *candidate == position)
+                        .and_then(|index| ih_slots[index]);
+                    let induction_hypothesis = self.make_computational_recursor(
+                        args[position].clone(),
+                        frame.cases.to_vec(),
+                        frame.default.clone(),
+                        frame.env.to_vec(),
+                        frame.static_origin,
+                        frame.provenance,
+                        frame.checked_frame_id,
+                        slot_template_id,
+                        producer_origin,
+                        position,
+                        RecursorLayerRole::SelectsOccurrence {
+                            origin: producer_origin,
+                        },
+                        activation,
+                        cursor,
+                        splice_caller,
+                        None,
+                        None,
+                    )?;
+                    #[cfg(test)]
+                    px8j_record_recursor_carrier(
+                        Px8jProducerPath::Composed,
+                        &induction_hypothesis,
+                    );
+                    induction_hypotheses.push(induction_hypothesis);
+                }
+                let mut case_env = induction_hypotheses;
+                case_env.extend(args);
+                case_env.extend(frame.env.iter().cloned());
+                let body =
+                    self.case_body_occurrence(frame.static_origin, case_index, &case.body)?;
+                if !case.recursive_positions.is_empty() {
+                    return self.lower_source_machine(builder, body, &case_env, &active_state);
+                }
+                if remaining.is_empty() {
+                    self.lower_expr(builder, body, &case_env)
+                } else {
+                    self.lower_computational_producer_expr(
+                        builder,
+                        body,
+                        &case_env,
+                        remaining,
+                    )
+                }
+            }
+            EliminatorFrame::Ordinary(frame) => {
+                if frame.retained_scrutinee_index.is_some()
+                    || frame.deferred_constructor_case.is_some()
+                {
+                    return Err(unsupported(
+                        "BoundaryCarrier",
+                        "a mixed-phase known constructor reached an ordinary eliminator that \
+                         retains or rebuilds its whole scrutinee",
+                    ));
+                }
+                let (case_index, case) = frame
+                    .cases
+                    .iter()
+                    .enumerate()
+                    .find(|(_, case)| case.constructor == constructor)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "Match",
+                            "the selected known constructor has no ordinary case",
+                        )
+                    })?;
+                if case.binders != args.len() {
+                    return Err(unsupported(
+                        "Match",
+                        format!(
+                            "case {} expects {} binders but constructor has {} args",
+                            case.constructor,
+                            case.binders,
+                            args.len()
+                        ),
+                    ));
+                }
+                let mut case_env = args;
+                case_env.extend(frame.env.iter().cloned());
+                let body =
+                    self.case_body_occurrence(frame.static_origin, case_index, &case.body)?;
+                if remaining.is_empty() {
+                    self.lower_expr(builder, body, &case_env)
+                } else {
+                    self.lower_computational_producer_expr(
+                        builder,
+                        body,
+                        &case_env,
+                        remaining,
+                    )
+                }
+            }
+            EliminatorFrame::PendingLet(_)
+            | EliminatorFrame::InvocationReturn
+            | EliminatorFrame::Active(_) => Err(unsupported(
+                "BoundaryCarrier",
+                "a mixed-phase known constructor reached a non-eliminating continuation",
+            )),
         }
     }
 
@@ -3691,24 +3915,40 @@ impl<'a> Lowering<'a> {
                             env,
                             next,
                         } => {
-                            // ⭐ A source `Construct` builds a constructor
-                            // **template**, so its arguments take the ruled
-                            // fail-closed boundary here.
-                            lowered.push(
-                                value.specialized_at(
-                                    LoweringOnlyOperandEdge::SourceConstructorArgument.token(),
-                                )?,
-                            );
+                            lowered.push(value);
                             control.continuation = *next;
                             if remaining.is_empty() {
-                                SourceMachineState::Value {
-                                    value: LoweringOperand::Specialized(self.finish_source_constructor(
-                                        builder,
-                                        constructor,
-                                        static_origin,
-                                        lowered,
-                                    )?),
-                                    control,
+                                if lowered.iter().any(|argument| {
+                                    matches!(argument, LoweringOperand::Carried(_))
+                                }) {
+                                    SourceMachineState::Value {
+                                        value: LoweringOperand::Carried(
+                                            self.transfer_constructor_operands(
+                                                builder,
+                                                static_origin,
+                                                &constructor,
+                                                &lowered,
+                                            )?,
+                                        ),
+                                        control,
+                                    }
+                                } else {
+                                    SourceMachineState::Value {
+                                        value: LoweringOperand::Specialized(
+                                            self.finish_source_constructor(
+                                                builder,
+                                                constructor,
+                                                static_origin,
+                                                self.specialized_source_env_at(
+                                                    &lowered,
+                                                    static_origin,
+                                                    0,
+                                                    SourceOperandRole::ConstructArgument,
+                                                )?,
+                                            )?,
+                                        ),
+                                        control,
+                                    }
                                 }
                             } else {
                                 let first = remaining.remove(0);
@@ -4350,7 +4590,6 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn lower_source_bounded_nat_match<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -6101,7 +6340,7 @@ impl<'a> Lowering<'a> {
                         ))
                     })?;
                     let callable = self.lower_expr(builder, argument, env)?;
-                    Self::lift_static_callable_binding(binding, callable, &mut lifted)?;
+                    lift_static_callable_binding(binding, &callable, &mut lifted)?;
                 }
                 EmittableStaticCallableArgumentKind::Forwarded {
                     body_origin,
@@ -6132,7 +6371,7 @@ impl<'a> Lowering<'a> {
                         )));
                     }
                     let callable = self.lower_expr(builder, argument, env)?;
-                    Self::lift_static_callable_binding(binding, callable, &mut lifted)?;
+                    lift_static_callable_binding(binding, &callable, &mut lifted)?;
                 }
             }
         }
@@ -6154,41 +6393,6 @@ impl<'a> Lowering<'a> {
             #[cfg(test)]
             None,
         )
-    }
-
-    fn lift_static_callable_binding(
-        binding: &EmittableStaticCallableBinding,
-        callable: LoweringOperand,
-        lifted: &mut Vec<LoweringOperand>,
-    ) -> Result<(), CraneliftBackendError> {
-        let LoweringOperand::Specialized(Lowered::Closure {
-            captures,
-            params,
-            body,
-        }) = callable
-        else {
-            return Err(backend(BackendFailure::PlannerInvariant(
-                "static callable binding is not a compiler-only closure".to_string(),
-            )));
-        };
-        if body != binding.body_origin()
-            || params.len() as u32 != binding.declared_arity()
-            || captures.len() != binding.captures().len()
-        {
-            return Err(backend(BackendFailure::PlannerInvariant(
-                "static callable binding changed body, arity, or capture shape after planning"
-                    .to_string(),
-            )));
-        }
-        for (capture, capture_binding) in captures.into_iter().zip(binding.captures()) {
-            match capture_binding {
-                EmittableStaticCallableCapture::Value => lifted.push(capture),
-                EmittableStaticCallableCapture::Callable(binding) => {
-                    Self::lift_static_callable_binding(binding, capture, lifted)?;
-                }
-            }
-        }
-        Ok(())
     }
 
     fn lower_carried_match(

@@ -72,7 +72,9 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
-            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            seed_material:
+                crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(
+                ),
             host_dispatch: None,
             host_dispatch_context: None,
             services_pointer: None,
@@ -88,6 +90,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
+            static_callable_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
@@ -180,7 +183,9 @@ fn run_px8j_malformed_recursor_consumer(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
-            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            seed_material:
+                crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(
+                ),
             host_dispatch: None,
             host_dispatch_context: None,
             services_pointer: None,
@@ -196,6 +201,7 @@ fn run_px8j_malformed_recursor_consumer(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
+            static_callable_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
@@ -1363,20 +1369,17 @@ fn px8j_all_three_producer_paths_reach_real_consumers() {
 
     let deferred = RuntimeExpr::Match {
         scrutinee: Box::new(px8j_deferred_recursive_field_fixture()),
-        cases: [
-            "ctor:prelude::Result::Err",
-            "ctor:prelude::Result::Ok",
-        ]
-        .into_iter()
-        .map(|constructor| RuntimeMatchCase {
-            constructor: constructor.to_string(),
-            binders: 1,
-            body: RuntimeExpr::Construct {
-                constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
-                args: Vec::new(),
-            },
-        })
-        .collect(),
+        cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+            .into_iter()
+            .map(|constructor| RuntimeMatchCase {
+                constructor: constructor.to_string(),
+                binders: 1,
+                body: RuntimeExpr::Construct {
+                    constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                    args: Vec::new(),
+                },
+            })
+            .collect(),
         default: RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
             message: "direct deferred HostResult default".to_string(),
@@ -2067,7 +2070,9 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
-            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            seed_material:
+                crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(
+                ),
             host_dispatch: None,
             host_dispatch_context: None,
             services_pointer: None,
@@ -2083,6 +2088,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
+            static_callable_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
@@ -4567,8 +4573,7 @@ fn every_specialized_unwrap_requires_a_typed_operand_edge_token() {
         );
     }
     assert!(
-        support.contains("LoweringOnlyOperandEdge::")
-            && core.contains("SourceOperandRole::"),
+        support.contains("LoweringOnlyOperandEdge::") && core.contains("SourceOperandRole::"),
         "source-child and lowering-only consumer populations must stay separate"
     );
 }
@@ -4834,8 +4839,8 @@ fn the_lower_expr_call_population_is_dispositioned_by_owner_not_by_site() {
     // reason; `calls` is their difference.
     let core = include_str!("../../core.rs");
     let units = include_str!("../../units.rs");
-    let tokens = identifier_occurrences(core, "lower_expr")
-        + identifier_occurrences(units, "lower_expr");
+    let tokens =
+        identifier_occurrences(core, "lower_expr") + identifier_occurrences(units, "lower_expr");
     let definitions = core
         .lines()
         .chain(units.lines())
@@ -4959,8 +4964,7 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
         "a completed recursive-position port still selected retained authority"
     );
 
-    let retained_lexical_transfer =
-        host_result_closure_match(ported_recursive_position.clone());
+    let retained_lexical_transfer = host_result_closure_match(ported_recursive_position.clone());
     assert_eq!(
         recursive_descent_residual(&retained_lexical_transfer),
         Some(RecursiveDescentResidual::LexicalCallArgumentRecursor),
@@ -5378,10 +5382,7 @@ fn a_trap_arm_and_its_trap_free_twin_both_functionize() {
     // THE GAP: successful compilation proves the trap did not enter the merge,
     // because the carrier producer rejects Trap; the separate D8 topology
     // controls prove the all-trap/no-merge boundary.
-    for (name, expr) in [
-        ("trap-free", &without_trap),
-        ("trap-carrying", &with_trap),
-    ] {
+    for (name, expr) in [("trap-free", &without_trap), ("trap-carrying", &with_trap)] {
         let plan = plan_static_transition_graph_with_symbols(
             expr,
             &BTreeMap::new(),
@@ -5400,9 +5401,8 @@ fn a_trap_arm_and_its_trap_free_twin_both_functionize() {
             BodyEmissionAuthority::FunctionizedUnits,
             "{name} twin did not select functionized emission"
         );
-        ac11_compiles(expr).unwrap_or_else(|error| {
-            panic!("{name} twin failed functionized emission: {error}")
-        });
+        ac11_compiles(expr)
+            .unwrap_or_else(|error| panic!("{name} twin failed functionized emission: {error}"));
     }
     let all_trap_plan = plan_static_transition_graph_with_symbols(
         &all_trap,
@@ -5413,11 +5413,7 @@ fn a_trap_arm_and_its_trap_free_twin_both_functionize() {
     )
     .expect("all-trap carried match plans");
     let all_trap_token = all_trap_plan
-        .join_plan_token(
-            all_trap_plan
-                .root_static_origin()
-                .expect("all-trap root"),
-        )
+        .join_plan_token(all_trap_plan.root_static_origin().expect("all-trap root"))
         .expect("all-trap root is a join");
     assert!(!all_trap_token.has_continuing_predecessor);
     assert_eq!(
@@ -5669,12 +5665,10 @@ fn every_generated_root_and_unit_signature_is_two_pointers_to_one_word() {
     let signature = crate::cranelift_backend::lowering::units::unit_signature(&module);
     let pointer = module.target_config().pointer_type();
     assert_eq!(signature.params.len(), 2);
-    assert!(
-        signature
-            .params
-            .iter()
-            .all(|parameter| parameter.value_type == pointer)
-    );
+    assert!(signature
+        .params
+        .iter()
+        .all(|parameter| parameter.value_type == pointer));
     assert_eq!(signature.returns.len(), 1);
     assert_eq!(signature.returns[0].value_type, types::I64);
 
@@ -7437,14 +7431,20 @@ fn rtfp_the_two_frames_are_header_identical_and_body_distinct() {
         format!("{:?}", rtfp_cases(2)),
         "the two bodies must actually differ"
     );
-    assert_ne!(RTFP_OUTER_FRAME, RTFP_INNER_FRAME, "identities are distinct");
+    assert_ne!(
+        RTFP_OUTER_FRAME, RTFP_INNER_FRAME,
+        "identities are distinct"
+    );
 }
 
 #[test]
 fn rtfp_both_exact_occurrences_lower_under_equal_header_fingerprints() {
     let plan = rtfp_plan();
-    let installed = rtfp_compose(&plan, rtfp_segment(Some(RTFP_OUTER_FRAME), Some(RTFP_INNER_FRAME)))
-        .expect("two header-identical frames with distinct transported ids must both lower");
+    let installed = rtfp_compose(
+        &plan,
+        rtfp_segment(Some(RTFP_OUTER_FRAME), Some(RTFP_INNER_FRAME)),
+    )
+    .expect("two header-identical frames with distinct transported ids must both lower");
     assert_eq!(
         installed
             .semantic_frames
@@ -7459,7 +7459,10 @@ fn rtfp_both_exact_occurrences_lower_under_equal_header_fingerprints() {
 #[test]
 fn rtfp_a_cleared_transported_identity_rejects_before_cfg() {
     let plan = rtfp_plan();
-    let reason = rtfp_reason(rtfp_compose(&plan, rtfp_segment(None, Some(RTFP_INNER_FRAME))));
+    let reason = rtfp_reason(rtfp_compose(
+        &plan,
+        rtfp_segment(None, Some(RTFP_INNER_FRAME)),
+    ));
     assert!(
         reason.contains("no checked frame identity"),
         "a dropped identity must be named as such, not recovered by inference: {reason}"
@@ -7732,8 +7735,7 @@ fn declaration_closure_unit_preserves_exact_result_and_trap_protocol() {
     }
 
     let result_symbol = "decl:fixture::decl_port::result";
-    let result_declaration =
-        declaration(result_symbol, RuntimeExpr::Var(0));
+    let result_declaration = declaration(result_symbol, RuntimeExpr::Var(0));
     assert_eq!(
         compile(
             "decl_port_result",
@@ -7860,6 +7862,201 @@ fn declaration_closure_unit_preserves_exact_result_and_trap_protocol() {
     );
 }
 
+#[test]
+fn static_callable_elimination_preserves_body_identity_and_runtime_captures() {
+    fn callable_declaration(symbol: &str) -> RuntimeDeclaration {
+        RuntimeDeclaration {
+            symbol: symbol.to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["callable".to_string()],
+                    body: Box::new(RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::Var(0)),
+                        args: Vec::new(),
+                    }),
+                },
+            },
+            metadata: RuntimeSymbolMetadata {
+                lowerability: Some(RuntimeLowerabilityStatus::Supported),
+                ..RuntimeSymbolMetadata::empty()
+            },
+        }
+    }
+
+    fn static_closure(body: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+            params: Vec::new(),
+            body: Box::new(body),
+        }
+    }
+
+    fn call(symbol: &str, argument: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: symbol.to_string(),
+            }),
+            args: vec![argument],
+        }
+    }
+
+    fn compile(
+        name: &str,
+        expr: &RuntimeExpr,
+        declarations: BTreeMap<&str, &RuntimeDeclaration>,
+    ) -> Result<RuntimeObservation, CraneliftBackendError> {
+        let compiled = compile_expr_into_module(
+            new_jit_module()?,
+            name,
+            Linkage::Local,
+            expr,
+            &NativeSeedEnvironment::empty(),
+            declarations,
+            None,
+            false,
+            None,
+            None,
+            None,
+        )?;
+        Ok(compiled.run(None)?.0)
+    }
+
+    let identity_symbol = "decl:fixture::static_callable::identity";
+    let identity_declaration = callable_declaration(identity_symbol);
+    let left = "ctor:fixture::StaticCallable::Left".to_string();
+    let right = "ctor:fixture::StaticCallable::Right".to_string();
+    let pair = "ctor:fixture::StaticCallable::Pair".to_string();
+    let identity_expr = RuntimeExpr::Construct {
+        constructor: pair.clone(),
+        args: vec![
+            call(
+                identity_symbol,
+                static_closure(RuntimeExpr::Construct {
+                    constructor: left.clone(),
+                    args: Vec::new(),
+                }),
+            ),
+            call(
+                identity_symbol,
+                static_closure(RuntimeExpr::Construct {
+                    constructor: right.clone(),
+                    args: Vec::new(),
+                }),
+            ),
+        ],
+    };
+    assert_eq!(
+        compile(
+            "static_callable_identity",
+            &identity_expr,
+            BTreeMap::from([(identity_symbol, &identity_declaration,)]),
+        )
+        .expect("two distinct static callable bodies emit and run"),
+        RuntimeObservation::Returned(RuntimeGroundValue::Constructor {
+            constructor: pair,
+            args: vec![
+                RuntimeGroundValue::Constructor {
+                    constructor: left,
+                    args: Vec::new(),
+                },
+                RuntimeGroundValue::Constructor {
+                    constructor: right,
+                    args: Vec::new(),
+                },
+            ],
+        }),
+        "two callable identities aliased at runtime"
+    );
+
+    let target_symbol = "decl:fixture::static_callable::capture_target";
+    let outer_symbol = "decl:fixture::static_callable::capture_outer";
+    let target = callable_declaration(target_symbol);
+    let outer = RuntimeDeclaration {
+        symbol: outer_symbol.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["value".to_string()],
+                body: Box::new(call(
+                    target_symbol,
+                    RuntimeExpr::LexicalClosure {
+                        captures: vec![RuntimeExpr::Var(0)],
+                        params: Vec::new(),
+                        body: Box::new(RuntimeExpr::Var(0)),
+                    },
+                )),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    let capture_pair = "ctor:fixture::StaticCallable::CapturePair".to_string();
+    let capture_expr = RuntimeExpr::Construct {
+        constructor: capture_pair.clone(),
+        args: vec![
+            RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::DeclarationRef {
+                    symbol: outer_symbol.to_string(),
+                }),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Bool(false))],
+            },
+            RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::DeclarationRef {
+                    symbol: outer_symbol.to_string(),
+                }),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+            },
+        ],
+    };
+    assert_eq!(
+        compile(
+            "static_callable_runtime_captures",
+            &capture_expr,
+            BTreeMap::from([(target_symbol, &target), (outer_symbol, &outer),]),
+        )
+        .expect("one static body accepts distinct runtime capture inputs"),
+        RuntimeObservation::Returned(RuntimeGroundValue::Constructor {
+            constructor: capture_pair,
+            args: vec![
+                RuntimeGroundValue::Bool(false),
+                RuntimeGroundValue::Bool(true),
+            ],
+        }),
+        "capture values entered the specialization identity or changed order"
+    );
+
+    let recursive_capture_symbol = "decl:fixture::static_callable::recursive_capture";
+    let recursive_capture_declaration = callable_declaration(recursive_capture_symbol);
+    let recursive_capture_expr = call(
+        recursive_capture_symbol,
+        RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            }],
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(0)),
+                args: Vec::new(),
+            }),
+        },
+    );
+    assert_eq!(
+        compile(
+            "static_callable_recursive_capture",
+            &recursive_capture_expr,
+            BTreeMap::from([(recursive_capture_symbol, &recursive_capture_declaration,)]),
+        )
+        .expect("a statically known callable capture is recursively lifted"),
+        RuntimeObservation::Returned(RuntimeGroundValue::Bool(true)),
+        "recursive static callable capture lost its body identity"
+    );
+}
+
 // ─── RT-FNSPLIT-B2F AC-11 — the producer walk can REJECT, and does not over-reject ─
 
 /// An imported reference — the one shape with no admitted carrier.
@@ -7902,9 +8099,7 @@ fn ac11_compiles(expr: &RuntimeExpr) -> Result<(), CraneliftBackendError> {
 /// The fixture contains real host effects, so a value-mode probe would reject
 /// it before reaching the emission mechanism this control measures.
 #[cfg(test)]
-fn recursive_port_process_compiles(
-    expr: &RuntimeExpr,
-) -> Result<(), CraneliftBackendError> {
+fn recursive_port_process_compiles(expr: &RuntimeExpr) -> Result<(), CraneliftBackendError> {
     let module = new_jit_module().expect("jit module");
     let process_symbols = crate::NativeProcessSymbols::legacy_prelude();
     compile_expr_into_module(
@@ -7926,24 +8121,20 @@ fn recursive_port_process_compiles(
 #[test]
 fn governed_nested_brackets_n3_through_n7_emit_complete_functionized_bundles() {
     for depth in 3..=7 {
-        let expr =
-            crate::cranelift_backend::planning::governed_nested_resource_bracket(depth);
+        let expr = crate::cranelift_backend::planning::governed_nested_resource_bracket(depth);
         assert_eq!(
             select_body_emission_authority(&expr, &BTreeMap::new()),
             BodyEmissionAuthority::FunctionizedUnits,
             "governed depth {depth} selected retained emission"
         );
-        recursive_port_process_compiles(&expr).unwrap_or_else(|error| {
-            panic!("governed depth {depth} did not compile: {error}")
-        });
+        recursive_port_process_compiles(&expr)
+            .unwrap_or_else(|error| panic!("governed depth {depth} did not compile: {error}"));
 
         let (declared, defined) =
             crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
-        let resolved =
-            crate::cranelift_backend::lowering::units::b2f_last_call_edge_resolution();
+        let resolved = crate::cranelift_backend::lowering::units::b2f_last_call_edge_resolution();
         let recursive_calls = recursive_position_unit_calls();
-        let (carried_unchanged, specialized_productions) =
-            d8_join_conversion_counts();
+        let (carried_unchanged, specialized_productions) = d8_join_conversion_counts();
         eprintln!(
             "RT_FNSPLIT_RECUR_PORT n={depth} authority=FunctionizedUnits \
              declared={declared} defined={defined} resolved_calls={resolved} \
@@ -7996,8 +8187,7 @@ fn rt_scale_b_peak_rss_kib() -> Result<usize, String> {
 fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
     const WORKER_ENV: &str = "KEN_RT_SCALE_B_EMISSION_WORKER";
     const DEPTH_ENV: &str = "KEN_RT_SCALE_B_EMISSION_DEPTH";
-    const FORCE_INDETERMINATE_ENV: &str =
-        "KEN_RT_SCALE_B_FORCE_INDETERMINATE";
+    const FORCE_INDETERMINATE_ENV: &str = "KEN_RT_SCALE_B_FORCE_INDETERMINATE";
     const OMIT_RESULT_ENV: &str = "KEN_RT_SCALE_B_OMIT_RESULT";
     const REQUIRED_FIELDS: [&str; 44] = [
         "compile_wall_ns=",
@@ -8047,80 +8237,78 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
     ];
 
     if std::env::var_os(WORKER_ENV).is_none() {
-        let run_worker =
-            |depth: usize, force_indeterminate: bool, omit_result: bool| {
-                let executable = std::env::current_exe().unwrap_or_else(|error| {
-                    panic!(
-                        "RT_SCALE_B could_not_determine: test executable \
+        let run_worker = |depth: usize, force_indeterminate: bool, omit_result: bool| {
+            let executable = std::env::current_exe().unwrap_or_else(|error| {
+                panic!(
+                    "RT_SCALE_B could_not_determine: test executable \
                          could not be located: {error}"
-                    )
-                });
-                let test_name = std::thread::current()
-                    .name()
-                    .expect("libtest names every test thread")
-                    .to_string();
-                let mut command = std::process::Command::new("prlimit");
-                command
-                    .args([
-                        "--cpu=30:30",
-                        "--as=4294967296:4294967296",
-                        "--stack=8388608:8388608",
-                        "--",
-                    ])
-                    .arg(executable)
-                    .args(["--exact", &test_name, "--nocapture", "--test-threads=1"])
-                    .env(WORKER_ENV, "1")
-                    .env(DEPTH_ENV, depth.to_string())
-                    .env_remove("RUST_MIN_STACK");
-                if force_indeterminate {
-                    command.env(FORCE_INDETERMINATE_ENV, "1");
-                }
-                if omit_result {
-                    command.env(OMIT_RESULT_ENV, "1");
-                }
-                command
-                    .stdout(std::process::Stdio::piped())
-                    .stderr(std::process::Stdio::piped());
-                let mut child = command.spawn().unwrap_or_else(|error| {
-                    panic!(
-                        "RT_SCALE_B could_not_determine n={depth}: \
+                )
+            });
+            let test_name = std::thread::current()
+                .name()
+                .expect("libtest names every test thread")
+                .to_string();
+            let mut command = std::process::Command::new("prlimit");
+            command
+                .args([
+                    "--cpu=30:30",
+                    "--as=4294967296:4294967296",
+                    "--stack=8388608:8388608",
+                    "--",
+                ])
+                .arg(executable)
+                .args(["--exact", &test_name, "--nocapture", "--test-threads=1"])
+                .env(WORKER_ENV, "1")
+                .env(DEPTH_ENV, depth.to_string())
+                .env_remove("RUST_MIN_STACK");
+            if force_indeterminate {
+                command.env(FORCE_INDETERMINATE_ENV, "1");
+            }
+            if omit_result {
+                command.env(OMIT_RESULT_ENV, "1");
+            }
+            command
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped());
+            let mut child = command.spawn().unwrap_or_else(|error| {
+                panic!(
+                    "RT_SCALE_B could_not_determine n={depth}: \
                          prlimit worker could not start: {error}"
-                    )
-                });
-                let deadline =
-                    std::time::Instant::now() + std::time::Duration::from_secs(45);
-                loop {
-                    match child.try_wait() {
-                        Ok(Some(_)) => {
-                            break child.wait_with_output().unwrap_or_else(|error| {
-                                panic!(
-                                    "RT_SCALE_B could_not_determine n={depth}: \
-                                     worker output could not be collected: {error}"
-                                )
-                            });
-                        }
-                        Ok(None) if std::time::Instant::now() < deadline => {
-                            std::thread::sleep(std::time::Duration::from_millis(25));
-                        }
-                        Ok(None) => {
-                            let _ = child.kill();
-                            break child.wait_with_output().unwrap_or_else(|error| {
-                                panic!(
-                                    "RT_SCALE_B could_not_determine n={depth}: \
-                                     timed-out worker could not be reaped: {error}"
-                                )
-                            });
-                        }
-                        Err(error) => {
-                            let _ = child.kill();
+                )
+            });
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(45);
+            loop {
+                match child.try_wait() {
+                    Ok(Some(_)) => {
+                        break child.wait_with_output().unwrap_or_else(|error| {
                             panic!(
                                 "RT_SCALE_B could_not_determine n={depth}: \
+                                     worker output could not be collected: {error}"
+                            )
+                        });
+                    }
+                    Ok(None) if std::time::Instant::now() < deadline => {
+                        std::thread::sleep(std::time::Duration::from_millis(25));
+                    }
+                    Ok(None) => {
+                        let _ = child.kill();
+                        break child.wait_with_output().unwrap_or_else(|error| {
+                            panic!(
+                                "RT_SCALE_B could_not_determine n={depth}: \
+                                     timed-out worker could not be reaped: {error}"
+                            )
+                        });
+                    }
+                    Err(error) => {
+                        let _ = child.kill();
+                        panic!(
+                            "RT_SCALE_B could_not_determine n={depth}: \
                                  worker status could not be observed: {error}"
-                            );
-                        }
+                        );
                     }
                 }
-            };
+            }
+        };
 
         // Promise class: durable invariant and fail-closed measurement gate.
         //
@@ -8154,8 +8342,7 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
             String::from_utf8_lossy(&omitted.stderr)
         );
         assert!(
-            omitted.status.success()
-                && !omitted_report.contains("status=measured_complete"),
+            omitted.status.success() && !omitted_report.contains("status=measured_complete"),
             "missing result data must remain distinguishable from a complete \
              row; status={:?}, report={omitted_report}",
             omitted.status
@@ -8223,9 +8410,8 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
         let metric_values = |name: &str| {
             rows.iter()
                 .map(|row| {
-                    *row.get(name).unwrap_or_else(|| {
-                        panic!("completed rows omitted metric {name}")
-                    })
+                    *row.get(name)
+                        .unwrap_or_else(|| panic!("completed rows omitted metric {name}"))
                 })
                 .collect::<Vec<_>>()
         };
@@ -8243,9 +8429,7 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
         for field in REQUIRED_FIELDS {
             let name = field.trim_end_matches('=');
             let (first, second) = differences(&metric_values(name));
-            eprintln!(
-                "RT_SCALE_B_DIFF metric={name} first={first:?} second={second:?}"
-            );
+            eprintln!("RT_SCALE_B_DIFF metric={name} first={first:?} second={second:?}");
         }
 
         // The four structural invariants are the discriminator. The measured
@@ -8274,8 +8458,7 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
             );
         }
         let persistent_nodes = metric_values("persistent_store_nodes");
-        let (persistent_first, persistent_second) =
-            differences(&persistent_nodes);
+        let (persistent_first, persistent_second) = differences(&persistent_nodes);
         assert!(
             persistent_first.iter().all(|difference| *difference >= 0)
                 && persistent_second.iter().all(|difference| *difference == 0),
@@ -8315,10 +8498,7 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
         .name(format!("rt-scale-b-emission-n{depth}-8-mib"))
         .stack_size(8 * 1024 * 1024)
         .spawn(move || {
-            let expr =
-                crate::cranelift_backend::planning::governed_nested_resource_bracket(
-                    depth,
-                );
+            let expr = crate::cranelift_backend::planning::governed_nested_resource_bracket(depth);
             assert_eq!(
                 select_body_emission_authority(&expr, &BTreeMap::new()),
                 BodyEmissionAuthority::FunctionizedUnits,
@@ -8340,14 +8520,13 @@ fn rt_scale_b_governed_n3_through_n7_collect_every_d2_metric() {
                      collection failed: {error}"
                 )
             });
-            let metrics =
-                crate::cranelift_backend::lowering::scale_b_last_emission_metrics()
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "RT_SCALE_B could_not_determine n={depth}: \
+            let metrics = crate::cranelift_backend::lowering::scale_b_last_emission_metrics()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "RT_SCALE_B could_not_determine n={depth}: \
                              completed-object metric snapshot is absent"
-                        )
-                    });
+                    )
+                });
             (compile_wall_ns, peak_rss_kib, metrics)
         })
         .unwrap_or_else(|error| {
@@ -8552,7 +8731,11 @@ fn d8_mixed_host_result_uses_one_uniform_carrier_conversion_per_predecessor() {
             (1, 1),
             "arm order changed carried pass-through or specialized production"
         );
-        assert_eq!(d8_join_merge_count(), 1, "mixed join emitted no unique merge");
+        assert_eq!(
+            d8_join_merge_count(),
+            1,
+            "mixed join emitted no unique merge"
+        );
     }
 }
 
@@ -8571,9 +8754,7 @@ fn d8_mixed_host_result_uses_one_uniform_carrier_conversion_per_predecessor() {
 /// `expect_err`.
 #[test]
 fn d8_dynamic_host_result_merge_enters_materialized_dead_cfg_population() {
-    set_d8_join_consumption_mutation(
-        JoinConsumptionMutation::DispositionDynamicHostResultMerge,
-    );
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::DispositionDynamicHostResultMerge);
     let result = recursive_port_process_compiles(&d8_mixed_host_result_join_fixture(false));
     set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
 
@@ -8633,8 +8814,7 @@ fn d8_unsupported_carrier_production_publishes_no_unit_function() {
             ref reason,
         }) if reason.contains("a closure cannot cross the boundary")
     ));
-    let (declared, defined) =
-        crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+    let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
     assert!(declared > 0, "fixture never reached the unit emission path");
     assert_eq!(
         defined, 0,
@@ -8663,10 +8843,7 @@ fn d8_join_helpers_have_the_closed_typed_caller_population() {
     }
     assert_eq!(callers.matches(".merge_branch_value(").count(), 4);
     assert_eq!(callers.matches(".merge_scalar_branch(").count(), 10);
-    assert_eq!(
-        callers.matches(".merge_planned_scalar_branch(").count(),
-        1
-    );
+    assert_eq!(callers.matches(".merge_planned_scalar_branch(").count(), 1);
     assert_eq!(
         helpers.matches("plan: &JoinPlanToken").count(),
         3,
@@ -8994,10 +9171,7 @@ fn d8_every_required_join_plan_is_consumed_exactly_once() {
     recursive_port_process_compiles(&d8_producer_no_match_with_dead_join_case())
         .expect("producer no-match/default route dispositions every source case");
     for (route, body) in [
-        (
-            "known-Bool",
-            d8_known_bool_match_with_dead_join_case(true),
-        ),
+        ("known-Bool", d8_known_bool_match_with_dead_join_case(true)),
         (
             "known-constructor",
             d8_known_constructor_match_with_dead_join_case(true),
@@ -9007,10 +9181,9 @@ fn d8_every_required_join_plan_is_consumed_exactly_once() {
             d8_known_constructor_match_with_dead_join_case(false),
         ),
     ] {
-        recursive_port_process_compiles(&d8_source_machine_with_match(body))
-            .unwrap_or_else(|error| {
-                panic!("source-machine {route} Match did not disposition dead cases: {error}")
-            });
+        recursive_port_process_compiles(&d8_source_machine_with_match(body)).unwrap_or_else(
+            |error| panic!("source-machine {route} Match did not disposition dead cases: {error}"),
+        );
     }
     recursive_port_process_compiles(&d8_recursive_computational_revisit_with_join())
         .expect("a recursive computational revisit unions its later selected case");
@@ -9035,9 +9208,8 @@ fn d8_every_required_join_plan_is_consumed_exactly_once() {
     );
 
     set_d8_join_consumption_mutation(JoinConsumptionMutation::IncludeStaticallyUnselected);
-    let dead_included =
-        recursive_port_process_compiles(&d8_known_if_with_dead_join_sibling(true))
-            .expect_err("including a dead sibling join must fail at function closure");
+    let dead_included = recursive_port_process_compiles(&d8_known_if_with_dead_join_sibling(true))
+        .expect_err("including a dead sibling join must fail at function closure");
     set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
     assert!(
         matches!(
@@ -9115,24 +9287,19 @@ fn d8_every_required_join_plan_is_consumed_exactly_once() {
         else_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Int(5.into()))),
     };
 
-    set_d8_join_consumption_mutation(
-        JoinConsumptionMutation::MaterializeFirstUnselectedMatchJoin,
-    );
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::MaterializeFirstUnselectedMatchJoin);
     let materialized_then_dead =
         recursive_port_process_compiles(&d8_known_bool_match_with_dead_join_case(true));
     set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
-    materialized_then_dead.expect(
-        "token-only materialization may become dead after final semantic selection",
-    );
+    materialized_then_dead
+        .expect("token-only materialization may become dead after final semantic selection");
 
-    set_d8_join_consumption_mutation(
-        JoinConsumptionMutation::AttachEntryToFirstMaterializedDead,
-    );
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::AttachEntryToFirstMaterializedDead);
     let reachable_dead_result =
         recursive_port_process_compiles(&d8_known_bool_match_with_dead_join_case(true));
     set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
-    let reachable_dead = reachable_dead_result
-        .expect_err("an entry-reachable materialized-but-dead join must fail");
+    let reachable_dead =
+        reachable_dead_result.expect_err("an entry-reachable materialized-but-dead join must fail");
     assert!(
         matches!(
             reachable_dead,
@@ -9628,7 +9795,9 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
         nullary_closure(RuntimeExpr::Value(RuntimeValue::Bool(true))),
         // Nested retention: the inner body is resolved while the outer one is
         // already being emitted, so a bypass that only fires at depth 1 shows up.
-        nullary_closure(nullary_closure(RuntimeExpr::Value(RuntimeValue::Bool(true)))),
+        nullary_closure(nullary_closure(RuntimeExpr::Value(RuntimeValue::Bool(
+            true,
+        )))),
         // A retained body under a parameter, so the environment is non-empty
         // where the resolution happens.
         RuntimeExpr::Call {
@@ -9734,7 +9903,8 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
     for (index, shape) in shapes.iter().enumerate() {
         let (resolutions, invocations) = route_counts_for(shape);
         assert_eq!(
-            resolutions, invocations,
+            resolutions,
+            invocations,
             "AC-4 -- shape {index}: {resolutions} origin->expression resolutions \
              were performed but the single route was invoked only {invocations} \
              times, so {} resolution(s) reached the plan's occurrence table by \
@@ -9800,10 +9970,8 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
         },
     ];
     for (index, shape) in declaration_shapes.iter().enumerate() {
-        let (declaration_resolutions, declaration_invocations) = route_counts_with_declarations(
-            shape,
-            BTreeMap::from([(wrap.as_str(), &declaration)]),
-        );
+        let (declaration_resolutions, declaration_invocations) =
+            route_counts_with_declarations(shape, BTreeMap::from([(wrap.as_str(), &declaration)]));
         assert!(
             declaration_resolutions > 0,
             "NON-VACUITY: declaration shape {index} must actually resolve a body \
@@ -9834,7 +10002,8 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
          this test is measuring nothing, whatever the equality below says."
     );
     assert_eq!(
-        resolutions, invocations,
+        resolutions,
+        invocations,
         "AC-4 -- {resolutions} origin->expression resolutions were performed \
          but the single route was invoked only {invocations} times, so \
          {} resolution(s) reached the plan's occurrence table by some other \
@@ -9938,7 +10107,10 @@ fn b2f_mints_one_defined_artifact_static_object_per_seed_environment_entry() {
 /// expectations are written out independently of the encoder.
 #[test]
 fn minted_seed_material_is_present_in_the_finalized_artifact() {
-    let env = b2f_seed_capture_program("s", RuntimeGroundValue::Int(0x0123_4567_89ab_cdefi64.into()));
+    let env = b2f_seed_capture_program(
+        "s",
+        RuntimeGroundValue::Int(0x0123_4567_89ab_cdefi64.into()),
+    );
     let module = new_jit_module().expect("jit module");
     let compiled = compile_expr_into_module(
         module,
@@ -10205,8 +10377,7 @@ fn a_retained_body_is_defined_once_even_when_called_twice() {
          test measures nothing, whatever the relation below reports."
     );
     assert_eq!(
-        twice,
-        once,
+        twice, once,
         "AC-6 -- one retained closure occurrence applied twice performed \
          {twice} origin->expression resolutions against {once} when applied \
          once. The selected functionized authority must define that retained \

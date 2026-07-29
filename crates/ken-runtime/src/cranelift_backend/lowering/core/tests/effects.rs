@@ -84,7 +84,9 @@ fn run_checked_bounded_nat_fixture(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: mutation,
         function_local: FunctionLocalRefs {
-            seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
+            seed_material:
+                crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(
+                ),
             host_dispatch: None,
             host_dispatch_context: None,
             services_pointer: None,
@@ -100,6 +102,7 @@ fn run_checked_bounded_nat_fixture(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
+            static_callable_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
@@ -314,9 +317,7 @@ fn run_checked_bounded_nat_fixture(
         .define_function(func_id, &mut context)
         .map_err(|error| backend_module(error.to_string()))?;
     let trap_catalog = compiler.static_transition_plan.trap_catalog();
-    let carrier_identity_catalog = compiler
-        .static_transition_plan
-        .carrier_identity_catalog()?;
+    let carrier_identity_catalog = compiler.static_transition_plan.carrier_identity_catalog()?;
     let compiled = CompiledModule::from_parts(
         module,
         func_id,
@@ -591,9 +592,7 @@ extern "C" fn b2f_host_context_probe(
             mismatches + usize::from(host_context as usize != expected),
         ));
     });
-    if host_context as usize != expected
-        || operation != ken_host::HostOpV1::ConsoleWrite as i64
-    {
+    if host_context as usize != expected || operation != ken_host::HostOpV1::ConsoleWrite as i64 {
         return -1;
     }
     let layout = ken_host::host_effect_wire_layout_v1(ken_host::HostOpV1::ConsoleWrite)
@@ -629,9 +628,7 @@ fn b2f_context_fixture() -> RuntimeExpr {
     }
 }
 
-fn run_b2f_context_fixture(
-    mutation: HostContextPropagationMutation,
-) -> (i64, (usize, usize)) {
+fn run_b2f_context_fixture(mutation: HostContextPropagationMutation) -> (i64, (usize, usize)) {
     struct Reset;
     impl Drop for Reset {
         fn drop(&mut self) {
@@ -644,10 +641,7 @@ fn run_b2f_context_fixture(
     set_host_context_propagation_mutation(mutation);
     let isa = native_isa().expect("native ISA");
     let mut jit = JITBuilder::with_isa(isa, default_libcall_names());
-    jit.symbol(
-        "ken_host_dispatch_v1",
-        b2f_host_context_probe as *const u8,
-    );
+    jit.symbol("ken_host_dispatch_v1", b2f_host_context_probe as *const u8);
     let symbols = crate::NativeProcessSymbols::legacy_prelude();
     let expression = b2f_context_fixture();
     let compiled = compile_expr_into_module(
@@ -689,8 +683,15 @@ fn run_b2f_context_fixture(
 #[test]
 fn root_and_descendant_effects_share_only_the_direct_host_context() {
     let (status, exact) = run_b2f_context_fixture(HostContextPropagationMutation::Exact);
-    assert_eq!(status, 0, "the descendant process answer must reach the root");
-    assert_eq!(exact, (2, 0), "both host effects must see the direct context");
+    assert_eq!(
+        status, 0,
+        "the descendant process answer must reach the root"
+    );
+    assert_eq!(
+        exact,
+        (2, 0),
+        "both host effects must see the direct context"
+    );
 
     for mutation in [
         HostContextPropagationMutation::ServicesPointer,
@@ -758,10 +759,7 @@ extern "C" fn b2f_process_pair_probe(
     _request_size: i64,
     reply: *mut std::ffi::c_void,
 ) -> i64 {
-    if operation != ken_host::HostOpV1::FsReadFile as i64
-        || request.is_null()
-        || reply.is_null()
-    {
+    if operation != ken_host::HostOpV1::FsReadFile as i64 || request.is_null() || reply.is_null() {
         return -1;
     }
     let layout = ken_host::host_effect_wire_layout_v1(ken_host::HostOpV1::FsReadFile)
@@ -792,10 +790,7 @@ fn compile_b2f_process_pair_fixture() -> Result<CompiledModule<JITModule>, Crane
     let symbols = crate::NativeProcessSymbols::legacy_prelude();
     let isa = native_isa().expect("native ISA");
     let mut jit = JITBuilder::with_isa(isa, default_libcall_names());
-    jit.symbol(
-        "ken_host_dispatch_v1",
-        b2f_process_pair_probe as *const u8,
-    );
+    jit.symbol("ken_host_dispatch_v1", b2f_process_pair_probe as *const u8);
     compile_expr_into_module(
         JITModule::new(jit),
         "b2f_process_pair_slots",
@@ -885,7 +880,10 @@ fn the_process_pair_reaches_a_retained_body_only_through_declared_slots() {
         .expect("the exact declared pair runs")
         .1
         .expect("the exact declared pair returns a status");
-    assert_eq!(exact, 0, "the descendant process answer must reach the root");
+    assert_eq!(
+        exact, 0,
+        "the descendant process answer must reach the root"
+    );
     let exact_observation = B2F_PROCESS_PAIR_OBSERVATION.with(std::cell::Cell::get);
     assert_eq!(exact_observation, (1, ingress.capability));
 
@@ -918,11 +916,7 @@ fn the_process_pair_reaches_a_retained_body_only_through_declared_slots() {
             .expect("the explicit launch-ingress recovery mutation runs")
             .1
             .expect("the explicit launch-ingress recovery mutation returns a status");
-        assert_eq!(
-            recovered,
-            0,
-            "{RECOVERY_ASSERTION}"
-        );
+        assert_eq!(recovered, 0, "{RECOVERY_ASSERTION}");
     })
     .expect_err("the reintroduced launch-ingress mutation must red");
     let recovery_message = recovery_red
@@ -976,8 +970,10 @@ fn borrowed_ingress_malformed_metadata_fails_closed() {
         len: 2,
     };
     assert_eq!(run_borrowed_fixture(&expr, &wrong_arity), -1);
-    assert!(crate::object_linker_packaging::process_starter_c_stub(&crate::boundary_resource_profile::starter_smoke_profile())
-        .contains("ken native trap: malformed borrowed process input"));
+    assert!(crate::object_linker_packaging::process_starter_c_stub(
+        &crate::boundary_resource_profile::starter_smoke_profile()
+    )
+    .contains("ken native trap: malformed borrowed process input"));
 }
 
 #[test]
@@ -1741,11 +1737,7 @@ extern "C" fn px8n_scripted_host_dispatch(
 ) -> i64 {
     // SAFETY: the direct context points to the live fixture for the duration
     // of the compiled call and is never retained by the dispatcher.
-    let fixture = unsafe {
-        &mut *(host_context
-            .cast_mut()
-            .cast::<Px8nHostReplyFixture>())
-    };
+    let fixture = unsafe { &mut *(host_context.cast_mut().cast::<Px8nHostReplyFixture>()) };
     let expected = if fixture.call_index == 0
         || (fixture.call_index == 1 && fixture.scenario != PX8I_METADATA_BIG)
     {

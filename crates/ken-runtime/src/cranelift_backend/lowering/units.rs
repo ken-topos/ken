@@ -207,6 +207,7 @@ pub(in crate::cranelift_backend) struct ResolvedUnitTarget {
     slots: Vec<AbiSlot>,
     offsets: Vec<u32>,
     static_callable: Option<EmittableStaticCallableCall>,
+    static_callable_body: Option<EmittableStaticCallableBinding>,
 }
 
 #[derive(Clone)]
@@ -216,6 +217,8 @@ pub(in crate::cranelift_backend) struct DeclaredUnitCall {
     pub(in crate::cranelift_backend) header: AbiFrameHeader,
     pub(in crate::cranelift_backend) slots: Vec<AbiSlot>,
     pub(in crate::cranelift_backend) offsets: Vec<u32>,
+    pub(in crate::cranelift_backend) static_callable_body:
+        Option<EmittableStaticCallableBinding>,
 }
 
 #[derive(Clone)]
@@ -235,18 +238,7 @@ fn rebuild_static_callable_binding(
     binding: &EmittableStaticCallableBinding,
     lifted: &mut impl Iterator<Item = LoweringOperand>,
 ) -> Result<LoweringOperand, CraneliftBackendError> {
-    let captures = binding
-        .captures()
-        .iter()
-        .map(|capture| match capture {
-            EmittableStaticCallableCapture::Value => lifted.next().ok_or_else(|| {
-                backend_module("specialization ABI omits a recursively lifted capture".to_string())
-            }),
-            EmittableStaticCallableCapture::Callable(binding) => {
-                rebuild_static_callable_binding(binding, lifted)
-            }
-        })
-        .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+    let captures = rebuild_static_callable_captures(binding, lifted)?;
     Ok(LoweringOperand::Specialized(Lowered::Closure {
         captures,
         params: vec![
@@ -257,6 +249,24 @@ fn rebuild_static_callable_binding(
         ],
         body: binding.body_origin(),
     }))
+}
+
+fn rebuild_static_callable_captures(
+    binding: &EmittableStaticCallableBinding,
+    lifted: &mut impl Iterator<Item = LoweringOperand>,
+) -> Result<Vec<LoweringOperand>, CraneliftBackendError> {
+    binding
+        .captures()
+        .iter()
+        .map(|capture| match capture {
+            EmittableStaticCallableCapture::Value => lifted.next().ok_or_else(|| {
+                backend_module("specialization ABI omits a recursively lifted capture".to_string())
+            }),
+            EmittableStaticCallableCapture::Callable(binding) => {
+                rebuild_static_callable_binding(binding, lifted)
+            }
+        })
+        .collect::<Result<Vec<_>, CraneliftBackendError>>()
 }
 
 impl CallEdgeTargets {
@@ -276,6 +286,7 @@ impl CallEdgeTargets {
                 header: target.header,
                 slots: target.slots.clone(),
                 offsets: target.offsets.clone(),
+                static_callable_body: target.static_callable_body.clone(),
             };
             let (calls, duplicate) = match target.kind {
                 EmittableCallKind::StaticBody => (
@@ -412,6 +423,20 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
                             )
                         })?,
                     )
+                } else {
+                    None
+                },
+                static_callable_body: if edge.kind() == EmittableCallKind::StaticBody {
+                    match unit.definition() {
+                        AbiUnitDefinition::StaticCallableSpecialization {
+                            specialization,
+                            ..
+                        } => plan
+                            .emittable_static_callable_unit(specialization)?
+                            .body_binding()
+                            .cloned(),
+                        _ => None,
+                    }
                 } else {
                     None
                 },
@@ -555,6 +580,7 @@ pub(super) fn define_root_adapter<M: Module>(
             header: root.header(),
             slots: root.slots().to_vec(),
             offsets,
+            static_callable_body: None,
         },
     );
 
@@ -974,53 +1000,73 @@ fn define_unit_body<M: Module>(
                     "specialization input environment disagrees with its ABI".to_string(),
                 ));
             }
-            let mut ordinary = env[..ordinary_count].iter().cloned();
-            let captures = &env[ordinary_count..];
-            let declaration_captures =
-                usize::try_from(binding.declaration_captures()).map_err(|_| {
-                    backend_module(
-                        "specialization declaration capture count exceeds usize".to_string(),
-                    )
-                })?;
-            if declaration_captures > captures.len() {
-                return Err(backend_module(
-                    "specialization ABI omits declaration captures".to_string(),
-                ));
-            }
-            let callable_capture_end = captures.len() - declaration_captures;
-            let mut callable_captures = captures[..callable_capture_end].iter().cloned();
-            let mut rebuilt = Vec::with_capacity(
-                parameter_count
-                    .checked_add(declaration_captures)
-                    .ok_or_else(|| {
-                        backend_module("specialization environment size exceeds usize".to_string())
-                    })?,
-            );
-            for parameter_ordinal in 0..parameter_count {
-                if let Some(static_binding) = binding
-                    .bindings()
-                    .iter()
-                    .find(|candidate| candidate.parameter_ordinal() as usize == parameter_ordinal)
-                {
-                    rebuilt.push(rebuild_static_callable_binding(
-                        static_binding,
-                        &mut callable_captures,
-                    )?);
-                } else {
-                    rebuilt.push(ordinary.next().ok_or_else(|| {
-                        backend_module(
-                            "specialization ABI is missing an ordinary parameter".to_string(),
-                        )
-                    })?);
+            if let Some(body_binding) = binding.body_binding() {
+                if ordinary_count != parameter_count {
+                    return Err(backend_module(
+                        "callable body specialization changed its declared arity".to_string(),
+                    ));
                 }
+                let mut callable_captures = env[ordinary_count..].iter().cloned();
+                let mut rebuilt = env[..ordinary_count].to_vec();
+                rebuilt.extend(rebuild_static_callable_captures(
+                    body_binding,
+                    &mut callable_captures,
+                )?);
+                if callable_captures.next().is_some() {
+                    return Err(backend_module(
+                        "callable body specialization left an unbound capture".to_string(),
+                    ));
+                }
+                env = rebuilt;
+            } else {
+                let mut ordinary = env[..ordinary_count].iter().cloned();
+                let captures = &env[ordinary_count..];
+                let declaration_captures = usize::try_from(binding.declaration_captures())
+                    .map_err(|_| {
+                        backend_module(
+                            "specialization declaration capture count exceeds usize".to_string(),
+                        )
+                    })?;
+                if declaration_captures > captures.len() {
+                    return Err(backend_module(
+                        "specialization ABI omits declaration captures".to_string(),
+                    ));
+                }
+                let callable_capture_end = captures.len() - declaration_captures;
+                let mut callable_captures = captures[..callable_capture_end].iter().cloned();
+                let mut rebuilt = Vec::with_capacity(
+                    parameter_count
+                        .checked_add(declaration_captures)
+                        .ok_or_else(|| {
+                            backend_module(
+                                "specialization environment size exceeds usize".to_string(),
+                            )
+                        })?,
+                );
+                for parameter_ordinal in 0..parameter_count {
+                    if let Some(static_binding) = binding.bindings().iter().find(|candidate| {
+                        candidate.parameter_ordinal() as usize == parameter_ordinal
+                    }) {
+                        rebuilt.push(rebuild_static_callable_binding(
+                            static_binding,
+                            &mut callable_captures,
+                        )?);
+                    } else {
+                        rebuilt.push(ordinary.next().ok_or_else(|| {
+                            backend_module(
+                                "specialization ABI is missing an ordinary parameter".to_string(),
+                            )
+                        })?);
+                    }
+                }
+                if ordinary.next().is_some() || callable_captures.next().is_some() {
+                    return Err(backend_module(
+                        "specialization ABI input partition is not exact".to_string(),
+                    ));
+                }
+                rebuilt.extend_from_slice(&captures[callable_capture_end..]);
+                env = rebuilt;
             }
-            if ordinary.next().is_some() || callable_captures.next().is_some() {
-                return Err(backend_module(
-                    "specialization ABI input partition is not exact".to_string(),
-                ));
-            }
-            rebuilt.extend_from_slice(&captures[callable_capture_end..]);
-            env = rebuilt;
         }
         // The in-process validation API historically stages one ground
         // `RuntimeValue` as the root environment.  It is compile-time material,
