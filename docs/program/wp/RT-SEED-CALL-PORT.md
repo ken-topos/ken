@@ -57,9 +57,27 @@ general, little or nothing remains here.
   full-residual enumeration built by [[RT-DECL-CLOSURE-PORT]]'s `D1`, report
   whether `SeedClosureCall` still fires on any measured program.
   - ⭐ **If it does not fire anywhere: post that, stop, and hand the node back to
-    the Steward to close.** ⛔ Do not build a port for a class with no
-    population, and ⛔ do not go looking for a program that would resurrect it.
+    the Steward to close** — ⚠ **but only after `D1a` below.** ⛔ Do not build a
+    port for a class with no population, and ⛔ do not go looking for a real
+    program that would resurrect it.
   - If it fires, `D1` names the exact programs and proceeds.
+- **⛔⛔ `D1a` — THE FREE-CLOSE GATE. A positive control on the instrument, on
+  THIS tree, required before any close-on-absence.** Construct or temporarily
+  reintroduce a program that *does* fire `SeedClosureCall`, and show the
+  enumeration **reports it**. Restore byte-identically. **Only then** is a "fires
+  nowhere" result admissible as a close.
+
+  ⭐ **Why this node needs it and the others do not.** A free close is this
+  node's *predicted* outcome — [[RT-DECL-CLOSURE-PORT]] is expected to subsume
+  this class. ⇒ An **empty result is exactly what everyone expects to see**, so a
+  broken or mis-aimed instrument produces the anticipated answer and nobody looks
+  twice. That is campaign **Trap 3** at its most dangerous: the absence is not
+  merely unproved, it is *welcome*.
+
+  ⚠ **The instrument's validation at [[RT-DECL-CLOSURE-PORT]]'s `AC-2` does not
+  transfer here.** That node rewrites `core.rs` and retires a class between then
+  and now; an enumerator proven live on the earlier tree is not thereby live on
+  this one. ⛔ Re-prove it, cheaply, at the point of use.
 - **`D2` — Callee-position seed units.** A `Call` whose callee is a closure seed
   reaches a separately owned callable unit, reusing
   [[RT-DECL-CLOSURE-PORT]]'s transport rather than a parallel one.
@@ -73,7 +91,10 @@ general, little or nothing remains here.
 - **`AC-1`.** Every program `D1` named as firing this class **compiles and
   passes** its existing suite. ⛔ Not "the residual is gone" — the objects build.
 - **`AC-2`.** `D1`'s enumeration is recorded in the tree with the class's full
-  population named.
+  population named. ⛔ **If the node closes on an empty population, `D1a`'s
+  positive control is recorded too.** A close-on-absence without it is not a
+  measurement that the class is retired — it is a measurement that the
+  instrument reported nothing.
 - **`AC-3` (no-regression).** Workspace green **in CI** — ⛔ never a local
   `--workspace` run (`COORDINATION §12`).
 - **`AC-4`.** The exhaustive-match fail-closed property at `core.rs:59-65` is
