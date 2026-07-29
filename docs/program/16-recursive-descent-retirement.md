@@ -123,6 +123,41 @@ the earlier ones de-risked them.** They enlarge the exposed population instead.
 found it.** It is the fail-closed machinery doing its job on a newly reachable
 population. Route it; do not work around it.
 
+#### ⭐⭐ AND THE OBVIOUS `AC-1` CANNOT SEE IT
+
+⛔ **Every node's `AC-1` quantifies over the programs that FIRE its class. This
+trap's population is the COMPLEMENT of that set.** The rows that break never
+fired your class at all — they were already green, and your port newly routes
+them onto `FunctionizedUnits`. ⇒ An `AC-1` of the form *"every program `D1`
+named as firing this class compiles and passes"* is **structurally blind to the
+hazard described above**, and reads green while the port regresses `main`.
+
+**Measured 2026-07-29 on [`RT-DECL-CLOSURE-PORT`](wp/RT-DECL-CLOSURE-PORT.md).**
+It discharged its selector gate on both governed deltas
+(`authority=FunctionizedUnits`, `residuals=none`) — the size wall was genuinely
+gone. A **delta-free** baseline then returned **1/7**: five rows green on `main`
+hit a carried-scrutinee producer-`Match` refusal, and a sixth hit a distinct
+closure-capture refusal. ⭐ **The port was not additive — it regressed `main`.**
+Every prior measurement had carried a delta, so the regression set was invisible
+to all of them.
+
+⇒ **Two obligations on every remaining port node in this campaign:**
+
+- ⭐ **`D0` — run the target suite on the base with NO delta applied**, before
+  building, and record which rows are green. That set is the regression
+  baseline. ⛔ A measurement carrying your own delta structurally cannot produce
+  it.
+- ⭐ **Factor `AC-1` in two**, because one criterion cannot carry both claims:
+  - **`AC-1a` — the ceiling moved.** The selector reports
+    `authority=FunctionizedUnits` / `residuals=none` on the governed programs.
+  - **`AC-1b` — the objects still build.** Every row green in `D0` is still
+    green. ⛔ This is the criterion that catches the regression, and ⛔ it is
+    **not** discharged by `AC-1a`.
+
+⚠ **CI does catch this** — `rt_parity_native` has run as its own job since
+2026-07-22. But it catches it *after* a QA cycle and a full CI run, on a
+candidate already cut. `D0` costs one suite run before any code is written.
+
 ### Trap 3 — ⭐⭐ a proof over a recorded population is vacuous for anything never recorded
 
 **Measured 2026-07-29, and it rejected a candidate that was otherwise sound.**

@@ -10,7 +10,7 @@ proves the state need not cross — and retires both classes.**
 stopped at.
 
 ⛔ **Read `docs/program/16-recursive-descent-retirement.md` first.** It carries
-the campaign's two binding traps and the schedule. This frame does not repeat
+the campaign's three binding traps and the schedule. This frame does not repeat
 them.
 
 ---
@@ -71,6 +71,13 @@ first would discard that.
 
 ## 4. Deliverables
 
+- **⭐ `D0` — the delta-free regression baseline.** Before applying any delta,
+  run the target suite on the base and record which rows are green. That set is
+  what `AC-1b` holds you to. ⛔ A measurement carrying your own delta cannot
+  produce it — see the campaign doc's **Trap 2**, where this cost
+  [[RT-DECL-CLOSURE-PORT]] a candidate. ⚠ This node exposes the campaign's
+  largest newly reachable population, so its baseline is the one most likely to
+  move.
 - **`D1` — The feasibility answer, and it is a question about the state, not the
   code.** For the invocation-local scope/return-hole state a recursive result
   carries, determine and report which holds:
@@ -90,13 +97,18 @@ first would discard that.
 - **`D3` — The transport**, per `D1`'s answer, covering **both** syntactic
   positions.
 - **`D4` — Remove both `MatchScrutineeRecursor` and
-  `LexicalCallArgumentRecursor`**, and only then re-run `AC-1`.
+  `LexicalCallArgumentRecursor`**, and only then re-run `AC-1a` and `AC-1b`.
 
 ## 5. Acceptance criteria
 
-- **`AC-1`.** Every program `D2` named as firing either class **compiles and
-  passes** its existing suite. ⛔ Not "the residuals are gone" — the objects
-  build.
+- **`AC-1a` — the ceiling moved.** The selector reports
+  `authority=FunctionizedUnits` / `residuals=none` on every program `D2` named
+  as firing either class.
+- **`AC-1b` — the objects still build.** Those programs **compile and pass**
+  their existing suites, **and every row green in `D0` is still green**. ⛔ Not
+  "the residuals are gone" — the objects build. ⚠ `AC-1a` does **not** discharge
+  this: it quantifies over the firing set, and the regression population is its
+  complement (campaign doc, Trap 2).
 - **`AC-2`.** `D1` lands on **(a)**, **(b)** or **(c)** explicitly and in the
   tree. Under (b), the proof obligation is discharged by a control, ⛔ not by
   prose.
@@ -125,7 +137,7 @@ first would discard that.
 
 ## 7. Hard stop
 
-Stop and report on `D1 = (c)`, or if the transport lands and `AC-1` still fails,
+Stop and report on `D1 = (c)`, or if the transport lands and `AC-1b` still fails,
 or if the two positions turn out to need different transports — ⭐ that last one
 falsifies this node's fold and is the Steward's re-cut, not the ring's to
 absorb. ⚠ Per Trap 2, this node exposes the largest newly reachable population

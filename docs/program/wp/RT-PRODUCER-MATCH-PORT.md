@@ -9,7 +9,7 @@ position deliver its result across a callable-unit boundary into the match.**
 **Risk:** medium.
 
 ⛔ **Read `docs/program/16-recursive-descent-retirement.md` first.** It carries
-the campaign's two binding traps and the schedule. This frame does not repeat
+the campaign's three binding traps and the schedule. This frame does not repeat
 them.
 
 ---
@@ -60,6 +60,11 @@ that same program and be **completely unreported**.
 
 ## 4. Deliverables
 
+- **⭐ `D0` — the delta-free regression baseline.** Before applying any delta,
+  run the target suite on the base and record which rows are green. That set is
+  what `AC-1b` holds you to. ⛔ A measurement carrying your own delta cannot
+  produce it — see the campaign doc's **Trap 2**, where this cost
+  [[RT-DECL-CLOSURE-PORT]] a candidate.
 - **`D1` — Full-residual enumeration** across the measured programs, recording
   for each: which classes fire, and which were previously masked by this one.
   ⛔ Post before building.
@@ -68,14 +73,20 @@ that same program and be **completely unreported**.
   match. Reuse the transport built by [[RT-DECL-CLOSURE-PORT]] where it applies;
   ⛔ report rather than duplicate it if it does not.
 - **`D3` — Remove `ProducerMatchCall`** from `RecursiveDescentResidual`, and only
-  then re-run `AC-1`.
+  then re-run `AC-1a` and `AC-1b`.
 - **`D4` — The masked-population delta**, handed to the Steward for
   [[RT-RECURSOR-TRANSPORT]]'s re-scope.
 
 ## 5. Acceptance criteria
 
-- **`AC-1`.** Every program `D1` named as firing this class **compiles and
-  passes** its existing suite. ⛔ Not "the residual is gone" — the objects build.
+- **`AC-1a` — the ceiling moved.** The selector reports
+  `authority=FunctionizedUnits` / `residuals=none` on every program `D1` named
+  as firing this class.
+- **`AC-1b` — the objects still build.** Those programs **compile and pass**
+  their existing suites, **and every row green in `D0` is still green**. ⛔ Not
+  "the residual is gone" — the objects build. ⚠ `AC-1a` does **not** discharge
+  this: it quantifies over the firing set, and the regression population is its
+  complement (campaign doc, Trap 2).
 - **`AC-2`.** `D1`'s enumeration and `D4`'s before/after delta are in the tree.
 - **`AC-3` (no-regression).** Workspace green **in CI** — ⛔ never a local
   `--workspace` run (`COORDINATION §12`).
