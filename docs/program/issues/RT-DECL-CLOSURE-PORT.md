@@ -11,7 +11,7 @@ github: null
 origin: Architect ruling evt_3t7t27e3rv8cx (2026-07-29), outcome 2 on the Steward's PX8-ERRID-ALLOC wall discriminator (evt_s2kv0wttb5f7). Measured by the Architect in a detached scratch worktree with diagnostic-only labels against exact ad7298fb. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> # ⭐⭐ WHY THIS NODE EXISTS — a sequencing premise was wrong for a year of work
+> # ⭐⭐ WHY THIS NODE EXISTS — an unmeasured sequencing premise held a ring
 >
 > **[[PX8-ERRID-ALLOC]] was held on [[RT-NATIVE-FNSPLIT]] from 2026-07-28 on the
 > premise that closing the per-function growth gate would clear its code-size
@@ -96,6 +96,14 @@ unproved shortcut. Neither is this node's deliverable.
 | `preserved/PX8-ERRID-ALLOC-e65c81b` = `e65c81b5` | the protected measured input, tree `102c54f8` |
 
 **Foundation owes no restart until this port lands.**
+
+## ▶ THE FRAME IS WRITTEN
+
+`docs/program/wp/RT-DECL-CLOSURE-PORT.md` — read it, not this file, for scope and
+acceptance. ⭐ Its `§3` carries the trap that decides the node: this residual is
+**one of five**, the selector short-circuits at the first hit, so retiring it does
+**not** entail the fixture reaches `FunctionizedUnits`. `AC-1` is therefore a
+compile, not a code-shape assertion.
 
 ## Sequencing
 
