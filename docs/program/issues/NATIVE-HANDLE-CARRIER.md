@@ -1,7 +1,7 @@
 ---
 id: NATIVE-HANDLE-CARRIER
 title: "Native build-pipeline completeness — a constructor-private resource-carrying handle fails checked-core body-view lowering (MissingClosureMetadata) when it crosses the higher-order withBuffer normalization boundary"
-status: ready
+status: active
 owner: runtime
 size: M
 gate: none
@@ -11,41 +11,59 @@ github: null
 origin: discovered under [[PX8-F-CAP-41]] Phase 2 impl (foundation-implementer hard-stop evt_563ss8821n7f); Architect means/representation ruling evt_2zkjr68y1sdgf (thr_570t9qzcthjv9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> # ⛔⛔ HELD 2026-07-29 — bound behind [[RT-JOIN-DISPOSITION]]; resume from the preserved WIP
+> # ✅ RELEASED 2026-07-29 — the hold is LIFTED; resume from the preserved WIP
 >
-> **Architect ruling `evt_2w62qa82fxyv`.** This node's fixture tripped a
-> fail-closed invariant landed by `RT-FNSPLIT-RECUR-PORT` (`6a451b45`) —
-> `emitted source join StaticOriginId(1000) was later dispositioned as
-> statically unselected`. ⭐ **The invariant is phase-overstrict and this
-> candidate is NOT the inconsistent party.** The repair is to landed code, not
-> part of this node's primitive identity closure, so it is a separate Runtime
-> node: **[[RT-JOIN-DISPOSITION]]**.
+> **[[RT-JOIN-DISPOSITION]] merged at `origin/main = 2f1b8897`** (PR #1239,
+> exact `cac8462414ef4c64723164f8b480c3880b663e3b`, all six blobs verified). The
+> phase-overstrict invariant that stopped this node is repaired, and ⭐ **that
+> repair was measured against *this* WIP before it landed**: ordered replay over
+> `8bc7556a`, the previously failing row `1/1`, no divergent observable, and the
+> preserved tree byte-identical afterward.
+>
+> ⇒ **The blocker is gone and the fix is known to clear this node's row.** Both
+> `depends_on` edges are now `merged`.
 >
 > | | |
 > |---|---|
 > | preserved WIP | `8bc7556af024886a6db01679f35a2bb063166876` |
 > | tree | `9bbce2f64b32c4948e389e8c3953e762bbc8a6dc` |
 >
-> ⛔ **Hold `8bc7556a` unchanged** — no edits, rebase, mutation, validation, or
-> candidate work. `active` → `ready` plus the new `depends_on` edge keep this
-> node **off** the releasable frontier until the repair merges.
+> ⚠ **The WIP is based on a pre-repair `main`, so it needs a rebase** — that is
+> `D1`, and `AC-1`'s stale-base control (`git merge-tree` showing **both** sides'
+> changes; a pre-rebase blob OID on any of the four files **fails** it) is the
+> thing that makes the rebase safe. ⛔ Resolve conflicts hunk-by-hunk; do **not**
+> resolve toward making a row pass.
 >
 > ▶ **On resume:** re-run the **full 6/6** `rt_span_prov_native` module plus the
 > already-named CAP-41 / AC-5 / private-public controls and mutations.
 > ⛔ **No honest partial is authorized** (standing Architect ruling).
 >
-> ## ⛔ §5a COUNTER — MOVED. DO NOT READ IT HERE.
+> ⛔⛔ **`AC-4` CHANGED WHILE YOU WERE HELD** (PR #1236). Its axes `(c)`
+> (erasure) and `(f)` (absent from the public name map) are the matrix's only
+> **absence** claims and carried no control. Each now owes a **positive
+> control** showing the check **reds when the thing IS there**. Read the frame.
 >
-> **The count of record moved to `docs/program/issues/RT-JOIN-DISPOSITION.md`
-> on 2026-07-29**, with the active work. ⛔ Read it there. This block claims
-> nothing; it is retained only so a reader landing here is not left holding a
-> stale number — the exact failure [[RT-NATIVE-FNSPLIT]]'s stale **15**
-> produced.
+> ## ⭐ §5a RESEARCH-CONSULT TRIGGER — THE COUNT OF RECORD IS BACK HERE
 >
-> At the moment of the move: count **21**, entries **12**, research pull **#21
-> fired and spent** (`evt_165w63xtakbpb` → advisory `evt_6nrz0cgqm1hkd`, landed
-> durably at `docs/program/rt-join-disposition-research-advisory-21.md`), next
-> pull **#24**, 12th-entry predicate check **owed by the Architect**.
+> Returned from [[RT-JOIN-DISPOSITION]] on its merge, because **the count
+> follows the active work**. ⛔ Do not read it from that node — it is closed and
+> its block now claims nothing.
+>
+> | | |
+> |---|---|
+> | **COUNT OF RECORD** | **21** |
+> | ENTRIES | 12 |
+> | NEXT PREDICATE CHECK | **15th entry** — the 12th is CONSUMED (`independent/mixed`, no recut) |
+> | NEXT RESEARCH PULL | **#24** — #21 fired and is spent |
+>
+> ⭐ **Provenance of the count above.** It left this node on 2026-07-29 when
+> this node was bound behind [[RT-JOIN-DISPOSITION]], and returned on that
+> node's merge. Research pull **#21** fired and is spent (`evt_165w63xtakbpb` →
+> advisory `evt_6nrz0cgqm1hkd`, landed durably at
+> `docs/program/rt-join-disposition-research-advisory-21.md`). The 12th-entry
+> predicate check was **answered** by the Architect — `independent/mixed`, ⛔ no
+> recut, no count freeze or reset — and its five-subfamily partition table is on
+> [[RT-JOIN-DISPOSITION]].
 >
 > **Hard stop #20 (2026-07-29):** Foundation's [[PX8-ERRID-ALLOC]] rebase still
 > failed the native size gate at `checked_process_object`. Architect ruling

@@ -1,7 +1,7 @@
 ---
 id: RT-JOIN-DISPOSITION
 title: "Join-disposition phase repair — the landed RECUR-PORT `consumed XOR statically-unselected` invariant conflates structural materialization with semantic reachability and false-rejects a join materialized before its enclosing match selects"
-status: active
+status: merged
 owner: runtime
 size: M
 gate: none
@@ -11,20 +11,22 @@ github: null
 origin: Architect ruling evt_2w62qa82fxyv (2026-07-29), on the Steward's three-way join-disposition discriminator (evt_2n3fgb49nm8rt) after §5a research consult #21 (evt_6nrz0cgqm1hkd). Measured by the Architect in a detached diagnostic-only worktree against the preserved WIP 8bc7556a. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> ## ⭐ §5a RESEARCH-CONSULT TRIGGER — THE COUNT OF RECORD LIVES HERE NOW
+> # ✅ MERGED 2026-07-29 — `origin/main = 2f1b8897`, all six blobs verified
 >
-> Carried forward from [[NATIVE-HANDLE-CARRIER]] when it was bound behind this
-> node on 2026-07-29. ⛔ **Do not read the count from any other node.** That
-> node's block now points here and claims nothing.
+> Successor `cac8462414ef4c64723164f8b480c3880b663e3b`, tree
+> `b7366cc43cbfcf9b8d204bc6ae4d4c56cf0c8d7e`, PR **#1239**, CI green.
+> Architect Decision `dec_2smgfpajw2j46` read **`resolved`** from the object;
+> QA `evt_2h5tft7bf25k9`. Predecessor `27f9dca2` was **rejected** and carries no
+> verdict.
 >
-> | | |
-> |---|---|
-> | **COUNT OF RECORD** | **21** |
-> | ENTRIES | 12 |
-> | NEXT PREDICATE CHECK | **15th entry** — ✅ the 12th-entry check is **CONSUMED** (below) |
-> | NEXT RESEARCH PULL | **#24** — #21 fired and is spent (`evt_165w63xtakbpb` → advisory `evt_6nrz0cgqm1hkd`) |
+> ## ⛔ §5a COUNTER — MOVED TO [[NATIVE-HANDLE-CARRIER]]. Do not read it here.
 >
-> **Hard stop #21 (2026-07-29)** is the stop that produced this node. Its
+> **The count of record follows the active work**, and this node is closed. ⛔ It
+> is **not** 21-as-of-forever; read it at
+> `docs/program/issues/NATIVE-HANDLE-CARRIER.md`. This block claims nothing and
+> is retained only so a reader landing here is not left holding a stale number.
+>
+> ⭐ **Hard stop #21 (2026-07-29)** is the stop that produced this node. Its
 > advisory is landed durably at
 > `docs/program/rt-join-disposition-research-advisory-21.md` — ⛔ do not cite the
 > `/workspaces/ken/local/` path, which is untracked.
