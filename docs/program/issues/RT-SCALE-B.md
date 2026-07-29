@@ -74,3 +74,37 @@ verdict that only the ring has read.
   this node.
 
 Gates the [[NATIVE-HANDLE-CARRIER]] fast-follow and [[PX8-F-CAP-41]] too.
+
+## ⭐ SYMPTOM INVENTORY
+
+The Architect appends **one line per hard-stop**; entries are never rewritten.
+The frame's *"armed at release"* sentence is a promise, not an arming — these two
+lines are the arming, and they are what either party re-reads.
+
+```text
+SYMPTOM INVENTORY (Architect appends one line per hard-stop; never rewritten)
+NEXT PREDICATE CHECK = 9th entry, then 12th, 15th, …
+NEXT RESEARCH PULL   = #18, then #21, #24, …
+```
+
+**Entries carried forward from the held chain (count of record = 8):**
+
+1. whole-configuration specialization
+2. flattened residual keys
+3. `Debug` serialization as identity
+4. helper identity coupled to env/control/layout contents
+5. (5–8) the four entries accumulated after the recut, per the Architect's
+   in-thread record — re-derive from the thread if a specific one is needed;
+   ⛔ the **count**, not the prose, is what arms the trigger.
+
+⭐ **The shared predicate already named for entries 1–4: a dynamic property
+naming static code.** ⚠ If a new entry reduces to that same predicate, the
+**emission port** is incomplete — it routes back to the port work and ⛔ does
+**not** become a verdict of super-linearity.
+
+⚠ **Why both counters start mid-sequence.** This chain ran to **33 hard-stops
+with the research trigger never fired**, because the count lived only as prose in
+a resume state that neither party re-read. The catch-up rule (steward §5a duty 2)
+re-anchored it at #11, then #15, #18. ⛔ Do not "reset to 3" because this node is
+new — it inherits the held chain's count, and a reset would disarm both triggers
+a second time.
