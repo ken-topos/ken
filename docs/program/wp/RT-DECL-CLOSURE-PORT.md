@@ -134,10 +134,65 @@ to widen.
   `TransparentDeclarationClosure` is removed from the retained residual.
 - **`D6`** — Remove the residual variant, and only then re-run `AC-1`.
 
-### ⭐⭐ `D7` — THE CLOSED BOUNDARY-OPERAND SEMANTIC-CLOSURE MATRIX
+### ⛔⛔ `D7` — ITS CLAIM TO BE A **CLOSED** MATRIX IS WITHDRAWN (2026-07-29)
 
 **Added 2026-07-29, Architect `evt_6h6vzqw7ydra8`. ⭐ RECUT 2026-07-29 at hard
-stop #24, Architect `evt_3ayvrada4c0nj`.**
+stop #24, Architect `evt_3ayvrada4c0nj`. ⛔⛔ POPULATION AUTHORITY WITHDRAWN
+2026-07-29 at hard stop #27, Architect `evt_4p9ne0vcds5hb` + addendum
+`evt_3gzcnk62v8bzz`.**
+
+> #### ⛔⛔ READ THIS BEFORE ANY ROW BELOW. THE ROWS ARE STILL THE SEMANTIC
+> #### CODOMAIN; THEY ARE NO LONGER A PROOF THAT THE POPULATION IS CLOSED.
+>
+> **This heading formerly read "THE CLOSED BOUNDARY-OPERAND SEMANTIC-CLOSURE
+> MATRIX". That word is RETIRED, not qualified.** The Architect ruled at stop #27
+> that **the derivation failed, not merely its latest classification** — and
+> withdrew the closure claim rather than adding a fifth cell.
+>
+> ⛔⛔ **DO NOT ADD A FIFTH CELL, A SEVENTH DISPOSITION, OR A NODE.** All three are
+> explicitly unauthorized. ⛔ Do not classify stop #27's origin-650 `Closure` at
+> all yet — it must first become a real member of a correctly derived population,
+> because classifying it now repeats the defect.
+>
+> **What the code proved false** (measured on exact `07ce6ef1`, three independent
+> ways):
+>
+> 1. `build_operand_edge_matrix` / `validate_operand_edge_matrix` are exact only
+>    over positional **source** children from `RuntimeExpr` + `SourceOperandRole`.
+>    That closes one syntax-derived subset, ⛔ not the lowering population.
+> 2. `LoweringOnlyOperandEdge::token(self)` mints an `OperandEdgeToken` **from an
+>    enum label**, ad hoc at consumer sites. ⇒ Exhaustive matching proves every
+>    **named variant** has a disposition; it proves **nothing** about whether every
+>    real transfer *has* a variant.
+> 3. `StaticRecursorWorkerResidual` is **one global `Option<disposition>` flag**
+>    plus on-demand synthesis by source-occurrence search — so the omission
+>    mutation removes a *flag*, not a concrete planned edge.
+>
+> ⭐⭐ **THE DECISIVE POINT — AND IT IS SHARPER THAN "A MEMBER WAS MISSING."** The
+> addendum plus Research advisory `evt_62tkq32hrjqmn` establish that #27's edge is
+> **already in the source inventory**: every `Construct` child maps to
+> `SourceOperandRole::ConstructArgument`, uniformly `SemanticEliminator`. But the
+> real crossing in `transfer_constructor_operands` **never consumes that cell** —
+> it calls the whole-value gate, whose `Closure` arm fabricates
+> `CallableCapsuleEscape.token()` with `parent = child = position = None`.
+>
+> ⇒ **ONE concrete crossing event receives TWO independent verdicts:** planned
+> `(655, 650, ConstructArgument) -> SemanticEliminator`, and lowering-time
+> `(Closure, no edge identity) -> EscapeForbidden`. ⛔ **That is two populations
+> crossing, not a missing name** — and no amount of adding outcomes or unioning
+> another enum repairs it. ⭐ If the declared classifier is `f(role)` and equal
+> roles require different outcomes, **adding an outcome does not make `f` a
+> function.**
+>
+> ⚠ **The Architect withdrew part of its OWN prior ruling, and that matters for
+> how §5a reads:** #26 being "one new member" survives **only** as a *local
+> classification of the measured `723` residual* — ⛔ never as evidence the global
+> matrix became closed.
+>
+> ✅ **What SURVIVES:** `Need(e) ⊆ Avail(e)`-or-eliminate remains the correct
+> governing predicate, and the six ruled dispositions remain the current semantic
+> **codomain**. ⛔ What is withdrawn is their claim to cover a closed **domain**,
+> until it is re-derived.
 
 ⛔ **This is one deliverable, not three repairs, and it lands ATOMICALLY with
 `483ef7ab`.** ⛔ **Do not file the observed refusals as separate nodes.**
@@ -203,6 +258,85 @@ never the population.**
 edge that can receive a lowering operand has **exactly one** disposition; every
 disposition names a **real** edge; each is consumed **exactly once**. ⛔ A
 missing edge must fail **planning/compilation before `ObjectEmission`**.
+
+> ### ⛔⛔ SUPERSEDED AS *POPULATION AUTHORITY* AT STOP #27 — the PROPERTY above
+> ### stands, the MECHANISM that was to establish it does not
+>
+> ⚠ The three sentences immediately above state the right **property** (one
+> disposition per edge, every disposition a real edge, consumed exactly once,
+> missing fails before emission). ⛔ **What is withdrawn is the claim that a
+> source-child matrix plus a lowering-only enum ESTABLISHES it.** Re-read them as
+> the obligation, ⛔ never as the design.
+>
+> **⭐ REQUIRED REPLACEMENT DERIVATION (Architect `evt_4p9ne0vcds5hb` §3).**
+> Re-derive `D7` from the **actual owner/phase transition graph**, after the finite
+> generated-unit / specialization / continuation fixed point closes. The planner
+> materializes **one exact `BoundaryUse`-shaped record per static lowering event**
+> that moves, stores, publishes, forwards, or semantically inspects a phase-bearing
+> operand. Names may vary; each record carries:
+>
+> - producer owner/phase **and** consumer owner/phase;
+> - exact source origins, **or** a planner-interned synthesized-edge identity where
+>   no source child exists;
+> - unit/ABI slot **or** structural parent→child path;
+> - the downstream semantic operation and its `Need`;
+> - the selected disposition and guaranteed `Avail`.
+>
+> ⭐⭐ **Source children and synthesized/lowering-only edges inhabit the SAME
+> population.** Static recursor worker, callable specialization, continuation
+> worker, deferred constructor field, join, environment insertion, carrier child,
+> and ABI input/result are **inserted when planning creates them** — ⛔ none may be
+> recovered by a lowering-time search or an enum label minted at its consumer.
+>
+> **Enforcement is at the choke point, not by exhaustiveness:**
+>
+> 1. make raw phase transitions **private** behind one API;
+> 2. require an **unforgeable exact planned-edge token** for every specialized
+>    read, forward, carrier transfer/store, environment insertion, join, and
+>    semantic elimination;
+> 3. **remove ad hoc `.token()` construction** from lowering;
+> 4. make `transfer_constructor_operands` consume the **exact parent edge plus one
+>    exact child edge per argument**, and descend into **every** nested child
+>    obligation **before allocation**;
+> 5. **reject any generated edge added after the plan fixed point closes.**
+>
+> Validation before function definition compares the exact **planned-edge set**
+> against the exact **emitted-consumption ledger**: no missing, extra, duplicate,
+> wrong-owner, wrong-phase, wrong-child-path, or unconsumed edge. ⭐ Rust
+> exhaustiveness stays useful for the set of semantic operations and dispositions —
+> but **privacy plus the choke-point token requirement is what proves no real
+> transition bypasses the population.**
+>
+> ### ⛔ THE EVIDENCE THIS OWES — the existing named-member mutation is INSUFFICIENT
+>
+> | control | what it must show |
+> |---|---|
+> | **#27 population** | the exact `655 → 650 / body 641 / captures 8` use is in the plan **before lowering**; omitting it fails **planning** before any function/object/carrier allocation. ⛔ It may **not** reach the late `Closure` diagnostic |
+> | **bypass** | a test-only attempt to call each raw move/read/store/transfer path **without** an exact token is unrepresentable or fails the pre-emission invariant — in particular a raw mixed-constructor transfer cannot bypass the ledger |
+> | **synthesized-edge closure** | adding **or** omitting one generated worker/specialization/continuation edge changes the planned set and produces a missing/unconsumed-edge failure |
+> | **structural descent** | an authorized **root** carrier does **not** authorize an unplanned **nested** child; omit a nested edge and **all** allocation/publication counters stay zero |
+> | **bijection mutations** | duplicate, transplant, wrong-owner, wrong-phase, wrong-position, and unused tokens **all** reject before function definition |
+> | **reached-set independence** | the complete static edge count is identical whether or not the named parity row executes a particular runtime branch |
+>
+> **⭐ PLUS the addendum's four sharpened #27 controls (`evt_3gzcnk62v8bzz`):**
+>
+> 1. **single-verdict** — the `655 → 650` crossing has exactly **one** planned
+>    authority and the carrier gate consumes **that same record**; there is no
+>    second identity-free verdict path;
+> 2. **key-sufficiency pair** — two `ConstructArgument` crossings with the same
+>    nominal role but different proved semantic/provenance facts take their **two
+>    different** required outcomes, and collapsing the key back to role-only
+>    **reds the pair**;
+> 3. **authority-conflict mutation** — restoring the current split (source
+>    `SemanticEliminator` **plus** anonymous capsule `EscapeForbidden`) fails
+>    planning **before function definition**;
+> 4. **no production token** has an absent parent/child/position or a
+>    synthesized-edge identity it did not earn.
+>
+> ⚠ **Control 2 is the load-bearing one** — it is the only entry that can fail
+> while every other control passes, because it tests whether the **key** is
+> sufficient rather than whether the **outcomes** are complete. That distinction is
+> the whole ruling.
 
 #### The required SIX-way partition — names may vary, this partition may not
 
@@ -814,6 +948,13 @@ the fixture, or if the port lands and `AC-1` still fails **on either delta**.
 > member, and no member has been ruled for it — ⛔ the count moves when the
 > **Architect admits** a cell, never when a stop **finds** one missing. Those are
 > different events and conflating them would inflate the matrix by fiat.
+>
+> ⛔⛔ **AND AS OF `evt_4p9ne0vcds5hb` THE COUNT MEASURES NOTHING ABOUT CLOSURE.**
+> The population authority is **withdrawn** (see the `D7` deliverable's withdrawal
+> block). ⇒ `26` is now a **tally of ruled dispositions in the codomain**, ⛔ not a
+> statement that the domain is covered. ⚠ Do not cite it, or its growth, as
+> evidence the matrix is closing — that reading is exactly what let four
+> individually-correct additions look like convergence.
 >
 > **#26 (2026-07-29):** [[RT-RECURSOR-TRANSPORT]] stopped on a recurred ordinary-
 > `Closure` refusal inside the recursor split (`evt_6stmz1wsg17pd` →

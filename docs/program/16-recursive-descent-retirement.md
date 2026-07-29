@@ -327,6 +327,35 @@ graph LR
 > no third charge, so a further refusal outside both populations is an attribution
 > question first, with no diagnostic authorized by default.
 
+> ### ⛔⛔ RULED — THE DERIVATION WAS WRONG. Still no node; the SCOPE grew.
+>
+> **Architect `evt_4p9ne0vcds5hb` + addendum `evt_3gzcnk62v8bzz`, Research advisory
+> `evt_62tkq32hrjqmn`.** The `#27` question came back **wrong-derivation**, not
+> incomplete: `D7`'s claim to a closed boundary-operand population is **withdrawn**.
+>
+> ⭐ **The decisive finding is sharper than a missing cell.** `#27`'s edge was
+> **already in the source inventory** as `ConstructArgument -> SemanticEliminator`
+> — but the real crossing never consumes that cell; it hits a gate that mints an
+> identity-free `CallableCapsuleEscape` token. **One event, two independent
+> verdicts, two populations.** ⛔ Adding outcomes cannot repair a key that does not
+> determine the verdict.
+>
+> ⛔⛔ **STILL NO NODE, NO EDGE, NO SEVENTH DISPOSITION, NO SCHEDULE CHANGE** — all
+> explicitly unauthorized, and the pair is still #3-atomic. ✅ `Need ⊆ Avail`-or-
+> eliminate survives as the governing predicate; the six dispositions survive as the
+> **codomain**.
+>
+> ⚠⚠ **BUT THE WORK GREW, AND THAT IS AN OPERATOR-FACING FACT, NOT A NODE
+> QUESTION.** What was a bounded ordering repair is now a planner **population
+> re-derivation**: one `BoundaryUse` record per static lowering event, raw phase
+> transitions made private behind one choke-point API, unforgeable planned-edge
+> tokens, `.token()` minting removed from lowering, and a planned-vs-emitted ledger
+> comparison before function definition — plus ten controls. ⭐ **`PX8` and the ABI
+> program sit behind this pair**, so the cost lands on that critical path. ⛔ The
+> Architect forbade splitting it out, so the answer is **not** a node; the honest
+> statement is that #3-atomic is now a substantially larger node than when it was
+> scheduled.
+
 > ### ⛔⛔ THE RELEASE POINT IS A **CONDITION**, NOT A NODE NUMBER
 >
 > ⚠ **A draft of this block twice asserted a node id as the release point** —
