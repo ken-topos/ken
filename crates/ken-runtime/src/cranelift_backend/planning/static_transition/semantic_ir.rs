@@ -1716,7 +1716,7 @@ impl SemanticPlane {
         nodes: &[StaticNode],
         edges: &[StaticEdge],
         entries: &[StaticNodeId],
-        sources: &[SemanticSourceSeed],
+        node_indexed_sources: &[SemanticSourceSeed],
     ) -> Result<(), CraneliftBackendError> {
         let partition = partition_function_units(nodes, edges, entries)?;
 
@@ -1839,7 +1839,7 @@ impl SemanticPlane {
                         "declaration call edge target is not a scheduling entry",
                     ));
                 }
-                let source = sources
+                let source = node_indexed_sources
                     .get(edge.from.0 as usize)
                     .ok_or_else(|| planner_error("declaration call source has no semantic seed"))?;
                 if source.source
@@ -1884,9 +1884,14 @@ impl SemanticPlane {
         nodes: &[StaticNode],
         edges: &[StaticEdge],
         entries: &[StaticNodeId],
-        sources: &[SemanticSourceSeed],
+        semantic_sources: &[SemanticSourceSeed],
         arena: &SemanticMaterialArena,
     ) -> Result<(), CraneliftBackendError> {
+        // `semantic_sources` is recorded in walk order. Position it exactly once
+        // before any validator indexes the population by `StaticOriginId`, then
+        // reuse that canonical view for every node-indexed check below.
+        let node_indexed_sources = positioned_sources(nodes, semantic_sources)?;
+
         let mut seen_nodes = vec![false; nodes.len()];
         let mut seen_origins = vec![false; nodes.len()];
         for descriptor in &self.descriptors {
@@ -1940,22 +1945,29 @@ impl SemanticPlane {
                 "semantic program arena contains a post-origin clone",
             ));
         }
-        self.validate_function_units(nodes, edges, entries, sources)?;
+        self.validate_function_units(nodes, edges, entries, &node_indexed_sources)?;
 
-        let source_by_node = positioned_sources(nodes, sources)?;
-        let expected_operands = source_by_node.iter().try_fold(0usize, |total, source| {
-            total
-                .checked_add(source.source_material_elements as usize)
-                .ok_or_else(|| planner_capacity_error("semantic operand count exhausted"))
-        })?;
+        let expected_operands =
+            node_indexed_sources
+                .iter()
+                .try_fold(0usize, |total, source| {
+                    total
+                        .checked_add(source.source_material_elements as usize)
+                        .ok_or_else(|| planner_capacity_error("semantic operand count exhausted"))
+                })?;
         // D4.4 — one-visit affine bound over the WHOLE material: this
         // occurrence's atoms plus its child references. The budget is unchanged
         // by the atom/child partition, so a superlinear arena still fails here.
-        let expected_child_origins = source_by_node.iter().try_fold(0usize, |total, source| {
-            total
-                .checked_add(source.children.len as usize)
-                .ok_or_else(|| planner_capacity_error("semantic child origin count exhausted"))
-        })?;
+        let expected_child_origins =
+            node_indexed_sources
+                .iter()
+                .try_fold(0usize, |total, source| {
+                    total
+                        .checked_add(source.children.len as usize)
+                        .ok_or_else(|| {
+                            planner_capacity_error("semantic child origin count exhausted")
+                        })
+                })?;
         let expected_atoms = expected_operands
             .checked_sub(expected_child_origins)
             .ok_or_else(|| {
@@ -2022,11 +2034,14 @@ impl SemanticPlane {
                 "semantic material does not partition the one-visit source-material budget",
             ));
         }
-        let expected_capture_slots = source_by_node.iter().try_fold(0usize, |total, source| {
-            total
-                .checked_add(source.capture_slots as usize)
-                .ok_or_else(|| planner_capacity_error("capture slot count exhausted"))
-        })?;
+        let expected_capture_slots =
+            node_indexed_sources
+                .iter()
+                .try_fold(0usize, |total, source| {
+                    total
+                        .checked_add(source.capture_slots as usize)
+                        .ok_or_else(|| planner_capacity_error("capture slot count exhausted"))
+                })?;
         if self.capture_slots.len() != expected_capture_slots {
             return Err(planner_error(
                 "capture layout does not flatten each source capture exactly once",
@@ -2052,7 +2067,7 @@ impl SemanticPlane {
             let program = self.programs[position];
             let record = self.records[position];
             let layout = self.capture_layouts[position];
-            let source = source_by_node[position];
+            let source = node_indexed_sources[position];
             if descriptor.planned_node != node
                 || descriptor.origin != source.origin
                 || descriptor.program != SemanticProgramId(node.0)

@@ -7180,6 +7180,80 @@ fn b2f_emits_one_defined_target_unit_per_planned_function_unit() {
     );
 }
 
+/// Hard-stop #18 row 2 — an out-of-node-order declaration call reaches the
+/// declaration-owned unit after semantic-source positioning.
+#[test]
+fn computational_match_declaration_ref_emits_and_runs_the_declaration_owned_unit() {
+    // Promise class: durable invariant.
+    //
+    // MEASURED: the real FunctionizedUnits compiler emits two complete units,
+    // resolves one typed declaration-call edge, and running the artifact returns
+    // the declaration body's unique value.
+    // CLAIMED: a transparent non-closure DeclarationRef nested in the exposing
+    // ComputationalMatch shape calls its already-owned unit.
+    // THE GAP: counts alone cannot prove which unit ran, so the returned `73`
+    // is load-bearing and differs from every value in the match scrutinee.
+    let symbol = "decl:fixture::row2::value".to_string();
+    let declaration = RuntimeDeclaration {
+        symbol: symbol.clone(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Value(RuntimeValue::Int((73).into())),
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    let expr = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Row2::Node".to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bool(false))],
+        }),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::Row2::Node".to_string(),
+            argument_binders: 1,
+            recursive_positions: Vec::new(),
+            body: RuntimeExpr::DeclarationRef {
+                symbol: symbol.clone(),
+            },
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "row-2 declaration fixture is total".to_string(),
+        },
+    };
+    let compiled = compile_expr_into_module(
+        new_jit_module().expect("JIT module"),
+        "row2_out_of_order_declaration_call",
+        Linkage::Local,
+        &expr,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::from([(symbol.as_str(), &declaration)]),
+        None,
+        false,
+        None,
+        None,
+        None,
+    )
+    .expect("the out-of-order declaration call emits");
+
+    assert_eq!(
+        crate::cranelift_backend::lowering::units::b2f_last_unit_emission(),
+        (2, 2),
+        "the root and transparent declaration must each emit one complete unit"
+    );
+    assert_eq!(
+        crate::cranelift_backend::lowering::units::b2f_last_call_edge_resolution(),
+        1,
+        "the exact DeclarationRef occurrence must resolve one typed call edge"
+    );
+    assert_eq!(
+        compiled.run(None).expect("the emitted call runs").0,
+        RuntimeObservation::Returned(RuntimeGroundValue::Int((73).into())),
+        "the caller ran some path other than the declaration-owned unit"
+    );
+}
+
 // ─── RT-FNSPLIT-B2F AC-11 — the producer walk can REJECT, and does not over-reject ─
 
 /// An imported reference — the one shape with no admitted carrier.

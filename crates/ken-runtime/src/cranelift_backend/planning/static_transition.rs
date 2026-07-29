@@ -6700,6 +6700,126 @@ mod tests {
             .expect("the declaration occurrence resolves its scrutinee position");
     }
 
+    /// Hard-stop #18 row 2 — declaration-call validation consumes the canonical
+    /// node-indexed source view, never the planner's walk order.
+    #[test]
+    fn declaration_call_validation_positions_out_of_order_sources_once() {
+        // Promise class: durable invariant plus a durable mutation proof.
+        //
+        // MEASURED: the exact DeclarationCall edge source names a
+        // `DeclarationRef` in the canonical positioned view while the raw
+        // walk-order slot at the same ordinal names a different source.
+        // CLAIMED: validation indexes source semantics by StaticOriginId.
+        // THE GAP: a fixture whose two views happen to agree cannot distinguish
+        // positioned indexing from the rejected raw indexing, so the mismatch
+        // assertions below are load-bearing.
+        let symbol = "decl:fixture::b2o".to_string();
+        let declaration =
+            b2o_transparent_declaration(RuntimeExpr::Value(RuntimeValue::Int((73).into())));
+        let declarations = BTreeMap::from([(symbol.as_str(), &declaration)]);
+        let expr = RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Row2::Node".to_string(),
+                args: vec![unit()],
+            }),
+            cases: vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Row2::Node".to_string(),
+                argument_binders: 1,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::DeclarationRef {
+                    symbol: symbol.clone(),
+                },
+            }],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "row-2 fixture is total".to_string(),
+            },
+        };
+        let plan = plan_static_transition_graph(&expr, &declarations)
+            .expect("the out-of-order declaration call validates");
+        let (edge_index, edge) = plan
+            .edges
+            .iter()
+            .copied()
+            .enumerate()
+            .find(|(_, edge)| edge.kind == EdgeKind::DeclarationCall)
+            .expect("the fixture has one declaration call edge");
+        let node_indexed_sources =
+            super::semantic_ir::positioned_sources(&plan.nodes, &plan.semantic_sources)
+                .expect("the source population positions");
+        assert_ne!(
+            plan.semantic_sources[edge.from.0 as usize].source,
+            SemanticSourceKind::Expression(RuntimeExprShape::DeclarationRef),
+            "the fixture's raw walk-order slot agrees with node order, so it \
+             cannot discriminate the rejected indexing"
+        );
+        assert_eq!(
+            node_indexed_sources[edge.from.0 as usize].source,
+            SemanticSourceKind::Expression(RuntimeExprShape::DeclarationRef),
+            "the canonical positioned source does not name the call occurrence"
+        );
+
+        let call = plan
+            .emittable_call_edges()
+            .expect("the validated call edge projects")
+            .into_iter()
+            .find(|call| call.kind() == EmittableCallKind::Declaration)
+            .expect("the declaration call remains separately typed");
+        assert_eq!(call.call_site_origin(), origin_of(edge.from));
+        assert_eq!(
+            call.callee_origin(),
+            plan.declaration_occurrence_origin(symbol.as_str())
+                .expect("the transparent declaration owns one exact origin")
+        );
+
+        // Ordinary in-order control: positioning is not a special case for
+        // ComputationalMatch and leaves an already positional call unchanged.
+        let ordinary = RuntimeExpr::DeclarationRef {
+            symbol: symbol.clone(),
+        };
+        let ordinary_plan = plan_static_transition_graph(&ordinary, &declarations)
+            .expect("an ordinary declaration call remains valid");
+        let ordinary_edge = ordinary_plan
+            .edges
+            .iter()
+            .find(|edge| edge.kind == EdgeKind::DeclarationCall)
+            .expect("the ordinary fixture has a declaration call edge");
+        assert_eq!(
+            ordinary_plan.semantic_sources[ordinary_edge.from.0 as usize].source,
+            SemanticSourceKind::Expression(RuntimeExprShape::DeclarationRef)
+        );
+
+        // Redirect only the call-site source to a non-DeclarationRef occurrence
+        // under the same owner. The source-shape invariant must still be the
+        // exact detector; positioning repairs indexing, not validation.
+        let caller_owner = plan.semantic.descriptors[edge.from.0 as usize].owner;
+        let non_declaration_source = plan
+            .nodes
+            .iter()
+            .map(|node| node.id)
+            .find(|node| {
+                *node != edge.from
+                    && plan.semantic.descriptors[node.0 as usize].owner == caller_owner
+                    && node_indexed_sources[node.0 as usize].source
+                        != SemanticSourceKind::Expression(RuntimeExprShape::DeclarationRef)
+            })
+            .expect("the caller owns a non-DeclarationRef occurrence");
+        let mut redirected_edges = plan.edges.clone();
+        redirected_edges[edge_index].from = non_declaration_source;
+        assert_eq!(
+            plan.semantic
+                .validate(
+                    &plan.nodes,
+                    &redirected_edges,
+                    &plan.entries,
+                    &plan.semantic_sources,
+                    &plan.semantic_material,
+                )
+                .unwrap_err(),
+            planner_error("declaration call edge source is not a DeclarationRef occurrence")
+        );
+    }
+
     /// **AC-12 — every semantic child position consumes `.occurrence`.**
     ///
     /// Pinned at the type rather than by auditing call sites: both seed entry
