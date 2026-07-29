@@ -9710,7 +9710,7 @@ impl<'a> Lowering<'a> {
                 cranelift_codegen::ir::condcodes::IntCC::SignedLessThanOrEqual,
                 |lhs, rhs| lhs <= rhs,
             ),
-            "uint8_to_int" | "int_to_uint8_raw" => {
+            "uint8_to_int" | "int_to_uint8_raw" | "int_to_uint64_raw" => {
                 let [value]: [Lowered; 1] = lowered_args.try_into().map_err(|args: Vec<_>| {
                     unsupported(
                         "PrimitiveCall",

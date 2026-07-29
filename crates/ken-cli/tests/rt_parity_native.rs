@@ -467,6 +467,20 @@ proc rt_cap41_offset_out_of_range_stage (cap : Cap AFull)
       ResourceRead rt_cap41_offset_out_of_range_file)
     (\outcome. rt_bracket_done outcome)
 
+fn rt_uint64_checked_bounds_stage (_cap : Cap AFull)
+  : HostIO AFull ExitCode =
+  match intToUInt64 18446744073709551615 {
+  None |-> host_exit AFull (Failure 61);
+  Some bounded |-> match intToUInt64
+      (add_int 18446744073709551615 1) {
+    Some overflow |-> host_exit AFull (Failure 62);
+    None |-> match intToUInt64 (sub_int 0 1) {
+      Some negative |-> host_exit AFull (Failure 63);
+      None |-> host_exit AFull Success
+      }
+    }
+  }
+
 proc main (_input : ProcessInput) (caps : ProgramCaps AFull)
   : HostIO AFull ExitCode visits [FS] =
   match caps {
@@ -651,6 +665,27 @@ fn cap41_invalid_offset_precedes_out_of_range_on_both_engines() {
             "cap41-offset-out-of-range",
             "rt_cap41_offset_out_of_range_stage",
         )
+    });
+}
+
+#[test]
+fn uint64_checked_wrapper_admits_max_and_rejects_both_neighbors() {
+    in_large_stack_thread("uint64-checked-bounds", || {
+        let Differential {
+            interpreted,
+            native,
+        } = differential("uint64-checked-bounds", "rt_uint64_checked_bounds_stage");
+        assert_eq!(
+            interpreted.exit_status, 0,
+            "interpreter must admit UInt64::MAX and reject both neighbors: {interpreted:?}"
+        );
+        assert_eq!(
+            native.exit_status, 0,
+            "native must admit UInt64::MAX and reject both neighbors: {native:?}"
+        );
+        assert_eq!(interpreted.terminal_error, None);
+        assert_eq!(native.terminal_error, None);
+        assert_eq!(interpreted.terminal_exit, native.terminal_exit);
     });
 }
 
