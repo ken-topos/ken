@@ -18,18 +18,29 @@ three traps that bind every node in it — including **Trap 3**, which this fram
 not repeat its content.
 
 **Status:** Steward frame, shovel-ready.
-⛔ **THIRD in Runtime's queue, and do not start it early.** The order is
-**[[RT-JOIN-DISPOSITION]] → [[NATIVE-HANDLE-CARRIER]] resume → this node.**
-Both this node and `NATIVE-HANDLE-CARRIER` own `lowering/core.rs`.
 
-⚠ **Why this node waits, stated so it can be reversed cheaply:** it moves whole
-objects off the monolithic `RecursiveDescent` root and onto `FunctionizedUnits`,
-which is exactly the route whose per-generated-function join accounting
-`RT-JOIN-DISPOSITION` is repairing. Landing this port on an unrepaired
-phase-overstrict invariant invites the same hard stop at greater scale, after
-more work is sunk. ⭐ **The cost of waiting is real and is not hidden:** `PX8`
-gates 15 of the ABI program's 19 nodes, and this ordering delays it by two nodes
-while Foundation stays idle.
+## ⭐⭐ REORDERED 2026-07-29 — THIS NODE IS NOW **NEXT**, NOT THIRD
+
+**Steward disposition `evt_5mtkdft1nxmwp`, on [[NATIVE-HANDLE-CARRIER]]'s hard
+stop.** The order was `RT-JOIN-DISPOSITION → NATIVE-HANDLE-CARRIER → this node`.
+`RT-JOIN-DISPOSITION` merged (`main = af056a78`); **`NATIVE-HANDLE-CARRIER` then
+hit this node's `AC-1` row** and is preserved at
+`85dcee259dc65f9e3c1d625c0ee0ed8342577492` (tree `b7cf9041`) pending this node.
+⇒ **`RT-JOIN-DISPOSITION` → this node → `NATIVE-HANDLE-CARRIER` resume.**
+
+⭐ **The premise that put `NATIVE-HANDLE-CARRIER` first was measured false.** It
+was *"NHC is 5/6 green and cheap to finish."* NHC's own `AC-1` — full parity, no
+partial — is **unreachable on any tree** until the ceiling below falls. It is not
+blocked on a formality; it cannot complete.
+
+⚠ **The cost that is real and is not hidden:** this node rewrites `core.rs`, so
+`85dcee25` needs a **second** rebase on resume. Its `D1` already proved that
+machinery on this exact branch (`git range-diff` 3/3 `=`, no side choice, four-file
+provenance settled), so the cost is bounded.
+
+⭐ **Reversing this is cheap:** run `NATIVE-HANDLE-CARRIER` first instead and it
+stops again at the same row. That is what makes the reorder safe rather than a
+preference.
 
 ⭐ **On the Linux ABI I critical path.** Sole blocker of [[PX8-ERRID-ALLOC]] →
 [[PX8-ERRID-SCOPE]] → [[PX8]]; `PX8` gates 15 of that program's 19 nodes.
@@ -127,9 +138,32 @@ to widen.
 
 - **`AC-1` (the only one that decides the node).** `scripts/ken-cargo test -p
   ken-cli --test rt_parity_native
-  fs_write_at_malformed_offset_narrows_to_invalid_offset` **compiles and passes**
-  on a tree carrying `ad7298fb`'s semantic delta. ⛔ Not "the residual is gone" —
-  **the object builds.**
+  fs_write_at_malformed_offset_narrows_to_invalid_offset` **compiles and passes**.
+  ⛔ Not "the residual is gone" — **the object builds.**
+
+  ⛔⛔ **AMENDED 2026-07-29 — `AC-1` NOW REQUIRES THIS ROW GREEN ON *TWO*
+  INDEPENDENT DELTAS, NOT ONE.** As originally written it read *"on a tree
+  carrying `ad7298fb`'s semantic delta"* — **Foundation's delta only.**
+  1. A tree carrying **`ad7298fb`**'s semantic delta ([[PX8-ERRID-ALLOC]],
+     preserved at `e65c81b5`).
+  2. A tree carrying **`85dcee25`**'s semantic delta ([[NATIVE-HANDLE-CARRIER]],
+     the `Resource Buffer → BufferHandle` carrier migration).
+
+  ⭐ **Why the second one was added, and why omitting it would have made the
+  reorder worthless.** Both deltas reach this same ceiling independently, and
+  `main` alone passes the row (measured: `evt_5mtkdft1nxmwp`). With one delta in
+  the AC, **this node could land fully green and `NATIVE-HANDLE-CARRIER` would
+  resume and still be red** — after the queue was reordered to fix exactly that.
+  ⇒ The single-delta AC does not measure that the ceiling is gone; it measures
+  that *one program* got under it.
+
+  ⚠ **A third program is known to sit near the ceiling**:
+  `docs/program/issues/CI-SKIPPED-NATIVE-TESTS.md` records this row as the only
+  one of seven opening **two nested resource brackets** where every sibling opens
+  one, and as the 250.5s timing outlier. ⛔ Do not add it as a third required
+  delta — two independent deltas is the control; ⭐ **but if either delta needs a
+  size concession to pass, that is a reportable finding that this node did not
+  remove the ceiling, only lowered the program under it.**
 - **`AC-2`.** `D1`'s complete residual enumeration is recorded in the tree, with
   the fixture's full set named. If the set is larger than
   `{TransparentDeclarationClosure}`, that is a reportable finding, not a silent
@@ -201,17 +235,27 @@ to widen.
 ## 7. Hard stop
 
 Report and stop if `D1` shows residuals beyond `TransparentDeclarationClosure` on
-the fixture, or if the port lands and `AC-1` still fails. ⛔ Do not attempt a
-size reduction in either case. This is hard-stop territory and **#21 fires the
-§5a research pull** — the count of record is **20**, carried on
-[[NATIVE-HANDLE-CARRIER]].
+the fixture, or if the port lands and `AC-1` still fails **on either delta**.
+⛔ Do not attempt a size reduction in either case.
+
+**§5a count of record: 21**, entries **12**, next predicate check the **15th
+entry**, next research pull **#24** — carried on [[NATIVE-HANDLE-CARRIER]].
+⛔ The `NATIVE-HANDLE-CARRIER` stop that reordered this node is **not** #22: it
+routed a red row to the node that already owned it, and no new mechanism failed.
 
 ## 8. What landing this closes
 
-[[PX8-ERRID-ALLOC]] is released the moment this merges — its candidate
-`ad7298fb` is rebased and preserved, and Foundation owes no rebuild, only a
-re-run. That in turn releases [[PX8-ERRID-SCOPE]] and clears the last of `PX8`'s
-three blockers on this path.
+**Two held nodes, not one.**
+
+- [[PX8-ERRID-ALLOC]] is released the moment this merges — its candidate
+  `ad7298fb` is rebased and preserved, and Foundation owes no rebuild, only a
+  re-run. That in turn releases [[PX8-ERRID-SCOPE]] and clears the last of `PX8`'s
+  three blockers on this path.
+- [[NATIVE-HANDLE-CARRIER]] resumes from preserved `85dcee25` — **11 of 12
+  `rt_parity_native` rows already green**, `D1` rebase complete, the identity arm
+  re-derived. It owes a second rebase over this node's `core.rs` rewrite, then
+  `AC-2`'s Big-identity mutation and the two `AC-4` positive-red controls, which
+  the hard stop pre-empted.
 
 ⭐ **The selector's own doc comment calls it "the one *temporary* B2F migration
 selector" (`core.rs:174`).** This node is that migration finishing, not a new

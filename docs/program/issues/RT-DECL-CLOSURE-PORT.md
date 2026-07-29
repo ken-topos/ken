@@ -1,15 +1,45 @@
 ---
 id: RT-DECL-CLOSURE-PORT
 title: "Transparent-declaration-closure emission port — a retained TransparentDeclarationClosure residual forces the whole object onto the monolithic RecursiveDescent root, which exceeds Cranelift's per-function ceiling"
-status: ready
+status: active
 owner: runtime
 size: L
 gate: none
 depends_on: []
-blocks: [PX8-ERRID-ALLOC, RT-SEED-CALL-PORT]
+blocks: [PX8-ERRID-ALLOC, RT-SEED-CALL-PORT, NATIVE-HANDLE-CARRIER]
 github: null
 origin: Architect ruling evt_3t7t27e3rv8cx (2026-07-29), outcome 2 on the Steward's PX8-ERRID-ALLOC wall discriminator (evt_s2kv0wttb5f7). Measured by the Architect in a detached scratch worktree with diagnostic-only labels against exact ad7298fb. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
+
+> # ▶ ACTIVE 2026-07-29 — REORDERED TO **NEXT**, AND IT NOW HOLDS **THREE** NODES
+>
+> **Steward disposition `evt_5mtkdft1nxmwp`.** [[NATIVE-HANDLE-CARRIER]] was
+> released ahead of this node, rebased cleanly, and stopped at **11/12** on
+> **this node's `AC-1` row** —
+> `fs_write_at_malformed_offset_narrows_to_invalid_offset`, `Code for function is
+> too large`, candidate-caused (the row passes `1/1` on detached
+> `main = af056a78`). It is preserved at `85dcee25` and now `depends_on` this
+> node.
+>
+> ⇒ **Three independent candidates reach this one ceiling on this one row:**
+> Foundation's `ad7298fb`/`e65c81b5`, Runtime's `85dcee25`, and the row is
+> already recorded as the only one of seven opening **two nested resource
+> brackets** (`CI-SKIPPED-NATIVE-TESTS`). ⭐ One wall, three ways in.
+>
+> ### ⛔⛔ `AC-1` WAS AMENDED — IT NOW REQUIRES **TWO** DELTAS
+>
+> It read *"a tree carrying `ad7298fb`'s semantic delta"* — Foundation's only.
+> **This node could have landed fully green and `NATIVE-HANDLE-CARRIER` would
+> have resumed and still been red**, after the queue was reordered to fix exactly
+> that. The row must now pass on **both** `ad7298fb`'s and `85dcee25`'s deltas.
+> Read the frame, not this summary.
+>
+> ### ⭐ Held by this node
+>
+> [[PX8-ERRID-ALLOC]] (→ [[PX8-ERRID-SCOPE]] → `PX8`, which gates 15 of the ABI
+> program's 19 nodes) · [[NATIVE-HANDLE-CARRIER]] (→ [[PX8-F-CAP-41]]) ·
+> [[RT-SEED-CALL-PORT]] and the rest of the retirement campaign, whose shared
+> residual enumerator this node's `D1` builds.
 
 > # ⭐⭐ WHY THIS NODE EXISTS — an unmeasured sequencing premise held a ring
 >

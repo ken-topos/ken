@@ -1,42 +1,78 @@
 ---
 id: NATIVE-HANDLE-CARRIER
 title: "Native build-pipeline completeness — a constructor-private resource-carrying handle fails checked-core body-view lowering (MissingClosureMetadata) when it crosses the higher-order withBuffer normalization boundary"
-status: active
+status: ready
 owner: runtime
 size: M
 gate: none
-depends_on: [RT-NATIVE-FNSPLIT, RT-JOIN-DISPOSITION]
+depends_on: [RT-NATIVE-FNSPLIT, RT-JOIN-DISPOSITION, RT-DECL-CLOSURE-PORT]
 blocks: [PX8-F-CAP-41]
 github: null
 origin: discovered under [[PX8-F-CAP-41]] Phase 2 impl (foundation-implementer hard-stop evt_563ss8821n7f); Architect means/representation ruling evt_2zkjr68y1sdgf (thr_570t9qzcthjv9, 2026-07-23). Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> # ✅ RELEASED 2026-07-29 — the hold is LIFTED; resume from the preserved WIP
+> # ⛔ HELD 2026-07-29 — 11/12 GREEN, STOPPED ON [[RT-DECL-CLOSURE-PORT]]'s `AC-1` ROW
 >
-> **[[RT-JOIN-DISPOSITION]] merged at `origin/main = 2f1b8897`** (PR #1239,
-> exact `cac8462414ef4c64723164f8b480c3880b663e3b`, all six blobs verified). The
-> phase-overstrict invariant that stopped this node is repaired, and ⭐ **that
-> repair was measured against *this* WIP before it landed**: ordered replay over
-> `8bc7556a`, the previously failing row `1/1`, no divergent observable, and the
-> preserved tree byte-identical afterward.
->
-> ⇒ **The blocker is gone and the fix is known to clear this node's row.** Both
-> `depends_on` edges are now `merged`.
+> **Steward disposition `evt_5mtkdft1nxmwp`.** This node was released, picked up,
+> rebased, and ran its first outward validation pass. It stopped on one row —
+> and that row is **not this node's to fix.**
 >
 > | | |
 > |---|---|
-> | preserved WIP | `8bc7556af024886a6db01679f35a2bb063166876` |
-> | tree | `9bbce2f64b32c4948e389e8c3953e762bbc8a6dc` |
+> | preserved candidate | `85dcee259dc65f9e3c1d625c0ee0ed8342577492` |
+> | tree | `b7cf904162bbacca83d70a0fe4bc2a86d9c36aa0` |
+> | superseded WIP | `8bc7556af024886a6db01679f35a2bb063166876` (tree `9bbce2f6`) |
+> | result | `rt_parity_native` **11 passed / 1 failed** |
 >
-> ⚠ **The WIP is based on a pre-repair `main`, so it needs a rebase** — that is
-> `D1`, and `AC-1`'s stale-base control (`git merge-tree` showing **both** sides'
-> changes; a pre-rebase blob OID on any of the four files **fails** it) is the
-> thing that makes the rebase safe. ⛔ Resolve conflicts hunk-by-hunk; do **not**
-> resolve toward making a row pass.
+> ⛔ **DO NOT reset, delete, or repoint `85dcee25`.** It carries a completed,
+> uncontested `D1` rebase — `git range-diff` 3/3 `=`, no conflict, no side
+> choice — plus the re-derived identity arm. ⚠ **A recorded SHA is not a copy**;
+> the hazard is a hard reset from a handoff gate, not storage.
 >
-> ▶ **On resume:** re-run the **full 6/6** `rt_span_prov_native` module plus the
-> already-named CAP-41 / AC-5 / private-public controls and mutations.
-> ⛔ **No honest partial is authorized** (standing Architect ruling).
+> ### The one red row belongs to a different node
+>
+> `fs_write_at_malformed_offset_narrows_to_invalid_offset` fails **before
+> observation**, at `checked_process_object`, with `Compilation error: Code for
+> function is too large`. It is **candidate-caused, not inherited** — the exact
+> row passes `1/1` on detached `origin/main = af056a78`.
+>
+> ⭐ **That row is [[RT-DECL-CLOSURE-PORT]]'s `AC-1` verbatim** — the sole AC that
+> decides that node — and the Architect already measured the wall there:
+> `authority=RecursiveDescent`, `residual=TransparentDeclarationClosure`, the
+> oversized function being the `RecursiveDescent` **root itself**
+> (`evt_3t7t27e3rv8cx`). ⇒ ⛔ **Not a new node** — filing one would duplicate a
+> framed, ready node that already owns this exact row.
+>
+> ### What is green, and stays green
+>
+> ✅ four CAP-41 two-engine rows · ✅
+> `uint64_checked_wrapper_admits_max_and_rejects_both_neighbors` · ✅ `AC-5`
+> `fs_read_at_malformed_offset_narrows_to_invalid_offset` · ✅
+> `int_to_uint64_raw_preserves_the_exact_big_native_int` 1/1 · ✅
+> `px8f_buffer_io_surface` 8/8.
+>
+> ### ▶ What this node still owes on resume
+>
+> 1. A **second rebase** over `RT-DECL-CLOSURE-PORT`'s `core.rs` rewrite. `D1`'s
+>    machinery is proven on this exact branch, so this is bounded.
+> 2. `AC-2`'s **Big-identity-versus-i64-cast** mutation — pre-empted by the stop.
+> 3. The two `AC-4` **positive-red controls**: `(c)` pre-erasure presence and
+>    `(f)` public-name census presence.
+> 4. The **full 6/6** `rt_span_prov_native` module plus the named CAP-41 /
+>    `AC-5` / private-public controls. ⛔ **No honest partial is authorized**
+>    (standing Architect ruling).
+>
+> ⚠ **`AC-1`'s stale-base control still binds the second rebase.** ⛔ Resolve
+> hunk-by-hunk; do **not** resolve toward making a row pass — that hazard is now
+> sharper, because the row that is supposed to go green is known by name.
+>
+> ### ⚠ The sequencing premise that put this node first was measured false
+>
+> It was *"NHC is 5/6 green and cheap to finish."* This node's `AC-1` is
+> unreachable on any tree until the ceiling falls. ⭐ **Same class as the
+> premise recorded in [[RT-DECL-CLOSURE-PORT]]'s own banner** — a Steward
+> sequencing inference, unmeasured, holding a ring. The reorder costs one extra
+> rebase and **shortens Foundation's wait from two nodes to one.**
 >
 > ⛔⛔ **`AC-4` CHANGED WHILE YOU WERE HELD** (PR #1236). Its axes `(c)`
 > (erasure) and `(f)` (absent from the public name map) are the matrix's only
