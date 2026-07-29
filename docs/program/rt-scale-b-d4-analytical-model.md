@@ -1,36 +1,50 @@
 # `RT-SCALE-B` D4 analytical emission model
 
-**Bound source:** `466a9fa790d93d0606decb8e160130d97ec89814`
+**Bound source:** `370281d0519c7503ee38caa6bf132cc0bd929176`
 
 **Frame:** `docs/program/wp/RT-SCALE-B-emission-scaling-verdict.md`,
-blob `954bb438372d1b3974d8506919c4f849f3e2c3ce`
+blob `1f7ca6e514c550f7c256eb44a89c7641abfec812`
 
 **Research dispatch:** `evt_62fqpe7pfvym4`; advisory
 `evt_5njmxwxyadqkk`
 
+**D5 reconciliation evidence:** exact `53866711ecda5693c4630d2a0fe8eb40838f7524`
+(not an input to the D4 derivation)
+
 ## Result
 
 For the frame's strictly nested, well-bracketed, single-shot LIFO resource
-family, the research-supported target order is **affine emitted material and
-O(n) frontend work**, or O(n log n) where ordered interning contributes a
-logarithmic lookup factor. Super-linearity is not inherent to this semantic
-family. It would identify an implementation or representation gap unless the
-measurement first demonstrates a genuinely super-linear semantic-state
-population.
+family, the research-supported target is **affine emitted material**. Frontend
+work is O(n) with expected-constant-time interning; ordered interning admits an
+O(n log n) implementation upper bound. If that logarithmic factor governs the
+measurements, it is residual implementation super-linearity, not a semantic
+necessity. No super-linearity is inherent to this family unless measurement
+first demonstrates a genuinely super-linear semantic-state population.
 
-This is an analytical result, not the node's closing verdict. On the bound
-source, the prescribed benchmark selects
-`BodyEmissionAuthority::RecursiveDescent`, while completed B2F unit emission
-occurs only under `FunctionizedUnits`. The benchmark therefore does not yet
-produce the population this frame requires. Measuring the retained authority
-would fabricate the denominator; replacing the recursive/trapping bracket
-family with a functionizable synthetic would change the question. The frame's
-armed symptom inventory consequently routes this state back to emission-port
-work before D1--D3 or D5 can close.
+For the historical one-point observation, the analytical side therefore
+selects **bad constants on an O(n) representation mechanism**: there is no
+evidence in that datum for the residual-super-linearity branch. This is a model
+classification, not proof that the current implementation is affine and not
+the node's closing empirical verdict. A deterministic super-linear population,
+or reproducible resource growth with a discriminator-backed mechanism, would
+be a further implementation gap under the decision table below. Mere sample
+noise is not such a finding. Neither result turns into an inherent lower bound.
+
+On the bound source, the governed family now selects
+`BodyEmissionAuthority::FunctionizedUnits` and reaches completed unit emission.
+The earlier emission-port blocker is closed. Runtime's D1--D3 measurements can
+therefore corroborate or falsify the implementation-order prediction without
+changing the analytical population.
 
 The historic n=4 figures, including about 103 seconds, about 4 GiB, and
 1,482/1,525 states/edges, are **NON-COMPARABLE**. There is no apples-to-apples
 baseline. The eventual n=3..7 table must report absolute values.
+
+This model is scoped to growth of the reached emission population. It does not
+claim that the representation is complete or verified while `RT-EFFECT-DIFF`
+remains open, and it does not erase the recorded pre-merge emission-port
+failures. D4 supplies the analytical half; Runtime's independent D1--D3 table
+and the operator-shaped D5 verdict remain separate deliverables.
 
 ## Research basis
 
@@ -129,18 +143,44 @@ scratch rather than a necessary property of the bracket semantics.
 
 ## Recursive lowering stack axis
 
-RT-SCALE-A measured in `evt_j5d4tn3xyjmt`:
+RT-SCALE-A measured in `evt_j5d4tn3xyjmt`, on its then-governed source:
 
 ```text
-n       3   4   5   6   7
-k(n)   14  18  22  26  30
+n         3   4   5   6   7
+k_A(n)   14  18  22  26  30
 ```
 
-Thus `k(n) = 4n + 2` on the measured family. The stack-depth axis carries
-evidence and is affine. It is not constant, and no constant-depth requirement
-is sound. These values do not supply a per-frame byte cost or prove that every
-other compiler stack is bounded by `k`; they only discharge the named
-production recursive-lowering-frame input to this model.
+Thus `k_A(n) = 4n + 2` on that measured family. This is the frame-mandated
+RT-SCALE-A input consumed by D4.
+
+The completed RT-SCALE-B workers measure the same
+`RecursiveLoweringFrameGuard`, during planning of the current governed source:
+
+```text
+n         3   4   5   6   7
+k_B(n)   18  23  28  33  38
+```
+
+Thus `k_B(n) = 5n + 3`. These are not two phase measurements of identical
+input. RT-SCALE-A's source at `e39e11a4` used a private earlier bracket fixture.
+The current shared `governed_nested_resource_bracket` moves the recursive body
+under a closure-body `Let`, uses the direct induction-hypothesis call in the
+computational case, and supplies the canonical four `BufferFreeze` operands.
+The Scale-B value is captured during planning and merely retained through
+completed emission; the difference must not be called emission overhead.
+
+Both source-bound series are affine. They therefore agree on the stack-axis
+classification even though their slopes and intercepts are not comparable.
+The stack depth is not constant, and no constant-depth requirement is sound.
+Neither series supplies a per-frame byte cost or proves that every other
+compiler stack is bounded by this guard.
+
+At n=4 the two source-bound values are `k_A(4) = 18` and `k_B(4) = 23`.
+If each production frame has bounded size `s`, the named stack contribution is
+Theta(n) in both cases. The instrument does not measure `s`, so the model does
+not invent a per-frame byte figure. In particular, the historic approximately
+4 GiB process RSS cannot be attributed to a super-linear `plan_expr` stack from
+this evidence.
 
 ## Four structural invariants
 
@@ -155,13 +195,14 @@ production recursive-lowering-frame input to this model.
    Per-unit ABI frames may contain different numbers of slots; therefore total
    `A(n)`, not one slot's width, must still be measured.
 3. **Affine total persistent nodes -- satisfied by RT-SCALE-A's planner
-   census; completed-emission corroboration is presently blocked.** This is
-   not permission to substitute Boundary A's numbers into Boundary B.
+   census; completed-emission corroboration is now measurable and belongs to
+   Runtime's table.** This is not permission to substitute Boundary A's numbers
+   into Boundary B.
 4. **At most affine logical chain depth -- satisfied by the landed planner
-   census; completed-emission corroboration is presently blocked.** Logical
-   chain depth may grow Theta(n), and that is sound because a helper/frame
-   carries one constant-width persistent ID, not an inline copy of the chain.
-   **Constant logical-chain depth is not required.**
+   census; completed-emission corroboration is now measurable and belongs to
+   Runtime's table.** Logical chain depth may grow Theta(n), and that is sound
+   because a helper/frame carries one constant-width persistent ID, not an
+   inline copy of the chain. **Constant logical-chain depth is not required.**
 
 The first two invariants rule out width growth in identity and node schemas.
 The latter two rule out a quadratic total representation while allowing an
@@ -184,18 +225,18 @@ include every production Cranelift body defined by that compilation:
 | test-only probes and capture functions | no | They are instrumentation, not production emitter output. |
 | generated C starters and object-linker stubs | no | They are production artifacts, but not Cranelift emitters or CLIF population. |
 
-The table must count the root adapter, every unit body, and both fixed local
-helper graphs in its total DFG/instruction/block/byte population. It may report
-the fixed helper graphs as a separate intercept, but may not silently omit
-them. This is this node's denominator; B2F AC-G0's native-Int-only count is not
-a substitute.
+The table must count the root adapter, every unit body, seven native-Int
+helpers, and twenty-nine boundary helpers in its total
+DFG/instruction/block/byte population. Thus the production-function count is
+`emitted_helpers + 37`. It may report the fixed helper graphs as a separate
+intercept, but may not silently omit them. This is this node's denominator;
+B2F AC-G0's native-Int-only count is not a substitute.
 
 ## The operator's binary
 
 The analytical side rules out an inherent super-linear lower bound for this
-strict LIFO family. It does **not** yet select the implementation verdict,
-because the prescribed family cannot reach completed functionized emission.
-After that port closes, apply this decision table:
+strict LIFO family and predicts a linearly sized completed representation.
+Apply this decision table to Runtime's independent measurements:
 
 | Observation | Classification |
 |---|---|
@@ -203,6 +244,15 @@ After that port closes, apply this decision table:
 | `V`, `E`, and `U` are affine, but `S`, `A`, `I`, `B`, or descriptor work is super-linear | Representation/materialization gap. |
 | All material counts are affine, but wall time or RSS is super-linear | Repeated analysis, allocation, module-finalization, or backend gap. |
 | Structural counts, wall time, and RSS are affine with a large intercept/slope | Bad constants on an O(n) mechanism. |
+
+For the historical observation, the model's answer to the operator's binary is
+the last row: **bad constants on an O(n) representation mechanism**. The
+approximately 103 seconds and 4 GiB at n=4 are one **NON-COMPARABLE** point and
+cannot establish an exponent; they are not evidence for residual
+super-linearity. The current table remains free to falsify implementation
+linearity. If it does, the applicable earlier row names the mechanism gap and
+the ring must not relabel it as acceptable constants. That is outcome (b): it
+routes to the operator through the Steward and this node does not close.
 
 For the last row, the constants plan is to attribute the fixed local-helper
 intercept separately, rank per-unit instruction and frame-slot slopes, remove
@@ -219,3 +269,38 @@ Finally, no exponent is inferable from five points. `370n`, `93n^2`, and a
 product that switches on at n=5 can all pass through the same historic n=4
 datum. The structural invariants discriminate; first and second finite
 differences only corroborate them.
+
+## D5 reconciliation boundary
+
+Exact `53866711` selects outcome **(a)** at the representation-mechanism
+boundary:
+
+- every deterministic structural and emission series has constant first
+  differences and zero second differences;
+- all four structural invariants pass;
+- D4 independently predicts affine emitted material; and
+- both actual recursive-frame series are affine on their respective source
+  revisions.
+
+The wall-time and peak-RSS samples are noisy and non-affine. They must be
+reported as absolute observations, but five samples establish no exponent.
+They prove neither affine resource use nor residual super-linearity. Therefore
+they do not trigger outcome (b), which requires a research-supported reason
+that growth is inherently super-linear.
+
+The terminal wording is:
+
+> Outcome (a): the completed FunctionizedUnits representation is empirically
+> affine in every deterministic material and structural population; the
+> independent analytical model predicts Theta(n) emitted material and no
+> inherent semantic product for this governed family. The observed wall-time
+> and peak-RSS samples are noisy and are not used to claim an exponent. The
+> historical n=4 observation remains NON-COMPARABLE. This is a
+> representation-growth verdict, not a completeness or verification claim;
+> RT-EFFECT-DIFF and the recorded trap differential residual remain open.
+
+Do not strengthen this to “wall time and RSS are empirically linear.” Do not
+weaken it to outcome (b): there is no measured deterministic super-linear
+population and no research-supported inherent product. The constants-reduction
+plan above remains the required follow-on plan, not evidence that a particular
+historical constant was reproduced.

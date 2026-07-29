@@ -676,7 +676,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
             }
             verify_cranelift_function(&ctx.func, module.isa())?;
             #[cfg(test)]
-            scale_b_record_root_adapter(&ctx.func);
+            scale_b_record_recursive_descent_root(&ctx.func);
             module
                 .define_function(func_id, &mut ctx)
                 .map_err(|err| backend_module(err.to_string()))?;

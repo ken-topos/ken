@@ -584,7 +584,7 @@ pub(super) fn define_root_adapter<M: Module>(
     }
     verify_cranelift_function(&func, module.isa())?;
     #[cfg(test)]
-    scale_b_record_root_adapter(&func);
+    scale_b_record_functionized_root_adapter(&func);
     let mut ctx = module.make_context();
     std::mem::swap(&mut ctx.func, &mut func);
     module

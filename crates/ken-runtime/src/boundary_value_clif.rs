@@ -451,7 +451,7 @@ fn finish<M: Module>(
         }
     });
     #[cfg(test)]
-    crate::cranelift_backend::scale_b_record_fixed_helper(&func);
+    crate::cranelift_backend::scale_b_record_boundary_value(&func);
     let mut ctx = module.make_context();
     std::mem::swap(&mut ctx.func, &mut func);
     module
