@@ -405,6 +405,45 @@ worker `StaticOriginId(723)`, arity `1`, `dynamic_splices=1`,
 > `evt_3tx7ndxp5pm4j`. See `RT-DECL-CLOSURE-PORT` §5a for the five-instance
 > record that framing rests on.
 
+> ### ⛔⛔ RULED AT STOP #27 (`evt_4p9ne0vcds5hb`) — THIS NODE'S SCOPE CHANGED, AND
+> ### THE "ONE NEW MEMBER" BELOW IS NOW *LOCAL CLASSIFICATION ONLY*
+>
+> The Architect **withdrew part of its own `#26` ruling**: *"my prior statement that
+> #26 was 'one new member' remains valid only as a **local classification of the
+> measured 723 residual**, not as evidence that the global matrix is now closed."*
+> ⇒ ⛔ Read §8b below as a fact about the `723` residual, ⛔ never as authority that
+> `D7`'s population is closed.
+>
+> ⭐⭐ **WHAT THIS NODE NOW OWES, and it is not a cell repair:** replace `D7`'s
+> **population authority in place** — re-derive from the actual owner/phase
+> transition graph, one exact `BoundaryUse` record per static lowering event, one
+> choke-point API with unforgeable planned-edge tokens, and a planned-set-vs-
+> emitted-ledger comparison **before function definition**. The full requirement and
+> its ten controls live in `RT-DECL-CLOSURE-PORT`'s `D7` deliverable — ⛔ read it
+> there, do not re-derive it from this summary.
+>
+> ⛔ **Ordering is fixed: population authority FIRST, cell-level repair after.** Do
+> **not** admit or classify the origin-650 `Closure`, add a fifth cell / seventh
+> disposition / node, weaken the generic `Closure` guard, relabel
+> `CallableCapsuleEscape -> EscapeForbidden`, touch `ProducerMatchCall` or
+> buffer-allocate, or route QA until #27 **fails early when omitted** and every real
+> transition is ledger-accounted.
+>
+> ✅ **`07ce6ef1` SURVIVES AND IS THE REPAIR BASE — do not reset it, do not cut a
+> subset commit.** Continue atop it, replacing the false authority in place.
+> **Retained as locally sound mechanism:** the compiler-only `StaticRecursorWorker`
+> and direct out-of-line target · complete capture/body/arity/provenance preflight
+> before environment allocation · the ordinary positional `Record` envelope with no
+> callable/control identity · class/count/order checks and
+> ordinary-arguments-then-captures ABI · the unchanged whole-capsule
+> `CallableCapsuleEscape -> EscapeForbidden` · the additional governed recursor
+> routes and their local worker controls.
+> **Superseded as population/closure authority:** the separate lowering-only enum as
+> proof of real-edge extent · lowering-time `.token()` minting · the global
+> `static_recursor_worker_residual_disposition` flag · on-demand residual-edge
+> synthesis by source-occurrence search · omission/reclassification of that flag as
+> proof the population is closed.
+
 ### 8b. Ownership and disposition — one new MEMBER, not a new lane
 
 | axis | ruling |
