@@ -1,7 +1,7 @@
 ---
 id: RT-FNSPLIT-RECUR-PORT
 title: "emission-port completion — the governed nested-bracket family (recursive ComputationalMatch + trap arms) must select FunctionizedUnits, so RT-SCALE-B can measure the completed population"
-status: active
+status: merged
 owner: runtime
 size: XL
 gate: none
