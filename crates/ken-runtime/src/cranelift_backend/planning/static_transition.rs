@@ -2333,10 +2333,13 @@ fn build_lowering_boundary_uses(
     plan: &StaticTransitionPlan<'_>,
 ) -> Result<Vec<PlannedLoweringBoundaryUse>, CraneliftBackendError> {
     let mut keys = BTreeSet::new();
+    let mut owner_bound_keys = BTreeSet::new();
     for occurrence in plan.source_occurrences.iter().flatten() {
         let origin = occurrence.static_origin;
         #[cfg(test)]
-        keys.insert((LoweringOnlyOperandEdge::TestFixtureResult, origin, 0));
+        if INCLUDE_TEST_FIXTURE_BOUNDARY_USE.with(Cell::get) {
+            keys.insert((LoweringOnlyOperandEdge::TestFixtureResult, origin, 0));
+        }
         match occurrence.expr {
             RuntimeExpr::CheckedComputationalIHInvocation { .. } => {
                 keys.insert((
@@ -2346,38 +2349,103 @@ fn build_lowering_boundary_uses(
                 ));
             }
             RuntimeExpr::Call { .. } => {
-                for edge in [
-                    LoweringOnlyOperandEdge::RecursiveSourceDeclarationArgument,
-                    LoweringOnlyOperandEdge::RecursiveDeclarationArgument,
-                    LoweringOnlyOperandEdge::DeclarationCaptureSpecialization,
-                ] {
-                    keys.insert((edge, origin, 0));
+                if !plan.functionized_units {
+                    for edge in [
+                        LoweringOnlyOperandEdge::RecursiveSourceDeclarationArgument,
+                        LoweringOnlyOperandEdge::RecursiveDeclarationArgument,
+                        LoweringOnlyOperandEdge::DeclarationCaptureSpecialization,
+                    ] {
+                        keys.insert((edge, origin, 0));
+                    }
                 }
             }
-            RuntimeExpr::Construct { .. } => {
-                keys.insert((
-                    LoweringOnlyOperandEdge::DeferredConstructorTrailingField,
-                    origin,
-                    0,
-                ));
-            }
+            RuntimeExpr::Construct { .. } => {}
             _ => {}
         }
-        if plan
+        if let Some(join) = plan
             .join_results
             .get(origin.0 as usize)
             .and_then(Option::as_ref)
-            .is_some()
         {
-            keys.insert((LoweringOnlyOperandEdge::JoinArm, origin, 0));
+            if !join.has_continuing_predecessor {
+                continue;
+            }
+            if join.representation == JoinResultRepresentation::CarrierWord {
+                let predecessor_positions: Box<dyn Iterator<Item = usize>> =
+                    match occurrence.expr {
+                        RuntimeExpr::CheckedJoinSite { .. } => Box::new(0..1),
+                        RuntimeExpr::If { .. } => Box::new(1..3),
+                        RuntimeExpr::Match { cases, .. } => {
+                            Box::new(1..1 + cases.len())
+                        }
+                        RuntimeExpr::ComputationalMatch { cases, .. } => {
+                            Box::new(1..1 + cases.len())
+                        }
+                        RuntimeExpr::Call { .. } => Box::new(std::iter::empty()),
+                        _ => Box::new(std::iter::empty()),
+                    };
+                for position in predecessor_positions {
+                    let predecessor = plan.semantic.child_origin(origin, position)?;
+                    let phase = plan
+                        .result_phases
+                        .get(predecessor.0 as usize)
+                        .and_then(Option::as_ref)
+                        .ok_or_else(|| {
+                            planner_error(
+                                "join predecessor has no planned result-phase authority",
+                            )
+                        })?;
+                    if phase.continues && phase.phase == ResultPhase::SpecializedOnly {
+                        keys.insert((
+                            LoweringOnlyOperandEdge::JoinArm,
+                            predecessor,
+                            0,
+                        ));
+                    }
+                }
+            } else {
+                keys.insert((LoweringOnlyOperandEdge::JoinArm, origin, 0));
+            }
         }
     }
+    let root_owner = plan
+        .root_occurrence
+        .map(|origin| plan.semantic.function_owner(origin))
+        .transpose()?
+        .flatten();
+    let emitted_functions = if plan.functionized_units {
+        plan.emittable_units()?
+            .into_iter()
+            .map(|unit| unit.function())
+            .collect::<BTreeSet<_>>()
+    } else {
+        BTreeSet::new()
+    };
     for descriptor in &plan.abi.descriptors {
-        keys.insert((
-            LoweringOnlyOperandEdge::CallableCapsuleEscape,
-            descriptor.origin,
-            u32::MAX,
-        ));
+        if (!plan.functionized_units
+            || (Some(descriptor.function) != root_owner
+                && emitted_functions.contains(&descriptor.function)))
+            && plan
+                .result_phases
+                .get(descriptor.origin.0 as usize)
+                .and_then(Option::as_ref)
+                .is_some_and(|phase| phase.continues)
+        {
+            if plan.functionized_units {
+                owner_bound_keys.insert((
+                    LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                    descriptor.origin,
+                    u32::MAX,
+                    descriptor.function,
+                ));
+            } else {
+                keys.insert((
+                    LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                    descriptor.origin,
+                    u32::MAX,
+                ));
+            }
+        }
         let start = descriptor.slots.start as usize;
         let end = start
             .checked_add(descriptor.slots.len as usize)
@@ -2387,13 +2455,47 @@ fn build_lowering_boundary_uses(
             .slots
             .get(start..end)
             .ok_or_else(|| planner_error("ABI boundary-use range is outside the slot plane"))?;
+        if Some(descriptor.function) == root_owner {
+            let mut input = 0u32;
+            for slot in slots {
+                if matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
+                    owner_bound_keys.insert((
+                        LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                        descriptor.origin,
+                        input,
+                        descriptor.function,
+                    ));
+                    input = input.checked_add(1).ok_or_else(|| {
+                        planner_capacity_error("ABI input boundary-use exhausted")
+                    })?;
+                }
+            }
+        }
+    }
+    for call in plan.emittable_call_edges()? {
+        let descriptor = plan
+            .abi
+            .descriptors
+            .iter()
+            .find(|descriptor| descriptor.function == call.callee)
+            .ok_or_else(|| planner_error("planned call has no callee ABI descriptor"))?;
+        let start = descriptor.slots.start as usize;
+        let end = start
+            .checked_add(descriptor.slots.len as usize)
+            .ok_or_else(|| planner_capacity_error("ABI call boundary-use range exhausted"))?;
+        let slots = plan
+            .abi
+            .slots
+            .get(start..end)
+            .ok_or_else(|| planner_error("ABI call boundary-use range is outside the slot plane"))?;
         let mut input = 0u32;
         for slot in slots {
             if matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
-                keys.insert((
+                owner_bound_keys.insert((
                     LoweringOnlyOperandEdge::CallableCapsuleEscape,
-                    descriptor.origin,
+                    call.call_site_origin,
                     input,
+                    call.caller,
                 ));
                 input = input
                     .checked_add(1)
@@ -2401,13 +2503,22 @@ fn build_lowering_boundary_uses(
             }
         }
     }
-    keys.into_iter()
-        .enumerate()
-        .map(|(ordinal, (edge, origin, position))| {
+    let mut resolved_keys = keys
+        .into_iter()
+        .map(|(edge, origin, position)| {
             let owner = plan
                 .semantic
                 .function_owner(origin)?
                 .ok_or_else(|| planner_error("lowering boundary use has no function owner"))?;
+            Ok((edge, origin, position, owner))
+        })
+        .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+    resolved_keys.extend(owner_bound_keys);
+    resolved_keys.sort();
+    resolved_keys
+        .into_iter()
+        .enumerate()
+        .map(|(ordinal, (edge, origin, position, owner))| {
             let disposition = edge.disposition();
             let (consumer_phase, operation, need, avail) =
                 boundary_contract(disposition);
@@ -2697,9 +2808,13 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// child. Lowering-only consumers live in [`LoweringOnlyOperandEdge`].
     operand_edges: Vec<PlannedOperandEdge>,
     /// Exact lowering consumption ledger. The plan is immutable during
-    /// emission; only this monotone ledger changes, and every owner is closed
-    /// before its function definition is handed to the object module.
+    /// emission; only this monotone ledger changes. The complete ledger closes
+    /// before any staged function definition is handed to the object module.
     operand_edge_consumption: RefCell<BTreeMap<BoundaryUseIdentity, u32>>,
+    /// Planned uses proven unreachable by a lowering-time static selection.
+    /// These identities are closed as dispositions, never masqueraded as
+    /// emitted consumption.
+    boundary_use_dispositions: RefCell<BTreeSet<BoundaryUseIdentity>>,
     /// The finite, interned population of out-of-line units that eliminate a
     /// statically known callable parameter from a transparent declaration ABI.
     static_callable_specializations: Vec<PlannedStaticCallableSpecialization>,
@@ -2851,6 +2966,14 @@ enum StaticRecursorResidualMatrixMutation {
 }
 
 #[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum SynthesizedConsumptionMutation {
+    Exact,
+    OmitFirst,
+    RepeatFirst,
+}
+
+#[cfg(test)]
 thread_local! {
     static D8_FORCE_VARIABLE_SPECIALIZED: Cell<bool> = const { Cell::new(false) };
     static D8_REMOVE_VARIABLE_CALLABLE_SEED: Cell<bool> = const { Cell::new(false) };
@@ -2860,6 +2983,10 @@ thread_local! {
     static STATIC_RECURSOR_RESIDUAL_MATRIX_MUTATION:
         Cell<StaticRecursorResidualMatrixMutation> =
         const { Cell::new(StaticRecursorResidualMatrixMutation::Exact) };
+    static INCLUDE_TEST_FIXTURE_BOUNDARY_USE: Cell<bool> = const { Cell::new(false) };
+    static SYNTHESIZED_CONSUMPTION_MUTATION: Cell<SynthesizedConsumptionMutation> =
+        const { Cell::new(SynthesizedConsumptionMutation::Exact) };
+    static SYNTHESIZED_CONSUMPTION_MUTATED: Cell<bool> = const { Cell::new(false) };
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -3446,6 +3573,7 @@ impl<'src> Planner<'src> {
                 lowering_boundary_uses: Vec::new(),
                 boundary_uses: Vec::new(),
                 operand_edge_consumption: RefCell::new(BTreeMap::new()),
+                boundary_use_dispositions: RefCell::new(BTreeSet::new()),
             },
             store_interner: BTreeMap::new(),
             next_source: 0,
@@ -4709,6 +4837,16 @@ impl<'src> StaticTransitionPlan<'src> {
         self.semantic.child_origin(parent, position)
     }
 
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn function_owner_for_test(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<PredeclaredFunctionId, CraneliftBackendError> {
+        self.semantic
+            .function_owner(origin)?
+            .ok_or_else(|| planner_error("test fixture origin has no function owner"))
+    }
+
     /// Consume the planner-owned disposition for one positional source edge.
     ///
     /// The caller must name the role it is implementing. Parent, checked
@@ -4763,12 +4901,174 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(())
     }
 
+    pub(in crate::cranelift_backend) fn disposition_operand_edge(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<(), CraneliftBackendError> {
+        let child = self.semantic.child_origin(parent, position)?;
+        let position = u32::try_from(position)
+            .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
+        let edge = self
+            .operand_edges
+            .iter()
+            .find(|edge| {
+                edge.parent == parent
+                    && edge.child == child
+                    && edge.position == position
+                    && edge.role == role
+            })
+            .ok_or_else(|| planner_error("dead source edge has no planned disposition"))?;
+        let identity = BoundaryUseIdentity::Source {
+            parent: edge.parent,
+            child: edge.child,
+            position: edge.position,
+        };
+        self.record_boundary_use_disposition(identity)
+    }
+
+    pub(in crate::cranelift_backend) fn close_reached_operand_edge(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<OperandEdgeDisposition, CraneliftBackendError> {
+        let child = self.semantic.child_origin(parent, position)?;
+        let position = u32::try_from(position)
+            .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
+        let edge = self
+            .operand_edges
+            .iter()
+            .find(|edge| {
+                edge.parent == parent
+                    && edge.child == child
+                    && edge.position == position
+                    && edge.role == role
+            })
+            .ok_or_else(|| planner_error("reached source edge has no planned disposition"))?;
+        let identity = BoundaryUseIdentity::Source {
+            parent: edge.parent,
+            child: edge.child,
+            position: edge.position,
+        };
+        if !self.operand_edge_consumption.borrow().contains_key(&identity) {
+            self.record_boundary_use_consumption(identity)?;
+        }
+        Ok(edge.disposition)
+    }
+
+    pub(in crate::cranelift_backend) fn disposition_boundary_uses_in_owner_subtree(
+        &self,
+        root: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        let owner = self
+            .semantic
+            .function_owner(root)?
+            .ok_or_else(|| planner_error("dead source subtree has no function owner"))?;
+        let mut pending = vec![root];
+        let mut origins = BTreeSet::new();
+        while let Some(origin) = pending.pop() {
+            if !origins.insert(origin) {
+                continue;
+            }
+            for child in self.semantic.child_origins(origin)?.iter().copied() {
+                if self.semantic.function_owner(child)? == Some(owner) {
+                    pending.push(child);
+                }
+            }
+        }
+        let identities = self
+            .boundary_uses
+            .iter()
+            .filter_map(|planned| {
+                let origin = match planned.path {
+                    PlannedBoundaryUsePath::Source { parent, .. } => parent,
+                    PlannedBoundaryUsePath::Synthesized { origin, .. } => origin,
+                };
+                (planned.producer_owner == owner && origins.contains(&origin))
+                    .then_some(planned.identity)
+            })
+            .collect::<Vec<_>>();
+        for identity in identities {
+            self.record_boundary_use_disposition(identity)?;
+        }
+        Ok(())
+    }
+
+    pub(in crate::cranelift_backend) fn disposition_lowering_boundary_use_if_planned(
+        &self,
+        edge: LoweringOnlyOperandEdge,
+        origin: StaticOriginId,
+        position: u32,
+    ) -> Result<(), CraneliftBackendError> {
+        let Some(planned) = self.lowering_boundary_uses.iter().find(|planned| {
+            planned.edge == edge
+                && planned.origin == origin
+                && planned.position == position
+        }) else {
+            return Ok(());
+        };
+        self.record_boundary_use_disposition(planned.identity)
+    }
+
+    pub(in crate::cranelift_backend) fn disposition_unreached_recursor_uses_for_owner(
+        &self,
+        owner: PredeclaredFunctionId,
+    ) -> Result<(), CraneliftBackendError> {
+        let consumed = self.operand_edge_consumption.borrow();
+        let dispositions = self.boundary_use_dispositions.borrow();
+        let unreached = self
+            .recursor_boundary_uses
+            .iter()
+            .filter(|planned| {
+                planned.owner == owner
+                    && !consumed.contains_key(&planned.identity)
+                    && !dispositions.contains(&planned.identity)
+            })
+            .map(|planned| planned.identity)
+            .collect::<Vec<_>>();
+        drop(dispositions);
+        drop(consumed);
+        for identity in unreached {
+            self.record_boundary_use_disposition(identity)?;
+        }
+        Ok(())
+    }
+
+    fn record_boundary_use_disposition(
+        &self,
+        identity: BoundaryUseIdentity,
+    ) -> Result<(), CraneliftBackendError> {
+        if !self
+            .boundary_uses
+            .iter()
+            .any(|planned| planned.identity == identity)
+        {
+            return Err(planner_error(
+                "dead boundary disposition names no exact planned use",
+            ));
+        }
+        if self.operand_edge_consumption.borrow().contains_key(&identity) {
+            return Err(planner_error(
+                "one boundary use was both emitted and statically dispositioned",
+            ));
+        }
+        if !self.boundary_use_dispositions.borrow_mut().insert(identity) {
+            return Err(planner_error(
+                "one boundary use was statically dispositioned more than once",
+            ));
+        }
+        Ok(())
+    }
+
     /// Close one generated function's source-boundary ledger before its
     /// definition is published to the object module.
     pub(in crate::cranelift_backend) fn validate_boundary_use_consumption_for_owner(
         &self,
         owner: PredeclaredFunctionId,
     ) -> Result<(), CraneliftBackendError> {
+        let dispositions = self.boundary_use_dispositions.borrow();
         let expected = self
             .operand_edges
             .iter()
@@ -4778,6 +5078,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 child: edge.child,
                 position: edge.position,
             })
+            .filter(|identity| !dispositions.contains(identity))
             .collect::<BTreeSet<_>>();
         let ledger = self.operand_edge_consumption.borrow();
         let actual = ledger
@@ -4809,8 +5110,20 @@ impl<'src> StaticTransitionPlan<'src> {
         if actual_set != expected {
             let missing = expected.difference(&actual_set).copied().collect::<Vec<_>>();
             let extra = actual_set.difference(&expected).copied().collect::<Vec<_>>();
+            let missing_edges = self
+                .operand_edges
+                .iter()
+                .filter(|edge| {
+                    missing.contains(&BoundaryUseIdentity::Source {
+                        parent: edge.parent,
+                        child: edge.child,
+                        position: edge.position,
+                    })
+                })
+                .collect::<Vec<_>>();
             return Err(planner_error(format!(
-                "source boundary-use ledger is not exact; missing={missing:?}; extra={extra:?}"
+                "source boundary-use ledger is not exact; missing={missing:?}; \
+                 missing_edges={missing_edges:?}; extra={extra:?}"
             )));
         }
         Ok(())
@@ -4827,29 +5140,57 @@ impl<'src> StaticTransitionPlan<'src> {
         for owner in owners {
             self.validate_boundary_use_consumption_for_owner(owner)?;
         }
+        let dispositions = self.boundary_use_dispositions.borrow();
         let expected = self
             .boundary_uses
             .iter()
             .map(|edge| edge.identity)
+            .filter(|identity| !dispositions.contains(identity))
             .collect::<BTreeSet<_>>();
         let ledger = self.operand_edge_consumption.borrow();
+        let emitted_and_dispositioned = ledger
+            .keys()
+            .filter(|identity| dispositions.contains(identity))
+            .copied()
+            .collect::<Vec<_>>();
+        if !emitted_and_dispositioned.is_empty() {
+            return Err(planner_error(format!(
+                "boundary uses were both emitted and statically dispositioned; \
+                 identities={emitted_and_dispositioned:?}"
+            )));
+        }
         let duplicates = ledger
             .iter()
             .filter(|(_, count)| **count != 1)
             .map(|(identity, count)| (*identity, *count))
             .collect::<Vec<_>>();
         if !duplicates.is_empty() {
+            let duplicate_uses = self
+                .boundary_uses
+                .iter()
+                .filter(|planned| {
+                    duplicates
+                        .iter()
+                        .any(|(identity, _)| *identity == planned.identity)
+                })
+                .collect::<Vec<_>>();
             return Err(planner_error(format!(
                 "boundary-use ledger contains duplicate consumption; \
-                 duplicates={duplicates:?}"
+                 duplicates={duplicates:?}; duplicate_uses={duplicate_uses:?}"
             )));
         }
         let actual = ledger.keys().copied().collect::<BTreeSet<_>>();
         if actual != expected {
             let missing = expected.difference(&actual).copied().collect::<Vec<_>>();
             let extra = actual.difference(&expected).copied().collect::<Vec<_>>();
+            let missing_uses = self
+                .boundary_uses
+                .iter()
+                .filter(|planned| missing.contains(&planned.identity))
+                .collect::<Vec<_>>();
             return Err(planner_error(format!(
-                "boundary-use ledger is not exact; missing={missing:?}; extra={extra:?}"
+                "boundary-use ledger is not exact; missing={missing:?}; \
+                 missing_uses={missing_uses:?}; extra={extra:?}"
             )));
         }
         Ok(())
@@ -4889,6 +5230,20 @@ impl<'src> StaticTransitionPlan<'src> {
         origin: StaticOriginId,
         position: u32,
     ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        let owner = self
+            .semantic
+            .function_owner(origin)?
+            .ok_or_else(|| planner_error("lowering boundary use has no function owner"))?;
+        self.lowering_boundary_use_token_for_owner(edge, origin, position, owner)
+    }
+
+    pub(in crate::cranelift_backend) fn lowering_boundary_use_token_for_owner(
+        &self,
+        edge: LoweringOnlyOperandEdge,
+        origin: StaticOriginId,
+        position: u32,
+        owner: PredeclaredFunctionId,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
         #[cfg(test)]
         if DENY_LOWERING_BOUNDARY_USE_ISSUANCE.with(Cell::get) {
             return Err(planner_error(
@@ -4902,13 +5257,37 @@ impl<'src> StaticTransitionPlan<'src> {
                 planned.edge == edge
                     && planned.origin == origin
                     && planned.position == position
+                    && planned.owner == owner
             })
             .ok_or_else(|| {
-                planner_error(
-                    "lowering transition has no exact planner-issued boundary use",
-                )
-            })?;
+                planner_error(format!(
+                    "lowering transition has no exact planner-issued boundary use: \
+                     edge={edge:?}, origin={origin:?}, position={position}, owner={owner:?}"
+                ))
+        })?;
         let token = self.planned_boundary_use_token(planned.identity, planned.edge.label())?;
+        #[cfg(test)]
+        {
+            let mutation = SYNTHESIZED_CONSUMPTION_MUTATION.with(Cell::get);
+            let apply = mutation != SynthesizedConsumptionMutation::Exact
+                && SYNTHESIZED_CONSUMPTION_MUTATED.with(|cell| {
+                    if cell.get() {
+                        false
+                    } else {
+                        cell.set(true);
+                        true
+                    }
+                });
+            if apply {
+                match mutation {
+                    SynthesizedConsumptionMutation::OmitFirst => return Ok(token),
+                    SynthesizedConsumptionMutation::RepeatFirst => {
+                        self.record_boundary_use_consumption(planned.identity)?;
+                    }
+                    SynthesizedConsumptionMutation::Exact => {}
+                }
+            }
+        }
         self.record_boundary_use_consumption(planned.identity)?;
         Ok(token)
     }
@@ -6956,6 +7335,27 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph<'src>(
     )
 }
 
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_test_fixture_boundary_use<
+    'src,
+>(
+    entry: &'src RuntimeExpr,
+    declarations: &BTreeMap<&str, &'src RuntimeDeclaration>,
+) -> Result<StaticTransitionPlan<'src>, CraneliftBackendError> {
+    INCLUDE_TEST_FIXTURE_BOUNDARY_USE.with(|cell| cell.set(true));
+    let result = plan_static_transition_graph(entry, declarations);
+    INCLUDE_TEST_FIXTURE_BOUNDARY_USE.with(|cell| cell.set(false));
+    result
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_synthesized_consumption_mutation(
+    mutation: SynthesizedConsumptionMutation,
+) {
+    SYNTHESIZED_CONSUMPTION_MUTATION.with(|cell| cell.set(mutation));
+    SYNTHESIZED_CONSUMPTION_MUTATED.with(|cell| cell.set(false));
+}
+
 pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'src>(
     entry: &'src RuntimeExpr,
     declarations: &BTreeMap<&str, &'src RuntimeDeclaration>,
@@ -8039,10 +8439,10 @@ mod tests {
         assert!(matches!(
             missing,
             CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
-                if detail == &format!(
-                    "source boundary-use ledger is not exact; missing={:?}; extra=[]",
+                if detail.starts_with(&format!(
+                    "source boundary-use ledger is not exact; missing={:?};",
                     [source_identity]
-                )
+                ))
         ));
 
         plan.operand_edge_token(root, 0, SourceOperandRole::ConstructArgument)
@@ -8078,7 +8478,10 @@ mod tests {
             constructor: "ctor:fixture::BoundaryUse::SynthExact".to_string(),
             args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
         };
-        let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+        let plan = plan_static_transition_graph_with_test_fixture_boundary_use(
+            &expr,
+            &BTreeMap::new(),
+        )
             .expect("the exact synthesized-consumption fixture plans");
         let root = plan
             .root_static_origin()
@@ -8089,9 +8492,9 @@ mod tests {
             .lowering_boundary_uses
             .iter()
             .find(|use_| {
-                use_.edge == LoweringOnlyOperandEdge::CallableCapsuleEscape
+                use_.edge == LoweringOnlyOperandEdge::TestFixtureResult
                     && use_.origin == root
-                    && use_.position == u32::MAX
+                    && use_.position == 0
             })
             .expect("the result crossing is planner-interned");
         consume_lowering_boundary_uses(&plan, Some(synthesized.identity));
@@ -8101,10 +8504,10 @@ mod tests {
         assert!(matches!(
             missing,
             CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
-                if detail == &format!(
-                    "boundary-use ledger is not exact; missing={:?}; extra=[]",
+                if detail.starts_with(&format!(
+                    "boundary-use ledger is not exact; missing={:?};",
                     [synthesized.identity]
-                )
+                ))
         ));
 
         plan.lowering_boundary_use_token(
@@ -8125,10 +8528,10 @@ mod tests {
         assert!(matches!(
             duplicate,
             CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
-                if detail == &format!(
-                    "boundary-use ledger contains duplicate consumption; duplicates={:?}",
+                if detail.starts_with(&format!(
+                    "boundary-use ledger contains duplicate consumption; duplicates={:?};",
                     [(synthesized.identity, 2)]
-                )
+                ))
         ));
     }
 

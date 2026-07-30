@@ -8835,6 +8835,62 @@ fn d8_mixed_host_result_uses_one_uniform_carrier_conversion_per_predecessor() {
     }
 }
 
+/// MEASURED: omitting the first real synthesized transition rejects at the
+/// unified exact ledger after all bodies are staged, while the adjacent unit
+/// publication counter remains zero.
+///
+/// CLAIMED: complete synthesized-use closure precedes every unit definition.
+///
+/// THE GAP: this controls omission only; the companion repeat control closes
+/// the other multiplicity direction.
+///
+/// Promise class: durable invariant.
+#[test]
+fn synthesized_boundary_use_omission_publishes_no_unit_function() {
+    set_synthesized_consumption_mutation(SynthesizedConsumptionMutation::OmitFirst);
+    let failure =
+        recursive_port_process_compiles(&d8_mixed_host_result_join_fixture(false))
+            .expect_err("an omitted synthesized use must reject");
+    set_synthesized_consumption_mutation(SynthesizedConsumptionMutation::Exact);
+
+    assert!(matches!(
+        failure,
+        CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+            if detail.starts_with("boundary-use ledger is not exact; missing=")
+    ));
+    let (declared, defined) =
+        crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+    assert!(declared > 0, "the control never reached function staging");
+    assert_eq!(defined, 0, "ledger omission published a unit function");
+}
+
+/// MEASURED: repeating the first real synthesized transition rejects at the
+/// unified multiplicity check after staging, with zero unit definitions.
+///
+/// CLAIMED: one planner-issued identity authorizes exactly one emission.
+///
+/// THE GAP: the companion omission control supplies population completeness.
+///
+/// Promise class: durable invariant.
+#[test]
+fn synthesized_boundary_use_repeat_publishes_no_unit_function() {
+    set_synthesized_consumption_mutation(SynthesizedConsumptionMutation::RepeatFirst);
+    let failure =
+        recursive_port_process_compiles(&d8_mixed_host_result_join_fixture(false))
+            .expect_err("a repeated synthesized use must reject");
+    set_synthesized_consumption_mutation(SynthesizedConsumptionMutation::Exact);
+
+    assert!(matches!(
+        failure,
+        CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+            if detail.starts_with("boundary-use ledger contains duplicate consumption;")
+    ));
+    let (declared, defined) =
+        crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+    assert!(declared > 0, "the control never reached function staging");
+    assert_eq!(defined, 0, "ledger repetition published a unit function");
+}
+
 /// **MEASURED:** a dynamic HostResult creates its planned merge through the
 /// central materialized-block recorder. A test-only false dead disposition then
 /// reaches completed-CFG validation, which observes the real entry-reachable

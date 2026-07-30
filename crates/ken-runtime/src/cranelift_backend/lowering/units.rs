@@ -214,6 +214,8 @@ pub(in crate::cranelift_backend) struct ResolvedUnitTarget {
 pub(in crate::cranelift_backend) struct DeclaredUnitCall {
     pub(in crate::cranelift_backend) function: FuncRef,
     pub(in crate::cranelift_backend) origin: StaticOriginId,
+    pub(in crate::cranelift_backend) call_site_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) boundary_owner: PredeclaredFunctionId,
     pub(in crate::cranelift_backend) header: AbiFrameHeader,
     pub(in crate::cranelift_backend) slots: Vec<AbiSlot>,
     pub(in crate::cranelift_backend) offsets: Vec<u32>,
@@ -283,6 +285,8 @@ impl CallEdgeTargets {
             let call = DeclaredUnitCall {
                 function: module.declare_func_in_func(target.function, func),
                 origin: target.origin,
+                call_site_origin: target.call_site_origin,
+                boundary_owner: caller,
                 header: target.header,
                 slots: target.slots.clone(),
                 offsets: target.offsets.clone(),
@@ -526,7 +530,7 @@ pub(in crate::cranelift_backend) fn declare_unit_bundle<M: Module>(
     Ok(UnitBundle { functions })
 }
 
-pub(super) fn define_root_adapter<M: Module>(
+pub(super) fn stage_root_adapter<M: Module>(
     module: &mut M,
     compiler: &mut Lowering<'_>,
     helpers: ArtifactHelpers<'_>,
@@ -534,7 +538,7 @@ pub(super) fn define_root_adapter<M: Module>(
     adapter_id: FuncId,
     process_mode: bool,
     project_public_scalar_root: bool,
-) -> Result<(), CraneliftBackendError> {
+) -> Result<cranelift_codegen::Context, CraneliftBackendError> {
     let root = compiler.static_transition_plan.root_emittable_unit()?;
     let root_id = bundle.function(root.function()).ok_or_else(|| {
         backend_module("the recorded root unit was never forward-declared".to_string())
@@ -577,6 +581,8 @@ pub(super) fn define_root_adapter<M: Module>(
         DeclaredUnitCall {
             function: module.declare_func_in_func(root_id, &mut func),
             origin: root_origin,
+            call_site_origin: root_origin,
+            boundary_owner: root.function(),
             header: root.header(),
             slots: root.slots().to_vec(),
             offsets,
@@ -683,12 +689,13 @@ pub(super) fn define_root_adapter<M: Module>(
     scale_b_record_functionized_root_adapter(&func);
     let mut ctx = module.make_context();
     std::mem::swap(&mut ctx.func, &mut func);
-    module
-        .define_function(adapter_id, &mut ctx)
-        .map_err(|err| backend_module(err.to_string()))
+    Ok(ctx)
 }
 
-/// **`D2` — define every declared unit against its declared activation frame.**
+/// **`D2` — stage every declared unit against its activation frame.**
+///
+/// No `define_function` occurs here. The complete body population remains
+/// private until the unified boundary-use ledger closes.
 ///
 /// ⛔ **Every dynamic value crosses into a unit through the declared
 /// `AbiFrameHeader` + `AbiSlot` layout, never through capture-by-construction.**
@@ -709,19 +716,25 @@ pub(super) struct RootUnitResult {
     pub(super) trap: Option<RuntimeTrap>,
 }
 
-pub(super) fn define_unit_bodies<M: Module>(
+pub(super) struct StagedUnitBodies {
+    root_result: RootUnitResult,
+    definitions: Vec<(FuncId, cranelift_codegen::Context)>,
+}
+
+pub(super) fn stage_unit_bodies<M: Module>(
     module: &mut M,
     compiler: &mut Lowering<'_>,
     helpers: ArtifactHelpers<'_>,
     bundle: &UnitBundle,
     call_edges: &CallEdgeTargets,
     staged_root_value: Option<&RuntimeValue>,
-) -> Result<RootUnitResult, CraneliftBackendError> {
+) -> Result<StagedUnitBodies, CraneliftBackendError> {
     let root = compiler
         .static_transition_plan
         .root_emittable_unit()?
         .function();
     let mut root_result = None;
+    let mut definitions = Vec::new();
     let emissions = compiler
         .static_transition_plan
         .emittable_units()?
@@ -744,7 +757,7 @@ pub(super) fn define_unit_bodies<M: Module>(
             backend_module("a planned unit was never forward-declared".to_string())
         })?;
         let is_root = root == unit.function;
-        let outcome = define_unit_body(
+        let (outcome, context) = stage_unit_body(
             module,
             compiler,
             helpers,
@@ -754,6 +767,7 @@ pub(super) fn define_unit_bodies<M: Module>(
             is_root,
             staged_root_value,
         )?;
+        definitions.push((id, context));
         if let Some(outcome) = outcome {
             if root_result.replace(outcome).is_some() {
                 return Err(backend_module(
@@ -762,9 +776,39 @@ pub(super) fn define_unit_bodies<M: Module>(
             }
         }
     }
-    root_result.ok_or_else(|| {
-        backend_module("the emitted unit bundle did not define its recorded root".to_string())
+    let root_result = root_result.ok_or_else(|| {
+        backend_module("the emitted unit bundle did not stage its recorded root".to_string())
+    })?;
+    Ok(StagedUnitBodies {
+        root_result,
+        definitions,
     })
+}
+
+pub(super) fn publish_functionized_bodies<M: Module>(
+    module: &mut M,
+    staged: StagedUnitBodies,
+    adapter_id: FuncId,
+    mut adapter: cranelift_codegen::Context,
+) -> Result<RootUnitResult, CraneliftBackendError> {
+    // The caller reaches this commit point only after the complete unified
+    // source/recursor/lowering ledger closes. Until this loop begins, every
+    // unit and the adapter exist only as verified Cranelift contexts and the
+    // module has received zero function definitions.
+    for (id, mut context) in staged.definitions {
+        module
+            .define_function(id, &mut context)
+            .map_err(|err| backend_module(err.to_string()))?;
+        #[cfg(test)]
+        B2F_UNIT_EMISSION.with(|cell| {
+            let (declared, defined) = cell.get();
+            cell.set((declared, defined + 1));
+        });
+    }
+    module
+        .define_function(adapter_id, &mut adapter)
+        .map_err(|err| backend_module(err.to_string()))?;
+    Ok(staged.root_result)
 }
 
 struct OwnedUnitEmission {
@@ -777,7 +821,7 @@ struct OwnedUnitEmission {
     frame_bytes: u32,
 }
 
-fn define_unit_body<M: Module>(
+fn stage_unit_body<M: Module>(
     module: &mut M,
     compiler: &mut Lowering<'_>,
     helpers: ArtifactHelpers<'_>,
@@ -786,7 +830,10 @@ fn define_unit_body<M: Module>(
     call_edges: &CallEdgeTargets,
     is_root: bool,
     staged_root_value: Option<&RuntimeValue>,
-) -> Result<Option<RootUnitResult>, CraneliftBackendError> {
+) -> Result<
+    (Option<RootUnitResult>, cranelift_codegen::Context),
+    CraneliftBackendError,
+> {
     // ⭐ The declared size and the walked size must agree. They are the same
     // walk by construction (`abi::slot_offsets` totals for both), so this
     // rejects a corrupted descriptor rather than a divergent derivation.
@@ -1133,6 +1180,9 @@ fn define_unit_body<M: Module>(
             compiler.lower_expr(&mut builder, body, &env)?
         };
         compiler.validate_join_plan_consumption(unit.function)?;
+        compiler
+            .static_transition_plan
+            .disposition_unreached_recursor_uses_for_owner(unit.function)?;
         let (result, outcome) = if is_root {
             match lowered {
                 LoweringOperand::Carried(word) if !compiler.process_object => (
@@ -1189,14 +1239,33 @@ fn define_unit_body<M: Module>(
             }
         } else {
             let word = match lowered {
-                LoweringOperand::Carried(word) => Some(word.word),
+                LoweringOperand::Carried(word) => {
+                    // The value is already operational, but it still crosses
+                    // this exact unit-result boundary. Consume the same
+                    // planner-issued escape authority that a specialized
+                    // result would use before transfer.
+                    compiler
+                        .static_transition_plan
+                        .lowering_boundary_use_token_for_owner(
+                            LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                            unit.origin,
+                            u32::MAX,
+                            unit.function,
+                        )?;
+                    Some(word.word)
+                }
                 LoweringOperand::Specialized(Lowered::Trap(trap)) => {
                     compiler.emit_current_trap(&mut builder, &trap)?;
                     None
                 }
                 LoweringOperand::Specialized(value) => Some(
                     compiler
-                        .transfer_unit_result_into_carrier(&mut builder, unit.origin, &value)?
+                        .transfer_unit_result_into_carrier(
+                            &mut builder,
+                            unit.origin,
+                            unit.function,
+                            &value,
+                        )?
                         .word,
                 ),
             };
@@ -1218,31 +1287,11 @@ fn define_unit_body<M: Module>(
         builder.seal_all_blocks();
         builder.finalize();
     }
-    compiler
-        .static_transition_plan
-        .validate_boundary_use_consumption_for_owner(unit.function)?;
     compiler.validate_materialized_dead_join_cfg(unit.function, &func)?;
     verify_cranelift_function(&func, module.isa())?;
     #[cfg(test)]
     scale_b_record_unit_body(&func);
     let mut ctx = module.make_context();
     std::mem::swap(&mut ctx.func, &mut func);
-    module
-        .define_function(id, &mut ctx)
-        .map_err(|err| backend_module(err.to_string()))?;
-    // ⛔ Counted HERE, adjacent to `define_function`, and NOT at the call site
-    // in the loop above -- where it was first written and where it was
-    // worthless.
-    //
-    // ⭐ A mutation gating the `define_unit_body` call left this test GREEN,
-    // because a counter incremented once per loop iteration compares the
-    // bundle's length to the length of the collection the loop walks, which are
-    // equal by construction. It proved the loop ran and CLAIMED bodies were
-    // defined. Only an increment on the emitting path can tell those apart.
-    #[cfg(test)]
-    B2F_UNIT_EMISSION.with(|cell| {
-        let (declared, defined) = cell.get();
-        cell.set((declared, defined + 1));
-    });
-    Ok(root_outcome)
+    Ok((root_outcome, ctx))
 }

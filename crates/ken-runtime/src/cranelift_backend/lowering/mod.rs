@@ -87,7 +87,9 @@ pub(in crate::cranelift_backend) use super::planning::{
 #[cfg(test)]
 pub(in crate::cranelift_backend) use super::planning::{
     plan_static_transition_graph, with_last_io_error_role_omitted,
-    with_lowering_boundary_use_issuance_denied, ScaleBPlanCensus,
+    plan_static_transition_graph_with_test_fixture_boundary_use,
+    set_synthesized_consumption_mutation, with_lowering_boundary_use_issuance_denied,
+    ScaleBPlanCensus, SynthesizedConsumptionMutation,
 };
 pub(in crate::cranelift_backend) use super::surface::{
     backend, backend_module, unsupported, BackendFailure, CraneliftBackendError,
@@ -1791,6 +1793,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         origin: StaticOriginId,
+        owner: PredeclaredFunctionId,
         value: &Lowered,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
         let process_exit = self.process_object
@@ -1804,11 +1807,14 @@ impl<'a> Lowering<'a> {
             let status = self.emit_process_exit_status(builder, value.clone());
             self.emit_carrier_immediate(builder, BoundaryTag::ImmediateExitStatus, status)
         } else {
-            let edge = self.static_transition_plan.lowering_boundary_use_token(
-                LoweringOnlyOperandEdge::CallableCapsuleEscape,
-                origin,
-                u32::MAX,
-            )?;
+            let edge =
+                self.static_transition_plan
+                    .lowering_boundary_use_token_for_owner(
+                        LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                        origin,
+                        u32::MAX,
+                        owner,
+                    )?;
             self.transfer_into_carrier_on_planned_edge(builder, origin, value, edge)
         }
     }
@@ -1888,6 +1894,8 @@ impl<'a> Lowering<'a> {
         {
             return Ok(());
         }
+        self.static_transition_plan
+            .disposition_boundary_uses_in_owner_subtree(root)?;
         let joins = self
             .static_transition_plan
             .source_join_origins_in_owner_subtree(root)?;
@@ -2004,6 +2012,17 @@ impl<'a> Lowering<'a> {
             let mut omitted_for_mutation = false;
             for (index, root) in case_bodies.into_iter().enumerate() {
                 if reached_cases.contains(&index) {
+                    self.static_transition_plan.close_reached_operand_edge(
+                        match_origin,
+                        1 + index,
+                        SourceOperandRole::MatchArm,
+                    )?;
+                    self.static_transition_plan
+                        .disposition_lowering_boundary_use_if_planned(
+                            LoweringOnlyOperandEdge::JoinArm,
+                            root,
+                            0,
+                        )?;
                     continue;
                 }
                 #[cfg(test)]
@@ -2014,8 +2033,19 @@ impl<'a> Lowering<'a> {
                     omitted_for_mutation = true;
                     continue;
                 }
+                self.static_transition_plan.disposition_operand_edge(
+                    match_origin,
+                    1 + index,
+                    SourceOperandRole::MatchArm,
+                )?;
                 self.disposition_statically_unselected_source_subtree(root)?;
             }
+            self.static_transition_plan
+                .disposition_lowering_boundary_use_if_planned(
+                    LoweringOnlyOperandEdge::JoinArm,
+                    match_origin,
+                    0,
+                )?;
         }
         Ok(())
     }
@@ -2409,20 +2439,21 @@ impl<'a> Lowering<'a> {
         // descending into or publishing any of its phase-bearing captures.
         let mut input_edges = Vec::with_capacity(inputs.len());
         for (position, input) in inputs.iter().enumerate() {
+            let position = u32::try_from(position).map_err(|_| {
+                backend_module("callee input boundary position exceeds u32".to_string())
+            })?;
+            let edge =
+                self.static_transition_plan
+                    .lowering_boundary_use_token_for_owner(
+                        LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                        target.call_site_origin,
+                        position,
+                        target.boundary_owner,
+                    )?;
             if let LoweringOperand::Specialized(value) = input {
-                let position = u32::try_from(position).map_err(|_| {
-                    backend_module("callee input boundary position exceeds u32".to_string())
-                })?;
-                let edge = self.static_transition_plan.lowering_boundary_use_token(
-                    LoweringOnlyOperandEdge::CallableCapsuleEscape,
-                    target.origin,
-                    position,
-                )?;
                 value.boundary_transfer_admissibility(&edge)?;
-                input_edges.push(Some(edge));
-            } else {
-                input_edges.push(None);
             }
+            input_edges.push(Some(edge));
         }
         let payload = builder.create_sized_stack_slot(StackSlotData::new(
             StackSlotKind::ExplicitSlot,

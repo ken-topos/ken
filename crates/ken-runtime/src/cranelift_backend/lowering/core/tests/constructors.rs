@@ -2088,10 +2088,15 @@ fn d7_mixed_constructor_transfer_reds_when_planner_issuance_is_denied() {
             )],
         }],
     };
+    let construct_owner = compiler
+        .static_transition_plan
+        .function_owner_for_test(construct_origin)
+        .expect("fixture origin has a function owner");
     let denied = with_lowering_boundary_use_issuance_denied(|| {
         compiler.transfer_unit_result_into_carrier(
             &mut builder,
             construct_origin,
+            construct_owner,
             &mixed,
         )
     })

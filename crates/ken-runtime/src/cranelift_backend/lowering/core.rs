@@ -631,7 +631,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
             let (unit_bundle, call_edges) = functionized_bundle
                 .as_ref()
                 .expect("the functionized selector arm owns its bundle");
-            let root_result = super::units::define_unit_bodies(
+            let staged_units = super::units::stage_unit_bodies(
                 &mut module,
                 &mut compiler,
                 helpers,
@@ -641,7 +641,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
             )?;
             compiler.require_complete_join_plan_consumption()?;
             compiler.require_complete_dynamic_splice_edge_consumption()?;
-            super::units::define_root_adapter(
+            let staged_adapter = super::units::stage_root_adapter(
                 &mut module,
                 &mut compiler,
                 helpers,
@@ -650,7 +650,15 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 process_mode,
                 project_public_scalar_root,
             )?;
-            root_result
+            compiler
+                .static_transition_plan
+                .validate_boundary_use_consumption()?;
+            super::units::publish_functionized_bodies(
+                &mut module,
+                staged_units,
+                func_id,
+                staged_adapter,
+            )?
         }
         BodyEmissionAuthority::RecursiveDescent => {
             let mut maybe_trap = None;
@@ -1978,6 +1986,11 @@ impl<'a> Lowering<'a> {
                 default: producer_default,
             } => {
                 let scrutinee = self.child_occurrence(static_origin, 0, scrutinee)?;
+                let _scrutinee_edge = self.static_transition_plan.operand_edge_token(
+                    static_origin,
+                    0,
+                    SourceOperandRole::MatchScrutinee,
+                )?;
                 let selected = self.lower_expr(builder, scrutinee, producer_env)?;
                 if let LoweringOperand::Carried(word) = selected {
                     return self.lower_carried_match(
@@ -2216,6 +2229,24 @@ impl<'a> Lowering<'a> {
                     .find(|(_, case)| case.constructor == constructor)
                 else {
                     self.disposition_statically_unselected_match_cases(static_origin, None)?;
+                    for eliminator in eliminators {
+                        let frame_origin = match eliminator {
+                            EliminatorFrame::Computational(frame) => frame.static_origin,
+                            EliminatorFrame::Ordinary(frame) => frame.static_origin,
+                            EliminatorFrame::PendingLet(_)
+                            | EliminatorFrame::InvocationReturn
+                            | EliminatorFrame::Active(_) => continue,
+                        };
+                        self.static_transition_plan.disposition_operand_edge(
+                            frame_origin,
+                            0,
+                            SourceOperandRole::MatchScrutinee,
+                        )?;
+                        self.disposition_statically_unselected_match_cases(
+                            frame_origin,
+                            None,
+                        )?;
+                    }
                     return Ok(LoweringOperand::Specialized(Lowered::Trap(
                         producer_default.clone(),
                     )));
@@ -4091,6 +4122,11 @@ impl<'a> Lowering<'a> {
                             next,
                         } => {
                             self.enter_source_occurrence_plan(static_origin)?;
+                            self.static_transition_plan.close_reached_operand_edge(
+                                static_origin,
+                                0,
+                                SourceOperandRole::MatchScrutinee,
+                            )?;
                             control.continuation = *next;
                             match value {
                                 LoweringOperand::Specialized(Lowered::BoundedNat(nat)) => {
@@ -4268,6 +4304,11 @@ impl<'a> Lowering<'a> {
                             next,
                         } => 'computational_scrutinee: {
                             self.enter_source_occurrence_plan(static_origin)?;
+                            self.static_transition_plan.close_reached_operand_edge(
+                                static_origin,
+                                0,
+                                SourceOperandRole::MatchScrutinee,
+                            )?;
                             // ⭐⭐ `AC-C4` — THE RESUMPTION POINT. An induction
                             // hypothesis over a carried child hands its word back
                             // as the machine's value, and it lands **here**: this
@@ -7857,6 +7898,11 @@ impl<'a> Lowering<'a> {
             }
             RuntimeExpr::Let { value, body } => {
                 let value = self.child_occurrence(static_origin, 0, value)?;
+                let _value_edge = self.static_transition_plan.operand_edge_token(
+                    static_origin,
+                    0,
+                    SourceOperandRole::LetValue,
+                )?;
                 let lowered_value = self.lower_expr(builder, value, env)?;
                 if matches!(lowered_value, LoweringOperand::Specialized(Lowered::RecursiveBackedge)) {
                     return Ok(LoweringOperand::Specialized(Lowered::RecursiveBackedge));
@@ -7867,6 +7913,11 @@ impl<'a> Lowering<'a> {
                 let mut body_env = vec![lowered_value];
                 body_env.extend_from_slice(env);
                 let body = self.child_occurrence(static_origin, 1, body)?;
+                let _body_edge = self.static_transition_plan.operand_edge_token(
+                    static_origin,
+                    1,
+                    SourceOperandRole::LetBody,
+                )?;
                 self.lower_expr(builder, body, &body_env)
             }
             RuntimeExpr::If {
@@ -7877,6 +7928,11 @@ impl<'a> Lowering<'a> {
                 let scrutinee = self.child_occurrence(static_origin, 0, scrutinee)?;
                 let then_expr = self.child_occurrence(static_origin, 1, then_expr)?;
                 let else_expr = self.child_occurrence(static_origin, 2, else_expr)?;
+                let _scrutinee_edge = self.static_transition_plan.operand_edge_token(
+                    static_origin,
+                    0,
+                    SourceOperandRole::IfScrutinee,
+                )?;
                 let lowered_scrutinee = self.lower_expr(builder, scrutinee, env)?;
                 if matches!(lowered_scrutinee, LoweringOperand::Specialized(Lowered::RecursiveBackedge)) {
                     return Ok(LoweringOperand::Specialized(Lowered::RecursiveBackedge));
@@ -7889,6 +7945,34 @@ impl<'a> Lowering<'a> {
                 };
                 if let Some(scrutinee) = known {
                     let unselected = if scrutinee { else_expr } else { then_expr };
+                    let selected_position = if scrutinee { 1 } else { 2 };
+                    let unselected_position = if scrutinee { 2 } else { 1 };
+                    let _selected_edge = self.static_transition_plan.operand_edge_token(
+                        static_origin,
+                        selected_position,
+                        SourceOperandRole::IfArm,
+                    )?;
+                    self.static_transition_plan.disposition_operand_edge(
+                        static_origin,
+                        unselected_position,
+                        SourceOperandRole::IfArm,
+                    )?;
+                    self.static_transition_plan
+                        .disposition_lowering_boundary_use_if_planned(
+                            LoweringOnlyOperandEdge::JoinArm,
+                            static_origin,
+                            0,
+                        )?;
+                    self.static_transition_plan
+                        .disposition_lowering_boundary_use_if_planned(
+                            LoweringOnlyOperandEdge::JoinArm,
+                            if scrutinee {
+                                then_expr.static_origin
+                            } else {
+                                else_expr.static_origin
+                            },
+                            0,
+                        )?;
                     self.disposition_statically_unselected_source_subtree(
                         unselected.static_origin,
                     )?;
@@ -7912,6 +7996,16 @@ impl<'a> Lowering<'a> {
                 let mut terminal_trap = None;
                 for (block, arm) in [(then_block, then_expr), (else_block, else_expr)] {
                     builder.switch_to_block(block);
+                    let position = if arm.static_origin == then_expr.static_origin {
+                        1
+                    } else {
+                        2
+                    };
+                    let _arm_edge = self.static_transition_plan.operand_edge_token(
+                        static_origin,
+                        position,
+                        SourceOperandRole::IfArm,
+                    )?;
                     let lowered = self.lower_expr(builder, arm, env)?;
                     if let LoweringOperand::Specialized(Lowered::Trap(trap)) = &lowered {
                         terminal_trap.get_or_insert_with(|| trap.clone());
@@ -8018,16 +8112,6 @@ impl<'a> Lowering<'a> {
                 default,
             } => {
                 let scrutinee_occurrence = self.child_occurrence(static_origin, 0, scrutinee)?;
-                let scrutinee_edge = self.static_transition_plan.operand_edge_token(
-                    static_origin,
-                    0,
-                    SourceOperandRole::MatchScrutinee,
-                )?;
-                if scrutinee_edge.disposition() != OperandEdgeDisposition::SemanticEliminator {
-                    return Err(backend(BackendFailure::PlannerInvariant(
-                        "match scrutinee lost its semantic-eliminator disposition".to_string(),
-                    )));
-                }
                 if requires_heterogeneous_deforestation(scrutinee)
                     || self.declaration_call_produces_deforestable_aggregate(scrutinee)
                 {
@@ -8044,6 +8128,16 @@ impl<'a> Lowering<'a> {
                             deferred_constructor_case: None,
                         })],
                     );
+                }
+                let scrutinee_edge = self.static_transition_plan.operand_edge_token(
+                    static_origin,
+                    0,
+                    SourceOperandRole::MatchScrutinee,
+                )?;
+                if scrutinee_edge.disposition() != OperandEdgeDisposition::SemanticEliminator {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "match scrutinee lost its semantic-eliminator disposition".to_string(),
+                    )));
                 }
                 let lowered_scrutinee = self.lower_expr(builder, scrutinee_occurrence, env)?;
                 // ⭐⭐ `D3`'s CARRIED arm, and it MUST come first.
@@ -8480,6 +8574,17 @@ impl<'a> Lowering<'a> {
                         body,
                     } = callee.expr
                     {
+                        let edge = self.static_transition_plan.operand_edge_token(
+                            static_origin,
+                            0,
+                            SourceOperandRole::CallCallee,
+                        )?;
+                        if edge.disposition() != OperandEdgeDisposition::SpecializedOnlyLeaf {
+                            return Err(backend(BackendFailure::PlannerInvariant(
+                                "direct lexical callee lost its semantic-inspection disposition"
+                                    .to_string(),
+                            )));
+                        }
                         if params.len() != args.len() {
                             return Err(unsupported(
                                 "Call",
@@ -8555,6 +8660,23 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     }) => {
+                        // A callable body may be emitted once per specialization,
+                        // while this source edge still denotes one exact source
+                        // occurrence. Close that planned occurrence on its first
+                        // reached specialization instead of fabricating one use
+                        // per emitted body.
+                        let disposition =
+                            self.static_transition_plan.close_reached_operand_edge(
+                                static_origin,
+                                0,
+                                SourceOperandRole::CallCallee,
+                            )?;
+                        if disposition != OperandEdgeDisposition::SpecializedOnlyLeaf {
+                            return Err(backend(BackendFailure::PlannerInvariant(
+                                "closure callee lost its semantic-inspection disposition"
+                                    .to_string(),
+                            )));
+                        }
                         let mut call_env = args
                             .iter()
                             .enumerate()
