@@ -6068,16 +6068,11 @@ fn d7_raw_mixed_constructor_transfer_cannot_bypass_the_planned_ledger() {
         .expect("the plan has a root occurrence origin");
 
     let bypass = plan
-        .lowering_boundary_use_token(
-            LoweringOnlyOperandEdge::CallableCapsuleEscape,
-            origin,
-            0,
-        )
+        .lowering_boundary_use_token(LoweringOnlyOperandEdge::CallableCapsuleEscape, origin, 0)
         .expect_err("an unplanned raw transfer position has no token");
     assert!(
-        format!("{bypass}").contains(
-            "lowering transition has no exact planner-issued boundary use"
-        ),
+        format!("{bypass}")
+            .contains("lowering transition has no exact planner-issued boundary use"),
         "the raw transfer must fail at planner authority lookup, before a value \
          walk or allocation can run: {bypass}"
     );
@@ -8214,6 +8209,60 @@ fn recursive_port_process_compiles(expr: &RuntimeExpr) -> Result<(), CraneliftBa
     .map(|_| ())
 }
 
+fn static_recursor_causal_branch_fixture(selected: bool) -> RuntimeExpr {
+    let node = "ctor:fixture::StaticLedger::Node";
+    let leaf = "ctor:fixture::StaticLedger::Leaf";
+    let worker = |body_marker: bool| RuntimeExpr::Construct {
+        constructor: node.to_string(),
+        args: vec![RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["unit".to_string()],
+            body: Box::new(RuntimeExpr::If {
+                scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(body_marker))),
+                then_expr: Box::new(RuntimeExpr::Construct {
+                    constructor: leaf.to_string(),
+                    args: Vec::new(),
+                }),
+                else_expr: Box::new(RuntimeExpr::Construct {
+                    constructor: leaf.to_string(),
+                    args: Vec::new(),
+                }),
+            }),
+        }],
+    };
+    RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::If {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(selected))),
+            then_expr: Box::new(worker(true)),
+            else_expr: Box::new(worker(false)),
+        }),
+        cases: vec![
+            crate::RuntimeComputationalMatchCase {
+                constructor: node.to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                        args: Vec::new(),
+                    }],
+                },
+            },
+            crate::RuntimeComputationalMatchCase {
+                constructor: leaf.to_string(),
+                argument_binders: 0,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Value(RuntimeValue::Int(17.into())),
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "static recursor causal branch fixture is total".to_string(),
+        },
+    }
+}
+
 #[test]
 fn governed_nested_brackets_n3_through_n7_emit_complete_functionized_bundles() {
     for depth in 3..=7 {
@@ -8848,9 +8897,8 @@ fn d8_mixed_host_result_uses_one_uniform_carrier_conversion_per_predecessor() {
 #[test]
 fn synthesized_boundary_use_omission_publishes_no_unit_function() {
     set_synthesized_consumption_mutation(SynthesizedConsumptionMutation::OmitFirst);
-    let failure =
-        recursive_port_process_compiles(&d8_mixed_host_result_join_fixture(false))
-            .expect_err("an omitted synthesized use must reject");
+    let failure = recursive_port_process_compiles(&d8_mixed_host_result_join_fixture(false))
+        .expect_err("an omitted synthesized use must reject");
     set_synthesized_consumption_mutation(SynthesizedConsumptionMutation::Exact);
 
     assert!(matches!(
@@ -8858,8 +8906,7 @@ fn synthesized_boundary_use_omission_publishes_no_unit_function() {
         CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
             if detail.starts_with("boundary-use ledger is not exact; missing=")
     ));
-    let (declared, defined) =
-        crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+    let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
     assert!(declared > 0, "the control never reached function staging");
     assert_eq!(defined, 0, "ledger omission published a unit function");
 }
@@ -8875,9 +8922,8 @@ fn synthesized_boundary_use_omission_publishes_no_unit_function() {
 #[test]
 fn synthesized_boundary_use_repeat_publishes_no_unit_function() {
     set_synthesized_consumption_mutation(SynthesizedConsumptionMutation::RepeatFirst);
-    let failure =
-        recursive_port_process_compiles(&d8_mixed_host_result_join_fixture(false))
-            .expect_err("a repeated synthesized use must reject");
+    let failure = recursive_port_process_compiles(&d8_mixed_host_result_join_fixture(false))
+        .expect_err("a repeated synthesized use must reject");
     set_synthesized_consumption_mutation(SynthesizedConsumptionMutation::Exact);
 
     assert!(matches!(
@@ -8885,10 +8931,94 @@ fn synthesized_boundary_use_repeat_publishes_no_unit_function() {
         CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
             if detail.starts_with("boundary-use ledger contains duplicate consumption;")
     ));
-    let (declared, defined) =
-        crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+    let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
     assert!(declared > 0, "the control never reached function staging");
     assert_eq!(defined, 0, "ledger repetition published a unit function");
+}
+
+/// MEASURED: either statically selected result arm consumes its exact worker
+/// identity, the other arm is causally dispositioned, and the complete staged
+/// bundle publishes only after global ledger closure.
+///
+/// CLAIMED: a dead worker is closed by the selecting `If`, never by absence
+/// from the emitted-consumption ledger.
+///
+/// THE GAP: the planner-level paired-identity control separately proves that
+/// both arms share parent/position while retaining distinct result provenance.
+///
+/// Promise class: durable invariant.
+#[test]
+fn static_unselected_recursor_result_is_causally_dispositioned() {
+    for selected in [true, false] {
+        recursive_port_process_compiles(&static_recursor_causal_branch_fixture(selected))
+            .unwrap_or_else(|error| {
+                panic!("selected static recursor branch {selected} did not compile: {error}")
+            });
+        let (declared, defined) =
+            crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+        assert!(declared > 1, "the fixture staged no worker unit");
+        assert_eq!(
+            defined, declared,
+            "the causally closed bundle was incomplete"
+        );
+    }
+}
+
+/// MEASURED: suppressing ledger consumption on a reached exact static-worker
+/// lookup reaches global set inequality after staging, with zero definitions.
+///
+/// CLAIMED: a live worker cannot be forgiven as merely unconsumed.
+///
+/// THE GAP: the companion causal-dead test supplies the lawful disposition
+/// arm; this mutation controls only reached omission.
+///
+/// Promise class: durable invariant.
+#[test]
+fn reached_static_recursor_omission_publishes_no_unit_function() {
+    set_static_recursor_consumption_mutation(StaticRecursorConsumptionMutation::OmitFirst);
+    let failure = recursive_port_process_compiles(&static_recursor_causal_branch_fixture(true))
+        .expect_err("an omitted reached static worker must reject");
+    set_static_recursor_consumption_mutation(StaticRecursorConsumptionMutation::Exact);
+
+    assert!(matches!(
+        failure,
+        CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+            if detail.starts_with("boundary-use ledger is not exact; missing=")
+    ));
+    let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+    assert!(declared > 1, "the control never reached function staging");
+    assert_eq!(
+        defined, 0,
+        "the omitted live worker published a unit function"
+    );
+}
+
+/// MEASURED: repeating the reached worker's exact unified identity rejects at
+/// multiplicity closure, before any staged unit definition is published.
+///
+/// CLAIMED: a planner-issued static-worker identity authorizes one crossing.
+///
+/// THE GAP: the companion omission control supplies population completeness.
+///
+/// Promise class: durable invariant.
+#[test]
+fn reached_static_recursor_repeat_publishes_no_unit_function() {
+    set_static_recursor_consumption_mutation(StaticRecursorConsumptionMutation::RepeatFirst);
+    let failure = recursive_port_process_compiles(&static_recursor_causal_branch_fixture(true))
+        .expect_err("a repeated reached static worker must reject");
+    set_static_recursor_consumption_mutation(StaticRecursorConsumptionMutation::Exact);
+
+    assert!(matches!(
+        failure,
+        CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+            if detail.starts_with("boundary-use ledger contains duplicate consumption;")
+    ));
+    let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+    assert!(declared > 1, "the control never reached function staging");
+    assert_eq!(
+        defined, 0,
+        "the repeated live worker published a unit function"
+    );
 }
 
 /// **MEASURED:** a dynamic HostResult creates its planned merge through the

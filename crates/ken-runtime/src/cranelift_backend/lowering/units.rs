@@ -219,8 +219,7 @@ pub(in crate::cranelift_backend) struct DeclaredUnitCall {
     pub(in crate::cranelift_backend) header: AbiFrameHeader,
     pub(in crate::cranelift_backend) slots: Vec<AbiSlot>,
     pub(in crate::cranelift_backend) offsets: Vec<u32>,
-    pub(in crate::cranelift_backend) static_callable_body:
-        Option<EmittableStaticCallableBinding>,
+    pub(in crate::cranelift_backend) static_callable_body: Option<EmittableStaticCallableBinding>,
 }
 
 #[derive(Clone)]
@@ -433,8 +432,7 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
                 static_callable_body: if edge.kind() == EmittableCallKind::StaticBody {
                     match unit.definition() {
                         AbiUnitDefinition::StaticCallableSpecialization {
-                            specialization,
-                            ..
+                            specialization, ..
                         } => plan
                             .emittable_static_callable_unit(specialization)?
                             .body_binding()
@@ -830,10 +828,7 @@ fn stage_unit_body<M: Module>(
     call_edges: &CallEdgeTargets,
     is_root: bool,
     staged_root_value: Option<&RuntimeValue>,
-) -> Result<
-    (Option<RootUnitResult>, cranelift_codegen::Context),
-    CraneliftBackendError,
-> {
+) -> Result<(Option<RootUnitResult>, cranelift_codegen::Context), CraneliftBackendError> {
     // ⭐ The declared size and the walked size must agree. They are the same
     // walk by construction (`abi::slot_offsets` totals for both), so this
     // rejects a corrupted descriptor rather than a divergent derivation.
@@ -1180,9 +1175,6 @@ fn stage_unit_body<M: Module>(
             compiler.lower_expr(&mut builder, body, &env)?
         };
         compiler.validate_join_plan_consumption(unit.function)?;
-        compiler
-            .static_transition_plan
-            .disposition_unreached_recursor_uses_for_owner(unit.function)?;
         let (result, outcome) = if is_root {
             match lowered {
                 LoweringOperand::Carried(word) if !compiler.process_object => (

@@ -17,9 +17,10 @@ pub(super) use static_transition::plan_static_transition_graph_with_symbols;
 #[cfg(test)]
 pub(super) use static_transition::{
     governed_nested_resource_bracket, plan_static_transition_graph,
-    plan_static_transition_graph_with_test_fixture_boundary_use, ScaleBPlanCensus,
-    set_synthesized_consumption_mutation, with_last_io_error_role_omitted,
-    with_lowering_boundary_use_issuance_denied, SynthesizedConsumptionMutation,
+    plan_static_transition_graph_with_test_fixture_boundary_use,
+    set_static_recursor_consumption_mutation, set_synthesized_consumption_mutation,
+    with_last_io_error_role_omitted, with_lowering_boundary_use_issuance_denied, ScaleBPlanCensus,
+    StaticRecursorConsumptionMutation, SynthesizedConsumptionMutation,
 };
 pub(super) use static_transition::{
     planned_partiality_trap, BoundaryUseIdentity, ConstructorIdentity, JoinPlanToken,

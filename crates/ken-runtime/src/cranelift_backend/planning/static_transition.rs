@@ -65,8 +65,7 @@ pub(in crate::cranelift_backend) fn with_lowering_boundary_use_issuance_denied<R
         }
     }
 
-    let previous =
-        DENY_LOWERING_BOUNDARY_USE_ISSUANCE.with(|denied| denied.replace(true));
+    let previous = DENY_LOWERING_BOUNDARY_USE_ISSUANCE.with(|denied| denied.replace(true));
     let _reset = Reset(previous);
     control()
 }
@@ -629,6 +628,7 @@ struct StaticRecursorCaptureProvenance {
 struct PlannedStaticRecursorWorkerResidual {
     id: StaticRecursorWorkerResidualId,
     parent_origin: StaticOriginId,
+    producer_origin: StaticOriginId,
     sibling_position: u32,
     closure_origin: StaticOriginId,
     body_origin: StaticOriginId,
@@ -666,7 +666,7 @@ struct PlannedLoweringBoundaryUse {
     avail: BoundaryUseAvail,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum PlannedBoundaryUsePath {
     Source {
         parent: StaticOriginId,
@@ -677,6 +677,15 @@ enum PlannedBoundaryUsePath {
         origin: StaticOriginId,
         position: u32,
     },
+    StaticRecursorWorker {
+        parent_origin: StaticOriginId,
+        producer_origin: StaticOriginId,
+        sibling_position: u32,
+        closure_origin: StaticOriginId,
+        body_origin: StaticOriginId,
+        declared_arity: u32,
+        captures: Vec<StaticRecursorCaptureProvenance>,
+    },
 }
 
 /// The single planner-owned population behind every phase-bearing transition.
@@ -684,7 +693,7 @@ enum PlannedBoundaryUsePath {
 /// Source-child indexes and synthesized-edge indexes remain useful for deriving
 /// exact lookup keys, but neither is lowering authority. Tokens are issued only
 /// from this closed population after the generated-unit fixed point completes.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct PlannedBoundaryUse {
     identity: BoundaryUseIdentity,
     path: PlannedBoundaryUsePath,
@@ -704,8 +713,10 @@ struct PlannedBoundaryUse {
 /// position. It cannot construct or reclassify one.
 #[derive(Debug)]
 pub(in crate::cranelift_backend) struct StaticRecursorWorkerResidualToken {
+    identity: BoundaryUseIdentity,
     pub(in crate::cranelift_backend) id: StaticRecursorWorkerResidualId,
     pub(in crate::cranelift_backend) parent_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) producer_origin: StaticOriginId,
     pub(in crate::cranelift_backend) sibling_position: u32,
     pub(in crate::cranelift_backend) closure_origin: StaticOriginId,
     pub(in crate::cranelift_backend) body_origin: StaticOriginId,
@@ -717,6 +728,10 @@ pub(in crate::cranelift_backend) struct StaticRecursorWorkerResidualToken {
 impl StaticRecursorWorkerResidualToken {
     pub(in crate::cranelift_backend) fn disposition(&self) -> OperandEdgeDisposition {
         self.disposition
+    }
+
+    pub(in crate::cranelift_backend) fn identity(&self) -> BoundaryUseIdentity {
+        self.identity
     }
 }
 
@@ -2137,8 +2152,7 @@ fn is_static_recursor_construct_argument(
         {
             continue;
         }
-        let scrutinee_origin =
-            plan.semantic.child_origin(occurrence.static_origin, 0)?;
+        let scrutinee_origin = plan.semantic.child_origin(occurrence.static_origin, 0)?;
         if !plan
             .source_result_origins_in_owner_subtree(scrutinee_origin)?
             .contains(&parent)
@@ -2179,8 +2193,7 @@ fn build_operand_edge_matrix(
                 .semantic
                 .function_owner(child)?
                 .ok_or_else(|| planner_error("source operand producer has no function owner"))?;
-            let disposition =
-                derive_operand_edge_disposition(plan, parent, child, position, role)?;
+            let disposition = derive_operand_edge_disposition(plan, parent, child, position, role)?;
             let (consumer_phase, operation, need, avail) = boundary_contract(disposition);
             edges.push(PlannedOperandEdge {
                 owner,
@@ -2219,8 +2232,7 @@ fn build_static_recursor_worker_residuals(
             continue;
         };
         let scrutinee_origin = plan.semantic.child_origin(parent.static_origin, 0)?;
-        let scrutinee_results =
-            plan.source_result_origins_in_owner_subtree(scrutinee_origin)?;
+        let scrutinee_results = plan.source_result_origins_in_owner_subtree(scrutinee_origin)?;
         for position in cases
             .iter()
             .flat_map(|case| case.recursive_positions.iter().copied())
@@ -2247,8 +2259,7 @@ fn build_static_recursor_worker_residuals(
                 ) {
                     continue;
                 }
-                let closure_origin =
-                    plan.semantic.child_origin(*constructor_origin, position)?;
+                let closure_origin = plan.semantic.child_origin(*constructor_origin, position)?;
                 let closure = plan
                     .source_occurrences
                     .get(closure_origin.0 as usize)
@@ -2259,6 +2270,7 @@ fn build_static_recursor_worker_residuals(
                 residuals.push(build_static_recursor_worker_residual(
                     plan,
                     parent.static_origin,
+                    *constructor_origin,
                     position,
                     closure,
                 )?);
@@ -2290,29 +2302,32 @@ fn build_recursor_boundary_uses(
             .iter()
             .flat_map(|case| case.recursive_positions.iter().copied())
         {
-            uses.insert((
-                owner,
-                occurrence.static_origin,
-                u32::try_from(position)
-                    .map_err(|_| planner_capacity_error("recursor boundary position exhausted"))?,
-            ));
+            let sibling_position = u32::try_from(position)
+                .map_err(|_| planner_capacity_error("recursor boundary position exhausted"))?;
+            if plan
+                .static_recursor_worker_residuals
+                .iter()
+                .any(|residual| {
+                    residual.parent_origin == occurrence.static_origin
+                        && residual.sibling_position == sibling_position
+                })
+            {
+                continue;
+            }
+            uses.insert((owner, occurrence.static_origin, sibling_position));
         }
     }
     uses.into_iter()
         .enumerate()
         .map(|(ordinal, (owner, parent_origin, sibling_position))| {
             let disposition = OperandEdgeDisposition::SpecializedOnlyLeaf;
-            let (consumer_phase, operation, need, avail) =
-                boundary_contract(disposition);
+            let (consumer_phase, operation, need, avail) = boundary_contract(disposition);
             let ordinal = u32::try_from(ordinal)
                 .map_err(|_| planner_capacity_error("recursor boundary identity exhausted"))?;
-            let identity = BoundaryUseIdentity::Synthesized(
-                0x4000_0000u32
-                    .checked_add(ordinal)
-                    .ok_or_else(|| {
-                        planner_capacity_error("recursor boundary identity exhausted")
-                    })?,
-            );
+            let identity =
+                BoundaryUseIdentity::Synthesized(0x4800_0000u32.checked_add(ordinal).ok_or_else(
+                    || planner_capacity_error("recursor boundary identity exhausted"),
+                )?);
             Ok(PlannedRecursorBoundaryUse {
                 identity,
                 owner,
@@ -2371,19 +2386,14 @@ fn build_lowering_boundary_uses(
                 continue;
             }
             if join.representation == JoinResultRepresentation::CarrierWord {
-                let predecessor_positions: Box<dyn Iterator<Item = usize>> =
-                    match occurrence.expr {
-                        RuntimeExpr::CheckedJoinSite { .. } => Box::new(0..1),
-                        RuntimeExpr::If { .. } => Box::new(1..3),
-                        RuntimeExpr::Match { cases, .. } => {
-                            Box::new(1..1 + cases.len())
-                        }
-                        RuntimeExpr::ComputationalMatch { cases, .. } => {
-                            Box::new(1..1 + cases.len())
-                        }
-                        RuntimeExpr::Call { .. } => Box::new(std::iter::empty()),
-                        _ => Box::new(std::iter::empty()),
-                    };
+                let predecessor_positions: Box<dyn Iterator<Item = usize>> = match occurrence.expr {
+                    RuntimeExpr::CheckedJoinSite { .. } => Box::new(0..1),
+                    RuntimeExpr::If { .. } => Box::new(1..3),
+                    RuntimeExpr::Match { cases, .. } => Box::new(1..1 + cases.len()),
+                    RuntimeExpr::ComputationalMatch { cases, .. } => Box::new(1..1 + cases.len()),
+                    RuntimeExpr::Call { .. } => Box::new(std::iter::empty()),
+                    _ => Box::new(std::iter::empty()),
+                };
                 for position in predecessor_positions {
                     let predecessor = plan.semantic.child_origin(origin, position)?;
                     let phase = plan
@@ -2391,16 +2401,10 @@ fn build_lowering_boundary_uses(
                         .get(predecessor.0 as usize)
                         .and_then(Option::as_ref)
                         .ok_or_else(|| {
-                            planner_error(
-                                "join predecessor has no planned result-phase authority",
-                            )
+                            planner_error("join predecessor has no planned result-phase authority")
                         })?;
                     if phase.continues && phase.phase == ResultPhase::SpecializedOnly {
-                        keys.insert((
-                            LoweringOnlyOperandEdge::JoinArm,
-                            predecessor,
-                            0,
-                        ));
+                        keys.insert((LoweringOnlyOperandEdge::JoinArm, predecessor, 0));
                     }
                 }
             } else {
@@ -2483,11 +2487,9 @@ fn build_lowering_boundary_uses(
         let end = start
             .checked_add(descriptor.slots.len as usize)
             .ok_or_else(|| planner_capacity_error("ABI call boundary-use range exhausted"))?;
-        let slots = plan
-            .abi
-            .slots
-            .get(start..end)
-            .ok_or_else(|| planner_error("ABI call boundary-use range is outside the slot plane"))?;
+        let slots = plan.abi.slots.get(start..end).ok_or_else(|| {
+            planner_error("ABI call boundary-use range is outside the slot plane")
+        })?;
         let mut input = 0u32;
         for slot in slots {
             if matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
@@ -2515,22 +2517,37 @@ fn build_lowering_boundary_uses(
         .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
     resolved_keys.extend(owner_bound_keys);
     resolved_keys.sort();
-    resolved_keys
+    let static_worker_bodies = plan
+        .static_recursor_worker_residuals
+        .iter()
+        .map(|residual| residual.body_origin)
+        .collect::<BTreeSet<_>>();
+    let mut exact_keys = Vec::new();
+    for key @ (edge, origin, position, _) in resolved_keys {
+        exact_keys.push(key);
+        if edge == LoweringOnlyOperandEdge::CallableCapsuleEscape
+            && position != u32::MAX
+            && static_worker_bodies.contains(&origin)
+        {
+            // A static worker has two distinct emitted call-input crossings:
+            // the initial specialized closure materialization and the carried
+            // recursive revisit. They require two identities; collapsing this
+            // pair would turn a real repeated emission into an `or_insert(1)`.
+            exact_keys.push(key);
+        }
+    }
+    exact_keys
         .into_iter()
         .enumerate()
         .map(|(ordinal, (edge, origin, position, owner))| {
             let disposition = edge.disposition();
-            let (consumer_phase, operation, need, avail) =
-                boundary_contract(disposition);
+            let (consumer_phase, operation, need, avail) = boundary_contract(disposition);
             let ordinal = u32::try_from(ordinal)
                 .map_err(|_| planner_capacity_error("lowering boundary identity exhausted"))?;
-            let identity = BoundaryUseIdentity::Synthesized(
-                0x5000_0000u32
-                    .checked_add(ordinal)
-                    .ok_or_else(|| {
-                        planner_capacity_error("lowering boundary identity exhausted")
-                    })?,
-            );
+            let identity =
+                BoundaryUseIdentity::Synthesized(0x5000_0000u32.checked_add(ordinal).ok_or_else(
+                    || planner_capacity_error("lowering boundary identity exhausted"),
+                )?);
             Ok(PlannedLoweringBoundaryUse {
                 identity,
                 edge,
@@ -2574,6 +2591,57 @@ fn build_boundary_uses(
             disposition: edge.disposition,
             avail: edge.avail,
         })
+        .chain(
+            plan.static_recursor_worker_residuals
+                .iter()
+                .enumerate()
+                .map(|(ordinal, residual)| {
+                    let producer_owner = plan
+                        .semantic
+                        .function_owner(residual.producer_origin)?
+                        .ok_or_else(|| {
+                            planner_error("static recursor producer has no function owner")
+                        })?;
+                    let consumer_owner = plan
+                        .semantic
+                        .function_owner(residual.parent_origin)?
+                        .ok_or_else(|| {
+                            planner_error("static recursor consumer has no function owner")
+                        })?;
+                    let ordinal = u32::try_from(ordinal).map_err(|_| {
+                        planner_capacity_error("static recursor boundary identity exhausted")
+                    })?;
+                    let identity = BoundaryUseIdentity::Synthesized(
+                        0x4000_0000u32.checked_add(ordinal).ok_or_else(|| {
+                            planner_capacity_error("static recursor boundary identity exhausted")
+                        })?,
+                    );
+                    let (consumer_phase, operation, need, avail) =
+                        boundary_contract(residual.disposition);
+                    Ok(PlannedBoundaryUse {
+                        identity,
+                        path: PlannedBoundaryUsePath::StaticRecursorWorker {
+                            parent_origin: residual.parent_origin,
+                            producer_origin: residual.producer_origin,
+                            sibling_position: residual.sibling_position,
+                            closure_origin: residual.closure_origin,
+                            body_origin: residual.body_origin,
+                            declared_arity: residual.declared_arity,
+                            captures: residual.captures.clone(),
+                        },
+                        producer_owner,
+                        consumer_owner,
+                        producer_phase: BoundaryUsePhase::SpecializedValue,
+                        consumer_phase,
+                        operation,
+                        need,
+                        disposition: residual.disposition,
+                        avail,
+                    })
+                })
+                .collect::<Result<Vec<_>, CraneliftBackendError>>()?
+                .into_iter(),
+        )
         .chain(
             plan.recursor_boundary_uses
                 .iter()
@@ -2628,6 +2696,7 @@ fn build_boundary_uses(
 fn build_static_recursor_worker_residual(
     plan: &StaticTransitionPlan<'_>,
     parent_origin: StaticOriginId,
+    producer_origin: StaticOriginId,
     sibling_position: usize,
     closure: &PlannedOccurrence<'_>,
 ) -> Result<PlannedStaticRecursorWorkerResidual, CraneliftBackendError> {
@@ -2707,6 +2776,7 @@ fn build_static_recursor_worker_residual(
     Ok(PlannedStaticRecursorWorkerResidual {
         id: StaticRecursorWorkerResidualId(closure_origin.0),
         parent_origin,
+        producer_origin,
         sibling_position: u32::try_from(sibling_position)
             .map_err(|_| planner_capacity_error("static recursor sibling exhausted"))?,
         closure_origin,
@@ -2974,6 +3044,14 @@ pub(in crate::cranelift_backend) enum SynthesizedConsumptionMutation {
 }
 
 #[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum StaticRecursorConsumptionMutation {
+    Exact,
+    OmitFirst,
+    RepeatFirst,
+}
+
+#[cfg(test)]
 thread_local! {
     static D8_FORCE_VARIABLE_SPECIALIZED: Cell<bool> = const { Cell::new(false) };
     static D8_REMOVE_VARIABLE_CALLABLE_SEED: Cell<bool> = const { Cell::new(false) };
@@ -2987,6 +3065,9 @@ thread_local! {
     static SYNTHESIZED_CONSUMPTION_MUTATION: Cell<SynthesizedConsumptionMutation> =
         const { Cell::new(SynthesizedConsumptionMutation::Exact) };
     static SYNTHESIZED_CONSUMPTION_MUTATED: Cell<bool> = const { Cell::new(false) };
+    static STATIC_RECURSOR_CONSUMPTION_MUTATION: Cell<StaticRecursorConsumptionMutation> =
+        const { Cell::new(StaticRecursorConsumptionMutation::Exact) };
+    static STATIC_RECURSOR_CONSUMPTION_MUTATED: Cell<bool> = const { Cell::new(false) };
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -4306,8 +4387,7 @@ impl<'src> Planner<'src> {
             root_ingress,
         )?;
         self.plan.functionized_units = functionized_units;
-        let (join_results, result_phases) =
-            build_join_result_plan(&self.plan, functionized_units)?;
+        let (join_results, result_phases) = build_join_result_plan(&self.plan, functionized_units)?;
         self.plan.join_results = join_results;
         self.plan.result_phases = result_phases;
         let (specializations, calls) = if functionized_units {
@@ -4325,10 +4405,8 @@ impl<'src> Planner<'src> {
         self.plan.operand_edges = build_operand_edge_matrix(&self.plan)?;
         self.plan.static_recursor_worker_residuals =
             build_static_recursor_worker_residuals(&self.plan)?;
-        self.plan.recursor_boundary_uses =
-            build_recursor_boundary_uses(&self.plan)?;
-        self.plan.lowering_boundary_uses =
-            build_lowering_boundary_uses(&self.plan)?;
+        self.plan.recursor_boundary_uses = build_recursor_boundary_uses(&self.plan)?;
+        self.plan.lowering_boundary_uses = build_lowering_boundary_uses(&self.plan)?;
         self.plan.boundary_uses = build_boundary_uses(&self.plan)?;
         #[cfg(test)]
         STATIC_RECURSOR_RESIDUAL_MATRIX_MUTATION.with(|mutation| match mutation.get() {
@@ -4881,10 +4959,8 @@ impl<'src> StaticTransitionPlan<'src> {
             child: edge.child,
             position: edge.position,
         };
-        let token = self.planned_boundary_use_token(
-            identity,
-            source_operand_role_label(edge.role),
-        )?;
+        let token =
+            self.planned_boundary_use_token(identity, source_operand_role_label(edge.role))?;
         self.record_boundary_use_consumption(identity)?;
         Ok(token)
     }
@@ -4934,6 +5010,22 @@ impl<'src> StaticTransitionPlan<'src> {
         position: usize,
         role: SourceOperandRole,
     ) -> Result<OperandEdgeDisposition, CraneliftBackendError> {
+        self.reached_operand_edge_token(parent, position, role)
+            .map(|token| token.disposition())
+    }
+
+    /// Return one exact source-occurrence token across repeated lowering
+    /// specializations, recording the source identity only on its first reach.
+    ///
+    /// This does not collapse emitted lowering-only transitions: source
+    /// identities name semantic syntax occurrences, and one occurrence can be
+    /// revisited while staging more than one generated unit.
+    pub(in crate::cranelift_backend) fn reached_operand_edge_token(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
         let child = self.semantic.child_origin(parent, position)?;
         let position = u32::try_from(position)
             .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
@@ -4952,10 +5044,16 @@ impl<'src> StaticTransitionPlan<'src> {
             child: edge.child,
             position: edge.position,
         };
-        if !self.operand_edge_consumption.borrow().contains_key(&identity) {
+        let token =
+            self.planned_boundary_use_token(identity, source_operand_role_label(edge.role))?;
+        if !self
+            .operand_edge_consumption
+            .borrow()
+            .contains_key(&identity)
+        {
             self.record_boundary_use_consumption(identity)?;
         }
-        Ok(edge.disposition)
+        Ok(token)
     }
 
     pub(in crate::cranelift_backend) fn disposition_boundary_uses_in_owner_subtree(
@@ -4978,18 +5076,31 @@ impl<'src> StaticTransitionPlan<'src> {
                 }
             }
         }
+        let dead_worker_bodies = self
+            .static_recursor_worker_residuals
+            .iter()
+            .filter(|residual| origins.contains(&residual.producer_origin))
+            .map(|residual| residual.body_origin)
+            .collect::<BTreeSet<_>>();
+        let consumption = self.operand_edge_consumption.borrow();
         let identities = self
             .boundary_uses
             .iter()
             .filter_map(|planned| {
-                let origin = match planned.path {
-                    PlannedBoundaryUsePath::Source { parent, .. } => parent,
-                    PlannedBoundaryUsePath::Synthesized { origin, .. } => origin,
+                let (origin, exact_static_worker) = match &planned.path {
+                    PlannedBoundaryUsePath::Source { parent, .. } => (*parent, false),
+                    PlannedBoundaryUsePath::Synthesized { origin, .. } => (*origin, false),
+                    PlannedBoundaryUsePath::StaticRecursorWorker {
+                        producer_origin, ..
+                    } => (*producer_origin, true),
                 };
-                (planned.producer_owner == owner && origins.contains(&origin))
-                    .then_some(planned.identity)
+                (planned.producer_owner == owner
+                    && (origins.contains(&origin) || dead_worker_bodies.contains(&origin))
+                    && (exact_static_worker || !consumption.contains_key(&planned.identity)))
+                .then_some(planned.identity)
             })
             .collect::<Vec<_>>();
+        drop(consumption);
         for identity in identities {
             self.record_boundary_use_disposition(identity)?;
         }
@@ -5003,37 +5114,11 @@ impl<'src> StaticTransitionPlan<'src> {
         position: u32,
     ) -> Result<(), CraneliftBackendError> {
         let Some(planned) = self.lowering_boundary_uses.iter().find(|planned| {
-            planned.edge == edge
-                && planned.origin == origin
-                && planned.position == position
+            planned.edge == edge && planned.origin == origin && planned.position == position
         }) else {
             return Ok(());
         };
         self.record_boundary_use_disposition(planned.identity)
-    }
-
-    pub(in crate::cranelift_backend) fn disposition_unreached_recursor_uses_for_owner(
-        &self,
-        owner: PredeclaredFunctionId,
-    ) -> Result<(), CraneliftBackendError> {
-        let consumed = self.operand_edge_consumption.borrow();
-        let dispositions = self.boundary_use_dispositions.borrow();
-        let unreached = self
-            .recursor_boundary_uses
-            .iter()
-            .filter(|planned| {
-                planned.owner == owner
-                    && !consumed.contains_key(&planned.identity)
-                    && !dispositions.contains(&planned.identity)
-            })
-            .map(|planned| planned.identity)
-            .collect::<Vec<_>>();
-        drop(dispositions);
-        drop(consumed);
-        for identity in unreached {
-            self.record_boundary_use_disposition(identity)?;
-        }
-        Ok(())
     }
 
     fn record_boundary_use_disposition(
@@ -5049,10 +5134,15 @@ impl<'src> StaticTransitionPlan<'src> {
                 "dead boundary disposition names no exact planned use",
             ));
         }
-        if self.operand_edge_consumption.borrow().contains_key(&identity) {
-            return Err(planner_error(
-                "one boundary use was both emitted and statically dispositioned",
-            ));
+        if self
+            .operand_edge_consumption
+            .borrow()
+            .contains_key(&identity)
+        {
+            return Err(planner_error(format!(
+                "one boundary use was both emitted and statically dispositioned: \
+                 {identity:?}"
+            )));
         }
         if !self.boundary_use_dispositions.borrow_mut().insert(identity) {
             return Err(planner_error(
@@ -5108,8 +5198,14 @@ impl<'src> StaticTransitionPlan<'src> {
         }
         let actual_set = actual.keys().copied().collect::<BTreeSet<_>>();
         if actual_set != expected {
-            let missing = expected.difference(&actual_set).copied().collect::<Vec<_>>();
-            let extra = actual_set.difference(&expected).copied().collect::<Vec<_>>();
+            let missing = expected
+                .difference(&actual_set)
+                .copied()
+                .collect::<Vec<_>>();
+            let extra = actual_set
+                .difference(&expected)
+                .copied()
+                .collect::<Vec<_>>();
             let missing_edges = self
                 .operand_edges
                 .iter()
@@ -5174,9 +5270,19 @@ impl<'src> StaticTransitionPlan<'src> {
                         .any(|(identity, _)| *identity == planned.identity)
                 })
                 .collect::<Vec<_>>();
+            let duplicate_lowering_uses = self
+                .lowering_boundary_uses
+                .iter()
+                .filter(|planned| {
+                    duplicates
+                        .iter()
+                        .any(|(identity, _)| *identity == planned.identity)
+                })
+                .collect::<Vec<_>>();
             return Err(planner_error(format!(
                 "boundary-use ledger contains duplicate consumption; \
-                 duplicates={duplicates:?}; duplicate_uses={duplicate_uses:?}"
+                 duplicates={duplicates:?}; duplicate_uses={duplicate_uses:?}; \
+                 duplicate_lowering_uses={duplicate_lowering_uses:?}"
             )));
         }
         let actual = ledger.keys().copied().collect::<BTreeSet<_>>();
@@ -5205,11 +5311,7 @@ impl<'src> StaticTransitionPlan<'src> {
             .boundary_uses
             .iter()
             .find(|planned| planned.identity == identity)
-            .ok_or_else(|| {
-                planner_error(
-                    "boundary transition has no exact unified planned use",
-                )
-            })?;
+            .ok_or_else(|| planner_error("boundary transition has no exact unified planned use"))?;
         Ok(OperandEdgeToken {
             disposition: planned.disposition,
             label,
@@ -5250,6 +5352,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 "test mutation denied planner-issued lowering boundary use",
             ));
         }
+        let ledger = self.operand_edge_consumption.borrow();
         let planned = self
             .lowering_boundary_uses
             .iter()
@@ -5258,14 +5361,26 @@ impl<'src> StaticTransitionPlan<'src> {
                     && planned.origin == origin
                     && planned.position == position
                     && planned.owner == owner
+                    && !ledger.contains_key(&planned.identity)
+            })
+            .or_else(|| {
+                self.lowering_boundary_uses.iter().find(|planned| {
+                    planned.edge == edge
+                        && planned.origin == origin
+                        && planned.position == position
+                        && planned.owner == owner
+                })
             })
             .ok_or_else(|| {
                 planner_error(format!(
                     "lowering transition has no exact planner-issued boundary use: \
                      edge={edge:?}, origin={origin:?}, position={position}, owner={owner:?}"
                 ))
-        })?;
-        let token = self.planned_boundary_use_token(planned.identity, planned.edge.label())?;
+            })?;
+        let identity = planned.identity;
+        let label = planned.edge.label();
+        drop(ledger);
+        let token = self.planned_boundary_use_token(identity, label)?;
         #[cfg(test)]
         {
             let mutation = SYNTHESIZED_CONSUMPTION_MUTATION.with(Cell::get);
@@ -5282,13 +5397,13 @@ impl<'src> StaticTransitionPlan<'src> {
                 match mutation {
                     SynthesizedConsumptionMutation::OmitFirst => return Ok(token),
                     SynthesizedConsumptionMutation::RepeatFirst => {
-                        self.record_boundary_use_consumption(planned.identity)?;
+                        self.record_boundary_use_consumption(identity)?;
                     }
                     SynthesizedConsumptionMutation::Exact => {}
                 }
             }
         }
-        self.record_boundary_use_consumption(planned.identity)?;
+        self.record_boundary_use_consumption(identity)?;
         Ok(token)
     }
 
@@ -5303,8 +5418,7 @@ impl<'src> StaticTransitionPlan<'src> {
             .recursor_boundary_uses
             .iter()
             .find(|edge| {
-                edge.parent_origin == parent_origin
-                    && edge.sibling_position == sibling_position
+                edge.parent_origin == parent_origin && edge.sibling_position == sibling_position
             })
             .ok_or_else(|| {
                 planner_error("computational recursor use has no planned boundary edge")
@@ -5338,17 +5452,8 @@ impl<'src> StaticTransitionPlan<'src> {
         else {
             return Ok(None);
         };
-        Ok(Some(StaticRecursorWorkerResidualToken {
-            id: residual.id,
-            parent_origin: residual.parent_origin,
-            sibling_position: residual.sibling_position,
-            closure_origin: residual.closure_origin,
-            body_origin: residual.body_origin,
-            declared_arity: residual.declared_arity,
-            capture_count: u32::try_from(residual.captures.len())
-                .map_err(|_| planner_capacity_error("static recursor capture count exhausted"))?,
-            disposition: residual.disposition,
-        }))
+        self.issue_static_recursor_worker_residual_token(residual)
+            .map(Some)
     }
 
     /// Recover the exact recursor-owned residual edge from its closure source
@@ -5370,9 +5475,157 @@ impl<'src> StaticTransitionPlan<'src> {
         else {
             return Ok(None);
         };
-        Ok(Some(StaticRecursorWorkerResidualToken {
+        self.issue_static_recursor_worker_residual_token(residual)
+            .map(Some)
+    }
+
+    /// Recover the one exact static worker left live by causal source-result
+    /// selection for a reached computational-recursion position.
+    ///
+    /// The constructor-side closure lookup owns ledger consumption. This
+    /// consumer-side lookup returns the same planner identity without recording
+    /// a second emission. A statically dead result subtree has already
+    /// dispositioned its identity, so two same-shape producers remain distinct
+    /// here without placing callable identity in the runtime carrier.
+    pub(in crate::cranelift_backend) fn selected_static_recursor_worker_residual_token(
+        &self,
+        parent_origin: StaticOriginId,
+        sibling_position: usize,
+    ) -> Result<Option<StaticRecursorWorkerResidualToken>, CraneliftBackendError> {
+        let sibling_position = u32::try_from(sibling_position)
+            .map_err(|_| planner_capacity_error("static recursor sibling exhausted"))?;
+        let candidates = self
+            .static_recursor_worker_residuals
+            .iter()
+            .filter(|residual| {
+                residual.parent_origin == parent_origin
+                    && residual.sibling_position == sibling_position
+            })
+            .collect::<Vec<_>>();
+        if candidates.is_empty() {
+            return Ok(None);
+        }
+        let dispositions = self.boundary_use_dispositions.borrow();
+        let mut selected = Vec::new();
+        for residual in candidates {
+            let planned = self
+                .boundary_uses
+                .iter()
+                .find(|planned| {
+                    matches!(
+                        &planned.path,
+                        PlannedBoundaryUsePath::StaticRecursorWorker {
+                            parent_origin: planned_parent,
+                            producer_origin,
+                            sibling_position: planned_position,
+                            closure_origin,
+                            body_origin,
+                            declared_arity,
+                            captures,
+                        } if *planned_parent == residual.parent_origin
+                            && *producer_origin == residual.producer_origin
+                            && *planned_position == residual.sibling_position
+                            && *closure_origin == residual.closure_origin
+                            && *body_origin == residual.body_origin
+                            && *declared_arity == residual.declared_arity
+                            && captures == &residual.captures
+                    )
+                })
+                .ok_or_else(|| {
+                    planner_error(
+                        "static recursor worker residual has no exact unified boundary use",
+                    )
+                })?;
+            if !dispositions.contains(&planned.identity) {
+                selected.push((residual, planned.identity));
+            }
+        }
+        drop(dispositions);
+        let [(residual, identity)] = selected.as_slice() else {
+            return Err(planner_error(
+                "reached static recursor position does not select exactly one result worker",
+            ));
+        };
+        self.static_recursor_worker_residual_token_value(residual, *identity)
+            .map(Some)
+    }
+
+    fn issue_static_recursor_worker_residual_token(
+        &self,
+        residual: &PlannedStaticRecursorWorkerResidual,
+    ) -> Result<StaticRecursorWorkerResidualToken, CraneliftBackendError> {
+        let planned = self
+            .boundary_uses
+            .iter()
+            .find(|planned| {
+                matches!(
+                    &planned.path,
+                    PlannedBoundaryUsePath::StaticRecursorWorker {
+                        parent_origin,
+                        producer_origin,
+                        sibling_position,
+                        closure_origin,
+                        body_origin,
+                        declared_arity,
+                        captures,
+                    } if *parent_origin == residual.parent_origin
+                        && *producer_origin == residual.producer_origin
+                        && *sibling_position == residual.sibling_position
+                        && *closure_origin == residual.closure_origin
+                        && *body_origin == residual.body_origin
+                        && *declared_arity == residual.declared_arity
+                        && captures == &residual.captures
+                )
+            })
+            .ok_or_else(|| {
+                planner_error("static recursor worker residual has no exact unified boundary use")
+            })?;
+        if planned.disposition != residual.disposition {
+            return Err(planner_error(
+                "static recursor worker residual disagrees with its unified disposition",
+            ));
+        }
+        #[cfg(test)]
+        {
+            let mutation = STATIC_RECURSOR_CONSUMPTION_MUTATION.with(Cell::get);
+            let apply = mutation != StaticRecursorConsumptionMutation::Exact
+                && STATIC_RECURSOR_CONSUMPTION_MUTATED.with(|cell| {
+                    if cell.get() {
+                        false
+                    } else {
+                        cell.set(true);
+                        true
+                    }
+                });
+            if apply {
+                match mutation {
+                    StaticRecursorConsumptionMutation::OmitFirst => {
+                        return self.static_recursor_worker_residual_token_value(
+                            residual,
+                            planned.identity,
+                        );
+                    }
+                    StaticRecursorConsumptionMutation::RepeatFirst => {
+                        self.record_boundary_use_consumption(planned.identity)?;
+                    }
+                    StaticRecursorConsumptionMutation::Exact => {}
+                }
+            }
+        }
+        self.record_boundary_use_consumption(planned.identity)?;
+        self.static_recursor_worker_residual_token_value(residual, planned.identity)
+    }
+
+    fn static_recursor_worker_residual_token_value(
+        &self,
+        residual: &PlannedStaticRecursorWorkerResidual,
+        identity: BoundaryUseIdentity,
+    ) -> Result<StaticRecursorWorkerResidualToken, CraneliftBackendError> {
+        Ok(StaticRecursorWorkerResidualToken {
+            identity,
             id: residual.id,
             parent_origin: residual.parent_origin,
+            producer_origin: residual.producer_origin,
             sibling_position: residual.sibling_position,
             closure_origin: residual.closure_origin,
             body_origin: residual.body_origin,
@@ -5380,7 +5633,73 @@ impl<'src> StaticTransitionPlan<'src> {
             capture_count: u32::try_from(residual.captures.len())
                 .map_err(|_| planner_capacity_error("static recursor capture count exhausted"))?,
             disposition: residual.disposition,
-        }))
+        })
+    }
+
+    pub(in crate::cranelift_backend) fn validate_static_recursor_worker_residual_identity(
+        &self,
+        identity: BoundaryUseIdentity,
+        id: StaticRecursorWorkerResidualId,
+        parent_origin: StaticOriginId,
+        producer_origin: StaticOriginId,
+        sibling_position: usize,
+        closure_origin: StaticOriginId,
+        body_origin: StaticOriginId,
+        declared_arity: usize,
+        capture_count: usize,
+    ) -> Result<(), CraneliftBackendError> {
+        let sibling_position = u32::try_from(sibling_position)
+            .map_err(|_| planner_capacity_error("static recursor sibling exhausted"))?;
+        let declared_arity = u32::try_from(declared_arity)
+            .map_err(|_| planner_capacity_error("static recursor arity exhausted"))?;
+        let residual = self
+            .static_recursor_worker_residuals
+            .iter()
+            .find(|residual| {
+                residual.id == id
+                    && residual.parent_origin == parent_origin
+                    && residual.producer_origin == producer_origin
+                    && residual.sibling_position == sibling_position
+                    && residual.closure_origin == closure_origin
+                    && residual.body_origin == body_origin
+                    && residual.declared_arity == declared_arity
+                    && residual.captures.len() == capture_count
+                    && residual.disposition == OperandEdgeDisposition::CallableCapture
+            })
+            .ok_or_else(|| {
+                planner_error("static recursor worker metadata has no exact planned residual")
+            })?;
+        let planned = self
+            .boundary_uses
+            .iter()
+            .find(|planned| planned.identity == identity)
+            .ok_or_else(|| {
+                planner_error("static recursor worker metadata has no exact unified identity")
+            })?;
+        let exact = matches!(
+            &planned.path,
+            PlannedBoundaryUsePath::StaticRecursorWorker {
+                parent_origin: planned_parent,
+                producer_origin: planned_producer,
+                sibling_position: planned_position,
+                closure_origin: planned_closure,
+                body_origin: planned_body,
+                declared_arity: planned_arity,
+                captures,
+            } if *planned_parent == residual.parent_origin
+                && *planned_producer == residual.producer_origin
+                && *planned_position == residual.sibling_position
+                && *planned_closure == residual.closure_origin
+                && *planned_body == residual.body_origin
+                && *planned_arity == residual.declared_arity
+                && captures == &residual.captures
+        );
+        if !exact || planned.disposition != OperandEdgeDisposition::CallableCapture {
+            return Err(planner_error(
+                "static recursor worker metadata disagrees with its unified authority",
+            ));
+        }
+        Ok(())
     }
 
     /// Consume the planner-owned result contract for one source join.
@@ -6697,10 +7016,9 @@ impl<'src> StaticTransitionPlan<'src> {
                 };
                 let position = u32::try_from(position)
                     .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
-                let producer_owner = self
-                    .semantic
-                    .function_owner(child)?
-                    .ok_or_else(|| planner_error("source operand producer has no function owner"))?;
+                let producer_owner = self.semantic.function_owner(child)?.ok_or_else(|| {
+                    planner_error("source operand producer has no function owner")
+                })?;
                 let disposition =
                     derive_operand_edge_disposition(self, parent, child, position, role)?;
                 let (consumer_phase, operation, need, avail) = boundary_contract(disposition);
@@ -7354,6 +7672,14 @@ pub(in crate::cranelift_backend) fn set_synthesized_consumption_mutation(
 ) {
     SYNTHESIZED_CONSUMPTION_MUTATION.with(|cell| cell.set(mutation));
     SYNTHESIZED_CONSUMPTION_MUTATED.with(|cell| cell.set(false));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_static_recursor_consumption_mutation(
+    mutation: StaticRecursorConsumptionMutation,
+) {
+    STATIC_RECURSOR_CONSUMPTION_MUTATION.with(|cell| cell.set(mutation));
+    STATIC_RECURSOR_CONSUMPTION_MUTATED.with(|cell| cell.set(false));
 }
 
 pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'src>(
@@ -8114,10 +8440,7 @@ mod tests {
         }
     }
 
-    fn recursor_worker_constructor(
-        constructor: &str,
-        body_constructor: &str,
-    ) -> RuntimeExpr {
+    fn recursor_worker_constructor(constructor: &str, body_constructor: &str) -> RuntimeExpr {
         RuntimeExpr::Construct {
             constructor: constructor.to_string(),
             args: vec![RuntimeExpr::Closure {
@@ -8128,6 +8451,30 @@ mod tests {
                     args: vec![RuntimeExpr::Var(0)],
                 }),
             }],
+        }
+    }
+
+    fn branched_static_recursor_worker_fixture(selected: bool) -> RuntimeExpr {
+        let constructor = "ctor:fixture::BranchedWorker::Node";
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::If {
+                scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(selected))),
+                then_expr: Box::new(recursor_worker_constructor(
+                    constructor,
+                    "ctor:fixture::BranchedWorker::Left",
+                )),
+                else_expr: Box::new(recursor_worker_constructor(
+                    constructor,
+                    "ctor:fixture::BranchedWorker::Right",
+                )),
+            }),
+            cases: vec![RuntimeComputationalMatchCase {
+                constructor: constructor.to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Var(0),
+            }],
+            default: trap("branched static recursor fixture"),
         }
     }
 
@@ -8252,6 +8599,18 @@ mod tests {
         assert_eq!(token.sibling_position, 0);
         assert_eq!(token.declared_arity, 1);
         assert_eq!(token.capture_count, 2);
+        let forward_identity = token.identity();
+        let reverse_plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+            .expect("the exact residual replans");
+        let reverse = reverse_plan
+            .static_recursor_worker_residual_token_for_closure(closure)
+            .expect("closure lookup is valid")
+            .expect("closure lookup finds the same residual");
+        assert_eq!(
+            reverse.identity(),
+            forward_identity,
+            "forward and closure lookup must issue the same unified identity"
+        );
         let ordinary = RuntimeExpr::Construct {
             constructor: "ctor:fixture::Ordinary::Node".to_string(),
             args: vec![RuntimeExpr::Closure {
@@ -8266,11 +8625,7 @@ mod tests {
             .root_occurrence
             .expect("ordinary constructor has an occurrence");
         let forbidden = ordinary_plan
-            .operand_edge_token(
-                ordinary_parent,
-                0,
-                SourceOperandRole::ConstructArgument,
-            )
+            .operand_edge_token(ordinary_parent, 0, SourceOperandRole::ConstructArgument)
             .expect("ordinary constructor crossing is planned");
         assert_eq!(
             forbidden.disposition(),
@@ -8300,11 +8655,7 @@ mod tests {
             .root_occurrence
             .expect("crossing constructor has an occurrence");
         let crossing_edge = crossing_plan
-            .operand_edge_token(
-                crossing_parent,
-                1,
-                SourceOperandRole::ConstructArgument,
-            )
+            .operand_edge_token(crossing_parent, 1, SourceOperandRole::ConstructArgument)
             .expect("crossing constructor edge is planned");
         assert_eq!(
             crossing_edge.disposition(),
@@ -8339,7 +8690,7 @@ mod tests {
     }
 
     #[test]
-    fn recursor_boundary_use_is_planned_once_and_rejects_population_drift() {
+    fn static_worker_recursor_use_is_one_exact_unified_member() {
         // Promise class: durable invariant.
         //
         // The four lowering routes for one recursive-position residual consume
@@ -8349,25 +8700,146 @@ mod tests {
         let mut plan = plan_static_transition_graph(&expr, &BTreeMap::new())
             .expect("captured static recursor worker plans");
         let parent = plan.root_occurrence.expect("fixture has a root occurrence");
-        assert_eq!(plan.recursor_boundary_uses.len(), 1);
+        assert!(
+            plan.recursor_boundary_uses.is_empty(),
+            "the generic SpecializedOnlyLeaf authority must not compete with \
+             an exact static worker"
+        );
+        let residual = plan
+            .static_recursor_worker_residuals
+            .first()
+            .expect("the exact worker residual is planned");
         let token = plan
-            .recursor_boundary_use_token(parent, 0)
+            .static_recursor_worker_residual_token(parent, 0, residual.body_origin)
+            .expect("recursive position lookup is valid")
             .expect("recursive position has one planned boundary use");
         assert!(matches!(
             token.identity(),
             BoundaryUseIdentity::Synthesized(_)
         ));
-        assert!(token.producer_owner.is_some());
-        assert_eq!(token.producer_owner, token.consumer_owner);
+        assert_eq!(token.producer_origin, residual.producer_origin);
+        assert_eq!(
+            plan.boundary_uses
+                .iter()
+                .filter(|planned| planned.identity == token.identity())
+                .count(),
+            1
+        );
 
-        plan.recursor_boundary_uses.clear();
-        assert!(plan.validate_recursor_boundary_uses().is_err());
+        plan.boundary_uses
+            .retain(|planned| planned.identity != token.identity());
+        assert!(plan.validate_boundary_uses().is_err());
 
         let mut plan = plan_static_transition_graph(&expr, &BTreeMap::new())
             .expect("captured static recursor worker replans");
-        plan.recursor_boundary_uses[0].consumer_phase =
-            BoundaryUsePhase::OperationalCarrier;
-        assert!(plan.validate_recursor_boundary_uses().is_err());
+        let planned = plan
+            .boundary_uses
+            .iter_mut()
+            .find(|planned| {
+                matches!(
+                    planned.path,
+                    PlannedBoundaryUsePath::StaticRecursorWorker { .. }
+                )
+            })
+            .expect("the exact worker is in the unified population");
+        planned.consumer_phase = BoundaryUsePhase::OperationalCarrier;
+        assert!(plan.validate_boundary_uses().is_err());
+    }
+
+    #[test]
+    fn same_parent_position_result_workers_keep_distinct_unified_identities() {
+        let expr = branched_static_recursor_worker_fixture(true);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+            .expect("both result-flow workers plan");
+        let parent = plan.root_occurrence.expect("fixture has a root occurrence");
+        assert_eq!(plan.static_recursor_worker_residuals.len(), 2);
+        assert!(plan
+            .static_recursor_worker_residuals
+            .iter()
+            .all(|residual| {
+                residual.parent_origin == parent && residual.sibling_position == 0
+            }));
+        assert!(
+            plan.recursor_boundary_uses.is_empty(),
+            "one generic parent/position authority would collapse the pair"
+        );
+        let worker_uses = plan
+            .boundary_uses
+            .iter()
+            .filter_map(|planned| match &planned.path {
+                PlannedBoundaryUsePath::StaticRecursorWorker {
+                    parent_origin,
+                    producer_origin,
+                    sibling_position,
+                    body_origin,
+                    ..
+                } => Some((
+                    planned.identity,
+                    *parent_origin,
+                    *producer_origin,
+                    *sibling_position,
+                    *body_origin,
+                )),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(worker_uses.len(), 2);
+        assert_ne!(worker_uses[0].0, worker_uses[1].0);
+        assert_eq!(worker_uses[0].1, worker_uses[1].1);
+        assert_eq!(worker_uses[0].3, worker_uses[1].3);
+        assert_ne!(worker_uses[0].2, worker_uses[1].2);
+        assert_ne!(worker_uses[0].4, worker_uses[1].4);
+    }
+
+    #[test]
+    fn static_unselected_result_dispositions_only_its_worker_identity() {
+        let expr = branched_static_recursor_worker_fixture(true);
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+            .expect("both result-flow workers plan");
+        let parent = plan.root_occurrence.expect("fixture has a root occurrence");
+        let scrutinee = plan.child_static_origin(parent, 0).unwrap();
+        let unselected = plan.child_static_origin(scrutinee, 2).unwrap();
+        let selected = plan.child_static_origin(scrutinee, 1).unwrap();
+        plan.disposition_boundary_uses_in_owner_subtree(unselected)
+            .expect("the exact statically dead result subtree closes");
+        let worker_identity = |producer_origin| {
+            plan.boundary_uses
+                .iter()
+                .find_map(|planned| match &planned.path {
+                    PlannedBoundaryUsePath::StaticRecursorWorker {
+                        producer_origin: candidate,
+                        ..
+                    } if *candidate == producer_origin => Some(planned.identity),
+                    _ => None,
+                })
+                .expect("result producer owns one exact worker use")
+        };
+        let worker_identities = plan
+            .boundary_uses
+            .iter()
+            .filter_map(|planned| {
+                matches!(
+                    planned.path,
+                    PlannedBoundaryUsePath::StaticRecursorWorker { .. }
+                )
+                .then_some(planned.identity)
+            })
+            .collect::<BTreeSet<_>>();
+        let dispositioned_workers = plan
+            .boundary_use_dispositions
+            .borrow()
+            .intersection(&worker_identities)
+            .copied()
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            dispositioned_workers,
+            BTreeSet::from([worker_identity(unselected)]),
+            "causal branch disposition reached another worker identity"
+        );
+        assert!(!plan
+            .boundary_use_dispositions
+            .borrow()
+            .contains(&worker_identity(selected)));
     }
 
     #[test]
@@ -8478,11 +8950,9 @@ mod tests {
             constructor: "ctor:fixture::BoundaryUse::SynthExact".to_string(),
             args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
         };
-        let plan = plan_static_transition_graph_with_test_fixture_boundary_use(
-            &expr,
-            &BTreeMap::new(),
-        )
-            .expect("the exact synthesized-consumption fixture plans");
+        let plan =
+            plan_static_transition_graph_with_test_fixture_boundary_use(&expr, &BTreeMap::new())
+                .expect("the exact synthesized-consumption fixture plans");
         let root = plan
             .root_static_origin()
             .expect("the fixture has a root occurrence");
@@ -8600,13 +9070,11 @@ mod tests {
         assert!(transplant.validate().is_err());
 
         let mut wrong_owner = plan.clone();
-        wrong_owner.operand_edges[edge_index].producer_owner =
-            PredeclaredFunctionId(u32::MAX);
+        wrong_owner.operand_edges[edge_index].producer_owner = PredeclaredFunctionId(u32::MAX);
         assert!(wrong_owner.validate().is_err());
 
         let mut wrong_phase = plan.clone();
-        wrong_phase.operand_edges[edge_index].consumer_phase =
-            BoundaryUsePhase::OperationalCarrier;
+        wrong_phase.operand_edges[edge_index].consumer_phase = BoundaryUsePhase::OperationalCarrier;
         assert!(wrong_phase.validate().is_err());
 
         let mut wrong_position = plan.clone();
@@ -8614,13 +9082,11 @@ mod tests {
         assert!(wrong_position.validate().is_err());
 
         let mut wrong_need = plan.clone();
-        wrong_need.operand_edges[edge_index].need =
-            BoundaryUseNeed::ReadSpecializedTemplate;
+        wrong_need.operand_edges[edge_index].need = BoundaryUseNeed::ReadSpecializedTemplate;
         assert!(wrong_need.validate().is_err());
 
         let mut wrong_avail = plan;
-        wrong_avail.operand_edges[edge_index].avail =
-            BoundaryUseAvail::SpecializedTemplate;
+        wrong_avail.operand_edges[edge_index].avail = BoundaryUseAvail::SpecializedTemplate;
         assert!(wrong_avail.validate().is_err());
     }
 

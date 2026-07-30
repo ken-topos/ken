@@ -1179,8 +1179,7 @@ impl<'a> Lowering<'a> {
                                         "recursor closure carries a continuation delimiter",
                                     );
                                     let recursive_worker = invocation.recursive_worker;
-                                    let recursor_parent =
-                                        invocation.selection.static_origin;
+                                    let recursor_parent = invocation.selection.static_origin;
                                     let sibling_position = invocation.sibling_position;
                                     let resume_cursor = invocation.resume_cursor;
                                     let current =
@@ -2242,10 +2241,7 @@ impl<'a> Lowering<'a> {
                             0,
                             SourceOperandRole::MatchScrutinee,
                         )?;
-                        self.disposition_statically_unselected_match_cases(
-                            frame_origin,
-                            None,
-                        )?;
+                        self.disposition_statically_unselected_match_cases(frame_origin, None)?;
                     }
                     return Ok(LoweringOperand::Specialized(Lowered::Trap(
                         producer_default.clone(),
@@ -2322,6 +2318,17 @@ impl<'a> Lowering<'a> {
                 let scrutinee = self.child_occurrence(static_origin, 0, scrutinee)?;
                 let then_expr = self.child_occurrence(static_origin, 1, then_expr)?;
                 let else_expr = self.child_occurrence(static_origin, 2, else_expr)?;
+                let scrutinee_edge = self.static_transition_plan.reached_operand_edge_token(
+                    static_origin,
+                    0,
+                    SourceOperandRole::IfScrutinee,
+                )?;
+                if scrutinee_edge.disposition() != OperandEdgeDisposition::SemanticEliminator {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "producer If scrutinee lost its semantic-eliminator disposition"
+                            .to_string(),
+                    )));
+                }
                 let selected = self.lower_expr(builder, scrutinee, producer_env)?;
                 let LoweringOperand::Specialized(Lowered::Bool { value, known }) = selected else {
                     return Err(unsupported(
@@ -2331,6 +2338,39 @@ impl<'a> Lowering<'a> {
                 };
                 if let Some(known) = known {
                     let unselected = if known { else_expr } else { then_expr };
+                    let selected_position = if known { 1 } else { 2 };
+                    let unselected_position = if known { 2 } else { 1 };
+                    let selected_edge = self.static_transition_plan.reached_operand_edge_token(
+                        static_origin,
+                        selected_position,
+                        SourceOperandRole::IfArm,
+                    )?;
+                    if selected_edge.disposition() != OperandEdgeDisposition::Forwarding {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "selected producer If arm lost its forwarding disposition".to_string(),
+                        )));
+                    }
+                    self.static_transition_plan.disposition_operand_edge(
+                        static_origin,
+                        unselected_position,
+                        SourceOperandRole::IfArm,
+                    )?;
+                    self.static_transition_plan
+                        .disposition_lowering_boundary_use_if_planned(
+                            LoweringOnlyOperandEdge::JoinArm,
+                            static_origin,
+                            0,
+                        )?;
+                    self.static_transition_plan
+                        .disposition_lowering_boundary_use_if_planned(
+                            LoweringOnlyOperandEdge::JoinArm,
+                            if known {
+                                then_expr.static_origin
+                            } else {
+                                else_expr.static_origin
+                            },
+                            0,
+                        )?;
                     self.disposition_statically_unselected_source_subtree(
                         unselected.static_origin,
                     )?;
@@ -2537,6 +2577,8 @@ impl<'a> Lowering<'a> {
                         .iter()
                         .position(|candidate| *candidate == position)
                         .and_then(|index| ih_slots[index]);
+                    let recursive_worker =
+                        self.selected_static_recursor_worker(frame.static_origin, position)?;
                     let induction_hypothesis = self.make_computational_recursor(
                         args[position].clone(),
                         frame.cases.to_vec(),
@@ -2555,7 +2597,7 @@ impl<'a> Lowering<'a> {
                         cursor,
                         splice_caller,
                         None,
-                        None,
+                        recursive_worker,
                     )?;
                     #[cfg(test)]
                     px8j_record_recursor_carrier(Px8jProducerPath::Composed, &induction_hypothesis);
@@ -2710,21 +2752,19 @@ impl<'a> Lowering<'a> {
                 scrutinee.specialized_at(edge)?
             }
             EliminatorFrame::PendingLet(frame) => {
-                let edge = self.static_transition_plan.recursor_boundary_use_token(
-                    frame.recursor_parent,
-                    frame.sibling_position,
-                )?;
+                let edge = self
+                    .static_transition_plan
+                    .recursor_boundary_use_token(frame.recursor_parent, frame.sibling_position)?;
                 scrutinee.specialized_at(edge)?
             }
             EliminatorFrame::Active(_) => {
                 return Err(backend(BackendFailure::PlannerInvariant(
-                    "active composed match has no exact planned scrutinee boundary"
-                        .to_string(),
+                    "active composed match has no exact planned scrutinee boundary".to_string(),
                 )));
             }
-            EliminatorFrame::InvocationReturn => unreachable!(
-                "invocation return forwards before composed scrutinee classification"
-            ),
+            EliminatorFrame::InvocationReturn => {
+                unreachable!("invocation return forwards before composed scrutinee classification")
+            }
         };
         if let Lowered::BoundedNat(nat) = scrutinee {
             return self.lower_bounded_nat_computational(builder, nat, false, eliminators);
@@ -2864,6 +2904,8 @@ impl<'a> Lowering<'a> {
                         .iter()
                         .position(|candidate| *candidate == position)
                         .and_then(|index| ih_slots[index]);
+                    let recursive_worker =
+                        self.selected_static_recursor_worker(eliminator.static_origin, position)?;
                     let induction_hypothesis = self.make_computational_recursor(
                         // ⭐ `AC-C4` clause 1 — the SPECIALIZED caller wraps
                         // explicitly, so the phase is stated at the call site
@@ -2885,7 +2927,7 @@ impl<'a> Lowering<'a> {
                         cursor,
                         splice_caller,
                         None,
-                        None,
+                        recursive_worker,
                     )?;
                     #[cfg(test)]
                     px8j_record_recursor_carrier(Px8jProducerPath::Composed, &induction_hypothesis);
@@ -3401,6 +3443,8 @@ impl<'a> Lowering<'a> {
                         .iter()
                         .position(|candidate| *candidate == position)
                         .and_then(|index| ih_slots[index]);
+                    let recursive_worker =
+                        self.selected_static_recursor_worker(frame.static_origin, position)?;
                     let induction_hypothesis = self.make_computational_recursor(
                         LoweringOperand::Specialized(constructor_args[position].clone()),
                         frame.cases.to_vec(),
@@ -3419,7 +3463,7 @@ impl<'a> Lowering<'a> {
                         deferred.selected_active.cursor,
                         deferred.splice_caller,
                         None,
-                        None,
+                        recursive_worker,
                     )?;
                     #[cfg(test)]
                     px8j_record_recursor_carrier(
@@ -4554,6 +4598,11 @@ impl<'a> Lowering<'a> {
                                         .iter()
                                         .position(|candidate| *candidate == position)
                                         .and_then(|index| ih_slots[index]);
+                                    let recursive_worker = self
+                                        .selected_static_recursor_worker(
+                                            static_origin,
+                                            position,
+                                        )?;
                                     let induction_hypothesis = self.make_computational_recursor(
                                         LoweringOperand::Specialized(
                                             args[position].clone(),
@@ -4577,7 +4626,7 @@ impl<'a> Lowering<'a> {
                                             &control.selected,
                                             control.selected_lineage.as_slice(),
                                         )),
-                                        None,
+                                        recursive_worker,
                                     )?;
                                     #[cfg(test)]
                                     px8j_record_recursor_carrier(
@@ -4778,6 +4827,21 @@ impl<'a> Lowering<'a> {
                 "the recursor invocation disagrees with its static worker edge",
             ));
         }
+        if matches!(residual, LoweringOperand::Carried(_)) {
+            self.static_transition_plan
+                .validate_static_recursor_worker_residual_identity(
+                    worker.boundary_identity,
+                    worker.residual_id,
+                    worker.parent_origin,
+                    worker.producer_origin,
+                    worker.sibling_position,
+                    worker.closure_origin,
+                    worker.body_origin,
+                    worker.declared_arity,
+                    worker.capture_count,
+                )?;
+            return Ok(PreparedStaticRecursorResidual::Passthrough(residual));
+        }
         self.prepare_planned_static_recursor_worker(residual, worker)
     }
 
@@ -4797,27 +4861,19 @@ impl<'a> Lowering<'a> {
                 "a callable recursor worker has no closure residual",
             ));
         };
-        let token = self
-            .static_transition_plan
-            .static_recursor_worker_residual_token(
+        self.static_transition_plan
+            .validate_static_recursor_worker_residual_identity(
+                worker.boundary_identity,
+                worker.residual_id,
                 worker.parent_origin,
+                worker.producer_origin,
                 worker.sibling_position,
+                worker.closure_origin,
                 worker.body_origin,
-            )?
-            .ok_or_else(|| {
-                backend(BackendFailure::PlannerInvariant(
-                    "static recursor worker residual token disappeared".to_string(),
-                ))
-            })?;
-        if token.disposition() != OperandEdgeDisposition::CallableCapture
-            || token.id != worker.residual_id
-            || token.parent_origin != worker.parent_origin
-            || token.sibling_position as usize != worker.sibling_position
-            || token.closure_origin != worker.closure_origin
-            || token.body_origin != worker.body_origin
-            || token.declared_arity as usize != worker.declared_arity
-            || token.capture_count as usize != worker.capture_count
-            || body != worker.body_origin
+                worker.declared_arity,
+                worker.capture_count,
+            )?;
+        if body != worker.body_origin
             || params.len() != worker.declared_arity
             || captures.len() != worker.capture_count
         {
@@ -4858,8 +4914,10 @@ impl<'a> Lowering<'a> {
             )));
         }
         let worker = StaticRecursorWorker {
+            boundary_identity: token.identity(),
             residual_id: token.id,
             parent_origin: token.parent_origin,
+            producer_origin: token.producer_origin,
             sibling_position: token.sibling_position as usize,
             closure_origin: token.closure_origin,
             body_origin: token.body_origin,
@@ -5670,11 +5728,23 @@ impl<'a> Lowering<'a> {
         // occurrence. A carried boundary word carries none of those and cannot
         // acquire them (`§2g`: the carrier holds the SSA word and nothing else),
         // so this is a specialized-only surface. ⛔ Fails closed.
-        let edge = self.static_transition_plan.operand_edge_token(
+        let edge = self.static_transition_plan.reached_operand_edge_token(
             call_origin,
             0,
             SourceOperandRole::CallCallee,
         )?;
+        for position in 0..args.len() {
+            let argument = self.static_transition_plan.reached_operand_edge_token(
+                call_origin,
+                1 + position,
+                SourceOperandRole::CallArgument,
+            )?;
+            if argument.disposition() != OperandEdgeDisposition::Forwarding {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "source-machine call argument lost its forwarding disposition".to_string(),
+                )));
+            }
+        }
         let callee = callee.specialized_at(edge)?;
         match callee {
             Lowered::Closure {
@@ -6339,12 +6409,7 @@ impl<'a> Lowering<'a> {
                         origin,
                         0,
                     )?;
-                    self.transfer_into_carrier_on_planned_edge(
-                        builder,
-                        origin,
-                        &lowered,
-                        edge,
-                    )
+                    self.transfer_into_carrier_on_planned_edge(builder, origin, &lowered, edge)
                 }
             }
         }
@@ -6530,12 +6595,7 @@ impl<'a> Lowering<'a> {
                 match argument {
                     LoweringOperand::Carried(child) => *child,
                     LoweringOperand::Specialized(value) => {
-                        self.transfer_into_carrier_on_edge(
-                            builder,
-                            child_origin,
-                            value,
-                            edge,
-                        )?
+                        self.transfer_into_carrier_on_edge(builder, child_origin, value, edge)?
                     }
                 }
             };
@@ -7370,52 +7430,24 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
-    /// Resolve the declared body unit of a callable recursive position in the
-    /// source form that owns the carried child.
-    ///
-    /// Structural-data recursive positions return `None`; they resume the
-    /// eliminator directly and take no arguments. A lexical closure with
-    /// captures also returns `None` because its carried value does not expose
-    /// those capture operands to a generated call frame.
-    fn recursive_position_unit_body(
+    fn selected_static_recursor_worker(
         &self,
-        eliminator_origin: StaticOriginId,
+        parent_origin: StaticOriginId,
         position: usize,
     ) -> Result<Option<StaticRecursorWorker>, CraneliftBackendError> {
-        let eliminator = self.retained_body_occurrence(eliminator_origin)?;
-        let RuntimeExpr::ComputationalMatch { scrutinee, .. } = eliminator.expr else {
-            return Err(backend(BackendFailure::PlannerInvariant(
-                "recursive-position metadata names a non-computational eliminator".to_string(),
-            )));
-        };
-        let scrutinee = self.child_occurrence(eliminator_origin, 0, scrutinee)?;
-        let RuntimeExpr::Construct { args, .. } = scrutinee.expr else {
-            return Ok(None);
-        };
-        let Some(argument) = args.get(position) else {
-            return Err(backend(BackendFailure::PlannerInvariant(
-                "recursive position is outside its source constructor".to_string(),
-            )));
-        };
-        let argument = self.child_occurrence(scrutinee.static_origin, position, argument)?;
-        let body = match argument.expr {
-            RuntimeExpr::Closure { body, .. } | RuntimeExpr::LexicalClosure { body, .. } => {
-                self.child_occurrence(argument.static_origin, 0, body)?
-                    .static_origin
-            }
-            _ => return Ok(None),
-        };
         self.static_transition_plan
-            .static_recursor_worker_residual_token(eliminator_origin, position, body)?
+            .selected_static_recursor_worker_residual_token(parent_origin, position)?
             .map(|token| {
                 if token.disposition() != OperandEdgeDisposition::CallableCapture {
                     return Err(backend(BackendFailure::PlannerInvariant(
-                        "static recursor worker residual is not callable-capture".to_string(),
+                        "selected static recursor residual is not callable-capture".to_string(),
                     )));
                 }
                 Ok(StaticRecursorWorker {
+                    boundary_identity: token.identity(),
                     residual_id: token.id,
                     parent_origin: token.parent_origin,
+                    producer_origin: token.producer_origin,
                     sibling_position: token.sibling_position as usize,
                     closure_origin: token.closure_origin,
                     body_origin: token.body_origin,
@@ -7624,6 +7656,8 @@ impl<'a> Lowering<'a> {
                         .iter()
                         .position(|candidate| *candidate == position)
                         .and_then(|index| ih_slots[index]);
+                    let recursive_worker =
+                        self.selected_static_recursor_worker(eliminator.static_origin, position)?;
                     // ⭐ Clause 1 — the CARRIED arm passes its projected operand
                     // **directly**. ⛔ No wrap, no `specialized_at`, no template.
                     let induction_hypothesis = self.make_computational_recursor(
@@ -7644,7 +7678,7 @@ impl<'a> Lowering<'a> {
                         cursor,
                         splice_caller,
                         None,
-                        self.recursive_position_unit_body(eliminator.static_origin, position)?,
+                        recursive_worker,
                     )?;
                     #[cfg(test)]
                     px8j_record_recursor_carrier(Px8jProducerPath::Composed, &induction_hypothesis);
@@ -9011,6 +9045,18 @@ impl<'a> Lowering<'a> {
         // host operation remains specialized-only and crosses the typed phase
         // boundary only after the checked operation is known.
         let specialized_lowered = if operation == ken_host::HostOpV1::BufferFreeze {
+            for position in 0..args.len() {
+                let edge = self.static_transition_plan.reached_operand_edge_token(
+                    static_origin,
+                    argument_base + position,
+                    SourceOperandRole::EffectArgument,
+                )?;
+                if edge.disposition() != OperandEdgeDisposition::SemanticEliminator {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "BufferFreeze operand lost its semantic-eliminator disposition".to_string(),
+                    )));
+                }
+            }
             None
         } else {
             Some(self.specialized_source_env_at(
@@ -9951,13 +9997,7 @@ impl<'a> Lowering<'a> {
         zero_env.extend_from_slice(producer_env);
         let zero_lowered = self.lower_expr(builder, zero_body, &zero_env)?;
         let (initial, result_kind) =
-            self.merge_scalar_operand(
-                builder,
-                join_origin,
-                zero_lowered,
-                None,
-                "DeclarationRef",
-            )?;
+            self.merge_scalar_operand(builder, join_origin, zero_lowered, None, "DeclarationRef")?;
         if result_kind == ScalarMergeKind::RecursiveBackedge {
             return Err(unsupported(
                 "DeclarationRef",
@@ -10027,14 +10067,13 @@ impl<'a> Lowering<'a> {
         suc_env.extend_from_slice(producer_env);
         let next = self.lower_expr(builder, suc_body, &suc_env);
         self.active_recursive_declarations.pop();
-        let (next, next_kind) =
-            self.merge_scalar_operand(
-                builder,
-                join_origin,
-                next?,
-                Some(result_kind),
-                "DeclarationRef",
-            )?;
+        let (next, next_kind) = self.merge_scalar_operand(
+            builder,
+            join_origin,
+            next?,
+            Some(result_kind),
+            "DeclarationRef",
+        )?;
         if next_kind != result_kind {
             return Err(unsupported(
                 "DeclarationRef",
@@ -10096,8 +10135,7 @@ impl<'a> Lowering<'a> {
                 )?;
                 if edge.disposition() != OperandEdgeDisposition::Forwarding {
                     return Err(backend(BackendFailure::PlannerInvariant(
-                        "ordinary declaration argument lost its forwarding disposition"
-                            .to_string(),
+                        "ordinary declaration argument lost its forwarding disposition".to_string(),
                     )));
                 }
                 self.lower_expr(builder, arg, producer_env)

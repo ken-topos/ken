@@ -74,8 +74,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     collect_checked_oriented_markers, collect_checked_subcontinuation_frames,
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
-    AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
-    BoundaryUseIdentity,
+    AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition, BoundaryUseIdentity,
     CheckedOrientedMarkerSets, ConstructorIdentity, EmittableCallKind,
     EmittableStaticCallableArgumentKind, EmittableStaticCallableBinding,
     EmittableStaticCallableCall, EmittableStaticCallableCapture, EmittableStaticCallableUnit,
@@ -86,10 +85,10 @@ pub(in crate::cranelift_backend) use super::planning::{
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use super::planning::{
-    plan_static_transition_graph, with_last_io_error_role_omitted,
-    plan_static_transition_graph_with_test_fixture_boundary_use,
-    set_synthesized_consumption_mutation, with_lowering_boundary_use_issuance_denied,
-    ScaleBPlanCensus, SynthesizedConsumptionMutation,
+    plan_static_transition_graph, plan_static_transition_graph_with_test_fixture_boundary_use,
+    set_static_recursor_consumption_mutation, set_synthesized_consumption_mutation,
+    with_last_io_error_role_omitted, with_lowering_boundary_use_issuance_denied, ScaleBPlanCensus,
+    StaticRecursorConsumptionMutation, SynthesizedConsumptionMutation,
 };
 pub(in crate::cranelift_backend) use super::surface::{
     backend, backend_module, unsupported, BackendFailure, CraneliftBackendError,
@@ -1807,14 +1806,14 @@ impl<'a> Lowering<'a> {
             let status = self.emit_process_exit_status(builder, value.clone());
             self.emit_carrier_immediate(builder, BoundaryTag::ImmediateExitStatus, status)
         } else {
-            let edge =
-                self.static_transition_plan
-                    .lowering_boundary_use_token_for_owner(
-                        LoweringOnlyOperandEdge::CallableCapsuleEscape,
-                        origin,
-                        u32::MAX,
-                        owner,
-                    )?;
+            let edge = self
+                .static_transition_plan
+                .lowering_boundary_use_token_for_owner(
+                    LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                    origin,
+                    u32::MAX,
+                    owner,
+                )?;
             self.transfer_into_carrier_on_planned_edge(builder, origin, value, edge)
         }
     }
@@ -2442,14 +2441,14 @@ impl<'a> Lowering<'a> {
             let position = u32::try_from(position).map_err(|_| {
                 backend_module("callee input boundary position exceeds u32".to_string())
             })?;
-            let edge =
-                self.static_transition_plan
-                    .lowering_boundary_use_token_for_owner(
-                        LoweringOnlyOperandEdge::CallableCapsuleEscape,
-                        target.call_site_origin,
-                        position,
-                        target.boundary_owner,
-                    )?;
+            let edge = self
+                .static_transition_plan
+                .lowering_boundary_use_token_for_owner(
+                    LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                    target.call_site_origin,
+                    position,
+                    target.boundary_owner,
+                )?;
             if let LoweringOperand::Specialized(value) = input {
                 value.boundary_transfer_admissibility(&edge)?;
             }
@@ -4878,10 +4877,7 @@ impl Lowered {
             // ⛔ One exact typed error at every depth, so a nested rejection is
             // not reported as some enclosing variant's failure.
             Lowered::Closure { .. } | Lowered::DeclarationClosure { .. } => {
-                if matches!(
-                    edge.identity(),
-                    BoundaryUseIdentity::Synthesized(0)
-                ) {
+                if matches!(edge.identity(), BoundaryUseIdentity::Synthesized(0)) {
                     return Err(backend(BackendFailure::PlannerInvariant(
                         "callable capsule boundary use has no exact identity".to_string(),
                     )));
@@ -5464,8 +5460,10 @@ struct PendingLetContinuationFrame<'a> {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct StaticRecursorWorker {
+    boundary_identity: BoundaryUseIdentity,
     residual_id: StaticRecursorWorkerResidualId,
     parent_origin: StaticOriginId,
+    producer_origin: StaticOriginId,
     sibling_position: usize,
     closure_origin: StaticOriginId,
     body_origin: StaticOriginId,
@@ -7894,13 +7892,11 @@ impl<'a> Lowering<'a> {
                     .static_transition_plan
                     .static_recursor_worker_residual_token(static_origin, sibling_position, *body)?
                     .ok_or_else(|| {
-                        backend(BackendFailure::PlannerInvariant(
-                            format!(
-                                "callable recursor residual has no planned matrix member: \
+                        backend(BackendFailure::PlannerInvariant(format!(
+                            "callable recursor residual has no planned matrix member: \
                                  parent={static_origin:?}, position={sibling_position}, \
                                  body={body:?}"
-                            ),
-                        ))
+                        )))
                     })?;
                 if token.disposition() != OperandEdgeDisposition::CallableCapture
                     || token.parent_origin != static_origin
@@ -7914,8 +7910,10 @@ impl<'a> Lowering<'a> {
                     )));
                 }
                 Some(StaticRecursorWorker {
+                    boundary_identity: token.identity(),
                     residual_id: token.id,
                     parent_origin: token.parent_origin,
+                    producer_origin: token.producer_origin,
                     sibling_position: token.sibling_position as usize,
                     closure_origin: token.closure_origin,
                     body_origin: token.body_origin,
@@ -9512,14 +9510,12 @@ impl<'a> Lowering<'a> {
                 args,
                 env,
                 next,
-            } => {
-                SourceContinuation::CallCallee {
-                    call_origin: *call_origin,
-                    args: args.clone(),
-                    env: env.clone(),
-                    next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
-                }
-            }
+            } => SourceContinuation::CallCallee {
+                call_origin: *call_origin,
+                args: args.clone(),
+                env: env.clone(),
+                next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
+            },
             SourcePrefixTemplate::CallArgument {
                 call_origin,
                 callee,
