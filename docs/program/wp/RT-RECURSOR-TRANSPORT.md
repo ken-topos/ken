@@ -184,6 +184,104 @@ IDs, resume cursors, unwind vectors, open obligations, splice handles. ⭐ **The
 are neither ABI key material nor runtime data.** Putting any of them in a
 descriptor is the failure this outcome exists to forbid.
 
+### ⭐⭐ RECUT 2026-07-30 — THE DYNAMIC CASE IS **CAUSAL CONTINUATION SPECIALIZATION**
+
+**Architect `evt_7dhwrk26ks9m0`**, ruled on preservation object `93746ada`
+(tree `8b3d06f9`, parent rejected `d55bceb5`) and Research advisory
+`evt_2q9mnxs8w5bke`. ⛔ **This is not a new node, disposition, carrier lane, or
+atomic participant.** It is the **exact dynamic case of outcome (b)** above, and
+the atomic scope remains exactly `RT-DECL-CLOSURE-PORT` `D7` + this node.
+
+#### The false premise this replaces
+
+The scalar `active_static_recursor_result`, and the post-join
+`selected_static_recursor_worker_residual_token(… predecessor_body=761)`, encode
+that **the predecessor body selects exactly one worker.** The measured trace
+falsifies it: body `761` returns **three** live continuation alternatives —
+bodies `442`, `641`, `723` — and the consumer sees only an **environment word**.
+
+⛔⛔ **`442` and `723` have the same seven-capture shape.** ⇒ **Equal tag, arity,
+field count, or capture layout is NOT a discriminator.** The witness is a `723`
+environment bound to a `442` body, reaching malformed borrowed process input —
+⭐ the payload was **structurally well-sized and semantically wrong**, which is
+exactly the failure a shape check cannot see.
+
+⭐ **The information is destroyed at the join.** Nothing downstream can
+reconstruct callable identity from the surviving environment word ⇒ **code
+identity must be discharged BEFORE the identity-erasing join.**
+
+#### Ownership
+
+| owns | what |
+|---|---|
+| **producer branch** | the fact *"this alternative produced worker 442 / 641 / 723"* |
+| **caller / consumer** | the continuation / suffix into which that worker result returns |
+| **planner** | the **finite relation** connecting those two facts |
+| **runtime** | execution of the **already-selected** unit with ordinary operands — nothing else |
+
+#### The lawful mechanism — closed, though names may vary
+
+1. During the generated-unit / specialization / continuation fixed point,
+   **enumerate the exact producer-result alternatives BEFORE their same-tag join
+   erases callable identity.**
+2. For each exact alternative, derive one **continuation-specialization key**
+   binding at least: producer unit/owner and exact **causal producer-result
+   occurrence** · consumer unit/owner and exact checked continuation/frame or
+   suffix identity · recursor parent and recursive/sibling position · exact
+   worker closure/body identity, declared arity, and **ordered capture
+   provenance** · the ordinary input/result ABI convention and the required
+   lifetime/provenance contract.
+3. **Intern that key BEFORE recursive discovery.** ⛔⛔ **Capture/environment
+   VALUES are operands, never key material.** ⛔ Equal tag, arity, field count,
+   layout, or constructor identity is **never** a substitute for body or causal
+   occurrence identity.
+4. Add **one explicit closed planner-derived unit-definition arm** for this
+   semantic class — conceptually **`ContinuationSpecialization`**. ⛔ It may
+   **not** be smuggled through `SchedulingEntry`, `ClosureBody`,
+   `TransparentDeclarationClosure`, or **`StaticCallableSpecialization`**. ⭐ The
+   distinction is exact: `StaticCallableSpecialization` specializes a
+   **transparent callable parameter**; this class embodies a **caller-owned
+   recursor continuation / return hole**. See [[RT-DECL-CLOSURE-PORT]] `D7`.
+5. Each exact producer alternative emits a **statically connected direct
+   call/return edge to its exact interned continuation specialization, BEFORE the
+   identity-erasing join.** The unit binds **one** compiler-known worker and
+   **one** caller-owned continuation/suffix. A join, if still required, occurs
+   **only after** that continuation has produced an ordinary result.
+6. The unit ABI carries **only** ordinary residual/result operands, the exact
+   worker environment fields, and any ordinary caller-continuation environment
+   fields already justified by their owner/lifetime records. ⛔ **Absent:**
+   worker/body/continuation identity, selector/tag, cursor, activation, frame,
+   splice, capsule, function pointer, trampoline, side-table handle.
+7. **Close and validate BEFORE descriptor, environment, function, or object
+   allocation:** discovered specialization keys **biject** defined units ·
+   planned causal call edges **biject** emitted direct call edges · every call
+   edge names **exactly one** specialization and **exactly one** worker · every
+   synthesized/source boundary identity and lifetime/provenance obligation is
+   **consumed exactly once** · recursive cycles **fold to already-interned
+   identities**.
+
+> ⛔⛔ **THIS IS BRANCH-LOCAL EDGE FORMATION, NOT A POST-JOIN SPECIALIZATION
+> LOOKUP.** ⭐ **Merely cloning `442`/`641`/`723` while leaving one joined
+> consumer call is UNLAWFUL** — it reproduces the identical information loss and
+> fails the same test as the current source-derived target. ⚠ This is the single
+> easiest way to build something that looks like the ruling and is not it.
+
+#### ⛔ The rejected fork — and it is not a fallback either
+
+**Producer-side continuation fusion is NOT the governing mechanism and is NOT an
+authorized fallback.** Moving or duplicating the caller-owned eliminator/suffix
+body into producer branches is this frame's prohibited **"inlining as
+transport"**, and it invites duplicated/reordered traps, effects, broken linear
+consumption, and code growth. ⭐ **The producer branch may SELECT and CALL its
+exact out-of-line unit; it may not ABSORB that unit's semantic body.**
+
+⇒ **If planning cannot discharge this, it must REJECT before allocation/emission
+— ⛔ there is no runtime-carrier fallback.** Reject when: a possible worker is
+**open/unknown** · the continuation **escapes** or is observed as a first-class
+value · an exact producer alternative **cannot be tied to one direct
+specialization edge** · effect order, trap order, or affinity **cannot be
+preserved**.
+
 ## 4. Deliverables
 
 - **⭐ `D0` — the delta-free regression baseline, PER ROW.** ⛔ Not an aggregate.
@@ -302,6 +400,33 @@ the only one that distinguishes a proved per-edge exception from a weakened
 default. ⭐ **The rest assert that the right thing happens; these two assert that
 the wrong thing still cannot.**
 
+### ⭐⭐ RECUT 2026-07-30 — the TEN required-evidence rows (`evt_7dhwrk26ks9m0` §4)
+
+⛔⛔ **These are REQUIRED EVIDENCE on one exact candidate, in addition to every
+existing `D7`/`RT-RECURSOR` AC. They do NOT open `AC-17`+ and they do NOT create
+a test node** — the same rule as the 2026-07-29 sharpening above. ⛔ **No
+approval transfers from any earlier SHA.**
+
+| # | what fresh QA must establish | the mutation that must **red** it |
+|---|---|---|
+| **`E-1`** | The **real `761` witness** reaches the **correct distinct** continuation/worker for **all three** alternatives `442`, `641`, `723`; the measured **`723`-environment / `442`-body malformed-borrow trap disappears** | — (this is the positive witness) |
+| **`E-2`** | The same-shape **`442`/`723` pair stays DISTINCT** | Collapsing, swapping, omitting body identity, or keying **only** by tag/arity/layout **reds before emission** |
+| **`E-3`** | Same worker + same static continuation + **different capture values** reuse **one** interned unit and produce **value-dependent** results | **Capture-value keying reds the census** |
+| **`E-4`** | The same worker under **two** checked continuation/frame or suffix identities produces **two exact** return-hole results | Collapse or swap **reds** |
+| **`E-5`** | ⭐ **Omit, duplicate, transplant, or retarget a causal producer→specialization call-edge token** ⇒ validation **rejects before definition/allocation** | ⭐⭐ **A post-join single-call mutation MUST FAIL** — this is the row that discriminates branch-local edge formation from a post-join lookup |
+| **`E-6`** | **ABI census proves ZERO callable/control identity** and exactly the ordinary ordered fields with unchanged class, owner, provenance, aliasing, and invocation lifetime | any control/identity word present |
+| **`E-7`** | **Untaken alternatives perform ZERO captures, traps, effects, or publication**; selected effects/traps retain **order and affine consumption** | Lifetime / owner / field-order mutations fail with **all allocation and publication counters at ZERO** |
+| **`E-8`** | Recursive **A→B→A** discovery terminates by **intern-before-descent**; repeated dynamic invocation reuses the **finite static population** | an occurrence/owner **collision** mutation **reds** |
+| **`E-9`** | **Unknown producer**, non-tail/escaping observation where relevant, and whole-`Closure` use **outside** the exact proved edge remain **fail-closed before allocation** | — |
+| **`E-10`** | Re-run the **complete 19-row CI-regression population** that rejected `d55bceb5`, **all** named `D7`/`RT-RECURSOR` controls, and obtain **literal all-check CI green** | ⛔ partial green is not green; ⛔ a cancelled shard is not a run |
+
+⚠ **`E-5` and `E-7` are the load-bearing pair.** `E-5` is the only row that can
+fail while every other row passes on a **post-join clone** — it tests *where* the
+edge is formed, not *whether* three units exist. `E-7` is the only row that sees
+an **untaken branch doing work**, which no outcome assertion can reach because
+the outcome is still correct. ⭐ **The rest assert the right thing happens; these
+two assert the wrong thing still cannot.**
+
 ## 6. ⛔ Banned scope
 
 - ⛔ **Retiring only one of the two classes.** They are folded for a stated
@@ -312,6 +437,19 @@ the wrong thing still cannot.**
   function pointer, trampoline, side table, or codec**; a **value-selected
   continuation**; **reconstruction of `Lowered::ComputationalRecursorClosure`**;
   **inlining as transport**; **validator or admission weakening**.
+- ⛔⛔ **EXTENDED 2026-07-30 (`evt_7dhwrk26ks9m0` §3) — still forbidden at every
+  depth:** choose-first · source-residual fallback · disposition state ·
+  environment shape · runtime body word · runtime selector · **tag dispatch for
+  callable identity** · function pointer · trampoline · side table · capsule
+  reconstruction · **capture-value keying** · clone-on-invocation · validator
+  weakening · lifetime promotion.
+- ⛔⛔ **Producer-side continuation fusion — as the mechanism OR as a fallback.**
+  ⭐ It was the *rejected* fork, not the runner-up: absorbing the caller-owned
+  eliminator/suffix into producer branches is the prohibited **inlining as
+  transport**. The producer branch **selects and calls**; it does not **absorb**.
+- ⛔ **A post-join specialization lookup dressed as this mechanism.** Cloning
+  `442`/`641`/`723` while one joined consumer call can still reach all three is
+  **unlawful** — see §3's recut.
 - ⛔ **Absorbing [[RT-PRODUCER-MATCH-PORT]]'s `ProducerMatchCall` retirement.**
   The dependency is retired; the sibling work is not.
 - ⛔ **Repairing `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds`.**
@@ -337,6 +475,23 @@ different transports, that **falsifies this node's fold** and is the Steward's
 re-cut, not the ring's to absorb. ⚠ Per Trap 2, this node exposes the largest
 newly reachable population in the campaign; **expect a fail-closed invariant to
 fire and route it as its own node.**
+
+### ⭐ 2026-07-30 — planning must REJECT, not degrade
+
+Per §3's recut, planning **rejects before allocation/emission** — ⛔ never
+degrades to a runtime carrier — when any of these holds:
+
+- a **possible worker is open or unknown**;
+- the **continuation escapes** or is observed as a first-class value;
+- an exact producer alternative **cannot be tied to one direct specialization
+  edge**;
+- **effect order, trap order, or affinity cannot be preserved**.
+
+⭐ **A rejection here is a correct outcome, not a failure to find a mechanism.**
+⛔ Do not treat "planning refuses" as a reason to widen the lane — with no users
+on `main`, a fail-closed refusal costs a developer some confusion, not an
+outage, and the refusal is what proves the exception is per-edge rather than a
+weakened default.
 
 ## 8. ⭐⭐ ATTRIBUTED 2026-07-29 — the ordinary-`Closure` refusal IS this node's
 

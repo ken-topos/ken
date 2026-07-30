@@ -13,7 +13,7 @@ residual can be retired.**
 
 ⛔ **Read `docs/program/16-recursive-descent-retirement.md` first.** This node is
 the **keystone** of that seven-node campaign, and the campaign doc carries the
-three traps that bind every node in it — including **Trap 3**, which this frame's
+traps that bind every node in it — including **Trap 3**, which this frame's
 `AC-2` now discharges explicitly. This frame predates the campaign doc and does
 not repeat its content.
 
@@ -458,6 +458,50 @@ callable specialization is a planner-derived emitted unit and must become an
 **explicit closed arm** with its own owner, descriptor, call edges, and
 validation. ⛔ **Do not smuggle it through `SchedulingEntry`, `ClosureBody`, or
 `TransparentDeclarationClosure`.**
+
+##### ⭐⭐ RECUT 2026-07-30 — a SECOND arm: `ContinuationSpecialization`
+
+**Architect `evt_7dhwrk26ks9m0` §2.4**, on preservation `93746ada`. The closed
+`AbiUnitDefinition` partition gains **one more explicit arm**, conceptually
+**`ContinuationSpecialization`**, owned by [[RT-RECURSOR-TRANSPORT]]'s outcome
+(b) dynamic case. ⛔ **This is not a new node, disposition, carrier lane, or
+atomic participant** — the six-way *operand-disposition* partition above is
+**unchanged**. What changes is the **unit-definition** census.
+
+⛔⛔ **It may not be smuggled through `SchedulingEntry`, `ClosureBody`,
+`TransparentDeclarationClosure`, or `StaticCallableSpecialization`.** ⭐ The last
+one is the trap, because it is the nearest neighbour and the only existing
+planner-interned arm:
+
+| | `StaticCallableSpecialization` (#24, above) | **`ContinuationSpecialization`** (new) |
+|---|---|---|
+| what is specialized | a **transparent callable PARAMETER** | a **caller-owned recursor CONTINUATION / return hole** |
+| who owns the identity | the **callee** declaration's parameter | the **caller**, into which a worker result returns |
+| key carries | base callee owner/origin + ordered (parameter ordinal, callable body origin, arity, capture provenance) | producer unit/owner + **exact causal producer-result occurrence** + consumer unit/owner + exact checked continuation/frame or suffix identity + recursor parent and recursive/sibling position + worker body identity, arity, ordered capture provenance |
+| shared rule | ⛔ **capture VALUES are never key material**; ⛔ intern **before** enqueue/descent; ⛔ zero callable-identity word in the ABI | identical |
+
+⇒ ⭐ **Reusing `StaticCallableSpecialization` for the continuation case is
+exactly the "same shape, different meaning" error that the `442`/`723` witness
+punishes** — the two keys have different *causal* content, and a unit arm that
+cannot tell them apart cannot prove one worker per call edge.
+
+**Validation this arm owes, before descriptor / environment / function / object
+allocation** (`evt_7dhwrk26ks9m0` §2.7) — ⛔ all five, ⛔ none deferrable to
+emission:
+
+1. discovered specialization keys **biject** defined units;
+2. planned **causal** call edges **biject** emitted **direct** call edges;
+3. every call edge names **exactly one** specialization and **exactly one**
+   worker;
+4. every synthesized/source boundary identity and lifetime/provenance obligation
+   is **consumed exactly once**;
+5. recursive cycles **fold to already-interned identities**.
+
+⚠ **Item 2 is the load-bearing one.** A post-join clone satisfies 1, 3, 4, and 5
+while failing only 2 — and 2 is the item whose control (`E-5` in
+[[RT-RECURSOR-TRANSPORT]]) requires a **post-join single-call mutation to
+fail**. ⭐ Read it as a claim about **where the edge is formed**, not about how
+many units exist.
 
 #### Row: the closure-capture cell (`core.rs:7370`)
 
