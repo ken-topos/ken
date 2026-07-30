@@ -4738,46 +4738,28 @@ impl<'src> StaticTransitionPlan<'src> {
                     && edge.role == role
             })
             .ok_or_else(|| planner_error("source operand edge has no planned disposition"))?;
-        self.consume_operand_edge(parent, position as usize)?;
         let identity = BoundaryUseIdentity::Source {
             parent: edge.parent,
             child: edge.child,
             position: edge.position,
         };
-        self.planned_boundary_use_token(
+        let token = self.planned_boundary_use_token(
             identity,
             source_operand_role_label(edge.role),
-        )
+        )?;
+        self.record_boundary_use_consumption(identity)?;
+        Ok(token)
     }
 
-    /// Record traversal of the exact positional source crossing. Static-body
-    /// children are not operand crossings and therefore return without a
-    /// ledger entry.
-    pub(in crate::cranelift_backend) fn consume_operand_edge(
+    fn record_boundary_use_consumption(
         &self,
-        parent: StaticOriginId,
-        position: usize,
+        identity: BoundaryUseIdentity,
     ) -> Result<(), CraneliftBackendError> {
-        let position = u32::try_from(position)
-            .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
-        let Some(edge) = self
-            .operand_edges
-            .iter()
-            .find(|edge| edge.parent == parent && edge.position == position)
-        else {
-            return Ok(());
-        };
-        let identity = BoundaryUseIdentity::Source {
-            parent: edge.parent,
-            child: edge.child,
-            position: edge.position,
-        };
         let mut ledger = self.operand_edge_consumption.borrow_mut();
-        // Lowering may revisit one static source crossing while emitting
-        // distinct control paths. The ledger records the static crossing, not
-        // the number of compiler walks through it; duplicate planned records
-        // are rejected independently by `validate_operand_edge_matrix`.
-        ledger.entry(identity).or_insert(1);
+        let count = ledger.entry(identity).or_insert(0);
+        *count = count
+            .checked_add(1)
+            .ok_or_else(|| planner_capacity_error("boundary-use consumption count exhausted"))?;
         Ok(())
     }
 
@@ -4812,21 +4794,23 @@ impl<'src> StaticTransitionPlan<'src> {
                 _ => None,
             })
             .collect::<BTreeMap<_, _>>();
-        if actual.values().any(|count| *count != 1) {
-            return Err(planner_error(
-                "source boundary-use ledger contains duplicate consumption",
-            ));
+        let duplicates = actual
+            .iter()
+            .filter(|(_, count)| **count != 1)
+            .map(|(identity, count)| (*identity, *count))
+            .collect::<Vec<_>>();
+        if !duplicates.is_empty() {
+            return Err(planner_error(format!(
+                "source boundary-use ledger contains duplicate consumption; \
+                 duplicates={duplicates:?}"
+            )));
         }
         let actual_set = actual.keys().copied().collect::<BTreeSet<_>>();
-        // The source matrix is branch-independent, while lowering may
-        // statically select a constructor case and emit no consumer for the
-        // other arms. Therefore the emitted ledger must be a duplicate-free
-        // subset of the complete planned population. Generated transitions
-        // are closed separately by their exact fixed-point validators.
-        if !actual_set.is_subset(&expected) {
+        if actual_set != expected {
+            let missing = expected.difference(&actual_set).copied().collect::<Vec<_>>();
             let extra = actual_set.difference(&expected).copied().collect::<Vec<_>>();
             return Err(planner_error(format!(
-                "source boundary-use ledger contains an unplanned crossing; extra={extra:?}"
+                "source boundary-use ledger is not exact; missing={missing:?}; extra={extra:?}"
             )));
         }
         Ok(())
@@ -4849,16 +4833,24 @@ impl<'src> StaticTransitionPlan<'src> {
             .map(|edge| edge.identity)
             .collect::<BTreeSet<_>>();
         let ledger = self.operand_edge_consumption.borrow();
-        if ledger.values().any(|count| *count != 1) {
-            return Err(planner_error(
-                "boundary-use ledger contains duplicate consumption",
-            ));
+        let duplicates = ledger
+            .iter()
+            .filter(|(_, count)| **count != 1)
+            .map(|(identity, count)| (*identity, *count))
+            .collect::<Vec<_>>();
+        if !duplicates.is_empty() {
+            return Err(planner_error(format!(
+                "boundary-use ledger contains duplicate consumption; \
+                 duplicates={duplicates:?}"
+            )));
         }
         let actual = ledger.keys().copied().collect::<BTreeSet<_>>();
-        if !actual.is_subset(&expected) {
-            return Err(planner_error(
-                "boundary-use ledger contains an unplanned source or synthesized crossing",
-            ));
+        if actual != expected {
+            let missing = expected.difference(&actual).copied().collect::<Vec<_>>();
+            let extra = actual.difference(&expected).copied().collect::<Vec<_>>();
+            return Err(planner_error(format!(
+                "boundary-use ledger is not exact; missing={missing:?}; extra={extra:?}"
+            )));
         }
         Ok(())
     }
@@ -4916,11 +4908,9 @@ impl<'src> StaticTransitionPlan<'src> {
                     "lowering transition has no exact planner-issued boundary use",
                 )
             })?;
-        self.operand_edge_consumption
-            .borrow_mut()
-            .entry(planned.identity)
-            .or_insert(1);
-        self.planned_boundary_use_token(planned.identity, planned.edge.label())
+        let token = self.planned_boundary_use_token(planned.identity, planned.edge.label())?;
+        self.record_boundary_use_consumption(planned.identity)?;
+        Ok(token)
     }
 
     pub(in crate::cranelift_backend) fn recursor_boundary_use_token(
@@ -4940,14 +4930,12 @@ impl<'src> StaticTransitionPlan<'src> {
             .ok_or_else(|| {
                 planner_error("computational recursor use has no planned boundary edge")
             })?;
-        self.operand_edge_consumption
-            .borrow_mut()
-            .entry(edge.identity)
-            .or_insert(1);
-        self.planned_boundary_use_token(
+        let token = self.planned_boundary_use_token(
             edge.identity,
             "a planned computational recursor residual",
-        )
+        )?;
+        self.record_boundary_use_consumption(edge.identity)?;
+        Ok(token)
     }
 
     /// Consume the planner-owned callable-capture disposition for one exact
@@ -7218,6 +7206,22 @@ mod tests {
         }
     }
 
+    fn consume_lowering_boundary_uses(
+        plan: &StaticTransitionPlan<'_>,
+        omitted: Option<BoundaryUseIdentity>,
+    ) -> Vec<BoundaryUseIdentity> {
+        let planned = plan.lowering_boundary_uses.clone();
+        planned
+            .into_iter()
+            .filter(|use_| Some(use_.identity) != omitted)
+            .map(|use_| {
+                plan.lowering_boundary_use_token(use_.edge, use_.origin, use_.position)
+                    .expect("the exact synthesized authority is consumed")
+                    .identity()
+            })
+            .collect()
+    }
+
     fn d7_functionized_plan<'a>(
         entry: &'a RuntimeExpr,
         declarations: &BTreeMap<&str, &'a RuntimeDeclaration>,
@@ -7981,17 +7985,14 @@ mod tests {
         let source = plan
             .operand_edge_token(root, 0, SourceOperandRole::ConstructArgument)
             .expect("the exact source child has unified authority");
-        let synthesized = plan
-            .lowering_boundary_use_token(
-                LoweringOnlyOperandEdge::CallableCapsuleEscape,
-                root,
-                u32::MAX,
-            )
-            .expect("the exact result transfer has unified authority");
+        let synthesized = consume_lowering_boundary_uses(&plan, None);
+        let expected = std::iter::once(source.identity())
+            .chain(synthesized)
+            .collect::<BTreeSet<_>>();
         let ledger = plan.operand_edge_consumption.borrow();
         assert_eq!(
             ledger.keys().copied().collect::<BTreeSet<_>>(),
-            BTreeSet::from([source.identity(), synthesized.identity()]),
+            expected,
             "source and synthesized emission must enter one identity ledger"
         );
         drop(ledger);
@@ -8004,6 +8005,131 @@ mod tests {
             "omitting either identity class from the unified planned set must \
              reject before lowering"
         );
+    }
+
+    #[test]
+    fn source_boundary_use_consumption_is_exactly_once() {
+        // Promise class: durable invariant with population-side mutations.
+        //
+        // MEASURED: omitting and repeating issuance of the real ConstructArgument
+        // authority reach distinct exact pre-emission ledger errors.
+        // CLAIMED: every planned source crossing is consumed exactly once.
+        // THE GAP: the synthesized use must already be consumed so neither
+        // control can pass or fail because the other identity class is absent.
+        let expr = RuntimeExpr::Construct {
+            constructor: "ctor:fixture::BoundaryUse::SourceExact".to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+        };
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+            .expect("the exact source-consumption fixture plans");
+        let root = plan
+            .root_static_origin()
+            .expect("the fixture has a root occurrence");
+        let source_identity = BoundaryUseIdentity::Source {
+            parent: root,
+            child: plan
+                .child_static_origin(root, 0)
+                .expect("the fixture has one exact child"),
+            position: 0,
+        };
+        consume_lowering_boundary_uses(&plan, None);
+        let missing = plan
+            .validate_boundary_use_consumption()
+            .expect_err("an unconsumed planned source use must reject");
+        assert!(matches!(
+            missing,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+                if detail == &format!(
+                    "source boundary-use ledger is not exact; missing={:?}; extra=[]",
+                    [source_identity]
+                )
+        ));
+
+        plan.operand_edge_token(root, 0, SourceOperandRole::ConstructArgument)
+            .expect("the exact source authority is consumed once");
+        plan.operand_edge_token(root, 0, SourceOperandRole::ConstructArgument)
+            .expect("the same issued authority is consumed a second time");
+        let duplicate = plan
+            .validate_boundary_use_consumption()
+            .expect_err("repeated source consumption must reject");
+        assert!(matches!(
+            duplicate,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+                if detail == &format!(
+                    "source boundary-use ledger contains duplicate consumption; \
+                     duplicates={:?}",
+                    [(source_identity, 2)]
+                )
+        ));
+    }
+
+    #[test]
+    fn synthesized_boundary_use_consumption_is_exactly_once() {
+        // Promise class: durable invariant with population-side mutations.
+        //
+        // MEASURED: omitting and repeating issuance of the real
+        // CallableCapsuleEscape authority reach distinct exact pre-emission
+        // ledger errors.
+        // CLAIMED: every planner-interned synthesized crossing is consumed
+        // exactly once.
+        // THE GAP: the source use must already be consumed so neither control
+        // can pass or fail because the source identity class is absent.
+        let expr = RuntimeExpr::Construct {
+            constructor: "ctor:fixture::BoundaryUse::SynthExact".to_string(),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+        };
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+            .expect("the exact synthesized-consumption fixture plans");
+        let root = plan
+            .root_static_origin()
+            .expect("the fixture has a root occurrence");
+        plan.operand_edge_token(root, 0, SourceOperandRole::ConstructArgument)
+            .expect("the independent source authority is consumed");
+        let synthesized = *plan
+            .lowering_boundary_uses
+            .iter()
+            .find(|use_| {
+                use_.edge == LoweringOnlyOperandEdge::CallableCapsuleEscape
+                    && use_.origin == root
+                    && use_.position == u32::MAX
+            })
+            .expect("the result crossing is planner-interned");
+        consume_lowering_boundary_uses(&plan, Some(synthesized.identity));
+        let missing = plan
+            .validate_boundary_use_consumption()
+            .expect_err("an unconsumed planned synthesized use must reject");
+        assert!(matches!(
+            missing,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+                if detail == &format!(
+                    "boundary-use ledger is not exact; missing={:?}; extra=[]",
+                    [synthesized.identity]
+                )
+        ));
+
+        plan.lowering_boundary_use_token(
+            synthesized.edge,
+            synthesized.origin,
+            synthesized.position,
+        )
+        .expect("the synthesized authority is consumed once");
+        plan.lowering_boundary_use_token(
+            synthesized.edge,
+            synthesized.origin,
+            synthesized.position,
+        )
+        .expect("the same issued synthesized authority is consumed again");
+        let duplicate = plan
+            .validate_boundary_use_consumption()
+            .expect_err("repeated synthesized consumption must reject");
+        assert!(matches!(
+            duplicate,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+                if detail == &format!(
+                    "boundary-use ledger contains duplicate consumption; duplicates={:?}",
+                    [(synthesized.identity, 2)]
+                )
+        ));
     }
 
     #[test]

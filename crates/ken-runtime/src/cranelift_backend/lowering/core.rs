@@ -1273,6 +1273,17 @@ impl<'a> Lowering<'a> {
                         .get(&static_origin)
                         .cloned()
                     {
+                        let edge = self.static_transition_plan.operand_edge_token(
+                            static_origin,
+                            0,
+                            SourceOperandRole::CallCallee,
+                        )?;
+                        if edge.disposition() != OperandEdgeDisposition::SpecializedOnlyLeaf {
+                            return Err(backend(BackendFailure::PlannerInvariant(
+                                "static callable callee lost its semantic-inspection disposition"
+                                    .to_string(),
+                            )));
+                        }
                         let value = self.lower_static_callable_specialization_call(
                             builder,
                             static_origin,
@@ -1721,6 +1732,17 @@ impl<'a> Lowering<'a> {
                             eliminator.static_origin,
                             Some(case_index),
                         )?;
+                        let edge = self.static_transition_plan.operand_edge_token(
+                            eliminator.static_origin,
+                            1 + case_index,
+                            SourceOperandRole::MatchArm,
+                        )?;
+                        if edge.disposition() != OperandEdgeDisposition::Forwarding {
+                            return Err(backend(BackendFailure::PlannerInvariant(
+                                "selected computational match arm lost its forwarding disposition"
+                                    .to_string(),
+                            )));
+                        }
                         if case.argument_binders != args.len() {
                             return Err(unsupported(
                                 "ComputationalMatch",
@@ -6146,8 +6168,6 @@ impl<'a> Lowering<'a> {
         position: usize,
         child: &'x RuntimeExpr,
     ) -> Result<SourceOccurrence<'x>, CraneliftBackendError> {
-        self.static_transition_plan
-            .consume_operand_edge(parent, position)?;
         Ok(SourceOccurrence {
             expr: child,
             static_origin: self
@@ -6166,8 +6186,6 @@ impl<'a> Lowering<'a> {
         position: usize,
         child: RuntimeExpr,
     ) -> Result<OwnedSourceOccurrence, CraneliftBackendError> {
-        self.static_transition_plan
-            .consume_operand_edge(parent, position)?;
         Ok(OwnedSourceOccurrence {
             expr: child,
             static_origin: self
@@ -8000,6 +8018,16 @@ impl<'a> Lowering<'a> {
                 default,
             } => {
                 let scrutinee_occurrence = self.child_occurrence(static_origin, 0, scrutinee)?;
+                let scrutinee_edge = self.static_transition_plan.operand_edge_token(
+                    static_origin,
+                    0,
+                    SourceOperandRole::MatchScrutinee,
+                )?;
+                if scrutinee_edge.disposition() != OperandEdgeDisposition::SemanticEliminator {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "match scrutinee lost its semantic-eliminator disposition".to_string(),
+                    )));
+                }
                 if requires_heterogeneous_deforestation(scrutinee)
                     || self.declaration_call_produces_deforestable_aggregate(scrutinee)
                 {
@@ -8426,6 +8454,17 @@ impl<'a> Lowering<'a> {
                         .get(&static_origin)
                         .cloned()
                     {
+                        let edge = self.static_transition_plan.operand_edge_token(
+                            static_origin,
+                            0,
+                            SourceOperandRole::CallCallee,
+                        )?;
+                        if edge.disposition() != OperandEdgeDisposition::SpecializedOnlyLeaf {
+                            return Err(backend(BackendFailure::PlannerInvariant(
+                                "static callable callee lost its semantic-inspection disposition"
+                                    .to_string(),
+                            )));
+                        }
                         return self.lower_static_callable_specialization_call(
                             builder,
                             static_origin,
@@ -9913,11 +9952,32 @@ impl<'a> Lowering<'a> {
         join_plan: JoinPlanToken,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let _checked_invocation = self.consume_checked_recursive_invocation_call(symbol)?;
+        let callee_edge = self.static_transition_plan.operand_edge_token(
+            call_origin,
+            0,
+            SourceOperandRole::CallCallee,
+        )?;
+        if callee_edge.disposition() != OperandEdgeDisposition::SpecializedOnlyLeaf {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "declaration callee lost its semantic-inspection disposition".to_string(),
+            )));
+        }
         let lowered_args = args
             .iter()
             .enumerate()
             .map(|(position, arg)| {
                 let arg = self.child_occurrence(call_origin, 1 + position, arg)?;
+                let edge = self.static_transition_plan.operand_edge_token(
+                    call_origin,
+                    1 + position,
+                    SourceOperandRole::CallArgument,
+                )?;
+                if edge.disposition() != OperandEdgeDisposition::Forwarding {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "ordinary declaration argument lost its forwarding disposition"
+                            .to_string(),
+                    )));
+                }
                 self.lower_expr(builder, arg, producer_env)
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -10568,6 +10628,16 @@ impl<'a> Lowering<'a> {
             };
             let arm_env = env_with([payload], env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
+            let arm_edge = self.static_transition_plan.operand_edge_token(
+                static_origin,
+                1 + index,
+                SourceOperandRole::MatchArm,
+            )?;
+            if arm_edge.disposition() != OperandEdgeDisposition::Forwarding {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "dynamic HostResult match arm lost its forwarding disposition".to_string(),
+                )));
+            }
             let lowered = self.lower_expr(builder, body, &arm_env)?;
             if self.seal_source_trap_branch(builder, &lowered)? {
                 continue;
