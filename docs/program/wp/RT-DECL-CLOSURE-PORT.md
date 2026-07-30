@@ -1406,6 +1406,27 @@ family — that is a measurement nobody has taken.
   continuation base. ⛔ No QA verdict **or prior Decision** transfers; fresh SHA,
   fresh QA, and a **fresh** Architect Decision are mandatory.
 
+  ##### ⭐ THE BASE IS NOW DURABLE AT `origin` — and it was NOT until 2026-07-30
+
+  ⚠ Measured 2026-07-30: `42ccd8ec` — the live base this whole atomic candidate
+  is being built on — existed on **exactly one local ref**
+  (`refs/heads/wp/RT-DECL-CLOSURE-PORT`, the seat's own working branch) with
+  **zero refs at `origin`**. ⛔ A handoff-gate hard reset or a worktree reseat
+  would have destroyed the continuation base of both nodes at once.
+
+  ⇒ Now recoverable from **`origin/preserved/rt-decl-d7-base-42ccd8ec`**.
+
+  ⛔ **This ref is a recovery point, NOT a resume instruction.** It is
+  preservation-only exactly as the paragraph above says; fetching it changes
+  nothing about the fresh-SHA / fresh-QA / fresh-Decision requirement.
+
+  ⚠ **The earlier preservation seams in this lineage — `548682c3`, `430798bf` —
+  are deliberately NOT pushed.** They are superseded history, and this frame
+  cites them as evidence of *what was ruled when*, not as places to resume from.
+  ⭐ **A cited SHA needs a durable ref only when an artifact tells someone to
+  resume from it**; treating every citation as a preservation obligation would
+  put ~200 dead refs on `origin` and bury the handful that matter.
+
   #### The CI regression population this must clear
 
   Measured on PR **#1251** at exact `4dc120c5`: **8 of 12 checks red**, where
