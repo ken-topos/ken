@@ -740,6 +740,18 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 let root = compiler.retained_body_occurrence(root_origin)?;
                 compiler.select_terminal_result_origins(root_origin, root.expr)?;
                 let lowered = compiler.lower_expr(&mut builder, root, &initial_env)?;
+                // RecursiveDescent publishes the root's native result directly;
+                // it emits no generated-unit result carrier. The root
+                // CallableCapsuleEscape authority remains planner-visible for
+                // direct producer tests, but this compilation causally
+                // dispositions that absent ABI crossing.
+                compiler
+                    .static_transition_plan
+                    .disposition_lowering_boundary_use_if_planned(
+                        LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                        root_origin,
+                        u32::MAX,
+                    )?;
                 // RecursiveDescent still owns the explicit active-recursor
                 // residual. It inlines across generated-unit owner boundaries,
                 // so the function-owner equality used by FunctionizedUnits is
@@ -886,6 +898,74 @@ impl<'a> Lowering<'a> {
         ))
     }
 
+    /// Read the closure-shaped worker retained by RecursiveDescent.
+    ///
+    /// The exact static-worker identity was consumed when the induction
+    /// hypothesis was minted. RecursiveDescent emits no generated-unit
+    /// crossing, so it retains that closure rather than consuming the generic
+    /// `SpecializedOnlyLeaf` authority that the worker replaces.
+    fn specialized_recursor_residual_ref<'b>(
+        &self,
+        residual: &'b LoweringOperand,
+        recursor_parent: StaticOriginId,
+        sibling_position: usize,
+        recursive_worker: Option<StaticRecursorWorker>,
+    ) -> Result<&'b Lowered, CraneliftBackendError> {
+        if let Some(worker) = recursive_worker {
+            if !matches!(
+                self.body_emission_authority,
+                BodyEmissionAuthority::RecursiveDescent
+            ) || worker.parent_origin != recursor_parent
+                || worker.sibling_position != sibling_position
+            {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "inline static recursor worker disagrees with its exact authority".to_string(),
+                )));
+            }
+            return match residual {
+                LoweringOperand::Specialized(lowered) => Ok(lowered),
+                LoweringOperand::Carried(_) => Err(backend(BackendFailure::PlannerInvariant(
+                    "inline static recursor worker lost its closure residual".to_string(),
+                ))),
+            };
+        }
+        let edge = self
+            .static_transition_plan
+            .recursor_boundary_use_token(recursor_parent, sibling_position)?;
+        residual.specialized_ref_at(edge)
+    }
+
+    fn specialized_recursor_residual(
+        &self,
+        residual: LoweringOperand,
+        recursor_parent: StaticOriginId,
+        sibling_position: usize,
+        recursive_worker: Option<StaticRecursorWorker>,
+    ) -> Result<Lowered, CraneliftBackendError> {
+        if let Some(worker) = recursive_worker {
+            if !matches!(
+                self.body_emission_authority,
+                BodyEmissionAuthority::RecursiveDescent
+            ) || worker.parent_origin != recursor_parent
+                || worker.sibling_position != sibling_position
+            {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "inline static recursor worker disagrees with its exact authority".to_string(),
+                )));
+            }
+            return match residual {
+                LoweringOperand::Specialized(lowered) => Ok(lowered),
+                LoweringOperand::Carried(_) => Err(backend(BackendFailure::PlannerInvariant(
+                    "inline static recursor worker lost its closure residual".to_string(),
+                ))),
+            };
+        }
+        let edge = self
+            .static_transition_plan
+            .recursor_boundary_use_token(recursor_parent, sibling_position)?;
+        residual.specialized_at(edge)
+    }
+
     /// `call_origin` is the origin of the `Call` occurrence `args` belong to.
     #[allow(clippy::too_many_arguments)]
     fn lower_recursor_residual_call(
@@ -937,10 +1017,12 @@ impl<'a> Lowering<'a> {
                 outer_eliminators,
             );
         }
-        let edge = self
-            .static_transition_plan
-            .recursor_boundary_use_token(recursor_parent, sibling_position)?;
-        let residual = residual.specialized_ref_at(edge)?;
+        let residual = self.specialized_recursor_residual_ref(
+            residual,
+            recursor_parent,
+            sibling_position,
+            recursive_worker,
+        )?;
         if let Lowered::BoundedNat(predecessor) = residual {
             if !args.is_empty() {
                 return Err(unsupported(
@@ -1575,10 +1657,12 @@ impl<'a> Lowering<'a> {
                                 eliminators,
                             );
                         }
-                        let edge = self
-                            .static_transition_plan
-                            .recursor_boundary_use_token(recursor_parent, sibling_position)?;
-                        let base = base.specialized_at(edge)?;
+                        let base = self.specialized_recursor_residual(
+                            base,
+                            recursor_parent,
+                            sibling_position,
+                            recursive_worker,
+                        )?;
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
                                 return Err(unsupported(
@@ -2800,12 +2884,12 @@ impl<'a> Lowering<'a> {
                 )?;
                 scrutinee.specialized_at(edge)?
             }
-            EliminatorFrame::PendingLet(frame) => {
-                let edge = self
-                    .static_transition_plan
-                    .recursor_boundary_use_token(frame.recursor_parent, frame.sibling_position)?;
-                scrutinee.specialized_at(edge)?
-            }
+            EliminatorFrame::PendingLet(frame) => self.specialized_recursor_residual(
+                scrutinee,
+                frame.recursor_parent,
+                frame.sibling_position,
+                frame.recursive_worker,
+            )?,
             EliminatorFrame::Active(_) => {
                 return Err(backend(BackendFailure::PlannerInvariant(
                     "active composed match has no exact planned scrutinee boundary".to_string(),
@@ -4747,7 +4831,9 @@ impl<'a> Lowering<'a> {
                                     induction_hypotheses.push(induction_hypothesis);
                                 }
                             }
-                            let edge = self.static_transition_plan.operand_edge_token(
+                            let edge = self
+                                .static_transition_plan
+                                .reached_operand_edge_token(
                                 frame.static_origin,
                                 0,
                                 SourceOperandRole::MatchScrutinee,
@@ -4927,6 +5013,16 @@ impl<'a> Lowering<'a> {
         residual: LoweringOperand,
         invocation: &RecursorInvocationSegment,
     ) -> Result<PreparedStaticRecursorResidual, CraneliftBackendError> {
+        // RecursiveDescent keeps the established inline recursor. Its exact
+        // worker or generic authority was consumed when the induction
+        // hypothesis was minted; no generated carrier/frame/object exists to
+        // prepare at invocation time.
+        if matches!(
+            self.body_emission_authority,
+            BodyEmissionAuthority::RecursiveDescent
+        ) {
+            return Ok(PreparedStaticRecursorResidual::Passthrough(residual));
+        }
         let Some(worker) = invocation.recursive_worker else {
             return Ok(PreparedStaticRecursorResidual::Passthrough(residual));
         };
@@ -5075,6 +5171,27 @@ impl<'a> Lowering<'a> {
             };
             return Ok(residual);
         };
+        if matches!(
+            self.body_emission_authority,
+            BodyEmissionAuthority::RecursiveDescent
+        ) {
+            let captures = captures
+                .into_iter()
+                .map(|capture| match capture {
+                    PreparedStaticRecursorCapture::Carried(capture) => {
+                        LoweringOperand::Carried(capture)
+                    }
+                    PreparedStaticRecursorCapture::Specialized { value, .. } => {
+                        LoweringOperand::Specialized(value)
+                    }
+                })
+                .collect();
+            return Ok(LoweringOperand::Specialized(Lowered::Closure {
+                captures,
+                params: vec![String::new(); worker.declared_arity],
+                body: worker.body_origin,
+            }));
+        }
         let captures = captures
             .into_iter()
             .map(|capture| match capture {
@@ -6202,6 +6319,12 @@ impl<'a> Lowering<'a> {
                 params,
                 body,
             } => {
+                self.disposition_recursive_declaration_call_alternatives(
+                    call_origin,
+                    false,
+                    false,
+                    false,
+                )?;
                 if params.len() != args.len() {
                     return Err(unsupported(
                         "Call",
@@ -6252,6 +6375,12 @@ impl<'a> Lowering<'a> {
                 )
             }
             mut recursor @ Lowered::ComputationalRecursorClosure { .. } => {
+                self.disposition_recursive_declaration_call_alternatives(
+                    call_origin,
+                    false,
+                    false,
+                    false,
+                )?;
                 let checked_ih_invocation =
                     self.mint_checked_computational_ih_instance(&mut recursor)?;
                 if let Some(CheckedRecursiveInvocationInstance {
@@ -6333,7 +6462,15 @@ impl<'a> Lowering<'a> {
                         "armed invocation endpoint changed selected cursor",
                     ));
                 }
-                if matches!(prepared, PreparedStaticRecursorResidual::Worker { .. }) {
+                let prepared_worker =
+                    matches!(&prepared, PreparedStaticRecursorResidual::Worker { .. });
+                let base = self.materialize_static_recursor_residual(builder, prepared)?;
+                if prepared_worker
+                    && matches!(
+                        self.body_emission_authority,
+                        BodyEmissionAuthority::FunctionizedUnits
+                    )
+                {
                     let mut suspended = armed.suspended;
                     suspended.continuation = self.install_recursor_invocation(
                         suspended.continuation,
@@ -6341,7 +6478,6 @@ impl<'a> Lowering<'a> {
                         invocation,
                         checked_ih_invocation,
                     )?;
-                    let base = self.materialize_static_recursor_residual(builder, prepared)?;
                     let LoweringOperand::Carried(word) = base else {
                         unreachable!("a prepared worker materializes one carried environment")
                     };
@@ -6363,9 +6499,6 @@ impl<'a> Lowering<'a> {
                         control: suspended,
                     }));
                 }
-                let PreparedStaticRecursorResidual::Passthrough(base) = prepared else {
-                    unreachable!("worker residual returned above")
-                };
                 // ⭐⭐ `AC-C4` — the carried residual on the source-machine
                 // route. ⚠ This is the site where "installs the ALREADY-CHECKED
                 // invocation segment" is literal: the refusal below runs
@@ -6408,10 +6541,12 @@ impl<'a> Lowering<'a> {
                         control: suspended,
                     }));
                 }
-                let edge = self
-                    .static_transition_plan
-                    .recursor_boundary_use_token(recursor_parent, sibling_position)?;
-                let base = base.specialized_at(edge)?;
+                let base = self.specialized_recursor_residual(
+                    base,
+                    recursor_parent,
+                    sibling_position,
+                    recursive_worker,
+                )?;
                 if let Lowered::BoundedNat(predecessor) = base {
                     if !args.is_empty() {
                         return Err(unsupported(
@@ -6484,6 +6619,42 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    /// Close the three declaration-only alternatives planned for every
+    /// RecursiveDescent `Call`.
+    ///
+    /// The planner cannot know which specialized callee the lowering will
+    /// reach. Once it does, the selected declaration path consumes its exact
+    /// edge(s) and this helper dispositions only the alternatives that cannot
+    /// occur at that call site.
+    fn disposition_recursive_declaration_call_alternatives(
+        &self,
+        call_origin: StaticOriginId,
+        consumes_source_argument: bool,
+        consumes_direct_argument: bool,
+        consumes_capture_specialization: bool,
+    ) -> Result<(), CraneliftBackendError> {
+        for (edge, consumed) in [
+            (
+                LoweringOnlyOperandEdge::RecursiveSourceDeclarationArgument,
+                consumes_source_argument,
+            ),
+            (
+                LoweringOnlyOperandEdge::RecursiveDeclarationArgument,
+                consumes_direct_argument,
+            ),
+            (
+                LoweringOnlyOperandEdge::DeclarationCaptureSpecialization,
+                consumes_capture_specialization,
+            ),
+        ] {
+            if !consumed {
+                self.static_transition_plan
+                    .disposition_lowering_boundary_use_if_planned(edge, call_origin, 0)?;
+            }
+        }
+        Ok(())
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn lower_source_declaration_call<'b>(
         &mut self,
@@ -6508,6 +6679,12 @@ impl<'a> Lowering<'a> {
             }));
         }
         if !self.declaration_is_recursive(&symbol) {
+            self.disposition_recursive_declaration_call_alternatives(
+                call_origin,
+                false,
+                false,
+                false,
+            )?;
             let mut call_env = args;
             call_env.extend(captures);
             call_env.extend(env);
@@ -6528,6 +6705,7 @@ impl<'a> Lowering<'a> {
         // non-recursive direct call above forwards `args` into `call_env`
         // untouched — that path stays phase-preserving and must not be made to
         // fail closed for a property only the loop needs.
+        self.disposition_recursive_declaration_call_alternatives(call_origin, true, false, true)?;
         let args_edge = self.static_transition_plan.lowering_boundary_use_token(
             LoweringOnlyOperandEdge::RecursiveSourceDeclarationArgument,
             call_origin,
@@ -7893,8 +8071,17 @@ impl<'a> Lowering<'a> {
         parent_origin: StaticOriginId,
         position: usize,
     ) -> Result<Option<StaticRecursorWorker>, CraneliftBackendError> {
-        self.static_transition_plan
-            .selected_static_recursor_worker_residual_token(parent_origin, position)?
+        let token = if matches!(
+            self.body_emission_authority,
+            BodyEmissionAuthority::RecursiveDescent
+        ) {
+            self.static_transition_plan
+                .reached_static_recursor_worker_residual_token(parent_origin, position)?
+        } else {
+            self.static_transition_plan
+                .selected_static_recursor_worker_residual_token(parent_origin, position)?
+        };
+        token
             .map(|token| {
                 if token.disposition() != OperandEdgeDisposition::CallableCapture {
                     return Err(backend(BackendFailure::PlannerInvariant(
@@ -8572,6 +8759,13 @@ impl<'a> Lowering<'a> {
                     .iter()
                     .any(|arg| matches!(arg, LoweringOperand::Specialized(Lowered::RecursiveBackedge)))
                 {
+                    for position in 0..lowered_args.len() {
+                        self.static_transition_plan.reached_operand_edge_token(
+                            static_origin,
+                            position,
+                            SourceOperandRole::ConstructArgument,
+                        )?;
+                    }
                     return Ok(LoweringOperand::Specialized(Lowered::RecursiveBackedge));
                 }
                 if lowered_args.is_empty()
@@ -9056,6 +9250,20 @@ impl<'a> Lowering<'a> {
             )),
             RuntimeExpr::Call { callee, args } => {
                 let join_plan = self.consumed_join_plan_token(static_origin)?;
+                if matches!(
+                    self.body_emission_authority,
+                    BodyEmissionAuthority::RecursiveDescent
+                ) {
+                    // An inline call has no emitted call-result merge. Its
+                    // result continues directly in the enclosing source
+                    // traversal, so the native JoinArm alternative is absent.
+                    self.static_transition_plan
+                        .disposition_lowering_boundary_use_if_planned(
+                            LoweringOnlyOperandEdge::JoinArm,
+                            static_origin,
+                            0,
+                        )?;
+                }
                 let callee = self.child_occurrence(static_origin, 0, callee)?;
                 if matches!(
                     self.body_emission_authority,
@@ -9179,6 +9387,12 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     }) => {
+                        self.disposition_recursive_declaration_call_alternatives(
+                            static_origin,
+                            false,
+                            false,
+                            false,
+                        )?;
                         // A callable body may be emitted once per specialization,
                         // while this source edge still denotes one exact source
                         // occurrence. Close that planned occurrence on its first
@@ -9203,6 +9417,18 @@ impl<'a> Lowering<'a> {
                                 let arg =
                                     self.child_occurrence(static_origin, 1 + position, arg)?;
                                 let lowered = self.lower_expr(builder, arg, env)?;
+                                let edge =
+                                    self.static_transition_plan.reached_operand_edge_token(
+                                        static_origin,
+                                        1 + position,
+                                        SourceOperandRole::CallArgument,
+                                    )?;
+                                if edge.disposition() != OperandEdgeDisposition::Forwarding {
+                                    return Err(backend(BackendFailure::PlannerInvariant(
+                                        "closure call argument lost its forwarding disposition"
+                                            .to_string(),
+                                    )));
+                                }
                                 match self.body_emission_authority {
                                     BodyEmissionAuthority::RecursiveDescent => Ok(lowered),
                                     BodyEmissionAuthority::FunctionizedUnits => {
@@ -9211,13 +9437,6 @@ impl<'a> Lowering<'a> {
                                                 LoweringOperand::Carried(word)
                                             }
                                             LoweringOperand::Specialized(value) => {
-                                                let edge = self
-                                                    .static_transition_plan
-                                                    .operand_edge_token(
-                                                        static_origin,
-                                                        1 + position,
-                                                        SourceOperandRole::CallArgument,
-                                                    )?;
                                                 LoweringOperand::Carried(
                                                     self.transfer_into_carrier_on_edge(
                                                         builder,
@@ -9262,6 +9481,12 @@ impl<'a> Lowering<'a> {
                     LoweringOperand::Specialized(
                         mut callee @ Lowered::ComputationalRecursorClosure { .. },
                     ) => {
+                        self.disposition_recursive_declaration_call_alternatives(
+                            static_origin,
+                            false,
+                            false,
+                            false,
+                        )?;
                         let checked_ih_invocation =
                             self.mint_checked_computational_ih_instance(&mut callee)?;
                         let (base, boundary) = decompose_computational_recursor(
@@ -9346,10 +9571,12 @@ impl<'a> Lowering<'a> {
                             self.leave_oriented_semantic_region(installed.checked);
                             return result;
                         }
-                        let edge = self
-                            .static_transition_plan
-                            .recursor_boundary_use_token(recursor_parent, sibling_position)?;
-                        let base = base.specialized_at(edge)?;
+                        let base = self.specialized_recursor_residual(
+                            base,
+                            recursor_parent,
+                            sibling_position,
+                            recursive_worker,
+                        )?;
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
                                 return Err(unsupported(
@@ -10795,6 +11022,7 @@ impl<'a> Lowering<'a> {
             inputs.extend(captures.iter().cloned());
             return self.call_declared_declaration_unit(builder, reference_origin, &inputs);
         }
+        self.disposition_recursive_declaration_call_alternatives(call_origin, false, true, true)?;
         let captures_edge = self.static_transition_plan.lowering_boundary_use_token(
             LoweringOnlyOperandEdge::DeclarationCaptureSpecialization,
             call_origin,

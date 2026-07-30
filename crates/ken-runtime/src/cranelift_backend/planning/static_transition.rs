@@ -2644,8 +2644,9 @@ fn build_lowering_boundary_uses(
         BTreeSet::new()
     };
     for descriptor in &plan.abi.descriptors {
-        if (!plan.functionized_units
-            || (Some(descriptor.function) != root_owner
+        if ((!plan.functionized_units && Some(descriptor.function) == root_owner)
+            || (plan.functionized_units
+                && Some(descriptor.function) != root_owner
                 && emitted_functions.contains(&descriptor.function)))
             && plan
                 .result_phases
@@ -2677,7 +2678,7 @@ fn build_lowering_boundary_uses(
             .slots
             .get(start..end)
             .ok_or_else(|| planner_error("ABI boundary-use range is outside the slot plane"))?;
-        if Some(descriptor.function) == root_owner {
+        if plan.functionized_units && Some(descriptor.function) == root_owner {
             let mut input = 0u32;
             for slot in slots {
                 if matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
@@ -2694,32 +2695,34 @@ fn build_lowering_boundary_uses(
             }
         }
     }
-    for call in plan.emittable_call_edges()? {
-        let descriptor = plan
-            .abi
-            .descriptors
-            .iter()
-            .find(|descriptor| descriptor.function == call.callee)
-            .ok_or_else(|| planner_error("planned call has no callee ABI descriptor"))?;
-        let start = descriptor.slots.start as usize;
-        let end = start
-            .checked_add(descriptor.slots.len as usize)
-            .ok_or_else(|| planner_capacity_error("ABI call boundary-use range exhausted"))?;
-        let slots = plan.abi.slots.get(start..end).ok_or_else(|| {
-            planner_error("ABI call boundary-use range is outside the slot plane")
-        })?;
-        let mut input = 0u32;
-        for slot in slots {
-            if matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
-                owner_bound_keys.insert((
-                    LoweringOnlyOperandEdge::CallableCapsuleEscape,
-                    call.call_site_origin,
-                    input,
-                    call.caller,
-                ));
-                input = input
-                    .checked_add(1)
-                    .ok_or_else(|| planner_capacity_error("ABI input boundary-use exhausted"))?;
+    if plan.functionized_units {
+        for call in plan.emittable_call_edges()? {
+            let descriptor = plan
+                .abi
+                .descriptors
+                .iter()
+                .find(|descriptor| descriptor.function == call.callee)
+                .ok_or_else(|| planner_error("planned call has no callee ABI descriptor"))?;
+            let start = descriptor.slots.start as usize;
+            let end = start
+                .checked_add(descriptor.slots.len as usize)
+                .ok_or_else(|| planner_capacity_error("ABI call boundary-use range exhausted"))?;
+            let slots = plan.abi.slots.get(start..end).ok_or_else(|| {
+                planner_error("ABI call boundary-use range is outside the slot plane")
+            })?;
+            let mut input = 0u32;
+            for slot in slots {
+                if matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
+                    owner_bound_keys.insert((
+                        LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                        call.call_site_origin,
+                        input,
+                        call.caller,
+                    ));
+                    input = input.checked_add(1).ok_or_else(|| {
+                        planner_capacity_error("ABI input boundary-use exhausted")
+                    })?;
+                }
             }
         }
     }
@@ -4416,6 +4419,7 @@ struct ProducerAnalysis<'plan, 'src> {
     carried_aggregates: BTreeSet<StaticOriginId>,
     carried_effects: BTreeSet<StaticOriginId>,
     reached_owners: BTreeSet<PredeclaredFunctionId>,
+    called_owners: BTreeSet<PredeclaredFunctionId>,
     changed: bool,
 }
 
@@ -4850,8 +4854,10 @@ impl ProducerAnalysis<'_, '_> {
             // Treating the active owner specially makes source recursion a
             // host-stack recursion and bypasses the very cycle closure this
             // analysis is required to prove.
-            for value in &mut incoming {
-                self.mark_carried(value);
+            if self.plan.functionized_units {
+                for value in &mut incoming {
+                    self.mark_carried(value);
+                }
             }
             let slots = self
                 .inputs
@@ -4859,13 +4865,16 @@ impl ProducerAnalysis<'_, '_> {
                 .ok_or_else(|| planner_error("producer-flow callable owner has no ABI inputs"))?;
             self.changed |= Self::merge_values(slots, &incoming)?;
             self.changed |= self.reached_owners.insert(owner);
+            self.changed |= self.called_owners.insert(owner);
             let mut value = self
                 .results
                 .get(&owner)
                 .cloned()
                 .unwrap_or_else(ProducerValue::empty);
             if let Some(recursor_origin) = callable.recursor_origin {
-                self.mark_carried(&mut value);
+                if self.plan.functionized_units {
+                    self.mark_carried(&mut value);
+                }
                 value.constructors = value
                     .constructors
                     .forwarded(recursor_origin, ProducerFlowKind::Recursor);
@@ -4884,7 +4893,9 @@ impl ProducerAnalysis<'_, '_> {
                     .get(&key)
                     .cloned()
                     .unwrap_or_else(ProducerValue::empty);
-                self.mark_carried(&mut value);
+                if self.plan.functionized_units {
+                    self.mark_carried(&mut value);
+                }
             }
             result = Some(match result {
                 Some(previous) => previous.join(&value),
@@ -4892,7 +4903,9 @@ impl ProducerAnalysis<'_, '_> {
             });
         }
         let mut result = result.unwrap_or_else(ProducerValue::empty);
-        self.mark_carried(&mut result);
+        if self.plan.functionized_units {
+            self.mark_carried(&mut result);
+        }
         result.constructors = result
             .constructors
             .forwarded(call_origin, ProducerFlowKind::CallResult);
@@ -5639,6 +5652,12 @@ fn build_producer_flow_plans(
                 value
             })
             .collect::<Vec<_>>();
+        if !matches!(
+            descriptor.definition,
+            AbiUnitDefinition::SchedulingEntry { .. }
+        ) {
+            environment.fill(ProducerValue::empty());
+        }
         if matches!(
             descriptor.definition,
             AbiUnitDefinition::SchedulingEntry {
@@ -5689,6 +5708,30 @@ fn build_producer_flow_plans(
     // aggregate observation before exact population validation can reject
     // them.
     let static_recursor_worker_residuals = build_static_recursor_worker_residuals(plan)?;
+    // A literal closure used as a Call callee has an exact source call edge
+    // even when static selection later places that call in unreachable CFG.
+    // Seed those result crossings directly from the Call child relation.
+    // Merely contained closures (for example in unused constructor fields or
+    // conditions) contribute no such edge.
+    let mut called_owners = BTreeSet::new();
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        let RuntimeExpr::Call { callee, .. } = occurrence.expr else {
+            continue;
+        };
+        if !matches!(
+            callee.as_ref(),
+            RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
+        ) {
+            continue;
+        }
+        let closure_origin = plan.semantic.child_origin(occurrence.static_origin, 0)?;
+        let body_origin = plan.semantic.child_origin(closure_origin, 0)?;
+        let owner = plan
+            .semantic
+            .function_owner(body_origin)?
+            .ok_or_else(|| planner_error("literal call body has no function owner"))?;
+        called_owners.insert(owner);
+    }
 
     // A static recursor worker is entered only through its exact planned
     // residual. Its ordinary arguments are recursive children extracted from
@@ -5726,6 +5769,7 @@ fn build_producer_flow_plans(
         for value in environment {
             *value = ProducerValue::owner(BoundaryReferentOwner::InvocationArena);
         }
+        called_owners.insert(owner);
     }
 
     // Every emittable unit needs complete aggregate occurrence authority
@@ -5748,6 +5792,7 @@ fn build_producer_flow_plans(
         carried_aggregates: BTreeSet::new(),
         carried_effects: BTreeSet::new(),
         reached_owners,
+        called_owners,
         changed: true,
     };
     let population_bound = plan
@@ -5765,13 +5810,14 @@ fn build_producer_flow_plans(
             analysis.active_owner = owner;
             let environment = analysis.source_environment(owner, definition)?;
             let mut value = analysis.eval(body_origin, &environment)?;
-            // Every non-root emittable unit returns across its declared ABI,
-            // even when no currently reached caller observes it. The root
-            // scheduling result has no such unit-return crossing: it enters
-            // the aggregate ledger only when the result-phase planner already
-            // requires a carrier. Treating every root result as carried would
-            // promote a SpecializedOnly source aggregate into a nonexistent
-            // emitted representation occurrence.
+            // A non-root result crosses its declared ABI only when an exact
+            // planned call or recursor residual can invoke that unit. Merely
+            // emitting an unreachable closure body is not a value-flow edge.
+            // The root scheduling result similarly enters the aggregate
+            // ledger only when the result-phase planner requires a carrier.
+            // Treating either syntactic containment or definition as a
+            // crossing promotes SpecializedOnly aggregates into nonexistent
+            // emitted representation occurrences.
             let result_phase = plan
                 .result_phases
                 .get(body_origin.0 as usize)
@@ -5787,7 +5833,13 @@ fn build_producer_flow_plans(
                     use_.edge == LoweringOnlyOperandEdge::TestFixtureResult
                         && use_.origin == body_origin
                 });
-            if owner != root_owner || root_result_is_carried {
+            let result_crosses_carrier = if owner == root_owner {
+                root_result_is_carried
+            } else {
+                root_result_is_carried
+                    || (plan.functionized_units && analysis.called_owners.contains(&owner))
+            };
+            if result_crosses_carrier {
                 analysis.mark_carried(&mut value);
             }
             let result = analysis
@@ -7545,6 +7597,23 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
         root: StaticOriginId,
     ) -> Result<(), CraneliftBackendError> {
+        self.disposition_boundary_uses_in_subtree(root, false)
+    }
+
+    /// Disposition a dead source subtree across the closure-body owner
+    /// boundaries that RecursiveDescent inlines.
+    pub(in crate::cranelift_backend) fn disposition_boundary_uses_in_inline_subtree(
+        &self,
+        root: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        self.disposition_boundary_uses_in_subtree(root, true)
+    }
+
+    fn disposition_boundary_uses_in_subtree(
+        &self,
+        root: StaticOriginId,
+        inline_closure_bodies: bool,
+    ) -> Result<(), CraneliftBackendError> {
         let owner = self
             .semantic
             .function_owner(root)?
@@ -7556,7 +7625,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 continue;
             }
             for child in self.semantic.child_origins(origin)?.iter().copied() {
-                if self.semantic.function_owner(child)? == Some(owner) {
+                if inline_closure_bodies || self.semantic.function_owner(child)? == Some(owner) {
                     pending.push(child);
                 }
             }
@@ -7607,7 +7676,8 @@ impl<'src> StaticTransitionPlan<'src> {
                             && lowering.position != u32::MAX
                     });
                 let exact_static_worker = exact_static_worker_path || dead_worker_call_input;
-                let in_dead_population = (planned.producer_owner == owner
+                let in_dead_population = ((inline_closure_bodies
+                    || planned.producer_owner == owner)
                     && origins.contains(&origin))
                     || dead_worker_origins
                         .get(&origin)
@@ -7630,7 +7700,7 @@ impl<'src> StaticTransitionPlan<'src> {
             .iter()
             .filter(|record| {
                 record.phase == ResultPhase::CarrierRequired
-                    && record.owner == owner
+                    && (inline_closure_bodies || record.owner == owner)
                     && origins.contains(&record.origin)
             })
             .map(|record| (record.owner, record.origin))
@@ -8361,6 +8431,34 @@ impl<'src> StaticTransitionPlan<'src> {
             .map(Some)
     }
 
+    /// Consume the exact selected worker on its first RecursiveDescent reach.
+    ///
+    /// FunctionizedUnits consumes this identity at the generated-unit
+    /// constructor crossing. RecursiveDescent has no such crossing: minting the
+    /// inline induction hypothesis is the causal consumer. Recursive revisits
+    /// reborrow the same planned worker rather than fabricating repeated
+    /// emission.
+    pub(in crate::cranelift_backend) fn reached_static_recursor_worker_residual_token(
+        &self,
+        parent_origin: StaticOriginId,
+        sibling_position: usize,
+    ) -> Result<Option<StaticRecursorWorkerResidualToken>, CraneliftBackendError> {
+        let token =
+            self.selected_static_recursor_worker_residual_token(parent_origin, sibling_position)?;
+        if let Some(token) = token {
+            if !self
+                .operand_edge_consumption
+                .borrow()
+                .contains_key(&token.identity())
+            {
+                self.record_boundary_use_consumption(token.identity())?;
+            }
+            Ok(Some(token))
+        } else {
+            Ok(None)
+        }
+    }
+
     fn issue_static_recursor_worker_residual_token(
         &self,
         residual: &PlannedStaticRecursorWorkerResidual,
@@ -8660,6 +8758,23 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
         root: StaticOriginId,
     ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+        self.source_join_origins_in_subtree(root, false)
+    }
+
+    /// Planned joins below a dead source root, including closure bodies that
+    /// RecursiveDescent would otherwise inline into the same emitted function.
+    pub(in crate::cranelift_backend) fn source_join_origins_in_inline_subtree(
+        &self,
+        root: StaticOriginId,
+    ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+        self.source_join_origins_in_subtree(root, true)
+    }
+
+    fn source_join_origins_in_subtree(
+        &self,
+        root: StaticOriginId,
+        inline_closure_bodies: bool,
+    ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
         let owner = self
             .semantic
             .function_owner(root)?
@@ -8671,7 +8786,7 @@ impl<'src> StaticTransitionPlan<'src> {
             if !visited.insert(origin) {
                 continue;
             }
-            if self.semantic.function_owner(origin)? != Some(owner) {
+            if !inline_closure_bodies && self.semantic.function_owner(origin)? != Some(owner) {
                 continue;
             }
             let index = origin.0 as usize;

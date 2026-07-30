@@ -1916,11 +1916,20 @@ impl<'a> Lowering<'a> {
         {
             return Ok(());
         }
-        self.static_transition_plan
-            .disposition_boundary_uses_in_owner_subtree(root)?;
-        let joins = self
-            .static_transition_plan
-            .source_join_origins_in_owner_subtree(root)?;
+        let joins = match self.body_emission_authority {
+            BodyEmissionAuthority::RecursiveDescent => {
+                self.static_transition_plan
+                    .disposition_boundary_uses_in_inline_subtree(root)?;
+                self.static_transition_plan
+                    .source_join_origins_in_inline_subtree(root)?
+            }
+            BodyEmissionAuthority::FunctionizedUnits => {
+                self.static_transition_plan
+                    .disposition_boundary_uses_in_owner_subtree(root)?;
+                self.static_transition_plan
+                    .source_join_origins_in_owner_subtree(root)?
+            }
+        };
         for origin in joins {
             self.function_local
                 .dispositioned_join_origins
@@ -8163,66 +8172,82 @@ impl<'a> Lowering<'a> {
         )>,
         recursive_worker: Option<StaticRecursorWorker>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let recursive_worker = match &recursive {
-            LoweringOperand::Specialized(Lowered::Closure {
-                body,
-                params,
-                captures,
-            }) => {
-                let token = self
-                    .static_transition_plan
-                    .static_recursor_worker_residual_token(static_origin, sibling_position, *body)?
-                    .ok_or_else(|| {
-                        backend(BackendFailure::PlannerInvariant(format!(
-                            "callable recursor residual has no planned matrix member: \
+        let recursive_worker = if matches!(
+            self.body_emission_authority,
+            BodyEmissionAuthority::RecursiveDescent
+        ) {
+            if recursive_worker.is_none() {
+                self.static_transition_plan
+                    .recursor_boundary_use_token(static_origin, sibling_position)?;
+            }
+            recursive_worker
+        } else {
+            match &recursive {
+                LoweringOperand::Specialized(Lowered::Closure {
+                    body,
+                    params,
+                    captures,
+                }) => {
+                    let token = self
+                        .static_transition_plan
+                        .static_recursor_worker_residual_token(
+                            static_origin,
+                            sibling_position,
+                            *body,
+                        )?
+                        .ok_or_else(|| {
+                            backend(BackendFailure::PlannerInvariant(format!(
+                                "callable recursor residual has no planned matrix member: \
                                  parent={static_origin:?}, position={sibling_position}, \
                                  body={body:?}"
-                        )))
-                    })?;
-                if token.disposition() != OperandEdgeDisposition::CallableCapture
-                    || token.parent_origin != static_origin
-                    || token.sibling_position as usize != sibling_position
-                    || token.body_origin != *body
-                    || token.declared_arity as usize != params.len()
-                    || token.capture_count as usize != captures.len()
-                {
-                    return Err(backend(BackendFailure::PlannerInvariant(
-                        "callable recursor residual disagrees with its planner token".to_string(),
-                    )));
+                            )))
+                        })?;
+                    if token.disposition() != OperandEdgeDisposition::CallableCapture
+                        || token.parent_origin != static_origin
+                        || token.sibling_position as usize != sibling_position
+                        || token.body_origin != *body
+                        || token.declared_arity as usize != params.len()
+                        || token.capture_count as usize != captures.len()
+                    {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "callable recursor residual disagrees with its planner token"
+                                .to_string(),
+                        )));
+                    }
+                    Some(StaticRecursorWorker {
+                        boundary_identity: token.identity(),
+                        residual_id: token.id,
+                        parent_origin: token.parent_origin,
+                        producer_origin: token.producer_origin,
+                        sibling_position: token.sibling_position as usize,
+                        closure_origin: token.closure_origin,
+                        body_origin: token.body_origin,
+                        declared_arity: token.declared_arity as usize,
+                        capture_count: token.capture_count as usize,
+                    })
                 }
-                Some(StaticRecursorWorker {
-                    boundary_identity: token.identity(),
-                    residual_id: token.id,
-                    parent_origin: token.parent_origin,
-                    producer_origin: token.producer_origin,
-                    sibling_position: token.sibling_position as usize,
-                    closure_origin: token.closure_origin,
-                    body_origin: token.body_origin,
-                    declared_arity: token.declared_arity as usize,
-                    capture_count: token.capture_count as usize,
-                })
-            }
-            LoweringOperand::Specialized(_) => {
-                #[cfg(test)]
-                let omit_boundary_use = D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get)
-                    == JoinConsumptionMutation::OmitFirstSourceMachineRecursorBoundaryUse
-                    && D8_SOURCE_MACHINE_RECURSOR_BOUNDARY_MUTATED.with(|mutated| {
-                        if mutated.get() {
-                            false
-                        } else {
-                            mutated.set(true);
-                            true
-                        }
-                    });
-                #[cfg(not(test))]
-                let omit_boundary_use = false;
-                if !omit_boundary_use {
-                    self.static_transition_plan
-                        .recursor_boundary_use_token(static_origin, sibling_position)?;
+                LoweringOperand::Specialized(_) => {
+                    #[cfg(test)]
+                    let omit_boundary_use = D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get)
+                        == JoinConsumptionMutation::OmitFirstSourceMachineRecursorBoundaryUse
+                        && D8_SOURCE_MACHINE_RECURSOR_BOUNDARY_MUTATED.with(|mutated| {
+                            if mutated.get() {
+                                false
+                            } else {
+                                mutated.set(true);
+                                true
+                            }
+                        });
+                    #[cfg(not(test))]
+                    let omit_boundary_use = false;
+                    if !omit_boundary_use {
+                        self.static_transition_plan
+                            .recursor_boundary_use_token(static_origin, sibling_position)?;
+                    }
+                    recursive_worker
                 }
-                recursive_worker
+                LoweringOperand::Carried(_) => recursive_worker,
             }
-            LoweringOperand::Carried(_) => recursive_worker,
         };
         let (residual, payload) = decompose_computational_recursor(recursive);
         let active_instance = self.active_recursive_invocations.last().copied();
