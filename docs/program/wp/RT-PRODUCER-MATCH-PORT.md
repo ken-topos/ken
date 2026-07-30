@@ -9,7 +9,7 @@ position deliver its result across a callable-unit boundary into the match.**
 **Risk:** medium.
 
 ⛔ **Read `docs/program/16-recursive-descent-retirement.md` first.** It carries
-the campaign's three binding traps and the schedule. This frame does not repeat
+the campaign's binding traps and the schedule. This frame does not repeat
 them.
 
 ---
@@ -72,6 +72,9 @@ that same program and be **completely unreported**.
   separately owned callable unit whose result crosses a typed boundary into the
   match. Reuse the transport built by [[RT-DECL-CLOSURE-PORT]] where it applies;
   ⛔ report rather than duplicate it if it does not.
+  ⛔ **If this unit synthesizes a `Constructor`/`Record` capture environment, the
+  campaign doc's Trap 5 binds that site before its first allocation** — and if it
+  allocates no aggregate, record that fact rather than minting a token.
 - **`D3` — Remove `ProducerMatchCall`** from `RecursiveDescentResidual`, and only
   then re-run `AC-1a` and `AC-1b`.
 - **`D4` — The masked-population delta**, handed to the Steward for

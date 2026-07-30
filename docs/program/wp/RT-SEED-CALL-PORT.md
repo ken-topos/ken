@@ -10,7 +10,7 @@ closure-seed → callable-unit machinery at the call site.**
 this is its second application point.
 
 ⛔ **Read `docs/program/16-recursive-descent-retirement.md` first.** It carries
-the campaign's three binding traps and the schedule. This frame does not repeat
+the campaign's binding traps and the schedule. This frame does not repeat
 them.
 
 ⭐ **This node may close for free on `D1`, and that is a success, not a failure
@@ -89,6 +89,9 @@ general, little or nothing remains here.
   [[RT-DECL-CLOSURE-PORT]]'s transport rather than a parallel one.
   ⛔ **If a second transport mechanism appears necessary, stop and report** —
   that is a finding about the first one's generality, and it re-cuts this node.
+  ⛔ **If this unit synthesizes a `Constructor`/`Record` capture environment, the
+  campaign doc's Trap 5 binds that site before its first allocation** — and if it
+  allocates no aggregate, record that fact rather than minting a token.
 - **`D3` — Remove `SeedClosureCall`** from `RecursiveDescentResidual`, and only
   then re-run `AC-1a` and `AC-1b`.
 

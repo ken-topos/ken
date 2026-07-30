@@ -10,7 +10,7 @@ proves the state need not cross — and retires both classes.**
 B2F migration stopped at.
 
 ⛔ **Read `docs/program/16-recursive-descent-retirement.md` first.** It carries
-the campaign's three binding traps and the schedule. This frame does not repeat
+the campaign's binding traps and the schedule. This frame does not repeat
 them.
 
 ---

@@ -54,6 +54,6 @@ rather than file contention — it cannot land until every class is retired.
 
 ## ▶ THE FRAME IS WRITTEN
 
-`docs/program/wp/RT-DESCENT-RETIRE.md`. ⭐ Campaign context, the three traps that
+`docs/program/wp/RT-DESCENT-RETIRE.md`. ⭐ Campaign context, the binding traps that
 bind every node in this arc, and the full schedule:
 `docs/program/16-recursive-descent-retirement.md` — **read it before the frame.**

@@ -88,7 +88,7 @@ exists as its own node whose **`D1` may legitimately return "already retired"**,
 at which point it closes for free. ⛔ A node that closes cheaply on evidence is
 correct; a fold that was wrong is expensive.
 
-## 3. ⛔⛔ THE THREE TRAPS THAT BIND EVERY NODE IN THIS CAMPAIGN
+## 3. ⛔⛔ THE CAMPAIGN'S BINDING TRAPS — EVERY ONE BINDS EVERY NODE
 
 The first two follow from one fact: **the selector short-circuits at the first
 residual it finds**, consulting the expression walk before the declaration walk.
@@ -223,6 +223,51 @@ atomic set is nearly irreversible in practice. It lengthens the critical path,
 re-opens settled frames, and every node in front of the widened set compounds.
 Reading a red job as a partition defect spends that cost to fix an implementation
 bug.
+
+### Trap 5 — preflight follows a synthesized aggregate
+
+**Architect ruling `evt_1zq4fkh6a1jv5`**, generalizing the defect that rejected
+`dec_pg3yyzhx085j` (`evt_3qywmvj31e7y9`). ⭐ **The scope is the allocation
+mechanism, not a node name** — `RT-DECL-CLOSURE-PORT`'s worker environment was
+the *witness*, never the boundary.
+
+> **Trap 5 — preflight follows a synthesized aggregate, not a node or
+> callable-unit name.** Creating or calling a separately emitted unit does not by
+> itself create a capture-environment aggregate. But whenever a remaining node
+> synthesizes a `Constructor` or `Record` environment, planning must, before any
+> allocation or publication, issue one exact occurrence record keyed by the exact
+> callable/environment owner identity and phase, aggregate identity/class/arity,
+> and ordered child provenance; close the possible referent-owner set of every
+> transitive child; select `PersistentGround` only when every possible child is
+> immediate or persistent and `InvocationAggregate` when any possible child is
+> invocation-owned; and reject every forbidden, unrepresented, or protocol-only
+> child. Lowering consumes the move-only exact occurrence authority before
+> allocation and does not rediscover ownership. The existing escape guard remains
+> defense in depth. If the port allocates no aggregate, record that fact; do not
+> mint an artificial environment or token merely because a callable unit exists.
+
+**Why this is not new law.** `RT-DECL-CLOSURE-PORT.md:1290-1311` already requires
+an exact planner-issued occurrence record for **each** `Constructor` or `Record`
+occurrence. The `7b860005` worker environment was one new `Record` allocation
+site that **bypassed** that existing law.
+
+⛔ **And why a blanket "one environment token per callable unit" would be FALSE.**
+At exact `6b9fe2bf` two FunctionizedUnits paths create and call units while
+allocating no capture `Record` at all: the direct lexical-closure call builds an
+ordered `args + captures` ABI-input vector and calls the declared unit
+(`core.rs:7281-7317`), and the ordinary lowered-closure call extends `call_env`
+with captures and calls the unit (`:7344-7395`). ⇒ A per-unit token would
+manufacture state the mechanism does not need.
+
+**What binds each remaining node:**
+
+| node | what binds |
+|---|---|
+| [`RT-SEED-CALL-PORT`](wp/RT-SEED-CALL-PORT.md) · [`RT-PRODUCER-MATCH-PORT`](wp/RT-PRODUCER-MATCH-PORT.md) | If the lawful port is only typed parameter/capture/result transport and allocates no aggregate, the obligation is **vacuous — record that fact.** If either port synthesizes a `Constructor`/`Record` capture environment, the complete preflight / owner-meet / exact-token law binds that site **before its first allocation.** |
+| [`RT-DESCENT-RETIRE`](wp/RT-DESCENT-RETIRE.md) | A **deletion** node, ⛔ not authorized to invent a new environment. It must preserve every surviving FunctionizedUnits allocation law. ⭐ If deleting the old lane **exposes** a synthesized aggregate site that lacks the law, that is a **hard stop** — ⛔ not permission to delete around it. |
+
+⚠ **This is a framing invariant, not a new AC**, and it authorizes no change to
+any active repair.
 
 ## 4. Schedule
 
