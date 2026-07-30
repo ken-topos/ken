@@ -29,6 +29,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
     Lowering {
         seed_env,
         active_emission_owner: None,
+        active_static_recursor_result: None,
         declarations: BTreeMap::new(),
         static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
@@ -144,6 +145,7 @@ fn run_px8j_malformed_recursor_consumer(
     let mut compiler = Lowering {
         seed_env: &seed_env,
         active_emission_owner: None,
+        active_static_recursor_result: None,
         declarations: BTreeMap::new(),
         static_transition_plan,
         declaration_stack: Vec::new(),
@@ -2029,6 +2031,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
     let mut lowering = Lowering {
         seed_env: &seed_env,
         active_emission_owner: None,
+        active_static_recursor_result: None,
         declarations: BTreeMap::new(),
         static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),

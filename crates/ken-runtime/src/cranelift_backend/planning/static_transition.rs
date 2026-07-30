@@ -2395,6 +2395,16 @@ fn is_static_recursor_construct_argument(
     child: StaticOriginId,
     position: u32,
 ) -> Result<bool, CraneliftBackendError> {
+    if !plan.static_recursor_worker_residuals.is_empty() {
+        return Ok(plan
+            .static_recursor_worker_residuals
+            .iter()
+            .any(|residual| {
+                residual.producer_origin == parent
+                    && residual.closure_origin == child
+                    && residual.sibling_position == position
+            }));
+    }
     for occurrence in plan.source_occurrences.iter().flatten() {
         let RuntimeExpr::ComputationalMatch { cases, .. } = occurrence.expr else {
             continue;
@@ -2549,9 +2559,9 @@ fn build_static_recursor_worker_residuals(
                     position,
                     closure,
                 )?;
-                // This is result-flow closure, not structural containment:
-                // only exact result origins of the ruled worker body can
-                // produce the next scrutinee observed by this recursor.
+                // A recursively reached source worker is populated only from
+                // the exact result flow of the preceding worker body. This is
+                // not structural descendant enumeration.
                 pending.extend(plan.source_result_origins_in_owner_subtree(residual.body_origin)?);
                 residuals.push(residual);
             }
@@ -2792,26 +2802,7 @@ fn build_lowering_boundary_uses(
         .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
     resolved_keys.extend(owner_bound_keys);
     resolved_keys.sort();
-    let static_worker_bodies = plan
-        .static_recursor_worker_residuals
-        .iter()
-        .map(|residual| residual.body_origin)
-        .collect::<BTreeSet<_>>();
-    let mut exact_keys = Vec::new();
-    for key @ (edge, origin, position, _) in resolved_keys {
-        exact_keys.push(key);
-        if edge == LoweringOnlyOperandEdge::CallableCapsuleEscape
-            && position != u32::MAX
-            && static_worker_bodies.contains(&origin)
-        {
-            // A static worker has two distinct emitted call-input crossings:
-            // the initial specialized closure materialization and the carried
-            // recursive revisit. They require two identities; collapsing this
-            // pair would turn a real repeated emission into an `or_insert(1)`.
-            exact_keys.push(key);
-        }
-    }
-    exact_keys
+    resolved_keys
         .into_iter()
         .enumerate()
         .map(|(ordinal, (edge, origin, position, owner))| {
@@ -7043,6 +7034,11 @@ impl<'src> Planner<'src> {
         self.plan.operand_edges = build_operand_edge_matrix(&self.plan)?;
         self.plan.static_recursor_worker_residuals =
             build_static_recursor_worker_residuals(&self.plan)?;
+        // The first edge pass supplies exact lexical-capture provenance needed
+        // to derive the residual population. Rebuild once that population is
+        // closed so every recursively reached constructor child receives its
+        // exact CallableCapture disposition too.
+        self.plan.operand_edges = build_operand_edge_matrix(&self.plan)?;
         self.plan.recursor_boundary_uses = build_recursor_boundary_uses(&self.plan)?;
         self.plan.lowering_boundary_uses = build_lowering_boundary_uses(&self.plan)?;
         self.plan.boundary_uses = build_boundary_uses(&self.plan)?;
@@ -7753,6 +7749,14 @@ impl<'src> StaticTransitionPlan<'src> {
         };
         let token =
             self.planned_boundary_use_token(identity, source_operand_role_label(edge.role))?;
+        // A source-machine specialization may prove this occurrence dead
+        // before a later specialization reaches the same semantic occurrence.
+        // The occurrence ledger closes over the union of reached clones, so
+        // exact reachability supersedes that earlier local disposition
+        // regardless of traversal order.
+        self.boundary_use_dispositions
+            .borrow_mut()
+            .remove(&identity);
         if !self
             .operand_edge_consumption
             .borrow()
@@ -8106,9 +8110,21 @@ impl<'src> StaticTransitionPlan<'src> {
             .copied()
             .collect::<Vec<_>>();
         if !emitted_and_dispositioned.is_empty() {
+            let overlapping_uses = self
+                .boundary_uses
+                .iter()
+                .filter(|planned| emitted_and_dispositioned.contains(&planned.identity))
+                .collect::<Vec<_>>();
+            let overlapping_lowering_uses = self
+                .lowering_boundary_uses
+                .iter()
+                .filter(|planned| emitted_and_dispositioned.contains(&planned.identity))
+                .collect::<Vec<_>>();
             return Err(planner_error(format!(
                 "boundary uses were both emitted and statically dispositioned; \
-                 identities={emitted_and_dispositioned:?}"
+                 identities={emitted_and_dispositioned:?}; \
+                 overlapping_uses={overlapping_uses:?}; \
+                 overlapping_lowering_uses={overlapping_lowering_uses:?}"
             )));
         }
         Ok(())
@@ -8403,6 +8419,12 @@ impl<'src> StaticTransitionPlan<'src> {
         let identity = planned.identity;
         let label = planned.edge.label();
         drop(ledger);
+        // See `reached_operand_edge_token`: this API is the explicit
+        // source-machine re-entry seam, and an exact later reach wins over an
+        // earlier clone-local dead classification.
+        self.boundary_use_dispositions
+            .borrow_mut()
+            .remove(&identity);
         if already_consumed {
             self.planned_boundary_use_token(identity, label)
         } else {
@@ -8577,15 +8599,26 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
         parent_origin: StaticOriginId,
         sibling_position: usize,
+        predecessor_body: Option<StaticOriginId>,
     ) -> Result<Option<StaticRecursorWorkerResidualToken>, CraneliftBackendError> {
         let sibling_position = u32::try_from(sibling_position)
             .map_err(|_| planner_capacity_error("static recursor sibling exhausted"))?;
+        let result_root = if let Some(body_origin) = predecessor_body {
+            body_origin
+        } else {
+            self.semantic.child_origin(parent_origin, 0)?
+        };
+        let live_producers = self
+            .source_result_origins_in_owner_subtree(result_root)?
+            .into_iter()
+            .collect::<BTreeSet<_>>();
         let candidates = self
             .static_recursor_worker_residuals
             .iter()
             .filter(|residual| {
                 residual.parent_origin == parent_origin
                     && residual.sibling_position == sibling_position
+                    && live_producers.contains(&residual.producer_origin)
             })
             .collect::<Vec<_>>();
         if candidates.is_empty() {
@@ -8648,8 +8681,11 @@ impl<'src> StaticTransitionPlan<'src> {
         parent_origin: StaticOriginId,
         sibling_position: usize,
     ) -> Result<Option<StaticRecursorWorkerResidualToken>, CraneliftBackendError> {
-        let token =
-            self.selected_static_recursor_worker_residual_token(parent_origin, sibling_position)?;
+        let token = self.selected_static_recursor_worker_residual_token(
+            parent_origin,
+            sibling_position,
+            None,
+        )?;
         if let Some(token) = token {
             if !self
                 .operand_edge_consumption
@@ -9090,6 +9126,61 @@ impl<'src> StaticTransitionPlan<'src> {
             }
         }
         Ok(results)
+    }
+
+    /// Constructor identities which can be returned by one exact source
+    /// result-flow subtree.
+    ///
+    /// An empty set is not a proof that the result is constructor-free: it can
+    /// mean the result is opaque. Consumers may narrow a carried match only
+    /// when this set is non-empty.
+    pub(in crate::cranelift_backend) fn source_result_constructor_identities_in_owner_subtree(
+        &self,
+        root: StaticOriginId,
+    ) -> Result<Vec<ConstructorIdentity>, CraneliftBackendError> {
+        let results = self.source_result_origins_in_owner_subtree(root)?;
+        let mut constructors = Vec::with_capacity(results.len());
+        for origin in results {
+            let Some(occurrence) = self
+                .source_occurrences
+                .get(origin.0 as usize)
+                .and_then(Option::as_ref)
+            else {
+                return Ok(Vec::new());
+            };
+            match occurrence.expr {
+                RuntimeExpr::Construct { .. } => {
+                    constructors.push(self.semantic.constructor_symbol_identity(origin)?);
+                }
+                RuntimeExpr::CheckedJoinSite { .. }
+                | RuntimeExpr::CheckedSubcontinuationFrame { .. }
+                | RuntimeExpr::CheckedRecursiveInvocation { .. }
+                | RuntimeExpr::CheckedComputationalIHSlots { .. }
+                | RuntimeExpr::CheckedComputationalIHInvocation { .. }
+                | RuntimeExpr::Let { .. }
+                | RuntimeExpr::If { .. }
+                | RuntimeExpr::Match { .. }
+                | RuntimeExpr::ComputationalMatch { .. } => {}
+                RuntimeExpr::Value(_)
+                | RuntimeExpr::Var(_)
+                | RuntimeExpr::PrimitiveCall { .. }
+                | RuntimeExpr::Record { .. }
+                | RuntimeExpr::Project { .. }
+                | RuntimeExpr::Closure { .. }
+                | RuntimeExpr::LexicalClosure { .. }
+                | RuntimeExpr::DeclarationRef { .. }
+                | RuntimeExpr::ImportedDeclarationRef { .. }
+                | RuntimeExpr::Call { .. }
+                | RuntimeExpr::Effect { .. }
+                | RuntimeExpr::Trap(_) => {
+                    // One opaque leaf keeps the whole result population open.
+                    // A known constructor sibling cannot make that alternative
+                    // impossible.
+                    return Ok(Vec::new());
+                }
+            }
+        }
+        Ok(constructors)
     }
 
     /// The case-body roots of a source `Match` occurrence.
@@ -9698,6 +9789,11 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
     ) -> Result<Vec<EmittableCallEdge>, CraneliftBackendError> {
         let specialized_bases = self.callable_base_functions()?;
+        let static_recursor_worker_bodies = self
+            .static_recursor_worker_residuals
+            .iter()
+            .map(|residual| residual.body_origin)
+            .collect::<BTreeSet<_>>();
         let mut eliminated_literal_bodies = BTreeSet::new();
         for call in &self.static_callable_calls {
             for argument in &call.arguments {
@@ -9718,6 +9814,7 @@ impl<'src> StaticTransitionPlan<'src> {
             .into_iter()
             .filter(|(caller, _, callee_origin)| {
                 !specialized_bases.contains(caller)
+                    && !static_recursor_worker_bodies.contains(callee_origin)
                     && !eliminated_literal_bodies.contains(&(*caller, *callee_origin))
             })
             .map(|(caller, callee, callee_origin)| EmittableCallEdge {
@@ -9749,6 +9846,32 @@ impl<'src> StaticTransitionPlan<'src> {
                     },
                 ),
         );
+        // A static recursor worker returns into the computational match's
+        // continuation. Nested workers are therefore called by that
+        // continuation owner, not by the lexical owner of the constructor
+        // which produced the next closure. Replace the raw StaticBody edges for
+        // this exact planned residual population with direct continuation-owned
+        // edges. The residual's result-flow derivation is the authority; no
+        // runtime body identity or selector participates.
+        for residual in &self.static_recursor_worker_residuals {
+            let caller = self
+                .semantic
+                .function_owner(residual.parent_origin)?
+                .ok_or_else(|| {
+                    planner_error("static recursor continuation has no function owner")
+                })?;
+            let callee = self
+                .semantic
+                .function_owner(residual.body_origin)?
+                .ok_or_else(|| planner_error("static recursor worker has no function owner"))?;
+            calls.push(EmittableCallEdge {
+                caller,
+                callee,
+                callee_origin: residual.body_origin,
+                call_site_origin: residual.body_origin,
+                kind: EmittableCallKind::StaticBody,
+            });
+        }
         let callable_body_callee =
             |binding: &StaticCallableBindingKey|
              -> Result<PredeclaredFunctionId, CraneliftBackendError> {
@@ -12492,6 +12615,46 @@ mod tests {
             ]),
             "conditions, unused let values, nested fields, and closure bodies \
              are not result-flow recursor authorities"
+        );
+    }
+
+    #[test]
+    fn result_constructor_narrowing_stays_open_for_one_opaque_alternative() {
+        let construct = |constructor: &str| RuntimeExpr::Construct {
+            constructor: constructor.to_string(),
+            args: Vec::new(),
+        };
+        let branch = |else_expr| RuntimeExpr::If {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            then_expr: Box::new(construct("ctor:fixture::ResultSet::Left")),
+            else_expr: Box::new(else_expr),
+        };
+
+        let closed = branch(construct("ctor:fixture::ResultSet::Right"));
+        let closed_plan = plan_static_transition_graph(&closed, &BTreeMap::new())
+            .expect("closed constructor result set plans");
+        let closed_root = closed_plan
+            .root_occurrence
+            .expect("closed fixture has a root");
+        assert_eq!(
+            closed_plan
+                .source_result_constructor_identities_in_owner_subtree(closed_root)
+                .expect("closed result set is derived")
+                .len(),
+            2,
+            "two exact constructor alternatives did not remain closed"
+        );
+
+        let open = branch(RuntimeExpr::Value(RuntimeValue::Bool(false)));
+        let open_plan = plan_static_transition_graph(&open, &BTreeMap::new())
+            .expect("mixed constructor/opaque result set plans");
+        let open_root = open_plan.root_occurrence.expect("open fixture has a root");
+        assert!(
+            open_plan
+                .source_result_constructor_identities_in_owner_subtree(open_root)
+                .expect("mixed result set is derived")
+                .is_empty(),
+            "one known constructor incorrectly closed an opaque result alternative"
         );
     }
 

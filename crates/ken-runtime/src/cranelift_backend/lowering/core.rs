@@ -557,6 +557,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
     let mut compiler = Lowering {
         seed_env,
         active_emission_owner: None,
+        active_static_recursor_result: None,
         declarations,
         static_transition_plan,
         declaration_stack: Vec::new(),
@@ -6493,6 +6494,7 @@ impl<'a> Lowering<'a> {
                         worker.body_origin,
                         &inputs,
                     )?;
+                    self.active_static_recursor_result = Some(worker);
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                         value,
                         control: suspended,
@@ -6529,6 +6531,7 @@ impl<'a> Lowering<'a> {
                             worker.body_origin,
                             &inputs,
                         )?;
+                        self.active_static_recursor_result = Some(worker);
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                             value,
                             control: suspended,
@@ -7136,12 +7139,33 @@ impl<'a> Lowering<'a> {
     /// the static plan.  A carried child is stored unchanged; a specialized
     /// sibling crosses through the sole producer before both are joined in the
     /// same runtime node.
-    fn transfer_constructor_operands(
+    pub(super) fn transfer_constructor_operands(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         origin: StaticOriginId,
         constructor: &str,
         args: &[LoweringOperand],
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        self.transfer_constructor_operands_with_edge_mode(builder, origin, constructor, args, false)
+    }
+
+    pub(super) fn transfer_reached_constructor_operands(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        constructor: &str,
+        args: &[LoweringOperand],
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        self.transfer_constructor_operands_with_edge_mode(builder, origin, constructor, args, true)
+    }
+
+    fn transfer_constructor_operands_with_edge_mode(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        constructor: &str,
+        args: &[LoweringOperand],
+        reborrow_source_edges: bool,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
         if constructor == self.process_symbols.exit_failure {
             if let [LoweringOperand::Carried(code)] = args {
@@ -7162,11 +7186,19 @@ impl<'a> Lowering<'a> {
             let child_origin = self
                 .static_transition_plan
                 .child_static_origin(origin, position)?;
-            let edge = self.static_transition_plan.operand_edge_token(
-                origin,
-                position,
-                SourceOperandRole::ConstructArgument,
-            )?;
+            let edge = if reborrow_source_edges {
+                self.static_transition_plan.reached_operand_edge_token(
+                    origin,
+                    position,
+                    SourceOperandRole::ConstructArgument,
+                )?
+            } else {
+                self.static_transition_plan.operand_edge_token(
+                    origin,
+                    position,
+                    SourceOperandRole::ConstructArgument,
+                )?
+            };
             let prepared = match argument {
                 LoweringOperand::Specialized(value @ Lowered::Closure { .. }) => {
                     if edge.disposition() == OperandEdgeDisposition::CallableCapture {
@@ -8032,6 +8064,25 @@ impl<'a> Lowering<'a> {
         Ok(result)
     }
 
+    fn lower_static_recursor_worker_result_composed(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: LoweringOperand,
+        frames: &[EliminatorFrame<'_>],
+        worker: StaticRecursorWorker,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let previous = self.active_static_recursor_result.replace(worker);
+        let result = self.lower_computational_match_value_composed(builder, value, frames);
+        // A nested worker call advances the direct static continuation. Do not
+        // erase that advance while unwinding the compiler's composed
+        // continuation stack; restore only when this worker produced no nested
+        // successor.
+        if self.active_static_recursor_result == Some(worker) {
+            self.active_static_recursor_result = previous;
+        }
+        result
+    }
+
     fn append_static_recursor_worker_captures(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -8077,8 +8128,19 @@ impl<'a> Lowering<'a> {
             self.static_transition_plan
                 .reached_static_recursor_worker_residual_token(parent_origin, position)?
         } else {
+            self.active_emission_owner.ok_or_else(|| {
+                backend(BackendFailure::PlannerInvariant(
+                    "functionized static recursor selection has no active emission owner"
+                        .to_string(),
+                ))
+            })?;
             self.static_transition_plan
-                .selected_static_recursor_worker_residual_token(parent_origin, position)?
+                .selected_static_recursor_worker_residual_token(
+                    parent_origin,
+                    position,
+                    self.active_static_recursor_result
+                        .map(|worker| worker.body_origin),
+                )?
         };
         token
             .map(|token| {
@@ -8150,11 +8212,16 @@ impl<'a> Lowering<'a> {
         // its IH over the carried child, still puts it in `case_env`, and still
         // eliminates — everything below runs. Only re-entering *this same*
         // eliminator refuses.
-        if let Some((_, header)) = self
+        let predecessor_body = self
+            .active_static_recursor_result
+            .map(|worker| worker.body_origin);
+        if let Some((_, _, header)) = self
             .active_carried_computational_eliminations
             .iter()
             .rev()
-            .find(|(origin, _)| *origin == eliminator.static_origin)
+            .find(|(origin, predecessor, _)| {
+                *origin == eliminator.static_origin && *predecessor == predecessor_body
+            })
         {
             builder.ins().jump(*header, &[scrutinee.word.into()]);
             let unreachable = builder.create_block();
@@ -8169,8 +8236,11 @@ impl<'a> Lowering<'a> {
         let scrutinee = CarriedBoundaryWord {
             word: builder.block_params(header)[0],
         };
-        self.active_carried_computational_eliminations
-            .push((eliminator.static_origin, header));
+        self.active_carried_computational_eliminations.push((
+            eliminator.static_origin,
+            predecessor_body,
+            header,
+        ));
         let lowered = self.lower_carried_computational_match_inner(
             builder,
             scrutinee,
@@ -8180,7 +8250,7 @@ impl<'a> Lowering<'a> {
         let popped = self.active_carried_computational_eliminations.pop();
         debug_assert_eq!(
             popped,
-            Some((eliminator.static_origin, header)),
+            Some((eliminator.static_origin, predecessor_body, header)),
             "the carried elimination stack must unwind in the order it was pushed"
         );
         lowered
@@ -8211,11 +8281,27 @@ impl<'a> Lowering<'a> {
 
         let tag = self.emit_carrier_tag(builder, scrutinee)?;
         let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
+        let phase_constructors = self
+            .active_static_recursor_result
+            .map(|worker| {
+                self.static_transition_plan
+                    .source_result_constructor_identities_in_owner_subtree(worker.body_origin)
+            })
+            .transpose()?
+            .filter(|constructors| !constructors.is_empty());
 
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
 
         for (index, case) in eliminator.cases.iter().enumerate() {
+            if let Some(constructors) = &phase_constructors {
+                let identity = self
+                    .static_transition_plan
+                    .case_constructor_identity(eliminator.static_origin, index)?;
+                if !constructors.iter().any(|candidate| candidate == &identity) {
+                    continue;
+                }
+            }
             // ⛔ Malformed recursive positions are rejected before any code is
             // emitted for this case, exactly as the specialized composed path
             // rejects them. ⚠ The bound is `argument_binders` — the case's own
@@ -9564,10 +9650,11 @@ impl<'a> Lowering<'a> {
                                         &inputs,
                                     )
                                     .and_then(|value| {
-                                        self.lower_computational_match_value_composed(
+                                        self.lower_static_recursor_worker_result_composed(
                                             builder,
                                             value,
                                             &frames,
+                                            worker,
                                         )
                                     });
                                 self.leave_oriented_semantic_region(installed.checked);

@@ -988,6 +988,9 @@ struct Lowering<'a> {
     /// Case-emission tokens are keyed by this identity; `None` is permitted
     /// only outside unit-body emission.
     active_emission_owner: Option<PredeclaredFunctionId>,
+    /// Static worker whose direct result is currently being lowered through
+    /// its caller-owned continuation. Compiler-only; never an ABI value.
+    active_static_recursor_result: Option<StaticRecursorWorker>,
     /// Everything resolved into the ONE generated function this `Lowering`
     /// emits into. ⛔ See [`FunctionLocalRefs`] — none of it is portable.
     function_local: FunctionLocalRefs,
@@ -1057,7 +1060,11 @@ struct Lowering<'a> {
     /// has already established a **finite acyclic carrier graph** and the call
     /// rides a **declared recursive child edge** — so its measure is strict
     /// descent in that validated graph, ⛔ never compile-time shrinkage.
-    active_carried_computational_eliminations: Vec<(StaticOriginId, cranelift_codegen::ir::Block)>,
+    active_carried_computational_eliminations: Vec<(
+        StaticOriginId,
+        Option<StaticOriginId>,
+        cranelift_codegen::ir::Block,
+    )>,
     native_join_plan: Option<crate::NativeJoinPlanV1>,
     consumed_join_sites: BTreeSet<u64>,
     root_terminal_authority: Option<RootTerminalAnswerAuthority>,
@@ -1841,6 +1848,38 @@ impl<'a> Lowering<'a> {
             let status = self.emit_process_exit_status(builder, value.clone());
             self.emit_carrier_immediate(builder, BoundaryTag::ImmediateExitStatus, status)
         } else {
+            if let Lowered::Constructor {
+                constructor,
+                aggregate_origin: Some(source_origin),
+                args,
+                ..
+            } = value
+            {
+                if args.iter().any(|argument| {
+                    matches!(
+                        argument,
+                        Lowered::Closure { .. } | Lowered::DeclarationClosure { .. }
+                    )
+                }) {
+                    // A functionized recursor worker may return the next source
+                    // constructor in the recursive chain. Its closure child
+                    // crosses only through the exact source CallableCapture
+                    // edge and planned worker environment; the generic
+                    // whole-result capsule guard cannot lawfully classify that
+                    // child.
+                    let operands = args
+                        .iter()
+                        .cloned()
+                        .map(LoweringOperand::Specialized)
+                        .collect::<Vec<_>>();
+                    return self.transfer_reached_constructor_operands(
+                        builder,
+                        *source_origin,
+                        constructor,
+                        &operands,
+                    );
+                }
+            }
             self.transfer_into_carrier_on_planned_edge(builder, origin, value, edge)
         }
     }
