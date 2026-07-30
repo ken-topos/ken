@@ -126,6 +126,9 @@ pub enum BoundaryTag {
     /// Handle to a `HostResult`: a runtime success discriminant plus the two
     /// payload words it selects between.
     InvocationHostResult = 8,
+    /// Handle to an ordinary constructor or record whose transitive contents
+    /// include invocation-owned storage. Payload indexes the invocation arena.
+    InvocationAggregate = 9,
 }
 
 // ⛔ There is deliberately NO `ImmediateCapability` and no `ImmediateResource`.
@@ -145,7 +148,7 @@ impl BoundaryTag {
     /// this list cannot drift from the enum: adding a variant without extending
     /// the `match` is a compile error, and the array length is checked against
     /// it in this module's tests.
-    pub const ALL: [BoundaryTag; 9] = [
+    pub const ALL: [BoundaryTag; 10] = [
         BoundaryTag::ImmediateBool,
         BoundaryTag::ImmediateInt,
         BoundaryTag::ImmediateExitStatus,
@@ -155,6 +158,7 @@ impl BoundaryTag {
         BoundaryTag::PersistentClosure,
         BoundaryTag::InvocationBorrowed,
         BoundaryTag::InvocationHostResult,
+        BoundaryTag::InvocationAggregate,
     ];
 
     /// Decode a tag byte. `None` for any byte outside the closed set — an
@@ -170,6 +174,7 @@ impl BoundaryTag {
             6 => BoundaryTag::PersistentClosure,
             7 => BoundaryTag::InvocationBorrowed,
             8 => BoundaryTag::InvocationHostResult,
+            9 => BoundaryTag::InvocationAggregate,
             _ => return None,
         })
     }
@@ -186,9 +191,9 @@ impl BoundaryTag {
             BoundaryTag::PersistentGround | BoundaryTag::PersistentClosure => {
                 BoundaryReferentOwner::PersistentStore
             }
-            BoundaryTag::InvocationBorrowed | BoundaryTag::InvocationHostResult => {
-                BoundaryReferentOwner::InvocationArena
-            }
+            BoundaryTag::InvocationBorrowed
+            | BoundaryTag::InvocationHostResult
+            | BoundaryTag::InvocationAggregate => BoundaryReferentOwner::InvocationArena,
         }
     }
 
@@ -230,7 +235,8 @@ impl BoundaryTag {
             BoundaryTag::PersistentGround
             | BoundaryTag::PersistentClosure
             | BoundaryTag::InvocationBorrowed
-            | BoundaryTag::InvocationHostResult => None,
+            | BoundaryTag::InvocationHostResult
+            | BoundaryTag::InvocationAggregate => None,
         }
     }
 }
@@ -660,6 +666,10 @@ pub(crate) const BOUNDARY_TAG_CLASS_RELATION: &[(BoundaryTag, &[BoundaryClass])]
     (
         BoundaryTag::InvocationHostResult,
         &[BoundaryClass::HostResult],
+    ),
+    (
+        BoundaryTag::InvocationAggregate,
+        &[BoundaryClass::Constructor, BoundaryClass::Record],
     ),
 ];
 
@@ -2198,9 +2208,9 @@ impl BoundaryValueStore {
             // ⛔ Transitively non-persistable. `41 §2.1` denies an ordinary
             // closure canonical bytes, slot identity and persistence outright;
             // `HostResult` and `BorrowedOpaque` die with the invocation.
-            BoundaryClass::Closure
-            | BoundaryClass::HostResult
-            | BoundaryClass::BorrowedOpaque => false,
+            BoundaryClass::Closure | BoundaryClass::HostResult | BoundaryClass::BorrowedOpaque => {
+                false
+            }
         }
     }
 
@@ -2648,9 +2658,9 @@ impl BoundaryValueStore {
             // representation lane is a named residual owned by the `FNSPLIT`
             // re-cut (`SPEC-STORE-SPLIT` §7 item 1). Only the arm that
             // *constructed a canonical closure image* is gone.
-            BoundaryClass::Closure
-            | BoundaryClass::HostResult
-            | BoundaryClass::BorrowedOpaque => Err(BOUNDARY_ERR_ESCAPE),
+            BoundaryClass::Closure | BoundaryClass::HostResult | BoundaryClass::BorrowedOpaque => {
+                Err(BOUNDARY_ERR_ESCAPE)
+            }
         }
     }
 
@@ -2708,9 +2718,9 @@ impl BoundaryValueStore {
                 }
                 self.decode_slot(slot).ok_or(BOUNDARY_ERR_SHAPE)
             }
-            BoundaryTag::InvocationBorrowed | BoundaryTag::InvocationHostResult => {
-                Err(BOUNDARY_ERR_ESCAPE)
-            }
+            BoundaryTag::InvocationBorrowed
+            | BoundaryTag::InvocationHostResult
+            | BoundaryTag::InvocationAggregate => Err(BOUNDARY_ERR_ESCAPE),
         }
     }
 
@@ -2752,8 +2762,7 @@ impl BoundaryValueStore {
         match self.carrier_identities.get(symbol) {
             Some(existing) => *existing == identity,
             None => {
-                self.carrier_identities
-                    .insert(symbol.to_string(), identity);
+                self.carrier_identities.insert(symbol.to_string(), identity);
                 self.carrier_symbols.insert(identity, symbol.to_string());
                 true
             }
@@ -2793,17 +2802,12 @@ impl BoundaryValueStore {
     /// adoption. This is the native-observation inverse of materialization,
     /// not a lowering conversion: generated code still never converts a
     /// carried word back into a specialized value.
-    pub(crate) fn observe_adopted_ground(
-        &self,
-        word: BoundaryWord,
-    ) -> Option<RuntimeGroundValue> {
+    pub(crate) fn observe_adopted_ground(&self, word: BoundaryWord) -> Option<RuntimeGroundValue> {
         match word.tag()? {
-            BoundaryTag::ImmediateBool => {
-                Some(RuntimeGroundValue::Bool(word.payload() != 0))
+            BoundaryTag::ImmediateBool => Some(RuntimeGroundValue::Bool(word.payload() != 0)),
+            BoundaryTag::ImmediateInt => {
+                Some(RuntimeGroundValue::Int(word.signed_payload().into()))
             }
-            BoundaryTag::ImmediateInt => Some(RuntimeGroundValue::Int(
-                word.signed_payload().into(),
-            )),
             BoundaryTag::PersistentGround => {
                 let slot = self.image.0.node_field(word.payload(), NODE_SLOT)?;
                 if slot == NULL_SLOT {
@@ -2816,7 +2820,8 @@ impl BoundaryValueStore {
             | BoundaryTag::ImmediateStructuralNat
             | BoundaryTag::PersistentClosure
             | BoundaryTag::InvocationBorrowed
-            | BoundaryTag::InvocationHostResult => None,
+            | BoundaryTag::InvocationHostResult
+            | BoundaryTag::InvocationAggregate => None,
         }
     }
 
@@ -2855,8 +2860,7 @@ impl BoundaryValueStore {
                         .into_iter()
                         .zip(fields.iter())
                         .map(|(name, value)| {
-                            self.ground_from_canonical(value)
-                                .map(|value| (name, value))
+                            self.ground_from_canonical(value).map(|value| (name, value))
                         })
                         .collect::<Option<Vec<_>>>()?,
                 }

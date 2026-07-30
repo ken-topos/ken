@@ -262,12 +262,14 @@ fn run_dynamic_constructor_dispatch_fixture(
                     tag: 0,
                     constructor: "ctor:fixture::Dynamic::Zero".to_string(),
                     identity: test_synthesized_constructor_identity(),
+                    aggregate: None,
                     fields: Vec::new(),
                 },
                 DynamicConstructorAlternativeV1 {
                     tag: 1,
                     constructor: "ctor:fixture::Dynamic::One".to_string(),
                     identity: test_synthesized_constructor_identity(),
+                    aggregate: None,
                     fields: vec![Lowered::Int {
                         value: builder.ins().iconst(types::I64, 7),
                         known: Some(7),
@@ -288,11 +290,13 @@ fn run_dynamic_constructor_dispatch_fixture(
                 static_origin: match_origin,
             },
         )?;
-        let edge = compiler.static_transition_plan.lowering_boundary_use_token(
-            LoweringOnlyOperandEdge::TestFixtureResult,
-            match_origin,
-            0,
-        )?;
+        let edge = compiler
+            .static_transition_plan
+            .lowering_boundary_use_token(
+                LoweringOnlyOperandEdge::TestFixtureResult,
+                match_origin,
+                0,
+            )?;
         let lowered = lowered.specialized_at(edge)?;
         let value = match lowered {
             Lowered::Trap(trap) => {
@@ -429,6 +433,7 @@ fn dynamic_constructor_known_omission_owns_source_default() {
         tag: 0,
         constructor: "ctor:fixture::Dynamic::Missing".to_string(),
         identity: test_synthesized_constructor_identity(),
+        aggregate: None,
         fields: Vec::new(),
     };
     let owned = RuntimeTrap {
@@ -481,6 +486,7 @@ fn dynamic_constructor_fields_precede_outer_environment_in_declaration_order() {
         tag: 7,
         constructor: "ctor:fixture::Dynamic::Pair".to_string(),
         identity: test_synthesized_constructor_identity(),
+        aggregate: None,
         fields: vec![
             Lowered::Bytes(b"first".to_vec()),
             Lowered::String("second".to_string()),
@@ -1995,6 +2001,7 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
     // root variant's own disposition, so it could not distinguish the walk
     // from the disposition table. The walk is the only thing that sees this.
     let inadmissible = Lowered::Constructor {
+        aggregate_origin: None,
         constructor: "ctor:fixture::C1::Wrap".to_string(),
         synthesized_identity: None,
         args: vec![Lowered::Closure {
@@ -2020,6 +2027,7 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
 
     // ── POSITIVE CONTROL: the same shape, admissible ──────────────────────
     let admissible = Lowered::Constructor {
+        aggregate_origin: None,
         constructor: "ctor:fixture::C1::Wrap".to_string(),
         synthesized_identity: None,
         args: vec![Lowered::Bool {
@@ -2077,9 +2085,11 @@ fn d7_mixed_constructor_transfer_reds_when_planner_issuance_is_denied() {
     bind_bare_test_trap_lane(&mut compiler, &mut builder);
 
     let mixed = Lowered::Constructor {
+        aggregate_origin: None,
         constructor: "ctor:fixture::D7::Mixed".to_string(),
         synthesized_identity: None,
         args: vec![Lowered::Record {
+            aggregate_origin: None,
             fields: vec![(
                 "field:callable".to_string(),
                 Lowered::Closure {
@@ -2659,13 +2669,14 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
                     tag: 0,
                     constructor: producer_symbols.read_some.clone(),
                     identity: ok_identity,
+                    aggregate: None,
                     fields: vec![Lowered::Bool {
                         value: true_word,
                         known: Some(true),
                     }],
                 }],
             });
-            let error = compiler.synthesized_constructor(
+            let error = compiler.synthesized_constructor_for_test(
                 SynthesizedFixedConstructorRole::Wrote,
                 producer_symbols.wrote.clone(),
                 vec![Lowered::Bool {
@@ -2708,9 +2719,11 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
         move |compiler, builder, _| {
             let true_word = builder.ins().iconst(types::I64, 1);
             let ordinary_result = Lowered::Constructor {
+                aggregate_origin: None,
                 constructor: ordinary_symbols.result_ok.clone(),
                 synthesized_identity: None,
                 args: vec![Lowered::Constructor {
+                    aggregate_origin: None,
                     constructor: ordinary_symbols.read_some.clone(),
                     synthesized_identity: None,
                     args: vec![Lowered::Bool {
@@ -2897,6 +2910,7 @@ fn ac_c7_ctor(name: &str) -> RuntimeExpr {
 
 fn ac_c7_lowered_ctor(name: &str) -> Lowered {
     Lowered::Constructor {
+        aggregate_origin: None,
         constructor: format!("ctor:fixture::C1::{name}"),
         synthesized_identity: None,
         args: Vec::new(),
@@ -2965,6 +2979,7 @@ fn ac_c7_project_edge(fields: [(&str, &str); 2], project: &str) -> (i64, u64, u6
     let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
         // ── PRODUCER: a compile-time record crosses the one-way seam ──────
         let record = Lowered::Record {
+            aggregate_origin: None,
             fields: lowered_fields,
         };
         let word = compiler.transfer_into_carrier(builder, record_origin, &record)?;
@@ -3082,6 +3097,7 @@ fn ac_c7_wrap(outer: &str, inner: &str) -> RuntimeExpr {
 
 fn ac_c7_lowered_wrap(outer: &str, inner: &str) -> Lowered {
     Lowered::Constructor {
+        aggregate_origin: None,
         constructor: format!("ctor:fixture::C1::{outer}"),
         synthesized_identity: None,
         args: vec![ac_c7_lowered_ctor(inner)],
@@ -3609,6 +3625,7 @@ fn ac_c4_wrap2(outer: &str, first: &str, second: &str) -> RuntimeExpr {
 
 fn ac_c4_lowered_wrap2(outer: &str, first: &str, second: &str) -> Lowered {
     Lowered::Constructor {
+        aggregate_origin: None,
         constructor: format!("ctor:fixture::C1::{outer}"),
         synthesized_identity: None,
         args: vec![ac_c7_lowered_ctor(first), ac_c7_lowered_ctor(second)],
@@ -4080,6 +4097,7 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
         ),
     ] {
         let inadmissible = Lowered::Constructor {
+            aggregate_origin: None,
             constructor: "ctor:fixture::C1::Wrap".to_string(),
             synthesized_identity: None,
             args: vec![ac_c4_recursor_capsule(residual)],
@@ -4103,6 +4121,7 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
 
     // ── POSITIVE CONTROL ──────────────────────────────────────────────────
     let admissible = Lowered::Constructor {
+        aggregate_origin: None,
         constructor: "ctor:fixture::C1::Wrap".to_string(),
         synthesized_identity: None,
         args: vec![Lowered::Bool {

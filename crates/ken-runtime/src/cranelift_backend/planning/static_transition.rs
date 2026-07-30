@@ -17,6 +17,7 @@ use super::{
     backend, unsupported, BackendFailure, CraneliftBackendError, RuntimeDeclaration,
     RuntimeDeclarationKind,
 };
+use crate::boundary_value::{BoundaryClass, BoundaryReferentOwner, BoundaryTag};
 use crate::{RuntimeExpr, RuntimePartiality, RuntimeSymbol, RuntimeTrap, RuntimeTrapCode};
 use abi::{build_abi_plane, extend_static_callable_abi, AbiPlane};
 use semantic_ir::{
@@ -569,17 +570,14 @@ fn effect_semantic_seats(
     operation: ken_host::HostOpV1,
     has_capability: bool,
 ) -> Result<Option<Vec<EffectSemanticSeat>>, CraneliftBackendError> {
-    use EffectSemanticSeat as Seat;
     use ken_host::HostOpV1 as Op;
+    use EffectSemanticSeat as Seat;
 
     let (expects_capability, arguments): (bool, &[Seat]) = match operation {
         Op::ConsoleWrite => (false, &[Seat::ConsoleStream, Seat::Bytes]),
         Op::ConsoleFlush | Op::ConsoleIsTerminal => (false, &[Seat::ConsoleStream]),
         Op::FsReadFile => (true, &[Seat::Bytes]),
-        Op::FsWriteFile => (
-            true,
-            &[Seat::Bytes, Seat::CreatePolicy, Seat::Bytes],
-        ),
+        Op::FsWriteFile => (true, &[Seat::Bytes, Seat::CreatePolicy, Seat::Bytes]),
         Op::FsChangeMode => (true, &[Seat::Bytes, Seat::ExactIntU64]),
         Op::FsOpen => (true, &[Seat::Bytes, Seat::OpenMode]),
         Op::FsHandleMetadata | Op::ResourceRelease => (false, &[Seat::Resource]),
@@ -666,13 +664,7 @@ fn effect_edge_contract(
     expr: &RuntimeExpr,
     position: usize,
     role: SourceOperandRole,
-) -> Result<
-    (
-        Option<ken_host::HostOpV1>,
-        Option<EffectSemanticSeat>,
-    ),
-    CraneliftBackendError,
-> {
+) -> Result<(Option<ken_host::HostOpV1>, Option<EffectSemanticSeat>), CraneliftBackendError> {
     let RuntimeExpr::Effect {
         operation,
         capability,
@@ -2929,9 +2921,9 @@ fn build_boundary_uses(
                     planner_capacity_error("static recursor capture identity exhausted")
                 })?,
             );
-            capture_ordinal = capture_ordinal
-                .checked_add(1)
-                .ok_or_else(|| planner_capacity_error("static recursor capture identity exhausted"))?;
+            capture_ordinal = capture_ordinal.checked_add(1).ok_or_else(|| {
+                planner_capacity_error("static recursor capture identity exhausted")
+            })?;
             let disposition = OperandEdgeDisposition::Forwarding;
             let (consumer_phase, operation, need, avail) =
                 non_semantic_boundary_contract(disposition);
@@ -3146,6 +3138,109 @@ struct PlannedCaseEmission {
     status: CaseEmissionStatus,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum AggregateIdentity {
+    Constructor(ConstructorIdentity),
+    Record(Vec<FieldIdentity>),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PlannedAggregateChild {
+    origin: StaticOriginId,
+    position: u32,
+    possible_owners: Vec<BoundaryReferentOwner>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PlannedAggregateRepresentation {
+    origin: StaticOriginId,
+    owner: PredeclaredFunctionId,
+    phase: ResultPhase,
+    class: BoundaryClass,
+    identity: AggregateIdentity,
+    arity: u32,
+    children: Vec<PlannedAggregateChild>,
+    selected_owner: BoundaryReferentOwner,
+    selected_tag: BoundaryTag,
+}
+
+/// The compiler-emission site of one synthesized aggregate occurrence.
+///
+/// Roles identify constructor semantics; sites distinguish repeated
+/// occurrences of the same role in one effect lowering.  This closed sum is
+/// planner input, not allocation authority.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum SynthesizedAggregateSite {
+    IoError(u32),
+    FileOperation,
+    FilePathSome,
+    FileError,
+    ResourceKind(u8, u8),
+    ResourceTraceIdentity,
+    ResourceHostIo,
+    ResourceClosed,
+    ResourceMalformed,
+    ResourceRightNotHeld,
+    ResourceReleaseFailed,
+    ResourceKindMismatch,
+    ResourceBufferLimit,
+    ResourceInvalidOffset,
+    ResourceInvalidBounds,
+    ResourceNoProgress,
+    ReadBufferSpan,
+    ReadTransferCount,
+    ReadEof,
+    ReadSome,
+    WriteTransferCount,
+    Wrote,
+    Unit,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PlannedSynthesizedAggregateRepresentation {
+    effect_origin: StaticOriginId,
+    owner: PredeclaredFunctionId,
+    phase: ResultPhase,
+    site: SynthesizedAggregateSite,
+    role: SynthesizedConstructorRole,
+    arity: u32,
+    children: Vec<Vec<BoundaryReferentOwner>>,
+    selected_owner: BoundaryReferentOwner,
+    selected_tag: BoundaryTag,
+}
+
+/// Opaque identity of one pre-planned compiler-synthesized aggregate.
+///
+/// Lowering may retain and clone the identity while it builds alternatives,
+/// but only the planner can construct it or exchange it for the move-only
+/// allocation token below.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct SynthesizedAggregateOccurrence {
+    effect_origin: StaticOriginId,
+    owner: PredeclaredFunctionId,
+    site: SynthesizedAggregateSite,
+}
+
+/// Move-only authority for allocating one exact aggregate occurrence.
+///
+/// Lowering can read the selected row but cannot mint, transplant, or relabel
+/// it. The exact owner/origin pair is consumed in the pre-publication ledger.
+#[derive(Debug)]
+pub(in crate::cranelift_backend) struct AggregateRepresentationToken {
+    tag: BoundaryTag,
+    class: BoundaryClass,
+}
+
+impl AggregateRepresentationToken {
+    pub(in crate::cranelift_backend) fn tag(&self) -> BoundaryTag {
+        self.tag
+    }
+
+    pub(in crate::cranelift_backend) fn class(&self) -> BoundaryClass {
+        self.class
+    }
+}
+
 /// Move-only authority for lowering one exact source case.
 ///
 /// Fields are readers only and construction remains planner-private. Lowering
@@ -3247,8 +3342,21 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     case_emissions: Vec<PlannedCaseEmission>,
     /// Exact reachable-case consumption ledger. It closes with the boundary
     /// ledger before any staged function is published.
-    case_emission_consumption:
-        RefCell<BTreeMap<(PredeclaredFunctionId, StaticOriginId, u32), u32>>,
+    case_emission_consumption: RefCell<BTreeMap<(PredeclaredFunctionId, StaticOriginId, u32), u32>>,
+    /// Owner-parametric representation selected for every reached source
+    /// Constructor/Record occurrence after producer flow closes.
+    aggregate_representations: Vec<PlannedAggregateRepresentation>,
+    /// Exact compiler-synthesized Constructor occurrences derived from each
+    /// carrier-required effect's closed emission schema.
+    synthesized_aggregate_representations: Vec<PlannedSynthesizedAggregateRepresentation>,
+    /// Exact source constructors whose process-result representation is the
+    /// immediate exit-status lane rather than an aggregate allocation.
+    terminal_exit_aggregate_origins: BTreeSet<StaticOriginId>,
+    /// Exact aggregate allocations emitted by lowering.
+    aggregate_representation_consumption:
+        RefCell<BTreeMap<(PredeclaredFunctionId, StaticOriginId), u32>>,
+    synthesized_aggregate_representation_consumption:
+        RefCell<BTreeMap<SynthesizedAggregateOccurrence, u32>>,
     /// The selected emission authority that determines whether owner crossings
     /// require operational carrier results.
     functionized_units: bool,
@@ -4096,10 +4204,71 @@ impl ProducerCallableSet {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+enum ReferentOwnerFact {
+    Bottom,
+    Closed(BTreeSet<BoundaryReferentOwner>),
+    Unrepresented,
+}
+
+impl ReferentOwnerFact {
+    fn owner(owner: BoundaryReferentOwner) -> Self {
+        Self::Closed(BTreeSet::from([owner]))
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Bottom, value) | (value, Self::Bottom) => value.clone(),
+            (Self::Unrepresented, _) | (_, Self::Unrepresented) => Self::Unrepresented,
+            (Self::Closed(left), Self::Closed(right)) => {
+                Self::Closed(left.union(right).copied().collect())
+            }
+        }
+    }
+
+    fn aggregate(children: &[ProducerValue]) -> Self {
+        if children
+            .iter()
+            .any(|child| child.referent_owners == Self::Unrepresented)
+        {
+            return Self::Unrepresented;
+        }
+        if children
+            .iter()
+            .any(|child| child.referent_owners == Self::Bottom)
+        {
+            return Self::Bottom;
+        }
+        let invocation_owned = children.iter().any(|child| {
+            matches!(
+                &child.referent_owners,
+                Self::Closed(owners)
+                    if owners.contains(&BoundaryReferentOwner::InvocationArena)
+            )
+        });
+        Self::owner(if invocation_owned {
+            BoundaryReferentOwner::InvocationArena
+        } else {
+            BoundaryReferentOwner::PersistentStore
+        })
+    }
+
+    fn closed_owners(&self) -> Option<Vec<BoundaryReferentOwner>> {
+        match self {
+            Self::Closed(owners) => Some(owners.iter().copied().collect()),
+            Self::Bottom | Self::Unrepresented => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct ProducerValue {
     constructors: ProducerFact,
     constructor_payloads: Vec<(ConstructorIdentity, Vec<ProducerValue>)>,
+    record_fields: Vec<(FieldIdentity, ProducerValue)>,
     callables: ProducerCallableSet,
+    referent_owners: ReferentOwnerFact,
+    aggregate_origins: BTreeSet<StaticOriginId>,
+    effect_origins: BTreeSet<StaticOriginId>,
     carried: bool,
 }
 
@@ -4108,7 +4277,11 @@ impl ProducerValue {
         Self {
             constructors: ProducerFact::empty(),
             constructor_payloads: Vec::new(),
+            record_fields: Vec::new(),
             callables: ProducerCallableSet::Closed(BTreeSet::new()),
+            referent_owners: ReferentOwnerFact::Bottom,
+            aggregate_origins: BTreeSet::new(),
+            effect_origins: BTreeSet::new(),
             carried: false,
         }
     }
@@ -4117,7 +4290,24 @@ impl ProducerValue {
         Self {
             constructors: ProducerFact::open(origin),
             constructor_payloads: Vec::new(),
+            record_fields: Vec::new(),
             callables: ProducerCallableSet::Open,
+            referent_owners: ReferentOwnerFact::Unrepresented,
+            aggregate_origins: BTreeSet::new(),
+            effect_origins: BTreeSet::new(),
+            carried: false,
+        }
+    }
+
+    fn owner(owner: BoundaryReferentOwner) -> Self {
+        Self {
+            constructors: ProducerFact::empty(),
+            constructor_payloads: Vec::new(),
+            record_fields: Vec::new(),
+            callables: ProducerCallableSet::Closed(BTreeSet::new()),
+            referent_owners: ReferentOwnerFact::owner(owner),
+            aggregate_origins: BTreeSet::new(),
+            effect_origins: BTreeSet::new(),
             carried: false,
         }
     }
@@ -4140,12 +4330,72 @@ impl ProducerValue {
                 constructor_payloads.push((*identity, incoming.clone()));
             }
         }
+        let mut record_fields = self.record_fields.clone();
+        for (identity, incoming) in &other.record_fields {
+            if let Some((_, known)) = record_fields
+                .iter_mut()
+                .find(|(candidate, _)| candidate == identity)
+            {
+                *known = known.join(incoming);
+            } else {
+                record_fields.push((*identity, incoming.clone()));
+            }
+        }
         Self {
             constructors: self.constructors.join(&other.constructors),
             constructor_payloads,
+            record_fields,
             callables: self.callables.join(&other.callables),
+            referent_owners: self.referent_owners.join(&other.referent_owners),
+            aggregate_origins: self
+                .aggregate_origins
+                .union(&other.aggregate_origins)
+                .copied()
+                .collect(),
+            effect_origins: self
+                .effect_origins
+                .union(&other.effect_origins)
+                .copied()
+                .collect(),
             carried: self.carried || other.carried,
         }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AggregateObservation {
+    class: BoundaryClass,
+    identity: AggregateIdentity,
+    children: Vec<(StaticOriginId, ReferentOwnerFact)>,
+    carried: bool,
+}
+
+impl AggregateObservation {
+    fn join(&self, other: &Self) -> Result<Self, CraneliftBackendError> {
+        if self.class != other.class
+            || self.identity != other.identity
+            || self.children.len() != other.children.len()
+            || self
+                .children
+                .iter()
+                .zip(&other.children)
+                .any(|((left, _), (right, _))| left != right)
+        {
+            return Err(planner_error(
+                "aggregate occurrence changed class, identity, arity, or child origin",
+            ));
+        }
+        Ok(Self {
+            class: self.class,
+            identity: self.identity.clone(),
+            children: self
+                .children
+                .iter()
+                .zip(&other.children)
+                .map(|((origin, left), (_, right))| (*origin, left.join(right)))
+                .collect(),
+            carried: self.carried || other.carried,
+        })
     }
 }
 
@@ -4155,15 +4405,64 @@ struct ProducerAnalysis<'plan, 'src> {
     inputs: BTreeMap<PredeclaredFunctionId, Vec<ProducerValue>>,
     results: BTreeMap<PredeclaredFunctionId, ProducerValue>,
     captures: BTreeMap<StaticOriginId, Vec<ProducerValue>>,
-    computational_scrutinees:
-        BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerValue>,
+    computational_scrutinees: BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerValue>,
     computational_results: BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerValue>,
     match_scrutinees: BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerFact>,
+    aggregate_occurrences: BTreeMap<(StaticOriginId, PredeclaredFunctionId), AggregateObservation>,
+    effect_operands: BTreeMap<(StaticOriginId, PredeclaredFunctionId), Vec<ReferentOwnerFact>>,
+    carried_aggregates: BTreeSet<StaticOriginId>,
+    carried_effects: BTreeSet<StaticOriginId>,
     reached_owners: BTreeSet<PredeclaredFunctionId>,
     changed: bool,
 }
 
+fn runtime_value_owner(value: &crate::RuntimeValue) -> ReferentOwnerFact {
+    match value {
+        crate::RuntimeValue::Bool(_) | crate::RuntimeValue::Int(_) => {
+            ReferentOwnerFact::owner(BoundaryReferentOwner::NoReferent)
+        }
+        crate::RuntimeValue::Bytes(_) | crate::RuntimeValue::String(_) => {
+            ReferentOwnerFact::owner(BoundaryReferentOwner::PersistentStore)
+        }
+        crate::RuntimeValue::Constructor { args, .. } => {
+            let children = args
+                .iter()
+                .map(|value| {
+                    let mut child = ProducerValue::empty();
+                    child.referent_owners = runtime_value_owner(value);
+                    child
+                })
+                .collect::<Vec<_>>();
+            ReferentOwnerFact::aggregate(&children)
+        }
+        crate::RuntimeValue::Record { fields } => {
+            let children = fields
+                .iter()
+                .map(|(_, value)| {
+                    let mut child = ProducerValue::empty();
+                    child.referent_owners = runtime_value_owner(value);
+                    child
+                })
+                .collect::<Vec<_>>();
+            ReferentOwnerFact::aggregate(&children)
+        }
+        crate::RuntimeValue::ClosureRef { .. } | crate::RuntimeValue::Unknown => {
+            ReferentOwnerFact::Unrepresented
+        }
+    }
+}
+
 impl ProducerAnalysis<'_, '_> {
+    fn mark_carried(&mut self, value: &mut ProducerValue) {
+        value.carried = true;
+        for origin in &value.aggregate_origins {
+            self.changed |= self.carried_aggregates.insert(*origin);
+        }
+        for origin in &value.effect_origins {
+            self.changed |= self.carried_effects.insert(*origin);
+        }
+    }
+
     fn merge_value(slot: &mut ProducerValue, incoming: &ProducerValue) -> bool {
         let joined = slot.join(incoming);
         if *slot == joined {
@@ -4188,6 +4487,47 @@ impl ProducerAnalysis<'_, '_> {
             changed |= Self::merge_value(slot, value);
         }
         Ok(changed)
+    }
+
+    fn record_aggregate(
+        &mut self,
+        origin: StaticOriginId,
+        class: BoundaryClass,
+        identity: AggregateIdentity,
+        child_origins: Vec<StaticOriginId>,
+        children: &[ProducerValue],
+        carried: bool,
+    ) -> Result<(), CraneliftBackendError> {
+        if child_origins.len() != children.len() {
+            return Err(planner_error(
+                "aggregate occurrence child authority is not positional",
+            ));
+        }
+        let observation = AggregateObservation {
+            class,
+            identity,
+            children: child_origins
+                .into_iter()
+                .zip(children)
+                .map(|(origin, value)| (origin, value.referent_owners.clone()))
+                .collect(),
+            carried: carried || self.carried_aggregates.contains(&origin),
+        };
+        let key = (origin, self.active_owner);
+        match self.aggregate_occurrences.entry(key) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(observation);
+                self.changed = true;
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                let joined = entry.get().join(&observation)?;
+                if *entry.get() != joined {
+                    entry.insert(joined);
+                    self.changed = true;
+                }
+            }
+        }
+        Ok(())
     }
 
     fn closure_value(
@@ -4227,6 +4567,15 @@ impl ProducerAnalysis<'_, '_> {
                 ));
             }
         };
+        let referent_owners = ReferentOwnerFact::aggregate(&capture_values);
+        let aggregate_origins = capture_values
+            .iter()
+            .flat_map(|capture| capture.aggregate_origins.iter().copied())
+            .collect();
+        let effect_origins = capture_values
+            .iter()
+            .flat_map(|capture| capture.effect_origins.iter().copied())
+            .collect();
         match self.captures.entry(origin) {
             std::collections::btree_map::Entry::Vacant(entry) => {
                 entry.insert(capture_values);
@@ -4239,11 +4588,15 @@ impl ProducerAnalysis<'_, '_> {
         Ok(ProducerValue {
             constructors: ProducerFact::empty(),
             constructor_payloads: Vec::new(),
+            record_fields: Vec::new(),
             callables: ProducerCallableSet::Closed(BTreeSet::from([ProducerCallable {
                 closure_origin: origin,
                 body_origin,
                 recursor_origin: None,
             }])),
+            referent_owners,
+            aggregate_origins,
+            effect_origins,
             carried: false,
         })
     }
@@ -4271,6 +4624,15 @@ impl ProducerAnalysis<'_, '_> {
                 }
             });
         }
+        let referent_owners = ReferentOwnerFact::aggregate(&captures);
+        let aggregate_origins = captures
+            .iter()
+            .flat_map(|capture| capture.aggregate_origins.iter().copied())
+            .collect();
+        let effect_origins = captures
+            .iter()
+            .flat_map(|capture| capture.effect_origins.iter().copied())
+            .collect();
         match self.captures.entry(binding.closure_origin) {
             std::collections::btree_map::Entry::Vacant(entry) => {
                 entry.insert(captures);
@@ -4283,11 +4645,15 @@ impl ProducerAnalysis<'_, '_> {
         Ok(ProducerValue {
             constructors: ProducerFact::empty(),
             constructor_payloads: Vec::new(),
+            record_fields: Vec::new(),
             callables: ProducerCallableSet::Closed(BTreeSet::from([ProducerCallable {
                 closure_origin: binding.closure_origin,
                 body_origin: binding.body_origin,
                 recursor_origin: None,
             }])),
+            referent_owners,
+            aggregate_origins,
+            effect_origins,
             carried: false,
         })
     }
@@ -4339,9 +4705,7 @@ impl ProducerAnalysis<'_, '_> {
                     .len()
                     .checked_sub(declaration_capture_count)
                     .ok_or_else(|| {
-                        planner_error(
-                            "producer-flow specialization omits declaration captures",
-                        )
+                        planner_error("producer-flow specialization omits declaration captures")
                     })?;
                 if ordinary_count > declaration_start {
                     return Err(planner_error(
@@ -4366,13 +4730,9 @@ impl ProducerAnalysis<'_, '_> {
                             &mut lifted_cursor,
                         )?);
                     } else {
-                        environment.push(
-                            raw.get(ordinary_cursor).cloned().ok_or_else(|| {
-                                planner_error(
-                                    "producer-flow specialization omits an ordinary input",
-                                )
-                            })?,
-                        );
+                        environment.push(raw.get(ordinary_cursor).cloned().ok_or_else(|| {
+                            planner_error("producer-flow specialization omits an ordinary input")
+                        })?);
                         ordinary_cursor += 1;
                     }
                 }
@@ -4455,11 +4815,12 @@ impl ProducerAnalysis<'_, '_> {
             // host-stack recursion and bypasses the very cycle closure this
             // analysis is required to prove.
             for value in &mut incoming {
-                value.carried = true;
+                self.mark_carried(value);
             }
-            let slots = self.inputs.get_mut(&owner).ok_or_else(|| {
-                planner_error("producer-flow callable owner has no ABI inputs")
-            })?;
+            let slots = self
+                .inputs
+                .get_mut(&owner)
+                .ok_or_else(|| planner_error("producer-flow callable owner has no ABI inputs"))?;
             self.changed |= Self::merge_values(slots, &incoming)?;
             self.changed |= self.reached_owners.insert(owner);
             let mut value = self
@@ -4468,7 +4829,7 @@ impl ProducerAnalysis<'_, '_> {
                 .cloned()
                 .unwrap_or_else(ProducerValue::empty);
             if let Some(recursor_origin) = callable.recursor_origin {
-                value.carried = true;
+                self.mark_carried(&mut value);
                 value.constructors = value
                     .constructors
                     .forwarded(recursor_origin, ProducerFlowKind::Recursor);
@@ -4487,7 +4848,7 @@ impl ProducerAnalysis<'_, '_> {
                     .get(&key)
                     .cloned()
                     .unwrap_or_else(ProducerValue::empty);
-                value.carried = true;
+                self.mark_carried(&mut value);
             }
             result = Some(match result {
                 Some(previous) => previous.join(&value),
@@ -4495,7 +4856,7 @@ impl ProducerAnalysis<'_, '_> {
             });
         }
         let mut result = result.unwrap_or_else(ProducerValue::empty);
-        result.carried = true;
+        self.mark_carried(&mut result);
         result.constructors = result
             .constructors
             .forwarded(call_origin, ProducerFlowKind::CallResult);
@@ -4522,13 +4883,20 @@ impl ProducerAnalysis<'_, '_> {
             | RuntimeExpr::CheckedComputationalIHInvocation { .. } => self
                 .eval(child(0)?, env)?
                 .with_forward(origin, ProducerFlowKind::Forward),
-            RuntimeExpr::Value(crate::RuntimeValue::Constructor { .. }) => {
+            RuntimeExpr::Value(value @ crate::RuntimeValue::Constructor { .. }) => {
                 // Runtime values have their own semantic atom kind. Until that
                 // canonical identity is exposed, this is an explicit opaque
                 // producer rather than a fabricated symbol lookup.
-                ProducerValue::open(origin)
+                let mut result = ProducerValue::open(origin);
+                result.referent_owners = runtime_value_owner(value);
+                result
             }
-            RuntimeExpr::Value(_) | RuntimeExpr::Trap(_) => ProducerValue::empty(),
+            RuntimeExpr::Value(value) => {
+                let mut result = ProducerValue::empty();
+                result.referent_owners = runtime_value_owner(value);
+                result
+            }
+            RuntimeExpr::Trap(_) => ProducerValue::empty(),
             RuntimeExpr::Var(index) => env
                 .get(*index as usize)
                 .cloned()
@@ -4550,15 +4918,41 @@ impl ProducerAnalysis<'_, '_> {
             }
             RuntimeExpr::Construct { args, .. } => {
                 let mut payload = Vec::with_capacity(args.len());
+                let mut child_origins = Vec::with_capacity(args.len());
                 for index in 0..args.len() {
-                    payload.push(self.eval(child(index)?, env)?);
+                    let child_origin = child(index)?;
+                    child_origins.push(child_origin);
+                    payload.push(self.eval(child_origin, env)?);
                 }
                 let identity = self.plan.semantic.constructor_symbol_identity(origin)?;
+                let carried = payload.iter().any(|child| child.carried);
+                self.record_aggregate(
+                    origin,
+                    BoundaryClass::Constructor,
+                    AggregateIdentity::Constructor(identity),
+                    child_origins,
+                    &payload,
+                    carried,
+                )?;
+                let referent_owners = ReferentOwnerFact::aggregate(&payload);
+                let mut aggregate_origins = payload
+                    .iter()
+                    .flat_map(|child| child.aggregate_origins.iter().copied())
+                    .collect::<BTreeSet<_>>();
+                aggregate_origins.insert(origin);
+                let effect_origins = payload
+                    .iter()
+                    .flat_map(|child| child.effect_origins.iter().copied())
+                    .collect();
                 ProducerValue {
                     constructors: ProducerFact::constructor(origin, identity),
                     constructor_payloads: vec![(identity, payload)],
+                    record_fields: Vec::new(),
                     callables: ProducerCallableSet::Closed(BTreeSet::new()),
-                    carried: false,
+                    referent_owners,
+                    aggregate_origins,
+                    effect_origins,
+                    carried,
                 }
             }
             RuntimeExpr::Match { cases, .. } => {
@@ -4586,9 +4980,13 @@ impl ProducerAnalysis<'_, '_> {
                         continue;
                     }
                     let mut case_env = match &scrutinee.constructors.population {
-                        ScrutineeProducerSet::Open => {
-                            vec![ProducerValue::open(origin); case.binders]
-                        }
+                        ScrutineeProducerSet::Open => (0..case.binders)
+                            .map(|_| {
+                                let mut value = ProducerValue::open(origin);
+                                value.referent_owners = scrutinee.referent_owners.clone();
+                                value
+                            })
+                            .collect(),
                         ScrutineeProducerSet::Closed(_) => scrutinee
                             .constructor_payloads
                             .iter()
@@ -4596,11 +4994,19 @@ impl ProducerAnalysis<'_, '_> {
                             .filter(|(_, payload)| payload.len() == case.binders)
                             .map(|(_, payload)| payload.clone())
                             .unwrap_or_else(|| {
-                                vec![ProducerValue::open(origin); case.binders]
+                                (0..case.binders)
+                                    .map(|_| {
+                                        let mut value = ProducerValue::open(origin);
+                                        value.referent_owners = scrutinee.referent_owners.clone();
+                                        value
+                                    })
+                                    .collect()
                             }),
                     };
                     for binder in &mut case_env {
-                        binder.carried |= scrutinee.carried;
+                        if scrutinee.carried {
+                            self.mark_carried(binder);
+                        }
                         binder.constructors = binder
                             .constructors
                             .clone()
@@ -4620,8 +5026,7 @@ impl ProducerAnalysis<'_, '_> {
                         self.changed = true;
                     }
                     std::collections::btree_map::Entry::Occupied(mut entry) => {
-                        self.changed |=
-                            Self::merge_value(entry.get_mut(), &incoming_scrutinee);
+                        self.changed |= Self::merge_value(entry.get_mut(), &incoming_scrutinee);
                     }
                 }
                 let scrutinee = self
@@ -4647,9 +5052,13 @@ impl ProducerAnalysis<'_, '_> {
                         continue;
                     }
                     let mut arguments = match &scrutinee.constructors.population {
-                        ScrutineeProducerSet::Open => {
-                            vec![ProducerValue::open(origin); case.argument_binders]
-                        }
+                        ScrutineeProducerSet::Open => (0..case.argument_binders)
+                            .map(|_| {
+                                let mut value = ProducerValue::open(origin);
+                                value.referent_owners = scrutinee.referent_owners.clone();
+                                value
+                            })
+                            .collect(),
                         ScrutineeProducerSet::Closed(_) => scrutinee
                             .constructor_payloads
                             .iter()
@@ -4657,11 +5066,19 @@ impl ProducerAnalysis<'_, '_> {
                             .filter(|(_, payload)| payload.len() == case.argument_binders)
                             .map(|(_, payload)| payload.clone())
                             .unwrap_or_else(|| {
-                                vec![ProducerValue::open(origin); case.argument_binders]
+                                (0..case.argument_binders)
+                                    .map(|_| {
+                                        let mut value = ProducerValue::open(origin);
+                                        value.referent_owners = scrutinee.referent_owners.clone();
+                                        value
+                                    })
+                                    .collect()
                             }),
                     };
                     for argument in &mut arguments {
-                        argument.carried |= scrutinee.carried;
+                        if scrutinee.carried {
+                            self.mark_carried(argument);
+                        }
                         argument.constructors = argument
                             .constructors
                             .clone()
@@ -4700,7 +5117,11 @@ impl ProducerAnalysis<'_, '_> {
                             ProducerValue {
                                 constructors: ProducerFact::empty(),
                                 constructor_payloads: Vec::new(),
+                                record_fields: Vec::new(),
                                 callables: ProducerCallableSet::Closed(callables),
+                                referent_owners: ReferentOwnerFact::Unrepresented,
+                                aggregate_origins: BTreeSet::new(),
+                                effect_origins: BTreeSet::new(),
                                 carried: false,
                             }
                         });
@@ -4749,26 +5170,119 @@ impl ProducerAnalysis<'_, '_> {
                 for index in 0..args.len() {
                     let _ = self.eval(child(index)?, env)?;
                 }
-                ProducerValue::open(origin)
+                // Every admitted primitive result is immediate or persistable
+                // ground data. Producer identity can remain open while its
+                // referent lifetime is closed and durable.
+                let mut result = ProducerValue::open(origin);
+                result.referent_owners =
+                    ReferentOwnerFact::owner(BoundaryReferentOwner::PersistentStore);
+                result
             }
             RuntimeExpr::Record { fields } => {
+                let mut payload = Vec::with_capacity(fields.len());
+                let mut child_origins = Vec::with_capacity(fields.len());
+                let mut record_fields: Vec<(FieldIdentity, ProducerValue)> = Vec::new();
+                let mut identities = Vec::with_capacity(fields.len());
                 for index in 0..fields.len() {
-                    let _ = self.eval(child(index)?, env)?;
+                    let child_origin = child(index)?;
+                    let value = self.eval(child_origin, env)?;
+                    let identity = self.plan.semantic.record_field_identity(origin, index)?;
+                    child_origins.push(child_origin);
+                    identities.push(identity);
+                    if let Some((_, known)) = record_fields
+                        .iter_mut()
+                        .find(|(candidate, _)| *candidate == identity)
+                    {
+                        *known = known.join(&value);
+                    } else {
+                        record_fields.push((identity, value.clone()));
+                    }
+                    payload.push(value);
                 }
-                ProducerValue::open(origin)
+                let carried = payload.iter().any(|child| child.carried);
+                self.record_aggregate(
+                    origin,
+                    BoundaryClass::Record,
+                    AggregateIdentity::Record(identities),
+                    child_origins,
+                    &payload,
+                    carried,
+                )?;
+                let mut aggregate_origins = payload
+                    .iter()
+                    .flat_map(|child| child.aggregate_origins.iter().copied())
+                    .collect::<BTreeSet<_>>();
+                aggregate_origins.insert(origin);
+                let effect_origins = payload
+                    .iter()
+                    .flat_map(|child| child.effect_origins.iter().copied())
+                    .collect();
+                ProducerValue {
+                    constructors: ProducerFact::empty(),
+                    constructor_payloads: Vec::new(),
+                    record_fields,
+                    callables: ProducerCallableSet::Closed(BTreeSet::new()),
+                    referent_owners: ReferentOwnerFact::aggregate(&payload),
+                    aggregate_origins,
+                    effect_origins,
+                    carried,
+                }
             }
             RuntimeExpr::Project { .. } => {
-                let _ = self.eval(child(0)?, env)?;
-                ProducerValue::open(origin)
+                let record = self.eval(child(0)?, env)?;
+                let identity = self.plan.semantic.project_field_identity(origin)?;
+                record
+                    .record_fields
+                    .iter()
+                    .find(|(candidate, _)| *candidate == identity)
+                    .map(|(_, value)| value.clone())
+                    .unwrap_or_else(|| ProducerValue::open(origin))
             }
             RuntimeExpr::Effect {
                 capability, args, ..
             } => {
                 let child_count = args.len() + usize::from(capability.is_some());
+                let mut operands = Vec::with_capacity(child_count);
                 for index in 0..child_count {
-                    let _ = self.eval(child(index)?, env)?;
+                    operands.push(self.eval(child(index)?, env)?.referent_owners);
                 }
-                ProducerValue::open(origin)
+                let key = (origin, self.active_owner);
+                match self.effect_operands.entry(key) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(operands);
+                        self.changed = true;
+                    }
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        if entry.get().len() != operands.len() {
+                            return Err(planner_error(
+                                "effect operand-owner population changed arity",
+                            ));
+                        }
+                        let joined = entry
+                            .get()
+                            .iter()
+                            .zip(&operands)
+                            .map(|(left, right)| left.join(right))
+                            .collect::<Vec<_>>();
+                        if entry.get() != &joined {
+                            entry.insert(joined);
+                            self.changed = true;
+                        }
+                    }
+                }
+                let mut result = ProducerValue::open(origin);
+                result.referent_owners =
+                    ReferentOwnerFact::owner(BoundaryReferentOwner::InvocationArena);
+                result.effect_origins.insert(origin);
+                // Invocation ownership answers how long the result's referent
+                // lives; it does not itself prove that this source occurrence
+                // crosses a generated-unit boundary.  An actual call,
+                // capture, result, or recursor flow marks the value carried.
+                // Conflating the two promotes source-machine control
+                // constructors around an effect into carrier allocations even
+                // when their exact SemanticEliminator consumes them locally.
+                result.carried = false;
+                result
             }
             RuntimeExpr::ImportedDeclarationRef { .. } => ProducerValue::open(origin),
         };
@@ -4787,9 +5301,242 @@ impl ProducerValueForward for ProducerValue {
     }
 }
 
-fn build_case_emission_plan(
+#[derive(Clone)]
+struct SynthesizedAggregateSpec {
+    site: SynthesizedAggregateSite,
+    role: SynthesizedConstructorRole,
+    children: Vec<Vec<BoundaryReferentOwner>>,
+}
+
+fn closed_owner_set(
+    fact: &ReferentOwnerFact,
+    context: &'static str,
+) -> Result<Vec<BoundaryReferentOwner>, CraneliftBackendError> {
+    fact.closed_owners()
+        .ok_or_else(|| planner_error(format!("{context} has no closed referent-owner authority")))
+}
+
+fn synthesized_effect_aggregate_specs(
+    operation: ken_host::HostOpV1,
+    has_capability: bool,
+    operands: &[ReferentOwnerFact],
+    io_error_roles: &[SynthesizedIoErrorRole],
+) -> Result<Vec<SynthesizedAggregateSpec>, CraneliftBackendError> {
+    use ken_host::HostOpV1 as Op;
+    use BoundaryReferentOwner as Owner;
+    use SynthesizedAggregateSite as Site;
+    use SynthesizedConstructorRole as Role;
+    use SynthesizedFixedConstructorRole as Fixed;
+
+    let none = || vec![Owner::NoReferent];
+    let persistent = || vec![Owner::PersistentStore];
+    let invocation = || vec![Owner::InvocationArena];
+    let mut specs = io_error_roles
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(index, role)| {
+            Ok(SynthesizedAggregateSpec {
+                site: Site::IoError(u32::try_from(index).map_err(|_| {
+                    planner_capacity_error("synthesized IOError occurrence ordinal exhausted")
+                })?),
+                role: Role::IoError(role),
+                children: if index + 1 == io_error_roles.len() {
+                    vec![none()]
+                } else {
+                    Vec::new()
+                },
+            })
+        })
+        .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+
+    let fixed = |site, role, children| SynthesizedAggregateSpec {
+        site,
+        role: Role::Fixed(role),
+        children,
+    };
+    if matches!(
+        operation,
+        Op::FsReadFile | Op::FsWriteFile | Op::FsChangeMode | Op::FsOpen
+    ) {
+        let path_position = usize::from(has_capability);
+        let path = operands
+            .get(path_position)
+            .ok_or_else(|| planner_error("file effect has no exact path owner fact"))?;
+        let path = closed_owner_set(path, "file path operand")?;
+        let wrapper_owner = if path.contains(&Owner::InvocationArena) {
+            invocation()
+        } else {
+            persistent()
+        };
+        let operation_role = match operation {
+            Op::FsReadFile | Op::FsOpen => Fixed::FileOperationRead,
+            Op::FsWriteFile => Fixed::FileOperationWrite,
+            Op::FsChangeMode => Fixed::FileOperationChangeMode,
+            _ => unreachable!("guarded file operation"),
+        };
+        specs.extend([
+            fixed(Site::FileOperation, operation_role, Vec::new()),
+            fixed(Site::FilePathSome, Fixed::OptionSome, vec![path]),
+            fixed(
+                Site::FileError,
+                Fixed::FileError,
+                vec![persistent(), wrapper_owner, persistent()],
+            ),
+        ]);
+    } else if matches!(
+        operation,
+        Op::FsHandleMetadata
+            | Op::ResourceRelease
+            | Op::BufferAllocate
+            | Op::BufferFreeze
+            | Op::FsReadAt
+            | Op::FsWriteAt
+    ) {
+        for occurrence in 0..3 {
+            specs.extend([
+                fixed(
+                    Site::ResourceKind(occurrence, 0),
+                    Fixed::ResourceKindFsHandle,
+                    Vec::new(),
+                ),
+                fixed(
+                    Site::ResourceKind(occurrence, 1),
+                    Fixed::ResourceKindBuffer,
+                    Vec::new(),
+                ),
+            ]);
+        }
+        specs.extend([
+            fixed(
+                Site::ResourceTraceIdentity,
+                Fixed::ResourceTraceIdentity,
+                vec![none(), none()],
+            ),
+            fixed(
+                Site::ResourceHostIo,
+                Fixed::ResourceHostIo,
+                vec![persistent()],
+            ),
+            fixed(Site::ResourceClosed, Fixed::ResourceClosed, Vec::new()),
+            fixed(
+                Site::ResourceMalformed,
+                Fixed::ResourceMalformed,
+                Vec::new(),
+            ),
+            fixed(
+                Site::ResourceRightNotHeld,
+                Fixed::ResourceRightNotHeld,
+                vec![none(), none()],
+            ),
+            fixed(
+                Site::ResourceReleaseFailed,
+                Fixed::ResourceReleaseFailed,
+                vec![persistent(), persistent(), persistent()],
+            ),
+            fixed(
+                Site::ResourceKindMismatch,
+                Fixed::ResourceKindMismatch,
+                vec![persistent(), persistent()],
+            ),
+            fixed(
+                Site::ResourceBufferLimit,
+                Fixed::ResourceBufferLimit,
+                Vec::new(),
+            ),
+            fixed(
+                Site::ResourceInvalidOffset,
+                Fixed::ResourceInvalidOffset,
+                Vec::new(),
+            ),
+            fixed(
+                Site::ResourceInvalidBounds,
+                Fixed::ResourceInvalidBounds,
+                Vec::new(),
+            ),
+            fixed(
+                Site::ResourceNoProgress,
+                Fixed::ResourceNoProgress,
+                Vec::new(),
+            ),
+        ]);
+    }
+
+    match operation {
+        Op::FsReadAt => specs.extend([
+            fixed(
+                Site::ReadBufferSpan,
+                Fixed::PrivateBufferSpan,
+                vec![invocation(), none(), none()],
+            ),
+            fixed(
+                Site::ReadTransferCount,
+                Fixed::PrivateTransferCount,
+                vec![none(), none()],
+            ),
+            fixed(Site::ReadEof, Fixed::ReadEof, Vec::new()),
+            fixed(
+                Site::ReadSome,
+                Fixed::ReadSome,
+                vec![invocation(), persistent()],
+            ),
+        ]),
+        Op::FsWriteAt => specs.extend([
+            fixed(
+                Site::WriteTransferCount,
+                Fixed::PrivateTransferCount,
+                vec![none(), none()],
+            ),
+            fixed(Site::Wrote, Fixed::Wrote, vec![persistent()]),
+        ]),
+        Op::FsReadFile
+        | Op::FsOpen
+        | Op::BufferAllocate
+        | Op::BufferFreeze
+        | Op::FsHandleMetadata => {}
+        _ => specs.push(fixed(Site::Unit, Fixed::Unit, Vec::new())),
+    }
+    Ok(specs)
+}
+
+fn build_producer_flow_plans(
     plan: &StaticTransitionPlan<'_>,
-) -> Result<Vec<PlannedCaseEmission>, CraneliftBackendError> {
+) -> Result<
+    (
+        Vec<PlannedCaseEmission>,
+        Vec<PlannedAggregateRepresentation>,
+        Vec<PlannedSynthesizedAggregateRepresentation>,
+    ),
+    CraneliftBackendError,
+> {
+    let mut computational_scrutinee_results = BTreeSet::new();
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        if !matches!(occurrence.expr, RuntimeExpr::ComputationalMatch { .. }) {
+            continue;
+        }
+        let scrutinee = plan.semantic.child_origin(occurrence.static_origin, 0)?;
+        computational_scrutinee_results
+            .extend(plan.source_result_origins_in_owner_subtree(scrutinee)?);
+    }
+    let mut pending = computational_scrutinee_results
+        .iter()
+        .copied()
+        .collect::<Vec<_>>();
+    while let Some(parent) = pending.pop() {
+        for child in plan
+            .operand_edges
+            .iter()
+            .filter(|edge| {
+                edge.parent == parent
+                    && edge.disposition == OperandEdgeDisposition::SemanticEliminator
+            })
+            .map(|edge| edge.child)
+        {
+            if computational_scrutinee_results.insert(child) {
+                pending.push(child);
+            }
+        }
+    }
     let emittable_owners = plan
         .emittable_units()?
         .into_iter()
@@ -4823,6 +5570,9 @@ fn build_case_emission_plan(
         ) {
             for value in &mut environment {
                 *value = ProducerValue::open(descriptor.origin);
+                value.referent_owners =
+                    ReferentOwnerFact::owner(BoundaryReferentOwner::InvocationArena);
+                value.carried = true;
             }
         }
         inputs.insert(descriptor.function, environment);
@@ -4833,13 +5583,14 @@ fn build_case_emission_plan(
             // input-less execution and can derive an unlawful `Closed({})`
             // fact from "no producer observed".
             AbiUnitDefinition::TransparentDeclarationClosure { .. } => continue,
-            AbiUnitDefinition::StaticCallableSpecialization { specialization, .. } => plan
-                .static_callable_specializations
-                .get(specialization.0 as usize)
-                .ok_or_else(|| {
-                    planner_error("producer-flow specialization is outside the plan")
-                })?
-                .base_body_origin,
+            AbiUnitDefinition::StaticCallableSpecialization { specialization, .. } => {
+                plan.static_callable_specializations
+                    .get(specialization.0 as usize)
+                    .ok_or_else(|| {
+                        planner_error("producer-flow specialization is outside the plan")
+                    })?
+                    .base_body_origin
+            }
             AbiUnitDefinition::SchedulingEntry { .. } => {
                 if plan.root_occurrence.is_some_and(|root| {
                     plan.semantic.function_owner(root).ok() == Some(Some(descriptor.function))
@@ -4855,18 +5606,11 @@ fn build_case_emission_plan(
         bodies.push((descriptor.function, body_origin, descriptor.definition));
     }
 
-    let reached_owners = plan
-        .abi
-        .descriptors
-        .iter()
-        .filter(|descriptor| {
-            matches!(
-                descriptor.definition,
-                AbiUnitDefinition::SchedulingEntry { .. }
-            )
-        })
-        .map(|descriptor| descriptor.function)
-        .collect();
+    // Every emittable unit needs complete aggregate occurrence authority
+    // before any unit can be defined. Call reachability still flows through
+    // the producer values themselves; it cannot suppress representation
+    // planning for a separately emitted body.
+    let reached_owners = emittable_owners.clone();
     let mut analysis = ProducerAnalysis {
         plan,
         active_owner: first_owner,
@@ -4876,6 +5620,10 @@ fn build_case_emission_plan(
         computational_scrutinees: BTreeMap::new(),
         computational_results: BTreeMap::new(),
         match_scrutinees: BTreeMap::new(),
+        aggregate_occurrences: BTreeMap::new(),
+        effect_operands: BTreeMap::new(),
+        carried_aggregates: BTreeSet::new(),
+        carried_effects: BTreeSet::new(),
         reached_owners,
         changed: true,
     };
@@ -4893,7 +5641,12 @@ fn build_case_emission_plan(
             }
             analysis.active_owner = owner;
             let environment = analysis.source_environment(owner, definition)?;
-            let value = analysis.eval(body_origin, &environment)?;
+            let mut value = analysis.eval(body_origin, &environment)?;
+            // A separately emittable unit's result is boundary transport even
+            // when no currently reached caller observes it. Representation
+            // planning must therefore cover its aggregate result before that
+            // unit can be defined.
+            analysis.mark_carried(&mut value);
             let result = analysis
                 .results
                 .entry(owner)
@@ -4909,6 +5662,147 @@ fn build_case_emission_plan(
             "constructor producer-flow fixed point did not close monotonically",
         ));
     }
+    let mut aggregate_records = Vec::new();
+    for ((origin, owner), observation) in &analysis.aggregate_occurrences {
+        if !emittable_owners.contains(owner) {
+            continue;
+        }
+        let mut children = Vec::with_capacity(observation.children.len());
+        let mut invocation_owned = false;
+        for (position, (child_origin, owners)) in observation.children.iter().enumerate() {
+            let possible_owners = match owners.closed_owners() {
+                Some(owners) => owners,
+                None if !observation.carried => Vec::new(),
+                None => {
+                    let parent_expr = plan
+                        .source_occurrence(*origin)
+                        .map(|expr| format!("{expr:?}"))
+                        .unwrap_or_else(|_| "<missing>".to_string());
+                    let child_expr = plan
+                        .source_occurrence(*child_origin)
+                        .map(|expr| format!("{expr:?}"))
+                        .unwrap_or_else(|_| "<missing>".to_string());
+                    return Err(planner_error(format!(
+                        "aggregate occurrence has an unrepresented, forbidden, or unclosed \
+                         carried child; owner={owner:?}; origin={origin:?}; position={position}; \
+                         parent={parent_expr}; child={child_expr}"
+                    )));
+                }
+            };
+            invocation_owned |= possible_owners.contains(&BoundaryReferentOwner::InvocationArena);
+            children.push(PlannedAggregateChild {
+                origin: *child_origin,
+                position: u32::try_from(position)
+                    .map_err(|_| planner_capacity_error("aggregate child position exhausted"))?,
+                possible_owners,
+            });
+        }
+        let (selected_owner, selected_tag) = if invocation_owned {
+            (
+                BoundaryReferentOwner::InvocationArena,
+                BoundaryTag::InvocationAggregate,
+            )
+        } else {
+            (
+                BoundaryReferentOwner::PersistentStore,
+                BoundaryTag::PersistentGround,
+            )
+        };
+        let planned_phase = plan
+            .result_phases
+            .get(origin.0 as usize)
+            .and_then(Option::as_ref)
+            .map(|summary| summary.phase)
+            .ok_or_else(|| {
+                planner_error("aggregate occurrence has no exact result-phase authority")
+            })?;
+        let is_carried = observation.carried || analysis.carried_aggregates.contains(origin);
+        let phase = if computational_scrutinee_results.contains(origin)
+            || plan.terminal_exit_aggregate_origins.contains(origin)
+        {
+            // A computational scrutinee is consumed by the source-machine
+            // continuation. Its result-position constructors are semantic
+            // control, not aggregate allocations, even when the enclosing
+            // callable result crosses a unit boundary.
+            ResultPhase::SpecializedOnly
+        } else if is_carried {
+            ResultPhase::CarrierRequired
+        } else {
+            planned_phase
+        };
+        aggregate_records.push(PlannedAggregateRepresentation {
+            origin: *origin,
+            owner: *owner,
+            phase,
+            class: observation.class,
+            identity: observation.identity.clone(),
+            arity: u32::try_from(observation.children.len())
+                .map_err(|_| planner_capacity_error("aggregate arity exhausted"))?,
+            children,
+            selected_owner,
+            selected_tag,
+        });
+    }
+    aggregate_records.sort_by_key(|record| (record.owner, record.origin));
+    let mut synthesized_aggregate_records = Vec::new();
+    for ((effect_origin, owner), operands) in &analysis.effect_operands {
+        if !emittable_owners.contains(owner) {
+            continue;
+        }
+        let occurrence = plan.source_occurrence(*effect_origin)?;
+        let RuntimeExpr::Effect {
+            operation,
+            capability,
+            ..
+        } = occurrence
+        else {
+            return Err(planner_error(
+                "synthesized aggregate authority names a non-effect occurrence",
+            ));
+        };
+        let phase = if analysis.carried_effects.contains(effect_origin) {
+            ResultPhase::CarrierRequired
+        } else {
+            ResultPhase::SpecializedOnly
+        };
+        for spec in synthesized_effect_aggregate_specs(
+            *operation,
+            capability.is_some(),
+            operands,
+            plan.semantic.synthesized_io_error_roles(),
+        )? {
+            let invocation_owned = spec
+                .children
+                .iter()
+                .flatten()
+                .any(|owner| *owner == BoundaryReferentOwner::InvocationArena);
+            let (selected_owner, selected_tag) = if invocation_owned {
+                (
+                    BoundaryReferentOwner::InvocationArena,
+                    BoundaryTag::InvocationAggregate,
+                )
+            } else {
+                (
+                    BoundaryReferentOwner::PersistentStore,
+                    BoundaryTag::PersistentGround,
+                )
+            };
+            synthesized_aggregate_records.push(PlannedSynthesizedAggregateRepresentation {
+                effect_origin: *effect_origin,
+                owner: *owner,
+                phase,
+                site: spec.site,
+                role: spec.role,
+                arity: u32::try_from(spec.children.len())
+                    .map_err(|_| planner_capacity_error("synthesized aggregate arity exhausted"))?,
+                children: spec.children,
+                selected_owner,
+                selected_tag,
+            });
+        }
+    }
+    synthesized_aggregate_records
+        .sort_by_key(|record| (record.owner, record.effect_origin, record.site));
     let mut records = Vec::new();
     for ((match_origin, owner), fact) in analysis.match_scrutinees {
         if !emittable_owners.contains(&owner) {
@@ -4955,7 +5849,7 @@ fn build_case_emission_plan(
         }
     }
     records.sort_by_key(|record| (record.owner, record.match_origin, record.ordinal));
-    Ok(records)
+    Ok((records, aggregate_records, synthesized_aggregate_records))
 }
 
 impl<'src> Planner<'src> {
@@ -4994,6 +5888,11 @@ impl<'src> Planner<'src> {
                 result_phases: Vec::new(),
                 case_emissions: Vec::new(),
                 case_emission_consumption: RefCell::new(BTreeMap::new()),
+                aggregate_representations: Vec::new(),
+                synthesized_aggregate_representations: Vec::new(),
+                terminal_exit_aggregate_origins: BTreeSet::new(),
+                aggregate_representation_consumption: RefCell::new(BTreeMap::new()),
+                synthesized_aggregate_representation_consumption: RefCell::new(BTreeMap::new()),
                 functionized_units: false,
                 operand_edges: Vec::new(),
                 static_callable_specializations: Vec::new(),
@@ -5717,6 +6616,21 @@ impl<'src> Planner<'src> {
         self.plan
             .semantic
             .validate_synthesized_constructor_inventory()?;
+        self.plan.terminal_exit_aggregate_origins = self
+            .plan
+            .source_occurrences
+            .iter()
+            .flatten()
+            .filter_map(|occurrence| match occurrence.expr {
+                RuntimeExpr::Construct { constructor, .. }
+                    if constructor == &symbols.exit_success
+                        || constructor == &symbols.exit_failure =>
+                {
+                    Some(occurrence.static_origin)
+                }
+                _ => None,
+            })
+            .collect();
         // `B2R` — the representation contract is built from the owner partition
         // the line above just validated, and it fails **before** anything is
         // emitted. It is deliberately not deferred to lowering: a contract that
@@ -5757,7 +6671,11 @@ impl<'src> Planner<'src> {
         self.plan.recursor_boundary_uses = build_recursor_boundary_uses(&self.plan)?;
         self.plan.lowering_boundary_uses = build_lowering_boundary_uses(&self.plan)?;
         self.plan.boundary_uses = build_boundary_uses(&self.plan)?;
-        self.plan.case_emissions = build_case_emission_plan(&self.plan)?;
+        let (case_emissions, aggregate_representations, synthesized_aggregate_representations) =
+            build_producer_flow_plans(&self.plan)?;
+        self.plan.case_emissions = case_emissions;
+        self.plan.aggregate_representations = aggregate_representations;
+        self.plan.synthesized_aggregate_representations = synthesized_aggregate_representations;
         #[cfg(test)]
         STATIC_RECURSOR_RESIDUAL_MATRIX_MUTATION.with(|mutation| match mutation.get() {
             StaticRecursorResidualMatrixMutation::Exact => {}
@@ -6505,10 +7423,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 .ok_or_else(|| planner_error("dead static worker body has no function owner"))?;
             let mut worker_pending = vec![*body];
             while let Some(origin) = worker_pending.pop() {
-                if dead_worker_origins
-                    .insert(origin, worker_owner)
-                    .is_some()
-                {
+                if dead_worker_origins.insert(origin, worker_owner).is_some() {
                     continue;
                 }
                 for child in self.semantic.child_origins(origin)?.iter().copied() {
@@ -6533,16 +7448,13 @@ impl<'src> StaticTransitionPlan<'src> {
                         producer_origin, ..
                     } => (*producer_origin, true),
                 };
-                let in_dead_population =
-                    (planned.producer_owner == owner && origins.contains(&origin))
-                        || dead_worker_origins
-                            .get(&origin)
-                            .is_some_and(|worker_owner| {
-                                *worker_owner == planned.producer_owner
-                            });
+                let in_dead_population = (planned.producer_owner == owner
+                    && origins.contains(&origin))
+                    || dead_worker_origins
+                        .get(&origin)
+                        .is_some_and(|worker_owner| *worker_owner == planned.producer_owner);
                 (in_dead_population
-                    && (exact_static_worker
-                        || !consumption.contains_key(&planned.identity)))
+                    && (exact_static_worker || !consumption.contains_key(&planned.identity)))
                 .then_some(planned.identity)
             })
             .collect::<Vec<_>>();
@@ -6682,6 +7594,8 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
     ) -> Result<(), CraneliftBackendError> {
         self.validate_case_emission_consumption()?;
+        self.validate_aggregate_representation_consumption()?;
+        self.validate_synthesized_aggregate_representation_consumption()?;
         let owners = self
             .operand_edges
             .iter()
@@ -6794,9 +7708,7 @@ impl<'src> StaticTransitionPlan<'src> {
         let inactive_arms = self
             .case_emissions
             .iter()
-            .filter(|record| {
-                !emitted_matches.contains(&(record.owner, record.match_origin))
-            })
+            .filter(|record| !emitted_matches.contains(&(record.owner, record.match_origin)))
             .map(|record| BoundaryUseIdentity::Source {
                 parent: record.match_origin,
                 child: record.body_origin,
@@ -6808,14 +7720,86 @@ impl<'src> StaticTransitionPlan<'src> {
                 .operand_edge_consumption
                 .borrow()
                 .contains_key(&identity)
-                || self
-                    .boundary_use_dispositions
-                    .borrow()
-                    .contains(&identity)
+                || self.boundary_use_dispositions.borrow().contains(&identity)
             {
                 continue;
             }
             self.record_boundary_use_disposition(identity)?;
+        }
+        Ok(())
+    }
+
+    fn validate_aggregate_representation_consumption(&self) -> Result<(), CraneliftBackendError> {
+        let expected = self
+            .aggregate_representations
+            .iter()
+            .filter(|record| record.phase == ResultPhase::CarrierRequired)
+            .map(|record| (record.owner, record.origin))
+            .collect::<BTreeSet<_>>();
+        let ledger = self.aggregate_representation_consumption.borrow();
+        let duplicates = ledger
+            .iter()
+            .filter(|(_, count)| **count != 1)
+            .map(|(identity, count)| (*identity, *count))
+            .collect::<Vec<_>>();
+        if !duplicates.is_empty() {
+            return Err(planner_error(format!(
+                "aggregate representation ledger contains duplicate consumption; \
+                 duplicates={duplicates:?}"
+            )));
+        }
+        let actual = ledger.keys().copied().collect::<BTreeSet<_>>();
+        if actual != expected {
+            let missing = expected.difference(&actual).copied().collect::<Vec<_>>();
+            let extra = actual.difference(&expected).copied().collect::<Vec<_>>();
+            let missing_expressions = missing
+                .iter()
+                .map(|(_, origin)| {
+                    (
+                        *origin,
+                        self.source_occurrence(*origin)
+                            .map(|expr| format!("{expr:?}"))
+                            .unwrap_or_else(|_| "<missing>".to_string()),
+                        self.operand_edges
+                            .iter()
+                            .filter(|edge| edge.child == *origin)
+                            .map(|edge| (edge.parent, edge.position, edge.disposition))
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            return Err(planner_error(format!(
+                "aggregate representation ledger is not exact; missing={missing:?}; \
+                 extra={extra:?}; missing_expressions={missing_expressions:?}"
+            )));
+        }
+        Ok(())
+    }
+
+    fn validate_synthesized_aggregate_representation_consumption(
+        &self,
+    ) -> Result<(), CraneliftBackendError> {
+        let expected = self
+            .synthesized_aggregate_representations
+            .iter()
+            .filter(|record| record.phase == ResultPhase::CarrierRequired)
+            .map(|record| SynthesizedAggregateOccurrence {
+                effect_origin: record.effect_origin,
+                owner: record.owner,
+                site: record.site,
+            })
+            .collect::<BTreeSet<_>>();
+        let ledger = self
+            .synthesized_aggregate_representation_consumption
+            .borrow();
+        let actual = ledger.keys().copied().collect::<BTreeSet<_>>();
+        if actual != expected {
+            let missing = expected.difference(&actual).copied().collect::<Vec<_>>();
+            let extra = actual.difference(&expected).copied().collect::<Vec<_>>();
+            return Err(planner_error(format!(
+                "synthesized aggregate ledger is not exact; missing={missing:?}; \
+                 extra={extra:?}"
+            )));
         }
         Ok(())
     }
@@ -7676,6 +8660,155 @@ impl<'src> StaticTransitionPlan<'src> {
         })
     }
 
+    pub(in crate::cranelift_backend) fn aggregate_representation_token(
+        &self,
+        origin: StaticOriginId,
+        class: BoundaryClass,
+        arity: usize,
+    ) -> Result<AggregateRepresentationToken, CraneliftBackendError> {
+        let owner = self
+            .semantic
+            .function_owner(origin)?
+            .ok_or_else(|| planner_error("aggregate occurrence has no function owner"))?;
+        let arity = u32::try_from(arity)
+            .map_err(|_| planner_capacity_error("aggregate arity exhausted"))?;
+        let record = self
+            .aggregate_representations
+            .iter()
+            .find(|record| record.owner == owner && record.origin == origin)
+            .ok_or_else(|| {
+                let expression = self
+                    .source_occurrence(origin)
+                    .map(|expr| format!("{expr:?}"))
+                    .unwrap_or_else(|_| "<missing>".to_string());
+                let candidates = self
+                    .aggregate_representations
+                    .iter()
+                    .filter(|record| record.origin == origin)
+                    .map(|record| record.owner)
+                    .collect::<Vec<_>>();
+                planner_error(format!(
+                    "aggregate allocation has no exact representation record; \
+                     owner={owner:?}; origin={origin:?}; class={class:?}; arity={arity}; \
+                     candidates={candidates:?}; expression={expression}"
+                ))
+            })?;
+        if record.class != class
+            || record.arity != arity
+            || record.phase != ResultPhase::CarrierRequired
+            || record.children.iter().enumerate().any(|(position, child)| {
+                child.position != u32::try_from(position).unwrap_or(u32::MAX)
+                    || self.semantic.child_origin(origin, position).ok() != Some(child.origin)
+            })
+        {
+            let expression = self
+                .source_occurrence(origin)
+                .map(|expr| format!("{expr:?}"))
+                .unwrap_or_else(|_| "<missing>".to_string());
+            return Err(planner_error(format!(
+                "aggregate representation record disagrees with its exact source occurrence; \
+                 requested_class={class:?}; requested_arity={arity}; record={record:?}; \
+                 expression={expression}"
+            )));
+        }
+        let key = (owner, origin);
+        let mut ledger = self.aggregate_representation_consumption.borrow_mut();
+        let count = ledger.entry(key).or_insert(0);
+        *count = count
+            .checked_add(1)
+            .ok_or_else(|| planner_capacity_error("aggregate representation ledger exhausted"))?;
+        Ok(AggregateRepresentationToken {
+            tag: record.selected_tag,
+            class: record.class,
+        })
+    }
+
+    pub(in crate::cranelift_backend) fn synthesized_aggregate_occurrence(
+        &self,
+        effect_origin: StaticOriginId,
+        site: SynthesizedAggregateSite,
+        role: SynthesizedConstructorRole,
+        arity: usize,
+    ) -> Result<SynthesizedAggregateOccurrence, CraneliftBackendError> {
+        let owner = self
+            .semantic
+            .function_owner(effect_origin)?
+            .ok_or_else(|| planner_error("synthesized aggregate has no function owner"))?;
+        let arity = u32::try_from(arity)
+            .map_err(|_| planner_capacity_error("synthesized aggregate arity exhausted"))?;
+        let record = self
+            .synthesized_aggregate_representations
+            .iter()
+            .find(|record| {
+                record.owner == owner
+                    && record.effect_origin == effect_origin
+                    && record.site == site
+            })
+            .ok_or_else(|| {
+                let candidates = self
+                    .synthesized_aggregate_representations
+                    .iter()
+                    .filter(|record| record.effect_origin == effect_origin && record.site == site)
+                    .map(|record| (record.owner, record.phase, record.role, record.arity))
+                    .collect::<Vec<_>>();
+                planner_error(format!(
+                    "compiler-synthesized aggregate has no exact planned occurrence; \
+                     owner={owner:?}; effect={effect_origin:?}; site={site:?}; \
+                     role={role:?}; arity={arity}; candidates={candidates:?}"
+                ))
+            })?;
+        if record.role != role || record.arity != arity || record.children.len() != arity as usize {
+            return Err(planner_error(
+                "compiler-synthesized aggregate request disagrees with its planned occurrence",
+            ));
+        }
+        Ok(SynthesizedAggregateOccurrence {
+            effect_origin,
+            owner,
+            site,
+        })
+    }
+
+    pub(in crate::cranelift_backend) fn synthesized_aggregate_representation_token(
+        &self,
+        occurrence: SynthesizedAggregateOccurrence,
+        class: BoundaryClass,
+        arity: usize,
+    ) -> Result<AggregateRepresentationToken, CraneliftBackendError> {
+        let arity = u32::try_from(arity)
+            .map_err(|_| planner_capacity_error("synthesized aggregate arity exhausted"))?;
+        let record = self
+            .synthesized_aggregate_representations
+            .iter()
+            .find(|record| {
+                record.owner == occurrence.owner
+                    && record.effect_origin == occurrence.effect_origin
+                    && record.site == occurrence.site
+            })
+            .ok_or_else(|| {
+                planner_error("compiler-synthesized aggregate token names no planned occurrence")
+            })?;
+        if class != BoundaryClass::Constructor
+            || record.arity != arity
+            || record.phase != ResultPhase::CarrierRequired
+        {
+            return Err(planner_error(
+                "compiler-synthesized aggregate allocation disagrees with its planned record",
+            ));
+        }
+        let mut ledger = self
+            .synthesized_aggregate_representation_consumption
+            .borrow_mut();
+        let count = ledger.entry(occurrence).or_insert(0);
+        *count = count.checked_add(1).ok_or_else(|| {
+            planner_capacity_error("synthesized aggregate representation ledger exhausted")
+        })?;
+        Ok(AggregateRepresentationToken {
+            tag: record.selected_tag,
+            class,
+        })
+    }
+
     /// The artifact-static constructor identity of a `Construct` occurrence —
     /// the producer side of [`Self::case_constructor_identity`] (`D2`).
     pub(in crate::cranelift_backend) fn constructor_symbol_identity(
@@ -7712,17 +8845,11 @@ impl<'src> StaticTransitionPlan<'src> {
             "::Stdout" => SynthesizedFixedConstructorRole::EffectConsoleStdout,
             "::Stderr" => SynthesizedFixedConstructorRole::EffectConsoleStderr,
             "::CreateNew" => SynthesizedFixedConstructorRole::EffectCreateNew,
-            "::CreateOrTruncate" => {
-                SynthesizedFixedConstructorRole::EffectCreateOrTruncate
-            }
+            "::CreateOrTruncate" => SynthesizedFixedConstructorRole::EffectCreateOrTruncate,
             "::CreateOrKeep" => SynthesizedFixedConstructorRole::EffectCreateOrKeep,
             "::ResourceRead" => SynthesizedFixedConstructorRole::EffectResourceRead,
-            "::ResourceMetadata" => {
-                SynthesizedFixedConstructorRole::EffectResourceMetadata
-            }
-            "::ResourceWriteCreate" => {
-                SynthesizedFixedConstructorRole::EffectResourceWriteCreate
-            }
+            "::ResourceMetadata" => SynthesizedFixedConstructorRole::EffectResourceMetadata,
+            "::ResourceWriteCreate" => SynthesizedFixedConstructorRole::EffectResourceWriteCreate,
             _ => {
                 return Err(planner_error(format!(
                     "effect constructor identity ending in {suffix:?} is absent"
@@ -8320,7 +9447,7 @@ impl<'src> StaticTransitionPlan<'src> {
         if self.entries.is_empty() {
             return Err(planner_error("closed graph has no entry"));
         }
-        self.validate_case_emissions()?;
+        self.validate_producer_flow_plans()?;
         self.validate_operand_edge_matrix()?;
         self.validate_static_recursor_worker_residuals()?;
         self.validate_recursor_boundary_uses()?;
@@ -8540,11 +9667,23 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(())
     }
 
-    fn validate_case_emissions(&self) -> Result<(), CraneliftBackendError> {
-        let expected = build_case_emission_plan(self)?;
-        if self.case_emissions != expected {
+    fn validate_producer_flow_plans(&self) -> Result<(), CraneliftBackendError> {
+        let (expected_cases, expected_aggregates, expected_synthesized_aggregates) =
+            build_producer_flow_plans(self)?;
+        if self.case_emissions != expected_cases {
             return Err(planner_error(
                 "case-emission partition is not the exact producer-flow derivation",
+            ));
+        }
+        if self.aggregate_representations != expected_aggregates {
+            return Err(planner_error(
+                "aggregate representation plan is not the exact producer-flow derivation",
+            ));
+        }
+        if self.synthesized_aggregate_representations != expected_synthesized_aggregates {
+            return Err(planner_error(
+                "synthesized aggregate representation plan is not the exact effect-schema \
+                 derivation",
             ));
         }
         let mut keys = BTreeSet::new();
@@ -8555,7 +9694,58 @@ impl<'src> StaticTransitionPlan<'src> {
                 ));
             }
         }
+        let mut aggregate_keys = BTreeSet::new();
+        for record in &self.aggregate_representations {
+            if !aggregate_keys.insert((record.owner, record.origin)) {
+                return Err(planner_error(
+                    "aggregate representation plan contains a duplicate occurrence",
+                ));
+            }
+            if record.selected_tag.referent_owner() != record.selected_owner
+                || !matches!(
+                    (record.selected_tag, record.class),
+                    (
+                        BoundaryTag::PersistentGround,
+                        BoundaryClass::Constructor | BoundaryClass::Record
+                    ) | (
+                        BoundaryTag::InvocationAggregate,
+                        BoundaryClass::Constructor | BoundaryClass::Record
+                    )
+                )
+            {
+                return Err(planner_error(
+                    "aggregate representation selected an unlawful tag, class, or owner",
+                ));
+            }
+        }
+        let mut synthesized_keys = BTreeSet::new();
+        for record in &self.synthesized_aggregate_representations {
+            if !synthesized_keys.insert((record.owner, record.effect_origin, record.site)) {
+                return Err(planner_error(
+                    "synthesized aggregate plan contains a duplicate occurrence",
+                ));
+            }
+            if !matches!(
+                record.phase,
+                ResultPhase::SpecializedOnly | ResultPhase::CarrierRequired
+            ) || record.selected_tag.referent_owner() != record.selected_owner
+                || !matches!(
+                    (record.selected_tag, BoundaryClass::Constructor),
+                    (BoundaryTag::PersistentGround, BoundaryClass::Constructor)
+                        | (BoundaryTag::InvocationAggregate, BoundaryClass::Constructor)
+                )
+            {
+                return Err(planner_error(
+                    "synthesized aggregate record selects an unrepresented row",
+                ));
+            }
+        }
         Ok(())
+    }
+
+    #[cfg(test)]
+    fn validate_case_emissions(&self) -> Result<(), CraneliftBackendError> {
+        self.validate_producer_flow_plans()
     }
 
     fn validate_static_callable_specializations(&self) -> Result<(), CraneliftBackendError> {
@@ -10760,6 +11950,8 @@ mod tests {
             .expect("the fixture has a root occurrence");
         plan.operand_edge_token(root, 0, SourceOperandRole::ConstructArgument)
             .expect("the independent source authority is consumed");
+        plan.aggregate_representation_token(root, BoundaryClass::Constructor, 1)
+            .expect("the independent aggregate authority is consumed");
         let synthesized = *plan
             .lowering_boundary_uses
             .iter()
@@ -16489,6 +17681,260 @@ mod tests {
         );
     }
 
+    fn d7_aggregate_identity_declaration(symbol: &str) -> RuntimeDeclaration {
+        RuntimeDeclaration {
+            symbol: symbol.to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["value".to_string()],
+                    body: Box::new(RuntimeExpr::Var(0)),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        }
+    }
+
+    fn d7_aggregate_identity_call(symbol: &str, value: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: symbol.to_string(),
+            }),
+            args: vec![value],
+        }
+    }
+
+    fn d7_invocation_value() -> RuntimeExpr {
+        RuntimeExpr::Effect {
+            family: "Buffer".to_string(),
+            operation: ken_host::HostOpV1::BufferAllocate,
+            capability: None,
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+        }
+    }
+
+    fn d7_boxed_value(constructor: &str, value: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::Construct {
+            constructor: constructor.to_string(),
+            args: vec![value],
+        }
+    }
+
+    fn d7_single_field_record(value: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::Record {
+            fields: vec![("field:fixture::value".to_string(), value)],
+        }
+    }
+
+    /// Promise class: durable invariant.
+    ///
+    /// MEASURED: two occurrences with the same constructor identity and arity,
+    /// and two records with the same field identity and arity, select different
+    /// representation owners solely from their exact child occurrence facts.
+    /// CLAIMED: aggregate spelling and shape are not referent-lifetime
+    /// authority.
+    /// THE GAP: emitted semantic parity is covered by the carrier tests; this
+    /// pin measures the pre-definition planner decision.
+    #[test]
+    fn d7_aggregate_owner_is_keyed_by_occurrence_not_nominal_shape() {
+        let symbol = "decl:fixture::d7-aggregate-identity";
+        let declaration = d7_aggregate_identity_declaration(symbol);
+        let entry = RuntimeExpr::Construct {
+            constructor: "ctor:fixture::AggregatePair".to_string(),
+            args: vec![
+                d7_aggregate_identity_call(
+                    symbol,
+                    d7_boxed_value(
+                        "ctor:fixture::SameBox",
+                        RuntimeExpr::Value(RuntimeValue::Bool(true)),
+                    ),
+                ),
+                d7_aggregate_identity_call(
+                    symbol,
+                    d7_boxed_value("ctor:fixture::SameBox", d7_invocation_value()),
+                ),
+                d7_aggregate_identity_call(
+                    symbol,
+                    d7_single_field_record(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                ),
+                d7_aggregate_identity_call(symbol, d7_single_field_record(d7_invocation_value())),
+            ],
+        };
+        let declarations = BTreeMap::from([(symbol, &declaration)]);
+        let plan = d7_functionized_plan(&entry, &declarations)
+            .expect("same-shape aggregate owner pair plans");
+
+        let constructor_identity = plan
+            .aggregate_representations
+            .iter()
+            .find_map(|record| match record.identity {
+                AggregateIdentity::Constructor(identity)
+                    if record.arity == 1 && record.phase == ResultPhase::CarrierRequired =>
+                {
+                    Some(identity)
+                }
+                _ => None,
+            })
+            .expect("fixture has one carried unary constructor identity");
+        let constructor_pair = plan
+            .aggregate_representations
+            .iter()
+            .filter(|record| {
+                record.identity == AggregateIdentity::Constructor(constructor_identity)
+                    && record.arity == 1
+                    && record.phase == ResultPhase::CarrierRequired
+            })
+            .map(|record| (record.selected_owner, record.selected_tag))
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            constructor_pair,
+            BTreeSet::from([
+                (
+                    BoundaryReferentOwner::PersistentStore,
+                    BoundaryTag::PersistentGround,
+                ),
+                (
+                    BoundaryReferentOwner::InvocationArena,
+                    BoundaryTag::InvocationAggregate,
+                ),
+            ]),
+            "same constructor identity/arity collapsed to one lifetime"
+        );
+
+        let record_pair = plan
+            .aggregate_representations
+            .iter()
+            .filter(|record| {
+                record.class == BoundaryClass::Record
+                    && record.arity == 1
+                    && record.phase == ResultPhase::CarrierRequired
+            })
+            .map(|record| (record.selected_owner, record.selected_tag))
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            record_pair,
+            BTreeSet::from([
+                (
+                    BoundaryReferentOwner::PersistentStore,
+                    BoundaryTag::PersistentGround,
+                ),
+                (
+                    BoundaryReferentOwner::InvocationArena,
+                    BoundaryTag::InvocationAggregate,
+                ),
+            ]),
+            "same record identity/arity collapsed to one lifetime"
+        );
+    }
+
+    /// Promise class: durable invariant.
+    ///
+    /// MEASURED: an invocation child below mixed Constructor/Record depth two
+    /// makes every ancestor invocation-owned, while an all-durable twin stays
+    /// persistent; a runtime alternative conservatively selects invocation.
+    /// CLAIMED: ownership is the transitive lifetime meet over every possible
+    /// child, not a direct-child or first-arm walk.
+    /// THE GAP: cross-invocation replay is a boundary-store property covered by
+    /// the arena lifecycle controls rather than this producer-flow pin.
+    #[test]
+    fn d7_aggregate_owner_meet_is_transitive_and_joins_all_alternatives() {
+        let symbol = "decl:fixture::d7-aggregate-transitive";
+        let declaration = d7_aggregate_identity_declaration(symbol);
+        let nested = |leaf| {
+            d7_boxed_value(
+                "ctor:fixture::Outer",
+                d7_single_field_record(d7_boxed_value("ctor:fixture::Inner", leaf)),
+            )
+        };
+        let alternative = RuntimeExpr::If {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            then_expr: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            else_expr: Box::new(d7_invocation_value()),
+        };
+        let entry = RuntimeExpr::Construct {
+            constructor: "ctor:fixture::AggregateTriple".to_string(),
+            args: vec![
+                d7_aggregate_identity_call(
+                    symbol,
+                    nested(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                ),
+                d7_aggregate_identity_call(symbol, nested(d7_invocation_value())),
+                d7_aggregate_identity_call(
+                    symbol,
+                    d7_boxed_value("ctor:fixture::AlternativeBox", alternative),
+                ),
+            ],
+        };
+        let declarations = BTreeMap::from([(symbol, &declaration)]);
+        let plan = d7_functionized_plan(&entry, &declarations)
+            .expect("transitive aggregate owner meet plans");
+
+        let outer_records = plan
+            .aggregate_representations
+            .iter()
+            .filter(|record| {
+                matches!(record.identity, AggregateIdentity::Constructor(_))
+                    && record.arity == 1
+                    && record.phase == ResultPhase::CarrierRequired
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            outer_records.iter().any(|record| {
+                record.selected_tag == BoundaryTag::PersistentGround
+                    && record.selected_owner == BoundaryReferentOwner::PersistentStore
+            }),
+            "all-durable transitive twin did not remain persistent"
+        );
+        assert!(
+            outer_records
+                .iter()
+                .filter(|record| {
+                    record.selected_tag == BoundaryTag::InvocationAggregate
+                        && record.selected_owner == BoundaryReferentOwner::InvocationArena
+                })
+                .count()
+                >= 2,
+            "depth-two or durable/invocation alternative lost invocation ownership"
+        );
+
+        let exact = plan.aggregate_representations.clone();
+        let invocation_index = exact
+            .iter()
+            .position(|record| record.selected_tag == BoundaryTag::InvocationAggregate)
+            .expect("fixture has an invocation aggregate");
+        let reject = |name: &str, mutate: &dyn Fn(&mut PlannedAggregateRepresentation)| {
+            let mut changed = plan.clone();
+            mutate(&mut changed.aggregate_representations[invocation_index]);
+            assert_ne!(
+                changed.aggregate_representations, exact,
+                "{name} was vacuous"
+            );
+            assert_eq!(
+                changed.validate_producer_flow_plans().unwrap_err(),
+                planner_error(
+                    "aggregate representation plan is not the exact producer-flow derivation"
+                ),
+                "{name} survived the pre-definition exact derivation"
+            );
+        };
+        reject("wrong selected tag", &|record| {
+            record.selected_tag = BoundaryTag::PersistentGround
+        });
+        reject("wrong owner", &|record| {
+            record.selected_owner = BoundaryReferentOwner::PersistentStore
+        });
+        reject("wrong phase", &|record| {
+            record.phase = ResultPhase::SpecializedOnly
+        });
+        reject("wrong arity", &|record| record.arity += 1);
+        reject("missing child", &|record| {
+            record.children.pop();
+        });
+        reject("stale child provenance", &|record| {
+            record.children[0].possible_owners = vec![BoundaryReferentOwner::PersistentStore];
+        });
+    }
+
     #[test]
     fn d8_trap_predecessors_do_not_create_a_result_edge() {
         let mixed = d8_mixed_join(false);
@@ -16594,10 +18040,8 @@ mod tests {
     fn d7_case_partition_records<'plan>(
         plan: &'plan StaticTransitionPlan<'_>,
     ) -> Vec<&'plan PlannedCaseEmission> {
-        let mut grouped = BTreeMap::<
-            (PredeclaredFunctionId, StaticOriginId),
-            Vec<&PlannedCaseEmission>,
-        >::new();
+        let mut grouped =
+            BTreeMap::<(PredeclaredFunctionId, StaticOriginId), Vec<&PlannedCaseEmission>>::new();
         for record in &plan.case_emissions {
             grouped
                 .entry((record.owner, record.match_origin))
@@ -16717,13 +18161,11 @@ mod tests {
                 .all(|record| record.status == CaseEmissionStatus::Reachable),
             "Open unlawfully eliminated a source case"
         );
-        assert!(
-            records[0]
-                .authority
-                .flow
-                .iter()
-                .any(|edge| edge.kind == ProducerFlowKind::OpaqueIngress)
-        );
+        assert!(records[0]
+            .authority
+            .flow
+            .iter()
+            .any(|edge| edge.kind == ProducerFlowKind::OpaqueIngress));
     }
 
     /// Promise class: durable invariant.
@@ -16739,8 +18181,7 @@ mod tests {
         let declaration = d7_case_partition_declaration(symbol, d7_case_partition_cases());
         let entry = d7_case_partition_call(symbol, d7_case_constructor("Append"));
         let declarations = BTreeMap::from([(symbol, &declaration)]);
-        let plan =
-            d7_functionized_plan(&entry, &declarations).expect("unavailable producer plans");
+        let plan = d7_functionized_plan(&entry, &declarations).expect("unavailable producer plans");
         let records = d7_case_partition_records(&plan);
         assert_eq!(
             records
@@ -16773,10 +18214,8 @@ mod tests {
     fn d7_case_emission_is_keyed_by_exact_match_occurrence() {
         let left_symbol = "decl:fixture::d7-case-left";
         let right_symbol = "decl:fixture::d7-case-right";
-        let left =
-            d7_case_partition_declaration(left_symbol, d7_case_partition_cases());
-        let right =
-            d7_case_partition_declaration(right_symbol, d7_case_partition_cases());
+        let left = d7_case_partition_declaration(left_symbol, d7_case_partition_cases());
+        let right = d7_case_partition_declaration(right_symbol, d7_case_partition_cases());
         let entry = RuntimeExpr::Construct {
             constructor: "ctor:fixture::Pair".to_string(),
             args: vec![
@@ -16784,15 +18223,10 @@ mod tests {
                 d7_case_partition_call(right_symbol, d7_case_constructor("B")),
             ],
         };
-        let declarations = BTreeMap::from([
-            (left_symbol, &left),
-            (right_symbol, &right),
-        ]);
+        let declarations = BTreeMap::from([(left_symbol, &left), (right_symbol, &right)]);
         let plan = d7_functionized_plan(&entry, &declarations).expect("two matches plan");
-        let mut groups = BTreeMap::<
-            (PredeclaredFunctionId, StaticOriginId),
-            Vec<CaseEmissionStatus>,
-        >::new();
+        let mut groups =
+            BTreeMap::<(PredeclaredFunctionId, StaticOriginId), Vec<CaseEmissionStatus>>::new();
         for record in &plan.case_emissions {
             groups
                 .entry((record.owner, record.match_origin))
@@ -16866,9 +18300,7 @@ mod tests {
             ),
             (
                 "ordinal",
-                Box::new(|record: &mut PlannedCaseEmission| {
-                    record.ordinal = u32::MAX
-                }),
+                Box::new(|record: &mut PlannedCaseEmission| record.ordinal = u32::MAX),
             ),
             (
                 "constructor",
@@ -16890,9 +18322,7 @@ mod tests {
             ),
             (
                 "provenance",
-                Box::new(|record: &mut PlannedCaseEmission| {
-                    record.authority.flow.clear()
-                }),
+                Box::new(|record: &mut PlannedCaseEmission| record.authority.flow.clear()),
             ),
             (
                 "false-elimination",
@@ -16966,8 +18396,7 @@ mod tests {
         let declaration = d7_case_partition_declaration(symbol, cases);
         let entry = d7_case_partition_call(symbol, d7_case_constructor("A"));
         let declarations = BTreeMap::from([(symbol, &declaration)]);
-        let plan =
-            d7_functionized_plan(&entry, &declarations).expect("nested dead case plans");
+        let plan = d7_functionized_plan(&entry, &declarations).expect("nested dead case plans");
         let records = d7_case_partition_records(&plan);
         let eliminated = records[1];
         assert_eq!(eliminated.status, CaseEmissionStatus::Eliminated);
@@ -17011,9 +18440,7 @@ mod tests {
                         && matches!(
                             planned.path,
                             PlannedBoundaryUsePath::Source {
-                                effect_operation: Some(
-                                    ken_host::HostOpV1::BufferAllocate
-                                ),
+                                effect_operation: Some(ken_host::HostOpV1::BufferAllocate),
                                 ..
                             }
                         )
@@ -17024,7 +18451,10 @@ mod tests {
         let joins = plan
             .source_join_origins_in_owner_subtree(root)
             .expect("dead subtree join population closes");
-        assert!(!joins.is_empty(), "the eliminated subtree has no planned join");
+        assert!(
+            !joins.is_empty(),
+            "the eliminated subtree has no planned join"
+        );
 
         plan.disposition_boundary_uses_in_owner_subtree(root)
             .expect("the eliminated subtree dispositions causally");

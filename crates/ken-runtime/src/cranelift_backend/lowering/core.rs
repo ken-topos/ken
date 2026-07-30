@@ -1731,10 +1731,11 @@ impl<'a> Lowering<'a> {
                         .collect::<Result<Vec<_>, _>>()?;
                     return Ok(LoweringOperand::Specialized(Lowered::Constructor {
                         constructor: constructor.clone(),
-                        synthesized_identity: Some(
+                        aggregate_origin: Some(static_origin),
+                        synthesized_identity: Some(ConstructorIdentityV1::Source(
                             self.static_transition_plan
                                 .constructor_symbol_identity(static_origin)?,
-                        ),
+                        )),
                         args: self.specialized_source_env_at(
                             &lowered_args,
                             static_origin,
@@ -1988,15 +1989,16 @@ impl<'a> Lowering<'a> {
                 }
                 let produced = LoweringOperand::Specialized(Lowered::Constructor {
                     constructor: constructor.clone(),
+                    aggregate_origin: Some(static_origin),
                     // Carry the plan's already-resolved source identity with
                     // the template.  A later unit boundary may receive this
                     // result after nested producer traversal, where the caller
                     // occurrence is not the constructor occurrence and
                     // therefore cannot lawfully re-query its atom.
-                    synthesized_identity: Some(
+                    synthesized_identity: Some(ConstructorIdentityV1::Source(
                         self.static_transition_plan
                             .constructor_symbol_identity(static_origin)?,
-                    ),
+                    )),
                     args: self.specialized_source_env_at(
                         &lowered_args,
                         static_origin,
@@ -2148,9 +2150,7 @@ impl<'a> Lowering<'a> {
                                 1 + index,
                                 SourceOperandRole::MatchArm,
                             )?;
-                            if arm_edge.disposition()
-                                != OperandEdgeDisposition::Forwarding
-                            {
+                            if arm_edge.disposition() != OperandEdgeDisposition::Forwarding {
                                 return Err(backend(BackendFailure::PlannerInvariant(
                                     "dynamic producer HostResult arm lost its forwarding \
                                      disposition"
@@ -2828,6 +2828,7 @@ impl<'a> Lowering<'a> {
         }
         let Lowered::Constructor {
             constructor,
+            aggregate_origin,
             synthesized_identity,
             args,
         } = scrutinee
@@ -2839,6 +2840,7 @@ impl<'a> Lowering<'a> {
         };
         let retained_scrutinee = Lowered::Constructor {
             constructor: constructor.clone(),
+            aggregate_origin,
             synthesized_identity,
             args: args.clone(),
         };
@@ -3423,10 +3425,11 @@ impl<'a> Lowering<'a> {
         }
         let outer_scrutinee = Lowered::Constructor {
             constructor: deferred.constructor.to_string(),
-            synthesized_identity: Some(
+            aggregate_origin: Some(deferred.construct_origin),
+            synthesized_identity: Some(ConstructorIdentityV1::Source(
                 self.static_transition_plan
                     .constructor_symbol_identity(deferred.construct_origin)?,
-            ),
+            )),
             args: constructor_args.clone(),
         };
         let outer_tail = match self.materialize_eliminator_frame_env(
@@ -5230,8 +5233,7 @@ impl<'a> Lowering<'a> {
                 .unwrap_or_default();
             let mut arm_env = env_with(arm_env, &[]);
             arm_env.extend_from_slice(env);
-            let edge =
-                self.mint_source_predecessor(target.clone(), case_body.static_origin);
+            let edge = self.mint_source_predecessor(target.clone(), case_body.static_origin);
             let continuation =
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let branch_control = SourceControl {
@@ -5529,21 +5531,16 @@ impl<'a> Lowering<'a> {
                 )
             })?;
             for (index, _) in [ok_case, err_case] {
-                let token = self.static_transition_plan.case_emission_token(
-                    owner,
-                    static_origin,
-                    index,
-                )?;
+                let token =
+                    self.static_transition_plan
+                        .case_emission_token(owner, static_origin, index)?;
                 if !token.is_reachable() {
                     return Err(backend_module(
                         "HostResult runtime selection targets a planner-eliminated case"
                             .to_string(),
                     ));
                 }
-                self.disposition_statically_unselected_match_cases(
-                    static_origin,
-                    Some(index),
-                )?;
+                self.disposition_statically_unselected_match_cases(static_origin, Some(index))?;
             }
             let ok_block = builder.create_block();
             builder.append_block_param(ok_block, types::I64);
@@ -5609,13 +5606,9 @@ impl<'a> Lowering<'a> {
                 let payload = CarriedBoundaryWord {
                     word: builder.block_params(block)[0],
                 };
-                let body = self.owned_case_body_occurrence(
-                    static_origin,
-                    index,
-                    case.body.clone(),
-                )?;
-                let edge =
-                    self.mint_source_predecessor(target.clone(), body.static_origin);
+                let body =
+                    self.owned_case_body_occurrence(static_origin, index, case.body.clone())?;
+                let edge = self.mint_source_predecessor(target.clone(), body.static_origin);
                 let continuation =
                     Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
                 let branch_control = SourceControl {
@@ -5632,11 +5625,7 @@ impl<'a> Lowering<'a> {
                     env_with_operands([LoweringOperand::Carried(payload)], env),
                     branch_control,
                 )?;
-                self.require_source_branch_sealed(
-                    builder,
-                    &lowered,
-                    "carried Result predecessor",
-                )?;
+                self.require_source_branch_sealed(builder, &lowered, "carried Result predecessor")?;
             }
         } else {
             let tag = self.emit_carrier_tag(builder, scrutinee)?;
@@ -5647,18 +5636,13 @@ impl<'a> Lowering<'a> {
                 )
             })?;
             for (index, case) in cases.iter().enumerate() {
-                let token = self.static_transition_plan.case_emission_token(
-                    owner,
-                    static_origin,
-                    index,
-                )?;
+                let token =
+                    self.static_transition_plan
+                        .case_emission_token(owner, static_origin, index)?;
                 if !token.is_reachable() {
                     continue;
                 }
-                self.disposition_statically_unselected_match_cases(
-                    static_origin,
-                    Some(index),
-                )?;
+                self.disposition_statically_unselected_match_cases(static_origin, Some(index))?;
                 let identity = self
                     .static_transition_plan
                     .case_constructor_identity(static_origin, index)?
@@ -5686,13 +5670,9 @@ impl<'a> Lowering<'a> {
                         self.emit_carrier_field(builder, scrutinee, position)?,
                     ));
                 }
-                let body = self.owned_case_body_occurrence(
-                    static_origin,
-                    index,
-                    case.body.clone(),
-                )?;
-                let edge =
-                    self.mint_source_predecessor(target.clone(), body.static_origin);
+                let body =
+                    self.owned_case_body_occurrence(static_origin, index, case.body.clone())?;
+                let edge = self.mint_source_predecessor(target.clone(), body.static_origin);
                 let continuation =
                     Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
                 let branch_control = SourceControl {
@@ -6013,8 +5993,7 @@ impl<'a> Lowering<'a> {
                 };
             let body =
                 self.owned_case_body_occurrence(static_origin, case_index, case.body.clone())?;
-            let edge =
-                self.mint_source_predecessor(target.clone(), body.static_origin);
+            let edge = self.mint_source_predecessor(target.clone(), body.static_origin);
             let continuation =
                 Self::instantiate_source_prefix_template(&fanout.source_prefix_template, edge)?;
             let control = SourceControl {
@@ -6127,8 +6106,7 @@ impl<'a> Lowering<'a> {
                 };
             let body =
                 self.owned_case_body_occurrence(static_origin, case_index, case.body.clone())?;
-            let edge =
-                self.mint_source_predecessor(target.clone(), body.static_origin);
+            let edge = self.mint_source_predecessor(target.clone(), body.static_origin);
             let continuation =
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let control = SourceControl {
@@ -6837,11 +6815,7 @@ impl<'a> Lowering<'a> {
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
         let edge = self
             .static_transition_plan
-            .reached_lowering_boundary_use_token(
-            LoweringOnlyOperandEdge::JoinArm,
-            origin,
-            0,
-        )?;
+            .reached_lowering_boundary_use_token(LoweringOnlyOperandEdge::JoinArm, origin, 0)?;
         match lowered {
             LoweringOperand::Carried(word) => {
                 #[cfg(test)]
@@ -6997,6 +6971,11 @@ impl<'a> Lowering<'a> {
                 return self.transfer_carried_failure_exit_status(builder, *code);
             }
         }
+        let representation = self.static_transition_plan.aggregate_representation_token(
+            origin,
+            BoundaryClass::Constructor,
+            args.len(),
+        )?;
         // Preflight the complete child graph before allocating either a child
         // environment or the parent constructor. An exact recursive-position
         // closure is the sole exception to whole-closure transfer: its planner
@@ -7081,8 +7060,8 @@ impl<'a> Lowering<'a> {
             .tag_abi_word()?;
         let word = self.emit_carrier_alloc(
             builder,
-            BoundaryTag::PersistentGround,
-            BoundaryClass::Constructor,
+            representation.tag(),
+            representation.class(),
             args.len(),
         )?;
         self.emit_carrier_store_tag_id(builder, word, identity)?;
@@ -7100,10 +7079,15 @@ impl<'a> Lowering<'a> {
         origin: StaticOriginId,
         fields: &[(String, LoweringOperand)],
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let representation = self.static_transition_plan.aggregate_representation_token(
+            origin,
+            BoundaryClass::Record,
+            fields.len(),
+        )?;
         let word = self.emit_carrier_alloc(
             builder,
-            BoundaryTag::PersistentGround,
-            BoundaryClass::Record,
+            representation.tag(),
+            representation.class(),
             fields.len(),
         )?;
         for (position, (_, field)) in fields.iter().enumerate() {
@@ -8627,10 +8611,11 @@ impl<'a> Lowering<'a> {
                 }
                 Ok(LoweringOperand::Specialized(Lowered::Constructor {
                     constructor: constructor.clone(),
-                    synthesized_identity: Some(
+                    aggregate_origin: Some(static_origin),
+                    synthesized_identity: Some(ConstructorIdentityV1::Source(
                         self.static_transition_plan
                             .constructor_symbol_identity(static_origin)?,
-                    ),
+                    )),
                     args: self.specialized_source_env_at(
                         &lowered_args,
                         static_origin,
@@ -8952,6 +8937,7 @@ impl<'a> Lowering<'a> {
                     specialized_fields.push((name, value.specialized_at(token)?));
                 }
                 Ok(LoweringOperand::Specialized(Lowered::Record {
+                    aggregate_origin: Some(static_origin),
                     fields: specialized_fields,
                 }))
             }
@@ -8988,7 +8974,7 @@ impl<'a> Lowering<'a> {
                     }
                     // ── the pre-existing SPECIALIZED route, unchanged ──────
                     LoweringOperand::Specialized(lowered) => {
-                        let Lowered::Record { fields } = lowered else {
+                        let Lowered::Record { fields, .. } = lowered else {
                             return Err(unsupported(
                                 "Project",
                                 "record projection needs a record value",
@@ -9659,10 +9645,7 @@ impl<'a> Lowering<'a> {
                         operation,
                         EffectSemanticSeat::Bytes,
                     )?;
-                    let (data, len) = self.wire_effect_bytes(
-                        builder,
-                        &bytes,
-                    )?;
+                    let (data, len) = self.wire_effect_bytes(builder, &bytes)?;
                     builder.ins().stack_store(data, request, request_offset(1));
                     builder.ins().stack_store(len, request, request_offset(2));
                 }
@@ -9691,10 +9674,7 @@ impl<'a> Lowering<'a> {
                     EffectSemanticSeat::Bytes,
                 )?;
                 file_path_operand = Some(path.clone());
-                let (path, path_len) = self.wire_effect_bytes(
-                    builder,
-                    &path,
-                )?;
+                let (path, path_len) = self.wire_effect_bytes(builder, &path)?;
                 builder.ins().stack_store(path, request, request_offset(1));
                 builder
                     .ins()
@@ -9744,8 +9724,7 @@ impl<'a> Lowering<'a> {
                         operation,
                         EffectSemanticSeat::ExactIntU64,
                     )?;
-                    let (mode, valid_int) =
-                        self.narrow_effect_exact_int_u64(builder, &mode)?;
+                    let (mode, valid_int) = self.narrow_effect_exact_int_u64(builder, &mode)?;
                     let in_range = builder.ins().icmp_imm(
                         cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
                         mode,
@@ -9785,9 +9764,7 @@ impl<'a> Lowering<'a> {
                     EffectSemanticSeat::Resource,
                 )?;
                 let token = self.effect_opaque_scalar(builder, &resource, false)?;
-                builder
-                    .ins()
-                    .stack_store(token, request, request_offset(0));
+                builder.ins().stack_store(token, request, request_offset(0));
             }
             ken_host::HostOpV1::BufferAllocate => {
                 if capability.is_some() {
@@ -9804,8 +9781,7 @@ impl<'a> Lowering<'a> {
                     operation,
                     EffectSemanticSeat::ExactIntU64,
                 )?;
-                let (capacity, valid) =
-                    self.narrow_effect_exact_int_u64(builder, &capacity)?;
+                let (capacity, valid) = self.narrow_effect_exact_int_u64(builder, &capacity)?;
                 let invalid = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
                     valid,
@@ -9845,10 +9821,8 @@ impl<'a> Lowering<'a> {
                     operation,
                     EffectSemanticSeat::ExactIntU64,
                 )?;
-                let (start, start_valid) =
-                    self.narrow_effect_exact_int_u64(builder, &start)?;
-                let (length, length_valid) =
-                    self.narrow_effect_exact_int_u64(builder, &length)?;
+                let (start, start_valid) = self.narrow_effect_exact_int_u64(builder, &start)?;
+                let (length, length_valid) = self.narrow_effect_exact_int_u64(builder, &length)?;
                 let valid = builder.ins().band(start_valid, length_valid);
                 let invalid = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
@@ -9865,8 +9839,7 @@ impl<'a> Lowering<'a> {
                     operation,
                     EffectSemanticSeat::Resource,
                 )?;
-                let span_origin =
-                    self.effect_opaque_scalar(builder, &span_origin, false)?;
+                let span_origin = self.effect_opaque_scalar(builder, &span_origin, false)?;
                 for (index, value) in [token, start, length, span_origin].into_iter().enumerate() {
                     builder
                         .ins()
@@ -10187,7 +10160,7 @@ impl<'a> Lowering<'a> {
             let payload_int = self.lower_dynamic_small_int(builder, payload);
             let io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
                 discriminator: builder.ins().band_imm(detail, 0xff),
-                alternatives: self.synthesized_io_error_alternatives(payload_int)?,
+                alternatives: self.synthesized_io_error_alternatives(static_origin, payload_int)?,
             });
             let error = if matches!(
                 operation,
@@ -10215,16 +10188,25 @@ impl<'a> Lowering<'a> {
                     ),
                     _ => unreachable!("validated FS result operation"),
                 };
-                let operation =
-                    self.synthesized_constructor(operation_role, operation_symbol, Vec::new())?;
+                let operation = self.synthesized_constructor(
+                    static_origin,
+                    SynthesizedAggregateSite::FileOperation,
+                    operation_role,
+                    operation_symbol,
+                    Vec::new(),
+                )?;
                 match path {
                     LoweringOperand::Specialized(path) => {
                         let path = self.synthesized_constructor(
+                            static_origin,
+                            SynthesizedAggregateSite::FilePathSome,
                             SynthesizedFixedConstructorRole::OptionSome,
                             self.process_symbols.option_some.clone(),
                             vec![path],
                         )?;
                         LoweringOperand::Specialized(self.synthesized_constructor(
+                            static_origin,
+                            SynthesizedAggregateSite::FileError,
                             SynthesizedFixedConstructorRole::FileError,
                             self.process_symbols.file_error.clone(),
                             vec![operation, path, io_error],
@@ -10234,12 +10216,14 @@ impl<'a> Lowering<'a> {
                         let path = self.synthesized_effect_carrier_constructor(
                             builder,
                             static_origin,
+                            SynthesizedAggregateSite::FilePathSome,
                             SynthesizedFixedConstructorRole::OptionSome,
                             &[carried],
                         )?;
                         self.synthesized_effect_carrier_constructor(
                             builder,
                             static_origin,
+                            SynthesizedAggregateSite::FileError,
                             SynthesizedFixedConstructorRole::FileError,
                             &[
                                 LoweringOperand::Specialized(operation),
@@ -10275,24 +10259,29 @@ impl<'a> Lowering<'a> {
                 let resource_held_int = self.lower_unsigned_u64_int(builder, resource_held)?;
                 let surface_io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: builder.ins().band_imm(surface_io, 0xff),
-                    alternatives: self.synthesized_io_error_alternatives(surface_io_payload_int)?,
+                    alternatives: self
+                        .synthesized_io_error_alternatives(static_origin, surface_io_payload_int)?,
                 });
                 let identity_low = builder.ins().band_imm(resource_identity, 0xffff_ffff);
                 let identity_high = builder.ins().ushr_imm(resource_identity, 32);
                 let identity_low_int = self.lower_dynamic_small_int(builder, identity_low);
                 let identity_high_int = self.lower_dynamic_small_int(builder, identity_high);
-                let resource_kind_value = |this: &Self, discriminator| {
+                let resource_kind_value = |this: &Self, discriminator, occurrence| {
                     Ok::<_, CraneliftBackendError>(Lowered::DynamicConstructor(
                         DynamicConstructorV1 {
                             discriminator,
                             alternatives: vec![
                                 this.synthesized_dynamic_alternative(
+                                    static_origin,
+                                    SynthesizedAggregateSite::ResourceKind(occurrence, 0),
                                     wire.resource_kind_fs_handle as i64,
                                     SynthesizedFixedConstructorRole::ResourceKindFsHandle,
                                     this.process_symbols.resource_kind_fs_handle.clone(),
                                     Vec::new(),
                                 )?,
                                 this.synthesized_dynamic_alternative(
+                                    static_origin,
+                                    SynthesizedAggregateSite::ResourceKind(occurrence, 1),
                                     wire.resource_kind_buffer as i64,
                                     SynthesizedFixedConstructorRole::ResourceKindBuffer,
                                     this.process_symbols.resource_kind_buffer.clone(),
@@ -10303,6 +10292,8 @@ impl<'a> Lowering<'a> {
                     ))
                 };
                 let trace_identity = self.synthesized_constructor(
+                    static_origin,
+                    SynthesizedAggregateSite::ResourceTraceIdentity,
                     SynthesizedFixedConstructorRole::ResourceTraceIdentity,
                     self.process_symbols.resource_trace_identity.clone(),
                     vec![identity_low_int, identity_high_int],
@@ -10311,67 +10302,87 @@ impl<'a> Lowering<'a> {
                     discriminator: surface_tag,
                     alternatives: vec![
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            SynthesizedAggregateSite::ResourceHostIo,
                             0,
                             SynthesizedFixedConstructorRole::ResourceHostIo,
                             self.process_symbols.resource_host_io.clone(),
                             vec![surface_io_error.clone()],
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            SynthesizedAggregateSite::ResourceClosed,
                             1,
                             SynthesizedFixedConstructorRole::ResourceClosed,
                             self.process_symbols.resource_closed.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            SynthesizedAggregateSite::ResourceMalformed,
                             2,
                             SynthesizedFixedConstructorRole::ResourceMalformed,
                             self.process_symbols.resource_malformed.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            SynthesizedAggregateSite::ResourceRightNotHeld,
                             3,
                             SynthesizedFixedConstructorRole::ResourceRightNotHeld,
                             self.process_symbols.resource_right_not_held.clone(),
                             vec![resource_required_int, resource_held_int],
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            SynthesizedAggregateSite::ResourceReleaseFailed,
                             4,
                             SynthesizedFixedConstructorRole::ResourceReleaseFailed,
                             self.process_symbols.resource_release_failed.clone(),
                             vec![
-                                resource_kind_value(self, resource_kind)?,
+                                resource_kind_value(self, resource_kind, 0)?,
                                 trace_identity,
                                 surface_io_error,
                             ],
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            SynthesizedAggregateSite::ResourceKindMismatch,
                             5,
                             SynthesizedFixedConstructorRole::ResourceKindMismatch,
                             self.process_symbols.resource_kind_mismatch.clone(),
                             vec![
-                                resource_kind_value(self, resource_expected_kind)?,
-                                resource_kind_value(self, resource_actual_kind)?,
+                                resource_kind_value(self, resource_expected_kind, 1)?,
+                                resource_kind_value(self, resource_actual_kind, 2)?,
                             ],
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            SynthesizedAggregateSite::ResourceBufferLimit,
                             6,
                             SynthesizedFixedConstructorRole::ResourceBufferLimit,
                             self.process_symbols.resource_buffer_limit.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            SynthesizedAggregateSite::ResourceInvalidOffset,
                             7,
                             SynthesizedFixedConstructorRole::ResourceInvalidOffset,
                             self.process_symbols.resource_invalid_offset.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            SynthesizedAggregateSite::ResourceInvalidBounds,
                             8,
                             SynthesizedFixedConstructorRole::ResourceInvalidBounds,
                             self.process_symbols.resource_invalid_bounds.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            SynthesizedAggregateSite::ResourceNoProgress,
                             9,
                             SynthesizedFixedConstructorRole::ResourceNoProgress,
                             self.process_symbols.resource_no_progress.clone(),
@@ -10476,11 +10487,10 @@ impl<'a> Lowering<'a> {
                 let reply_start_int = self.lower_unsigned_u64_int(builder, reply_start)?;
                 // PX8-SPAN-PROV: bind the minted span to this `readAt`'s buffer
                 // operand acquisition (lowered arg 2, the request seat).
-                let LoweringOperand::Specialized(Lowered::ResourceToken {
-                    value: span_origin,
-                }) = read_buffer_operand
-                    .as_ref()
-                    .expect("FsReadAt retained its exact buffer seat")
+                let LoweringOperand::Specialized(Lowered::ResourceToken { value: span_origin }) =
+                    read_buffer_operand
+                        .as_ref()
+                        .expect("FsReadAt retained its exact buffer seat")
                 else {
                     return Err(unsupported(
                         "Effect",
@@ -10489,6 +10499,8 @@ impl<'a> Lowering<'a> {
                 };
                 let span_origin = *span_origin;
                 let span = self.synthesized_constructor(
+                    static_origin,
+                    SynthesizedAggregateSite::ReadBufferSpan,
                     SynthesizedFixedConstructorRole::PrivateBufferSpan,
                     self.process_symbols.private_buffer_span.clone(),
                     vec![
@@ -10498,6 +10510,8 @@ impl<'a> Lowering<'a> {
                     ],
                 )?;
                 let transferred = self.synthesized_constructor(
+                    static_origin,
+                    SynthesizedAggregateSite::ReadTransferCount,
                     SynthesizedFixedConstructorRole::PrivateTransferCount,
                     self.process_symbols.private_transfer_count.clone(),
                     vec![
@@ -10509,12 +10523,16 @@ impl<'a> Lowering<'a> {
                     discriminator: builder.ins().uextend(types::I64, nonzero),
                     alternatives: vec![
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            SynthesizedAggregateSite::ReadEof,
                             0,
                             SynthesizedFixedConstructorRole::ReadEof,
                             self.process_symbols.read_eof.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            SynthesizedAggregateSite::ReadSome,
                             1,
                             SynthesizedFixedConstructorRole::ReadSome,
                             self.process_symbols.read_some.clone(),
@@ -10541,6 +10559,8 @@ impl<'a> Lowering<'a> {
                     None,
                 );
                 let transferred = self.synthesized_constructor(
+                    static_origin,
+                    SynthesizedAggregateSite::WriteTransferCount,
                     SynthesizedFixedConstructorRole::PrivateTransferCount,
                     self.process_symbols.private_transfer_count.clone(),
                     vec![
@@ -10549,6 +10569,8 @@ impl<'a> Lowering<'a> {
                     ],
                 )?;
                 self.synthesized_constructor(
+                    static_origin,
+                    SynthesizedAggregateSite::Wrote,
                     SynthesizedFixedConstructorRole::Wrote,
                     self.process_symbols.wrote.clone(),
                     vec![transferred],
@@ -10557,29 +10579,24 @@ impl<'a> Lowering<'a> {
                 self.lower_unsigned_u64_int(builder, detail)?
             } else {
                 self.synthesized_constructor(
+                    static_origin,
+                    SynthesizedAggregateSite::Unit,
                     SynthesizedFixedConstructorRole::Unit,
                     self.process_symbols.unit.clone(),
                     Vec::new(),
                 )?
             });
             match (&error, &ok) {
-                (
-                    LoweringOperand::Specialized(error),
-                    LoweringOperand::Specialized(ok),
-                ) => Ok(LoweringOperand::Specialized(Lowered::HostResult {
-                    success,
-                    error: Box::new(error.clone()),
-                    ok: Box::new(ok.clone()),
-                    err_constructor: self.process_symbols.result_err.clone(),
-                    ok_constructor: self.process_symbols.result_ok.clone(),
-                })),
-                _ => self.effect_carrier_host_result(
-                    builder,
-                    static_origin,
-                    success,
-                    &ok,
-                    &error,
-                ),
+                (LoweringOperand::Specialized(error), LoweringOperand::Specialized(ok)) => {
+                    Ok(LoweringOperand::Specialized(Lowered::HostResult {
+                        success,
+                        error: Box::new(error.clone()),
+                        ok: Box::new(ok.clone()),
+                        err_constructor: self.process_symbols.result_err.clone(),
+                        ok_constructor: self.process_symbols.result_ok.clone(),
+                    }))
+                }
+                _ => self.effect_carrier_host_result(builder, static_origin, success, &ok, &error),
             }
         }
     }

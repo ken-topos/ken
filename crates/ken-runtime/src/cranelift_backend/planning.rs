@@ -23,11 +23,11 @@ pub(super) use static_transition::{
     StaticRecursorConsumptionMutation, SynthesizedConsumptionMutation,
 };
 pub(super) use static_transition::{
-    planned_partiality_trap, BoundaryUseIdentity, ConstructorIdentity, EffectSemanticSeat, JoinPlanToken,
-    JoinResultRepresentation, LoweringOnlyOperandEdge, OperandEdgeDisposition, OperandEdgeToken,
-    SourceOperandRole, StaticOriginId, StaticRecursorWorkerResidualId, StaticTransitionPlan,
-    StaticRecursorCaptureLifetime,
-    SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
+    planned_partiality_trap, BoundaryUseIdentity, ConstructorIdentity, EffectSemanticSeat,
+    JoinPlanToken, JoinResultRepresentation, LoweringOnlyOperandEdge, OperandEdgeDisposition,
+    OperandEdgeToken, SourceOperandRole, StaticOriginId, StaticRecursorCaptureLifetime,
+    StaticRecursorWorkerResidualId, StaticTransitionPlan, SynthesizedAggregateOccurrence,
+    SynthesizedAggregateSite, SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 // `RT-FNSPLIT-B2A-S` `AC-4` — the route counters behind
 // `every_origin_to_expression_resolution_goes_through_the_single_route`.

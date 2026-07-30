@@ -6088,9 +6088,11 @@ fn d7_raw_mixed_constructor_transfer_cannot_bypass_the_planned_ledger() {
         )
         .expect("the exact unit-result transfer is planned");
     let mixed = Lowered::Constructor {
+        aggregate_origin: None,
         constructor: "ctor:fixture::Pair::MkPair".to_string(),
         synthesized_identity: None,
         args: vec![Lowered::Record {
+            aggregate_origin: None,
             fields: vec![("field:callable".to_string(), c1_closure(origin))],
         }],
     };
@@ -6146,14 +6148,17 @@ fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
         body: origin,
     };
     let depth_1 = Lowered::Constructor {
+        aggregate_origin: None,
         constructor: "ctor:fixture::Box::MkBox".to_string(),
         synthesized_identity: None,
         args: vec![c1_closure(origin)],
     };
     let depth_2 = Lowered::Constructor {
+        aggregate_origin: None,
         constructor: "ctor:fixture::Box::MkBox".to_string(),
         synthesized_identity: None,
         args: vec![Lowered::Record {
+            aggregate_origin: None,
             fields: vec![("field:held".to_string(), c1_closure(origin))],
         }],
     };
@@ -6185,7 +6190,7 @@ fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
         assert!(
             matches!(
                 value.boundary_disposition(),
-                BoundaryDisposition::RepresentedHandle { .. }
+                BoundaryDisposition::RepresentedAggregate { .. }
             ),
             "{label}: the ROOT table already refuses this, so the graph walk is \
              not what is catching it and this control proves nothing about depth"
@@ -6208,11 +6213,13 @@ fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
 fn c1_d5_a_closure_free_constructor_is_admissible() {
     // Promise class: durable invariant.
     let closure_free = Lowered::Constructor {
+        aggregate_origin: None,
         constructor: "ctor:fixture::Pair::MkPair".to_string(),
         synthesized_identity: None,
         args: vec![
             Lowered::String("left".to_string()),
             Lowered::Record {
+                aggregate_origin: None,
                 fields: vec![("field:right".to_string(), Lowered::Bytes(vec![7, 8]))],
             },
         ],
@@ -6230,11 +6237,13 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
     // rather than to the walk admitting everything it is handed.
     let origin = c1_closure_fixture_origin();
     let closure_bearing = Lowered::Constructor {
+        aggregate_origin: None,
         constructor: "ctor:fixture::Pair::MkPair".to_string(),
         synthesized_identity: None,
         args: vec![
             Lowered::String("left".to_string()),
             Lowered::Record {
+                aggregate_origin: None,
                 fields: vec![("field:right".to_string(), c1_closure(origin))],
             },
         ],
@@ -6380,7 +6389,8 @@ fn b2v_ac3_every_variant_carries_exactly_one_of_the_five_static_policies() {
                 "AC-3: {variant:?} rejects without an exact reason"
             ),
             BoundaryDisposition::RepresentedImmediate { .. }
-            | BoundaryDisposition::RepresentedHandle { .. } => {}
+            | BoundaryDisposition::RepresentedHandle { .. }
+            | BoundaryDisposition::RepresentedAggregate { .. } => {}
         }
     }
 }
@@ -9406,8 +9416,7 @@ fn d8_recursive_computational_revisit_with_join() -> RuntimeExpr {
 /// Promise class: durable invariant.
 #[test]
 fn d8_source_machine_known_bool_closes_live_recursor_and_dead_case() {
-    let fixture =
-        d8_source_machine_with_match(d8_known_bool_match_with_dead_join_case(true));
+    let fixture = d8_source_machine_with_match(d8_known_bool_match_with_dead_join_case(true));
     recursive_port_process_compiles(&fixture)
         .expect("live generic recursor consumed and exact dead case dispositioned");
 
@@ -9424,8 +9433,14 @@ fn d8_source_machine_known_bool_closes_live_recursor_and_dead_case() {
                 && detail.contains("SpecializedOnlyLeaf")
     ));
     let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
-    assert!(declared > 0, "the live-omission control never reached staging");
-    assert_eq!(defined, 0, "live generic recursor omission published a unit");
+    assert!(
+        declared > 0,
+        "the live-omission control never reached staging"
+    );
+    assert_eq!(
+        defined, 0,
+        "live generic recursor omission published a unit"
+    );
 
     set_d8_join_consumption_mutation(
         JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase,
@@ -9439,7 +9454,10 @@ fn d8_source_machine_known_bool_closes_live_recursor_and_dead_case() {
             if detail.contains("neither emitted nor statically unselected")
     ));
     let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
-    assert!(declared > 0, "the dead-omission control never reached staging");
+    assert!(
+        declared > 0,
+        "the dead-omission control never reached staging"
+    );
     assert_eq!(defined, 0, "dead Match-case omission published a unit");
 }
 
