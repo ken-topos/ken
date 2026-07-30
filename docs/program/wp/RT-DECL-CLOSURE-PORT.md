@@ -836,6 +836,68 @@ family — that is a measurement nobody has taken.
     order / omission mutations; the nested-capsule **zero-allocation** negative;
     and the exact-member versus same-closure-outside-edge pair.
 
+  #### ⛔⛔ THE CARRIED SOURCE-MACHINE `Match` ROUTE — Architect `evt_7tqhf9d7wsvzw`
+
+  ⭐ **The hard-stop control two bullets above FIRED and was discharged
+  in-scope.** Acting on the authorized `#23` specialized-ordinary capture
+  crossing reached origin **271**, where an ordinary `Match` over a `Var` that
+  loads the transported capture as `LoweringOperand::Carried` was refused.
+  ⛔ **That is NOT a third producing predicate and it adds no node, member,
+  disposition, or lane.** `RuntimeExpr::Var(_)` is a *source access form*, not a
+  production predicate — partitioning on it would recreate the very derivation
+  error `D7` withdrew. The classification is: **producer** = the already-attributed
+  `#23` mixed-phase static-worker capture transport; **consumer/owner** = *this*
+  node's ordinary `Match` as a `SemanticEliminator`, specifically its
+  **source-machine continuation route**, which `D7` already names. The refusal
+  fires only because `SourceContinuation::MatchScrutinee` enumerates specialized
+  shapes and **has no `Carried` arm**. Atomic membership is unchanged; the buffer
+  test is only the **reaching witness** and owns nothing.
+
+  **The binding lawful route.** At `SourceContinuation::MatchScrutinee`, after
+  consuming the exact planner-issued `SemanticEliminator` authority, **dispatch on
+  phase BEFORE any specialized-shape test**:
+
+  1. `Carried(word)` uses the existing `D7` carrier ABI semantics — runtime
+     class / tag / arity, planner-issued case identities, projected children
+     **remaining `Carried`**, and the closed default. ⛔ No decode, no
+     reconstruction, no `Carried -> Lowered` conversion.
+  2. `Specialized(...)` retains every existing source-machine path **unchanged**.
+  3. ⛔ **The carried path must preserve the ENTIRE remaining `SourceControl`.**
+     ⛔ Do **not** call the direct `lower_carried_match` helper as-is and return
+     its isolated result — its case bodies use direct/producer lowering and do
+     **not** carry this source continuation. Factor a source-machine carried-match
+     route from the existing source branch machinery: split/instantiate the
+     source-prefix template, preserve an inherited affine join when nested, mint
+     **one predecessor per runtime-selected arm**, lower each selected case with
+     `lower_forked_branch` under the **original** `next`, union branch-local frame
+     consumption, consume the match's planned join **exactly once** where locally
+     owned, and resume the suffix **exactly once**.
+  4. ⛔ This authorizes **no** generic `Match` weakening, origin whitelist, buffer
+     special case, anonymous token, new carrier lane, or whole callable /
+     control-capsule transport.
+
+  **Required evidence before candidate routing** — ⚠ these are acceptance
+  obligations, and QA reviews against them:
+
+  - the exact origin-**271** linked-native row advances through the carried
+    ordinary source-machine `Match` and reaches its intended `InvalidBounds`
+    result;
+  - a source-machine ordinary `Match(Var)` over a **carried** represented
+    constructor / `HostResult` selects the right case, validates arity, and leaves
+    bound fields **`Carried`**;
+  - ⭐ a **nontrivial post-match source continuation** is observed, so
+    dropping/bypassing `next` **reds** the control;
+  - an inherited / nested source join preserves **distinct** affine predecessor
+    edges and **exact-once** join-plan consumption;
+  - the same **specialized** source-machine match remains green;
+  - removing the carried-first route **restores the exact refusal**, and
+    identity / arity / field / order mutations **red**.
+
+  ⇒ Every `#23` / `#26` mixed-phase, zero-allocation nested-capsule, population,
+  and per-row first-refusal obligation above **remains owed on top of these**.
+  Exact `fb8fd881` is **preservation-only, not a candidate**, and is the exact
+  continuation base.
+
   #### The CI regression population this must clear
 
   Measured on PR **#1251** at exact `4dc120c5`: **8 of 12 checks red**, where
