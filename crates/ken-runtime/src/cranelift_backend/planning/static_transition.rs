@@ -5584,6 +5584,14 @@ fn build_producer_flow_plans(
         .first()
         .map(|descriptor| descriptor.function)
         .ok_or_else(|| planner_error("case-emission analysis has no function population"))?;
+    let root_owner = plan
+        .root_occurrence
+        .ok_or_else(|| planner_error("producer-flow analysis has no root occurrence"))
+        .and_then(|origin| {
+            plan.semantic
+                .function_owner(origin)?
+                .ok_or_else(|| planner_error("producer-flow root has no function owner"))
+        })?;
     let mut inputs = BTreeMap::new();
     let mut bodies = Vec::new();
     for descriptor in &plan.abi.descriptors {
@@ -5757,11 +5765,31 @@ fn build_producer_flow_plans(
             analysis.active_owner = owner;
             let environment = analysis.source_environment(owner, definition)?;
             let mut value = analysis.eval(body_origin, &environment)?;
-            // A separately emittable unit's result is boundary transport even
-            // when no currently reached caller observes it. Representation
-            // planning must therefore cover its aggregate result before that
-            // unit can be defined.
-            analysis.mark_carried(&mut value);
+            // Every non-root emittable unit returns across its declared ABI,
+            // even when no currently reached caller observes it. The root
+            // scheduling result has no such unit-return crossing: it enters
+            // the aggregate ledger only when the result-phase planner already
+            // requires a carrier. Treating every root result as carried would
+            // promote a SpecializedOnly source aggregate into a nonexistent
+            // emitted representation occurrence.
+            let result_phase = plan
+                .result_phases
+                .get(body_origin.0 as usize)
+                .and_then(Option::as_ref)
+                .map(|summary| summary.phase);
+            let root_result_is_carried = result_phase == Some(ResultPhase::CarrierRequired);
+            #[cfg(test)]
+            // The synthesized-ledger control asks the planner to insert one
+            // exact root-result crossing. That planned crossing is causal
+            // carrier authority; it is not a blanket root promotion.
+            let root_result_is_carried = root_result_is_carried
+                || plan.lowering_boundary_uses.iter().any(|use_| {
+                    use_.edge == LoweringOnlyOperandEdge::TestFixtureResult
+                        && use_.origin == body_origin
+                });
+            if owner != root_owner || root_result_is_carried {
+                analysis.mark_carried(&mut value);
+            }
             let result = analysis
                 .results
                 .entry(owner)
@@ -7359,13 +7387,7 @@ impl<'src> StaticTransitionPlan<'src> {
         };
         let token =
             self.planned_boundary_use_token(identity, source_operand_role_label(edge.role))?;
-        if !self
-            .operand_edge_consumption
-            .borrow()
-            .contains_key(&identity)
-        {
-            self.record_boundary_use_consumption(identity)?;
-        }
+        self.record_boundary_use_consumption(identity)?;
         Ok(token)
     }
 
