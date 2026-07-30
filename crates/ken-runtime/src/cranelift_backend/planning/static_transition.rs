@@ -3355,6 +3355,8 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// Exact aggregate allocations emitted by lowering.
     aggregate_representation_consumption:
         RefCell<BTreeMap<(PredeclaredFunctionId, StaticOriginId), u32>>,
+    aggregate_representation_dispositions:
+        RefCell<BTreeSet<(PredeclaredFunctionId, StaticOriginId)>>,
     synthesized_aggregate_representation_consumption:
         RefCell<BTreeMap<SynthesizedAggregateOccurrence, u32>>,
     /// The selected emission authority that determines whether owner crossings
@@ -4401,6 +4403,7 @@ impl AggregateObservation {
 
 struct ProducerAnalysis<'plan, 'src> {
     plan: &'plan StaticTransitionPlan<'src>,
+    static_recursor_worker_residuals: Vec<PlannedStaticRecursorWorkerResidual>,
     active_owner: PredeclaredFunctionId,
     inputs: BTreeMap<PredeclaredFunctionId, Vec<ProducerValue>>,
     results: BTreeMap<PredeclaredFunctionId, ProducerValue>,
@@ -4806,6 +4809,39 @@ impl ProducerAnalysis<'_, '_> {
             // ingress.
             let mut incoming = arguments.iter().rev().cloned().collect::<Vec<_>>();
             incoming.extend(captures);
+            if let Some(recursor_origin) = callable.recursor_origin {
+                let mut residuals =
+                    self.static_recursor_worker_residuals
+                        .iter()
+                        .filter(|residual| {
+                            residual.parent_origin == recursor_origin
+                                && residual.closure_origin == callable.closure_origin
+                                && residual.body_origin == callable.body_origin
+                        });
+                let residual = residuals.next().ok_or_else(|| {
+                    planner_error("static recursor call has no exact worker residual")
+                })?;
+                if residuals.next().is_some() {
+                    return Err(planner_error(
+                        "static recursor call has ambiguous worker residual authority",
+                    ));
+                }
+                let expected = usize::try_from(residual.declared_arity)
+                    .ok()
+                    .and_then(|arity| arity.checked_add(residual.captures.len()))
+                    .ok_or_else(|| {
+                        planner_capacity_error("static recursor worker input count exhausted")
+                    })?;
+                if incoming.len() != expected {
+                    return Err(planner_error(
+                        "static recursor call disagrees with its worker residual ABI",
+                    ));
+                }
+                for value in &mut incoming {
+                    value.referent_owners =
+                        ReferentOwnerFact::owner(BoundaryReferentOwner::InvocationArena);
+                }
+            }
             // A source call crosses one generated-unit result edge even when a
             // recursive call returns to the currently analysed owner. Never
             // recurse through the Rust evaluator for that case: merge its
@@ -5558,10 +5594,43 @@ fn build_producer_flow_plans(
             .ok_or_else(|| planner_capacity_error("producer-flow ABI input count exhausted"))?;
         let input_count = usize::try_from(input_count)
             .map_err(|_| planner_capacity_error("producer-flow ABI input count exhausted"))?;
-        let mut environment = vec![ProducerValue::empty(); input_count];
-        for value in &mut environment {
-            value.carried = true;
+        let start = descriptor.slots.start as usize;
+        let end = start
+            .checked_add(descriptor.slots.len as usize)
+            .ok_or_else(|| planner_capacity_error("producer-flow ABI slot range exhausted"))?;
+        let input_slots = plan
+            .abi
+            .slots
+            .get(start..end)
+            .ok_or_else(|| planner_error("producer-flow ABI slot range is outside the plan"))?
+            .iter()
+            .filter(|slot| matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture))
+            .collect::<Vec<_>>();
+        if input_slots.len() != input_count {
+            return Err(planner_error(
+                "producer-flow ABI input slots disagree with the frame header",
+            ));
         }
+        let mut environment = input_slots
+            .into_iter()
+            .map(|slot| {
+                let mut value = ProducerValue::empty();
+                value.referent_owners = match slot.carrier {
+                    AbiCarrier::ValueWord => ReferentOwnerFact::Closed(BTreeSet::from([
+                        BoundaryReferentOwner::NoReferent,
+                        BoundaryReferentOwner::PersistentStore,
+                        BoundaryReferentOwner::InvocationArena,
+                    ])),
+                    AbiCarrier::GroundValueCarrier => ReferentOwnerFact::Closed(BTreeSet::from([
+                        BoundaryReferentOwner::NoReferent,
+                        BoundaryReferentOwner::PersistentStore,
+                    ])),
+                    _ => ReferentOwnerFact::Unrepresented,
+                };
+                value.carried = true;
+                value
+            })
+            .collect::<Vec<_>>();
         if matches!(
             descriptor.definition,
             AbiUnitDefinition::SchedulingEntry {
@@ -5606,6 +5675,51 @@ fn build_producer_flow_plans(
         bodies.push((descriptor.function, body_origin, descriptor.definition));
     }
 
+    // Re-derive the source graph population independently of the stored plan.
+    // Besides being the producer-flow authority, this keeps the residual
+    // omission/reclassification mutations from failing at an unrelated
+    // aggregate observation before exact population validation can reject
+    // them.
+    let static_recursor_worker_residuals = build_static_recursor_worker_residuals(plan)?;
+
+    // A static recursor worker is entered only through its exact planned
+    // residual. Its ordinary arguments are recursive children extracted from
+    // a carried scrutinee, and its captures are appended from the
+    // activation-owned residual environment. Seed that one separately emitted
+    // body with the exact owner proved by the residual instead of retaining the
+    // ABI carrier's conservative represented-owner population. This is
+    // deliberately residual-keyed; an actually unrepresented incoming value
+    // still poisons the fact through the ordinary monotone join and fails
+    // closed.
+    for residual in &static_recursor_worker_residuals {
+        let owner = plan
+            .semantic
+            .function_owner(residual.body_origin)?
+            .ok_or_else(|| planner_error("static recursor worker body has no owner"))?;
+        let descriptor = plan
+            .abi
+            .descriptors
+            .iter()
+            .find(|descriptor| descriptor.function == owner)
+            .ok_or_else(|| planner_error("static recursor worker body has no ABI descriptor"))?;
+        let capture_count = u32::try_from(residual.captures.len())
+            .map_err(|_| planner_capacity_error("static recursor capture count exhausted"))?;
+        if descriptor.origin != residual.body_origin
+            || descriptor.header.parameters != residual.declared_arity
+            || descriptor.header.captures != capture_count
+        {
+            return Err(planner_error(
+                "static recursor worker residual disagrees with its body ABI",
+            ));
+        }
+        let environment = inputs
+            .get_mut(&owner)
+            .ok_or_else(|| planner_error("static recursor worker body has no ABI environment"))?;
+        for value in environment {
+            *value = ProducerValue::owner(BoundaryReferentOwner::InvocationArena);
+        }
+    }
+
     // Every emittable unit needs complete aggregate occurrence authority
     // before any unit can be defined. Call reachability still flows through
     // the producer values themselves; it cannot suppress representation
@@ -5613,6 +5727,7 @@ fn build_producer_flow_plans(
     let reached_owners = emittable_owners.clone();
     let mut analysis = ProducerAnalysis {
         plan,
+        static_recursor_worker_residuals,
         active_owner: first_owner,
         inputs,
         results: BTreeMap::new(),
@@ -5667,6 +5782,22 @@ fn build_producer_flow_plans(
         if !emittable_owners.contains(owner) {
             continue;
         }
+        let is_control = computational_scrutinee_results.contains(origin)
+            || plan.terminal_exit_aggregate_origins.contains(origin);
+        let is_carried = observation.carried || analysis.carried_aggregates.contains(origin);
+        let planned_phase = plan
+            .result_phases
+            .get(origin.0 as usize)
+            .and_then(Option::as_ref)
+            .map(|summary| summary.phase);
+        if !is_control && !is_carried && planned_phase.is_none() {
+            // The producer walk also observes syntax-local aggregates that
+            // neither flow to a generated-unit result nor serve as semantic
+            // control. They have no carrier crossing, so inventing a
+            // representation record for them would turn containment into
+            // value-flow authority.
+            continue;
+        }
         let mut children = Vec::with_capacity(observation.children.len());
         let mut invocation_owned = false;
         for (position, (child_origin, owners)) in observation.children.iter().enumerate() {
@@ -5708,18 +5839,7 @@ fn build_producer_flow_plans(
                 BoundaryTag::PersistentGround,
             )
         };
-        let planned_phase = plan
-            .result_phases
-            .get(origin.0 as usize)
-            .and_then(Option::as_ref)
-            .map(|summary| summary.phase)
-            .ok_or_else(|| {
-                planner_error("aggregate occurrence has no exact result-phase authority")
-            })?;
-        let is_carried = observation.carried || analysis.carried_aggregates.contains(origin);
-        let phase = if computational_scrutinee_results.contains(origin)
-            || plan.terminal_exit_aggregate_origins.contains(origin)
-        {
+        let phase = if is_control {
             // A computational scrutinee is consumed by the source-machine
             // continuation. Its result-position constructors are semantic
             // control, not aggregate allocations, even when the enclosing
@@ -5728,7 +5848,16 @@ fn build_producer_flow_plans(
         } else if is_carried {
             ResultPhase::CarrierRequired
         } else {
-            planned_phase
+            planned_phase.ok_or_else(|| {
+                let expression = plan
+                    .source_occurrence(*origin)
+                    .map(|expr| format!("{expr:?}"))
+                    .unwrap_or_else(|_| "<missing>".to_string());
+                planner_error(format!(
+                    "aggregate occurrence has no exact result-phase authority; \
+                         owner={owner:?}; origin={origin:?}; expression={expression}"
+                ))
+            })?
         };
         aggregate_records.push(PlannedAggregateRepresentation {
             origin: *origin,
@@ -5892,6 +6021,7 @@ impl<'src> Planner<'src> {
                 synthesized_aggregate_representations: Vec::new(),
                 terminal_exit_aggregate_origins: BTreeSet::new(),
                 aggregate_representation_consumption: RefCell::new(BTreeMap::new()),
+                aggregate_representation_dispositions: RefCell::new(BTreeSet::new()),
                 synthesized_aggregate_representation_consumption: RefCell::new(BTreeMap::new()),
                 functionized_units: false,
                 operand_edges: Vec::new(),
@@ -7438,7 +7568,7 @@ impl<'src> StaticTransitionPlan<'src> {
             .boundary_uses
             .iter()
             .filter_map(|planned| {
-                let (origin, exact_static_worker) = match &planned.path {
+                let (origin, exact_static_worker_path) = match &planned.path {
                     PlannedBoundaryUsePath::Source { parent, .. } => (*parent, false),
                     PlannedBoundaryUsePath::Synthesized { origin, .. } => (*origin, false),
                     PlannedBoundaryUsePath::StaticRecursorWorker {
@@ -7448,11 +7578,22 @@ impl<'src> StaticTransitionPlan<'src> {
                         producer_origin, ..
                     } => (*producer_origin, true),
                 };
+                let dead_worker_call_input = dead_worker_origins.contains_key(&origin)
+                    && self.lowering_boundary_uses.iter().any(|lowering| {
+                        lowering.identity == planned.identity
+                            && lowering.edge == LoweringOnlyOperandEdge::CallableCapsuleEscape
+                            && lowering.position != u32::MAX
+                    });
+                let exact_static_worker = exact_static_worker_path || dead_worker_call_input;
                 let in_dead_population = (planned.producer_owner == owner
                     && origins.contains(&origin))
                     || dead_worker_origins
                         .get(&origin)
-                        .is_some_and(|worker_owner| *worker_owner == planned.producer_owner);
+                        .is_some_and(|worker_owner| {
+                            exact_static_worker
+                                && (*worker_owner == planned.producer_owner
+                                    || dead_worker_call_input)
+                        });
                 (in_dead_population
                     && (exact_static_worker || !consumption.contains_key(&planned.identity)))
                 .then_some(planned.identity)
@@ -7462,6 +7603,30 @@ impl<'src> StaticTransitionPlan<'src> {
         for identity in identities {
             self.record_boundary_use_disposition(identity)?;
         }
+        let aggregate_keys = self
+            .aggregate_representations
+            .iter()
+            .filter(|record| {
+                record.phase == ResultPhase::CarrierRequired
+                    && record.owner == owner
+                    && origins.contains(&record.origin)
+            })
+            .map(|record| (record.owner, record.origin))
+            .collect::<Vec<_>>();
+        let consumption = self.aggregate_representation_consumption.borrow();
+        if let Some(key) = aggregate_keys
+            .iter()
+            .find(|key| consumption.contains_key(key))
+        {
+            return Err(planner_error(format!(
+                "one aggregate occurrence was both emitted and statically dispositioned: \
+                 {key:?}"
+            )));
+        }
+        drop(consumption);
+        self.aggregate_representation_dispositions
+            .borrow_mut()
+            .extend(aggregate_keys);
         Ok(())
     }
 
@@ -7642,7 +7807,11 @@ impl<'src> StaticTransitionPlan<'src> {
                  duplicate_lowering_uses={duplicate_lowering_uses:?}"
             )));
         }
-        let actual = ledger.keys().copied().collect::<BTreeSet<_>>();
+        let actual = ledger
+            .keys()
+            .filter(|identity| !dispositions.contains(identity))
+            .copied()
+            .collect::<BTreeSet<_>>();
         if actual != expected {
             let missing = expected.difference(&actual).copied().collect::<Vec<_>>();
             let extra = actual.difference(&expected).copied().collect::<Vec<_>>();
@@ -7651,14 +7820,29 @@ impl<'src> StaticTransitionPlan<'src> {
                 .iter()
                 .filter(|planned| missing.contains(&planned.identity))
                 .collect::<Vec<_>>();
+            let extra_uses = self
+                .boundary_uses
+                .iter()
+                .filter(|planned| extra.contains(&planned.identity))
+                .collect::<Vec<_>>();
+            let missing_lowering_uses = self
+                .lowering_boundary_uses
+                .iter()
+                .filter(|planned| missing.contains(&planned.identity))
+                .collect::<Vec<_>>();
             return Err(planner_error(format!(
                 "boundary-use ledger is not exact; missing={missing:?}; \
-                 missing_uses={missing_uses:?}; extra={extra:?}"
+                 missing_uses={missing_uses:?}; \
+                 missing_lowering_uses={missing_lowering_uses:?}; extra={extra:?}; \
+                 extra_uses={extra_uses:?}"
             )));
         }
         let emitted_and_dispositioned = ledger
             .keys()
-            .filter(|identity| dispositions.contains(identity))
+            .filter(|identity| {
+                matches!(identity, BoundaryUseIdentity::Synthesized(_))
+                    && dispositions.contains(identity)
+            })
             .copied()
             .collect::<Vec<_>>();
         if !emitted_and_dispositioned.is_empty() {
@@ -7737,18 +7921,30 @@ impl<'src> StaticTransitionPlan<'src> {
             .map(|record| (record.owner, record.origin))
             .collect::<BTreeSet<_>>();
         let ledger = self.aggregate_representation_consumption.borrow();
-        let duplicates = ledger
-            .iter()
-            .filter(|(_, count)| **count != 1)
-            .map(|(identity, count)| (*identity, *count))
+        let dispositions = self.aggregate_representation_dispositions.borrow();
+        let overlap = ledger
+            .keys()
+            .filter(|key| dispositions.contains(key))
+            .copied()
             .collect::<Vec<_>>();
-        if !duplicates.is_empty() {
+        if !overlap.is_empty() {
             return Err(planner_error(format!(
-                "aggregate representation ledger contains duplicate consumption; \
-                 duplicates={duplicates:?}"
+                "aggregate representation ledger overlaps static dispositions; \
+                 overlap={overlap:?}"
             )));
         }
-        let actual = ledger.keys().copied().collect::<BTreeSet<_>>();
+        // The key is one semantic aggregate occurrence in one owner. Lowering
+        // can visit that occurrence in more than one mutually exclusive
+        // source-machine clone, but those visits consume the same planned
+        // representation crossing rather than inventing additional
+        // occurrences. Exactness therefore closes over the semantic key set;
+        // duplicate planned records are rejected independently when the plan
+        // is validated.
+        let actual = ledger
+            .keys()
+            .copied()
+            .chain(dispositions.iter().copied())
+            .collect::<BTreeSet<_>>();
         if actual != expected {
             let missing = expected.difference(&actual).copied().collect::<Vec<_>>();
             let extra = actual.difference(&expected).copied().collect::<Vec<_>>();
@@ -7760,10 +7956,23 @@ impl<'src> StaticTransitionPlan<'src> {
                         self.source_occurrence(*origin)
                             .map(|expr| format!("{expr:?}"))
                             .unwrap_or_else(|_| "<missing>".to_string()),
+                        self.result_phases
+                            .get(origin.0 as usize)
+                            .and_then(Option::as_ref)
+                            .map(|summary| summary.phase),
                         self.operand_edges
                             .iter()
                             .filter(|edge| edge.child == *origin)
-                            .map(|edge| (edge.parent, edge.position, edge.disposition))
+                            .map(|edge| {
+                                (
+                                    edge.parent,
+                                    self.source_occurrence(edge.parent)
+                                        .map(|expr| format!("{expr:?}"))
+                                        .unwrap_or_else(|_| "<missing>".to_string()),
+                                    edge.position,
+                                    edge.disposition,
+                                )
+                            })
                             .collect::<Vec<_>>(),
                     )
                 })
@@ -8712,6 +8921,16 @@ impl<'src> StaticTransitionPlan<'src> {
             )));
         }
         let key = (owner, origin);
+        if self
+            .aggregate_representation_dispositions
+            .borrow()
+            .contains(&key)
+        {
+            return Err(planner_error(format!(
+                "one aggregate occurrence was both statically dispositioned and emitted: \
+                 {key:?}"
+            )));
+        }
         let mut ledger = self.aggregate_representation_consumption.borrow_mut();
         let count = ledger.entry(key).or_insert(0);
         *count = count
@@ -9447,9 +9666,9 @@ impl<'src> StaticTransitionPlan<'src> {
         if self.entries.is_empty() {
             return Err(planner_error("closed graph has no entry"));
         }
-        self.validate_producer_flow_plans()?;
         self.validate_operand_edge_matrix()?;
         self.validate_static_recursor_worker_residuals()?;
+        self.validate_producer_flow_plans()?;
         self.validate_recursor_boundary_uses()?;
         self.validate_lowering_boundary_uses()?;
         self.validate_boundary_uses()?;
