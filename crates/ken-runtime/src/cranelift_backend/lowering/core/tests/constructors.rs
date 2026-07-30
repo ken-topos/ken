@@ -287,7 +287,12 @@ fn run_dynamic_constructor_dispatch_fixture(
                 static_origin: match_origin,
             },
         )?;
-        let lowered = lowered.specialized_at(LoweringOnlyOperandEdge::TestFixtureResult.token())?;
+        let edge = compiler.static_transition_plan.lowering_boundary_use_token(
+            LoweringOnlyOperandEdge::TestFixtureResult,
+            match_origin,
+            0,
+        )?;
+        let lowered = lowered.specialized_at(edge)?;
         let value = match lowered {
             Lowered::Trap(trap) => {
                 assert_eq!(trap, default);
@@ -2034,6 +2039,74 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
         "NON-VACUITY: the admissible graph must get PAST the walk and stop at \
          the first emitted call, or the closure case above proves nothing about \
          ordering: got {reached:?}"
+    );
+}
+
+/// D7/AC-24 — a lowering-only transfer cannot reach the value walk without
+/// consuming its exact planner-issued boundary use.
+///
+/// The mutation denies issuance inside the planner while exercising the real
+/// unit-result producer. Retaining or restoring a lowering-local raw token
+/// would bypass that denial and report the nested `Closure` instead, turning
+/// this control red.
+#[test]
+fn d7_mixed_constructor_transfer_reds_when_planner_issuance_is_denied() {
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut module = new_jit_module().expect("JIT module constructs");
+    let mut signature = module.make_signature();
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function("d7_planner_issuance_probe", Linkage::Local, &signature)
+        .expect("probe declares");
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+
+    let construct = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::D7::Mixed".to_string(),
+        args: Vec::new(),
+    };
+    let (plan, construct_origin) = planned_root_occurrence(&construct);
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
+
+    let mixed = Lowered::Constructor {
+        constructor: "ctor:fixture::D7::Mixed".to_string(),
+        synthesized_identity: None,
+        args: vec![Lowered::Record {
+            fields: vec![(
+                "field:callable".to_string(),
+                Lowered::Closure {
+                    captures: Vec::new(),
+                    params: Vec::new(),
+                    body: construct_origin,
+                },
+            )],
+        }],
+    };
+    let denied = with_lowering_boundary_use_issuance_denied(|| {
+        compiler.transfer_unit_result_into_carrier(
+            &mut builder,
+            construct_origin,
+            &mixed,
+        )
+    })
+    .expect_err("the mutation denies the production transfer's exact token");
+    assert!(
+        matches!(
+            denied,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(
+                ref message
+            )) if message.contains(
+                "test mutation denied planner-issued lowering boundary use"
+            )
+        ),
+        "the production transfer must stop at planner issuance, before the \
+         mixed graph reaches its nested Closure: got {denied:?}"
     );
 }
 

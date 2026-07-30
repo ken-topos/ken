@@ -4554,10 +4554,21 @@ fn retained_closures_carry_a_static_origin_and_no_body_term() {
 fn every_specialized_unwrap_requires_a_typed_operand_edge_token() {
     let support = include_str!("../../mod.rs");
     let core = include_str!("../../core.rs");
-    assert!(
-        support.contains("fn specialized_at(self, edge: OperandEdgeToken)"),
-        "the consuming phase boundary must require planner-owned edge evidence"
-    );
+    let planner = include_str!("../../../planning/static_transition.rs");
+    for required_token_gate in [
+        "fn specialized_at(self, edge: OperandEdgeToken)",
+        "fn specialized_join_arm(\n        self,\n        join: OperandEdgeToken,",
+        "fn specialized_ref_at(\n        &self,\n        edge: OperandEdgeToken,",
+        "fn specialized_env_at(\n    env: &[LoweringOperand],\n    edge: OperandEdgeToken,",
+        "fn transfer_into_carrier_on_planned_edge(",
+        "fn transfer_into_carrier_on_edge(",
+    ] {
+        assert!(
+            support.contains(required_token_gate),
+            "every raw read, move, store, or transfer choke point must require \
+             planner-owned edge evidence: {required_token_gate}"
+        );
+    }
     assert!(
         support.contains("edge.disposition()"),
         "the consuming phase boundary must inspect the closed disposition"
@@ -4573,8 +4584,15 @@ fn every_specialized_unwrap_requires_a_typed_operand_edge_token() {
         );
     }
     assert!(
-        support.contains("LoweringOnlyOperandEdge::") && core.contains("SourceOperandRole::"),
-        "source-child and lowering-only consumer populations must stay separate"
+        planner.contains("planned_boundary_use_token")
+            && support.contains("LoweringOnlyOperandEdge::")
+            && core.contains("SourceOperandRole::"),
+        "distinct source/synthesized lookup vocabularies must resolve through \
+         the one planned BoundaryUse authority"
+    );
+    assert!(
+        !planner.contains("BoundaryUseIdentity::Synthesized(self as u32 + 1)"),
+        "a lowering-only enum label must never mint production identity"
     );
 }
 
@@ -6018,6 +6036,78 @@ fn c1_closure_fixture_origin() -> StaticOriginId {
         .expect("the plan has a root occurrence origin")
 }
 
+fn c1_callable_capsule_token() -> OperandEdgeToken {
+    let expr = RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+        args: Vec::new(),
+    };
+    let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+        .expect("the fixture expression plans");
+    let origin = plan
+        .root_static_origin()
+        .expect("the plan has a root occurrence origin");
+    plan.lowering_boundary_use_token(
+        LoweringOnlyOperandEdge::CallableCapsuleEscape,
+        origin,
+        u32::MAX,
+    )
+    .expect("the unit result has an exact planned capsule boundary")
+}
+
+#[test]
+fn d7_raw_mixed_constructor_transfer_cannot_bypass_the_planned_ledger() {
+    // Promise class: durable invariant.
+    let expr = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::Pair::MkPair".to_string(),
+        args: Vec::new(),
+    };
+    let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+        .expect("the fixture expression plans");
+    let origin = plan
+        .root_static_origin()
+        .expect("the plan has a root occurrence origin");
+
+    let bypass = plan
+        .lowering_boundary_use_token(
+            LoweringOnlyOperandEdge::CallableCapsuleEscape,
+            origin,
+            0,
+        )
+        .expect_err("an unplanned raw transfer position has no token");
+    assert!(
+        format!("{bypass}").contains(
+            "lowering transition has no exact planner-issued boundary use"
+        ),
+        "the raw transfer must fail at planner authority lookup, before a value \
+         walk or allocation can run: {bypass}"
+    );
+
+    let exact = plan
+        .lowering_boundary_use_token(
+            LoweringOnlyOperandEdge::CallableCapsuleEscape,
+            origin,
+            u32::MAX,
+        )
+        .expect("the exact unit-result transfer is planned");
+    let mixed = Lowered::Constructor {
+        constructor: "ctor:fixture::Pair::MkPair".to_string(),
+        synthesized_identity: None,
+        args: vec![Lowered::Record {
+            fields: vec![("field:callable".to_string(), c1_closure(origin))],
+        }],
+    };
+    assert_eq!(
+        mixed.boundary_transfer_admissibility(&exact).unwrap_err(),
+        unsupported(
+            "Closure",
+            "a closure cannot cross the boundary: it is runtime-local and \
+             live-domain only, and it has no durable lane",
+        ),
+        "the sole planned mixed-constructor route must recurse and refuse the \
+         nested callable before allocation"
+    );
+}
+
 fn c1_closure(origin: StaticOriginId) -> Lowered {
     Lowered::Closure {
         captures: Vec::new(),
@@ -6078,9 +6168,7 @@ fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
     ] {
         assert_eq!(
             value
-                .boundary_transfer_admissibility(
-                    &LoweringOnlyOperandEdge::CallableCapsuleEscape.token(),
-                )
+                .boundary_transfer_admissibility(&c1_callable_capsule_token())
                 .unwrap_err(),
             expected,
             "{label}: the graph holds a closure and must be refused with the \
@@ -6133,9 +6221,7 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
     };
     assert!(
         closure_free
-            .boundary_transfer_admissibility(
-                &LoweringOnlyOperandEdge::CallableCapsuleEscape.token(),
-            )
+            .boundary_transfer_admissibility(&c1_callable_capsule_token())
             .is_ok(),
         "a constructor whose graph holds no closure must remain admissible; \
          D5 rejects closure-bearing GRAPHS, not the Constructor variant"
@@ -6157,9 +6243,7 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
     };
     assert!(
         closure_bearing
-            .boundary_transfer_admissibility(
-                &LoweringOnlyOperandEdge::CallableCapsuleEscape.token(),
-            )
+            .boundary_transfer_admissibility(&c1_callable_capsule_token())
             .is_err(),
         "NON-VACUITY: the walk admits a graph differing only by a closure in one \
          leaf position, so it is not discriminating on closures at all"

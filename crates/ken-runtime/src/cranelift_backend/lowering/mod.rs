@@ -86,7 +86,8 @@ pub(in crate::cranelift_backend) use super::planning::{
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use super::planning::{
-    plan_static_transition_graph, with_last_io_error_role_omitted, ScaleBPlanCensus,
+    plan_static_transition_graph, with_last_io_error_role_omitted,
+    with_lowering_boundary_use_issuance_denied, ScaleBPlanCensus,
 };
 pub(in crate::cranelift_backend) use super::surface::{
     backend, backend_module, unsupported, BackendFailure, CraneliftBackendError,
@@ -1737,14 +1738,29 @@ impl<'a> Lowering<'a> {
     /// in a separate private [`Self::emit_carrier_transfer`] — the entry point
     /// screens the whole graph, and the recursion never re-screens a subgraph
     /// whose parent is already allocated.
+    fn transfer_into_carrier_on_planned_edge(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        value: &Lowered,
+        edge: OperandEdgeToken,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        self.transfer_into_carrier_on_edge(builder, origin, value, edge)
+    }
+
+    #[cfg(test)]
     fn transfer_into_carrier(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         origin: StaticOriginId,
         value: &Lowered,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
-        let edge = LoweringOnlyOperandEdge::CallableCapsuleEscape.token();
-        self.transfer_into_carrier_on_edge(builder, origin, value, edge)
+        let edge = self.static_transition_plan.lowering_boundary_use_token(
+            LoweringOnlyOperandEdge::CallableCapsuleEscape,
+            origin,
+            u32::MAX,
+        )?;
+        self.transfer_into_carrier_on_planned_edge(builder, origin, value, edge)
     }
 
     /// Transfer through one exact planner-owned crossing.
@@ -1788,7 +1804,12 @@ impl<'a> Lowering<'a> {
             let status = self.emit_process_exit_status(builder, value.clone());
             self.emit_carrier_immediate(builder, BoundaryTag::ImmediateExitStatus, status)
         } else {
-            self.transfer_into_carrier(builder, origin, value)
+            let edge = self.static_transition_plan.lowering_boundary_use_token(
+                LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                origin,
+                u32::MAX,
+            )?;
+            self.transfer_into_carrier_on_planned_edge(builder, origin, value, edge)
         }
     }
 
@@ -2386,10 +2407,21 @@ impl<'a> Lowering<'a> {
         // D7/#24: close the whole input graph before the first frame allocation
         // or store. In particular a callable capsule is rejected here without
         // descending into or publishing any of its phase-bearing captures.
-        for input in &inputs {
+        let mut input_edges = Vec::with_capacity(inputs.len());
+        for (position, input) in inputs.iter().enumerate() {
             if let LoweringOperand::Specialized(value) = input {
-                let edge = LoweringOnlyOperandEdge::CallableCapsuleEscape.token();
+                let position = u32::try_from(position).map_err(|_| {
+                    backend_module("callee input boundary position exceeds u32".to_string())
+                })?;
+                let edge = self.static_transition_plan.lowering_boundary_use_token(
+                    LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                    target.origin,
+                    position,
+                )?;
                 value.boundary_transfer_admissibility(&edge)?;
+                input_edges.push(Some(edge));
+            } else {
+                input_edges.push(None);
             }
         }
         let payload = builder.create_sized_stack_slot(StackSlotData::new(
@@ -2412,8 +2444,21 @@ impl<'a> Lowering<'a> {
                     let word = match value {
                         LoweringOperand::Carried(word) => word.word,
                         LoweringOperand::Specialized(value) => {
-                            self.transfer_into_carrier(builder, target.origin, &value)?
-                                .word
+                            let edge = input_edges
+                                .get_mut(input)
+                                .and_then(Option::take)
+                                .ok_or_else(|| {
+                                    backend_module(
+                                        "callee input has no planned boundary token".to_string(),
+                                    )
+                                })?;
+                            self.transfer_into_carrier_on_planned_edge(
+                                builder,
+                                target.origin,
+                                &value,
+                                edge,
+                            )?
+                            .word
                         }
                     };
                     builder.ins().stack_store(word, payload, offset);
@@ -7599,8 +7644,11 @@ impl<'a> Lowering<'a> {
         // ⭐ The marker consumes a **recursor closure template**; a carried
         // boundary word is not one and never becomes one, so this is a
         // specialized-only surface with the ruled fail-closed arm.
-        let _ = marker_origin;
-        let edge = LoweringOnlyOperandEdge::CheckedComputationalIhMarker.token();
+        let edge = self.static_transition_plan.lowering_boundary_use_token(
+            LoweringOnlyOperandEdge::CheckedComputationalIhMarker,
+            marker_origin,
+            0,
+        )?;
         let mut value = value.specialized_at(edge)?;
         let Some(instance) = self.mint_checked_computational_ih_instance(&mut value)? else {
             return Ok(LoweringOperand::Specialized(value));
@@ -8046,7 +8094,12 @@ impl<'a> Lowering<'a> {
             ));
         }
         let _ = construct;
-        let lowered = lowered.specialized_join_arm(LoweringOnlyOperandEdge::JoinArm.token())?;
+        let edge = self.static_transition_plan.lowering_boundary_use_token(
+            LoweringOnlyOperandEdge::JoinArm,
+            join_plan.origin,
+            0,
+        )?;
+        let lowered = lowered.specialized_join_arm(edge)?;
         let checked_root_exit_representation = self.has_checked_root_exit_representation();
         let lowered = if checked_root_exit_representation {
             Self::unwrap_terminal_ret(lowered)
@@ -8103,7 +8156,7 @@ impl<'a> Lowering<'a> {
                 "carrier-result join reached a native-only scalar merge consumer".to_string(),
             ));
         }
-        self.merge_scalar_operand(builder, lowered, None, construct)
+        self.merge_scalar_operand(builder, join_plan.origin, lowered, None, construct)
     }
 
     /// Consume one scalar-valued operand at a private typed CFG boundary.
@@ -8117,6 +8170,7 @@ impl<'a> Lowering<'a> {
     fn merge_scalar_operand(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        join_origin: StaticOriginId,
         lowered: LoweringOperand,
         required_kind: Option<ScalarMergeKind>,
         construct: &'static str,
@@ -8165,7 +8219,12 @@ impl<'a> Lowering<'a> {
             ));
         }
         let _ = construct;
-        let lowered = lowered.specialized_join_arm(LoweringOnlyOperandEdge::JoinArm.token())?;
+        let edge = self.static_transition_plan.lowering_boundary_use_token(
+            LoweringOnlyOperandEdge::JoinArm,
+            join_origin,
+            0,
+        )?;
+        let lowered = lowered.specialized_join_arm(edge)?;
         if required_kind == Some(ScalarMergeKind::ExitCode) {
             let lowered = Self::unwrap_terminal_ret(lowered);
             let zero_tag = builder.ins().iconst(types::I64, 0);
@@ -8399,7 +8458,13 @@ impl<'a> Lowering<'a> {
                 "carrier-result join reached a native checked-plan merge consumer".to_string(),
             ));
         }
-        self.merge_scalar_operand(builder, lowered, Some(required_kind), construct)
+        self.merge_scalar_operand(
+            builder,
+            join_plan.origin,
+            lowered,
+            Some(required_kind),
+            construct,
+        )
     }
 
     fn record_merge_kind(

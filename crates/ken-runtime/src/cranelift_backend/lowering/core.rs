@@ -2656,11 +2656,22 @@ impl<'a> Lowering<'a> {
                 )?;
                 scrutinee.specialized_at(edge)?
             }
-            EliminatorFrame::PendingLet(_)
-            | EliminatorFrame::InvocationReturn
-            | EliminatorFrame::Active(_) => scrutinee.specialized_at(
-                LoweringOnlyOperandEdge::ComposedComputationalMatchScrutinee.token(),
-            )?,
+            EliminatorFrame::PendingLet(frame) => {
+                let edge = self.static_transition_plan.recursor_boundary_use_token(
+                    frame.recursor_parent,
+                    frame.sibling_position,
+                )?;
+                scrutinee.specialized_at(edge)?
+            }
+            EliminatorFrame::Active(_) => {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "active composed match has no exact planned scrutinee boundary"
+                        .to_string(),
+                )));
+            }
+            EliminatorFrame::InvocationReturn => unreachable!(
+                "invocation return forwards before composed scrutinee classification"
+            ),
         };
         if let Lowered::BoundedNat(nat) = scrutinee {
             return self.lower_bounded_nat_computational(builder, nat, false, eliminators);
@@ -3388,10 +3399,12 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
-                constructor_args.extend(specialized_env_at(
-                    &outer_tail,
-                    LoweringOnlyOperandEdge::DeferredConstructorTrailingField.token(),
-                )?);
+                let edge = self.static_transition_plan.lowering_boundary_use_token(
+                    LoweringOnlyOperandEdge::DeferredConstructorTrailingField,
+                    deferred.construct_origin,
+                    0,
+                )?;
+                constructor_args.extend(specialized_env_at(&outer_tail, edge)?);
                 Ok(Ok(constructor_args
                     .into_iter()
                     .map(LoweringOperand::Specialized)
@@ -5645,6 +5658,7 @@ impl<'a> Lowering<'a> {
                 let body = self.machine_body_occurrence(body)?;
                 self.lower_source_declaration_call(
                     builder,
+                    call_origin,
                     reference_origin,
                     symbol,
                     captures,
@@ -5891,6 +5905,7 @@ impl<'a> Lowering<'a> {
     fn lower_source_declaration_call<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        call_origin: StaticOriginId,
         reference_origin: StaticOriginId,
         symbol: RuntimeSymbol,
         captures: Vec<LoweringOperand>,
@@ -5930,14 +5945,18 @@ impl<'a> Lowering<'a> {
         // non-recursive direct call above forwards `args` into `call_env`
         // untouched — that path stays phase-preserving and must not be made to
         // fail closed for a property only the loop needs.
-        let args = specialized_env_at(
-            &args,
-            LoweringOnlyOperandEdge::RecursiveSourceDeclarationArgument.token(),
+        let args_edge = self.static_transition_plan.lowering_boundary_use_token(
+            LoweringOnlyOperandEdge::RecursiveSourceDeclarationArgument,
+            call_origin,
+            0,
         )?;
-        let captures = specialized_env_at(
-            &captures,
-            LoweringOnlyOperandEdge::DeclarationCaptureSpecialization.token(),
+        let args = specialized_env_at(&args, args_edge)?;
+        let captures_edge = self.static_transition_plan.lowering_boundary_use_token(
+            LoweringOnlyOperandEdge::DeclarationCaptureSpecialization,
+            call_origin,
+            0,
         )?;
+        let captures = specialized_env_at(&captures, captures_edge)?;
         if let Some(active) = self
             .active_recursive_declarations
             .iter()
@@ -6256,7 +6275,17 @@ impl<'a> Lowering<'a> {
                     let status = self.emit_process_exit_status(builder, lowered);
                     self.emit_carrier_immediate(builder, BoundaryTag::ImmediateExitStatus, status)
                 } else {
-                    self.transfer_into_carrier(builder, origin, &lowered)
+                    let edge = self.static_transition_plan.lowering_boundary_use_token(
+                        LoweringOnlyOperandEdge::JoinArm,
+                        origin,
+                        0,
+                    )?;
+                    self.transfer_into_carrier_on_planned_edge(
+                        builder,
+                        origin,
+                        &lowered,
+                        edge,
+                    )
                 }
             }
         }
@@ -9761,7 +9790,13 @@ impl<'a> Lowering<'a> {
         zero_env.extend_from_slice(producer_env);
         let zero_lowered = self.lower_expr(builder, zero_body, &zero_env)?;
         let (initial, result_kind) =
-            self.merge_scalar_operand(builder, zero_lowered, None, "DeclarationRef")?;
+            self.merge_scalar_operand(
+                builder,
+                join_origin,
+                zero_lowered,
+                None,
+                "DeclarationRef",
+            )?;
         if result_kind == ScalarMergeKind::RecursiveBackedge {
             return Err(unsupported(
                 "DeclarationRef",
@@ -9832,7 +9867,13 @@ impl<'a> Lowering<'a> {
         let next = self.lower_expr(builder, suc_body, &suc_env);
         self.active_recursive_declarations.pop();
         let (next, next_kind) =
-            self.merge_scalar_operand(builder, next?, Some(result_kind), "DeclarationRef")?;
+            self.merge_scalar_operand(
+                builder,
+                join_origin,
+                next?,
+                Some(result_kind),
+                "DeclarationRef",
+            )?;
         if next_kind != result_kind {
             return Err(unsupported(
                 "DeclarationRef",
@@ -9895,19 +9936,23 @@ impl<'a> Lowering<'a> {
             inputs.extend(captures.iter().cloned());
             return self.call_declared_declaration_unit(builder, reference_origin, &inputs);
         }
-        let captures = specialized_env_at(
-            captures,
-            LoweringOnlyOperandEdge::DeclarationCaptureSpecialization.token(),
+        let captures_edge = self.static_transition_plan.lowering_boundary_use_token(
+            LoweringOnlyOperandEdge::DeclarationCaptureSpecialization,
+            call_origin,
+            0,
         )?;
+        let captures = specialized_env_at(captures, captures_edge)?;
         // ⭐ A recursive declaration's arguments are its **loop-header
         // representation**: their shapes are compared across iterations
         // (`same_recursive_argument_shapes`) and lowered into block params. A
         // carried boundary word has no such shape, so this is a
         // specialized-only surface with the ruled fail-closed arm.
-        let lowered_args = specialized_env_at(
-            &lowered_args,
-            LoweringOnlyOperandEdge::RecursiveDeclarationArgument.token(),
+        let args_edge = self.static_transition_plan.lowering_boundary_use_token(
+            LoweringOnlyOperandEdge::RecursiveDeclarationArgument,
+            call_origin,
+            0,
         )?;
+        let lowered_args = specialized_env_at(&lowered_args, args_edge)?;
         if params.len() != lowered_args.len() {
             return Err(unsupported(
                 "DeclarationRef",

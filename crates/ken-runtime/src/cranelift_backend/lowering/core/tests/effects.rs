@@ -303,7 +303,13 @@ fn run_checked_bounded_nat_fixture(
                     compiler.lower_bounded_nat_computational(&mut builder, nat, false, &frames)?
                 }
             };
-            match lowered.specialized_at(LoweringOnlyOperandEdge::TestFixtureResult.token())? {
+            let fixture_origin = compiler.static_transition_plan.root_static_origin()?;
+            let edge = compiler.static_transition_plan.lowering_boundary_use_token(
+                LoweringOnlyOperandEdge::TestFixtureResult,
+                fixture_origin,
+                0,
+            )?;
+            match lowered.specialized_at(edge)? {
                 Lowered::Int { value, .. } => value,
                 other => compiler.emit_result(&mut builder, other)?.0,
             }

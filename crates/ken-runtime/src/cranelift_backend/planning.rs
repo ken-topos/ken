@@ -15,10 +15,9 @@ mod static_transition;
 
 pub(super) use static_transition::plan_static_transition_graph_with_symbols;
 #[cfg(test)]
-pub(super) use static_transition::with_last_io_error_role_omitted;
-#[cfg(test)]
 pub(super) use static_transition::{
     governed_nested_resource_bracket, plan_static_transition_graph, ScaleBPlanCensus,
+    with_last_io_error_role_omitted, with_lowering_boundary_use_issuance_denied,
 };
 pub(super) use static_transition::{
     planned_partiality_trap, BoundaryUseIdentity, ConstructorIdentity, JoinPlanToken,
