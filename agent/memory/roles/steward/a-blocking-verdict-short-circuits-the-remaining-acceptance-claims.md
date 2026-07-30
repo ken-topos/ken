@@ -33,6 +33,35 @@ assertion** — *it still fails*. A negative assertion passes for **any** reason
 including a new and different cause that happens to render the same message.
 **A message match is not a mechanism match.**
 
+> ### ⭐⭐⭐ OUTCOME: THE CLAIM WAS FALSE AND THE WP OWNED THE REGRESSION
+>
+> Measured at the zero-WP merge-base `f7cea8fd`, the control **passes**; the
+> candidate **fails** it on the same path with an aggregate-record /
+> source-occurrence owner disagreement for a dead nested-join origin. The
+> implementer's verdict: *"This atomic WP owns the regression."*
+>
+> ⇒ **"Expected retained true-base failure" was a live regression wearing a
+> baseline's clothes**, and it would have merged as an accepted known-failure.
+> ⛔ This is not a hypothetical hazard — it is the measured one.
+
+⛔⛔ **THE ANCHOR IS WHERE THIS CHECK ACTUALLY FAILS — AND IT FAILED TWICE
+BEFORE IT WORKED.** Asking for the differential is the easy half. Both anchors
+first used already contained the change:
+
+| anchor tried | what it actually was | WP work vs merge-base |
+|---|---|---|
+| the candidate's parent | the **previous blocked candidate** | all of it |
+| the *"preservation-only"* WIP seam | a hard-stop checkpoint, **not** a base | **+16451 / −3845 across 12 files** |
+
+⭐ **"Preservation-only, no QA candidate" describes what the commit CLAIMS, not
+what it CONTAINS.** It means nobody offered it for review — it is in-flight
+state, often deep in it. Reading it as a clean base is the error that made two
+rounds of the differential vacuous, and it was **my** error, not the ring's.
+
+⇒ ⭐ **A baseline anchor must be a commit with ZERO of the WP's changes** —
+`origin/main`, or `git merge-base <candidate> origin/main`. **Measure the
+anchor's diff before trusting it**, never infer cleanliness from its message.
+
 **How to apply:**
 
 - **At the publish gate, diff the handoff's claim list against what the QA
@@ -42,9 +71,11 @@ including a new and different cause that happens to render the same message.
 - **Route the residue to the LEADER before the fresh candidate**, as an
   *acceptance* obligation, explicitly adding no scope to the repair. Folding it
   into the next review request is far cheaper than holding a publish later.
-- **Discriminate an "expected failure" against the PARENT SHA by cause, not by
-  string** — run the one test at both SHAs. If it fails at the candidate and not
-  at the parent, the candidate introduced it.
+- **Discriminate an "expected failure" against a ZERO-WP anchor by cause, not by
+  string** — `origin/main` or the exact merge-base, ⛔ never the parent commit
+  and ⛔ never a preservation seam. Confirm the test exists at that anchor, then
+  require the verdict to **record the anchor SHA**, so no later round
+  re-litigates it.
 - ⭐ **"Unchanged from base" is a claim about two runs, and you were shown
   one.**
 
