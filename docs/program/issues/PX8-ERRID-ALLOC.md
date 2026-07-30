@@ -19,10 +19,33 @@ origin: "Architect ruling evt_6tzss92ckj2by (2026-07-27) on the Steward's PX8-ER
 >
 > - rebased candidate `ad7298fb80128d43e430d427b71f8aa16a9336aa`, tree `77ece013`
 > - base `origin/main = eef0cb06`, `main` an ancestor, worktree clean
-> - protected `preserved/PX8-ERRID-ALLOC-e65c81b` = `e65c81b5`, tree `102c54f8`
 > - 0 passed / 1 failed after **135.28 s** — `rt_parity_native.rs:370`,
 >   ObjectEmission at field `checked_process_object`,
 >   `Cranelift … Code for function is too large`
+>
+> ### ⛔ WHERE THE WORK ACTUALLY IS — measured 2026-07-30, and it had NO durable copy
+>
+> ⚠ **This banner used to call `preserved/PX8-ERRID-ALLOC-e65c81b` "protected".
+> That was false.** Both it and the rebased candidate existed as **local refs in
+> one worktree with zero copies at `origin`** — a `git reset --hard` or a worktree
+> reseat would have destroyed the rebase silently. Pushed durably 2026-07-30:
+>
+> | SHA | what it is | durable ref at `origin` |
+> |---|---|---|
+> | `ad7298fb` (07-29) | ⭐ **the resume point** — rebased onto a recent `main` | `preserved/px8-errid-alloc-rebased-ad7298fb` |
+> | `e65c81b5` (07-28) | the pre-rebase candidate | `preserved/px8-errid-alloc-e65c81b` |
+> | `763f0a44` (07-27) | PR #1141's head — ⛔ **2 days stale** | `wp/PX8-ERRID-ALLOC` + `refs/pull/1141/head` |
+>
+> ⛔⛔ **`origin/wp/PX8-ERRID-ALLOC` IS THE STALE ONE.** It still points at
+> `763f0a44`; the rebase never left the box. ⇒ On restart, ⛔ do **not** resume
+> from the branch as fetched — resume from `ad7298fb`, and expect the first push
+> to `wp/PX8-ERRID-ALLOC` to be **rejected as a non-fast-forward** because the
+> two lineages diverged at the rebase.
+>
+> ⭐ **The unlanded feature delta, so a restart can confirm it is still needed:**
+> catalog entry `error|resource.AllocationFailed|9` (`main` 73 lines → 74) and
+> test `linked_trace_codec_preserves_allocation_failure_identity`. **Neither is
+> on `main`** as of `53c4d4f2` — verified by blob, not by ancestry.
 >
 > **Architect ruling `evt_3t7t27e3rv8cx` — outcome 2.** The oversized function is
 > the monolithic `RecursiveDescent` root; `FunctionizedUnits` defines **zero**
