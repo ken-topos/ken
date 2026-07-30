@@ -5427,7 +5427,16 @@ impl<'src> StaticTransitionPlan<'src> {
             edge.identity,
             "a planned computational recursor residual",
         )?;
-        self.record_boundary_use_consumption(edge.identity)?;
+        // This is a semantic source crossing. The same recursive-position
+        // authority may be revisited while staging multiple generated units,
+        // but it is one planned use rather than repeated emitted lowering.
+        if !self
+            .operand_edge_consumption
+            .borrow()
+            .contains_key(&edge.identity)
+        {
+            self.record_boundary_use_consumption(edge.identity)?;
+        }
         Ok(token)
     }
 

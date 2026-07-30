@@ -9375,6 +9375,59 @@ fn d8_recursive_computational_revisit_with_join() -> RuntimeExpr {
     host_result_closure_match(recursive_computational_result_depth(2, later_case_body))
 }
 
+/// MEASURED: a source-machine selected computational match consumes its exact
+/// generic recursive-position authority while the known-true nested `Match`
+/// dispositions its exact dead case. Omitting the live recursive-position use
+/// reaches global exact closure after staging and before the first definition;
+/// omitting the dead case reaches the independent match-case closure failure.
+///
+/// CLAIMED: the selected generic recursor and the dead source case close for
+/// distinct causal reasons; neither is inferred merely from ledger absence.
+///
+/// THE GAP: exact static-worker residuals use their richer unified identities
+/// and are controlled separately. This covers the non-worker authority exposed
+/// by the true-base D8 differential.
+///
+/// Promise class: durable invariant.
+#[test]
+fn d8_source_machine_known_bool_closes_live_recursor_and_dead_case() {
+    let fixture =
+        d8_source_machine_with_match(d8_known_bool_match_with_dead_join_case(true));
+    recursive_port_process_compiles(&fixture)
+        .expect("live generic recursor consumed and exact dead case dispositioned");
+
+    set_d8_join_consumption_mutation(
+        JoinConsumptionMutation::OmitFirstSourceMachineRecursorBoundaryUse,
+    );
+    let live_omission = recursive_port_process_compiles(&fixture)
+        .expect_err("omitting the selected generic recursor use must reject");
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
+    assert!(matches!(
+        live_omission,
+        CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+            if detail.starts_with("boundary-use ledger is not exact; missing=")
+                && detail.contains("SpecializedOnlyLeaf")
+    ));
+    let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+    assert!(declared > 0, "the live-omission control never reached staging");
+    assert_eq!(defined, 0, "live generic recursor omission published a unit");
+
+    set_d8_join_consumption_mutation(
+        JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase,
+    );
+    let dead_omission = recursive_port_process_compiles(&fixture)
+        .expect_err("omitting the exact dead Match case disposition must reject");
+    set_d8_join_consumption_mutation(JoinConsumptionMutation::Exact);
+    assert!(matches!(
+        dead_omission,
+        CraneliftBackendError::Backend(BackendFailure::Module(ref detail))
+            if detail.contains("neither emitted nor statically unselected")
+    ));
+    let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+    assert!(declared > 0, "the dead-omission control never reached staging");
+    assert_eq!(defined, 0, "dead Match-case omission published a unit");
+}
+
 /// MEASURED: successful FunctionizedUnits emission closes two facts separately.
 /// Each generated function consumes each owner-bound join token at most once,
 /// then, after its reached-case union closes, partitions its complete semantic

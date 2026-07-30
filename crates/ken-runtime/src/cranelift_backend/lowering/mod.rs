@@ -859,6 +859,8 @@ thread_local! {
         const { std::cell::Cell::new(0) };
     static D8_JOIN_CONSUMPTION_MUTATION: std::cell::Cell<JoinConsumptionMutation> =
         const { std::cell::Cell::new(JoinConsumptionMutation::Exact) };
+    static D8_SOURCE_MACHINE_RECURSOR_BOUNDARY_MUTATED: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
 }
 
 #[cfg(test)]
@@ -870,6 +872,7 @@ enum JoinConsumptionMutation {
     IncludeStaticallyUnselected,
     OmitFirstStaticallyUnselectedMatchCase,
     OmitSourceMachineComputationalMatchSelection,
+    OmitFirstSourceMachineRecursorBoundaryUse,
     MaterializeFirstUnselectedMatchJoin,
     AttachEntryToFirstMaterializedDead,
     DispositionDynamicHostResultMerge,
@@ -898,6 +901,7 @@ fn d8_join_merge_count() -> usize {
 #[cfg(test)]
 fn set_d8_join_consumption_mutation(mutation: JoinConsumptionMutation) {
     D8_JOIN_CONSUMPTION_MUTATION.with(|cell| cell.set(mutation));
+    D8_SOURCE_MACHINE_RECURSOR_BOUNDARY_MUTATED.with(|cell| cell.set(false));
 }
 
 #[cfg(test)]
@@ -1865,6 +1869,7 @@ impl<'a> Lowering<'a> {
             | JoinConsumptionMutation::IncludeStaticallyUnselected
             | JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase
             | JoinConsumptionMutation::OmitSourceMachineComputationalMatchSelection
+            | JoinConsumptionMutation::OmitFirstSourceMachineRecursorBoundaryUse
             | JoinConsumptionMutation::MaterializeFirstUnselectedMatchJoin
             | JoinConsumptionMutation::AttachEntryToFirstMaterializedDead
             | JoinConsumptionMutation::DispositionDynamicHostResultMerge => {}
@@ -2293,6 +2298,7 @@ impl<'a> Lowering<'a> {
                 | JoinConsumptionMutation::DuplicateFirst
                 | JoinConsumptionMutation::IncludeStaticallyUnselected
                 | JoinConsumptionMutation::OmitFirstStaticallyUnselectedMatchCase
+                | JoinConsumptionMutation::OmitFirstSourceMachineRecursorBoundaryUse
                 | JoinConsumptionMutation::MaterializeFirstUnselectedMatchJoin
                 | JoinConsumptionMutation::DispositionDynamicHostResultMerge => blocks,
             };
@@ -7921,7 +7927,28 @@ impl<'a> Lowering<'a> {
                     capture_count: token.capture_count as usize,
                 })
             }
-            LoweringOperand::Specialized(_) | LoweringOperand::Carried(_) => recursive_worker,
+            LoweringOperand::Specialized(_) => {
+                #[cfg(test)]
+                let omit_boundary_use = D8_JOIN_CONSUMPTION_MUTATION
+                    .with(std::cell::Cell::get)
+                    == JoinConsumptionMutation::OmitFirstSourceMachineRecursorBoundaryUse
+                    && D8_SOURCE_MACHINE_RECURSOR_BOUNDARY_MUTATED.with(|mutated| {
+                        if mutated.get() {
+                            false
+                        } else {
+                            mutated.set(true);
+                            true
+                        }
+                    });
+                #[cfg(not(test))]
+                let omit_boundary_use = false;
+                if !omit_boundary_use {
+                    self.static_transition_plan
+                        .recursor_boundary_use_token(static_origin, sibling_position)?;
+                }
+                recursive_worker
+            }
+            LoweringOperand::Carried(_) => recursive_worker,
         };
         let (residual, payload) = decompose_computational_recursor(recursive);
         let active_instance = self.active_recursive_invocations.last().copied();
