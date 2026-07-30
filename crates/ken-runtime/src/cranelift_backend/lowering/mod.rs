@@ -984,6 +984,10 @@ fn set_trap_caller_protocol_mutation(mutation: TrapCallerProtocolMutation) {
 
 struct Lowering<'a> {
     seed_env: &'a NativeSeedEnvironment,
+    /// Exact planner owner of the function body currently being staged.
+    /// Case-emission tokens are keyed by this identity; `None` is permitted
+    /// only outside unit-body emission.
+    active_emission_owner: Option<PredeclaredFunctionId>,
     /// Everything resolved into the ONE generated function this `Lowering`
     /// emits into. ⛔ See [`FunctionLocalRefs`] — none of it is portable.
     function_local: FunctionLocalRefs,
@@ -6652,6 +6656,7 @@ enum SourceContinuation<'a> {
         next: Box<SourceContinuation<'a>>,
     },
     LetBody {
+        let_origin: StaticOriginId,
         body: OwnedSourceOccurrence,
         env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
@@ -6783,6 +6788,7 @@ enum SourcePrefixTemplate {
         next: Box<SourcePrefixTemplate>,
     },
     LetBody {
+        let_origin: StaticOriginId,
         body: OwnedSourceOccurrence,
         env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
@@ -7692,14 +7698,21 @@ impl<'a> Lowering<'a> {
         marker_origin: StaticOriginId,
         value: LoweringOperand,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        // ⭐ The marker consumes a **recursor closure template**; a carried
-        // boundary word is not one and never becomes one, so this is a
-        // specialized-only surface with the ruled fail-closed arm.
-        let edge = self.static_transition_plan.lowering_boundary_use_token(
+        // The planner token closes the marker occurrence. The specialized-only
+        // read applies only while the marker is still pending, when this value
+        // is the recursor closure template itself. A source call consumes the
+        // marker from its callee before it executes; its returned semantic
+        // value may therefore be carried and must continue unchanged.
+        let edge = self
+            .static_transition_plan
+            .reached_lowering_boundary_use_token(
             LoweringOnlyOperandEdge::CheckedComputationalIhMarker,
             marker_origin,
             0,
         )?;
+        if self.pending_computational_ih_call.is_none() {
+            return Ok(value);
+        }
         let mut value = value.specialized_at(edge)?;
         let Some(instance) = self.mint_checked_computational_ih_instance(&mut value)? else {
             return Ok(LoweringOperand::Specialized(value));
@@ -8166,7 +8179,9 @@ impl<'a> Lowering<'a> {
             ));
         }
         let _ = construct;
-        let edge = self.static_transition_plan.lowering_boundary_use_token(
+        let edge = self
+            .static_transition_plan
+            .reached_lowering_boundary_use_token(
             LoweringOnlyOperandEdge::JoinArm,
             join_plan.origin,
             0,
@@ -8291,7 +8306,9 @@ impl<'a> Lowering<'a> {
             ));
         }
         let _ = construct;
-        let edge = self.static_transition_plan.lowering_boundary_use_token(
+        let edge = self
+            .static_transition_plan
+            .reached_lowering_boundary_use_token(
             LoweringOnlyOperandEdge::JoinArm,
             join_origin,
             0,
@@ -8934,7 +8951,13 @@ impl<'a> Lowering<'a> {
                     )?),
                 }
             }
-            SourceContinuation::LetBody { body, env, next } => SourceContinuation::LetBody {
+            SourceContinuation::LetBody {
+                let_origin,
+                body,
+                env,
+                next,
+            } => SourceContinuation::LetBody {
+                let_origin,
                 body,
                 env,
                 next: Box::new(Self::replace_source_terminal_with_unwind(
@@ -9257,10 +9280,16 @@ impl<'a> Lowering<'a> {
                 },
                 SourcePrefixTerminal::Join(edge),
             ),
-            SourceContinuation::LetBody { body, env, next } => {
+            SourceContinuation::LetBody {
+                let_origin,
+                body,
+                env,
+                next,
+            } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
                 (
                     SourcePrefixTemplate::LetBody {
+                        let_origin,
                         body,
                         env,
                         next: Box::new(next),
@@ -9461,7 +9490,13 @@ impl<'a> Lowering<'a> {
                     next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
                 }
             }
-            SourcePrefixTemplate::LetBody { body, env, next } => SourceContinuation::LetBody {
+            SourcePrefixTemplate::LetBody {
+                let_origin,
+                body,
+                env,
+                next,
+            } => SourceContinuation::LetBody {
+                let_origin: *let_origin,
                 body: body.clone(),
                 env: env.clone(),
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),

@@ -43,6 +43,7 @@ fn run_checked_bounded_nat_fixture(
     let seed_env = NativeSeedEnvironment::empty();
     let mut compiler = Lowering {
         seed_env: &seed_env,
+        active_emission_owner: None,
         declarations: BTreeMap::new(),
         static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),

@@ -3071,6 +3071,100 @@ struct PlannedJoinResult {
     has_continuing_predecessor: bool,
 }
 
+/// The complete producer population for one exact carried `Match` scrutinee.
+///
+/// `Open` is a positive fact: at least one value-flow ingress is opaque,
+/// untracked, or otherwise not closed by the planner. It is never inferred from
+/// an empty observation. `Closed` is the monotone union of canonical
+/// constructor identities supplied by exact source producers.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ScrutineeProducerSet {
+    Open,
+    Closed(Vec<ConstructorIdentity>),
+}
+
+impl ScrutineeProducerSet {
+    fn join(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Open, _) | (_, Self::Open) => Self::Open,
+            (Self::Closed(left), Self::Closed(right)) => {
+                let mut union = left.clone();
+                for identity in right {
+                    if !union.contains(identity) {
+                        union.push(*identity);
+                    }
+                }
+                Self::Closed(union)
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum ProducerFlowKind {
+    Construct,
+    Forward,
+    Environment,
+    Alternative,
+    CallArgument,
+    CallResult,
+    Capture,
+    Recursor,
+    OpaqueIngress,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct ProducerFlowEdge {
+    from: StaticOriginId,
+    to: StaticOriginId,
+    kind: ProducerFlowKind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ScrutineeProducerAuthority {
+    producers: ScrutineeProducerSet,
+    producer_origins: Vec<(ConstructorIdentity, BTreeSet<StaticOriginId>)>,
+    flow: BTreeSet<ProducerFlowEdge>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+enum CaseEmissionStatus {
+    Reachable,
+    Eliminated,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PlannedCaseEmission {
+    match_origin: StaticOriginId,
+    scrutinee_origin: StaticOriginId,
+    owner: PredeclaredFunctionId,
+    phase: ResultPhase,
+    ordinal: u32,
+    body_origin: StaticOriginId,
+    constructor: ConstructorIdentity,
+    authority: ScrutineeProducerAuthority,
+    status: CaseEmissionStatus,
+}
+
+/// Move-only authority for lowering one exact source case.
+///
+/// Fields are readers only and construction remains planner-private. Lowering
+/// cannot mint a case, change its status, or substitute a case from another
+/// match occurrence.
+#[derive(Debug)]
+pub(in crate::cranelift_backend) struct CaseEmissionToken {
+    match_origin: StaticOriginId,
+    ordinal: u32,
+    body_origin: StaticOriginId,
+    status: CaseEmissionStatus,
+}
+
+impl CaseEmissionToken {
+    pub(in crate::cranelift_backend) fn is_reachable(&self) -> bool {
+        self.status == CaseEmissionStatus::Reachable
+    }
+}
+
 /// A nonzero identity for one exact trap value interned by the planner.
 ///
 /// The word travels only through [`AbiCarrier::TrapWord`]. It is not a source
@@ -3148,6 +3242,13 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// The phase of every source result as derived by the same lexical
     /// value-flow walk that plans joins.
     result_phases: Vec<Option<ResultPhaseSummary>>,
+    /// One exact, planner-derived case partition for every carried ordinary
+    /// `Match`. The population closes after generated units and continuations.
+    case_emissions: Vec<PlannedCaseEmission>,
+    /// Exact reachable-case consumption ledger. It closes with the boundary
+    /// ledger before any staged function is published.
+    case_emission_consumption:
+        RefCell<BTreeMap<(PredeclaredFunctionId, StaticOriginId, u32), u32>>,
     /// The selected emission authority that determines whether owner crossings
     /// require operational carrier results.
     functionized_units: bool,
@@ -3888,6 +3989,975 @@ fn build_join_result_plan(
     Ok((joins, phases))
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ProducerFact {
+    population: ScrutineeProducerSet,
+    producer_origins: Vec<(ConstructorIdentity, BTreeSet<StaticOriginId>)>,
+    flow: BTreeSet<ProducerFlowEdge>,
+    frontier: BTreeSet<StaticOriginId>,
+}
+
+impl ProducerFact {
+    fn empty() -> Self {
+        Self {
+            population: ScrutineeProducerSet::Closed(Vec::new()),
+            producer_origins: Vec::new(),
+            flow: BTreeSet::new(),
+            frontier: BTreeSet::new(),
+        }
+    }
+
+    fn open(origin: StaticOriginId) -> Self {
+        Self {
+            population: ScrutineeProducerSet::Open,
+            producer_origins: Vec::new(),
+            flow: BTreeSet::from([ProducerFlowEdge {
+                from: origin,
+                to: origin,
+                kind: ProducerFlowKind::OpaqueIngress,
+            }]),
+            frontier: BTreeSet::from([origin]),
+        }
+    }
+
+    fn constructor(origin: StaticOriginId, identity: ConstructorIdentity) -> Self {
+        Self {
+            population: ScrutineeProducerSet::Closed(vec![identity]),
+            producer_origins: vec![(identity, BTreeSet::from([origin]))],
+            flow: BTreeSet::from([ProducerFlowEdge {
+                from: origin,
+                to: origin,
+                kind: ProducerFlowKind::Construct,
+            }]),
+            frontier: BTreeSet::from([origin]),
+        }
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        let mut producer_origins = self.producer_origins.clone();
+        for (identity, origins) in &other.producer_origins {
+            if let Some((_, known)) = producer_origins
+                .iter_mut()
+                .find(|(candidate, _)| candidate == identity)
+            {
+                known.extend(origins.iter().copied());
+            } else {
+                producer_origins.push((*identity, origins.clone()));
+            }
+        }
+        Self {
+            population: self.population.join(&other.population),
+            producer_origins,
+            flow: self.flow.union(&other.flow).copied().collect(),
+            frontier: self.frontier.union(&other.frontier).copied().collect(),
+        }
+    }
+
+    fn forwarded(mut self, to: StaticOriginId, kind: ProducerFlowKind) -> Self {
+        for from in self.frontier.iter().copied() {
+            self.flow.insert(ProducerFlowEdge { from, to, kind });
+        }
+        self.frontier.clear();
+        self.frontier.insert(to);
+        self
+    }
+
+    fn authority(&self) -> ScrutineeProducerAuthority {
+        ScrutineeProducerAuthority {
+            producers: self.population.clone(),
+            producer_origins: self.producer_origins.clone(),
+            flow: self.flow.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct ProducerCallable {
+    closure_origin: StaticOriginId,
+    body_origin: StaticOriginId,
+    recursor_origin: Option<StaticOriginId>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ProducerCallableSet {
+    Open,
+    Closed(BTreeSet<ProducerCallable>),
+}
+
+impl ProducerCallableSet {
+    fn join(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Open, _) | (_, Self::Open) => Self::Open,
+            (Self::Closed(left), Self::Closed(right)) => {
+                Self::Closed(left.union(right).copied().collect())
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ProducerValue {
+    constructors: ProducerFact,
+    constructor_payloads: Vec<(ConstructorIdentity, Vec<ProducerValue>)>,
+    callables: ProducerCallableSet,
+    carried: bool,
+}
+
+impl ProducerValue {
+    fn empty() -> Self {
+        Self {
+            constructors: ProducerFact::empty(),
+            constructor_payloads: Vec::new(),
+            callables: ProducerCallableSet::Closed(BTreeSet::new()),
+            carried: false,
+        }
+    }
+
+    fn open(origin: StaticOriginId) -> Self {
+        Self {
+            constructors: ProducerFact::open(origin),
+            constructor_payloads: Vec::new(),
+            callables: ProducerCallableSet::Open,
+            carried: false,
+        }
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        let mut constructor_payloads = self.constructor_payloads.clone();
+        for (identity, incoming) in &other.constructor_payloads {
+            if let Some((_, known)) = constructor_payloads
+                .iter_mut()
+                .find(|(candidate, _)| candidate == identity)
+            {
+                if known.len() == incoming.len() {
+                    for (slot, value) in known.iter_mut().zip(incoming) {
+                        *slot = slot.join(value);
+                    }
+                } else {
+                    known.clear();
+                }
+            } else {
+                constructor_payloads.push((*identity, incoming.clone()));
+            }
+        }
+        Self {
+            constructors: self.constructors.join(&other.constructors),
+            constructor_payloads,
+            callables: self.callables.join(&other.callables),
+            carried: self.carried || other.carried,
+        }
+    }
+}
+
+struct ProducerAnalysis<'plan, 'src> {
+    plan: &'plan StaticTransitionPlan<'src>,
+    active_owner: PredeclaredFunctionId,
+    inputs: BTreeMap<PredeclaredFunctionId, Vec<ProducerValue>>,
+    results: BTreeMap<PredeclaredFunctionId, ProducerValue>,
+    captures: BTreeMap<StaticOriginId, Vec<ProducerValue>>,
+    computational_scrutinees:
+        BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerValue>,
+    computational_results: BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerValue>,
+    match_scrutinees: BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerFact>,
+    reached_owners: BTreeSet<PredeclaredFunctionId>,
+    changed: bool,
+}
+
+impl ProducerAnalysis<'_, '_> {
+    fn merge_value(slot: &mut ProducerValue, incoming: &ProducerValue) -> bool {
+        let joined = slot.join(incoming);
+        if *slot == joined {
+            false
+        } else {
+            *slot = joined;
+            true
+        }
+    }
+
+    fn merge_values(
+        slots: &mut Vec<ProducerValue>,
+        incoming: &[ProducerValue],
+    ) -> Result<bool, CraneliftBackendError> {
+        if slots.len() != incoming.len() {
+            return Err(planner_error(
+                "producer-flow environment arity disagrees with the planned ABI",
+            ));
+        }
+        let mut changed = false;
+        for (slot, value) in slots.iter_mut().zip(incoming) {
+            changed |= Self::merge_value(slot, value);
+        }
+        Ok(changed)
+    }
+
+    fn closure_value(
+        &mut self,
+        origin: StaticOriginId,
+        env: &[ProducerValue],
+    ) -> Result<ProducerValue, CraneliftBackendError> {
+        let occurrence = self
+            .plan
+            .source_occurrences
+            .get(origin.0 as usize)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| planner_error("producer-flow closure names no occurrence"))?;
+        let (capture_values, body_origin) = match occurrence.expr {
+            RuntimeExpr::Closure { captures, .. } => (
+                captures
+                    .iter()
+                    .map(|_| ProducerValue::open(origin))
+                    .collect::<Vec<_>>(),
+                self.plan.semantic.child_origin(origin, 0)?,
+            ),
+            RuntimeExpr::LexicalClosure { captures, .. } => {
+                let mut values = Vec::with_capacity(captures.len());
+                for index in 0..captures.len() {
+                    let capture_origin = self.plan.semantic.child_origin(origin, 1 + index)?;
+                    let mut value = self.eval(capture_origin, env)?;
+                    value.constructors = value
+                        .constructors
+                        .forwarded(origin, ProducerFlowKind::Capture);
+                    values.push(value);
+                }
+                (values, self.plan.semantic.child_origin(origin, 0)?)
+            }
+            _ => {
+                return Err(planner_error(
+                    "producer-flow callable identity is not a closure",
+                ));
+            }
+        };
+        match self.captures.entry(origin) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(capture_values);
+                self.changed = true;
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                self.changed |= Self::merge_values(entry.get_mut(), &capture_values)?;
+            }
+        }
+        Ok(ProducerValue {
+            constructors: ProducerFact::empty(),
+            constructor_payloads: Vec::new(),
+            callables: ProducerCallableSet::Closed(BTreeSet::from([ProducerCallable {
+                closure_origin: origin,
+                body_origin,
+                recursor_origin: None,
+            }])),
+            carried: false,
+        })
+    }
+
+    fn bound_callable_value(
+        &mut self,
+        binding: &StaticCallableBindingKey,
+        lifted: &[ProducerValue],
+        cursor: &mut usize,
+    ) -> Result<ProducerValue, CraneliftBackendError> {
+        let mut captures = Vec::with_capacity(binding.captures.len());
+        for capture in &binding.captures {
+            captures.push(match capture {
+                StaticCallableCaptureBinding::Value(_) => {
+                    let value = lifted.get(*cursor).cloned().ok_or_else(|| {
+                        planner_error("producer-flow callable binding omits a lifted capture")
+                    })?;
+                    *cursor = cursor.checked_add(1).ok_or_else(|| {
+                        planner_capacity_error("producer-flow lifted capture cursor exhausted")
+                    })?;
+                    value
+                }
+                StaticCallableCaptureBinding::Callable(nested) => {
+                    self.bound_callable_value(nested, lifted, cursor)?
+                }
+            });
+        }
+        match self.captures.entry(binding.closure_origin) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(captures);
+                self.changed = true;
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                self.changed |= Self::merge_values(entry.get_mut(), &captures)?;
+            }
+        }
+        Ok(ProducerValue {
+            constructors: ProducerFact::empty(),
+            constructor_payloads: Vec::new(),
+            callables: ProducerCallableSet::Closed(BTreeSet::from([ProducerCallable {
+                closure_origin: binding.closure_origin,
+                body_origin: binding.body_origin,
+                recursor_origin: None,
+            }])),
+            carried: false,
+        })
+    }
+
+    fn source_environment(
+        &mut self,
+        owner: PredeclaredFunctionId,
+        definition: AbiUnitDefinition,
+    ) -> Result<Vec<ProducerValue>, CraneliftBackendError> {
+        let raw = self
+            .inputs
+            .get(&owner)
+            .cloned()
+            .ok_or_else(|| planner_error("producer-flow owner has no ABI environment"))?;
+        let AbiUnitDefinition::StaticCallableSpecialization { specialization, .. } = definition
+        else {
+            return Ok(raw);
+        };
+        let specialization = self
+            .plan
+            .static_callable_specializations
+            .get(specialization.0 as usize)
+            .ok_or_else(|| planner_error("producer-flow specialization is outside the plan"))?;
+        match &specialization.kind {
+            PlannedStaticCallableSpecializationKind::Declaration => {
+                let occurrence = self
+                    .plan
+                    .source_occurrences
+                    .get(specialization.base_origin.0 as usize)
+                    .and_then(Option::as_ref)
+                    .ok_or_else(|| {
+                        planner_error("producer-flow specialization base has no occurrence")
+                    })?;
+                let (parameter_count, declaration_capture_count) = match occurrence.expr {
+                    RuntimeExpr::Closure {
+                        params, captures, ..
+                    } => (params.len(), captures.len()),
+                    RuntimeExpr::LexicalClosure {
+                        params, captures, ..
+                    } => (params.len(), captures.len()),
+                    _ => {
+                        return Err(planner_error(
+                            "producer-flow specialization base is not a closure",
+                        ));
+                    }
+                };
+                let ordinary_count = specialization.ordinary_parameters as usize;
+                let declaration_start = raw
+                    .len()
+                    .checked_sub(declaration_capture_count)
+                    .ok_or_else(|| {
+                        planner_error(
+                            "producer-flow specialization omits declaration captures",
+                        )
+                    })?;
+                if ordinary_count > declaration_start {
+                    return Err(planner_error(
+                        "producer-flow specialization ordinary inputs exceed its ABI",
+                    ));
+                }
+                let lifted = &raw[ordinary_count..declaration_start];
+                let mut lifted_cursor = 0usize;
+                let mut ordinary_cursor = 0usize;
+                let mut environment =
+                    Vec::with_capacity(parameter_count + declaration_capture_count);
+                for parameter in 0..parameter_count {
+                    if let Some(binding) = specialization
+                        .key
+                        .bindings
+                        .iter()
+                        .find(|binding| binding.parameter_ordinal as usize == parameter)
+                    {
+                        environment.push(self.bound_callable_value(
+                            binding,
+                            lifted,
+                            &mut lifted_cursor,
+                        )?);
+                    } else {
+                        environment.push(
+                            raw.get(ordinary_cursor).cloned().ok_or_else(|| {
+                                planner_error(
+                                    "producer-flow specialization omits an ordinary input",
+                                )
+                            })?,
+                        );
+                        ordinary_cursor += 1;
+                    }
+                }
+                if ordinary_cursor != ordinary_count || lifted_cursor != lifted.len() {
+                    return Err(planner_error(
+                        "producer-flow specialization input partition is not exact",
+                    ));
+                }
+                environment.extend_from_slice(&raw[declaration_start..]);
+                Ok(environment)
+            }
+            PlannedStaticCallableSpecializationKind::CallableBody { binding } => {
+                let parameter_count = binding.declared_arity as usize;
+                if parameter_count > raw.len() {
+                    return Err(planner_error(
+                        "producer-flow callable body omits declared parameters",
+                    ));
+                }
+                let mut cursor = 0usize;
+                let callable =
+                    self.bound_callable_value(binding, &raw[parameter_count..], &mut cursor)?;
+                if cursor != raw.len() - parameter_count {
+                    return Err(planner_error(
+                        "producer-flow callable body left a lifted capture unused",
+                    ));
+                }
+                let mut environment = raw[..parameter_count].to_vec();
+                environment.extend(
+                    self.captures
+                        .get(&binding.closure_origin)
+                        .cloned()
+                        .ok_or_else(|| {
+                            planner_error("producer-flow callable body has no captures")
+                        })?,
+                );
+                let _ = callable;
+                Ok(environment)
+            }
+        }
+    }
+
+    fn invoke(
+        &mut self,
+        call_origin: StaticOriginId,
+        callables: ProducerCallableSet,
+        arguments: Vec<ProducerValue>,
+    ) -> Result<ProducerValue, CraneliftBackendError> {
+        let ProducerCallableSet::Closed(callables) = callables else {
+            return Ok(ProducerValue::open(call_origin));
+        };
+        if callables.is_empty() {
+            return Ok(ProducerValue::open(call_origin));
+        }
+        let mut result: Option<ProducerValue> = None;
+        for callable in callables {
+            let owner = self
+                .plan
+                .semantic
+                .function_owner(callable.body_origin)?
+                .ok_or_else(|| planner_error("producer-flow callable body has no owner"))?;
+            let captures = self
+                .captures
+                .get(&callable.closure_origin)
+                .cloned()
+                .ok_or_else(|| planner_error("producer-flow callable has no capture authority"))?;
+            // Source calls list arguments left-to-right, while a declaration
+            // body observes its parameters de-Bruijn-nearest first. Preserve
+            // the same reversal the emitted declaration ABI performs; failing
+            // to do so attributes the first source argument to `Var(0)` and
+            // turns a closed constructor producer into an unrelated opaque
+            // ingress.
+            let mut incoming = arguments.iter().rev().cloned().collect::<Vec<_>>();
+            incoming.extend(captures);
+            // A source call crosses one generated-unit result edge even when a
+            // recursive call returns to the currently analysed owner. Never
+            // recurse through the Rust evaluator for that case: merge its
+            // inputs and read the previous monotone result approximation. The
+            // outer fixed point re-evaluates the owner after either changes.
+            // Treating the active owner specially makes source recursion a
+            // host-stack recursion and bypasses the very cycle closure this
+            // analysis is required to prove.
+            for value in &mut incoming {
+                value.carried = true;
+            }
+            let slots = self.inputs.get_mut(&owner).ok_or_else(|| {
+                planner_error("producer-flow callable owner has no ABI inputs")
+            })?;
+            self.changed |= Self::merge_values(slots, &incoming)?;
+            self.changed |= self.reached_owners.insert(owner);
+            let mut value = self
+                .results
+                .get(&owner)
+                .cloned()
+                .unwrap_or_else(ProducerValue::empty);
+            if let Some(recursor_origin) = callable.recursor_origin {
+                value.carried = true;
+                value.constructors = value
+                    .constructors
+                    .forwarded(recursor_origin, ProducerFlowKind::Recursor);
+                let key = (recursor_origin, self.active_owner);
+                match self.computational_scrutinees.entry(key) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(value);
+                        self.changed = true;
+                    }
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        self.changed |= Self::merge_value(entry.get_mut(), &value);
+                    }
+                }
+                value = self
+                    .computational_results
+                    .get(&key)
+                    .cloned()
+                    .unwrap_or_else(ProducerValue::empty);
+                value.carried = true;
+            }
+            result = Some(match result {
+                Some(previous) => previous.join(&value),
+                None => value,
+            });
+        }
+        let mut result = result.unwrap_or_else(ProducerValue::empty);
+        result.carried = true;
+        result.constructors = result
+            .constructors
+            .forwarded(call_origin, ProducerFlowKind::CallResult);
+        Ok(result)
+    }
+
+    fn eval(
+        &mut self,
+        origin: StaticOriginId,
+        env: &[ProducerValue],
+    ) -> Result<ProducerValue, CraneliftBackendError> {
+        let occurrence = self
+            .plan
+            .source_occurrences
+            .get(origin.0 as usize)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| planner_error("producer-flow names no source occurrence"))?;
+        let child = |position| self.plan.semantic.child_origin(origin, position);
+        let value = match occurrence.expr {
+            RuntimeExpr::CheckedJoinSite { .. }
+            | RuntimeExpr::CheckedSubcontinuationFrame { .. }
+            | RuntimeExpr::CheckedRecursiveInvocation { .. }
+            | RuntimeExpr::CheckedComputationalIHSlots { .. }
+            | RuntimeExpr::CheckedComputationalIHInvocation { .. } => self
+                .eval(child(0)?, env)?
+                .with_forward(origin, ProducerFlowKind::Forward),
+            RuntimeExpr::Value(crate::RuntimeValue::Constructor { .. }) => {
+                // Runtime values have their own semantic atom kind. Until that
+                // canonical identity is exposed, this is an explicit opaque
+                // producer rather than a fabricated symbol lookup.
+                ProducerValue::open(origin)
+            }
+            RuntimeExpr::Value(_) | RuntimeExpr::Trap(_) => ProducerValue::empty(),
+            RuntimeExpr::Var(index) => env
+                .get(*index as usize)
+                .cloned()
+                .unwrap_or_else(|| ProducerValue::open(origin))
+                .with_forward(origin, ProducerFlowKind::Environment),
+            RuntimeExpr::Let { .. } => {
+                let bound = self.eval(child(0)?, env)?;
+                let mut body_env = Vec::with_capacity(env.len() + 1);
+                body_env.push(bound);
+                body_env.extend_from_slice(env);
+                self.eval(child(1)?, &body_env)?
+                    .with_forward(origin, ProducerFlowKind::Forward)
+            }
+            RuntimeExpr::If { .. } => {
+                let left = self.eval(child(1)?, env)?;
+                let right = self.eval(child(2)?, env)?;
+                left.join(&right)
+                    .with_forward(origin, ProducerFlowKind::Alternative)
+            }
+            RuntimeExpr::Construct { args, .. } => {
+                let mut payload = Vec::with_capacity(args.len());
+                for index in 0..args.len() {
+                    payload.push(self.eval(child(index)?, env)?);
+                }
+                let identity = self.plan.semantic.constructor_symbol_identity(origin)?;
+                ProducerValue {
+                    constructors: ProducerFact::constructor(origin, identity),
+                    constructor_payloads: vec![(identity, payload)],
+                    callables: ProducerCallableSet::Closed(BTreeSet::new()),
+                    carried: false,
+                }
+            }
+            RuntimeExpr::Match { cases, .. } => {
+                let scrutinee_origin = child(0)?;
+                let scrutinee = self.eval(scrutinee_origin, env)?;
+                if scrutinee.carried {
+                    self.match_scrutinees
+                        .entry((origin, self.active_owner))
+                        .and_modify(|known| *known = known.join(&scrutinee.constructors))
+                        .or_insert_with(|| scrutinee.constructors.clone());
+                }
+                let mut result = ProducerValue::empty();
+                for (index, case) in cases.iter().enumerate() {
+                    let identity = self
+                        .plan
+                        .semantic
+                        .case_constructor_identity(origin, index)?;
+                    let reachable = match &scrutinee.constructors.population {
+                        ScrutineeProducerSet::Open => true,
+                        ScrutineeProducerSet::Closed(constructors) => {
+                            constructors.contains(&identity)
+                        }
+                    };
+                    if !reachable {
+                        continue;
+                    }
+                    let mut case_env = match &scrutinee.constructors.population {
+                        ScrutineeProducerSet::Open => {
+                            vec![ProducerValue::open(origin); case.binders]
+                        }
+                        ScrutineeProducerSet::Closed(_) => scrutinee
+                            .constructor_payloads
+                            .iter()
+                            .find(|(constructor, _)| *constructor == identity)
+                            .filter(|(_, payload)| payload.len() == case.binders)
+                            .map(|(_, payload)| payload.clone())
+                            .unwrap_or_else(|| {
+                                vec![ProducerValue::open(origin); case.binders]
+                            }),
+                    };
+                    for binder in &mut case_env {
+                        binder.carried |= scrutinee.carried;
+                        binder.constructors = binder
+                            .constructors
+                            .clone()
+                            .forwarded(origin, ProducerFlowKind::Forward);
+                    }
+                    case_env.extend_from_slice(env);
+                    result = result.join(&self.eval(child(1 + index)?, &case_env)?);
+                }
+                result.with_forward(origin, ProducerFlowKind::Alternative)
+            }
+            RuntimeExpr::ComputationalMatch { cases, .. } => {
+                let incoming_scrutinee = self.eval(child(0)?, env)?;
+                let key = (origin, self.active_owner);
+                match self.computational_scrutinees.entry(key) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(incoming_scrutinee);
+                        self.changed = true;
+                    }
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        self.changed |=
+                            Self::merge_value(entry.get_mut(), &incoming_scrutinee);
+                    }
+                }
+                let scrutinee = self
+                    .computational_scrutinees
+                    .get(&key)
+                    .cloned()
+                    .ok_or_else(|| {
+                        planner_error("producer-flow computational scrutinee is absent")
+                    })?;
+                let mut result = ProducerValue::empty();
+                for (index, case) in cases.iter().enumerate() {
+                    let identity = self
+                        .plan
+                        .semantic
+                        .case_constructor_identity(origin, index)?;
+                    let reachable = match &scrutinee.constructors.population {
+                        ScrutineeProducerSet::Open => true,
+                        ScrutineeProducerSet::Closed(constructors) => {
+                            constructors.contains(&identity)
+                        }
+                    };
+                    if !reachable {
+                        continue;
+                    }
+                    let mut arguments = match &scrutinee.constructors.population {
+                        ScrutineeProducerSet::Open => {
+                            vec![ProducerValue::open(origin); case.argument_binders]
+                        }
+                        ScrutineeProducerSet::Closed(_) => scrutinee
+                            .constructor_payloads
+                            .iter()
+                            .find(|(constructor, _)| *constructor == identity)
+                            .filter(|(_, payload)| payload.len() == case.argument_binders)
+                            .map(|(_, payload)| payload.clone())
+                            .unwrap_or_else(|| {
+                                vec![ProducerValue::open(origin); case.argument_binders]
+                            }),
+                    };
+                    for argument in &mut arguments {
+                        argument.carried |= scrutinee.carried;
+                        argument.constructors = argument
+                            .constructors
+                            .clone()
+                            .forwarded(origin, ProducerFlowKind::Forward);
+                    }
+                    let producer_origins = scrutinee
+                        .constructors
+                        .producer_origins
+                        .iter()
+                        .find(|(constructor, _)| *constructor == identity)
+                        .map(|(_, origins)| origins)
+                        .cloned()
+                        .unwrap_or_default();
+                    let mut induction_hypotheses =
+                        Vec::with_capacity(case.recursive_positions.len());
+                    for position in case.recursive_positions.iter().rev().copied() {
+                        let callables = self
+                            .plan
+                            .static_recursor_worker_residuals
+                            .iter()
+                            .filter(|residual| {
+                                residual.parent_origin == origin
+                                    && residual.sibling_position
+                                        == u32::try_from(position).unwrap_or(u32::MAX)
+                                    && producer_origins.contains(&residual.producer_origin)
+                            })
+                            .map(|residual| ProducerCallable {
+                                closure_origin: residual.closure_origin,
+                                body_origin: residual.body_origin,
+                                recursor_origin: Some(origin),
+                            })
+                            .collect::<BTreeSet<_>>();
+                        induction_hypotheses.push(if callables.is_empty() {
+                            ProducerValue::open(origin)
+                        } else {
+                            ProducerValue {
+                                constructors: ProducerFact::empty(),
+                                constructor_payloads: Vec::new(),
+                                callables: ProducerCallableSet::Closed(callables),
+                                carried: false,
+                            }
+                        });
+                    }
+                    let mut case_env = induction_hypotheses;
+                    case_env.extend(arguments);
+                    case_env.extend_from_slice(env);
+                    result = result.join(&self.eval(child(1 + index)?, &case_env)?);
+                }
+                result = result.with_forward(origin, ProducerFlowKind::Alternative);
+                match self.computational_results.entry(key) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(result.clone());
+                        self.changed = true;
+                    }
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        self.changed |= Self::merge_value(entry.get_mut(), &result);
+                        result = entry.get().clone();
+                    }
+                }
+                result
+            }
+            RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. } => {
+                self.closure_value(origin, env)?
+            }
+            RuntimeExpr::DeclarationRef { symbol } => {
+                if let Some(declaration) = self.plan.declaration_occurrences.get(symbol) {
+                    self.closure_value(*declaration, &[])?
+                } else {
+                    ProducerValue::open(origin)
+                }
+            }
+            RuntimeExpr::Call { args, .. } => {
+                let callee = self.eval(child(0)?, env)?;
+                let mut arguments = Vec::with_capacity(args.len());
+                for index in 0..args.len() {
+                    let mut argument = self.eval(child(1 + index)?, env)?;
+                    argument.constructors = argument
+                        .constructors
+                        .forwarded(origin, ProducerFlowKind::CallArgument);
+                    arguments.push(argument);
+                }
+                self.invoke(origin, callee.callables, arguments)?
+            }
+            RuntimeExpr::PrimitiveCall { args, .. } => {
+                for index in 0..args.len() {
+                    let _ = self.eval(child(index)?, env)?;
+                }
+                ProducerValue::open(origin)
+            }
+            RuntimeExpr::Record { fields } => {
+                for index in 0..fields.len() {
+                    let _ = self.eval(child(index)?, env)?;
+                }
+                ProducerValue::open(origin)
+            }
+            RuntimeExpr::Project { .. } => {
+                let _ = self.eval(child(0)?, env)?;
+                ProducerValue::open(origin)
+            }
+            RuntimeExpr::Effect {
+                capability, args, ..
+            } => {
+                let child_count = args.len() + usize::from(capability.is_some());
+                for index in 0..child_count {
+                    let _ = self.eval(child(index)?, env)?;
+                }
+                ProducerValue::open(origin)
+            }
+            RuntimeExpr::ImportedDeclarationRef { .. } => ProducerValue::open(origin),
+        };
+        Ok(value)
+    }
+}
+
+trait ProducerValueForward {
+    fn with_forward(self, origin: StaticOriginId, kind: ProducerFlowKind) -> Self;
+}
+
+impl ProducerValueForward for ProducerValue {
+    fn with_forward(mut self, origin: StaticOriginId, kind: ProducerFlowKind) -> Self {
+        self.constructors = self.constructors.forwarded(origin, kind);
+        self
+    }
+}
+
+fn build_case_emission_plan(
+    plan: &StaticTransitionPlan<'_>,
+) -> Result<Vec<PlannedCaseEmission>, CraneliftBackendError> {
+    let emittable_owners = plan
+        .emittable_units()?
+        .into_iter()
+        .map(|unit| unit.function())
+        .collect::<BTreeSet<_>>();
+    let first_owner = plan
+        .abi
+        .descriptors
+        .first()
+        .map(|descriptor| descriptor.function)
+        .ok_or_else(|| planner_error("case-emission analysis has no function population"))?;
+    let mut inputs = BTreeMap::new();
+    let mut bodies = Vec::new();
+    for descriptor in &plan.abi.descriptors {
+        let input_count = descriptor
+            .header
+            .parameters
+            .checked_add(descriptor.header.captures)
+            .ok_or_else(|| planner_capacity_error("producer-flow ABI input count exhausted"))?;
+        let input_count = usize::try_from(input_count)
+            .map_err(|_| planner_capacity_error("producer-flow ABI input count exhausted"))?;
+        let mut environment = vec![ProducerValue::empty(); input_count];
+        for value in &mut environment {
+            value.carried = true;
+        }
+        if matches!(
+            descriptor.definition,
+            AbiUnitDefinition::SchedulingEntry {
+                ingress: AbiSchedulingIngress::ProcessPair,
+            }
+        ) {
+            for value in &mut environment {
+                *value = ProducerValue::open(descriptor.origin);
+            }
+        }
+        inputs.insert(descriptor.function, environment);
+        let body_origin = match descriptor.definition {
+            // This unit only forwards into its separately owned closure body.
+            // Producer flow follows the statically known callable directly in
+            // `invoke`; evaluating the body here as well fabricates a second,
+            // input-less execution and can derive an unlawful `Closed({})`
+            // fact from "no producer observed".
+            AbiUnitDefinition::TransparentDeclarationClosure { .. } => continue,
+            AbiUnitDefinition::StaticCallableSpecialization { specialization, .. } => plan
+                .static_callable_specializations
+                .get(specialization.0 as usize)
+                .ok_or_else(|| {
+                    planner_error("producer-flow specialization is outside the plan")
+                })?
+                .base_body_origin,
+            AbiUnitDefinition::SchedulingEntry { .. } => {
+                if plan.root_occurrence.is_some_and(|root| {
+                    plan.semantic.function_owner(root).ok() == Some(Some(descriptor.function))
+                }) {
+                    plan.root_occurrence
+                        .ok_or_else(|| planner_error("producer-flow root is absent"))?
+                } else {
+                    descriptor.origin
+                }
+            }
+            AbiUnitDefinition::ClosureBody { .. } => descriptor.origin,
+        };
+        bodies.push((descriptor.function, body_origin, descriptor.definition));
+    }
+
+    let reached_owners = plan
+        .abi
+        .descriptors
+        .iter()
+        .filter(|descriptor| {
+            matches!(
+                descriptor.definition,
+                AbiUnitDefinition::SchedulingEntry { .. }
+            )
+        })
+        .map(|descriptor| descriptor.function)
+        .collect();
+    let mut analysis = ProducerAnalysis {
+        plan,
+        active_owner: first_owner,
+        inputs,
+        results: BTreeMap::new(),
+        captures: BTreeMap::new(),
+        computational_scrutinees: BTreeMap::new(),
+        computational_results: BTreeMap::new(),
+        match_scrutinees: BTreeMap::new(),
+        reached_owners,
+        changed: true,
+    };
+    let population_bound = plan
+        .source_occurrences
+        .len()
+        .checked_mul(plan.abi.descriptors.len().max(1))
+        .and_then(|bound| bound.checked_add(1))
+        .ok_or_else(|| planner_capacity_error("producer-flow fixed-point bound exhausted"))?;
+    for _ in 0..population_bound {
+        analysis.changed = false;
+        for (owner, body_origin, definition) in bodies.iter().copied() {
+            if !analysis.reached_owners.contains(&owner) {
+                continue;
+            }
+            analysis.active_owner = owner;
+            let environment = analysis.source_environment(owner, definition)?;
+            let value = analysis.eval(body_origin, &environment)?;
+            let result = analysis
+                .results
+                .entry(owner)
+                .or_insert_with(ProducerValue::empty);
+            analysis.changed |= ProducerAnalysis::merge_value(result, &value);
+        }
+        if !analysis.changed {
+            break;
+        }
+    }
+    if analysis.changed {
+        return Err(planner_error(
+            "constructor producer-flow fixed point did not close monotonically",
+        ));
+    }
+    let mut records = Vec::new();
+    for ((match_origin, owner), fact) in analysis.match_scrutinees {
+        if !emittable_owners.contains(&owner) {
+            continue;
+        }
+        let occurrence = plan
+            .source_occurrences
+            .get(match_origin.0 as usize)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| planner_error("case-emission match names no occurrence"))?;
+        let RuntimeExpr::Match { cases, .. } = occurrence.expr else {
+            return Err(planner_error(
+                "case-emission producer authority names a non-Match occurrence",
+            ));
+        };
+        let scrutinee_origin = plan.semantic.child_origin(match_origin, 0)?;
+        let phase = ResultPhase::CarrierRequired;
+        let authority = fact.authority();
+        for (ordinal, _case) in cases.iter().enumerate() {
+            let constructor = plan
+                .semantic
+                .case_constructor_identity(match_origin, ordinal)?;
+            let status = match &authority.producers {
+                ScrutineeProducerSet::Open => CaseEmissionStatus::Reachable,
+                ScrutineeProducerSet::Closed(constructors)
+                    if constructors.contains(&constructor) =>
+                {
+                    CaseEmissionStatus::Reachable
+                }
+                ScrutineeProducerSet::Closed(_) => CaseEmissionStatus::Eliminated,
+            };
+            records.push(PlannedCaseEmission {
+                match_origin,
+                scrutinee_origin,
+                owner,
+                phase,
+                ordinal: u32::try_from(ordinal)
+                    .map_err(|_| planner_capacity_error("case-emission ordinal exhausted"))?,
+                body_origin: plan.semantic.child_origin(match_origin, 1 + ordinal)?,
+                constructor,
+                authority: authority.clone(),
+                status,
+            });
+        }
+    }
+    records.sort_by_key(|record| (record.owner, record.match_origin, record.ordinal));
+    Ok(records)
+}
+
 impl<'src> Planner<'src> {
     fn new() -> Result<Self, CraneliftBackendError> {
         let empty = PersistentNodeId(0);
@@ -3922,6 +4992,8 @@ impl<'src> Planner<'src> {
                 source_occurrences: Vec::new(),
                 join_results: Vec::new(),
                 result_phases: Vec::new(),
+                case_emissions: Vec::new(),
+                case_emission_consumption: RefCell::new(BTreeMap::new()),
                 functionized_units: false,
                 operand_edges: Vec::new(),
                 static_callable_specializations: Vec::new(),
@@ -4685,6 +5757,7 @@ impl<'src> Planner<'src> {
         self.plan.recursor_boundary_uses = build_recursor_boundary_uses(&self.plan)?;
         self.plan.lowering_boundary_uses = build_lowering_boundary_uses(&self.plan)?;
         self.plan.boundary_uses = build_boundary_uses(&self.plan)?;
+        self.plan.case_emissions = build_case_emission_plan(&self.plan)?;
         #[cfg(test)]
         STATIC_RECURSOR_RESIDUAL_MATRIX_MUTATION.with(|mutation| match mutation.get() {
             StaticRecursorResidualMatrixMutation::Exact => {}
@@ -5238,7 +6311,13 @@ impl<'src> StaticTransitionPlan<'src> {
         };
         let token =
             self.planned_boundary_use_token(identity, source_operand_role_label(edge.role))?;
-        self.record_boundary_use_consumption(identity)?;
+        if !self
+            .operand_edge_consumption
+            .borrow()
+            .contains_key(&identity)
+        {
+            self.record_boundary_use_consumption(identity)?;
+        }
         Ok(token)
     }
 
@@ -5418,6 +6497,27 @@ impl<'src> StaticTransitionPlan<'src> {
             .filter(|residual| origins.contains(&residual.producer_origin))
             .map(|residual| residual.body_origin)
             .collect::<BTreeSet<_>>();
+        let mut dead_worker_origins = BTreeMap::new();
+        for body in &dead_worker_bodies {
+            let worker_owner = self
+                .semantic
+                .function_owner(*body)?
+                .ok_or_else(|| planner_error("dead static worker body has no function owner"))?;
+            let mut worker_pending = vec![*body];
+            while let Some(origin) = worker_pending.pop() {
+                if dead_worker_origins
+                    .insert(origin, worker_owner)
+                    .is_some()
+                {
+                    continue;
+                }
+                for child in self.semantic.child_origins(origin)?.iter().copied() {
+                    if self.semantic.function_owner(child)? == Some(worker_owner) {
+                        worker_pending.push(child);
+                    }
+                }
+            }
+        }
         let consumption = self.operand_edge_consumption.borrow();
         let identities = self
             .boundary_uses
@@ -5433,9 +6533,16 @@ impl<'src> StaticTransitionPlan<'src> {
                         producer_origin, ..
                     } => (*producer_origin, true),
                 };
-                (planned.producer_owner == owner
-                    && (origins.contains(&origin) || dead_worker_bodies.contains(&origin))
-                    && (exact_static_worker || !consumption.contains_key(&planned.identity)))
+                let in_dead_population =
+                    (planned.producer_owner == owner && origins.contains(&origin))
+                        || dead_worker_origins
+                            .get(&origin)
+                            .is_some_and(|worker_owner| {
+                                *worker_owner == planned.producer_owner
+                            });
+                (in_dead_population
+                    && (exact_static_worker
+                        || !consumption.contains_key(&planned.identity)))
                 .then_some(planned.identity)
             })
             .collect::<Vec<_>>();
@@ -5457,6 +6564,13 @@ impl<'src> StaticTransitionPlan<'src> {
         }) else {
             return Ok(());
         };
+        if self
+            .operand_edge_consumption
+            .borrow()
+            .contains_key(&planned.identity)
+        {
+            return Ok(());
+        }
         self.record_boundary_use_disposition(planned.identity)
     }
 
@@ -5478,16 +6592,16 @@ impl<'src> StaticTransitionPlan<'src> {
             .borrow()
             .contains_key(&identity)
         {
+            let planned = self
+                .boundary_uses
+                .iter()
+                .find(|planned| planned.identity == identity);
             return Err(planner_error(format!(
                 "one boundary use was both emitted and statically dispositioned: \
-                 {identity:?}"
+                 {identity:?}; planned={planned:?}"
             )));
         }
-        if !self.boundary_use_dispositions.borrow_mut().insert(identity) {
-            return Err(planner_error(
-                "one boundary use was statically dispositioned more than once",
-            ));
-        }
+        self.boundary_use_dispositions.borrow_mut().insert(identity);
         Ok(())
     }
 
@@ -5519,7 +6633,7 @@ impl<'src> StaticTransitionPlan<'src> {
                         .function_owner(*parent)
                         .is_ok_and(|candidate| candidate == Some(owner)) =>
                 {
-                    Some((*identity, *count))
+                    (!dispositions.contains(identity)).then_some((*identity, *count))
                 }
                 _ => None,
             })
@@ -5567,6 +6681,7 @@ impl<'src> StaticTransitionPlan<'src> {
     pub(in crate::cranelift_backend) fn validate_boundary_use_consumption(
         &self,
     ) -> Result<(), CraneliftBackendError> {
+        self.validate_case_emission_consumption()?;
         let owners = self
             .operand_edges
             .iter()
@@ -5583,17 +6698,6 @@ impl<'src> StaticTransitionPlan<'src> {
             .filter(|identity| !dispositions.contains(identity))
             .collect::<BTreeSet<_>>();
         let ledger = self.operand_edge_consumption.borrow();
-        let emitted_and_dispositioned = ledger
-            .keys()
-            .filter(|identity| dispositions.contains(identity))
-            .copied()
-            .collect::<Vec<_>>();
-        if !emitted_and_dispositioned.is_empty() {
-            return Err(planner_error(format!(
-                "boundary uses were both emitted and statically dispositioned; \
-                 identities={emitted_and_dispositioned:?}"
-            )));
-        }
         let duplicates = ledger
             .iter()
             .filter(|(_, count)| **count != 1)
@@ -5637,6 +6741,81 @@ impl<'src> StaticTransitionPlan<'src> {
                 "boundary-use ledger is not exact; missing={missing:?}; \
                  missing_uses={missing_uses:?}; extra={extra:?}"
             )));
+        }
+        let emitted_and_dispositioned = ledger
+            .keys()
+            .filter(|identity| dispositions.contains(identity))
+            .copied()
+            .collect::<Vec<_>>();
+        if !emitted_and_dispositioned.is_empty() {
+            return Err(planner_error(format!(
+                "boundary uses were both emitted and statically dispositioned; \
+                 identities={emitted_and_dispositioned:?}"
+            )));
+        }
+        Ok(())
+    }
+
+    fn validate_case_emission_consumption(&self) -> Result<(), CraneliftBackendError> {
+        let ledger = self.case_emission_consumption.borrow();
+        let emitted_matches = ledger
+            .keys()
+            .map(|(owner, match_origin, _)| (*owner, *match_origin))
+            .collect::<BTreeSet<_>>();
+        let expected = self
+            .case_emissions
+            .iter()
+            .filter(|record| {
+                record.status == CaseEmissionStatus::Reachable
+                    && emitted_matches.contains(&(record.owner, record.match_origin))
+            })
+            .map(|record| (record.owner, record.match_origin, record.ordinal))
+            .collect::<BTreeSet<_>>();
+        let duplicates = ledger
+            .iter()
+            .filter(|(_, count)| **count != 1)
+            .map(|(identity, count)| (*identity, *count))
+            .collect::<Vec<_>>();
+        if !duplicates.is_empty() {
+            return Err(planner_error(format!(
+                "case-emission ledger contains duplicate consumption; \
+                 duplicates={duplicates:?}"
+            )));
+        }
+        let actual = ledger.keys().copied().collect::<BTreeSet<_>>();
+        if actual != expected {
+            let missing = expected.difference(&actual).copied().collect::<Vec<_>>();
+            let extra = actual.difference(&expected).copied().collect::<Vec<_>>();
+            return Err(planner_error(format!(
+                "case-emission ledger is not exact; missing={missing:?}; extra={extra:?}"
+            )));
+        }
+        drop(ledger);
+        let inactive_arms = self
+            .case_emissions
+            .iter()
+            .filter(|record| {
+                !emitted_matches.contains(&(record.owner, record.match_origin))
+            })
+            .map(|record| BoundaryUseIdentity::Source {
+                parent: record.match_origin,
+                child: record.body_origin,
+                position: 1 + record.ordinal,
+            })
+            .collect::<BTreeSet<_>>();
+        for identity in inactive_arms {
+            if self
+                .operand_edge_consumption
+                .borrow()
+                .contains_key(&identity)
+                || self
+                    .boundary_use_dispositions
+                    .borrow()
+                    .contains(&identity)
+            {
+                continue;
+            }
+            self.record_boundary_use_disposition(identity)?;
         }
         Ok(())
     }
@@ -5686,6 +6865,59 @@ impl<'src> StaticTransitionPlan<'src> {
             .function_owner(origin)?
             .ok_or_else(|| planner_error("lowering boundary use has no function owner"))?;
         self.lowering_boundary_use_token_for_owner(edge, origin, position, owner)
+    }
+
+    /// Re-enter one lowering transition attached to a source occurrence.
+    ///
+    /// Source-machine recursion can revisit an already emitted semantic
+    /// occurrence while building one generated function. The first visit
+    /// consumes the planner-issued identity. A later visit reborrows that same
+    /// authority; it is not a second planned population member. Callers must
+    /// choose this API explicitly—ordinary lowering-only transitions continue
+    /// to count every request and therefore red on duplicate consumption.
+    pub(in crate::cranelift_backend) fn reached_lowering_boundary_use_token(
+        &self,
+        edge: LoweringOnlyOperandEdge,
+        origin: StaticOriginId,
+        position: u32,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        let owner = self
+            .semantic
+            .function_owner(origin)?
+            .ok_or_else(|| planner_error("lowering boundary use has no function owner"))?;
+        let ledger = self.operand_edge_consumption.borrow();
+        let planned = self
+            .lowering_boundary_uses
+            .iter()
+            .find(|planned| {
+                planned.edge == edge
+                    && planned.origin == origin
+                    && planned.position == position
+                    && planned.owner == owner
+                    && !ledger.contains_key(&planned.identity)
+            })
+            .or_else(|| {
+                self.lowering_boundary_uses.iter().find(|planned| {
+                    planned.edge == edge
+                        && planned.origin == origin
+                        && planned.position == position
+                        && planned.owner == owner
+                })
+            })
+            .ok_or_else(|| {
+                planner_error(
+                    "reached lowering transition has no exact planner-issued boundary use",
+                )
+            })?;
+        let already_consumed = ledger.contains_key(&planned.identity);
+        let identity = planned.identity;
+        let label = planned.edge.label();
+        drop(ledger);
+        if already_consumed {
+            self.planned_boundary_use_token(identity, label)
+        } else {
+            self.lowering_boundary_use_token_for_owner(edge, origin, position, owner)
+        }
     }
 
     pub(in crate::cranelift_backend) fn lowering_boundary_use_token_for_owner(
@@ -6385,6 +7617,65 @@ impl<'src> StaticTransitionPlan<'src> {
         self.semantic.case_constructor_identity(origin, case_index)
     }
 
+    pub(in crate::cranelift_backend) fn case_emission_token(
+        &self,
+        owner: PredeclaredFunctionId,
+        match_origin: StaticOriginId,
+        case_index: usize,
+    ) -> Result<CaseEmissionToken, CraneliftBackendError> {
+        let ordinal = u32::try_from(case_index)
+            .map_err(|_| planner_capacity_error("case-emission ordinal exhausted"))?;
+        let body_origin = self.semantic.child_origin(match_origin, 1 + case_index)?;
+        let record = self
+            .case_emissions
+            .iter()
+            .find(|record| {
+                record.owner == owner
+                    && record.match_origin == match_origin
+                    && record.ordinal == ordinal
+            })
+            .ok_or_else(|| {
+                let candidates = self
+                    .case_emissions
+                    .iter()
+                    .filter(|record| {
+                        record.match_origin == match_origin && record.ordinal == ordinal
+                    })
+                    .map(|record| record.owner)
+                    .collect::<Vec<_>>();
+                planner_error(format!(
+                    "carried Match case has no planned emission record; owner={owner:?}; \
+                     match={match_origin:?}; ordinal={ordinal}; candidates={candidates:?}"
+                ))
+            })?;
+        if record.body_origin != body_origin
+            || record.scrutinee_origin != self.semantic.child_origin(match_origin, 0)?
+            || record.constructor
+                != self
+                    .semantic
+                    .case_constructor_identity(match_origin, case_index)?
+            || record.phase != ResultPhase::CarrierRequired
+        {
+            return Err(planner_error(
+                "case-emission record disagrees with its exact source case",
+            ));
+        }
+        if record.status == CaseEmissionStatus::Reachable {
+            let key = (owner, match_origin, ordinal);
+            let mut ledger = self.case_emission_consumption.borrow_mut();
+            let count = ledger.entry(key).or_insert(0);
+            *count = count
+                .checked_add(1)
+                .ok_or_else(|| planner_capacity_error("case-emission ledger exhausted"))?;
+        }
+        Ok(CaseEmissionToken {
+            match_origin,
+            ordinal,
+            body_origin,
+            status: record.status,
+        })
+    }
+
     /// The artifact-static constructor identity of a `Construct` occurrence —
     /// the producer side of [`Self::case_constructor_identity`] (`D2`).
     pub(in crate::cranelift_backend) fn constructor_symbol_identity(
@@ -7029,6 +8320,7 @@ impl<'src> StaticTransitionPlan<'src> {
         if self.entries.is_empty() {
             return Err(planner_error("closed graph has no entry"));
         }
+        self.validate_case_emissions()?;
         self.validate_operand_edge_matrix()?;
         self.validate_static_recursor_worker_residuals()?;
         self.validate_recursor_boundary_uses()?;
@@ -7245,6 +8537,24 @@ impl<'src> StaticTransitionPlan<'src> {
         )?;
         self.validate_source_occurrence_table()?;
         self.validate_join_result_plan()?;
+        Ok(())
+    }
+
+    fn validate_case_emissions(&self) -> Result<(), CraneliftBackendError> {
+        let expected = build_case_emission_plan(self)?;
+        if self.case_emissions != expected {
+            return Err(planner_error(
+                "case-emission partition is not the exact producer-flow derivation",
+            ));
+        }
+        let mut keys = BTreeSet::new();
+        for record in &self.case_emissions {
+            if !keys.insert((record.owner, record.match_origin, record.ordinal)) {
+                return Err(planner_error(
+                    "case-emission partition contains a duplicate source case",
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -15234,6 +16544,497 @@ mod tests {
         assert_eq!(
             missing.validate_join_result_plan().unwrap_err(),
             planner_error("source join occurrence has no result representation")
+        );
+    }
+
+    fn d7_case_partition_declaration(
+        symbol: &str,
+        cases: Vec<RuntimeMatchCase>,
+    ) -> RuntimeDeclaration {
+        RuntimeDeclaration {
+            symbol: symbol.to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["scrutinee".to_string()],
+                    body: Box::new(RuntimeExpr::Match {
+                        scrutinee: Box::new(RuntimeExpr::Var(0)),
+                        cases,
+                        default: trap("closed case partition"),
+                    }),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        }
+    }
+
+    fn d7_case_partition_cases() -> Vec<RuntimeMatchCase> {
+        ["A", "B", "Append"]
+            .into_iter()
+            .map(|name| RuntimeMatchCase {
+                constructor: format!("ctor:fixture::D7Case::{name}"),
+                binders: 0,
+                body: RuntimeExpr::Construct {
+                    constructor: format!("ctor:fixture::D7Answer::{name}"),
+                    args: Vec::new(),
+                },
+            })
+            .collect()
+    }
+
+    fn d7_case_partition_call(symbol: &str, producer: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: symbol.to_string(),
+            }),
+            args: vec![producer],
+        }
+    }
+
+    fn d7_case_partition_records<'plan>(
+        plan: &'plan StaticTransitionPlan<'_>,
+    ) -> Vec<&'plan PlannedCaseEmission> {
+        let mut grouped = BTreeMap::<
+            (PredeclaredFunctionId, StaticOriginId),
+            Vec<&PlannedCaseEmission>,
+        >::new();
+        for record in &plan.case_emissions {
+            grouped
+                .entry((record.owner, record.match_origin))
+                .or_default()
+                .push(record);
+        }
+        grouped
+            .into_values()
+            .find(|records| records.len() == 3)
+            .expect("the fixture has one three-case carried match")
+    }
+
+    fn d7_case_constructor(name: &str) -> RuntimeExpr {
+        RuntimeExpr::Construct {
+            constructor: format!("ctor:fixture::D7Case::{name}"),
+            args: Vec::new(),
+        }
+    }
+
+    /// Promise class: durable invariant.
+    ///
+    /// MEASURED: a runtime `If` contributes both constructor identities and
+    /// their producer paths to one exact carried Match partition.
+    /// CLAIMED: alternatives union monotonically instead of taking the first
+    /// producer found.
+    /// THE GAP: this fixture does not exercise recursive cycles; the fixed-point
+    /// closure is independently bounded and rejects non-convergence.
+    #[test]
+    fn d7_case_emission_unions_every_runtime_alternative() {
+        let symbol = "decl:fixture::d7-case-union";
+        let declaration = d7_case_partition_declaration(symbol, d7_case_partition_cases());
+        let producer = RuntimeExpr::If {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            then_expr: Box::new(d7_case_constructor("A")),
+            else_expr: Box::new(d7_case_constructor("B")),
+        };
+        let entry = d7_case_partition_call(symbol, producer);
+        let declarations = BTreeMap::from([(symbol, &declaration)]);
+        let plan = d7_functionized_plan(&entry, &declarations).expect("case union plans");
+        let records = d7_case_partition_records(&plan);
+        assert_eq!(
+            records
+                .iter()
+                .map(|record| record.status)
+                .collect::<Vec<_>>(),
+            vec![
+                CaseEmissionStatus::Reachable,
+                CaseEmissionStatus::Reachable,
+                CaseEmissionStatus::Eliminated,
+            ]
+        );
+        let ScrutineeProducerSet::Closed(constructors) = &records[0].authority.producers else {
+            panic!("a source-only conditional must close");
+        };
+        assert_eq!(constructors.len(), 2);
+        assert_eq!(records[0].authority.producer_origins.len(), 2);
+        assert!(
+            records[0]
+                .authority
+                .flow
+                .iter()
+                .any(|edge| edge.kind == ProducerFlowKind::Alternative),
+            "the union has no alternative-flow provenance"
+        );
+
+        // Population-side evasion: removing the B-producing alternative must
+        // move B from reachable to eliminated.
+        let single = d7_case_partition_call(
+            symbol,
+            RuntimeExpr::If {
+                scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                then_expr: Box::new(d7_case_constructor("A")),
+                else_expr: Box::new(d7_case_constructor("A")),
+            },
+        );
+        let single_plan =
+            d7_functionized_plan(&single, &declarations).expect("single producer plans");
+        assert_eq!(
+            d7_case_partition_records(&single_plan)[1].status,
+            CaseEmissionStatus::Eliminated
+        );
+    }
+
+    /// Promise class: durable invariant.
+    ///
+    /// MEASURED: opaque ingress dominates a closed constructor alternative and
+    /// leaves every source case reachable.
+    /// CLAIMED: lack of producer closure never authorizes pruning.
+    /// THE GAP: the unchanged host-operation gate supplies the later refusal;
+    /// this pin guards the planner-side precondition for reaching it.
+    #[test]
+    fn d7_case_emission_open_ingress_prunes_nothing() {
+        let symbol = "decl:fixture::d7-case-open";
+        let declaration = d7_case_partition_declaration(symbol, d7_case_partition_cases());
+        let producer = RuntimeExpr::If {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            then_expr: Box::new(d7_case_constructor("A")),
+            else_expr: Box::new(RuntimeExpr::PrimitiveCall {
+                primitive: crate::RuntimePrimitive {
+                    symbol: "opaque_fixture".to_string(),
+                    partiality: crate::RuntimePartiality::Total,
+                },
+                args: Vec::new(),
+            }),
+        };
+        let entry = d7_case_partition_call(symbol, producer);
+        let declarations = BTreeMap::from([(symbol, &declaration)]);
+        let plan = d7_functionized_plan(&entry, &declarations).expect("open producer plans");
+        let records = d7_case_partition_records(&plan);
+        assert!(matches!(
+            records[0].authority.producers,
+            ScrutineeProducerSet::Open
+        ));
+        assert!(
+            records
+                .iter()
+                .all(|record| record.status == CaseEmissionStatus::Reachable),
+            "Open unlawfully eliminated a source case"
+        );
+        assert!(
+            records[0]
+                .authority
+                .flow
+                .iter()
+                .any(|edge| edge.kind == ProducerFlowKind::OpaqueIngress)
+        );
+    }
+
+    /// Promise class: durable invariant.
+    ///
+    /// MEASURED: a real `Append` constructor in producer flow makes the exact
+    /// `Append` case reachable even though siblings are eliminated.
+    /// CLAIMED: the capability catalog is not used as a reachability oracle.
+    /// THE GAP: object lowering's literal 13-operation gate is separately
+    /// responsible for rejecting the retained unsupported body.
+    #[test]
+    fn d7_case_emission_retains_a_real_unavailable_producer() {
+        let symbol = "decl:fixture::d7-case-unavailable";
+        let declaration = d7_case_partition_declaration(symbol, d7_case_partition_cases());
+        let entry = d7_case_partition_call(symbol, d7_case_constructor("Append"));
+        let declarations = BTreeMap::from([(symbol, &declaration)]);
+        let plan =
+            d7_functionized_plan(&entry, &declarations).expect("unavailable producer plans");
+        let records = d7_case_partition_records(&plan);
+        assert_eq!(
+            records
+                .iter()
+                .map(|record| record.status)
+                .collect::<Vec<_>>(),
+            vec![
+                CaseEmissionStatus::Eliminated,
+                CaseEmissionStatus::Eliminated,
+                CaseEmissionStatus::Reachable,
+            ],
+            "the unavailable producer was filtered by case spelling"
+        );
+        assert_eq!(
+            records[2].authority.producer_origins.len(),
+            1,
+            "the retained case has no concrete producer provenance"
+        );
+    }
+
+    /// Promise class: durable invariant.
+    ///
+    /// MEASURED: two syntactically identical case lists at distinct Match
+    /// occurrences receive distinct exact partitions from distinct producers.
+    /// CLAIMED: match occurrence, owner, and scrutinee edge—not family or case
+    /// spelling—key reachability.
+    /// THE GAP: phase differs only for carried versus specialized planning;
+    /// phase mutation is covered by the bijection pin below.
+    #[test]
+    fn d7_case_emission_is_keyed_by_exact_match_occurrence() {
+        let left_symbol = "decl:fixture::d7-case-left";
+        let right_symbol = "decl:fixture::d7-case-right";
+        let left =
+            d7_case_partition_declaration(left_symbol, d7_case_partition_cases());
+        let right =
+            d7_case_partition_declaration(right_symbol, d7_case_partition_cases());
+        let entry = RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Pair".to_string(),
+            args: vec![
+                d7_case_partition_call(left_symbol, d7_case_constructor("A")),
+                d7_case_partition_call(right_symbol, d7_case_constructor("B")),
+            ],
+        };
+        let declarations = BTreeMap::from([
+            (left_symbol, &left),
+            (right_symbol, &right),
+        ]);
+        let plan = d7_functionized_plan(&entry, &declarations).expect("two matches plan");
+        let mut groups = BTreeMap::<
+            (PredeclaredFunctionId, StaticOriginId),
+            Vec<CaseEmissionStatus>,
+        >::new();
+        for record in &plan.case_emissions {
+            groups
+                .entry((record.owner, record.match_origin))
+                .or_default()
+                .push(record.status);
+        }
+        let populations = groups.into_values().collect::<BTreeSet<_>>();
+        assert!(populations.contains(&vec![
+            CaseEmissionStatus::Reachable,
+            CaseEmissionStatus::Eliminated,
+            CaseEmissionStatus::Eliminated,
+        ]));
+        assert!(populations.contains(&vec![
+            CaseEmissionStatus::Eliminated,
+            CaseEmissionStatus::Reachable,
+            CaseEmissionStatus::Eliminated,
+        ]));
+    }
+
+    /// Promise class: durable invariant.
+    ///
+    /// MEASURED: each field in the exact case record participates in
+    /// pre-emission equality against a fresh producer-flow derivation.
+    /// CLAIMED: no missing, duplicate, transplanted, stale, or forged record can
+    /// survive to function definition.
+    /// THE GAP: move-only construction prevents production lowering from
+    /// fabricating a record; this pin exercises corrupt planner state.
+    #[test]
+    fn d7_case_emission_bijection_rejects_every_identity_axis() {
+        let symbol = "decl:fixture::d7-case-bijection";
+        let declaration = d7_case_partition_declaration(symbol, d7_case_partition_cases());
+        let entry = d7_case_partition_call(symbol, d7_case_constructor("A"));
+        let declarations = BTreeMap::from([(symbol, &declaration)]);
+        let plan = d7_functionized_plan(&entry, &declarations).expect("case partition plans");
+        let exact = plan.case_emissions.clone();
+        assert!(exact.len() >= 3, "the mutation population is vacuous");
+
+        let reject = |name: &str, records: Vec<PlannedCaseEmission>| {
+            assert_ne!(records, exact, "{name} mutation did not change the subject");
+            let mut mutated = plan.clone();
+            mutated.case_emissions = records;
+            assert_eq!(
+                mutated.validate_case_emissions().unwrap_err(),
+                planner_error("case-emission partition is not the exact producer-flow derivation"),
+                "{name} was rejected by the wrong gate"
+            );
+        };
+
+        reject("omit", exact[1..].to_vec());
+        let mut duplicate = exact.clone();
+        duplicate.push(exact[0].clone());
+        reject("duplicate", duplicate);
+        for (name, mutation) in [
+            (
+                "match",
+                Box::new(|record: &mut PlannedCaseEmission| {
+                    record.match_origin = StaticOriginId(u32::MAX)
+                }) as Box<dyn Fn(&mut PlannedCaseEmission)>,
+            ),
+            (
+                "scrutinee",
+                Box::new(|record: &mut PlannedCaseEmission| {
+                    record.scrutinee_origin = StaticOriginId(u32::MAX)
+                }),
+            ),
+            (
+                "body",
+                Box::new(|record: &mut PlannedCaseEmission| {
+                    record.body_origin = StaticOriginId(u32::MAX)
+                }),
+            ),
+            (
+                "ordinal",
+                Box::new(|record: &mut PlannedCaseEmission| {
+                    record.ordinal = u32::MAX
+                }),
+            ),
+            (
+                "constructor",
+                Box::new(|record: &mut PlannedCaseEmission| {
+                    record.constructor = exact[1].constructor
+                }),
+            ),
+            (
+                "owner",
+                Box::new(|record: &mut PlannedCaseEmission| {
+                    record.owner = PredeclaredFunctionId(u32::MAX)
+                }),
+            ),
+            (
+                "phase",
+                Box::new(|record: &mut PlannedCaseEmission| {
+                    record.phase = ResultPhase::SpecializedOnly
+                }),
+            ),
+            (
+                "provenance",
+                Box::new(|record: &mut PlannedCaseEmission| {
+                    record.authority.flow.clear()
+                }),
+            ),
+            (
+                "false-elimination",
+                Box::new(|record: &mut PlannedCaseEmission| {
+                    record.status = CaseEmissionStatus::Eliminated
+                }),
+            ),
+        ] {
+            let mut records = exact.clone();
+            mutation(&mut records[0]);
+            reject(name, records);
+        }
+
+        let open_entry = d7_case_partition_call(
+            symbol,
+            RuntimeExpr::PrimitiveCall {
+                primitive: crate::RuntimePrimitive {
+                    symbol: "opaque_fixture".to_string(),
+                    partiality: crate::RuntimePartiality::Total,
+                },
+                args: Vec::new(),
+            },
+        );
+        let open_plan =
+            d7_functionized_plan(&open_entry, &declarations).expect("open partition plans");
+        let mut forged = open_plan.clone();
+        for record in &mut forged.case_emissions {
+            record.authority.producers = ScrutineeProducerSet::Closed(Vec::new());
+            record.status = CaseEmissionStatus::Eliminated;
+        }
+        assert_eq!(
+            forged.validate_case_emissions().unwrap_err(),
+            planner_error("case-emission partition is not the exact producer-flow derivation"),
+            "Open-to-Closed forgery reached a later gate"
+        );
+    }
+
+    /// Promise class: durable invariant.
+    ///
+    /// MEASURED: eliminating one exact case dispositions every planned
+    /// boundary use below its same-owner body, including an effect seat, while
+    /// retaining the nested source join in the structural accounting
+    /// population.
+    /// CLAIMED: omitted case bodies emit no anonymous boundary transition and
+    /// cannot hide a nested join from the pre-definition ledgers.
+    /// THE GAP: helper-call allocation is covered by the object-emission
+    /// no-publication controls; this pin closes the planner's causal subtree.
+    #[test]
+    fn d7_case_emission_eliminated_subtree_is_fully_accounted() {
+        let symbol = "decl:fixture::d7-case-eliminated-subtree";
+        let mut cases = d7_case_partition_cases();
+        cases[1].body = RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Effect {
+                family: "Buffer".to_string(),
+                operation: ken_host::HostOpV1::BufferAllocate,
+                capability: None,
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+            }),
+            body: Box::new(RuntimeExpr::If {
+                scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                then_expr: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::D7Answer::B".to_string(),
+                    args: vec![RuntimeExpr::Var(0)],
+                }),
+                else_expr: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::D7Answer::B".to_string(),
+                    args: vec![RuntimeExpr::Var(0)],
+                }),
+            }),
+        };
+        let declaration = d7_case_partition_declaration(symbol, cases);
+        let entry = d7_case_partition_call(symbol, d7_case_constructor("A"));
+        let declarations = BTreeMap::from([(symbol, &declaration)]);
+        let plan =
+            d7_functionized_plan(&entry, &declarations).expect("nested dead case plans");
+        let records = d7_case_partition_records(&plan);
+        let eliminated = records[1];
+        assert_eq!(eliminated.status, CaseEmissionStatus::Eliminated);
+
+        let owner = eliminated.owner;
+        let root = eliminated.body_origin;
+        let mut pending = vec![root];
+        let mut subtree = BTreeSet::new();
+        while let Some(origin) = pending.pop() {
+            if !subtree.insert(origin) {
+                continue;
+            }
+            for child in plan.semantic.child_origins(origin).unwrap() {
+                if plan.semantic.function_owner(*child).unwrap() == Some(owner) {
+                    pending.push(*child);
+                }
+            }
+        }
+        let expected_boundary_uses = plan
+            .boundary_uses
+            .iter()
+            .filter_map(|planned| {
+                let origin = match &planned.path {
+                    PlannedBoundaryUsePath::Source { parent, .. } => *parent,
+                    PlannedBoundaryUsePath::Synthesized { origin, .. } => *origin,
+                    PlannedBoundaryUsePath::StaticRecursorWorker {
+                        producer_origin, ..
+                    }
+                    | PlannedBoundaryUsePath::StaticRecursorCapture {
+                        producer_origin, ..
+                    } => *producer_origin,
+                };
+                (planned.producer_owner == owner && subtree.contains(&origin))
+                    .then_some(planned.identity)
+            })
+            .collect::<BTreeSet<_>>();
+        assert!(
+            expected_boundary_uses.iter().any(|identity| {
+                plan.boundary_uses.iter().any(|planned| {
+                    planned.identity == *identity
+                        && matches!(
+                            planned.path,
+                            PlannedBoundaryUsePath::Source {
+                                effect_operation: Some(
+                                    ken_host::HostOpV1::BufferAllocate
+                                ),
+                                ..
+                            }
+                        )
+                })
+            }),
+            "the eliminated subtree has no planned effect-seat boundary use"
+        );
+        let joins = plan
+            .source_join_origins_in_owner_subtree(root)
+            .expect("dead subtree join population closes");
+        assert!(!joins.is_empty(), "the eliminated subtree has no planned join");
+
+        plan.disposition_boundary_uses_in_owner_subtree(root)
+            .expect("the eliminated subtree dispositions causally");
+        assert!(
+            plan.operand_edge_consumption.borrow().is_empty(),
+            "the eliminated body emitted a source boundary use"
+        );
+        assert!(
+            expected_boundary_uses.is_subset(&plan.boundary_use_dispositions.borrow()),
+            "one nested planned boundary use escaped elimination accounting"
         );
     }
 }

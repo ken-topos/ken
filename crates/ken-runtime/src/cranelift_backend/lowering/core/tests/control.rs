@@ -28,6 +28,7 @@ enum Px8dsEdgeMutation {
 fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowering<'a> {
     Lowering {
         seed_env,
+        active_emission_owner: None,
         declarations: BTreeMap::new(),
         static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
@@ -142,6 +143,7 @@ fn run_px8j_malformed_recursor_consumer(
     let (static_transition_plan, fixture_origin) = planned_root_occurrence(lowered_fixture);
     let mut compiler = Lowering {
         seed_env: &seed_env,
+        active_emission_owner: None,
         declarations: BTreeMap::new(),
         static_transition_plan,
         declaration_stack: Vec::new(),
@@ -2026,6 +2028,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
     let seed_env = NativeSeedEnvironment::empty();
     let mut lowering = Lowering {
         seed_env: &seed_env,
+        active_emission_owner: None,
         declarations: BTreeMap::new(),
         static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
@@ -8901,11 +8904,14 @@ fn synthesized_boundary_use_omission_publishes_no_unit_function() {
         .expect_err("an omitted synthesized use must reject");
     set_synthesized_consumption_mutation(SynthesizedConsumptionMutation::Exact);
 
-    assert!(matches!(
-        failure,
-        CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
-            if detail.starts_with("boundary-use ledger is not exact; missing=")
-    ));
+    assert!(
+        matches!(
+            failure,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+                if detail.starts_with("boundary-use ledger is not exact; missing=")
+        ),
+        "unexpected omission failure: {failure:?}"
+    );
     let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
     assert!(declared > 0, "the control never reached function staging");
     assert_eq!(defined, 0, "ledger omission published a unit function");
@@ -8926,11 +8932,14 @@ fn synthesized_boundary_use_repeat_publishes_no_unit_function() {
         .expect_err("a repeated synthesized use must reject");
     set_synthesized_consumption_mutation(SynthesizedConsumptionMutation::Exact);
 
-    assert!(matches!(
-        failure,
-        CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
-            if detail.starts_with("boundary-use ledger contains duplicate consumption;")
-    ));
+    assert!(
+        matches!(
+            failure,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+                if detail.starts_with("boundary-use ledger contains duplicate consumption;")
+        ),
+        "unexpected repeat failure: {failure:?}"
+    );
     let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
     assert!(declared > 0, "the control never reached function staging");
     assert_eq!(defined, 0, "ledger repetition published a unit function");
@@ -8980,11 +8989,14 @@ fn reached_static_recursor_omission_publishes_no_unit_function() {
         .expect_err("an omitted reached static worker must reject");
     set_static_recursor_consumption_mutation(StaticRecursorConsumptionMutation::Exact);
 
-    assert!(matches!(
-        failure,
-        CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
-            if detail.starts_with("boundary-use ledger is not exact; missing=")
-    ));
+    assert!(
+        matches!(
+            failure,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+                if detail.starts_with("boundary-use ledger is not exact; missing=")
+        ),
+        "unexpected omission failure: {failure:?}"
+    );
     let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
     assert!(declared > 1, "the control never reached function staging");
     assert_eq!(
@@ -9008,11 +9020,14 @@ fn reached_static_recursor_repeat_publishes_no_unit_function() {
         .expect_err("a repeated reached static worker must reject");
     set_static_recursor_consumption_mutation(StaticRecursorConsumptionMutation::Exact);
 
-    assert!(matches!(
-        failure,
-        CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
-            if detail.starts_with("boundary-use ledger contains duplicate consumption;")
-    ));
+    assert!(
+        matches!(
+            failure,
+            CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(ref detail))
+                if detail.starts_with("boundary-use ledger contains duplicate consumption;")
+        ),
+        "unexpected repeat failure: {failure:?}"
+    );
     let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
     assert!(declared > 1, "the control never reached function staging");
     assert_eq!(

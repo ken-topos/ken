@@ -938,6 +938,7 @@ fn stage_unit_body<M: Module>(
             )?;
         }
         compiler.function_local = function_local;
+        compiler.active_emission_owner = Some(unit.function);
         #[cfg(test)]
         if is_root
             && PROCESS_SLOT_MUTATION.with(std::cell::Cell::get)

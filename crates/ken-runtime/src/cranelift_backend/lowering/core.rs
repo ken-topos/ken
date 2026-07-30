@@ -585,6 +585,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
         seed_env,
+        active_emission_owner: None,
         declarations,
         static_transition_plan,
         declaration_stack: Vec::new(),
@@ -729,6 +730,12 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 }
                 compiler.root_terminal_authority =
                     compiler.take_distinguished_root_answer_authority()?;
+                compiler.active_emission_owner = Some(
+                    compiler
+                        .static_transition_plan
+                        .root_emittable_unit()?
+                        .function(),
+                );
                 let root_origin = compiler.static_transition_plan.root_static_origin()?;
                 let root = compiler.retained_body_occurrence(root_origin)?;
                 compiler.select_terminal_result_origins(root_origin, root.expr)?;
@@ -1105,6 +1112,11 @@ impl<'a> Lowering<'a> {
         self.enter_source_occurrence_plan(static_origin)?;
         match scrutinee {
             RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
+                self.static_transition_plan.close_reached_operand_edge(
+                    static_origin,
+                    0,
+                    SourceOperandRole::WrapperBody,
+                )?;
                 self.enter_checked_subcontinuation_frame(*frame_id)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let result = self.lower_computational_producer_expr(
@@ -1126,6 +1138,11 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
+                self.static_transition_plan.close_reached_operand_edge(
+                    static_origin,
+                    0,
+                    SourceOperandRole::WrapperBody,
+                )?;
                 let instance = self.enter_checked_recursive_invocation(*call_template_id, body)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let result = self.lower_computational_producer_expr(
@@ -1138,6 +1155,11 @@ impl<'a> Lowering<'a> {
                 result
             }
             RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
+                self.static_transition_plan.close_reached_operand_edge(
+                    static_origin,
+                    0,
+                    SourceOperandRole::WrapperBody,
+                )?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 self.lower_computational_producer_expr(builder, body, producer_env, eliminators)
             }
@@ -1146,6 +1168,11 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
+                self.static_transition_plan.close_reached_operand_edge(
+                    static_origin,
+                    0,
+                    SourceOperandRole::WrapperBody,
+                )?;
                 self.enter_checked_computational_ih_invocation(*call_template_id)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let value = self.lower_computational_producer_expr(
@@ -2113,23 +2140,45 @@ impl<'a> Lowering<'a> {
                         (err_block, err_constructor.as_str(), *error),
                     ] {
                         builder.switch_to_block(block);
-                        let lowered = if let Some((index, producer_case)) =
+                        let (lowered, predecessor_origin) = if let Some((index, producer_case)) =
                             dynamic_host_result_producer_case(producer_cases, constructor)?
                         {
+                            let arm_edge = self.static_transition_plan.operand_edge_token(
+                                static_origin,
+                                1 + index,
+                                SourceOperandRole::MatchArm,
+                            )?;
+                            if arm_edge.disposition()
+                                != OperandEdgeDisposition::Forwarding
+                            {
+                                return Err(backend(BackendFailure::PlannerInvariant(
+                                    "dynamic producer HostResult arm lost its forwarding \
+                                     disposition"
+                                        .to_string(),
+                                )));
+                            }
                             let case_env = env_with([payload], producer_env);
                             let body = self.case_body_occurrence(
                                 static_origin,
                                 index,
                                 &producer_case.body,
                             )?;
-                            self.lower_computational_producer_expr(
-                                builder,
-                                body,
-                                &case_env,
-                                eliminators,
-                            )?
+                            (
+                                self.lower_computational_producer_expr(
+                                    builder,
+                                    body,
+                                    &case_env,
+                                    eliminators,
+                                )?,
+                                body.static_origin,
+                            )
                         } else {
-                            LoweringOperand::Specialized(Lowered::Trap(producer_default.clone()))
+                            (
+                                LoweringOperand::Specialized(Lowered::Trap(
+                                    producer_default.clone(),
+                                )),
+                                static_origin,
+                            )
                         };
                         if self.seal_source_trap_branch(builder, &lowered)? {
                             continue;
@@ -2145,7 +2194,7 @@ impl<'a> Lowering<'a> {
                             builder,
                             merge,
                             &join_plan,
-                            static_origin,
+                            predecessor_origin,
                             lowered,
                             &mut merge_kind,
                             "ComputationalMatch",
@@ -3611,6 +3660,11 @@ impl<'a> Lowering<'a> {
                     expr
                 } {
                     RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
+                        self.static_transition_plan.close_reached_operand_edge(
+                            static_origin,
+                            0,
+                            SourceOperandRole::WrapperBody,
+                        )?;
                         self.enter_checked_subcontinuation_frame(frame_id)?;
                         SourceMachineState::Eval {
                             expr: self.owned_child_occurrence(static_origin, 0, *body)?,
@@ -3623,6 +3677,11 @@ impl<'a> Lowering<'a> {
                         body,
                         ..
                     } => {
+                        self.static_transition_plan.close_reached_operand_edge(
+                            static_origin,
+                            0,
+                            SourceOperandRole::WrapperBody,
+                        )?;
                         let instance =
                             self.enter_checked_recursive_invocation(call_template_id, &body)?;
                         control.continuation =
@@ -3637,6 +3696,11 @@ impl<'a> Lowering<'a> {
                         }
                     }
                     RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
+                        self.static_transition_plan.close_reached_operand_edge(
+                            static_origin,
+                            0,
+                            SourceOperandRole::WrapperBody,
+                        )?;
                         SourceMachineState::Eval {
                             expr: self.owned_child_occurrence(static_origin, 0, *body)?,
                             env,
@@ -3648,6 +3712,11 @@ impl<'a> Lowering<'a> {
                         body,
                         ..
                     } => {
+                        self.static_transition_plan.close_reached_operand_edge(
+                            static_origin,
+                            0,
+                            SourceOperandRole::WrapperBody,
+                        )?;
                         self.enter_checked_computational_ih_invocation(call_template_id)?;
                         control.continuation =
                             SourceContinuation::CheckedComputationalIHInvocationReturn {
@@ -3672,7 +3741,13 @@ impl<'a> Lowering<'a> {
                         control,
                     },
                     RuntimeExpr::Let { value, body } => {
+                        self.static_transition_plan.close_reached_operand_edge(
+                            static_origin,
+                            0,
+                            SourceOperandRole::LetValue,
+                        )?;
                         control.continuation = SourceContinuation::LetBody {
+                            let_origin: static_origin,
                             body: self.owned_child_occurrence(static_origin, 1, *body)?,
                             env: env.clone(),
                             next: Box::new(control.continuation),
@@ -3952,13 +4027,23 @@ impl<'a> Lowering<'a> {
                             }
                             return Ok(LoweringOperand::Specialized(Lowered::RecursiveBackedge));
                         }
-                        SourceContinuation::LetBody { body, env, next } => {
+                        SourceContinuation::LetBody {
+                            let_origin,
+                            body,
+                            env,
+                            next,
+                        } => {
                             control.continuation = *next;
                             if matches!(value, LoweringOperand::Specialized(Lowered::RecursiveBackedge)) {
                                 SourceMachineState::Value { value, control }
                             } else if matches!(value, LoweringOperand::Specialized(Lowered::Trap(_))) {
                                 SourceMachineState::Value { value, control }
                             } else {
+                                self.static_transition_plan.close_reached_operand_edge(
+                                    let_origin,
+                                    1,
+                                    SourceOperandRole::LetBody,
+                                )?;
                                 let body_env = env_with_operands([value], &env);
                                 SourceMachineState::Eval {
                                     expr: body,
@@ -5438,6 +5523,28 @@ impl<'a> Lowering<'a> {
                     "carried Result cases must each bind exactly one selected payload",
                 ));
             }
+            let owner = self.active_emission_owner.ok_or_else(|| {
+                backend_module(
+                    "carried Match emission has no exact generated-function owner".to_string(),
+                )
+            })?;
+            for (index, _) in [ok_case, err_case] {
+                let token = self.static_transition_plan.case_emission_token(
+                    owner,
+                    static_origin,
+                    index,
+                )?;
+                if !token.is_reachable() {
+                    return Err(backend_module(
+                        "HostResult runtime selection targets a planner-eliminated case"
+                            .to_string(),
+                    ));
+                }
+                self.disposition_statically_unselected_match_cases(
+                    static_origin,
+                    Some(index),
+                )?;
+            }
             let ok_block = builder.create_block();
             builder.append_block_param(ok_block, types::I64);
             let err_block = builder.create_block();
@@ -5534,7 +5641,24 @@ impl<'a> Lowering<'a> {
         } else {
             let tag = self.emit_carrier_tag(builder, scrutinee)?;
             let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
+            let owner = self.active_emission_owner.ok_or_else(|| {
+                backend_module(
+                    "carried Match emission has no exact generated-function owner".to_string(),
+                )
+            })?;
             for (index, case) in cases.iter().enumerate() {
+                let token = self.static_transition_plan.case_emission_token(
+                    owner,
+                    static_origin,
+                    index,
+                )?;
+                if !token.is_reachable() {
+                    continue;
+                }
+                self.disposition_statically_unselected_match_cases(
+                    static_origin,
+                    Some(index),
+                )?;
                 let identity = self
                     .static_transition_plan
                     .case_constructor_identity(static_origin, index)?
@@ -6711,7 +6835,9 @@ impl<'a> Lowering<'a> {
         required_kind: Option<ScalarMergeKind>,
         join: &'static str,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
-        let edge = self.static_transition_plan.lowering_boundary_use_token(
+        let edge = self
+            .static_transition_plan
+            .reached_lowering_boundary_use_token(
             LoweringOnlyOperandEdge::JoinArm,
             origin,
             0,
@@ -8217,6 +8343,11 @@ impl<'a> Lowering<'a> {
                 .lower_value(builder, value)
                 .map(LoweringOperand::Specialized),
             RuntimeExpr::CheckedJoinSite { site_id, body } => {
+                self.static_transition_plan.close_reached_operand_edge(
+                    static_origin,
+                    0,
+                    SourceOperandRole::WrapperBody,
+                )?;
                 if self.active_join_site.replace(*site_id).is_some() {
                     return Err(unsupported(
                         "NativeJoinPlanV1",
@@ -8234,6 +8365,11 @@ impl<'a> Lowering<'a> {
                 result
             }
             RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
+                self.static_transition_plan.close_reached_operand_edge(
+                    static_origin,
+                    0,
+                    SourceOperandRole::WrapperBody,
+                )?;
                 self.enter_checked_subcontinuation_frame(*frame_id)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let result = self.lower_expr(builder, body, env);
@@ -8250,6 +8386,11 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
+                self.static_transition_plan.close_reached_operand_edge(
+                    static_origin,
+                    0,
+                    SourceOperandRole::WrapperBody,
+                )?;
                 let instance =
                     self.enter_checked_recursive_invocation(*call_template_id, body)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
@@ -8258,6 +8399,11 @@ impl<'a> Lowering<'a> {
                 result
             }
             RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
+                self.static_transition_plan.close_reached_operand_edge(
+                    static_origin,
+                    0,
+                    SourceOperandRole::WrapperBody,
+                )?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 self.lower_expr(builder, body, env)
             }
@@ -8266,6 +8412,11 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
+                self.static_transition_plan.close_reached_operand_edge(
+                    static_origin,
+                    0,
+                    SourceOperandRole::WrapperBody,
+                )?;
                 self.enter_checked_computational_ih_invocation(*call_template_id)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let value = self.lower_expr(builder, body, env)?;
@@ -11486,6 +11637,16 @@ impl<'a> Lowering<'a> {
             };
             let arm_env = materialize_dynamic_constructor_env(&alternative, env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
+            let arm_edge = self.static_transition_plan.operand_edge_token(
+                static_origin,
+                1 + index,
+                SourceOperandRole::MatchArm,
+            )?;
+            if arm_edge.disposition() != OperandEdgeDisposition::Forwarding {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "dynamic constructor match arm lost its forwarding disposition".to_string(),
+                )));
+            }
             let lowered = match continuation {
                 DynamicConstructorContinuation::Ordinary { .. } => {
                     self.lower_expr(builder, body, &arm_env)?
@@ -11545,6 +11706,11 @@ impl<'a> Lowering<'a> {
             .iter()
             .enumerate()
             .map(|(position, arg)| {
+                let _edge = self.static_transition_plan.operand_edge_token(
+                    static_origin,
+                    position,
+                    SourceOperandRole::PrimitiveArgument,
+                )?;
                 let arg = self.child_occurrence(static_origin, position, arg)?;
                 self.lower_expr(builder, arg, env)
             })
