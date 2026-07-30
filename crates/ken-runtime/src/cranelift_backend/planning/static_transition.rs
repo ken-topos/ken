@@ -844,6 +844,38 @@ struct PlannedStaticRecursorWorkerResidual {
     disposition: OperandEdgeDisposition,
 }
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct PlannedStaticRecursorWorkerEnvironmentCapture {
+    provenance: StaticRecursorCaptureProvenance,
+    possible_owners: Vec<BoundaryReferentOwner>,
+}
+
+/// One compiler-synthesized worker environment, keyed by the exact residual
+/// identity and the residual's ordered capture provenance.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct PlannedStaticRecursorWorkerEnvironment {
+    worker_identity: BoundaryUseIdentity,
+    residual_id: StaticRecursorWorkerResidualId,
+    owner: PredeclaredFunctionId,
+    parent_origin: StaticOriginId,
+    producer_origin: StaticOriginId,
+    sibling_position: u32,
+    closure_origin: StaticOriginId,
+    captures: Vec<PlannedStaticRecursorWorkerEnvironmentCapture>,
+    selected_owner: BoundaryReferentOwner,
+    selected_tag: BoundaryTag,
+}
+
+/// Opaque identity of one pre-planned static-worker environment occurrence.
+///
+/// Lowering can retain this identity between capture preflight and allocation,
+/// but it cannot construct or relabel one.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct StaticRecursorWorkerEnvironmentOccurrence {
+    worker_identity: BoundaryUseIdentity,
+    residual_id: StaticRecursorWorkerResidualId,
+}
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct PlannedRecursorBoundaryUse {
     identity: BoundaryUseIdentity,
@@ -2458,24 +2490,41 @@ fn build_static_recursor_worker_residuals(
             continue;
         };
         let scrutinee_origin = plan.semantic.child_origin(parent.static_origin, 0)?;
-        let scrutinee_results = plan.source_result_origins_in_owner_subtree(scrutinee_origin)?;
-        for position in cases
-            .iter()
-            .flat_map(|case| case.recursive_positions.iter().copied())
-        {
-            for constructor_origin in &scrutinee_results {
-                let Some(constructor) = plan
-                    .source_occurrences
-                    .get(constructor_origin.0 as usize)
-                    .and_then(Option::as_ref)
-                else {
-                    return Err(planner_error(
-                        "static recursor scrutinee descendant has no source occurrence",
-                    ));
-                };
-                let RuntimeExpr::Construct { args, .. } = constructor.expr else {
-                    continue;
-                };
+        let mut pending = plan
+            .source_result_origins_in_owner_subtree(scrutinee_origin)?
+            .into_iter()
+            .collect::<Vec<_>>();
+        let mut visited = BTreeSet::new();
+        while let Some(constructor_origin) = pending.pop() {
+            if !visited.insert(constructor_origin) {
+                continue;
+            }
+            let constructor = plan
+                .source_occurrences
+                .get(constructor_origin.0 as usize)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| planner_error("static recursor result has no source occurrence"))?;
+            let RuntimeExpr::Construct { args, .. } = constructor.expr else {
+                continue;
+            };
+            let identity = plan
+                .semantic
+                .constructor_symbol_identity(constructor_origin)?;
+            let recursive_positions = cases
+                .iter()
+                .enumerate()
+                .filter_map(|(case_index, case)| {
+                    (plan
+                        .semantic
+                        .case_constructor_identity(parent.static_origin, case_index)
+                        .ok()
+                        == Some(identity))
+                    .then_some(&case.recursive_positions)
+                })
+                .flatten()
+                .copied()
+                .collect::<BTreeSet<_>>();
+            for position in recursive_positions {
                 let Some(candidate) = args.get(position) else {
                     continue;
                 };
@@ -2485,7 +2534,7 @@ fn build_static_recursor_worker_residuals(
                 ) {
                     continue;
                 }
-                let closure_origin = plan.semantic.child_origin(*constructor_origin, position)?;
+                let closure_origin = plan.semantic.child_origin(constructor_origin, position)?;
                 let closure = plan
                     .source_occurrences
                     .get(closure_origin.0 as usize)
@@ -2493,13 +2542,18 @@ fn build_static_recursor_worker_residuals(
                     .ok_or_else(|| {
                         planner_error("static recursor child has no source occurrence")
                     })?;
-                residuals.push(build_static_recursor_worker_residual(
+                let residual = build_static_recursor_worker_residual(
                     plan,
                     parent.static_origin,
-                    *constructor_origin,
+                    constructor_origin,
                     position,
                     closure,
-                )?);
+                )?;
+                // This is result-flow closure, not structural containment:
+                // only exact result origins of the ruled worker body can
+                // produce the next scrutinee observed by this recursor.
+                pending.extend(plan.source_result_origins_in_owner_subtree(residual.body_origin)?);
+                residuals.push(residual);
             }
         }
     }
@@ -3385,6 +3439,14 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// point closes. Lowering can only consume this population; it cannot
     /// recover a residual by searching source occurrences.
     static_recursor_worker_residuals: Vec<PlannedStaticRecursorWorkerResidual>,
+    /// One exact synthesized Record occurrence for every static-worker
+    /// environment, derived from the worker's ordered capture provenance and
+    /// the producer-flow referent-owner meet.
+    static_recursor_worker_environments: Vec<PlannedStaticRecursorWorkerEnvironment>,
+    /// Exact worker environments whose move-only representation authority was
+    /// consumed before allocation.
+    static_recursor_worker_environment_consumption:
+        RefCell<BTreeMap<StaticRecursorWorkerEnvironmentOccurrence, u32>>,
     recursor_boundary_uses: Vec<PlannedRecursorBoundaryUse>,
     lowering_boundary_uses: Vec<PlannedLoweringBoundaryUse>,
     boundary_uses: Vec<PlannedBoundaryUse>,
@@ -3528,6 +3590,13 @@ enum StaticRecursorResidualMatrixMutation {
 
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StaticRecursorWorkerEnvironmentTokenMutation {
+    Exact,
+    ForcePersistentFirst,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) enum SynthesizedConsumptionMutation {
     Exact,
     OmitFirst,
@@ -3552,6 +3621,11 @@ thread_local! {
     static STATIC_RECURSOR_RESIDUAL_MATRIX_MUTATION:
         Cell<StaticRecursorResidualMatrixMutation> =
         const { Cell::new(StaticRecursorResidualMatrixMutation::Exact) };
+    static STATIC_RECURSOR_WORKER_ENVIRONMENT_TOKEN_MUTATION:
+        Cell<StaticRecursorWorkerEnvironmentTokenMutation> =
+        const { Cell::new(StaticRecursorWorkerEnvironmentTokenMutation::Exact) };
+    static STATIC_RECURSOR_WORKER_ENVIRONMENT_TOKEN_MUTATED: Cell<bool> =
+        const { Cell::new(false) };
     static INCLUDE_TEST_FIXTURE_BOUNDARY_USE: Cell<bool> = const { Cell::new(false) };
     static SYNTHESIZED_CONSUMPTION_MUTATION: Cell<SynthesizedConsumptionMutation> =
         const { Cell::new(SynthesizedConsumptionMutation::Exact) };
@@ -5555,6 +5629,7 @@ fn build_producer_flow_plans(
         Vec<PlannedCaseEmission>,
         Vec<PlannedAggregateRepresentation>,
         Vec<PlannedSynthesizedAggregateRepresentation>,
+        Vec<PlannedStaticRecursorWorkerEnvironment>,
     ),
     CraneliftBackendError,
 > {
@@ -6012,6 +6087,89 @@ fn build_producer_flow_plans(
     }
     synthesized_aggregate_records
         .sort_by_key(|record| (record.owner, record.effect_origin, record.site));
+    let mut static_recursor_worker_environments = Vec::new();
+    for residual in &analysis.static_recursor_worker_residuals {
+        let planned_worker = plan
+            .boundary_uses
+            .iter()
+            .find(|planned| {
+                matches!(
+                    &planned.path,
+                    PlannedBoundaryUsePath::StaticRecursorWorker {
+                        parent_origin,
+                        producer_origin,
+                        sibling_position,
+                        closure_origin,
+                        body_origin,
+                        declared_arity,
+                        captures,
+                    } if *parent_origin == residual.parent_origin
+                        && *producer_origin == residual.producer_origin
+                        && *sibling_position == residual.sibling_position
+                        && *closure_origin == residual.closure_origin
+                        && *body_origin == residual.body_origin
+                        && *declared_arity == residual.declared_arity
+                        && captures == &residual.captures
+                )
+            })
+            .ok_or_else(|| {
+                planner_error(
+                    "static recursor worker environment has no exact unified worker identity",
+                )
+            })?;
+        let capture_values = analysis.captures.get(&residual.closure_origin);
+        let mut captures = Vec::with_capacity(residual.captures.len());
+        let mut invocation_owned = false;
+        for capture in &residual.captures {
+            let possible_owners = match capture.source {
+                // Seed environments cross the GroundValueCarrier ABI. That
+                // closed carrier excludes invocation-arena referents.
+                StaticRecursorCaptureSource::Seed(_) => vec![
+                    BoundaryReferentOwner::NoReferent,
+                    BoundaryReferentOwner::PersistentStore,
+                ],
+                StaticRecursorCaptureSource::Lexical(_) => capture_values
+                    .and_then(|values| values.get(capture.ordinal as usize))
+                    .and_then(|value| value.referent_owners.closed_owners())
+                    .ok_or_else(|| {
+                        planner_error(format!(
+                            "static recursor worker capture has no closed referent-owner fact; \
+                             residual={:?}; capture={capture:?}",
+                            residual.id
+                        ))
+                    })?,
+            };
+            invocation_owned |= possible_owners.contains(&BoundaryReferentOwner::InvocationArena);
+            captures.push(PlannedStaticRecursorWorkerEnvironmentCapture {
+                provenance: capture.clone(),
+                possible_owners,
+            });
+        }
+        let (selected_owner, selected_tag) = if invocation_owned {
+            (
+                BoundaryReferentOwner::InvocationArena,
+                BoundaryTag::InvocationAggregate,
+            )
+        } else {
+            (
+                BoundaryReferentOwner::PersistentStore,
+                BoundaryTag::PersistentGround,
+            )
+        };
+        static_recursor_worker_environments.push(PlannedStaticRecursorWorkerEnvironment {
+            worker_identity: planned_worker.identity,
+            residual_id: residual.id,
+            owner: planned_worker.consumer_owner,
+            parent_origin: residual.parent_origin,
+            producer_origin: residual.producer_origin,
+            sibling_position: residual.sibling_position,
+            closure_origin: residual.closure_origin,
+            captures,
+            selected_owner,
+            selected_tag,
+        });
+    }
+    static_recursor_worker_environments.sort_by_key(|record| record.worker_identity);
     let mut records = Vec::new();
     for ((match_origin, owner), fact) in analysis.match_scrutinees {
         if !emittable_owners.contains(&owner) {
@@ -6058,7 +6216,12 @@ fn build_producer_flow_plans(
         }
     }
     records.sort_by_key(|record| (record.owner, record.match_origin, record.ordinal));
-    Ok((records, aggregate_records, synthesized_aggregate_records))
+    Ok((
+        records,
+        aggregate_records,
+        synthesized_aggregate_records,
+        static_recursor_worker_environments,
+    ))
 }
 
 impl<'src> Planner<'src> {
@@ -6108,6 +6271,8 @@ impl<'src> Planner<'src> {
                 static_callable_specializations: Vec::new(),
                 static_callable_calls: Vec::new(),
                 static_recursor_worker_residuals: Vec::new(),
+                static_recursor_worker_environments: Vec::new(),
+                static_recursor_worker_environment_consumption: RefCell::new(BTreeMap::new()),
                 recursor_boundary_uses: Vec::new(),
                 lowering_boundary_uses: Vec::new(),
                 boundary_uses: Vec::new(),
@@ -6881,11 +7046,16 @@ impl<'src> Planner<'src> {
         self.plan.recursor_boundary_uses = build_recursor_boundary_uses(&self.plan)?;
         self.plan.lowering_boundary_uses = build_lowering_boundary_uses(&self.plan)?;
         self.plan.boundary_uses = build_boundary_uses(&self.plan)?;
-        let (case_emissions, aggregate_representations, synthesized_aggregate_representations) =
-            build_producer_flow_plans(&self.plan)?;
+        let (
+            case_emissions,
+            aggregate_representations,
+            synthesized_aggregate_representations,
+            static_recursor_worker_environments,
+        ) = build_producer_flow_plans(&self.plan)?;
         self.plan.case_emissions = case_emissions;
         self.plan.aggregate_representations = aggregate_representations;
         self.plan.synthesized_aggregate_representations = synthesized_aggregate_representations;
+        self.plan.static_recursor_worker_environments = static_recursor_worker_environments;
         #[cfg(test)]
         STATIC_RECURSOR_RESIDUAL_MATRIX_MUTATION.with(|mutation| match mutation.get() {
             StaticRecursorResidualMatrixMutation::Exact => {}
@@ -7695,6 +7865,12 @@ impl<'src> StaticTransitionPlan<'src> {
         for identity in identities {
             self.record_boundary_use_disposition(identity)?;
         }
+        let consumption = self.aggregate_representation_consumption.borrow();
+        // Source-machine specializations can classify one clone of a semantic
+        // occurrence dead after another clone has already emitted it. The
+        // occurrence-level ledger closes over the union of reached clones, so
+        // an existing exact consumption wins over this later local dead
+        // classification just as it does for source BoundaryUse identities.
         let aggregate_keys = self
             .aggregate_representations
             .iter()
@@ -7704,17 +7880,8 @@ impl<'src> StaticTransitionPlan<'src> {
                     && origins.contains(&record.origin)
             })
             .map(|record| (record.owner, record.origin))
+            .filter(|key| !consumption.contains_key(key))
             .collect::<Vec<_>>();
-        let consumption = self.aggregate_representation_consumption.borrow();
-        if let Some(key) = aggregate_keys
-            .iter()
-            .find(|key| consumption.contains_key(key))
-        {
-            return Err(planner_error(format!(
-                "one aggregate occurrence was both emitted and statically dispositioned: \
-                 {key:?}"
-            )));
-        }
         drop(consumption);
         self.aggregate_representation_dispositions
             .borrow_mut()
@@ -7853,6 +8020,7 @@ impl<'src> StaticTransitionPlan<'src> {
         self.validate_case_emission_consumption()?;
         self.validate_aggregate_representation_consumption()?;
         self.validate_synthesized_aggregate_representation_consumption()?;
+        self.validate_static_recursor_worker_environment_consumption()?;
         let owners = self
             .operand_edges
             .iter()
@@ -7941,6 +8109,43 @@ impl<'src> StaticTransitionPlan<'src> {
             return Err(planner_error(format!(
                 "boundary uses were both emitted and statically dispositioned; \
                  identities={emitted_and_dispositioned:?}"
+            )));
+        }
+        Ok(())
+    }
+
+    fn validate_static_recursor_worker_environment_consumption(
+        &self,
+    ) -> Result<(), CraneliftBackendError> {
+        let dispositions = self.boundary_use_dispositions.borrow();
+        let expected = self
+            .static_recursor_worker_environments
+            .iter()
+            .filter(|record| !dispositions.contains(&record.worker_identity))
+            .map(|record| StaticRecursorWorkerEnvironmentOccurrence {
+                worker_identity: record.worker_identity,
+                residual_id: record.residual_id,
+            })
+            .collect::<BTreeSet<_>>();
+        let ledger = self.static_recursor_worker_environment_consumption.borrow();
+        let duplicates = ledger
+            .iter()
+            .filter(|(_, count)| **count != 1)
+            .map(|(occurrence, count)| (*occurrence, *count))
+            .collect::<Vec<_>>();
+        if !duplicates.is_empty() {
+            return Err(planner_error(format!(
+                "static recursor worker environment ledger contains duplicate consumption; \
+                 duplicates={duplicates:?}"
+            )));
+        }
+        let actual = ledger.keys().copied().collect::<BTreeSet<_>>();
+        if actual != expected {
+            let missing = expected.difference(&actual).copied().collect::<Vec<_>>();
+            let extra = actual.difference(&expected).copied().collect::<Vec<_>>();
+            return Err(planner_error(format!(
+                "static recursor worker environment ledger is not exact; \
+                 missing={missing:?}; extra={extra:?}"
             )));
         }
         Ok(())
@@ -9165,6 +9370,111 @@ impl<'src> StaticTransitionPlan<'src> {
         })
     }
 
+    /// Name the one synthesized Record occurrence attached to an exact
+    /// static-worker residual. The returned identity is planner-minted and
+    /// cannot be relabeled by lowering.
+    pub(in crate::cranelift_backend) fn static_recursor_worker_environment_occurrence(
+        &self,
+        worker_identity: BoundaryUseIdentity,
+        residual_id: StaticRecursorWorkerResidualId,
+        parent_origin: StaticOriginId,
+        producer_origin: StaticOriginId,
+        sibling_position: usize,
+        closure_origin: StaticOriginId,
+        capture_count: usize,
+    ) -> Result<StaticRecursorWorkerEnvironmentOccurrence, CraneliftBackendError> {
+        let sibling_position = u32::try_from(sibling_position)
+            .map_err(|_| planner_capacity_error("static recursor sibling exhausted"))?;
+        let record = self
+            .static_recursor_worker_environments
+            .iter()
+            .find(|record| {
+                record.worker_identity == worker_identity
+                    && record.residual_id == residual_id
+                    && record.parent_origin == parent_origin
+                    && record.producer_origin == producer_origin
+                    && record.sibling_position == sibling_position
+                    && record.closure_origin == closure_origin
+                    && record.captures.len() == capture_count
+            })
+            .ok_or_else(|| {
+                planner_error("static recursor worker environment has no exact planned occurrence")
+            })?;
+        if record
+            .captures
+            .iter()
+            .enumerate()
+            .any(|(ordinal, capture)| {
+                capture.provenance.ordinal as usize != ordinal
+                    || capture.provenance.closure_origin != closure_origin
+            })
+        {
+            return Err(planner_error(
+                "static recursor worker environment lost its ordered capture provenance",
+            ));
+        }
+        Ok(StaticRecursorWorkerEnvironmentOccurrence {
+            worker_identity,
+            residual_id,
+        })
+    }
+
+    /// Consume the move-only representation authority for one exact worker
+    /// environment before lowering performs any capture conversion or
+    /// allocation.
+    pub(in crate::cranelift_backend) fn static_recursor_worker_environment_token(
+        &self,
+        occurrence: StaticRecursorWorkerEnvironmentOccurrence,
+        class: BoundaryClass,
+        arity: usize,
+    ) -> Result<AggregateRepresentationToken, CraneliftBackendError> {
+        let arity = u32::try_from(arity)
+            .map_err(|_| planner_capacity_error("static recursor environment arity exhausted"))?;
+        let record = self
+            .static_recursor_worker_environments
+            .iter()
+            .find(|record| {
+                record.worker_identity == occurrence.worker_identity
+                    && record.residual_id == occurrence.residual_id
+            })
+            .ok_or_else(|| {
+                planner_error("static recursor environment token names no planned occurrence")
+            })?;
+        if class != BoundaryClass::Record || record.captures.len() != arity as usize {
+            return Err(planner_error(
+                "static recursor environment allocation disagrees with its planned occurrence",
+            ));
+        }
+        let mut ledger = self
+            .static_recursor_worker_environment_consumption
+            .borrow_mut();
+        let count = ledger.entry(occurrence).or_insert(0);
+        *count = count.checked_add(1).ok_or_else(|| {
+            planner_capacity_error("static recursor environment ledger exhausted")
+        })?;
+        #[cfg(test)]
+        let mut tag = record.selected_tag;
+        #[cfg(not(test))]
+        let tag = record.selected_tag;
+        #[cfg(test)]
+        {
+            let mutation = STATIC_RECURSOR_WORKER_ENVIRONMENT_TOKEN_MUTATION.with(Cell::get);
+            if mutation == StaticRecursorWorkerEnvironmentTokenMutation::ForcePersistentFirst
+                && STATIC_RECURSOR_WORKER_ENVIRONMENT_TOKEN_MUTATED.with(|mutated| {
+                    if mutated.get() {
+                        false
+                    } else {
+                        mutated.set(true);
+                        true
+                    }
+                })
+            {
+                tag = BoundaryTag::PersistentGround;
+            }
+        }
+        Ok(AggregateRepresentationToken { tag, class })
+    }
+
     /// The artifact-static constructor identity of a `Construct` occurrence —
     /// the producer side of [`Self::case_constructor_identity`] (`D2`).
     pub(in crate::cranelift_backend) fn constructor_symbol_identity(
@@ -10024,8 +10334,12 @@ impl<'src> StaticTransitionPlan<'src> {
     }
 
     fn validate_producer_flow_plans(&self) -> Result<(), CraneliftBackendError> {
-        let (expected_cases, expected_aggregates, expected_synthesized_aggregates) =
-            build_producer_flow_plans(self)?;
+        let (
+            expected_cases,
+            expected_aggregates,
+            expected_synthesized_aggregates,
+            expected_worker_environments,
+        ) = build_producer_flow_plans(self)?;
         if self.case_emissions != expected_cases {
             return Err(planner_error(
                 "case-emission partition is not the exact producer-flow derivation",
@@ -10040,6 +10354,11 @@ impl<'src> StaticTransitionPlan<'src> {
             return Err(planner_error(
                 "synthesized aggregate representation plan is not the exact effect-schema \
                  derivation",
+            ));
+        }
+        if self.static_recursor_worker_environments != expected_worker_environments {
+            return Err(planner_error(
+                "static recursor worker environments are not the exact producer-flow derivation",
             ));
         }
         let mut keys = BTreeSet::new();
@@ -10093,6 +10412,43 @@ impl<'src> StaticTransitionPlan<'src> {
             {
                 return Err(planner_error(
                     "synthesized aggregate record selects an unrepresented row",
+                ));
+            }
+        }
+        let mut worker_environment_keys = BTreeSet::new();
+        for record in &self.static_recursor_worker_environments {
+            if !worker_environment_keys.insert((record.worker_identity, record.residual_id)) {
+                return Err(planner_error(
+                    "static recursor worker environment plan contains a duplicate occurrence",
+                ));
+            }
+            if record.selected_tag.referent_owner() != record.selected_owner
+                || !matches!(
+                    record.selected_tag,
+                    BoundaryTag::PersistentGround | BoundaryTag::InvocationAggregate
+                )
+                || record
+                    .captures
+                    .iter()
+                    .enumerate()
+                    .any(|(ordinal, capture)| {
+                        capture.provenance.ordinal as usize != ordinal
+                            || capture.provenance.closure_origin != record.closure_origin
+                            || capture.provenance.phase != OperandEdgeDisposition::CallableCapture
+                    })
+            {
+                return Err(planner_error(
+                    "static recursor worker environment selected an unlawful row or provenance",
+                ));
+            }
+            let invocation_owned = record.captures.iter().any(|capture| {
+                capture
+                    .possible_owners
+                    .contains(&BoundaryReferentOwner::InvocationArena)
+            });
+            if invocation_owned != (record.selected_tag == BoundaryTag::InvocationAggregate) {
+                return Err(planner_error(
+                    "static recursor worker environment tag disagrees with its child-owner meet",
                 ));
             }
         }
@@ -11785,6 +12141,242 @@ mod tests {
             }],
             default: trap("static recursor fixture"),
         }
+    }
+
+    fn lexical_static_recursor_worker_fixture(capture: RuntimeExpr) -> RuntimeExpr {
+        let constructor = "ctor:fixture::WorkerEnvironment::Node".to_string();
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: constructor.clone(),
+                args: vec![RuntimeExpr::LexicalClosure {
+                    captures: vec![capture],
+                    params: vec!["argument".to_string()],
+                    body: Box::new(RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::WorkerEnvironment::Result".to_string(),
+                        args: vec![RuntimeExpr::Var(0)],
+                    }),
+                }],
+            }),
+            cases: vec![RuntimeComputationalMatchCase {
+                constructor,
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![RuntimeExpr::Var(1)],
+                },
+            }],
+            default: trap("static recursor worker environment fixture"),
+        }
+    }
+
+    fn worker_environment_plan(
+        capture: RuntimeExpr,
+        root_ingress: AbiRootIngress,
+    ) -> StaticTransitionPlan<'static> {
+        let expression = Box::leak(Box::new(lexical_static_recursor_worker_fixture(capture)));
+        plan_static_transition_graph_with_symbols(
+            expression,
+            &BTreeMap::new(),
+            &crate::NativeProcessSymbols::legacy_prelude(),
+            root_ingress,
+            true,
+        )
+        .expect("worker environment fixture plans")
+    }
+
+    #[test]
+    fn static_recursor_worker_environment_meets_ordered_capture_owners() {
+        // Promise class: durable invariant.
+        //
+        // MEASURED: same-shape one-capture workers select PersistentGround for
+        // a closed durable capture and InvocationAggregate for process ingress.
+        // CLAIMED: the exact ordered capture-owner meet, rather than worker
+        // shape or a fixed tag, chooses the synthesized Record's lifetime.
+        // THE GAP: the test observes one capture. Exact arity/provenance and
+        // omission/transplant/tag failures are independently mutated below.
+        let durable = worker_environment_plan(
+            RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            AbiRootIngress::Value,
+        );
+        let invocation = worker_environment_plan(RuntimeExpr::Var(0), AbiRootIngress::Process);
+        let durable = durable
+            .static_recursor_worker_environments
+            .first()
+            .expect("durable fixture has one worker environment");
+        let invocation = invocation
+            .static_recursor_worker_environments
+            .first()
+            .expect("invocation fixture has one worker environment");
+        assert_eq!(durable.captures.len(), 1);
+        assert_eq!(invocation.captures.len(), 1);
+        assert_eq!(durable.selected_tag, BoundaryTag::PersistentGround);
+        assert_eq!(invocation.selected_tag, BoundaryTag::InvocationAggregate);
+        assert_eq!(durable.captures[0].provenance.ordinal, 0);
+        assert_eq!(invocation.captures[0].provenance.ordinal, 0);
+        assert!(!durable.captures[0]
+            .possible_owners
+            .contains(&BoundaryReferentOwner::InvocationArena));
+        assert!(invocation.captures[0]
+            .possible_owners
+            .contains(&BoundaryReferentOwner::InvocationArena));
+    }
+
+    #[test]
+    fn static_recursor_worker_environment_population_mutations_reject_before_allocation() {
+        // Promise class: durable mutation proof.
+        //
+        // MEASURED: omission, transplant, and wrong lifetime tag each fail the
+        // independently re-derived pre-emission plan validation.
+        // CLAIMED: lowering cannot recover, relabel, or substitute a worker
+        // environment occurrence after planning.
+        // THE GAP: exact-once token consumption is the adjacent ledger control.
+        let mut plan = worker_environment_plan(
+            RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            AbiRootIngress::Value,
+        );
+        let original = plan
+            .static_recursor_worker_environments
+            .first()
+            .cloned()
+            .expect("fixture has one environment");
+
+        plan.static_recursor_worker_environments.clear();
+        assert!(
+            plan.validate().is_err(),
+            "omission survived plan validation"
+        );
+
+        let mut transplanted = worker_environment_plan(
+            RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            AbiRootIngress::Value,
+        );
+        transplanted.static_recursor_worker_environments[0].worker_identity =
+            BoundaryUseIdentity::Synthesized(u32::MAX);
+        assert!(
+            transplanted.validate().is_err(),
+            "identity transplant survived plan validation"
+        );
+
+        let mut wrong_tag = worker_environment_plan(
+            RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            AbiRootIngress::Value,
+        );
+        wrong_tag.static_recursor_worker_environments[0].selected_tag =
+            BoundaryTag::InvocationAggregate;
+        assert!(
+            wrong_tag.validate().is_err(),
+            "wrong lifetime tag survived plan validation"
+        );
+        assert_eq!(original.selected_tag, BoundaryTag::PersistentGround);
+    }
+
+    #[test]
+    fn static_recursor_worker_environment_token_is_exact_once_and_preallocation() {
+        // Promise class: durable mutation proof.
+        //
+        // MEASURED: one exact occurrence consumes once; omission and repeat
+        // fail the dedicated ledger, independently of the boundary-use ledger.
+        // CLAIMED: allocation authority is move-only and causal.
+        // THE GAP: this is the planner/lowering seam, not an emitted allocation
+        // counter; the lowering control exercises the returned row.
+        let exact = worker_environment_plan(
+            RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            AbiRootIngress::Value,
+        );
+        let record = exact.static_recursor_worker_environments[0].clone();
+        let occurrence = exact
+            .static_recursor_worker_environment_occurrence(
+                record.worker_identity,
+                record.residual_id,
+                record.parent_origin,
+                record.producer_origin,
+                record.sibling_position as usize,
+                record.closure_origin,
+                record.captures.len(),
+            )
+            .expect("exact occurrence is issued");
+        let token = exact
+            .static_recursor_worker_environment_token(
+                occurrence,
+                BoundaryClass::Record,
+                record.captures.len(),
+            )
+            .expect("exact token is consumed");
+        assert_eq!(token.tag(), BoundaryTag::PersistentGround);
+        exact
+            .validate_static_recursor_worker_environment_consumption()
+            .expect("one exact consumption closes");
+
+        let omitted = worker_environment_plan(
+            RuntimeExpr::Value(RuntimeValue::Bool(true)),
+            AbiRootIngress::Value,
+        );
+        assert!(omitted
+            .validate_static_recursor_worker_environment_consumption()
+            .is_err());
+
+        exact
+            .static_recursor_worker_environment_token(
+                occurrence,
+                BoundaryClass::Record,
+                record.captures.len(),
+            )
+            .expect("repeat issuance reaches the ledger");
+        assert!(exact
+            .validate_static_recursor_worker_environment_consumption()
+            .is_err());
+    }
+
+    #[test]
+    fn forced_persistent_worker_environment_reaches_escape_defense() {
+        // Promise class: durable mutation proof.
+        //
+        // MEASURED: forcing the rejected persistent tag for an
+        // invocation-owned capture leaves the exact boundary escape control
+        // returning BOUNDARY_ERR_ESCAPE.
+        // CLAIMED: the planner prevents this row before allocation and the
+        // boundary remains defense-in-depth if that authority is corrupted.
+        // THE GAP: the CLIF store-field parity control independently pins the
+        // emitted helper to this exact status.
+        let plan = worker_environment_plan(RuntimeExpr::Var(0), AbiRootIngress::Process);
+        let record = plan.static_recursor_worker_environments[0].clone();
+        let occurrence = plan
+            .static_recursor_worker_environment_occurrence(
+                record.worker_identity,
+                record.residual_id,
+                record.parent_origin,
+                record.producer_origin,
+                record.sibling_position as usize,
+                record.closure_origin,
+                record.captures.len(),
+            )
+            .expect("invocation occurrence is issued");
+        STATIC_RECURSOR_WORKER_ENVIRONMENT_TOKEN_MUTATION.with(|mutation| {
+            mutation.set(StaticRecursorWorkerEnvironmentTokenMutation::ForcePersistentFirst)
+        });
+        STATIC_RECURSOR_WORKER_ENVIRONMENT_TOKEN_MUTATED.with(|mutated| mutated.set(false));
+        let token = plan
+            .static_recursor_worker_environment_token(
+                occurrence,
+                BoundaryClass::Record,
+                record.captures.len(),
+            )
+            .expect("forced token is issued");
+        STATIC_RECURSOR_WORKER_ENVIRONMENT_TOKEN_MUTATION
+            .with(|mutation| mutation.set(StaticRecursorWorkerEnvironmentTokenMutation::Exact));
+        assert_eq!(token.tag(), BoundaryTag::PersistentGround);
+        let mut builder = crate::boundary_value::BoundaryArenaBuilder::new();
+        let invocation_capture = crate::boundary_value::materialize_host_result(
+            &mut builder,
+            1,
+            crate::boundary_value::BoundaryWord::immediate(BoundaryTag::ImmediateBool, 1),
+            crate::boundary_value::BoundaryWord::immediate(BoundaryTag::ImmediateBool, 0),
+        );
+        assert_eq!(
+            crate::boundary_value::check_escape(invocation_capture),
+            crate::boundary_value::BOUNDARY_ERR_ESCAPE
+        );
     }
 
     fn recursor_worker_constructor(constructor: &str, body_constructor: &str) -> RuntimeExpr {

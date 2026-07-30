@@ -74,8 +74,9 @@ pub(in crate::cranelift_backend) use super::planning::{
     collect_checked_oriented_markers, collect_checked_subcontinuation_frames,
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
-    AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition, BoundaryUseIdentity,
-    CheckedOrientedMarkerSets, ConstructorIdentity, EffectSemanticSeat, EmittableCallKind,
+    AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
+    AggregateRepresentationToken, BoundaryUseIdentity, CheckedOrientedMarkerSets,
+    ConstructorIdentity, EffectSemanticSeat, EmittableCallKind,
     EmittableStaticCallableArgumentKind, EmittableStaticCallableBinding,
     EmittableStaticCallableCall, EmittableStaticCallableCapture, EmittableStaticCallableUnit,
     EmittableUnit, JoinPlanToken, JoinResultRepresentation, LoweringOnlyOperandEdge,
@@ -1817,6 +1818,18 @@ impl<'a> Lowering<'a> {
         owner: PredeclaredFunctionId,
         value: &Lowered,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        // Every continuing unit result consumes its exact planned crossing.
+        // Process exits select a different wire representation below, but that
+        // conversion does not erase the generated-unit boundary that carries
+        // the result to its caller.
+        let edge = self
+            .static_transition_plan
+            .lowering_boundary_use_token_for_owner(
+                LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                origin,
+                u32::MAX,
+                owner,
+            )?;
         let process_exit = self.process_object
             && matches!(
                 value,
@@ -1828,14 +1841,6 @@ impl<'a> Lowering<'a> {
             let status = self.emit_process_exit_status(builder, value.clone());
             self.emit_carrier_immediate(builder, BoundaryTag::ImmediateExitStatus, status)
         } else {
-            let edge = self
-                .static_transition_plan
-                .lowering_boundary_use_token_for_owner(
-                    LoweringOnlyOperandEdge::CallableCapsuleEscape,
-                    origin,
-                    u32::MAX,
-                    owner,
-                )?;
             self.transfer_into_carrier_on_planned_edge(builder, origin, value, edge)
         }
     }
@@ -5748,6 +5753,7 @@ enum PreparedStaticRecursorResidual {
     Worker {
         worker: StaticRecursorWorker,
         captures: Vec<PreparedStaticRecursorCapture>,
+        environment: AggregateRepresentationToken,
     },
 }
 enum PreparedStaticRecursorCapture {

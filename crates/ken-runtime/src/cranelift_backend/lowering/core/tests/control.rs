@@ -4944,17 +4944,19 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
     let declarations = BTreeMap::new();
 
     // Promise class: durable invariant. Any new RuntimeExpr form must be
-    // classified explicitly, while these two completed ports and the retained
-    // producer-Match residual remain part of the migration boundary.
+    // classified explicitly. AC-1a retires the ordinary-Match and lexical-call
+    // recursor outcomes; ProducerMatchCall and SeedClosureCall remain the
+    // typed migration boundary.
     //
     // MEASURED: recursive computational positions and a source Trap select
     // functionized emission, while an otherwise ordinary Match whose producer
     // is a Call selects recursive descent.
-    // CLAIMED: D3 removed only the two predicates backed by D1 and D2 and did
-    // not turn absence from a functionized allow-list into admission.
+    // CLAIMED: AC-1a removed only the two outcomes backed by lawful recursor
+    // transport and did not turn absence from a functionized allow-list into
+    // admission.
     // THE GAP: this pin measures the source-only selector. S1 and S2 separately
     // prove the declared-unit and terminal-CFG mechanisms behind the two green
-    // selections; D4 will exercise the complete governed n=3..7 family.
+    // selections; the cumulative D7 controls exercise the governed family.
     assert_eq!(
         select_body_emission_authority(
             &RuntimeExpr::Value(RuntimeValue::Bool(true)),
@@ -4985,34 +4987,51 @@ fn the_body_authority_selector_narrows_only_completed_ports_and_stays_fail_close
         "a completed recursive-position port still selected retained authority"
     );
 
-    let retained_lexical_transfer = host_result_closure_match(ported_recursive_position.clone());
+    let ported_lexical_transfer = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["recursor".to_string()],
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: vec![ported_recursive_position.clone()],
+    };
     assert_eq!(
-        recursive_descent_residual(&retained_lexical_transfer),
-        Some(RecursiveDescentResidual::LexicalCallArgumentRecursor),
-        "an active recursor crossing a lexical-unit argument lost its retained lane"
+        recursive_descent_residual(&ported_lexical_transfer),
+        None,
+        "a ported active recursor crossing retained a lexical-call residual"
     );
     assert_eq!(
-        select_body_emission_authority(&retained_lexical_transfer, &declarations),
-        BodyEmissionAuthority::RecursiveDescent
+        select_body_emission_authority(&ported_lexical_transfer, &declarations),
+        BodyEmissionAuthority::FunctionizedUnits,
+        "the lexical-call recursor transport did not select functionized units"
     );
+    ac11_compiles(&ported_lexical_transfer)
+        .expect("AC-1a: the formerly retained lexical-call program must functionize");
 
-    let retained_match_transfer = RuntimeExpr::Match {
-        scrutinee: Box::new(ported_recursive_position.clone()),
-        cases: Vec::new(),
+    let ported_match_transfer = RuntimeExpr::Match {
+        scrutinee: Box::new(static_recursor_causal_branch_fixture(true)),
+        cases: vec![RuntimeMatchCase {
+            constructor: "ctor:fixture::StaticLedger::Leaf".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Value(RuntimeValue::Bool(true)),
+        }],
         default: RuntimeTrap {
             code: RuntimeTrapCode::PatternMatchFailure,
             message: "selector retained recursor-match default".to_string(),
         },
     };
     assert_eq!(
-        recursive_descent_residual(&retained_match_transfer),
-        Some(RecursiveDescentResidual::MatchScrutineeRecursor),
-        "an ordinary Match consuming an active recursor lost its retained lane"
+        recursive_descent_residual(&ported_match_transfer),
+        None,
+        "a ported active recursor retained an ordinary-Match residual"
     );
     assert_eq!(
-        select_body_emission_authority(&retained_match_transfer, &declarations),
-        BodyEmissionAuthority::RecursiveDescent
+        select_body_emission_authority(&ported_match_transfer, &declarations),
+        BodyEmissionAuthority::FunctionizedUnits,
+        "the ordinary-Match recursor transport did not select functionized units"
     );
+    ac11_compiles(&ported_match_transfer)
+        .expect("AC-1a: the formerly retained ordinary-Match program must functionize");
 
     let ported_trap = RuntimeExpr::Trap(RuntimeTrap {
         code: RuntimeTrapCode::ExplicitTrap,
@@ -5215,7 +5234,7 @@ fn retained_authority_residual_is_the_typed_selector_accounting() {
 }
 
 #[test]
-fn complete_residual_report_reaches_all_four_without_short_circuiting() {
+fn complete_residual_report_keeps_only_the_two_future_residuals() {
     let active_recursor = || RuntimeExpr::ComputationalMatch {
         scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
         cases: vec![crate::RuntimeComputationalMatchCase {
@@ -5276,29 +5295,33 @@ fn complete_residual_report_reaches_all_four_without_short_circuiting() {
     // classifier while preserving the triggering semantic owner.
     // THE GAP: the governed deltas are measured separately through the
     // on-demand diagnostic; these fixtures establish instrument reachability.
-    let witnesses = [
+    let retained_witnesses = [
         (
             RecursiveDescentResidual::ProducerMatchCall,
             producer_match.clone(),
-        ),
-        (
-            RecursiveDescentResidual::MatchScrutineeRecursor,
-            match_recursor.clone(),
-        ),
-        (
-            RecursiveDescentResidual::LexicalCallArgumentRecursor,
-            lexical_recursor.clone(),
         ),
         (
             RecursiveDescentResidual::SeedClosureCall,
             seed_closure.clone(),
         ),
     ];
-    for (expected, witness) in witnesses {
+    for (expected, witness) in retained_witnesses {
         assert_eq!(
             recursive_descent_residual_report(&witness, &BTreeMap::new()).variants(),
             BTreeSet::from([expected]),
             "D1 did not reach {expected:?}"
+        );
+    }
+    for witness in [&match_recursor, &lexical_recursor] {
+        let report = recursive_descent_residual_report(witness, &BTreeMap::new());
+        assert!(
+            report.variants().is_empty(),
+            "AC-1a: a formerly firing recursor program retained a residual: {report:?}"
+        );
+        assert_eq!(
+            select_body_emission_authority(witness, &BTreeMap::new()),
+            BodyEmissionAuthority::FunctionizedUnits,
+            "AC-1a: a formerly firing recursor program did not select functionized units"
         );
     }
 
@@ -5314,8 +5337,6 @@ fn complete_residual_report_reaches_all_four_without_short_circuiting() {
         recursive_descent_residual_report(&compound, &BTreeMap::new()).variants(),
         BTreeSet::from([
             RecursiveDescentResidual::ProducerMatchCall,
-            RecursiveDescentResidual::MatchScrutineeRecursor,
-            RecursiveDescentResidual::LexicalCallArgumentRecursor,
             RecursiveDescentResidual::SeedClosureCall,
         ]),
         "D1 retained the selector's first-hit short circuit"
@@ -8276,6 +8297,39 @@ fn static_recursor_causal_branch_fixture(selected: bool) -> RuntimeExpr {
     }
 }
 
+fn invocation_capture_static_recursor_fixture() -> RuntimeExpr {
+    let node = "ctor:fixture::InvocationWorker::Node";
+    RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: node.to_string(),
+            args: vec![RuntimeExpr::LexicalClosure {
+                captures: vec![RuntimeExpr::Var(0)],
+                params: vec!["unit".to_string()],
+                body: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::InvocationWorker::Leaf".to_string(),
+                    args: Vec::new(),
+                }),
+            }],
+        }),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: node.to_string(),
+            argument_binders: 1,
+            recursive_positions: vec![0],
+            body: RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(0)),
+                args: vec![RuntimeExpr::Construct {
+                    constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                    args: Vec::new(),
+                }],
+            },
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "invocation-owned static recursor capture default".to_string(),
+        },
+    }
+}
+
 #[test]
 fn governed_nested_brackets_n3_through_n7_emit_complete_functionized_bundles() {
     for depth in 3..=7 {
@@ -8981,6 +9035,29 @@ fn static_unselected_recursor_result_is_causally_dispositioned() {
             "the causally closed bundle was incomplete"
         );
     }
+}
+
+/// MEASURED: a process-ingress capture in a reached static worker compiles
+/// through the functionized path and publishes the complete staged bundle.
+///
+/// CLAIMED: the worker environment consumes its planner-issued
+/// InvocationAggregate Record authority before converting the capture.
+///
+/// GAP: the planner discriminator independently compares this fixture's owner
+/// meet with its durable same-shape twin; this control observes lowering and
+/// publication, not the planner-private record.
+///
+/// Promise class: durable invariant.
+#[test]
+fn invocation_owned_static_recursor_environment_uses_planned_transport() {
+    recursive_port_process_compiles(&invocation_capture_static_recursor_fixture())
+        .expect("invocation-owned static worker environment compiles");
+    let (declared, defined) = crate::cranelift_backend::lowering::units::b2f_last_unit_emission();
+    assert!(declared > 1, "the fixture staged no worker unit");
+    assert_eq!(
+        defined, declared,
+        "the planned bundle was not fully published"
+    );
 }
 
 /// MEASURED: suppressing ledger consumption on a reached exact static-worker

@@ -41,15 +41,6 @@ fn recursive_position_unit_calls() -> usize {
 enum RecursiveDescentResidual {
     /// An ordinary producer match whose scrutinee is directly a call.
     ProducerMatchCall,
-    /// An ordinary match consuming an active computational recursor.
-    MatchScrutineeRecursor,
-    /// A lexical unit call whose argument is an active computational recursor.
-    ///
-    /// The recursive result still carries invocation-local scope/return-hole
-    /// state. Passing it through a separately declared lexical unit is not one
-    /// of the completed functionized ports, so the established recursive
-    /// descent lane retains the whole call.
-    LexicalCallArgumentRecursor,
     /// A call whose callee is the retained non-lexical closure form.
     SeedClosureCall,
 }
@@ -128,14 +119,6 @@ fn walk_recursive_descent_residuals(
             {
                 return false;
             }
-            if matches!(
-                scrutinee.as_ref(),
-                RuntimeExpr::ComputationalMatch { cases, .. }
-                    if cases.iter().any(|case| !case.recursive_positions.is_empty())
-            ) && !visit(RecursiveDescentResidual::MatchScrutineeRecursor)
-            {
-                return false;
-            }
             walk_recursive_descent_residuals(scrutinee, visit)
                 && cases
                     .iter()
@@ -156,18 +139,6 @@ fn walk_recursive_descent_residuals(
         RuntimeExpr::Call { callee, args } => {
             if matches!(callee.as_ref(), RuntimeExpr::Closure { .. })
                 && !visit(RecursiveDescentResidual::SeedClosureCall)
-            {
-                return false;
-            }
-            if matches!(callee.as_ref(), RuntimeExpr::LexicalClosure { .. })
-                && args.iter().any(|argument| {
-                    matches!(
-                        argument,
-                        RuntimeExpr::ComputationalMatch { cases, .. }
-                            if cases.iter().any(|case| !case.recursive_positions.is_empty())
-                    )
-                })
-                && !visit(RecursiveDescentResidual::LexicalCallArgumentRecursor)
             {
                 return false;
             }
@@ -5126,7 +5097,30 @@ impl<'a> Lowering<'a> {
                 }
             })
             .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
-        Ok(PreparedStaticRecursorResidual::Worker { worker, captures })
+        let environment = self
+            .static_transition_plan
+            .static_recursor_worker_environment_occurrence(
+                worker.boundary_identity,
+                worker.residual_id,
+                worker.parent_origin,
+                worker.producer_origin,
+                worker.sibling_position,
+                worker.closure_origin,
+                worker.capture_count,
+            )
+            .and_then(|occurrence| {
+                self.static_transition_plan
+                    .static_recursor_worker_environment_token(
+                        occurrence,
+                        BoundaryClass::Record,
+                        worker.capture_count,
+                    )
+            })?;
+        Ok(PreparedStaticRecursorResidual::Worker {
+            worker,
+            captures,
+            environment,
+        })
     }
 
     fn prepare_static_recursor_constructor_residual(
@@ -5165,7 +5159,12 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         prepared: PreparedStaticRecursorResidual,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let PreparedStaticRecursorResidual::Worker { worker, captures } = prepared else {
+        let PreparedStaticRecursorResidual::Worker {
+            worker,
+            captures,
+            environment,
+        } = prepared
+        else {
             let PreparedStaticRecursorResidual::Passthrough(residual) = prepared else {
                 unreachable!("prepared residual has two closed variants")
             };
@@ -5203,8 +5202,8 @@ impl<'a> Lowering<'a> {
             .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
         let environment = self.emit_carrier_alloc(
             builder,
-            BoundaryTag::PersistentGround,
-            BoundaryClass::Record,
+            environment.tag(),
+            environment.class(),
             worker.capture_count,
         )?;
         for (position, capture) in captures.into_iter().enumerate() {
@@ -9331,7 +9330,20 @@ impl<'a> Lowering<'a> {
                                     1 + position,
                                     argument,
                                 )?;
-                                self.lower_expr(builder, argument, env)
+                                let lowered = self.lower_expr(builder, argument, env)?;
+                                let edge =
+                                    self.static_transition_plan.reached_operand_edge_token(
+                                        static_origin,
+                                        1 + position,
+                                        SourceOperandRole::CallArgument,
+                                    )?;
+                                if edge.disposition() != OperandEdgeDisposition::Forwarding {
+                                    return Err(backend(BackendFailure::PlannerInvariant(
+                                        "direct lexical argument lost its forwarding disposition"
+                                            .to_string(),
+                                    )));
+                                }
+                                Ok(lowered)
                             })
                             .collect::<Result<Vec<_>, _>>()?;
                         let closure_origin = callee.static_origin;
