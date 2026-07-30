@@ -895,6 +895,13 @@ family — that is a measurement nobody has taken.
   4. ⛔ This authorizes **no** generic `Match` weakening, origin whitelist, buffer
      special case, anonymous token, new carrier lane, or whole callable /
      control-capsule transport.
+     > ⚠⚠ **"NEW CARRIER LANE" IS NARROWLY SUPERSEDED — Architect
+     > `evt_5ks9da0h0977w` (2026-07-30).** The `MkProgramCaps` lifetime ruling
+     > **does** admit **one** explicit `InvocationAggregate` tag over exactly
+     > `{Constructor, Record}`. ⭐ Everything else in this clause stands, and the
+     > supersession is **only** that row family — ⛔ no new arena, word width,
+     > scalar encoding, constructor identity, class, host ABI, or durable lane.
+     > See **the `MkProgramCaps` invocation-aggregate section** below.
 
   **Required evidence before candidate routing** — ⚠ these are acceptance
   obligations, and QA reviews against them:
@@ -1217,6 +1224,187 @@ family — that is a measurement nobody has taken.
   ⇒ Exact `548682c3` is **preservation-only, not a candidate**, and is the exact
   continuation base. ⛔ No verdict transfers; fresh SHA, fresh QA, and a **fresh**
   Architect Decision are mandatory.
+
+  #### ⛔⛔ THE `MkProgramCaps` INVOCATION-AGGREGATE REPRESENTATION
+  #### — Architect `evt_5ks9da0h0977w` (+ Research advisory `evt_1xtgtqhwyhhtd`)
+
+  Grounded on exact preservation-only `42ccd8ec` (tree `8c16a9d9`, parent exact
+  `548682c3`). ⭐ **The case-emission proof of the previous section is ACCEPTED at
+  this seam** — origin 271 is `Closed` on canonical `DenseRange { start: 708,
+  len: 53 }` through exact `Construct 385→385 / Forward 385→12 /
+  Environment 12→270`, and `FsAppendFile` is **absent by that proof**. The next
+  refusal is **independent of case reachability**: the row now clears planning and
+  object emission, then traps `malformed borrowed process input` / `RuntimeTrap(1)`
+  with a **zero effect trace** instead of returning `InvalidBounds`.
+
+  ✅ **THE ESCAPE GUARD IS CORRECT AND STAYS.** The synthetic root adapter
+  materializes `MkProgramCaps` as a **persistent** `Lowered::Constructor`, then
+  stores an **invocation-lifetime** `BorrowedOpaque` `CapabilityToken` child, and
+  `boundary_value_clif::store_field` rejects persistent-parent / invocation-child
+  with `BOUNDARY_ERR_ESCAPE` **before host dispatch**. ⛔ `BOUNDARY_ERR_ESCAPE`
+  must remain. The rejection is **evidence the representation's two promises
+  conflict**, ⛔ not evidence the guard is wrong.
+
+  ⭐⭐⭐ **THE REAL DEFECT: `B2V`'S VARIANT-ONLY REPRESENTATION AUTHORITY CONFLATES
+  AGGREGATE SHAPE WITH REFERENT LIFETIME.** The current authority
+
+  ```text
+  LoweredVariant::Constructor -> PersistentGround / Constructor
+  ```
+
+  is **under-keyed**: `Constructor` answers the **shape** question and proves
+  **nothing** about the **referent owner**. ⇒ This exact `MkProgramCaps` occurrence
+  **may** cross the unit ABI, be matched, and project its child **during** the
+  invocation; it **may not** be published into the persistent store or survive the
+  invocation. ⛔ **Copying the 64-bit token, giving the outer value a persistent
+  tag, and separately compiling the callee each perform NO ownership conversion**
+  — a generated-unit frame slot is **transport, not persistent ownership**.
+
+  ⚠⚠ **AND THIS RULING NARROWLY SUPERSEDES A PRIOR BAN — the only supersession so
+  far.** The blanket *"no new carrier lane"* clause **is** narrowed here: this
+  repair **does** add **one** explicit admitted tag×class representation row
+  family. ⛔ **Hiding that fact is forbidden** — no reusing `PersistentGround`, no
+  disguising an aggregate as `InvocationBorrowed / BorrowedOpaque`, and no calling
+  a singleton rewrite *"not a lane."* ⭐ [[B2V]] is **not** reopened as a separate
+  WP; its closed representation authority is corrected **inside this same atomic
+  acceptance surface**. Atomic scope remains `D7` + [[RT-RECURSOR-TRANSPORT]].
+
+  ##### 1. Add ONE explicit invocation-aggregate tag
+
+  Names may vary; its **meaning** may not. Its payload indexes the **existing**
+  invocation arena; `referent_owner()` is `InvocationArena`; it is **distinct**
+  from borrowed-opaque ingress **and** from `InvocationHostResult`. Admitted node
+  classes are **exactly**:
+
+  ```text
+  InvocationAggregate × { Constructor, Record }
+  ```
+
+  ⛔ **No** new arena, word width, scalar encoding, constructor identity, class,
+  host ABI, or durable lane. `HostResult` keeps its existing invocation lane;
+  `Closure` remains **forbidden**; Int/Bytes/String and opaque tokens keep their
+  representations. ⛔ The numeric tag and **every** ABI/plan identity covering the
+  closed tag set must update **through the existing authority**, ⛔ never an
+  untracked literal.
+
+  ##### 2. Replace variant-only ownership with a planner-issued occurrence record
+
+  After the exact boundary producer/flow graph closes and **before function
+  definition**, derive for **each** `Constructor` or `Record` occurrence: aggregate
+  origin + owner/phase · class + constructor/field identity and arity · exact child
+  occurrence/position records · **possible referent-owner set for every child** ·
+  selected aggregate owner/tag/class.
+
+  ⭐⭐ **THE OWNER LAW IS THE LIFETIME MEET:**
+
+  - select `PersistentGround` **only** when **every** possible transitive child is
+    immediate/no-referent or persistent;
+  - select `InvocationAggregate` when **any** possible child is invocation-owned;
+  - a join or dynamic alternative that **may** produce either durable or
+    invocation-owned children selects **invocation ownership conservatively**;
+  - an unrepresented / protocol-only / forbidden child **rejects before emission**.
+
+  Empty and all-durable aggregates remain persistent. ⛔ **Constructor spelling,
+  source type, test name, root-adapter location, one reached branch, and the
+  presence of `ProgramCaps` are NEVER ownership authority.** ⛔ Lowering **consumes**
+  the exact record; it does **not** recursively rediscover lifetime while emitting
+  fields.
+
+  ##### 3. Preserve transitive containment at construction and escape
+
+  The invocation aggregate may contain immediate, persistent, or same-invocation
+  children, and its fields must be validated through the **same** arena/store
+  relation before sealing. ⛔ A persistent parent containing **any**
+  invocation-owned child — **including an invocation aggregate nested at depth two
+  or greater** — still returns `BOUNDARY_ERR_ESCAPE`. ⛔ An invocation aggregate may
+  **never** be adopted, interned, or relabelled into the persistent store. ⭐ The
+  existing tag-owner escape check remains **defense in depth** even though a valid
+  plan must never reach it with a persistent parent / invocation child.
+
+  ##### 4. Keep the capability opaque and invocation-scoped
+
+  `CapabilityToken` remains full-width `InvocationBorrowed / BorrowedOpaque`. ⛔ No
+  immediate form, persistent copy, scalar constructor field, new minting path, or
+  callee host-context reload. Its **only** legal path is: ingress → declared root
+  slot → invocation-owned `MkProgramCaps` field → ordinary carried projection →
+  host-effect consumer, **all under the originating invocation's activation
+  services**.
+
+  ##### 5. Keep ordinary constructor semantics
+
+  The invocation-owned constructor carries the **same** canonical constructor
+  identity, arity, positional fields, class query, carried-`Match` identity chain,
+  field projection, and closed default as its persistent twin. Consumers choose
+  from the **emitted word's tag/class relation**, ⛔ never from the constructor
+  name. ⛔ **No `ProgramCaps` flattening, singleton-constructor elimination,
+  lifted-capability special ABI, or unit inlining.** ⭐ Those shortcuts erase the
+  source constructor at one synthetic site, bypass identity/arity/default controls,
+  and **leave the same Record/nesting matrix hole open**.
+
+  ⭐ **The Research advisory's discriminator is ADOPTED:** a **synchronous
+  cross-unit loan is lawful**; persistence, surviving closure/continuation capture,
+  async handoff, and cross-invocation retention are **not**. Trap / cancellation
+  cleanup ends the same invocation extent and must leave **no** retained aggregate.
+
+  ##### Required acceptance evidence — ⚠ QA reviews against these
+
+  1. **Exact reaching witness.** The root adapter produces canonical
+     `MkProgramCaps` as `InvocationAggregate / Constructor`, transfers it through
+     the declared root parameter, the carried `Match` selects the exact identity and
+     projects the **unchanged full-width** capability, and the buffer row reaches
+     `InvalidBounds` with **zero** `BufferAllocate` host dispatches.
+  2. **⭐ Same-nominal-shape owner pair.** Two occurrences of the **same**
+     constructor identity/arity differing **only** in child lifetime: all-durable
+     children ⇒ `PersistentGround / Constructor`; one invocation child ⇒
+     `InvocationAggregate / Constructor`. ⛔ Keying by variant, type, constructor
+     name, root adapter, or an unconditional shortest/longest lifetime **reds the
+     pair**.
+  3. **Closed aggregate matrix.** Repeat the owner pair for `Record`; prove the new
+     tag admits **exactly** `Constructor` and `Record`. Every other tag×class
+     mutation, unknown tag/class, wrong recorded owner, and untracked
+     tag-set/ABI-identity mutation **rejects**. Rust builders and emitted helpers
+     must derive from and reconcile to **one** representation authority over the
+     **full finite product**.
+  4. **Transitive and alternative closure.** Put an invocation child below **at
+     least two** mixed `Constructor`/`Record` levels; **every** ancestor is
+     invocation-owned. An all-persistent twin stays persistent. A runtime
+     alternative joining persistent and invocation children selects **invocation**
+     ownership and **both** arms project correctly. ⛔ A direct-child-only walk, a
+     first-arm rule, or a lowering-time search **reds**.
+  5. **⭐ Synchronous-loan versus escape discriminator.** Passing the invocation
+     aggregate through a separately emitted parameter/capture/result slot and
+     consuming it **before** the outer invocation ends **succeeds**. Attempting
+     persistent adoption/publication, returning it across the native invocation
+     boundary, storing it in a surviving closure/continuation, or handing it to
+     asynchronous work **rejects before persistent identity/publication or host
+     dispatch**. ⛔ A frame-slot write alone must **not** be misclassified as
+     persistence.
+  6. **Originating-invocation closure.** There is **no** legal raw `BoundaryWord`
+     bridge between invocation arenas. Destroy invocation A, then attempt **every**
+     exposed replay route for A's wrapper/token under invocation B — including equal
+     payload/index pressure: **none** may authorize B or resolve through B's
+     semantic slots. Exceptional exit likewise leaves **no** retained wrapper and
+     performs **no** post-invalidation dispatch.
+  7. **Construction ordering and defense.** Missing/duplicate/transplanted child
+     record, wrong origin/position/identity/arity/owner/phase, stale owner
+     provenance, changed selected tag, or an unused aggregate record **rejects
+     before function definition or carrier allocation**. Independently mutating a
+     persistent parent to receive an invocation child must still reach exact
+     `BOUNDARY_ERR_ESCAPE`; ⛔ weakening or removing that guard **reds**.
+  8. **Representation-semantic parity.** Persistent and invocation-owned ordinary
+     constructors use the **same** identity/arity/field/default consumer logic.
+     Forcing either through `BorrowedOpaque`, `HostResult`, or the other's
+     owner-specific allocator **reds at its named assertion**; ⛔ no compile-time
+     template recovery and no constructor-name dispatch passes.
+  9. **Cumulative closure.** All origin-271 producer-set / case-partition controls,
+     the 13-operation seat census, the key and disposition discriminators, the
+     `#23`/`#26` mixed-phase and zero-allocation controls, the complete per-CI-row
+     first-refusal map, the **`D8` retained-target obligation**, and the **literal
+     all-twelve CI gate** remain owed.
+
+  ⇒ Exact `42ccd8ec` is **preservation-only, not a candidate**, and is the exact
+  continuation base. ⛔ No QA verdict **or prior Decision** transfers; fresh SHA,
+  fresh QA, and a **fresh** Architect Decision are mandatory.
 
   #### The CI regression population this must clear
 
