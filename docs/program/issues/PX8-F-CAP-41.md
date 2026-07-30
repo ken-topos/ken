@@ -90,8 +90,9 @@ it is two-phase:**
   RT-NATIVE-FNSPLIT's VReg wall). Architect means/representation ruling
   `evt_2zkjr68y1sdgf`: representation stands; fix the compiler layer; do **not** land
   as an honest partial (it *regresses* an already-GREEN pre-existing 2-bracket native
-  row). Interp half is confirmed GREEN on all four rows at `f0eb65ce`. **WIP preserved
-  durably on origin** as `wp/PX8-F-CAP-41-p2-buffer-handle @ f0eb65ce`. Foundation
+  row). Interp half is confirmed GREEN on all four rows at `f0eb65ce`. **WIP
+  preserved durably on origin** as
+  `preserved/px8-f-cap-41-p2-buffer-handle-f0eb65ce`. Foundation
   re-sequenced onto [[NATIVE-HANDLE-CARRIER]]; on that fix, **fold with `f0eb65ce` and
   run the full two-engine oracle** — Phase 2 then lands complete. The (superseded)
   re-sized

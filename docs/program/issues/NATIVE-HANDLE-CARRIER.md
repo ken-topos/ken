@@ -29,6 +29,24 @@ origin: discovered under [[PX8-F-CAP-41]] Phase 2 impl (foundation-implementer h
 > choice — plus the re-derived identity arm. ⚠ **A recorded SHA is not a copy**;
 > the hazard is a hard reset from a handoff gate, not storage.
 >
+> ### ✅ THE COPY NOW EXISTS — pushed 2026-07-30
+>
+> ⚠ **The warning above was correct and the copy it called for had never been
+> made.** Measured 2026-07-30: `85dcee25` lived on exactly one local ref
+> (`refs/heads/wp/NATIVE-HANDLE-CARRIER`) with **zero refs at `origin`** — the
+> handoff-gate hard reset it warns about would have destroyed it. Now durable:
+>
+> | SHA | date | durable ref at `origin` |
+> |---|---|---|
+> | `85dcee25` | 07-29 16:08 | ⭐ `preserved/native-handle-carrier-hs21-85dcee25` |
+> | `8bc7556a` | 07-29 13:54 | `preserved/native-handle-carrier-hs21-8bc7556a` |
+> | `c07e63c2` | 07-23 15:13 | `preserved/native-handle-carrier-c07e63c2` |
+>
+> ⛔⛔ **ALL THREE ARE ON DIVERGENT LINEAGES — none is an ancestor of another**,
+> so each needs its own ref and ⛔ **preserving the newest does NOT subsume the
+> rest.** Each was cut as an independent "preserve the hard-stop tree" commit off
+> a different base. ⇒ Read the table as three separate artifacts, not a history.
+>
 > ### The one red row belongs to a different node
 >
 > `fs_write_at_malformed_offset_narrows_to_invalid_offset` fails **before
@@ -174,8 +192,12 @@ the true root cause: `MissingClosureMetadata` was **masking**
 checked-core `BigInt` literals were narrowed to `i64`, and the CAP-41 fixture reaches
 u64-max via the checked `intToUInt64` bound. Foundation widened checked-body literals
 to `BigInt` (lossless map to `RuntimeIntV1`), preserving the underlying error through
-the driver. Body-view + erasure GREEN. **Preserved on origin: `wp/NATIVE-HANDLE-CARRIER
-@ c07e63c2`** (parent carrier fixture `f0eb65ce`; the two-commit branch is one
+the driver. Body-view + erasure GREEN. **Preserved on origin as
+`preserved/native-handle-carrier-c07e63c2` @ `c07e63c2`** — ⚠ this used to say
+`wp/NATIVE-HANDLE-CARRIER`, which has **never existed at `origin`**; the SHA was
+safe but the fetch instruction was not (corrected 2026-07-30). (Parent carrier
+fixture `f0eb65ce` = `preserved/px8-f-cap-41-p2-buffer-handle-f0eb65ce`; the
+two-commit branch is one
 `ken-elaborator` production slice + test call-site migrations; **no `ken-runtime`
 touched**). Sized **S** by the implementer.
 
@@ -257,8 +279,9 @@ gap from [[RT-NATIVE-FNSPLIT]] (which addresses the later single-Cranelift-funct
 
 ## The defect (Architect-grounded, `evt_2zkjr68y1sdgf`)
 
-On the exact preserved fixture `wp/PX8-F-CAP-41-p2-buffer-handle @ f0eb65ce`
-(pushed to origin), native compilation fails inside the front half of the pipeline:
+On the exact preserved fixture
+`preserved/px8-f-cap-41-p2-buffer-handle-f0eb65ce` (`f0eb65ce`, at origin),
+native compilation fails inside the front half of the pipeline:
 `compile_native_program_sources` builds the normalized checked-core package, then
 `checked_computational_ih_templates` asks `checked_core_declaration_body_view` for
 `main`; that body-view error is **collapsed by the driver to**
@@ -323,7 +346,8 @@ malformed / stale / closed authority behavior is unchanged.
 ## What "done" unblocks
 
 Once the carrier lowers, **fold the fix with the preserved
-`wp/PX8-F-CAP-41-p2-buffer-handle @ f0eb65ce`** and run the full two-engine oracle;
+`preserved/px8-f-cap-41-p2-buffer-handle-f0eb65ce`** (`f0eb65ce`) and run the
+full two-engine oracle;
 [[PX8-F-CAP-41]] Phase 2 then lands **complete** (interp **and** native GREEN) — no
 honest-partial, no operator scope exception. Sibling native-completeness WP:
 [[RT-NATIVE-FNSPLIT]] (independent). Root gate: [[PX8]] (this is on the critical
