@@ -4884,14 +4884,39 @@ impl<'a> Lowering<'a> {
         }
         let captures = captures
             .into_iter()
-            .map(|capture| {
-                let LoweringOperand::Carried(capture) = capture else {
-                    return Err(unsupported(
-                        "StaticRecursorWorker",
-                        "a static recursor environment capture is not an ordinary carried operand",
-                    ));
-                };
-                Ok(capture)
+            .enumerate()
+            .map(|(ordinal, capture)| {
+                let token = self.static_transition_plan.static_recursor_capture_token(
+                    worker.boundary_identity,
+                    worker.residual_id,
+                    worker.parent_origin,
+                    worker.producer_origin,
+                    worker.sibling_position,
+                    worker.closure_origin,
+                    ordinal,
+                )?;
+                if token.ordinal as usize != ordinal
+                    || token.closure_origin != worker.closure_origin
+                    || token.phase != OperandEdgeDisposition::CallableCapture
+                    || token.lifetime != StaticRecursorCaptureLifetime::ActivationOwned
+                {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "static recursor capture contract disagrees with its ordered worker"
+                            .to_string(),
+                    )));
+                }
+                match capture {
+                    LoweringOperand::Carried(capture) => {
+                        Ok(PreparedStaticRecursorCapture::Carried(capture))
+                    }
+                    LoweringOperand::Specialized(value) => {
+                        value.boundary_transfer_admissibility(&token.edge)?;
+                        Ok(PreparedStaticRecursorCapture::Specialized {
+                            origin: token.source_origin,
+                            value,
+                        })
+                    }
+                }
             })
             .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
         Ok(PreparedStaticRecursorResidual::Worker { worker, captures })
@@ -4939,6 +4964,15 @@ impl<'a> Lowering<'a> {
             };
             return Ok(residual);
         };
+        let captures = captures
+            .into_iter()
+            .map(|capture| match capture {
+                PreparedStaticRecursorCapture::Carried(capture) => Ok(capture),
+                PreparedStaticRecursorCapture::Specialized { origin, value } => {
+                    self.emit_carrier_transfer(builder, origin, &value)
+                }
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
         let environment = self.emit_carrier_alloc(
             builder,
             BoundaryTag::PersistentGround,

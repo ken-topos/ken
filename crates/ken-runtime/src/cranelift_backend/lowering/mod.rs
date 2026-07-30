@@ -81,7 +81,8 @@ pub(in crate::cranelift_backend) use super::planning::{
     EmittableUnit, JoinPlanToken, JoinResultRepresentation, LoweringOnlyOperandEdge,
     OperandEdgeDisposition, OperandEdgeToken, PredeclaredFunctionId, SourceOperandRole,
     StaticCallableSpecializationId, StaticOriginId, StaticRecursorWorkerResidualId,
-    StaticTransitionPlan, SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
+    StaticRecursorCaptureLifetime, StaticTransitionPlan, SynthesizedConstructorRole,
+    SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use super::planning::{
@@ -5480,7 +5481,14 @@ enum PreparedStaticRecursorResidual {
     Passthrough(LoweringOperand),
     Worker {
         worker: StaticRecursorWorker,
-        captures: Vec<CarriedBoundaryWord>,
+        captures: Vec<PreparedStaticRecursorCapture>,
+    },
+}
+enum PreparedStaticRecursorCapture {
+    Carried(CarriedBoundaryWord),
+    Specialized {
+        origin: StaticOriginId,
+        value: Lowered,
     },
 }
 #[derive(Clone, Copy)]

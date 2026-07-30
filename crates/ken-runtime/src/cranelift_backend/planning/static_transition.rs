@@ -615,6 +615,11 @@ enum StaticRecursorCaptureSource {
     Lexical(StaticOriginId),
 }
 
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum StaticRecursorCaptureLifetime {
+    ActivationOwned,
+}
+
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct StaticRecursorCaptureProvenance {
     ordinal: u32,
@@ -622,6 +627,21 @@ struct StaticRecursorCaptureProvenance {
     closure_origin: StaticOriginId,
     source: StaticRecursorCaptureSource,
     phase: OperandEdgeDisposition,
+}
+
+/// Move-only authority for one ordered capture of one exact static worker.
+///
+/// The source value is deliberately absent. Lowering must present the capture
+/// at `ordinal` and use `edge` to cross a specialized ordinary value.
+#[derive(Debug)]
+pub(in crate::cranelift_backend) struct StaticRecursorCaptureToken {
+    pub(in crate::cranelift_backend) ordinal: u32,
+    pub(in crate::cranelift_backend) owner: PredeclaredFunctionId,
+    pub(in crate::cranelift_backend) closure_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) source_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) phase: OperandEdgeDisposition,
+    pub(in crate::cranelift_backend) lifetime: StaticRecursorCaptureLifetime,
+    pub(in crate::cranelift_backend) edge: OperandEdgeToken,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -685,6 +705,16 @@ enum PlannedBoundaryUsePath {
         body_origin: StaticOriginId,
         declared_arity: u32,
         captures: Vec<StaticRecursorCaptureProvenance>,
+    },
+    StaticRecursorCapture {
+        worker_identity: BoundaryUseIdentity,
+        residual_id: StaticRecursorWorkerResidualId,
+        parent_origin: StaticOriginId,
+        producer_origin: StaticOriginId,
+        sibling_position: u32,
+        closure_origin: StaticOriginId,
+        ordinal: u32,
+        capture: StaticRecursorCaptureProvenance,
     },
 }
 
@@ -2681,6 +2711,54 @@ fn build_boundary_uses(
                 }),
         )
         .collect::<Vec<_>>();
+    let mut capture_ordinal = 0u32;
+    for (worker_ordinal, residual) in plan.static_recursor_worker_residuals.iter().enumerate() {
+        let worker_ordinal = u32::try_from(worker_ordinal)
+            .map_err(|_| planner_capacity_error("static recursor boundary identity exhausted"))?;
+        let worker_identity = BoundaryUseIdentity::Synthesized(
+            0x4000_0000u32.checked_add(worker_ordinal).ok_or_else(|| {
+                planner_capacity_error("static recursor boundary identity exhausted")
+            })?,
+        );
+        let consumer_owner = plan
+            .semantic
+            .function_owner(residual.parent_origin)?
+            .ok_or_else(|| planner_error("static recursor consumer has no function owner"))?;
+        for capture in &residual.captures {
+            let identity = BoundaryUseIdentity::Synthesized(
+                0x4400_0000u32.checked_add(capture_ordinal).ok_or_else(|| {
+                    planner_capacity_error("static recursor capture identity exhausted")
+                })?,
+            );
+            capture_ordinal = capture_ordinal
+                .checked_add(1)
+                .ok_or_else(|| planner_capacity_error("static recursor capture identity exhausted"))?;
+            let disposition = OperandEdgeDisposition::Forwarding;
+            let (consumer_phase, operation, need, avail) =
+                boundary_contract(disposition);
+            uses.push(PlannedBoundaryUse {
+                identity,
+                path: PlannedBoundaryUsePath::StaticRecursorCapture {
+                    worker_identity,
+                    residual_id: residual.id,
+                    parent_origin: residual.parent_origin,
+                    producer_origin: residual.producer_origin,
+                    sibling_position: residual.sibling_position,
+                    closure_origin: residual.closure_origin,
+                    ordinal: capture.ordinal,
+                    capture: capture.clone(),
+                },
+                producer_owner: capture.owner,
+                consumer_owner,
+                producer_phase: BoundaryUsePhase::SpecializedValue,
+                consumer_phase,
+                operation,
+                need,
+                disposition,
+                avail,
+            });
+        }
+    }
     uses.sort_by_key(|edge| edge.identity);
     if uses
         .windows(2)
@@ -5093,6 +5171,9 @@ impl<'src> StaticTransitionPlan<'src> {
                     PlannedBoundaryUsePath::StaticRecursorWorker {
                         producer_origin, ..
                     } => (*producer_origin, true),
+                    PlannedBoundaryUsePath::StaticRecursorCapture {
+                        producer_origin, ..
+                    } => (*producer_origin, true),
                 };
                 (planned.producer_owner == owner
                     && (origins.contains(&origin) || dead_worker_bodies.contains(&origin))
@@ -5709,6 +5790,73 @@ impl<'src> StaticTransitionPlan<'src> {
             ));
         }
         Ok(())
+    }
+
+    /// Consume the exact one-way producer authority for one ordered capture of
+    /// one already-validated static worker.
+    pub(in crate::cranelift_backend) fn static_recursor_capture_token(
+        &self,
+        worker_identity: BoundaryUseIdentity,
+        residual_id: StaticRecursorWorkerResidualId,
+        parent_origin: StaticOriginId,
+        producer_origin: StaticOriginId,
+        sibling_position: usize,
+        closure_origin: StaticOriginId,
+        ordinal: usize,
+    ) -> Result<StaticRecursorCaptureToken, CraneliftBackendError> {
+        let sibling_position = u32::try_from(sibling_position)
+            .map_err(|_| planner_capacity_error("static recursor sibling exhausted"))?;
+        let ordinal = u32::try_from(ordinal)
+            .map_err(|_| planner_capacity_error("static recursor capture ordinal exhausted"))?;
+        let planned = self
+            .boundary_uses
+            .iter()
+            .find(|planned| {
+                matches!(
+                    &planned.path,
+                    PlannedBoundaryUsePath::StaticRecursorCapture {
+                        worker_identity: planned_worker,
+                        residual_id: planned_residual,
+                        parent_origin: planned_parent,
+                        producer_origin: planned_producer,
+                        sibling_position: planned_position,
+                        closure_origin: planned_closure,
+                        ordinal: planned_ordinal,
+                        capture,
+                    } if *planned_worker == worker_identity
+                        && *planned_residual == residual_id
+                        && *planned_parent == parent_origin
+                        && *planned_producer == producer_origin
+                        && *planned_position == sibling_position
+                        && *planned_closure == closure_origin
+                        && *planned_ordinal == ordinal
+                        && capture.ordinal == ordinal
+                        && capture.closure_origin == closure_origin
+                        && capture.phase == OperandEdgeDisposition::CallableCapture
+                )
+            })
+            .ok_or_else(|| {
+                planner_error("static recursor capture has no exact planned producer authority")
+            })?;
+        let capture = match &planned.path {
+            PlannedBoundaryUsePath::StaticRecursorCapture { capture, .. } => capture,
+            _ => unreachable!("selected static recursor capture path"),
+        };
+        let edge =
+            self.planned_boundary_use_token(planned.identity, "a static recursor capture")?;
+        self.record_boundary_use_consumption(planned.identity)?;
+        Ok(StaticRecursorCaptureToken {
+            ordinal,
+            owner: capture.owner,
+            closure_origin: capture.closure_origin,
+            source_origin: match capture.source {
+                StaticRecursorCaptureSource::Seed(_) => capture.closure_origin,
+                StaticRecursorCaptureSource::Lexical(origin) => origin,
+            },
+            phase: capture.phase,
+            lifetime: StaticRecursorCaptureLifetime::ActivationOwned,
+            edge,
+        })
     }
 
     /// Consume the planner-owned result contract for one source join.

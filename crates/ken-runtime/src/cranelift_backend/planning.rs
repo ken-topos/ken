@@ -26,6 +26,7 @@ pub(super) use static_transition::{
     planned_partiality_trap, BoundaryUseIdentity, ConstructorIdentity, JoinPlanToken,
     JoinResultRepresentation, LoweringOnlyOperandEdge, OperandEdgeDisposition, OperandEdgeToken,
     SourceOperandRole, StaticOriginId, StaticRecursorWorkerResidualId, StaticTransitionPlan,
+    StaticRecursorCaptureLifetime,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 // `RT-FNSPLIT-B2A-S` `AC-4` — the route counters behind
