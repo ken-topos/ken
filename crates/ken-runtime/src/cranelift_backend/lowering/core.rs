@@ -4172,6 +4172,17 @@ impl<'a> Lowering<'a> {
                                 SourceOperandRole::MatchScrutinee,
                             )?;
                             control.continuation = *next;
+                            if let LoweringOperand::Carried(word) = &value {
+                                return self.lower_source_carried_match(
+                                    builder,
+                                    *word,
+                                    &cases,
+                                    &default,
+                                    static_origin,
+                                    &env,
+                                    control,
+                                );
+                            }
                             match value {
                                 LoweringOperand::Specialized(Lowered::BoundedNat(nat)) => {
                                     return self.lower_source_bounded_nat_match(
@@ -5338,6 +5349,286 @@ impl<'a> Lowering<'a> {
         };
         self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
         self.resume_active_continuation(builder, merged?, suffix_active)
+    }
+
+    fn lower_source_carried_match<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        scrutinee: CarriedBoundaryWord,
+        cases: &[crate::RuntimeMatchCase],
+        default: &RuntimeTrap,
+        static_origin: StaticOriginId,
+        env: &[LoweringOperand],
+        suffix_control: SourceControl<'b>,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        if cases.is_empty() {
+            return Ok(LoweringOperand::Specialized(Lowered::Trap(default.clone())));
+        }
+        let (source_prefix_template, terminal) =
+            Self::split_source_prefix(suffix_control.continuation)?;
+        let mut local_completion = None;
+        let target = match terminal {
+            SourcePrefixTerminal::Join(inherited_edge) => inherited_edge.target,
+            SourcePrefixTerminal::ResumeOuter { root_authority } => {
+                let active = suffix_control
+                    .selected
+                    .as_active(&suffix_control.selected_lineage);
+                let (prefix, suffix_pending, required_kind, site_id) =
+                    self.planned_active_scalar_cut(active)?;
+                let join_id = self.next_source_join;
+                self.next_source_join = self
+                    .next_source_join
+                    .checked_add(1)
+                    .expect("compiler-private source join identity exhausted");
+                let join_plan = std::rc::Rc::new(self.consumed_join_plan_token(static_origin)?);
+                let merge = builder.create_block();
+                self.append_planned_join_params(builder, merge, join_plan.as_ref());
+                local_completion = Some((
+                    merge,
+                    suffix_pending.to_vec(),
+                    required_kind,
+                    site_id,
+                    root_authority,
+                ));
+                SourceJoinTarget {
+                    join_id,
+                    block: merge,
+                    expected_outer: suffix_control.terminal_outer,
+                    required_kind,
+                    join_plan,
+                    result_origin: static_origin,
+                    terminal_active_prefix: prefix,
+                }
+            }
+        };
+
+        let frame_baseline = self.consumed_subcontinuation_frames.clone();
+        let mut frame_union = frame_baseline.clone();
+        let ok_case = cases
+            .iter()
+            .enumerate()
+            .find(|(_, case)| case.constructor == self.process_symbols.result_ok);
+        let err_case = cases
+            .iter()
+            .enumerate()
+            .find(|(_, case)| case.constructor == self.process_symbols.result_err);
+        if ok_case.is_some() || err_case.is_some() {
+            let (Some(ok_case), Some(err_case)) = (ok_case, err_case) else {
+                return Err(unsupported(
+                    "HostResult",
+                    "a carried HostResult match requires both closed Result cases",
+                ));
+            };
+            if ok_case.1.binders != 1 || err_case.1.binders != 1 {
+                return Err(unsupported(
+                    "HostResult",
+                    "carried Result cases must each bind exactly one selected payload",
+                ));
+            }
+            let ok_block = builder.create_block();
+            builder.append_block_param(ok_block, types::I64);
+            let err_block = builder.create_block();
+            builder.append_block_param(err_block, types::I64);
+
+            let class = self.emit_carrier_class(builder, scrutinee)?;
+            let is_host_result = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                class,
+                BoundaryClass::HostResult as i64,
+            );
+            let host_result = builder.create_block();
+            let represented = builder.create_block();
+            builder
+                .ins()
+                .brif(is_host_result, host_result, &[], represented, &[]);
+
+            builder.switch_to_block(host_result);
+            let success = self.emit_carrier_host_success(builder, scrutinee)?;
+            let payload = self.emit_carrier_host_payload(builder, scrutinee)?;
+            builder.ins().brif(
+                success,
+                ok_block,
+                &[payload.word.into()],
+                err_block,
+                &[payload.word.into()],
+            );
+
+            builder.switch_to_block(represented);
+            let tag = self.emit_carrier_tag(builder, scrutinee)?;
+            let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
+            for (block, (index, _)) in [(ok_block, ok_case), (err_block, err_case)] {
+                let identity = self
+                    .static_transition_plan
+                    .case_constructor_identity(static_origin, index)?
+                    .tag_abi_word()?;
+                let identity = Self::carrier_identity_immediate(builder, identity);
+                let selected = builder.create_block();
+                let next = builder.create_block();
+                let matched = builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    tag,
+                    identity,
+                );
+                builder.ins().brif(matched, selected, &[], next, &[]);
+                builder.switch_to_block(selected);
+                Self::require_i64(builder, field_count, 1);
+                let payload = self.emit_carrier_field(builder, scrutinee, 0)?;
+                builder.ins().jump(block, &[payload.word.into()]);
+                builder.switch_to_block(next);
+            }
+            let defaulted = LoweringOperand::Specialized(Lowered::Trap(default.clone()));
+            if !self.seal_source_trap_branch(builder, &defaulted)? {
+                return Err(unsupported(
+                    "Match",
+                    "the source carried Result default did not seal its branch",
+                ));
+            }
+
+            for (block, (index, case)) in [(ok_block, ok_case), (err_block, err_case)] {
+                builder.switch_to_block(block);
+                let payload = CarriedBoundaryWord {
+                    word: builder.block_params(block)[0],
+                };
+                let edge = self.mint_source_predecessor(target.clone());
+                let continuation =
+                    Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
+                let branch_control = SourceControl {
+                    continuation,
+                    selected: suffix_control.selected.clone(),
+                    selected_lineage: suffix_control.selected_lineage.clone(),
+                    terminal_outer: suffix_control.terminal_outer,
+                };
+                let lowered = self.lower_forked_branch(
+                    builder,
+                    &frame_baseline,
+                    &mut frame_union,
+                    self.owned_case_body_occurrence(
+                        static_origin,
+                        index,
+                        case.body.clone(),
+                    )?,
+                    env_with_operands([LoweringOperand::Carried(payload)], env),
+                    branch_control,
+                )?;
+                self.require_source_branch_sealed(
+                    builder,
+                    &lowered,
+                    "carried Result predecessor",
+                )?;
+            }
+        } else {
+            let tag = self.emit_carrier_tag(builder, scrutinee)?;
+            let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
+            for (index, case) in cases.iter().enumerate() {
+                let identity = self
+                    .static_transition_plan
+                    .case_constructor_identity(static_origin, index)?
+                    .tag_abi_word()?;
+                let identity = Self::carrier_identity_immediate(builder, identity);
+                let selected = builder.create_block();
+                let next = builder.create_block();
+                let matched = builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    tag,
+                    identity,
+                );
+                builder.ins().brif(matched, selected, &[], next, &[]);
+                builder.switch_to_block(selected);
+                let binders = i64::try_from(case.binders).map_err(|_| {
+                    unsupported(
+                        "BoundaryCarrier",
+                        "a case binds more fields than the carrier ABI can count",
+                    )
+                })?;
+                Self::require_i64(builder, field_count, binders);
+                let mut bindings = Vec::with_capacity(case.binders);
+                for position in 0..case.binders {
+                    bindings.push(LoweringOperand::Carried(
+                        self.emit_carrier_field(builder, scrutinee, position)?,
+                    ));
+                }
+                let edge = self.mint_source_predecessor(target.clone());
+                let continuation =
+                    Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
+                let branch_control = SourceControl {
+                    continuation,
+                    selected: suffix_control.selected.clone(),
+                    selected_lineage: suffix_control.selected_lineage.clone(),
+                    terminal_outer: suffix_control.terminal_outer,
+                };
+                let lowered = self.lower_forked_branch(
+                    builder,
+                    &frame_baseline,
+                    &mut frame_union,
+                    self.owned_case_body_occurrence(
+                        static_origin,
+                        index,
+                        case.body.clone(),
+                    )?,
+                    env_with_operands(bindings, env),
+                    branch_control,
+                )?;
+                self.require_source_branch_sealed(
+                    builder,
+                    &lowered,
+                    "carried constructor predecessor",
+                )?;
+                builder.switch_to_block(next);
+            }
+            let defaulted = LoweringOperand::Specialized(Lowered::Trap(default.clone()));
+            if !self.seal_source_trap_branch(builder, &defaulted)? {
+                return Err(unsupported(
+                    "Match",
+                    "the source carried match default did not seal its branch",
+                ));
+            }
+        }
+        self.consumed_subcontinuation_frames = frame_union;
+
+        let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
+            local_completion
+        else {
+            return Ok(LoweringOperand::Specialized(Lowered::RecursiveBackedge));
+        };
+        let merged = self.finish_planned_join(
+            builder,
+            merge,
+            target.join_plan.as_ref(),
+            Some(required_kind),
+            "NativeJoinPlanV1",
+        );
+        let suffix_active = ActiveContinuationFrame {
+            activation: suffix_control.selected.activation,
+            cursor: suffix_control.selected.cursor,
+            parent: suffix_control.selected.parent,
+            pending: &suffix_pending,
+            selected_ancestry: &suffix_control.selected.selected_ancestry,
+            source_lineage: &suffix_control.selected_lineage,
+            source_selected_cursor: Some(suffix_control.selected.cursor),
+            selected_scope: suffix_control.selected.selected_scope.as_ref(),
+        };
+        self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
+        self.resume_active_continuation(builder, merged?, suffix_active)
+    }
+
+    fn require_source_branch_sealed(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        lowered: &LoweringOperand,
+        label: &str,
+    ) -> Result<(), CraneliftBackendError> {
+        if self.seal_source_trap_branch(builder, lowered)?
+            || matches!(
+                lowered,
+                LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+            )
+        {
+            return Ok(());
+        }
+        Err(unsupported(
+            "NativeJoinPlanV1",
+            format!("{label} did not seal its distinct affine join edge"),
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]
