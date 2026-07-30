@@ -475,12 +475,49 @@ residual edge** and prove **all five**:
 1. the invocation segment is the **exact checked affine segment** for the parent
    producer / sibling, and is **consumed once**;
 2. `Closure.body` **equals** the planned worker body origin;
-3. closure **parameter count** equals the planned declared arity, **and** capture
-   count equals the planned capture provenance;
+3. closure **parameter count** equals the planned declared arity, **and** the
+   **complete ordered capture contract** equals the planned
+   `StaticRecursorCaptureProvenance` — ⛔ **not merely `capture_count`**;
 4. capture **order, phase, owner, and lifetime** equal the plan;
 5. **every runtime capture has an ordinary transferable lane.** ⛔ A nested
    callable / control capsule is **not ordinary data** and **must fail before
    allocation** unless an already-ruled static binding eliminates it.
+
+> #### ⛔⛔ SHARPENED 2026-07-30 — `capture_count` IS NOT THE CONTRACT
+>
+> **Architect `evt_21gpwrsewyxax`, on CI-red exact `4dc120c5`.** The unified
+> identity did store the ordered provenance — but the **move-only token exported
+> only `capture_count`**, `validate_static_recursor_worker_residual_identity`
+> revalidated **only that count**, and `prepare_planned_static_recursor_worker`
+> then rejected every capture not **already** `LoweringOperand::Carried`.
+>
+> ⭐ **Two distinct failures in one projection.** It is **weaker** than §8c items
+> 3–4 (the per-capture phase / owner / provenance is dropped, so items 3 and 4
+> cannot actually be checked at consumption), **and** it is **narrower** than
+> item 5 (⛔ *"already carried or reject"* is not *"has an ordinary transferable
+> lane"* — it refuses a **specialized ordinary** capture that item 5 admits via
+> the one-way producer). ⇒ ⭐ **The binding rule is both stricter AND more
+> capable than what was built.** It is not a matter of tightening one direction.
+>
+> **What consumption must therefore revalidate, per capture:** ordinal · source
+> provenance · owner · expected phase / lane · lifetime · exact-once producer
+> authority where needed. Carried ordinary captures pass unchanged; specialized
+> ordinary captures cross the one-way producer **exactly once**; a nested
+> callable / control capsule stays **fail-closed with every allocation and
+> publication counter at zero**.
+>
+> ⚠ **The control that catches the regression, and why an outcome assertion will
+> not:** at least one environment must contain **both** a carried **and** a
+> specialized ordinary capture. ⭐ A **single-phase** environment cannot
+> distinguish *"validates the whole ordered contract"* from *"counts captures and
+> requires them pre-carried"* — both are green on it. Add phase / owner / order /
+> omission mutations, the nested-capsule zero-allocation negative, and the
+> exact-member versus same-closure-outside-edge pair.
+>
+> ⛔ Hard stop **#23** is now attributed **here** (with `D7`), not to a buffer
+> operation and not to either later syntactic residual node — see
+> [[RT-DECL-CLOSURE-PORT]]. That authorizes transporting an ordinary specialized
+> capture; ⛔ it does **not** authorize carrying a nested capsule.
 
 **Only after that complete validation** may lowering erase the `Closure` wrapper
 and create the ordinary ordered environment payload.

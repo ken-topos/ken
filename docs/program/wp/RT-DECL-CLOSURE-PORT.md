@@ -697,8 +697,24 @@ family — that is a measurement nobody has taken.
     carried-scrutinee population (Architect-filed under
     [[RT-PRODUCER-MATCH-PORT]], hard stop **#22**);
   - one — `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds` — hits a
-    **distinct carried closure-capture** refusal (hard stop **#23**, owner
-    classification open).
+    **distinct carried closure-capture** refusal (hard stop **#23**, ✅ **owner
+    ATTRIBUTED 2026-07-30**, see immediately below).
+
+  > #### ✅ HARD STOP #23 IS ATTRIBUTED — Architect `evt_21gpwrsewyxax`, 2026-07-30
+  >
+  > On PR #1251's CI, `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds`
+  > reached the **`StaticRecursorWorker` capture boundary**. ⇒ Its owner is **this
+  > `D7` / [[RT-RECURSOR-TRANSPORT]] representation closure** — ⛔ **not** a buffer
+  > operation, and ⛔ **not** either later syntactic residual node.
+  >
+  > ⭐ **What the attribution authorizes:** planning and transporting an **ordinary
+  > specialized capture** under the existing mixed-phase contract. ⛔ **What it does
+  > NOT authorize:** carrying a **nested callable / control capsule**. If the exact
+  > capture proves to be one, ⛔ preserve the zero-allocation refusal and return
+  > that concrete edge as a **new hard stop** — do not widen scope to absorb it.
+  >
+  > ⚠ **This retires the earlier ban on acting on this row.** The row is no longer
+  > unowned or out of bounds; it is in this pair's population and must go green.
 
   #### ⭐⭐ THE EXACT PER-ROW `D0` — measured, and it replaces the aggregate
 
@@ -731,15 +747,118 @@ family — that is a measurement nobody has taken.
   [[RT-PRODUCER-MATCH-PORT]]'s syntactic residual (Architect
   `evt_5zr53v2dp86md`). ⛔ Do not read the base text as the owner.
 
-  ⇒ ⛔ **The port is NOT additive: it regresses `main`.** `AC-4` (workspace green
-  in CI) is therefore unreachable, and this node **cannot become a candidate**
-  until its consumers are complete. ⛔ No QA route, no fresh review, no approval.
+  ⇒ ⛔ **The port is NOT additive: it regresses `main`.**
+
+  > #### ⭐⭐ CORRECTED 2026-07-30 BY CI MEASUREMENT — Architect `evt_21gpwrsewyxax`
+  >
+  > **The regression is real and still stands. What was wrong is the inference
+  > drawn from it.** This paragraph used to continue *"`AC-4` (workspace green in
+  > CI) is therefore unreachable, and this node cannot become a candidate until
+  > its consumers are complete."* ⛔ **That is retired.** It read a defect in the
+  > implementation as a defect in the node partition.
+  >
+  > ⭐ **What CI actually falsified.** The atomic pair *was* measured together, at
+  > exact `4dc120c5` on PR #1251: **8 of 12 checks red**, against a `main`
+  > (`e79f7af6`, run `30497524438`) where **all twelve are green**. ⇒ The failures
+  > are this lineage's regressions, not inherited. But the ruling is that **CI
+  > falsified that SHA's sufficiency, not the partition**: `AC-4` **stays
+  > literal**, [[RT-SEED-CALL-PORT]] and [[RT-PRODUCER-MATCH-PORT]] **do not
+  > fold**, and the existing `D7` + [[RT-RECURSOR-TRANSPORT]] pair **is still the
+  > minimal set**.
+  >
+  > ⭐⭐ **The test that decides whether another node joins an atomic landing:**
+  > **a failure must fire that node's own producing predicate.** None of the
+  > reported failures fires `SeedClosureCall` (a `Call` whose callee is the
+  > retained non-lexical closure form) or `ProducerMatchCall` (an ordinary
+  > producer `Match` whose scrutinee is directly a `Call`). ⛔ **A test name and a
+  > pre-port refusal text are not ownership.**
 
   ⭐ **The baseline proxy that found this was not in the original plan and it
   changed the outcome.** Every measurement before it carried a delta, so the
   regression was invisible to all of them — and the factoring above was, before
   it ran, about to be used to argue this node could land. ⚠ **A port measured only
   with its consumers' inputs applied has not been measured against `main`.**
+
+  ### ⛔⛔ THE BINDING REPAIR BOUNDARY AFTER THE 2026-07-30 RECUT
+
+  **Architect `evt_21gpwrsewyxax`.** Exact `4dc120c5` is an **incomplete
+  implementation of this pair**, and both CI refusal classes are **inside** it.
+  ⛔ This section is an acceptance obligation, not commentary.
+
+  #### The two diagnosed defects
+
+  1. **`StaticRecursorWorker` is an in-scope capture-contract defect.** The
+     unified identity stores the ordered `StaticRecursorCaptureProvenance`, but
+     the move-only token exports **only `capture_count`**;
+     `validate_static_recursor_worker_residual_identity` revalidates **only that
+     count**; and `prepare_planned_static_recursor_worker` then rejects every
+     capture that is not **already** `LoweringOperand::Carried`. ⇒ That
+     projection **loses the per-capture phase / owner / provenance the frame
+     requires.** ⭐ `D7`'s binding capture rule is **narrower and more capable**:
+     each capture retains its own phase; an already-carried ordinary value passes
+     unchanged; a specialized ordinary value crosses the one-way producer
+     **exactly once**; a nested callable / control capsule still fails **before**
+     allocation. ⛔ [[RT-RECURSOR-TRANSPORT]] §8c requires an **ordinary
+     transferable lane**, ⛔ not *"already carried or reject."*
+
+  2. **The late generic `Closure` refusal on the `fs_*` rows is an in-scope `#26`
+     population omission.** This frame already attributes those rows, after the
+     port, to [[RT-RECURSOR-TRANSPORT]] rather than the syntactic ProducerMatch
+     retirement. ⭐ **The matrix-omission law is explicit: a real static-worker
+     residual that is omitted or misclassified must FAIL IN PLANNING, and may
+     NOT fall through to the late generic `Closure` refusal.** Exact `4dc120c5`
+     reaches that **forbidden late fallback** ⇒ the graph-derived `#26`
+     population is **still incomplete**. Repair the **planner-issued exact
+     edge**; ⛔ do **not** weaken `CallableCapsuleEscape -> EscapeForbidden`.
+
+  #### What the replacement owes
+
+  - **Carry and revalidate the COMPLETE ORDERED capture contract at
+    consumption** — ordinal, source provenance, owner, expected phase / lane,
+    lifetime, and exact-once producer authority where needed. ⛔ `capture_count`
+    alone is insufficient. Preserve **one** exact static-worker identity.
+  - **Preflight the ENTIRE environment before allocation.** Carried ordinary
+    captures pass unchanged; specialized ordinary captures use the existing
+    one-way producer **exactly once**; nested callable / control captures remain
+    **fail-closed with every allocation / publication counter at zero**.
+  - **Close the `#26` result-flow population for every CI-reached exact
+    recursive-position closure.** An omitted real member must **red in
+    planning**; ⛔ no exact member may reach the generic whole-`Closure` arm; and
+    the **same** closure **outside** an exact planner-proved edge must **still**
+    reach that arm.
+  - ⭐⭐ **Record a per-row FIRST-REFUSAL MAP for every currently failing job and
+    test — not only the two example rows.** ⛔ Never a count (see the `1/7`
+    lesson above). ⛔ **If a third production predicate appears — or an actual
+    `SeedClosureCall` or `ProducerMatchCall` appears — HARD STOP and return the
+    concrete edge before widening scope.**
+  - **Add mixed-phase worker controls:** at least one environment containing
+    **both** carried **and** specialized ordinary captures; phase / owner /
+    order / omission mutations; the nested-capsule **zero-allocation** negative;
+    and the exact-member versus same-closure-outside-edge pair.
+
+  #### The CI regression population this must clear
+
+  Measured on PR **#1251** at exact `4dc120c5`: **8 of 12 checks red**, where
+  `main` at `e79f7af6` (run `30497524438`) is **12 of 12 green** — so every one
+  is this lineage's regression, ⛔ none inherited.
+
+  | failing check | first-refusal evidence |
+  |---|---|
+  | `native-slow (rt_parity_native)` | `StaticRecursorWorker: a static recursor environment capture is not an ordinary carried operand` (`rt-parity-allocate`); `Closure: a closure cannot cross the boundary…` (`rt-parity-read-norights`) |
+  | `native-slow (px8f_buffer_native)` | `px8f_buffer_native.rs` — owed in the map |
+  | `native-slow (px8f_write_partition)` | owed in the map |
+  | `test shard 1/4` … `4/4` | `px4b_native_production` (4 rows), `px7f_resource_native`, `px7l_checked_host_recursive_bind`, `px7m_hostresult_computational_match` |
+  | `build + test` | aggregate of the above |
+
+  ⚠ **`AC-4` remains literal: workspace green IN CI.** ⛔ The replacement is
+  **not a candidate** until **all twelve** publisher checks are green. Fresh SHA,
+  fresh QA, fresh Architect Decision — `dec_2z9v81tc5jt6x` **transfers nothing**.
+
+  ⭐⭐ **And note where this class of failure is visible from.** Every failing row
+  is a `crates/ken-cli` **linked-native** test. ⛔ No amount of targeted
+  `-p ken-runtime` evidence can see it — per `agent/COORDINATION.md` §12 that is
+  CI's job by design. ⇒ **An `AC-1b`- or `AC-4`-style "the objects still build"
+  criterion has NO local discharge, and this frame does not claim one.**
 
   ### ⭐⭐ WHAT THIS NODE OWES ITS SUCCESSORS — the consumer-side enumeration
 

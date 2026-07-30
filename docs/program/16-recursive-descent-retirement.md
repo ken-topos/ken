@@ -183,6 +183,47 @@ one that passes when the proof holds. ⚠ The sound-proof-over-incomplete-popula
 failure is silent by construction: **every control over it passes**, which is
 exactly why it survives review.
 
+### Trap 4 — ⭐⭐ a red CI job is not evidence that the atomic set is too small
+
+**Measured 2026-07-30, and it nearly re-scoped two nodes for nothing.** The
+`RT-DECL-CLOSURE-PORT` `D7` + `RT-RECURSOR-TRANSPORT` atomic candidate reached CI
+as PR #1251 and came back **8 of 12 red**, against a `main` that was **12 of 12
+green** — so the failures were genuinely the lineage's, not inherited. Two of the
+refusals named shapes that *look* like later nodes' territory, and the
+`RT-DECL-CLOSURE-PORT` frame itself already said `AC-4` was *"unreachable until
+its consumers are complete."* ⇒ The obvious reading was **fold the successors in
+and land a bigger set.**
+
+⛔ **That reading was wrong.** Architect `evt_21gpwrsewyxax`: CI falsified **that
+SHA's sufficiency, not the node partition.** Both refusal classes were in-scope
+defects of the pair — a capture contract projected down to `capture_count`, and a
+`#26` population omission falling through to a late generic refusal.
+
+⭐⭐ **THE TEST, and it binds every node in this campaign:**
+
+> **A node joins an atomic landing only when a failure fires THAT NODE'S OWN
+> PRODUCING PREDICATE.**
+
+For the two remaining syntactic residuals that means, concretely:
+
+| node | its producing predicate |
+|---|---|
+| [`RT-SEED-CALL-PORT`](wp/RT-SEED-CALL-PORT.md) | a `Call` whose callee is the retained non-lexical closure form |
+| [`RT-PRODUCER-MATCH-PORT`](wp/RT-PRODUCER-MATCH-PORT.md) | an ordinary producer `Match` whose scrutinee is directly a `Call` |
+
+⛔ **A test name is not ownership, and neither is a pre-port refusal text.** Both
+mislead in the same direction here: a row that failed at the base with one
+refusal can reach a *different* wall after the port, and the base text then names
+the wrong owner. ⇒ Attribute by **the predicate the failure actually fires on the
+candidate**, which means the per-row **first-refusal map** Trap 2 already
+requires — ⛔ never the aggregate, never the test name.
+
+⚠ **And the reason this trap is expensive rather than merely wrong:** widening an
+atomic set is nearly irreversible in practice. It lengthens the critical path,
+re-opens settled frames, and every node in front of the widened set compounds.
+Reading a red job as a partition defect spends that cost to fix an implementation
+bug.
+
 ## 4. Schedule
 
 Runtime is single-threaded, and **every node here edits `lowering/core.rs`**, so
