@@ -254,6 +254,16 @@ declared-unit result now enters the already-ruled phase-bearing lowering graph.
 environment insertion, recursive call, branch/join forwarding, and result
 propagation, ⛔ **with no reachability whitelist.**
 
+> ⚠⚠ **READ "NO REACHABILITY WHITELIST" PRECISELY — it bans an ORACLE, not a
+> PROOF.** Architect `evt_1x47ep8rnhk9p` (2026-07-30) ruled that a **closed,
+> exact value-flow proof over the planner graph** is the lawful way to eliminate a
+> runtime edge, and is ⛔ **not** the whitelist banned here. ⭐ The discriminator
+> is the **source of the fact**: a reached trace, an operation catalog, a test
+> name, an origin list, a lowering-time search, or *"no producer was observed"* are
+> ⛔ **never** proofs — a **monotone fixed point over the producer graph, where any
+> unknown yields `Open`**, is. See **the `FsAppendFile` case-emission section**
+> under §5.
+
 ⚠ **The implementation does not mechanically close that population.** At exact
 `483ef7ab` there are **at least 24** explicit calls to `specialized_at`,
 `specialized_ref_at`, `specialized_env_at`, or `specialized_join_arm`, plus
@@ -1056,6 +1066,157 @@ family — that is a measurement nobody has taken.
   ⇒ Exact `430798bf` is **preservation-only, not a candidate**, and is the exact
   continuation base. ⛔ No QA verdict transfers; fresh SHA, fresh QA, and a
   **fresh** Architect Decision are mandatory.
+
+  #### ⛔⛔ THE `FsAppendFile` CASE-EMISSION REACHABILITY AUTHORITY
+  #### — Architect `evt_1x47ep8rnhk9p`
+
+  Grounded on exact preservation-only `548682c3` (tree `31505888`, parent exact
+  `430798bf`; 7 tracked Runtime files, `+1162/-242`). The delta **preserves** the
+  13-operation catalog and **advances** the exact effect seat. Then, at the carried
+  source-machine match, lowering **iterates every source case and lowers every
+  body**, and the plan — which exports the full case-body list and each canonical
+  `case_constructor_identity` — exports **no authority answering which constructor
+  identities can reach this exact scrutinee**. So the `FsAppendFile` body
+  (`family=decl:rt_parity_buffer_allocate_single::FSOp`, `0x0303` / 771) is emitted
+  and the existing out-of-catalog gate **correctly** refuses it: `represented
+  unavailable lane`.
+
+  ⛔ **This is a MISSING CASE-EMISSION REACHABILITY AUTHORITY inside `D7`'s
+  existing graph-derived `SemanticEliminator`.** It adds **no** producing
+  predicate, node, carrier lane, seventh disposition, or atomic participant.
+  Atomic scope remains `D7` + [[RT-RECURSOR-TRANSPORT]]; Seed and ProducerMatch do
+  not fold; the buffer row is **still** only the reaching witness.
+
+  ⭐⭐⭐ **BOTH CHEAP REACTIONS ARE UNLAWFUL, AND THE SECOND IS THE TRAP:**
+
+  - ⛔ **Admitting `FsAppendFile`** widens `CRANELIFT_HOST_EFFECT_CONSUMERS_V1`
+    beyond the ruled 13-operation surface.
+  - ⛔ **Dropping a case because its body names an unavailable operation** turns a
+    potentially **lawful runtime `FsAppendFile` value** into the match **default**.
+    ⭐⭐ **THE CATALOG IS A CAPABILITY BOUNDARY, NOT A REACHABILITY ORACLE.** A test
+    name, the branch this execution happened to take, and absence from the reached
+    trace prove **nothing** about the static producer population.
+
+  ⇒ **The observed case is NOT YET ENTITLED TO THE WORD *dead*.** It is eliminable
+  **only** if the planner **proves** its canonical constructor identity is absent
+  from the **closed set of producers that can reach this exact scrutinee**.
+
+  ##### 1. Derive one closed producer-set fact per carried match scrutinee
+
+  Computed **after** the generated-unit / specialization / continuation fixed point
+  closes. Names may vary; the abstract result is exactly:
+
+  ```text
+  ScrutineeProducerSet = Open | Closed(Set<ConstructorIdentity>)
+  ```
+
+  The **key** includes the exact match origin, the exact scrutinee edge/origin, and
+  the function owner **and phase**. `Construct` contributes its existing canonical
+  `constructor_symbol_identity`; forwarding, environment/capture transfer, joins,
+  calls, results, and recursor flow **propagate that same authority**; runtime
+  `If` / `Match` alternatives **union** their producers; cycles close by a
+  **monotone fixed point**.
+
+  ⛔ **Any ABI ingress, opaque/untracked producer, unknown dynamic source, or
+  missing flow edge yields `Open`, and `Open` DOMINATES union.** ⛔⛔ **Never derive
+  `Closed` from a reached trace, an operation catalog, a test, an origin whitelist,
+  a lowering-time search, or *"no producer was observed."***
+
+  ##### 2. Partition every case ordinal before emission
+
+  A planner-issued, **unforgeable** case-emission record binding at least: match +
+  scrutinee origins and owner/phase · case ordinal + body origin + canonical case
+  `ConstructorIdentity` · the closed producer-set authority **and its exact flow
+  provenance** · `status = Reachable | Eliminated`.
+
+  ⭐ **This is a case-body EMISSION PARTITION — ⛔ not a seventh operand
+  disposition.**
+
+  - **`Open` ⇒ NO case may be eliminated.** Every case remains potentially live; if
+    a retained body contains an unsupported operation, **planning / object
+    construction rejects**.
+  - **`Closed(S)` ⇒ a case is `Reachable` iff its canonical identity ∈ `S`.** Emit
+    that body and require every nested boundary-use / join token **normally**.
+  - **A case outside `S` is `Eliminated`** — ⛔ do not lower its body or mint an
+    effect-seat / object-emission use for it. Its **whole same-owner subtree** must
+    be accounted for as eliminated in the plan, so the planned-use / emitted-use
+    **bijection cannot report or hide anonymous unused tokens**.
+  - **The runtime tag chain retains the closed default.** A corrupted or unlawful
+    tag for an eliminated case therefore **traps / fails closed**; ⛔ it never
+    executes an omitted body.
+
+  ##### 3. Validate the partition BEFORE function definition
+
+  Every source case has **exactly one** record; every record names a **real** case
+  of that exact match; `Reachable` and `Eliminated` are **disjoint and cover the
+  full case list**. Missing, duplicate, transplanted, wrong
+  match/scrutinee/body/ordinal/identity/owner/phase, stale producer provenance, or
+  an **`Open → Closed` mutation** ⇒ **rejects before function / object / carrier
+  allocation**. ⭐ **The exact reachable-case ledger must EQUAL the emitted-case
+  ledger.** Eliminated subtrees must have **no** unaccounted boundary use, join,
+  effect seat, or helper call. ⛔ **Lowering CONSUMES this record; it does not
+  re-derive reachability.**
+
+  ##### 4. Keep the capability boundary literal
+
+  `CRANELIFT_HOST_EFFECT_CONSUMERS_V1` remains **exactly 13** operations. ⛔ **If
+  the closed set at origin 271 actually contains `FsAppendFile`, or if the set is
+  `Open`, this repair MAY NOT PRUNE IT** — the exact program remains **unbuildable**
+  at the existing represented-unavailable gate. **Return that producer edge as the
+  next hard stop.** ⛔ Do not widen the catalog and do not convert the refusal into
+  a runtime default. ⭐ **Only a proved `Closed` set excluding `FsAppendFile`
+  authorizes omission.**
+
+  ⭐⭐ **AND NOTE WHAT THIS IS:** the exact implementation of `D7`'s **existing**
+  law — `Need ⊆ Avail`, **or planning eliminates the runtime edge completely before
+  emission**. ⛔ It is **not** the reachability whitelist this frame forbids (see
+  the disambiguation at §2's *"no reachability whitelist"* clause); it is a
+  **closed, exact value-flow proof over the same planner graph**.
+
+  ##### Required acceptance evidence — ⚠ QA reviews against these
+
+  1. **Exact origin-271 proof.** Record the **complete `Closed` constructor set**
+     and **every** producer origin / flow path reaching the exact scrutinee. The
+     buffer row may advance **only if `FsAppendFile` is absent by that proof**; it
+     then reaches `InvalidBounds` with **zero** `BufferAllocate` dispatches.
+  2. **Multi-producer union.** One runtime conditional supplies **at least two
+     distinct admitted constructors** to the same carried match; **both** case
+     bodies are planned/emitted and either selects correctly. ⭐ This proves the
+     producer walk **does not short-circuit on the first constructor**.
+  3. **⭐ Actual unavailable-producer negative.** Add a **real** `FsAppendFile`
+     constructor on a flow path to the same match. Its case becomes `Reachable` and
+     the **unchanged** 13-op gate rejects before function definition / object /
+     carrier allocation. ⛔ **A catalog-based filter would incorrectly GREEN this
+     control** — it is the discriminator between the lawful proof and the banned
+     shortcut.
+  4. **Open-source negative.** Feed the match from an opaque / ABI / untracked
+     carried source. The set is **`Open`**; **no** case is pruned, and the
+     unsupported case **still rejects**.
+  5. **Occurrence-key discriminator.** Two matches with **identical case
+     spellings** but different exact producer sets receive **different**
+     partitions. ⛔ Keying by family, case string, operation, or role **reds the
+     pair**.
+  6. **Bijection mutations.** Omit, duplicate, transplant, change
+     match/scrutinee/body/ordinal/constructor identity/owner/phase/producer
+     provenance, change `Open` to `Closed`, or leave a reachable record unused:
+     each **rejects before function definition**.
+  7. **Eliminated-subtree closure.** An eliminated case containing its **own**
+     effect seat, boundary use, and planned join emits **none** of them but remains
+     **fully accounted for** by the elimination record. Removing that record,
+     omitting one nested member, or **falsely eliminating a truly reachable case**
+     **reds before allocation / emission**.
+  8. **Closed-default integrity.** Injecting an eliminated or unknown runtime tag
+     takes the existing closed default / carrier failure and performs **zero**
+     omitted-body effects; tag / arity / field mutations remain red.
+  9. **No prior regression.** The specialized match route, the exact 13-operation
+     census, the key-sufficiency and disposition discriminators, the origin-271
+     continuation/join controls, the `#23`/`#26` mixed-phase and zero-allocation
+     controls, the complete CI first-refusal map, and the **literal all-12 CI
+     gate** all remain owed.
+
+  ⇒ Exact `548682c3` is **preservation-only, not a candidate**, and is the exact
+  continuation base. ⛔ No verdict transfers; fresh SHA, fresh QA, and a **fresh**
+  Architect Decision are mandatory.
 
   #### The CI regression population this must clear
 
