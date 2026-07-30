@@ -1639,20 +1639,57 @@ Report and stop if `D1` shows residuals beyond `TransparentDeclarationClosure` o
 the fixture, or if the port lands and `AC-1` still fails **on either delta**.
 ⛔ Do not attempt a size reduction in either case.
 
-> ### ⛔ §5a — ARMED AND CURRENT AS OF 2026-07-29. Re-read this line at every stop.
+> ### ⛔ §5a — ARMED AND CURRENT AS OF 2026-07-30. Re-read this line at every stop.
 >
-> **Count of record: 26** · entries **18** · **next research pull = `#30`** ·
-> **next predicate check = 21st entry**. ⇒ ⭐ **Neither trigger is due; they are no
-> longer simultaneous.**
+> **Both triggers are ANCHORED TO A NAMED EVENT, not to an index.**
 >
-> ✅⭐ **BOTH TRIGGERS FIRED TOGETHER AT `#27` / the 18th entry, IN ONE PASS
-> (`evt_3tx7ndxp5pm4j`), BEFORE THE ARCHITECT RULED.** The foreseen
-> simultaneous-due condition arrived exactly as written and was discharged rather
-> than deferred — the research pull went to Research and the predicate check to the
-> Architect in the same post. ⭐ **Cadence re-anchored from `#27`, and deliberately
-> re-staggered** (pull at `#30`, predicate at the 21st entry) so the two do not
-> come due on the same stop again; the simultaneity was the recorded hazard, and
-> nothing requires them to stay locked together.
+> | trigger | next due |
+> |---|---|
+> | research pull | the **3rd hard stop after `evt_5ks9da0h0977w`** |
+> | predicate check | the **3rd hard stop after `evt_5ks9da0h0977w`** |
+>
+> ⭐ **Count forward from that ruling. ⛔ Do NOT evaluate either trigger against
+> an entry index or a matrix count.** Anchoring on an index made both triggers
+> unevaluable without a correct history — and the history was wrong twice (see the
+> two ⚠ notes below). An event anchor is checkable from the channel alone.
+>
+> ✅⭐ **BOTH FIRED AND WERE DISCHARGED AT THE `42ccd8ec` STOP (2026-07-30).**
+> Leader's classification request `evt_1qz2eh0vxvwkp`; research pull
+> `evt_4xpktd1g5t8m3` → advisory `evt_1xtgtqhwyhhtd`; Architect ruling
+> `evt_5ks9da0h0977w`, which cites the advisory explicitly. ⭐ **The predicate check
+> returned a REPRESENTATION-level answer, which is the outcome `steward.md §5a-ii`
+> exists to produce:** the shared predicate is that
+> `LoweredVariant::Constructor -> PersistentGround / Constructor` is **under-keyed**
+> — it answers aggregate **shape** and never proves **referent owner** — so the
+> closure is one explicit `InvocationAggregate` representation row family over the
+> closed `{Constructor, Record}` matrix, ⛔ not another enumerated disposition.
+>
+> ⚠ **THE TWO NUMBERS BELOW MEASURE DIFFERENT POPULATIONS AND MUST NEVER BE READ
+> AS ONE CADENCE.** `count of record` tallies **Architect-admitted cells**;
+> the research/predicate cadence counts **hard stops**. A stop can occur with no
+> admission (and did, at `#27`), so the two advance at different rates. ⛔ The
+> superseded line stated them adjacently as `count 26 · next pull #30`, which reads
+> as one series and computes the trigger against the wrong population — measured
+> 2026-07-30: the ring pulled research correctly by counting its own hard stops
+> while that line would have answered *"not due."*
+>
+> **Count of record: 26** (admitted cells) · **entries: 18 + the four 2026-07-30
+> stops, never appended.** ⚠ Whether the `evt_5ks9da0h0977w` admission moves the
+> count is **NOT self-evident** — it admits a **B2V representation row family**,
+> while the count tallies **ruled dispositions in the codomain**. ⇒ It stays `26`
+> pending an Architect statement; ⛔ moving it would be exactly the
+> inflation-by-fiat the block below forbids.
+>
+> ### 📜 HISTORY BELOW THIS LINE — ⛔ no cadence stated past here is live.
+>
+> **`#27` / the 18th entry (2026-07-29).** Both triggers fired together in one pass
+> (`evt_3tx7ndxp5pm4j`) before the Architect ruled — the foreseen simultaneous-due
+> condition, discharged rather than deferred. ⛔ **Its re-stagger (pull at `#30`,
+> predicate at the 21st entry) is SUPERSEDED** by the event anchor above: four
+> further stops landed on 2026-07-30 without either index being advanced, so the
+> re-stagger was already unevaluable when the next stop arrived. ⭐ **That is the
+> second failure of an index-shaped anchor in this block, which is why the live
+> trigger is now keyed to a ruling event instead.**
 >
 > ⚠ **Count of record stays `26`.** Stop `#27` reached an edge with **no** lawful
 > member, and no member has been ruled for it — ⛔ the count moves when the
@@ -1702,6 +1739,17 @@ predicate check:**
 | 24 | 15 | **callable as transparent-declaration `CallArgument`** — `StaticOriginId(1031)`, a `LexicalClosure` with no lawful disposition among the ruled five |
 | 26 | 17 | **static-recursor-worker residual** — `StaticOriginId(723)`, a `Closure` in the recursor split's `Captures[Carried x7]`, with no lawful **member** among the ruled matrix's cells |
 | **27** | **18** | **constructor-operand closure on a carried computational-match path** — parent `StaticOriginId(655)` / child `650` / body `641`, arity `1`, captures **`8`**, refused inside `transfer_constructor_operands` with **no planner-proved token at all** (`evt_4tvysmzr6mfpb`) |
+| `42ccd8ec` | 2026-07-30 | ⭐ **persistent-parent / invocation-child escape** — the synthetic root adapter materializes `MkProgramCaps` as a persistent `Lowered::Constructor`, then stores an invocation-lifetime `BorrowedOpaque CapabilityToken`; `store_field` raises `BOUNDARY_ERR_ESCAPE` **correctly** (`evt_1qz2eh0vxvwkp` → ruling `evt_5ks9da0h0977w`) |
+
+⚠ **The last row lands in a DIFFERENT matrix from the five above it, and that is
+the finding, not a bookkeeping detail.** Rows 22–27 are missing cells in the
+**disposition** matrix — each asks *which ruled disposition covers this edge?*
+The `42ccd8ec` row is a missing row in the **B2V representation** matrix: every
+disposition was present and lawful, and the authority
+`LoweredVariant::Constructor -> PersistentGround / Constructor` still could not
+say who **owns the referent**. ⇒ ⭐ **This is why the predicate check produced a
+structural closure rather than a sixth enumerated disposition** — the enumeration
+was never short a cell; the representation was short a key.
 
 ⭐ #22 and #23 were already ruled one shape, and folding them is what produced
 `D7` — which is what **found** #24. ⛔ No repair of the two known cells would
