@@ -1152,14 +1152,18 @@ fn define_host_payload<M: Module>(
         let success = b
             .ins()
             .load(types::I64, MemFlags::trusted(), node, NODE_PAYLOAD);
+        let selected_index = b.ins().iconst(types::I64, 0);
         let ok_index = b.ins().iconst(types::I64, 0);
         let err_index = b.ins().iconst(types::I64, 1);
         let took_ok = b.ins().icmp_imm(IntCC::NotEqual, success, 0);
-        let index = b.ins().select(took_ok, ok_index, err_index);
-
         let count = b
             .ins()
             .load(types::I64, MemFlags::trusted(), node, NODE_FIELD_COUNT);
+        let selected_only = b.ins().icmp_imm(IntCC::Equal, count, 1);
+        let legacy_index = b.ins().select(took_ok, ok_index, err_index);
+        let index = b
+            .ins()
+            .select(selected_only, selected_index, legacy_index);
         let within = b.ins().icmp(IntCC::UnsignedLessThan, index, count);
         let ok = b.create_block();
         let oob = b.create_block();

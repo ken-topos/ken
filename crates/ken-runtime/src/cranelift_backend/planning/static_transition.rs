@@ -420,6 +420,7 @@ pub(in crate::cranelift_backend) enum LoweringOnlyOperandEdge {
     SourceCallRecursorResidual,
     RecursiveSourceDeclarationArgument,
     JoinArm,
+    BorrowedMatchJoinArm,
     DirectCallRecursorResidual,
     RecursiveDeclarationArgument,
     DeclarationCaptureSpecialization,
@@ -438,6 +439,7 @@ pub(in crate::cranelift_backend) enum LoweringOnlyOperandEdge {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(in crate::cranelift_backend) enum BoundaryUseIdentity {
     Source {
+        emitted_owner: PredeclaredFunctionId,
         parent: StaticOriginId,
         child: StaticOriginId,
         position: u32,
@@ -702,7 +704,7 @@ fn effect_edge_contract(
 impl LoweringOnlyOperandEdge {
     fn disposition(self) -> OperandEdgeDisposition {
         match self {
-            Self::JoinArm => OperandEdgeDisposition::Forwarding,
+            Self::JoinArm | Self::BorrowedMatchJoinArm => OperandEdgeDisposition::Forwarding,
             Self::CallableCapsuleEscape => OperandEdgeDisposition::EscapeForbidden,
             Self::CheckedComputationalIhMarker
             | Self::PendingLetRecursorResidual
@@ -737,6 +739,7 @@ impl LoweringOnlyOperandEdge {
             Self::SourceCallRecursorResidual => "a recursor residual in a source call",
             Self::RecursiveSourceDeclarationArgument => "a recursive source-declaration argument",
             Self::JoinArm => "a planned join arm",
+            Self::BorrowedMatchJoinArm => "a borrowed-process match join arm",
             Self::DirectCallRecursorResidual => "a recursor residual in a direct call",
             Self::RecursiveDeclarationArgument => "a recursive declaration argument",
             Self::DeclarationCaptureSpecialization => "a recursive-descent declaration capture",
@@ -874,6 +877,7 @@ struct PlannedStaticRecursorWorkerEnvironment {
 pub(in crate::cranelift_backend) struct StaticRecursorWorkerEnvironmentOccurrence {
     worker_identity: BoundaryUseIdentity,
     residual_id: StaticRecursorWorkerResidualId,
+    emitted_owner: PredeclaredFunctionId,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -2594,6 +2598,13 @@ fn build_recursor_boundary_uses(
         {
             let sibling_position = u32::try_from(position)
                 .map_err(|_| planner_capacity_error("recursor boundary position exhausted"))?;
+            if plan.carried_recursor_positions.contains(&(
+                owner,
+                occurrence.static_origin,
+                sibling_position,
+            )) {
+                continue;
+            }
             if plan
                 .static_recursor_worker_residuals
                 .iter()
@@ -2677,6 +2688,10 @@ fn build_lowering_boundary_uses(
                 continue;
             }
             if join.representation == JoinResultRepresentation::CarrierWord {
+                if plan.borrowed_process_match_origins.contains(&origin) {
+                    keys.insert((LoweringOnlyOperandEdge::BorrowedMatchJoinArm, origin, 0));
+                    keys.insert((LoweringOnlyOperandEdge::BorrowedMatchJoinArm, origin, 1));
+                }
                 let predecessor_positions: Box<dyn Iterator<Item = usize>> = match occurrence.expr {
                     RuntimeExpr::CheckedJoinSite { .. } => Box::new(0..1),
                     RuntimeExpr::If { .. } => Box::new(1..3),
@@ -2790,16 +2805,28 @@ fn build_lowering_boundary_uses(
             }
         }
     }
-    let mut resolved_keys = keys
-        .into_iter()
-        .map(|(edge, origin, position)| {
-            let owner = plan
-                .semantic
-                .function_owner(origin)?
-                .ok_or_else(|| planner_error("lowering boundary use has no function owner"))?;
-            Ok((edge, origin, position, owner))
-        })
-        .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+    let mut resolved_keys = Vec::new();
+    for (edge, origin, position) in keys {
+        let mut owners = plan
+            .emitted_source_occurrences
+            .iter()
+            .filter_map(|(owner, emitted_origin)| {
+                (*emitted_origin == origin).then_some(*owner)
+            })
+            .collect::<Vec<_>>();
+        if owners.is_empty() {
+            owners.push(
+                plan.semantic
+                    .function_owner(origin)?
+                    .ok_or_else(|| planner_error("lowering boundary use has no function owner"))?,
+            );
+        }
+        resolved_keys.extend(
+            owners
+                .into_iter()
+                .map(|owner| (edge, origin, position, owner)),
+        );
+    }
     resolved_keys.extend(owner_bound_keys);
     resolved_keys.sort();
     resolved_keys
@@ -2835,31 +2862,51 @@ fn build_lowering_boundary_uses(
 fn build_boundary_uses(
     plan: &StaticTransitionPlan<'_>,
 ) -> Result<Vec<PlannedBoundaryUse>, CraneliftBackendError> {
-    let mut uses = plan
+    let source_uses = plan
         .operand_edges
         .iter()
-        .map(|edge| PlannedBoundaryUse {
-            identity: BoundaryUseIdentity::Source {
-                parent: edge.parent,
-                child: edge.child,
-                position: edge.position,
-            },
-            path: PlannedBoundaryUsePath::Source {
-                parent: edge.parent,
-                child: edge.child,
-                position: edge.position,
-                effect_operation: edge.effect_operation,
-                effect_seat: edge.effect_seat,
-            },
-            producer_owner: edge.producer_owner,
-            consumer_owner: edge.owner,
-            producer_phase: edge.producer_phase,
-            consumer_phase: edge.consumer_phase,
-            operation: edge.operation,
-            need: edge.need,
-            disposition: edge.disposition,
-            avail: edge.avail,
+        .flat_map(|edge| {
+            let mut emitted_owners = plan
+                .emitted_source_occurrences
+                .iter()
+                .filter_map(|(owner, origin)| (*origin == edge.parent).then_some(*owner))
+                .collect::<Vec<_>>();
+            if emitted_owners.is_empty() {
+                emitted_owners.push(edge.owner);
+            }
+            emitted_owners.into_iter().map(move |emitted_owner| {
+                PlannedBoundaryUse {
+                    identity: BoundaryUseIdentity::Source {
+                        emitted_owner,
+                        parent: edge.parent,
+                        child: edge.child,
+                        position: edge.position,
+                    },
+                    path: PlannedBoundaryUsePath::Source {
+                        parent: edge.parent,
+                        child: edge.child,
+                        position: edge.position,
+                        effect_operation: edge.effect_operation,
+                        effect_seat: edge.effect_seat,
+                    },
+                    producer_owner: if edge.producer_owner == edge.owner {
+                        emitted_owner
+                    } else {
+                        edge.producer_owner
+                    },
+                    consumer_owner: emitted_owner,
+                    producer_phase: edge.producer_phase,
+                    consumer_phase: edge.consumer_phase,
+                    operation: edge.operation,
+                    need: edge.need,
+                    disposition: edge.disposition,
+                    avail: edge.avail,
+                }
+            })
         })
+        .collect::<Vec<_>>();
+    let mut uses = source_uses
+        .into_iter()
         .chain(
             plan.static_recursor_worker_residuals
                 .iter()
@@ -3346,6 +3393,9 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// the root occurrence because computational matches make them differ.
     root_entry: Option<StaticNodeId>,
     root_ingress: AbiRootIngress,
+    /// Exact carried Matches whose constructor family admits the borrowed
+    /// process-input predecessor in addition to represented carrier input.
+    borrowed_process_match_origins: BTreeSet<StaticOriginId>,
     /// The **occurrence** origin of the whole program's root, stored at planning
     /// time.
     ///
@@ -3407,6 +3457,8 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
         RefCell<BTreeSet<(PredeclaredFunctionId, StaticOriginId)>>,
     synthesized_aggregate_representation_consumption:
         RefCell<BTreeMap<SynthesizedAggregateOccurrence, u32>>,
+    synthesized_aggregate_representation_dispositions:
+        RefCell<BTreeSet<SynthesizedAggregateOccurrence>>,
     /// The selected emission authority that determines whether owner crossings
     /// require operational carrier results.
     functionized_units: bool,
@@ -3421,6 +3473,10 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// These identities are closed as dispositions, never masqueraded as
     /// emitted consumption.
     boundary_use_dispositions: RefCell<BTreeSet<BoundaryUseIdentity>>,
+    /// Exact generated-unit/source pairs reached by the producer-flow fixed
+    /// point. A static origin is provenance; this pair is emitted occurrence
+    /// authority.
+    emitted_source_occurrences: BTreeSet<(PredeclaredFunctionId, StaticOriginId)>,
     /// The finite, interned population of out-of-line units that eliminate a
     /// statically known callable parameter from a transparent declaration ABI.
     static_callable_specializations: Vec<PlannedStaticCallableSpecialization>,
@@ -3434,6 +3490,8 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// environment, derived from the worker's ordered capture provenance and
     /// the producer-flow referent-owner meet.
     static_recursor_worker_environments: Vec<PlannedStaticRecursorWorkerEnvironment>,
+    carried_recursor_positions:
+        BTreeSet<(PredeclaredFunctionId, StaticOriginId, u32)>,
     /// Exact worker environments whose move-only representation authority was
     /// consumed before allocation.
     static_recursor_worker_environment_consumption:
@@ -4251,12 +4309,13 @@ impl ProducerFact {
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct ProducerCallable {
+    closure_owner: PredeclaredFunctionId,
     closure_origin: StaticOriginId,
     body_origin: StaticOriginId,
     recursor_origin: Option<StaticOriginId>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum ProducerCallableSet {
     Open,
     Closed(BTreeSet<ProducerCallable>),
@@ -4283,6 +4342,14 @@ enum ReferentOwnerFact {
 impl ReferentOwnerFact {
     fn owner(owner: BoundaryReferentOwner) -> Self {
         Self::Closed(BTreeSet::from([owner]))
+    }
+
+    fn carrier_universe() -> Self {
+        Self::Closed(BTreeSet::from([
+            BoundaryReferentOwner::NoReferent,
+            BoundaryReferentOwner::PersistentStore,
+            BoundaryReferentOwner::InvocationArena,
+        ]))
     }
 
     fn join(&self, other: &Self) -> Self {
@@ -4330,10 +4397,21 @@ impl ReferentOwnerFact {
     }
 }
 
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct ConstructorPayloadOccurrence {
+    producer_origin: StaticOriginId,
+    child_callables: Vec<ProducerCallableSet>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ProducerValue {
     constructors: ProducerFact,
-    constructor_payloads: Vec<(ConstructorIdentity, Vec<ProducerValue>)>,
+    constructor_payloads:
+        Vec<(
+            ConstructorIdentity,
+            ConstructorPayloadOccurrence,
+            Vec<ProducerValue>,
+        )>,
     record_fields: Vec<(FieldIdentity, ProducerValue)>,
     callables: ProducerCallableSet,
     referent_owners: ReferentOwnerFact,
@@ -4369,25 +4447,14 @@ impl ProducerValue {
         }
     }
 
-    fn owner(owner: BoundaryReferentOwner) -> Self {
-        Self {
-            constructors: ProducerFact::empty(),
-            constructor_payloads: Vec::new(),
-            record_fields: Vec::new(),
-            callables: ProducerCallableSet::Closed(BTreeSet::new()),
-            referent_owners: ReferentOwnerFact::owner(owner),
-            aggregate_origins: BTreeSet::new(),
-            effect_origins: BTreeSet::new(),
-            carried: false,
-        }
-    }
-
     fn join(&self, other: &Self) -> Self {
         let mut constructor_payloads = self.constructor_payloads.clone();
-        for (identity, incoming) in &other.constructor_payloads {
-            if let Some((_, known)) = constructor_payloads
+        for (identity, occurrence, incoming) in &other.constructor_payloads {
+            if let Some((_, _, known)) = constructor_payloads
                 .iter_mut()
-                .find(|(candidate, _)| candidate == identity)
+                .find(|(candidate, candidate_occurrence, _)| {
+                    candidate == identity && candidate_occurrence == occurrence
+                })
             {
                 if known.len() == incoming.len() {
                     for (slot, value) in known.iter_mut().zip(incoming) {
@@ -4397,7 +4464,11 @@ impl ProducerValue {
                     known.clear();
                 }
             } else {
-                constructor_payloads.push((*identity, incoming.clone()));
+                constructor_payloads.push((
+                    *identity,
+                    occurrence.clone(),
+                    incoming.clone(),
+                ));
             }
         }
         let mut record_fields = self.record_fields.clone();
@@ -4455,6 +4526,7 @@ impl AggregateObservation {
                 "aggregate occurrence changed class, identity, arity, or child origin",
             ));
         }
+        let carried = self.carried || other.carried;
         Ok(Self {
             class: self.class,
             identity: self.identity.clone(),
@@ -4462,22 +4534,40 @@ impl AggregateObservation {
                 .children
                 .iter()
                 .zip(&other.children)
-                .map(|((origin, left), (_, right))| (*origin, left.join(right)))
+                .map(|((origin, left), (_, right))| {
+                    let owners = left.join(right);
+                    (
+                        *origin,
+                        if carried && owners == ReferentOwnerFact::Bottom {
+                            ReferentOwnerFact::owner(
+                                BoundaryReferentOwner::NoReferent,
+                            )
+                        } else if carried
+                            && owners == ReferentOwnerFact::Unrepresented
+                        {
+                            ReferentOwnerFact::carrier_universe()
+                        } else {
+                            owners
+                        },
+                    )
+                })
                 .collect(),
-            carried: self.carried || other.carried,
+            carried,
         })
     }
 }
 
+#[derive(Clone)]
 struct ProducerAnalysis<'plan, 'src> {
     plan: &'plan StaticTransitionPlan<'src>,
     static_recursor_worker_residuals: Vec<PlannedStaticRecursorWorkerResidual>,
     active_owner: PredeclaredFunctionId,
     inputs: BTreeMap<PredeclaredFunctionId, Vec<ProducerValue>>,
     results: BTreeMap<PredeclaredFunctionId, ProducerValue>,
-    captures: BTreeMap<StaticOriginId, Vec<ProducerValue>>,
+    captures: BTreeMap<(PredeclaredFunctionId, StaticOriginId), Vec<ProducerValue>>,
     computational_scrutinees: BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerValue>,
     computational_results: BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerValue>,
+    computational_result_origins: BTreeSet<StaticOriginId>,
     match_scrutinees: BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerFact>,
     aggregate_occurrences: BTreeMap<(StaticOriginId, PredeclaredFunctionId), AggregateObservation>,
     effect_operands: BTreeMap<(StaticOriginId, PredeclaredFunctionId), Vec<ReferentOwnerFact>>,
@@ -4485,6 +4575,8 @@ struct ProducerAnalysis<'plan, 'src> {
     carried_effects: BTreeSet<StaticOriginId>,
     reached_owners: BTreeSet<PredeclaredFunctionId>,
     called_owners: BTreeSet<PredeclaredFunctionId>,
+    emitted_source_occurrences: BTreeSet<(PredeclaredFunctionId, StaticOriginId)>,
+    observe_emitted_aggregates: bool,
     changed: bool,
 }
 
@@ -4525,8 +4617,73 @@ fn runtime_value_owner(value: &crate::RuntimeValue) -> ReferentOwnerFact {
 }
 
 impl ProducerAnalysis<'_, '_> {
+    fn exact_closure_owner_for_residual(
+        &self,
+        residual: &PlannedStaticRecursorWorkerResidual,
+    ) -> Result<PredeclaredFunctionId, CraneliftBackendError> {
+        let candidates = self
+            .captures
+            .keys()
+            .filter_map(|(owner, origin)| {
+                (*origin == residual.closure_origin).then_some(*owner)
+            })
+            .collect::<BTreeSet<_>>();
+        if candidates.len() == 1 {
+            return candidates.into_iter().next().ok_or_else(|| {
+                planner_error("static recursor closure owner population disappeared")
+            });
+        }
+        let producer_owner = self.plan.semantic.function_owner(residual.producer_origin)?;
+        let narrowed = candidates
+            .into_iter()
+            .filter(|owner| Some(*owner) == producer_owner)
+            .collect::<Vec<_>>();
+        match narrowed.as_slice() {
+            [owner] => Ok(*owner),
+            [] => Err(planner_error(
+                "static recursor residual has no emitted closure owner",
+            )),
+            _ => Err(planner_error(
+                "static recursor residual has ambiguous emitted closure owners",
+            )),
+        }
+    }
+
     fn mark_carried(&mut self, value: &mut ProducerValue) {
+        if self.active_owner.0 == 5
+            && value
+                .aggregate_origins
+                .contains(&StaticOriginId(483))
+        {
+            eprintln!(
+                "TRACE carried owner={:?} aggregates={:?} flow={:?}",
+                self.active_owner,
+                value.aggregate_origins,
+                value
+                    .constructors
+                    .flow
+                    .iter()
+                    .map(|edge| edge.kind)
+                    .collect::<BTreeSet<_>>()
+            );
+        }
         value.carried = true;
+        if value.referent_owners == ReferentOwnerFact::Bottom {
+            value.referent_owners =
+                ReferentOwnerFact::owner(BoundaryReferentOwner::NoReferent);
+        } else if matches!(value.referent_owners, ReferentOwnerFact::Unrepresented) {
+            // A value admitted to the boundary carrier has already crossed the
+            // representation gate. Its exact payload may remain opaque to
+            // producer analysis, but its referent owner cannot: the carrier
+            // ABI closes that fact to this finite universe. This does not admit
+            // a callable capsule; callable provenance is tracked and rejected
+            // independently before allocation.
+            value.referent_owners = ReferentOwnerFact::Closed(BTreeSet::from([
+                BoundaryReferentOwner::NoReferent,
+                BoundaryReferentOwner::PersistentStore,
+                BoundaryReferentOwner::InvocationArena,
+            ]));
+        }
         for origin in &value.aggregate_origins {
             self.changed |= self.carried_aggregates.insert(*origin);
         }
@@ -4575,15 +4732,43 @@ impl ProducerAnalysis<'_, '_> {
                 "aggregate occurrence child authority is not positional",
             ));
         }
+        let carried = carried || self.carried_aggregates.contains(&origin);
+        if self.active_owner.0 == 3 && origin.0 == 581 {
+            eprintln!(
+                "TRACE owner3 aggregate581 carried={carried} children={children:?}"
+            );
+        }
+        if self.active_owner.0 == 5 && origin.0 == 483 {
+            eprintln!(
+                "TRACE aggregate owner={:?} origin={origin:?} carried={carried}",
+                self.active_owner
+            );
+        }
         let observation = AggregateObservation {
             class,
             identity,
             children: child_origins
                 .into_iter()
                 .zip(children)
-                .map(|(origin, value)| (origin, value.referent_owners.clone()))
+                .map(|(origin, value)| {
+                    let owners = if carried
+                        && value.referent_owners == ReferentOwnerFact::Bottom
+                    {
+                        ReferentOwnerFact::owner(
+                            BoundaryReferentOwner::NoReferent,
+                        )
+                    } else if carried
+                        && value.referent_owners
+                            == ReferentOwnerFact::Unrepresented
+                    {
+                        ReferentOwnerFact::carrier_universe()
+                    } else {
+                        value.referent_owners.clone()
+                    };
+                    (origin, owners)
+                })
                 .collect(),
-            carried: carried || self.carried_aggregates.contains(&origin),
+            carried,
         };
         let key = (origin, self.active_owner);
         match self.aggregate_occurrences.entry(key) {
@@ -4648,7 +4833,7 @@ impl ProducerAnalysis<'_, '_> {
             .iter()
             .flat_map(|capture| capture.effect_origins.iter().copied())
             .collect();
-        match self.captures.entry(origin) {
+        match self.captures.entry((self.active_owner, origin)) {
             std::collections::btree_map::Entry::Vacant(entry) => {
                 entry.insert(capture_values);
                 self.changed = true;
@@ -4662,6 +4847,7 @@ impl ProducerAnalysis<'_, '_> {
             constructor_payloads: Vec::new(),
             record_fields: Vec::new(),
             callables: ProducerCallableSet::Closed(BTreeSet::from([ProducerCallable {
+                closure_owner: self.active_owner,
                 closure_origin: origin,
                 body_origin,
                 recursor_origin: None,
@@ -4705,7 +4891,10 @@ impl ProducerAnalysis<'_, '_> {
             .iter()
             .flat_map(|capture| capture.effect_origins.iter().copied())
             .collect();
-        match self.captures.entry(binding.closure_origin) {
+        match self
+            .captures
+            .entry((self.active_owner, binding.closure_origin))
+        {
             std::collections::btree_map::Entry::Vacant(entry) => {
                 entry.insert(captures);
                 self.changed = true;
@@ -4719,6 +4908,7 @@ impl ProducerAnalysis<'_, '_> {
             constructor_payloads: Vec::new(),
             record_fields: Vec::new(),
             callables: ProducerCallableSet::Closed(BTreeSet::from([ProducerCallable {
+                closure_owner: self.active_owner,
                 closure_origin: binding.closure_origin,
                 body_origin: binding.body_origin,
                 recursor_origin: None,
@@ -4735,11 +4925,77 @@ impl ProducerAnalysis<'_, '_> {
         owner: PredeclaredFunctionId,
         definition: AbiUnitDefinition,
     ) -> Result<Vec<ProducerValue>, CraneliftBackendError> {
-        let raw = self
+        let mut raw = self
             .inputs
             .get(&owner)
             .cloned()
             .ok_or_else(|| planner_error("producer-flow owner has no ABI environment"))?;
+        if matches!(definition, AbiUnitDefinition::ClosureBody { .. }) {
+            let residuals = self
+                .static_recursor_worker_residuals
+                .iter()
+                .filter(|residual| {
+                    self.plan
+                        .semantic
+                        .function_owner(residual.body_origin)
+                        .ok()
+                        .flatten()
+                        == Some(owner)
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            if owner.0 == 3 {
+                eprintln!(
+                    "TRACE owner3 environment residuals={:?} capture_keys={:?}",
+                    residuals,
+                    self.captures.keys().collect::<Vec<_>>()
+                );
+            }
+            for residual in &residuals {
+                if !self
+                    .captures
+                    .keys()
+                    .any(|(_, origin)| *origin == residual.closure_origin)
+                {
+                    continue;
+                }
+                let capture_owner = self.exact_closure_owner_for_residual(residual)?;
+                let Some(captures) = self
+                    .captures
+                    .get(&(capture_owner, residual.closure_origin))
+                    .cloned()
+                else {
+                    continue;
+                };
+                let parameter_count = residual.declared_arity as usize;
+                if raw.len() != parameter_count + captures.len() {
+                    return Err(planner_error(
+                        "producer-flow static recursor capture environment disagrees with its ABI",
+                    ));
+                }
+                for (slot, capture) in raw[parameter_count..].iter_mut().zip(&captures) {
+                    Self::merge_value(slot, capture);
+                }
+            }
+            if owner.0 == 6 {
+                eprintln!(
+                    "TRACE owner6 residuals={:?} environment={:?}",
+                    residuals,
+                    raw.iter()
+                        .map(|value| (
+                            &value.constructors.population,
+                            &value.constructors.producer_origins,
+                            value
+                                .constructors
+                                .flow
+                                .iter()
+                                .map(|edge| edge.kind)
+                                .collect::<BTreeSet<_>>()
+                        ))
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
         let AbiUnitDefinition::StaticCallableSpecialization { specialization, .. } = definition
         else {
             return Ok(raw);
@@ -4834,7 +5090,7 @@ impl ProducerAnalysis<'_, '_> {
                 let mut environment = raw[..parameter_count].to_vec();
                 environment.extend(
                     self.captures
-                        .get(&binding.closure_origin)
+                        .get(&(self.active_owner, binding.closure_origin))
                         .cloned()
                         .ok_or_else(|| {
                             planner_error("producer-flow callable body has no captures")
@@ -4867,9 +5123,16 @@ impl ProducerAnalysis<'_, '_> {
                 .ok_or_else(|| planner_error("producer-flow callable body has no owner"))?;
             let captures = self
                 .captures
-                .get(&callable.closure_origin)
+                .get(&(callable.closure_owner, callable.closure_origin))
                 .cloned()
-                .ok_or_else(|| planner_error("producer-flow callable has no capture authority"))?;
+                .ok_or_else(|| {
+                    planner_error(format!(
+                        "producer-flow callable has no capture authority; callable={callable:?}; \
+                         active_owner={:?}; known_keys={:?}",
+                        self.active_owner,
+                        self.captures.keys().collect::<Vec<_>>()
+                    ))
+                })?;
             // Source calls list arguments left-to-right, while a declaration
             // body observes its parameters de-Bruijn-nearest first. Preserve
             // the same reversal the emitted declaration ABI performs; failing
@@ -4982,6 +5245,8 @@ impl ProducerAnalysis<'_, '_> {
         origin: StaticOriginId,
         env: &[ProducerValue],
     ) -> Result<ProducerValue, CraneliftBackendError> {
+        self.emitted_source_occurrences
+            .insert((self.active_owner, origin));
         let occurrence = self
             .plan
             .source_occurrences
@@ -4989,14 +5254,53 @@ impl ProducerAnalysis<'_, '_> {
             .and_then(Option::as_ref)
             .ok_or_else(|| planner_error("producer-flow names no source occurrence"))?;
         let child = |position| self.plan.semantic.child_origin(origin, position);
+        if matches!(
+            origin.0,
+            441 | 442 | 449 | 450 | 483 | 640 | 641 | 650 | 761 | 767
+        ) {
+            eprintln!(
+                "TRACE selected expr owner={:?} origin={origin:?} expr={:?}",
+                self.active_owner, occurrence.expr
+            );
+        }
         let value = match occurrence.expr {
             RuntimeExpr::CheckedJoinSite { .. }
             | RuntimeExpr::CheckedSubcontinuationFrame { .. }
             | RuntimeExpr::CheckedRecursiveInvocation { .. }
-            | RuntimeExpr::CheckedComputationalIHSlots { .. }
-            | RuntimeExpr::CheckedComputationalIHInvocation { .. } => self
+            | RuntimeExpr::CheckedComputationalIHSlots { .. } => self
                 .eval(child(0)?, env)?
                 .with_forward(origin, ProducerFlowKind::Forward),
+            RuntimeExpr::CheckedComputationalIHInvocation { .. } => {
+                // Trap 5: the checked invocation is a protocol wrapper, not an
+                // aggregate child. Its exact body occurrence is the
+                // call-template result site, whose ABI is one carried boundary
+                // word. Preserve the body's producer graph, but close an
+                // otherwise opaque referent-owner fact to the carrier ABI's
+                // finite owner universe instead of inventing a wrapper
+                // representation.
+                let mut result = self
+                    .eval(child(0)?, env)?
+                    .with_forward(origin, ProducerFlowKind::CallResult);
+                if self.active_owner == PredeclaredFunctionId(5) {
+                    eprintln!(
+                        "TRACE owner5 checked invocation origin={origin:?} child={:?} callables={:?}",
+                        child(0)?,
+                        result.callables
+                    );
+                }
+                if matches!(
+                    result.referent_owners,
+                    ReferentOwnerFact::Unrepresented
+                ) {
+                    result.referent_owners = ReferentOwnerFact::Closed(BTreeSet::from([
+                        BoundaryReferentOwner::NoReferent,
+                        BoundaryReferentOwner::PersistentStore,
+                        BoundaryReferentOwner::InvocationArena,
+                    ]));
+                }
+                self.mark_carried(&mut result);
+                result
+            }
             RuntimeExpr::Value(value @ crate::RuntimeValue::Constructor { .. }) => {
                 // Runtime values have their own semantic atom kind. Until that
                 // canonical identity is exposed, this is an explicit opaque
@@ -5060,7 +5364,17 @@ impl ProducerAnalysis<'_, '_> {
                     .collect();
                 ProducerValue {
                     constructors: ProducerFact::constructor(origin, identity),
-                    constructor_payloads: vec![(identity, payload)],
+                    constructor_payloads: vec![(
+                        identity,
+                        ConstructorPayloadOccurrence {
+                            producer_origin: origin,
+                            child_callables: payload
+                                .iter()
+                                .map(|child| child.callables.clone())
+                                .collect(),
+                        },
+                        payload,
+                    )],
                     record_fields: Vec::new(),
                     callables: ProducerCallableSet::Closed(BTreeSet::new()),
                     referent_owners,
@@ -5071,7 +5385,80 @@ impl ProducerAnalysis<'_, '_> {
             }
             RuntimeExpr::Match { cases, .. } => {
                 let scrutinee_origin = child(0)?;
-                let scrutinee = self.eval(scrutinee_origin, env)?;
+                if self.active_owner.0 == 6 && origin.0 == 268 {
+                    eprintln!(
+                        "TRACE owner6 match268 expr={:?} child={:?}",
+                        occurrence.expr,
+                        self.plan.source_occurrence(scrutinee_origin)?
+                    );
+                    eprintln!(
+                        "TRACE owner6 sources 12={:?} 270={:?} 271={:?} 385={:?}",
+                        self.plan.source_occurrence(StaticOriginId(12)).ok(),
+                        self.plan.source_occurrence(StaticOriginId(270)).ok(),
+                        self.plan.source_occurrence(StaticOriginId(271)).ok(),
+                        self.plan.source_occurrence(StaticOriginId(385)).ok()
+                    );
+                }
+                let mut scrutinee = self.eval(scrutinee_origin, env)?;
+                let operational_carrier = self.plan.operand_edges.iter().any(|edge| {
+                    edge.parent == origin
+                        && edge.position == 0
+                        && edge.role == SourceOperandRole::MatchScrutinee
+                        && edge.consumer_phase == BoundaryUsePhase::OperationalCarrier
+                });
+                let continuation_capture = scrutinee.constructors.flow.iter().any(|edge| {
+                    edge.kind == ProducerFlowKind::Capture
+                });
+                let effect_dispatch = cases.iter().any(|case| {
+                    matches!(
+                        case.body,
+                        RuntimeExpr::Let { ref value, .. }
+                            if matches!(value.as_ref(), RuntimeExpr::Effect { .. })
+                    )
+                });
+                if self.active_owner.0 == 6 && origin.0 == 268 {
+                    eprintln!(
+                        "TRACE owner6 match268 scrutinee={:?} comp={} continuation={} \
+                         effect_dispatch={}",
+                        scrutinee.constructors,
+                        false,
+                        continuation_capture,
+                        effect_dispatch
+                    );
+                }
+                if self.active_owner.0 == 5 && matches!(origin.0, 487 | 494) {
+                    eprintln!(
+                        "TRACE ordinary owner={:?} origin={origin:?} population={:?} \
+                         carried={} operational={} continuation={} flow={:?}",
+                        self.active_owner,
+                        scrutinee.constructors.population,
+                        scrutinee.carried,
+                        operational_carrier,
+                        continuation_capture,
+                        scrutinee
+                            .constructors
+                            .flow
+                            .iter()
+                            .map(|edge| edge.kind)
+                            .collect::<BTreeSet<_>>()
+                    );
+                    eprintln!(
+                        "TRACE ordinary producers={:?}",
+                        scrutinee.constructors.producer_origins
+                    );
+                }
+                if operational_carrier && continuation_capture && !effect_dispatch {
+                    scrutinee.carried = true;
+                    scrutinee.constructors = scrutinee
+                        .constructors
+                        .join(&ProducerFact::open(scrutinee_origin));
+                    if matches!(
+                        scrutinee.referent_owners,
+                        ReferentOwnerFact::Bottom | ReferentOwnerFact::Unrepresented
+                    ) {
+                        scrutinee.referent_owners = ReferentOwnerFact::carrier_universe();
+                    }
+                }
                 if scrutinee.carried {
                     self.match_scrutinees
                         .entry((origin, self.active_owner))
@@ -5084,55 +5471,104 @@ impl ProducerAnalysis<'_, '_> {
                         .plan
                         .semantic
                         .case_constructor_identity(origin, index)?;
-                    let reachable = match &scrutinee.constructors.population {
-                        ScrutineeProducerSet::Open => true,
-                        ScrutineeProducerSet::Closed(constructors) => {
-                            constructors.contains(&identity)
-                        }
-                    };
+                    let reachable = self.observe_emitted_aggregates
+                        || match &scrutinee.constructors.population {
+                            ScrutineeProducerSet::Open => true,
+                            ScrutineeProducerSet::Closed(constructors) => {
+                                constructors.contains(&identity)
+                            }
+                        };
                     if !reachable {
                         continue;
                     }
-                    let mut case_env = match &scrutinee.constructors.population {
-                        ScrutineeProducerSet::Open => (0..case.binders)
-                            .map(|_| {
-                                let mut value = ProducerValue::open(origin);
-                                value.referent_owners = scrutinee.referent_owners.clone();
-                                value
-                            })
-                            .collect(),
+                    let mut alternatives = match &scrutinee.constructors.population {
+                        ScrutineeProducerSet::Open => Vec::new(),
                         ScrutineeProducerSet::Closed(_) => scrutinee
                             .constructor_payloads
                             .iter()
-                            .find(|(constructor, _)| *constructor == identity)
-                            .filter(|(_, payload)| payload.len() == case.binders)
-                            .map(|(_, payload)| payload.clone())
-                            .unwrap_or_else(|| {
-                                (0..case.binders)
-                                    .map(|_| {
-                                        let mut value = ProducerValue::open(origin);
-                                        value.referent_owners = scrutinee.referent_owners.clone();
-                                        value
-                                    })
-                                    .collect()
-                            }),
+                            .filter(|(constructor, _, payload)| {
+                                *constructor == identity && payload.len() == case.binders
+                            })
+                            .map(|(_, _, payload)| payload.clone())
+                            .collect(),
                     };
-                    for binder in &mut case_env {
-                        if scrutinee.carried {
-                            self.mark_carried(binder);
-                        }
-                        binder.constructors = binder
-                            .constructors
-                            .clone()
-                            .forwarded(origin, ProducerFlowKind::Forward);
+                    if alternatives.is_empty() {
+                        alternatives.push(
+                            (0..case.binders)
+                                .map(|_| {
+                                    let mut value = ProducerValue::open(origin);
+                                    value.referent_owners =
+                                        scrutinee.referent_owners.clone();
+                                    value
+                                })
+                                .collect(),
+                        );
                     }
-                    case_env.extend_from_slice(env);
-                    result = result.join(&self.eval(child(1 + index)?, &case_env)?);
+                    for mut case_env in alternatives {
+                        for binder in &mut case_env {
+                            if scrutinee.carried {
+                                self.mark_carried(binder);
+                            }
+                            binder.constructors = binder
+                                .constructors
+                                .clone()
+                                .forwarded(origin, ProducerFlowKind::Forward);
+                        }
+                        case_env.extend_from_slice(env);
+                        result =
+                            result.join(&self.eval(child(1 + index)?, &case_env)?);
+                    }
                 }
-                result.with_forward(origin, ProducerFlowKind::Alternative)
+                let mut result =
+                    result.with_forward(origin, ProducerFlowKind::Alternative);
+                result
+                    .effect_origins
+                    .extend(scrutinee.effect_origins.iter().copied());
+                if operational_carrier && continuation_capture && !effect_dispatch {
+                    self.mark_carried(&mut result);
+                }
+                result
             }
             RuntimeExpr::ComputationalMatch { cases, .. } => {
-                let incoming_scrutinee = self.eval(child(0)?, env)?;
+                let scrutinee_origin = child(0)?;
+                let mut incoming_scrutinee = self.eval(scrutinee_origin, env)?;
+                let operational_carrier = self.plan.operand_edges.iter().any(|edge| {
+                    edge.parent == origin
+                        && edge.position == 0
+                        && edge.role == SourceOperandRole::MatchScrutinee
+                        && edge.consumer_phase == BoundaryUsePhase::OperationalCarrier
+                });
+                let continuation_capture =
+                    incoming_scrutinee.constructors.flow.iter().any(|edge| {
+                        edge.kind == ProducerFlowKind::Capture
+                    });
+                if operational_carrier && continuation_capture {
+                    incoming_scrutinee.carried = true;
+                    incoming_scrutinee.constructors = incoming_scrutinee
+                        .constructors
+                        .join(&ProducerFact::open(scrutinee_origin));
+                    if matches!(
+                        incoming_scrutinee.referent_owners,
+                        ReferentOwnerFact::Bottom | ReferentOwnerFact::Unrepresented
+                    ) {
+                        incoming_scrutinee.referent_owners =
+                            ReferentOwnerFact::carrier_universe();
+                    }
+                }
+                if self.active_owner.0 == 5 && origin.0 == 460 {
+                    eprintln!(
+                        "TRACE computational owner={:?} origin={origin:?} \
+                         population={:?} carried={} flow={:?}",
+                        self.active_owner,
+                        incoming_scrutinee.constructors.population,
+                        incoming_scrutinee.carried,
+                        incoming_scrutinee
+                            .constructors
+                            .flow
+                            .iter()
+                            .collect::<BTreeSet<_>>()
+                    );
+                }
                 let key = (origin, self.active_owner);
                 match self.computational_scrutinees.entry(key) {
                     std::collections::btree_map::Entry::Vacant(entry) => {
@@ -5156,96 +5592,152 @@ impl ProducerAnalysis<'_, '_> {
                         .plan
                         .semantic
                         .case_constructor_identity(origin, index)?;
-                    let reachable = match &scrutinee.constructors.population {
-                        ScrutineeProducerSet::Open => true,
-                        ScrutineeProducerSet::Closed(constructors) => {
-                            constructors.contains(&identity)
-                        }
-                    };
+                    let reachable = self.observe_emitted_aggregates
+                        || match &scrutinee.constructors.population {
+                            ScrutineeProducerSet::Open => true,
+                            ScrutineeProducerSet::Closed(constructors) => {
+                                constructors.contains(&identity)
+                            }
+                        };
                     if !reachable {
                         continue;
                     }
-                    let mut arguments = match &scrutinee.constructors.population {
-                        ScrutineeProducerSet::Open => (0..case.argument_binders)
-                            .map(|_| {
-                                let mut value = ProducerValue::open(origin);
-                                value.referent_owners = scrutinee.referent_owners.clone();
-                                value
-                            })
-                            .collect(),
+                    let mut alternatives = match &scrutinee.constructors.population {
+                        ScrutineeProducerSet::Open => Vec::new(),
                         ScrutineeProducerSet::Closed(_) => scrutinee
                             .constructor_payloads
                             .iter()
-                            .find(|(constructor, _)| *constructor == identity)
-                            .filter(|(_, payload)| payload.len() == case.argument_binders)
-                            .map(|(_, payload)| payload.clone())
-                            .unwrap_or_else(|| {
-                                (0..case.argument_binders)
-                                    .map(|_| {
-                                        let mut value = ProducerValue::open(origin);
-                                        value.referent_owners = scrutinee.referent_owners.clone();
-                                        value
-                                    })
-                                    .collect()
-                            }),
+                            .filter(|(constructor, _, payload)| {
+                                *constructor == identity
+                                    && payload.len() == case.argument_binders
+                            })
+                            .map(|(_, _, payload)| payload.clone())
+                            .collect(),
                     };
-                    for argument in &mut arguments {
-                        if scrutinee.carried {
-                            self.mark_carried(argument);
-                        }
-                        argument.constructors = argument
-                            .constructors
-                            .clone()
-                            .forwarded(origin, ProducerFlowKind::Forward);
+                    if alternatives.is_empty() {
+                        alternatives.push(
+                            (0..case.argument_binders)
+                                .map(|_| {
+                                    let mut value = ProducerValue::open(origin);
+                                    value.referent_owners =
+                                        scrutinee.referent_owners.clone();
+                                    value
+                                })
+                                .collect(),
+                        );
                     }
-                    let producer_origins = scrutinee
-                        .constructors
-                        .producer_origins
-                        .iter()
-                        .find(|(constructor, _)| *constructor == identity)
-                        .map(|(_, origins)| origins)
-                        .cloned()
-                        .unwrap_or_default();
-                    let mut induction_hypotheses =
-                        Vec::with_capacity(case.recursive_positions.len());
-                    for position in case.recursive_positions.iter().rev().copied() {
-                        let callables = self
-                            .plan
-                            .static_recursor_worker_residuals
-                            .iter()
-                            .filter(|residual| {
-                                residual.parent_origin == origin
-                                    && residual.sibling_position
-                                        == u32::try_from(position).unwrap_or(u32::MAX)
-                                    && producer_origins.contains(&residual.producer_origin)
-                            })
-                            .map(|residual| ProducerCallable {
-                                closure_origin: residual.closure_origin,
-                                body_origin: residual.body_origin,
-                                recursor_origin: Some(origin),
-                            })
-                            .collect::<BTreeSet<_>>();
-                        induction_hypotheses.push(if callables.is_empty() {
-                            ProducerValue::open(origin)
-                        } else {
-                            ProducerValue {
+                    for mut arguments in alternatives {
+                        for argument in &mut arguments {
+                            if scrutinee.carried {
+                                self.mark_carried(argument);
+                            }
+                            argument.constructors = argument
+                                .constructors
+                                .clone()
+                                .forwarded(origin, ProducerFlowKind::Forward);
+                        }
+                        let mut induction_hypotheses =
+                            Vec::with_capacity(case.recursive_positions.len());
+                        for position in case.recursive_positions.iter().rev().copied() {
+                            let argument = arguments.get(position).ok_or_else(|| {
+                                planner_error(
+                                    "computational recursive position exceeds constructor payload",
+                                )
+                            })?;
+                            let callables = match &argument.callables {
+                                ProducerCallableSet::Open => ProducerCallableSet::Open,
+                                ProducerCallableSet::Closed(callables) => {
+                                    let mut selected = BTreeSet::new();
+                                    for callable in callables {
+                                        if callable.recursor_origin.is_some() {
+                                            selected.insert(*callable);
+                                            continue;
+                                        }
+                                        let mut residuals = self
+                                            .plan
+                                            .static_recursor_worker_residuals
+                                            .iter()
+                                            .filter(|residual| {
+                                                residual.parent_origin == origin
+                                                    && residual.sibling_position
+                                                        == u32::try_from(position)
+                                                            .unwrap_or(u32::MAX)
+                                                    && residual.closure_origin
+                                                        == callable.closure_origin
+                                                    && residual.body_origin
+                                                        == callable.body_origin
+                                            });
+                                        let residual = residuals.next().ok_or_else(|| {
+                                            let candidates = self
+                                                .plan
+                                                .static_recursor_worker_residuals
+                                                .iter()
+                                                .filter(|residual| {
+                                                    residual.parent_origin == origin
+                                                        && residual.sibling_position
+                                                            == u32::try_from(position)
+                                                                .unwrap_or(u32::MAX)
+                                                })
+                                                .map(|residual| {
+                                                    (
+                                                        residual.producer_origin,
+                                                        residual.closure_origin,
+                                                        residual.body_origin,
+                                                    )
+                                                })
+                                                .collect::<Vec<_>>();
+                                            planner_error(format!(
+                                                "causal recursive payload has no exact worker; \
+                                                 match={origin:?}; position={position}; \
+                                                 callable={callable:?}; \
+                                                 candidates={candidates:?}"
+                                            ))
+                                        })?;
+                                        if residuals.next().is_some() {
+                                            return Err(planner_error(
+                                                "causal recursive payload has ambiguous workers",
+                                            ));
+                                        }
+                                        selected.insert(ProducerCallable {
+                                            closure_owner: self
+                                                .exact_closure_owner_for_residual(residual)?,
+                                            closure_origin: residual.closure_origin,
+                                            body_origin: residual.body_origin,
+                                            recursor_origin: Some(origin),
+                                        });
+                                    }
+                                    if selected.is_empty() {
+                                        ProducerCallableSet::Open
+                                    } else {
+                                        ProducerCallableSet::Closed(selected)
+                                    }
+                                }
+                            };
+                            induction_hypotheses.push(ProducerValue {
                                 constructors: ProducerFact::empty(),
                                 constructor_payloads: Vec::new(),
                                 record_fields: Vec::new(),
-                                callables: ProducerCallableSet::Closed(callables),
+                                callables,
                                 referent_owners: ReferentOwnerFact::Unrepresented,
                                 aggregate_origins: BTreeSet::new(),
                                 effect_origins: BTreeSet::new(),
                                 carried: false,
-                            }
-                        });
+                            });
+                        }
+                        let mut case_env = induction_hypotheses;
+                        case_env.extend(arguments);
+                        case_env.extend_from_slice(env);
+                        result =
+                            result.join(&self.eval(child(1 + index)?, &case_env)?);
                     }
-                    let mut case_env = induction_hypotheses;
-                    case_env.extend(arguments);
-                    case_env.extend_from_slice(env);
-                    result = result.join(&self.eval(child(1 + index)?, &case_env)?);
                 }
+                result
+                    .effect_origins
+                    .extend(scrutinee.effect_origins.iter().copied());
                 result = result.with_forward(origin, ProducerFlowKind::Alternative);
+                if operational_carrier && continuation_capture {
+                    self.mark_carried(&mut result);
+                }
                 match self.computational_results.entry(key) {
                     std::collections::btree_map::Entry::Vacant(entry) => {
                         entry.insert(result.clone());
@@ -5621,6 +6113,8 @@ fn build_producer_flow_plans(
         Vec<PlannedAggregateRepresentation>,
         Vec<PlannedSynthesizedAggregateRepresentation>,
         Vec<PlannedStaticRecursorWorkerEnvironment>,
+        BTreeSet<(PredeclaredFunctionId, StaticOriginId)>,
+        BTreeSet<(PredeclaredFunctionId, StaticOriginId, u32)>,
     ),
     CraneliftBackendError,
 > {
@@ -5829,11 +6323,13 @@ fn build_producer_flow_plans(
                 "static recursor worker residual disagrees with its body ABI",
             ));
         }
-        let environment = inputs
-            .get_mut(&owner)
-            .ok_or_else(|| planner_error("static recursor worker body has no ABI environment"))?;
-        for value in environment {
-            *value = ProducerValue::owner(BoundaryReferentOwner::InvocationArena);
+        if !bodies
+            .iter()
+            .any(|(body_owner, body_origin, _)| {
+                *body_owner == owner && *body_origin == residual.body_origin
+            })
+        {
+            bodies.push((owner, residual.body_origin, descriptor.definition));
         }
         called_owners.insert(owner);
     }
@@ -5852,6 +6348,7 @@ fn build_producer_flow_plans(
         captures: BTreeMap::new(),
         computational_scrutinees: BTreeMap::new(),
         computational_results: BTreeMap::new(),
+        computational_result_origins: computational_scrutinee_results.clone(),
         match_scrutinees: BTreeMap::new(),
         aggregate_occurrences: BTreeMap::new(),
         effect_operands: BTreeMap::new(),
@@ -5859,6 +6356,8 @@ fn build_producer_flow_plans(
         carried_effects: BTreeSet::new(),
         reached_owners,
         called_owners,
+        emitted_source_occurrences: BTreeSet::new(),
+        observe_emitted_aggregates: false,
         changed: true,
     };
     let population_bound = plan
@@ -5923,19 +6422,119 @@ fn build_producer_flow_plans(
             "constructor producer-flow fixed point did not close monotonically",
         ));
     }
+    if plan.source_occurrences.len() > 761 {
+        eprintln!(
+            "TRACE owner5 result callables={:?}",
+            analysis
+                .results
+                .get(&PredeclaredFunctionId(5))
+                .map(|value| &value.callables)
+        );
+        if let Some(value) = analysis.results.get(&PredeclaredFunctionId(5)) {
+            for (identity, occurrence, payload) in &value.constructor_payloads {
+                eprintln!(
+                    "TRACE owner5 result constructor={identity:?} \
+                     occurrence={occurrence:?} \
+                     payload_callables={:?}",
+                    payload
+                        .iter()
+                        .map(|child| &child.callables)
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
+        for ((origin, owner), value) in &analysis.computational_results {
+            if *owner == PredeclaredFunctionId(5) {
+                eprintln!(
+                    "TRACE owner5 computational result origin={origin:?} callables={:?}",
+                    value.callables
+                );
+            }
+        }
+    }
+    // Lowering emits the complete CFG of every separately generated recursor
+    // worker even when exact producer flow proves that only one branch can run.
+    // Derive representation authority for those emitted-but-unreached
+    // aggregate occurrences in an isolated analysis. Its deliberately open
+    // worker ABI inputs are occurrence population authority only: none of its
+    // match/effect/callable facts may widen the exact source-machine analysis
+    // above.
+    let mut emitted_aggregate_analysis = analysis.clone();
+    emitted_aggregate_analysis.observe_emitted_aggregates = true;
+    for _ in 0..population_bound {
+        emitted_aggregate_analysis.changed = false;
+        for (owner, body_origin, definition) in bodies.iter().copied() {
+            if !emitted_aggregate_analysis.reached_owners.contains(&owner) {
+                continue;
+            }
+            emitted_aggregate_analysis.active_owner = owner;
+            let environment =
+                emitted_aggregate_analysis.source_environment(owner, definition)?;
+            let mut value = emitted_aggregate_analysis.eval(body_origin, &environment)?;
+            let result_phase = plan
+                .result_phases
+                .get(body_origin.0 as usize)
+                .and_then(Option::as_ref)
+                .map(|summary| summary.phase);
+            if result_phase == Some(ResultPhase::CarrierRequired)
+                || (owner != root_owner
+                    && plan.functionized_units
+                    && emitted_aggregate_analysis.called_owners.contains(&owner))
+            {
+                emitted_aggregate_analysis.mark_carried(&mut value);
+            }
+            let result = emitted_aggregate_analysis
+                .results
+                .entry(owner)
+                .or_insert_with(ProducerValue::empty);
+            emitted_aggregate_analysis.changed |=
+                ProducerAnalysis::merge_value(result, &value);
+        }
+        if !emitted_aggregate_analysis.changed {
+            break;
+        }
+    }
+    if emitted_aggregate_analysis.changed {
+        return Err(planner_error(
+            "emitted aggregate occurrence fixed point did not close monotonically",
+        ));
+    }
+    analysis
+        .carried_aggregates
+        .extend(emitted_aggregate_analysis.carried_aggregates.iter().copied());
+    if plan.source_occurrences.len() > 483 {
+        eprintln!(
+            "TRACE emitted aggregate483={:?} carried={}",
+            emitted_aggregate_analysis
+                .aggregate_occurrences
+                .get(&(StaticOriginId(483), PredeclaredFunctionId(5))),
+            emitted_aggregate_analysis
+                .carried_aggregates
+                .contains(&StaticOriginId(483))
+        );
+    }
+    for (identity, observation) in emitted_aggregate_analysis.aggregate_occurrences {
+        analysis
+            .aggregate_occurrences
+            .entry(identity)
+            .or_insert(observation);
+    }
     let mut aggregate_records = Vec::new();
     for ((origin, owner), observation) in &analysis.aggregate_occurrences {
         if !emittable_owners.contains(owner) {
             continue;
         }
-        let is_control = computational_scrutinee_results.contains(origin)
-            || plan.terminal_exit_aggregate_origins.contains(origin);
-        let is_carried = observation.carried || analysis.carried_aggregates.contains(origin);
         let planned_phase = plan
             .result_phases
             .get(origin.0 as usize)
             .and_then(Option::as_ref)
             .map(|summary| summary.phase);
+        let is_carried =
+            observation.carried || analysis.carried_aggregates.contains(origin);
+        let is_control = plan.terminal_exit_aggregate_origins.contains(origin)
+            || (computational_scrutinee_results.contains(origin)
+                && !is_carried
+                && planned_phase != Some(ResultPhase::CarrierRequired));
         if !is_control && !is_carried && planned_phase.is_none() {
             // The producer walk also observes syntax-local aggregates that
             // neither flow to a generated-unit result nor serve as semantic
@@ -5962,7 +6561,7 @@ fn build_producer_flow_plans(
                     return Err(planner_error(format!(
                         "aggregate occurrence has an unrepresented, forbidden, or unclosed \
                          carried child; owner={owner:?}; origin={origin:?}; position={position}; \
-                         parent={parent_expr}; child={child_expr}"
+                         owners={owners:?}; parent={parent_expr}; child={child_expr}"
                     )));
                 }
             };
@@ -6035,22 +6634,31 @@ fn build_producer_flow_plans(
                 "synthesized aggregate authority names a non-effect occurrence",
             ));
         };
-        let phase = if analysis.carried_effects.contains(effect_origin) {
-            ResultPhase::CarrierRequired
-        } else {
-            ResultPhase::SpecializedOnly
-        };
-        for spec in synthesized_effect_aggregate_specs(
+        let specs = synthesized_effect_aggregate_specs(
             *operation,
             capability.is_some(),
             operands,
             plan.semantic.synthesized_io_error_roles(),
-        )? {
+        )?;
+        let carrier_closure = *operation != ken_host::HostOpV1::ConsoleIsTerminal
+            && (analysis.carried_effects.contains(effect_origin)
+                || specs.iter().any(|spec| {
+                    spec.children
+                        .iter()
+                        .flatten()
+                        .any(|owner| *owner == BoundaryReferentOwner::InvocationArena)
+                }));
+        for spec in specs {
             let invocation_owned = spec
                 .children
                 .iter()
                 .flatten()
                 .any(|owner| *owner == BoundaryReferentOwner::InvocationArena);
+            let phase = if carrier_closure {
+                ResultPhase::CarrierRequired
+            } else {
+                ResultPhase::SpecializedOnly
+            };
             let (selected_owner, selected_tag) = if invocation_owned {
                 (
                     BoundaryReferentOwner::InvocationArena,
@@ -6108,59 +6716,149 @@ fn build_producer_flow_plans(
                     "static recursor worker environment has no exact unified worker identity",
                 )
             })?;
-        let capture_values = analysis.captures.get(&residual.closure_origin);
-        let mut captures = Vec::with_capacity(residual.captures.len());
-        let mut invocation_owned = false;
-        for capture in &residual.captures {
-            let possible_owners = match capture.source {
-                // Seed environments cross the GroundValueCarrier ABI. That
-                // closed carrier excludes invocation-arena referents.
-                StaticRecursorCaptureSource::Seed(_) => vec![
-                    BoundaryReferentOwner::NoReferent,
+        let mut emitted_owners = analysis
+            .emitted_source_occurrences
+            .iter()
+            .filter_map(|(owner, origin)| {
+                (*origin == residual.closure_origin).then_some(*owner)
+            })
+            .collect::<BTreeSet<_>>();
+        if emitted_owners.is_empty() {
+            emitted_owners.insert(planned_worker.consumer_owner);
+        }
+        for emitted_owner in emitted_owners {
+            let capture_values = analysis
+                .captures
+                .get(&(emitted_owner, residual.closure_origin));
+            let mut captures = Vec::with_capacity(residual.captures.len());
+            let mut invocation_owned = false;
+            for capture in &residual.captures {
+                let possible_owners = match capture.source {
+                    // Seed environments cross the GroundValueCarrier ABI. That
+                    // closed carrier excludes invocation-arena referents.
+                    StaticRecursorCaptureSource::Seed(_) => vec![
+                        BoundaryReferentOwner::NoReferent,
+                        BoundaryReferentOwner::PersistentStore,
+                    ],
+                    StaticRecursorCaptureSource::Lexical(_) => capture_values
+                        .and_then(|values| values.get(capture.ordinal as usize))
+                        .and_then(|value| value.referent_owners.closed_owners())
+                        .ok_or_else(|| {
+                            planner_error(format!(
+                                "static recursor worker capture has no closed referent-owner \
+                                 fact; residual={:?}; emitted_owner={emitted_owner:?}; \
+                                 capture={capture:?}",
+                                residual.id
+                            ))
+                        })?,
+                };
+                invocation_owned |=
+                    possible_owners.contains(&BoundaryReferentOwner::InvocationArena);
+                captures.push(PlannedStaticRecursorWorkerEnvironmentCapture {
+                    provenance: capture.clone(),
+                    possible_owners,
+                });
+            }
+            let (selected_owner, selected_tag) = if invocation_owned {
+                (
+                    BoundaryReferentOwner::InvocationArena,
+                    BoundaryTag::InvocationAggregate,
+                )
+            } else {
+                (
                     BoundaryReferentOwner::PersistentStore,
-                ],
-                StaticRecursorCaptureSource::Lexical(_) => capture_values
-                    .and_then(|values| values.get(capture.ordinal as usize))
-                    .and_then(|value| value.referent_owners.closed_owners())
-                    .ok_or_else(|| {
-                        planner_error(format!(
-                            "static recursor worker capture has no closed referent-owner fact; \
-                             residual={:?}; capture={capture:?}",
-                            residual.id
-                        ))
-                    })?,
+                    BoundaryTag::PersistentGround,
+                )
             };
-            invocation_owned |= possible_owners.contains(&BoundaryReferentOwner::InvocationArena);
-            captures.push(PlannedStaticRecursorWorkerEnvironmentCapture {
-                provenance: capture.clone(),
-                possible_owners,
+            static_recursor_worker_environments.push(PlannedStaticRecursorWorkerEnvironment {
+                worker_identity: planned_worker.identity,
+                residual_id: residual.id,
+                owner: emitted_owner,
+                parent_origin: residual.parent_origin,
+                producer_origin: residual.producer_origin,
+                sibling_position: residual.sibling_position,
+                closure_origin: residual.closure_origin,
+                captures,
+                selected_owner,
+                selected_tag,
             });
         }
-        let (selected_owner, selected_tag) = if invocation_owned {
-            (
-                BoundaryReferentOwner::InvocationArena,
-                BoundaryTag::InvocationAggregate,
-            )
-        } else {
-            (
-                BoundaryReferentOwner::PersistentStore,
-                BoundaryTag::PersistentGround,
-            )
-        };
-        static_recursor_worker_environments.push(PlannedStaticRecursorWorkerEnvironment {
-            worker_identity: planned_worker.identity,
-            residual_id: residual.id,
-            owner: planned_worker.consumer_owner,
-            parent_origin: residual.parent_origin,
-            producer_origin: residual.producer_origin,
-            sibling_position: residual.sibling_position,
-            closure_origin: residual.closure_origin,
-            captures,
-            selected_owner,
-            selected_tag,
-        });
     }
-    static_recursor_worker_environments.sort_by_key(|record| record.worker_identity);
+    static_recursor_worker_environments
+        .sort_by_key(|record| (record.worker_identity, record.owner));
+    let mut carried_recursor_positions = BTreeSet::new();
+    for ((match_origin, owner), scrutinee) in &analysis.computational_scrutinees {
+        if !emittable_owners.contains(owner) {
+            continue;
+        }
+        let occurrence = plan
+            .source_occurrences
+            .get(match_origin.0 as usize)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| planner_error("computational scrutinee names no occurrence"))?;
+        let RuntimeExpr::ComputationalMatch { cases, .. } = occurrence.expr else {
+            return Err(planner_error(
+                "computational scrutinee authority names a non-computational match",
+            ));
+        };
+        let mut position_requires_template = BTreeMap::<u32, bool>::new();
+        for (case_index, case) in cases.iter().enumerate() {
+            let identity = plan
+                .semantic
+                .case_constructor_identity(*match_origin, case_index)?;
+            let case_reachable = match &scrutinee.constructors.population {
+                ScrutineeProducerSet::Open => true,
+                ScrutineeProducerSet::Closed(constructors) => {
+                    constructors.contains(&identity)
+                }
+            };
+            let constructor_crosses_carrier = scrutinee
+                .constructors
+                .producer_origins
+                .iter()
+                .find(|(constructor, _)| *constructor == identity)
+                .is_some_and(|(_, origins)| {
+                    origins.iter().any(|origin| {
+                        aggregate_records.iter().any(|record| {
+                            record.owner == *owner
+                                && record.origin == *origin
+                                && record.phase == ResultPhase::CarrierRequired
+                        })
+                    })
+                });
+            let case_payloads = scrutinee
+                .constructor_payloads
+                .iter()
+                .filter(|(constructor, _, _)| *constructor == identity)
+                .map(|(_, _, payload)| payload)
+                .collect::<Vec<_>>();
+            for position in case.recursive_positions.iter().copied() {
+                let position = u32::try_from(position).map_err(|_| {
+                    planner_capacity_error("carried recursor position exhausted")
+                })?;
+                let requires_template = case_reachable
+                    && !scrutinee.carried
+                    && !constructor_crosses_carrier
+                    && (case_payloads.is_empty()
+                        || case_payloads.iter().any(|payload| {
+                            !payload
+                                .get(position as usize)
+                                .is_some_and(|value| value.carried)
+                        }));
+                position_requires_template
+                    .entry(position)
+                    .and_modify(|required| *required |= requires_template)
+                    .or_insert(requires_template);
+            }
+        }
+        carried_recursor_positions.extend(
+            position_requires_template
+                .into_iter()
+                .filter_map(|(position, requires_template)| {
+                    (!requires_template).then_some((*owner, *match_origin, position))
+                }),
+        );
+    }
     let mut records = Vec::new();
     for ((match_origin, owner), fact) in analysis.match_scrutinees {
         if !emittable_owners.contains(&owner) {
@@ -6207,11 +6905,63 @@ fn build_producer_flow_plans(
         }
     }
     records.sort_by_key(|record| (record.owner, record.match_origin, record.ordinal));
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        if !matches!(
+            occurrence.expr,
+            RuntimeExpr::Effect {
+                operation: ken_host::HostOpV1::FsAppendFile,
+                ..
+            }
+        ) {
+            continue;
+        }
+        let mut cursor = occurrence.static_origin;
+        for _ in 0..32 {
+            let Some(parent) = plan.source_occurrences.iter().flatten().find_map(
+                |candidate| {
+                    plan.semantic
+                        .child_origins(candidate.static_origin)
+                        .ok()
+                        .and_then(|children| {
+                            children
+                                .iter()
+                                .position(|child| *child == cursor)
+                                .map(|position| (candidate, position))
+                        })
+                },
+            ) else {
+                break;
+            };
+            if matches!(parent.0.expr, RuntimeExpr::Match { .. }) {
+                eprintln!(
+                    "TRACE append effect={:?} match={:?} child_position={} records={:?}",
+                    occurrence.static_origin,
+                    parent.0.static_origin,
+                    parent.1,
+                    records
+                        .iter()
+                        .filter(|record| {
+                            record.match_origin == parent.0.static_origin
+                        })
+                        .collect::<Vec<_>>()
+                );
+                break;
+            }
+            cursor = parent.0.static_origin;
+        }
+    }
+    let emitted_source_occurrences = analysis
+        .emitted_source_occurrences
+        .into_iter()
+        .filter(|(owner, _)| emittable_owners.contains(owner))
+        .collect();
     Ok((
         records,
         aggregate_records,
         synthesized_aggregate_records,
         static_recursor_worker_environments,
+        emitted_source_occurrences,
+        carried_recursor_positions,
     ))
 }
 
@@ -6242,6 +6992,7 @@ impl<'src> Planner<'src> {
                 abi: AbiPlane::default(),
                 root_entry: None,
                 root_ingress: AbiRootIngress::Value,
+                borrowed_process_match_origins: BTreeSet::new(),
                 semantic: SemanticPlane::default(),
                 root_occurrence: None,
                 declaration_occurrences: BTreeMap::new(),
@@ -6257,18 +7008,21 @@ impl<'src> Planner<'src> {
                 aggregate_representation_consumption: RefCell::new(BTreeMap::new()),
                 aggregate_representation_dispositions: RefCell::new(BTreeSet::new()),
                 synthesized_aggregate_representation_consumption: RefCell::new(BTreeMap::new()),
+                synthesized_aggregate_representation_dispositions: RefCell::new(BTreeSet::new()),
                 functionized_units: false,
                 operand_edges: Vec::new(),
                 static_callable_specializations: Vec::new(),
                 static_callable_calls: Vec::new(),
                 static_recursor_worker_residuals: Vec::new(),
                 static_recursor_worker_environments: Vec::new(),
+                carried_recursor_positions: BTreeSet::new(),
                 static_recursor_worker_environment_consumption: RefCell::new(BTreeMap::new()),
                 recursor_boundary_uses: Vec::new(),
                 lowering_boundary_uses: Vec::new(),
                 boundary_uses: Vec::new(),
                 operand_edge_consumption: RefCell::new(BTreeMap::new()),
                 boundary_use_dispositions: RefCell::new(BTreeSet::new()),
+                emitted_source_occurrences: BTreeSet::new(),
             },
             store_interner: BTreeMap::new(),
             next_source: 0,
@@ -7006,6 +7760,27 @@ impl<'src> Planner<'src> {
             .root_entry
             .ok_or_else(|| planner_error("plan has no root scheduling entry"))?;
         self.plan.root_ingress = root_ingress;
+        if matches!(root_ingress, AbiRootIngress::Process) {
+            self.plan.borrowed_process_match_origins = self
+                .plan
+                .source_occurrences
+                .iter()
+                .flatten()
+                .filter_map(|occurrence| match occurrence.expr {
+                    RuntimeExpr::Match { cases, .. }
+                        if !cases.is_empty()
+                            && cases.iter().all(|case| {
+                                symbols
+                                    .borrowed_constructor_identity(&case.constructor)
+                                    .is_some()
+                            }) =>
+                    {
+                        Some(occurrence.static_origin)
+                    }
+                    _ => None,
+                })
+                .collect();
+        }
         self.plan.abi = build_abi_plane(
             &self.plan.semantic,
             &self.plan.nodes,
@@ -7047,11 +7822,22 @@ impl<'src> Planner<'src> {
             aggregate_representations,
             synthesized_aggregate_representations,
             static_recursor_worker_environments,
+            emitted_source_occurrences,
+            carried_recursor_positions,
         ) = build_producer_flow_plans(&self.plan)?;
         self.plan.case_emissions = case_emissions;
         self.plan.aggregate_representations = aggregate_representations;
         self.plan.synthesized_aggregate_representations = synthesized_aggregate_representations;
         self.plan.static_recursor_worker_environments = static_recursor_worker_environments;
+        self.plan.emitted_source_occurrences = emitted_source_occurrences;
+        self.plan.carried_recursor_positions = carried_recursor_positions;
+        // Emitted identities are minted only after the generated-unit and
+        // producer-flow fixed points close. Rebuild both the lowering-only
+        // population and the unified ledger so each emitted unit receives its
+        // own exact occurrence.
+        self.plan.recursor_boundary_uses = build_recursor_boundary_uses(&self.plan)?;
+        self.plan.lowering_boundary_uses = build_lowering_boundary_uses(&self.plan)?;
+        self.plan.boundary_uses = build_boundary_uses(&self.plan)?;
         #[cfg(test)]
         STATIC_RECURSOR_RESIDUAL_MATRIX_MUTATION.with(|mutation| match mutation.get() {
             StaticRecursorResidualMatrixMutation::Exact => {}
@@ -7559,6 +8345,43 @@ impl<'src> StaticTransitionPlan<'src> {
         self.semantic.child_origin(parent, position)
     }
 
+    pub(in crate::cranelift_backend) fn is_terminal_exit_aggregate_origin(
+        &self,
+        origin: StaticOriginId,
+    ) -> bool {
+        self.terminal_exit_aggregate_origins.contains(&origin)
+    }
+
+    pub(in crate::cranelift_backend) fn terminal_exit_constructor_identity(
+        &self,
+        symbol: &str,
+    ) -> Result<ConstructorIdentity, CraneliftBackendError> {
+        let identities = self
+            .terminal_exit_aggregate_origins
+            .iter()
+            .filter_map(|origin| {
+                let occurrence = self.source_occurrences.get(origin.0 as usize)?.as_ref()?;
+                matches!(
+                    occurrence.expr,
+                    RuntimeExpr::Construct { constructor, .. } if constructor == symbol
+                )
+                .then(|| self.semantic.constructor_symbol_identity(*origin))
+            })
+            .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+        let Some(identity) = identities.first().copied() else {
+            return Err(planner_error(
+                "terminal ExitCode constructor has no semantic identity",
+            ));
+        };
+        if identities.iter().all(|candidate| *candidate == identity) {
+            Ok(identity)
+        } else {
+            Err(planner_error(
+                "terminal ExitCode constructor has ambiguous semantic identities",
+            ))
+        }
+    }
+
     #[cfg(test)]
     pub(in crate::cranelift_backend) fn function_owner_for_test(
         &self,
@@ -7580,25 +8403,35 @@ impl<'src> StaticTransitionPlan<'src> {
         position: usize,
         role: SourceOperandRole,
     ) -> Result<OperandEdgeToken, CraneliftBackendError> {
-        let child = self.semantic.child_origin(parent, position)?;
-        let position = u32::try_from(position)
-            .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
         let owner = self
             .semantic
             .function_owner(parent)?
             .ok_or_else(|| planner_error("source operand edge has no function owner"))?;
+        self.operand_edge_token_for_owner(owner, parent, position, role)
+    }
+
+    pub(in crate::cranelift_backend) fn operand_edge_token_for_owner(
+        &self,
+        emitted_owner: PredeclaredFunctionId,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        let child = self.semantic.child_origin(parent, position)?;
+        let position = u32::try_from(position)
+            .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
         let edge = self
             .operand_edges
             .iter()
             .find(|edge| {
-                edge.owner == owner
-                    && edge.parent == parent
+                edge.parent == parent
                     && edge.child == child
                     && edge.position == position
                     && edge.role == role
             })
             .ok_or_else(|| planner_error("source operand edge has no planned disposition"))?;
         let identity = BoundaryUseIdentity::Source {
+            emitted_owner,
             parent: edge.parent,
             child: edge.child,
             position: edge.position,
@@ -7622,19 +8455,32 @@ impl<'src> StaticTransitionPlan<'src> {
         operation: ken_host::HostOpV1,
         seat: EffectSemanticSeat,
     ) -> Result<OperandEdgeToken, CraneliftBackendError> {
-        let child = self.semantic.child_origin(parent, position)?;
-        let position = u32::try_from(position)
-            .map_err(|_| planner_capacity_error("effect-seat position exhausted"))?;
         let owner = self
             .semantic
             .function_owner(parent)?
             .ok_or_else(|| planner_error("effect-seat edge has no function owner"))?;
+        self.effect_operand_edge_token_for_owner(
+            owner, parent, position, role, operation, seat,
+        )
+    }
+
+    pub(in crate::cranelift_backend) fn effect_operand_edge_token_for_owner(
+        &self,
+        emitted_owner: PredeclaredFunctionId,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+        operation: ken_host::HostOpV1,
+        seat: EffectSemanticSeat,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        let child = self.semantic.child_origin(parent, position)?;
+        let position = u32::try_from(position)
+            .map_err(|_| planner_capacity_error("effect-seat position exhausted"))?;
         let edge = self
             .operand_edges
             .iter()
             .find(|edge| {
-                edge.owner == owner
-                    && edge.parent == parent
+                edge.parent == parent
                     && edge.child == child
                     && edge.position == position
                     && edge.role == role
@@ -7643,6 +8489,7 @@ impl<'src> StaticTransitionPlan<'src> {
             })
             .ok_or_else(|| planner_error("effect use has no exact planned semantic seat"))?;
         let identity = BoundaryUseIdentity::Source {
+            emitted_owner,
             parent: edge.parent,
             child: edge.child,
             position: edge.position,
@@ -7674,14 +8521,77 @@ impl<'src> StaticTransitionPlan<'src> {
     ) -> Result<(), CraneliftBackendError> {
         let mut ledger = self.operand_edge_consumption.borrow_mut();
         let count = ledger.entry(identity).or_insert(0);
-        *count = count
-            .checked_add(1)
-            .ok_or_else(|| planner_capacity_error("boundary-use consumption count exhausted"))?;
+        if *count == 1 && self.boundary_use_has_affine_worker_revisit(identity) {
+            // The exact source MatchArm authority proves this is a second
+            // compiler visit to one mutually exclusive worker occurrence, not
+            // a second emitted transition. Worker, ordered captures, and its
+            // callable-capsule preflight must reborrow as one indivisible
+            // occurrence; unrelated repeated identities still count and fail.
+        } else {
+            *count = count.checked_add(1).ok_or_else(|| {
+                planner_capacity_error("boundary-use consumption count exhausted")
+            })?;
+        }
         Ok(())
+    }
+
+    fn boundary_use_has_affine_worker_revisit(&self, identity: BoundaryUseIdentity) -> bool {
+        let Some(worker_identity) = self
+            .boundary_uses
+            .iter()
+            .find_map(|planned| {
+            (planned.identity == identity).then(|| match &planned.path {
+                PlannedBoundaryUsePath::StaticRecursorWorker { .. } => Some(identity),
+                PlannedBoundaryUsePath::StaticRecursorCapture {
+                    worker_identity, ..
+                } => Some(*worker_identity),
+                PlannedBoundaryUsePath::Synthesized { origin, .. } => self
+                    .lowering_boundary_uses
+                    .iter()
+                    .find(|lowering| {
+                        lowering.identity == identity
+                            && lowering.edge == LoweringOnlyOperandEdge::CallableCapsuleEscape
+                    })
+                    .and_then(|_| {
+                        self.static_recursor_worker_environments
+                            .iter()
+                            .find(|record| {
+                                self.static_recursor_worker_residuals.iter().any(|residual| {
+                                    residual.id == record.residual_id
+                                        && residual.body_origin == *origin
+                                })
+                            })
+                            .map(|record| record.worker_identity)
+                    }),
+                PlannedBoundaryUsePath::Source { .. } => None,
+            })
+            })
+            .flatten()
+        else {
+            return false;
+        };
+        self.static_recursor_worker_environments
+            .iter()
+            .filter(|record| record.worker_identity == worker_identity)
+            .any(|record| self.static_recursor_environment_has_affine_case_revisit(record))
     }
 
     pub(in crate::cranelift_backend) fn disposition_operand_edge(
         &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<(), CraneliftBackendError> {
+        let owner = self
+            .semantic
+            .function_owner(parent)?
+            .ok_or_else(|| planner_error("dead source edge has no function owner"))?;
+        self.disposition_operand_edge_for_owner(owner, parent, position, role)
+    }
+
+    pub(in crate::cranelift_backend) fn disposition_operand_edge_for_owner(
+        &self,
+        emitted_owner: PredeclaredFunctionId,
         parent: StaticOriginId,
         position: usize,
         role: SourceOperandRole,
@@ -7700,6 +8610,7 @@ impl<'src> StaticTransitionPlan<'src> {
             })
             .ok_or_else(|| planner_error("dead source edge has no planned disposition"))?;
         let identity = BoundaryUseIdentity::Source {
+            emitted_owner,
             parent: edge.parent,
             child: edge.child,
             position: edge.position,
@@ -7717,6 +8628,17 @@ impl<'src> StaticTransitionPlan<'src> {
             .map(|token| token.disposition())
     }
 
+    pub(in crate::cranelift_backend) fn close_reached_operand_edge_for_owner(
+        &self,
+        emitted_owner: PredeclaredFunctionId,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<OperandEdgeDisposition, CraneliftBackendError> {
+        self.reached_operand_edge_token_for_owner(emitted_owner, parent, position, role)
+            .map(|token| token.disposition())
+    }
+
     /// Return one exact source-occurrence token across repeated lowering
     /// specializations, recording the source identity only on its first reach.
     ///
@@ -7725,6 +8647,20 @@ impl<'src> StaticTransitionPlan<'src> {
     /// revisited while staging more than one generated unit.
     pub(in crate::cranelift_backend) fn reached_operand_edge_token(
         &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        let owner = self
+            .semantic
+            .function_owner(parent)?
+            .ok_or_else(|| planner_error("reached source edge has no function owner"))?;
+        self.reached_operand_edge_token_for_owner(owner, parent, position, role)
+    }
+
+    pub(in crate::cranelift_backend) fn reached_operand_edge_token_for_owner(
+        &self,
+        emitted_owner: PredeclaredFunctionId,
         parent: StaticOriginId,
         position: usize,
         role: SourceOperandRole,
@@ -7743,6 +8679,7 @@ impl<'src> StaticTransitionPlan<'src> {
             })
             .ok_or_else(|| planner_error("reached source edge has no planned disposition"))?;
         let identity = BoundaryUseIdentity::Source {
+            emitted_owner,
             parent: edge.parent,
             child: edge.child,
             position: edge.position,
@@ -7774,6 +8711,14 @@ impl<'src> StaticTransitionPlan<'src> {
         self.disposition_boundary_uses_in_subtree(root, false)
     }
 
+    pub(in crate::cranelift_backend) fn disposition_boundary_uses_in_owner_subtree_for_owner(
+        &self,
+        emitted_owner: PredeclaredFunctionId,
+        root: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        self.disposition_boundary_uses_in_subtree_for_owner(root, false, emitted_owner)
+    }
+
     /// Disposition a dead source subtree across the closure-body owner
     /// boundaries that RecursiveDescent inlines.
     pub(in crate::cranelift_backend) fn disposition_boundary_uses_in_inline_subtree(
@@ -7783,10 +8728,31 @@ impl<'src> StaticTransitionPlan<'src> {
         self.disposition_boundary_uses_in_subtree(root, true)
     }
 
+    pub(in crate::cranelift_backend) fn disposition_boundary_uses_in_inline_subtree_for_owner(
+        &self,
+        emitted_owner: PredeclaredFunctionId,
+        root: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        self.disposition_boundary_uses_in_subtree_for_owner(root, true, emitted_owner)
+    }
+
     fn disposition_boundary_uses_in_subtree(
         &self,
         root: StaticOriginId,
         inline_closure_bodies: bool,
+    ) -> Result<(), CraneliftBackendError> {
+        let owner = self
+            .semantic
+            .function_owner(root)?
+            .ok_or_else(|| planner_error("dead source subtree has no function owner"))?;
+        self.disposition_boundary_uses_in_subtree_for_owner(root, inline_closure_bodies, owner)
+    }
+
+    fn disposition_boundary_uses_in_subtree_for_owner(
+        &self,
+        root: StaticOriginId,
+        inline_closure_bodies: bool,
+        emitted_owner: PredeclaredFunctionId,
     ) -> Result<(), CraneliftBackendError> {
         let owner = self
             .semantic
@@ -7860,8 +8826,9 @@ impl<'src> StaticTransitionPlan<'src> {
                                 && (*worker_owner == planned.producer_owner
                                     || dead_worker_call_input)
                         });
-                (in_dead_population
-                    && (exact_static_worker || !consumption.contains_key(&planned.identity)))
+                (planned.consumer_owner == emitted_owner
+                    && in_dead_population
+                    && !consumption.contains_key(&planned.identity))
                 .then_some(planned.identity)
             })
             .collect::<Vec<_>>();
@@ -7880,7 +8847,7 @@ impl<'src> StaticTransitionPlan<'src> {
             .iter()
             .filter(|record| {
                 record.phase == ResultPhase::CarrierRequired
-                    && (inline_closure_bodies || record.owner == owner)
+                    && record.owner == emitted_owner
                     && origins.contains(&record.origin)
             })
             .map(|record| (record.owner, record.origin))
@@ -7890,6 +8857,28 @@ impl<'src> StaticTransitionPlan<'src> {
         self.aggregate_representation_dispositions
             .borrow_mut()
             .extend(aggregate_keys);
+        let synthesized_consumption = self
+            .synthesized_aggregate_representation_consumption
+            .borrow();
+        let synthesized_occurrences = self
+            .synthesized_aggregate_representations
+            .iter()
+            .filter(|record| {
+                record.phase == ResultPhase::CarrierRequired
+                    && record.owner == emitted_owner
+                    && origins.contains(&record.effect_origin)
+            })
+            .map(|record| SynthesizedAggregateOccurrence {
+                effect_origin: record.effect_origin,
+                owner: record.owner,
+                site: record.site,
+            })
+            .filter(|occurrence| !synthesized_consumption.contains_key(occurrence))
+            .collect::<Vec<_>>();
+        drop(synthesized_consumption);
+        self.synthesized_aggregate_representation_dispositions
+            .borrow_mut()
+            .extend(synthesized_occurrences);
         Ok(())
     }
 
@@ -7899,8 +8888,25 @@ impl<'src> StaticTransitionPlan<'src> {
         origin: StaticOriginId,
         position: u32,
     ) -> Result<(), CraneliftBackendError> {
+        let owner = self
+            .semantic
+            .function_owner(origin)?
+            .ok_or_else(|| planner_error("lowering boundary use has no function owner"))?;
+        self.disposition_lowering_boundary_use_if_planned_for_owner(edge, origin, position, owner)
+    }
+
+    pub(in crate::cranelift_backend) fn disposition_lowering_boundary_use_if_planned_for_owner(
+        &self,
+        edge: LoweringOnlyOperandEdge,
+        origin: StaticOriginId,
+        position: u32,
+        owner: PredeclaredFunctionId,
+    ) -> Result<(), CraneliftBackendError> {
         let Some(planned) = self.lowering_boundary_uses.iter().find(|planned| {
-            planned.edge == edge && planned.origin == origin && planned.position == position
+            planned.edge == edge
+                && planned.origin == origin
+                && planned.position == position
+                && planned.owner == owner
         }) else {
             return Ok(());
         };
@@ -7953,13 +8959,15 @@ impl<'src> StaticTransitionPlan<'src> {
     ) -> Result<(), CraneliftBackendError> {
         let dispositions = self.boundary_use_dispositions.borrow();
         let expected = self
-            .operand_edges
+            .boundary_uses
             .iter()
-            .filter(|edge| edge.owner == owner)
-            .map(|edge| BoundaryUseIdentity::Source {
-                parent: edge.parent,
-                child: edge.child,
-                position: edge.position,
+            .filter_map(|planned| match planned.identity {
+                identity @ BoundaryUseIdentity::Source { emitted_owner, .. }
+                    if emitted_owner == owner =>
+                {
+                    Some(identity)
+                }
+                _ => None,
             })
             .filter(|identity| !dispositions.contains(identity))
             .collect::<BTreeSet<_>>();
@@ -7967,11 +8975,8 @@ impl<'src> StaticTransitionPlan<'src> {
         let actual = ledger
             .iter()
             .filter_map(|(identity, count)| match identity {
-                BoundaryUseIdentity::Source { parent, .. }
-                    if self
-                        .semantic
-                        .function_owner(*parent)
-                        .is_ok_and(|candidate| candidate == Some(owner)) =>
+                BoundaryUseIdentity::Source { emitted_owner, .. }
+                    if *emitted_owner == owner =>
                 {
                     (!dispositions.contains(identity)).then_some((*identity, *count))
                 }
@@ -8004,15 +9009,28 @@ impl<'src> StaticTransitionPlan<'src> {
                 .iter()
                 .filter(|edge| {
                     missing.contains(&BoundaryUseIdentity::Source {
+                        emitted_owner: owner,
                         parent: edge.parent,
                         child: edge.child,
                         position: edge.position,
                     })
                 })
                 .collect::<Vec<_>>();
+            let missing_parents = missing
+                .iter()
+                .filter_map(|identity| match identity {
+                    BoundaryUseIdentity::Source { parent, .. } => self
+                        .source_occurrences
+                        .get(parent.0 as usize)
+                        .and_then(Option::as_ref)
+                        .map(|occurrence| (*parent, occurrence.expr)),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
             return Err(planner_error(format!(
                 "source boundary-use ledger is not exact; missing={missing:?}; \
-                 missing_edges={missing_edges:?}; extra={extra:?}"
+                 missing_edges={missing_edges:?}; missing_parents={missing_parents:?}; extra={extra:?}; \
+                 dispositions={dispositions:?}"
             )));
         }
         Ok(())
@@ -8026,9 +9044,9 @@ impl<'src> StaticTransitionPlan<'src> {
         self.validate_synthesized_aggregate_representation_consumption()?;
         self.validate_static_recursor_worker_environment_consumption()?;
         let owners = self
-            .operand_edges
+            .emitted_source_occurrences
             .iter()
-            .map(|edge| edge.owner)
+            .map(|(owner, _)| *owner)
             .collect::<BTreeSet<_>>();
         for owner in owners {
             self.validate_boundary_use_consumption_for_owner(owner)?;
@@ -8141,6 +9159,7 @@ impl<'src> StaticTransitionPlan<'src> {
             .map(|record| StaticRecursorWorkerEnvironmentOccurrence {
                 worker_identity: record.worker_identity,
                 residual_id: record.residual_id,
+                emitted_owner: record.owner,
             })
             .collect::<BTreeSet<_>>();
         let ledger = self.static_recursor_worker_environment_consumption.borrow();
@@ -8201,15 +9220,28 @@ impl<'src> StaticTransitionPlan<'src> {
                 "case-emission ledger is not exact; missing={missing:?}; extra={extra:?}"
             )));
         }
+        let emitted_cases = ledger.keys().copied().collect::<BTreeSet<_>>();
         drop(ledger);
         let inactive_arms = self
-            .case_emissions
+            .boundary_uses
             .iter()
-            .filter(|record| !emitted_matches.contains(&(record.owner, record.match_origin)))
-            .map(|record| BoundaryUseIdentity::Source {
-                parent: record.match_origin,
-                child: record.body_origin,
-                position: 1 + record.ordinal,
+            .filter_map(|planned| match planned.identity {
+                identity @ BoundaryUseIdentity::Source {
+                    emitted_owner,
+                    parent,
+                    position,
+                    ..
+                } if position > 0
+                    && self.operand_edges.iter().any(|edge| {
+                        edge.parent == parent
+                            && edge.position == position
+                            && edge.role == SourceOperandRole::MatchArm
+                    })
+                    && !emitted_cases.contains(&(emitted_owner, parent, position - 1)) =>
+                {
+                    Some(identity)
+                }
+                _ => None,
             })
             .collect::<BTreeSet<_>>();
         for identity in inactive_arms {
@@ -8221,6 +9253,24 @@ impl<'src> StaticTransitionPlan<'src> {
             {
                 continue;
             }
+            let BoundaryUseIdentity::Source {
+                emitted_owner,
+                child,
+                ..
+            } = identity
+            else {
+                unreachable!("inactive match arms are source identities")
+            };
+            // The case-emission record is the causal authority that this
+            // source-machine arm has no emitted occurrence in this unit.
+            // Close its complete planned population here, including aggregate
+            // allocations and synthesized sites nested below the arm, before
+            // global exact-ledger validation. Merely dispositioning the arm's
+            // parent edge leaves those independently planned events orphaned.
+            self.disposition_boundary_uses_in_owner_subtree_for_owner(
+                emitted_owner,
+                child,
+            )?;
             self.record_boundary_use_disposition(identity)?;
         }
         Ok(())
@@ -8314,13 +9364,42 @@ impl<'src> StaticTransitionPlan<'src> {
         let ledger = self
             .synthesized_aggregate_representation_consumption
             .borrow();
-        let actual = ledger.keys().copied().collect::<BTreeSet<_>>();
+        let dispositions = self
+            .synthesized_aggregate_representation_dispositions
+            .borrow();
+        let overlap = ledger
+            .keys()
+            .filter(|occurrence| dispositions.contains(occurrence))
+            .copied()
+            .collect::<Vec<_>>();
+        if !overlap.is_empty() {
+            return Err(planner_error(format!(
+                "synthesized aggregate ledger overlaps static dispositions; \
+                 overlap={overlap:?}"
+            )));
+        }
+        let actual = ledger
+            .keys()
+            .copied()
+            .chain(dispositions.iter().copied())
+            .collect::<BTreeSet<_>>();
         if actual != expected {
             let missing = expected.difference(&actual).copied().collect::<Vec<_>>();
             let extra = actual.difference(&expected).copied().collect::<Vec<_>>();
+            let missing_effects = missing
+                .iter()
+                .map(|occurrence| {
+                    (
+                        occurrence.effect_origin,
+                        self.source_occurrence(occurrence.effect_origin)
+                            .map(|expr| format!("{expr:?}"))
+                            .unwrap_or_else(|_| "<missing>".to_string()),
+                    )
+                })
+                .collect::<BTreeSet<_>>();
             return Err(planner_error(format!(
                 "synthesized aggregate ledger is not exact; missing={missing:?}; \
-                 extra={extra:?}"
+                 extra={extra:?}; missing_effects={missing_effects:?}"
             )));
         }
         Ok(())
@@ -8391,6 +9470,16 @@ impl<'src> StaticTransitionPlan<'src> {
             .semantic
             .function_owner(origin)?
             .ok_or_else(|| planner_error("lowering boundary use has no function owner"))?;
+        self.reached_lowering_boundary_use_token_for_owner(edge, origin, position, owner)
+    }
+
+    pub(in crate::cranelift_backend) fn reached_lowering_boundary_use_token_for_owner(
+        &self,
+        edge: LoweringOnlyOperandEdge,
+        origin: StaticOriginId,
+        position: u32,
+        owner: PredeclaredFunctionId,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
         let ledger = self.operand_edge_consumption.borrow();
         let planned = self
             .lowering_boundary_uses
@@ -8411,9 +9500,34 @@ impl<'src> StaticTransitionPlan<'src> {
                 })
             })
             .ok_or_else(|| {
-                planner_error(
-                    "reached lowering transition has no exact planner-issued boundary use",
-                )
+                let candidates = self
+                    .lowering_boundary_uses
+                    .iter()
+                    .filter(|planned| {
+                        planned.edge == edge
+                            && planned.origin == origin
+                            && planned.position == position
+                    })
+                    .map(|planned| planned.owner)
+                    .collect::<Vec<_>>();
+                let semantic_owner = self.semantic.function_owner(origin).ok().flatten();
+                let emitted_owners = self
+                    .emitted_source_occurrences
+                    .iter()
+                    .filter_map(|(candidate, emitted_origin)| {
+                        (*emitted_origin == origin).then_some(*candidate)
+                    })
+                    .collect::<Vec<_>>();
+                let expression = self
+                    .source_occurrence(origin)
+                    .map(|expr| format!("{expr:?}"))
+                    .unwrap_or_else(|_| "<missing>".to_string());
+                planner_error(format!(
+                    "reached lowering transition has no exact planner-issued boundary use; \
+                     edge={edge:?}; origin={origin:?}; position={position}; owner={owner:?}; \
+                     candidates={candidates:?}; semantic_owner={semantic_owner:?}; \
+                     emitted_owners={emitted_owners:?}; expression={expression}"
+                ))
             })?;
         let already_consumed = ledger.contains_key(&planned.identity);
         let identity = planned.identity;
@@ -8539,6 +9653,29 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(token)
     }
 
+    pub(in crate::cranelift_backend) fn disposition_recursor_boundary_use_if_planned(
+        &self,
+        parent_origin: StaticOriginId,
+        sibling_position: usize,
+    ) -> Result<(), CraneliftBackendError> {
+        let sibling_position = u32::try_from(sibling_position)
+            .map_err(|_| planner_capacity_error("recursor boundary position exhausted"))?;
+        let Some(edge) = self.recursor_boundary_uses.iter().find(|edge| {
+            edge.parent_origin == parent_origin && edge.sibling_position == sibling_position
+        }) else {
+            return Ok(());
+        };
+        if self
+            .operand_edge_consumption
+            .borrow()
+            .contains_key(&edge.identity)
+            || self.boundary_use_dispositions.borrow().contains(&edge.identity)
+        {
+            return Ok(());
+        }
+        self.record_boundary_use_disposition(edge.identity)
+    }
+
     /// Consume the planner-owned callable-capture disposition for one exact
     /// computational-recursor worker residual.
     pub(in crate::cranelift_backend) fn static_recursor_worker_residual_token(
@@ -8601,6 +9738,35 @@ impl<'src> StaticTransitionPlan<'src> {
         sibling_position: usize,
         predecessor_body: Option<StaticOriginId>,
     ) -> Result<Option<StaticRecursorWorkerResidualToken>, CraneliftBackendError> {
+        self.selected_static_recursor_worker_residual_token_at(
+            parent_origin,
+            sibling_position,
+            predecessor_body,
+            None,
+        )
+    }
+
+    pub(in crate::cranelift_backend) fn selected_static_recursor_worker_residual_token_for_producer(
+        &self,
+        parent_origin: StaticOriginId,
+        sibling_position: usize,
+        producer_origin: StaticOriginId,
+    ) -> Result<Option<StaticRecursorWorkerResidualToken>, CraneliftBackendError> {
+        self.selected_static_recursor_worker_residual_token_at(
+            parent_origin,
+            sibling_position,
+            None,
+            Some(producer_origin),
+        )
+    }
+
+    fn selected_static_recursor_worker_residual_token_at(
+        &self,
+        parent_origin: StaticOriginId,
+        sibling_position: usize,
+        predecessor_body: Option<StaticOriginId>,
+        exact_producer: Option<StaticOriginId>,
+    ) -> Result<Option<StaticRecursorWorkerResidualToken>, CraneliftBackendError> {
         let sibling_position = u32::try_from(sibling_position)
             .map_err(|_| planner_capacity_error("static recursor sibling exhausted"))?;
         let result_root = if let Some(body_origin) = predecessor_body {
@@ -8608,10 +9774,13 @@ impl<'src> StaticTransitionPlan<'src> {
         } else {
             self.semantic.child_origin(parent_origin, 0)?
         };
-        let live_producers = self
-            .source_result_origins_in_owner_subtree(result_root)?
-            .into_iter()
-            .collect::<BTreeSet<_>>();
+        let live_producers = match exact_producer {
+            Some(producer) => BTreeSet::from([producer]),
+            None => self
+                .source_result_origins_in_owner_subtree(result_root)?
+                .into_iter()
+                .collect(),
+        };
         let candidates = self
             .static_recursor_worker_residuals
             .iter()
@@ -8621,6 +9790,14 @@ impl<'src> StaticTransitionPlan<'src> {
                     && live_producers.contains(&residual.producer_origin)
             })
             .collect::<Vec<_>>();
+        if parent_origin == StaticOriginId(12)
+            && predecessor_body == Some(StaticOriginId(761))
+        {
+            eprintln!(
+                "TRACE selection parent={parent_origin:?} predecessor={predecessor_body:?} \
+                 live={live_producers:?} candidates={candidates:?}"
+            );
+        }
         if candidates.is_empty() {
             return Ok(None);
         }
@@ -8661,9 +9838,12 @@ impl<'src> StaticTransitionPlan<'src> {
         }
         drop(dispositions);
         let [(residual, identity)] = selected.as_slice() else {
-            return Err(planner_error(
-                "reached static recursor position does not select exactly one result worker",
-            ));
+            return Err(planner_error(format!(
+                "reached static recursor position does not select exactly one result worker; \
+                 parent={parent_origin:?}; position={sibling_position}; \
+                 result_root={result_root:?}; live_producers={live_producers:?}; \
+                 selected={selected:?}"
+            )));
         };
         self.static_recursor_worker_residual_token_value(residual, *identity)
             .map(Some)
@@ -8735,6 +9915,14 @@ impl<'src> StaticTransitionPlan<'src> {
                 "static recursor worker residual disagrees with its unified disposition",
             ));
         }
+        // Reaching this exact closure constructor is emitted-occurrence
+        // authority for the worker. Another mutually exclusive generated
+        // source-machine clone may have dispositioned the same planned source
+        // residual earlier; that local result cannot suppress this causal
+        // emission. The emitted worker identity, not traversal order, wins.
+        self.boundary_use_dispositions
+            .borrow_mut()
+            .remove(&planned.identity);
         #[cfg(test)]
         {
             let mutation = STATIC_RECURSOR_CONSUMPTION_MUTATION.with(Cell::get);
@@ -9289,10 +10477,14 @@ impl<'src> StaticTransitionPlan<'src> {
         if record.status == CaseEmissionStatus::Reachable {
             let key = (owner, match_origin, ordinal);
             let mut ledger = self.case_emission_consumption.borrow_mut();
-            let count = ledger.entry(key).or_insert(0);
-            *count = count
-                .checked_add(1)
-                .ok_or_else(|| planner_capacity_error("case-emission ledger exhausted"))?;
+            // This ledger closes the planned source-case population, not the
+            // emitted predecessor population. A source-machine continuation
+            // can emit more than one causal clone of the same source case;
+            // those clones consume their own join and BoundaryUse identities,
+            // while this immutable reachability record is reborrowed.
+            if !ledger.contains_key(&key) {
+                ledger.insert(key, 1);
+            }
         }
         Ok(CaseEmissionToken {
             match_origin,
@@ -9312,6 +10504,16 @@ impl<'src> StaticTransitionPlan<'src> {
             .semantic
             .function_owner(origin)?
             .ok_or_else(|| planner_error("aggregate occurrence has no function owner"))?;
+        self.aggregate_representation_token_for_owner(owner, origin, class, arity)
+    }
+
+    pub(in crate::cranelift_backend) fn aggregate_representation_token_for_owner(
+        &self,
+        owner: PredeclaredFunctionId,
+        origin: StaticOriginId,
+        class: BoundaryClass,
+        arity: usize,
+    ) -> Result<AggregateRepresentationToken, CraneliftBackendError> {
         let arity = u32::try_from(arity)
             .map_err(|_| planner_capacity_error("aggregate arity exhausted"))?;
         let record = self
@@ -9329,10 +10531,42 @@ impl<'src> StaticTransitionPlan<'src> {
                     .filter(|record| record.origin == origin)
                     .map(|record| record.owner)
                     .collect::<Vec<_>>();
+                let mut ancestry = vec![origin];
+                let mut cursor = origin;
+                for _ in 0..32 {
+                    let parent = self.source_occurrences.iter().flatten().find_map(
+                        |occurrence| {
+                            self.semantic
+                                .child_origins(occurrence.static_origin)
+                                .ok()
+                                .filter(|children| children.contains(&cursor))
+                                .map(|_| occurrence.static_origin)
+                        },
+                    );
+                    let Some(parent) = parent else {
+                        break;
+                    };
+                    ancestry.push(parent);
+                    cursor = parent;
+                }
+                let local_ancestry = ancestry
+                    .iter()
+                    .take(6)
+                    .map(|origin| {
+                        (
+                            *origin,
+                            self.source_occurrence(*origin)
+                                .map(|expr| format!("{expr:?}"))
+                                .unwrap_or_else(|_| "<missing>".to_string()),
+                        )
+                    })
+                    .collect::<Vec<_>>();
                 planner_error(format!(
                     "aggregate allocation has no exact representation record; \
                      owner={owner:?}; origin={origin:?}; class={class:?}; arity={arity}; \
-                     candidates={candidates:?}; expression={expression}"
+                     candidates={candidates:?}; ancestry={ancestry:?}; \
+                     local_ancestry={local_ancestry:?}; \
+                     expression={expression}"
                 ))
             })?;
         if record.class != class
@@ -9386,6 +10620,23 @@ impl<'src> StaticTransitionPlan<'src> {
             .semantic
             .function_owner(effect_origin)?
             .ok_or_else(|| planner_error("synthesized aggregate has no function owner"))?;
+        self.synthesized_aggregate_occurrence_for_owner(
+            owner,
+            effect_origin,
+            site,
+            role,
+            arity,
+        )
+    }
+
+    pub(in crate::cranelift_backend) fn synthesized_aggregate_occurrence_for_owner(
+        &self,
+        owner: PredeclaredFunctionId,
+        effect_origin: StaticOriginId,
+        site: SynthesizedAggregateSite,
+        role: SynthesizedConstructorRole,
+        arity: usize,
+    ) -> Result<SynthesizedAggregateOccurrence, CraneliftBackendError> {
         let arity = u32::try_from(arity)
             .map_err(|_| planner_capacity_error("synthesized aggregate arity exhausted"))?;
         let record = self
@@ -9444,9 +10695,21 @@ impl<'src> StaticTransitionPlan<'src> {
             || record.arity != arity
             || record.phase != ResultPhase::CarrierRequired
         {
-            return Err(planner_error(
-                "compiler-synthesized aggregate allocation disagrees with its planned record",
-            ));
+            return Err(planner_error(format!(
+                "compiler-synthesized aggregate allocation disagrees with its planned record; \
+                 occurrence={occurrence:?}; requested_class={class:?}; \
+                requested_arity={arity}; record={record:?}"
+            )));
+        }
+        if self
+            .synthesized_aggregate_representation_dispositions
+            .borrow()
+            .contains(&occurrence)
+        {
+            return Err(planner_error(format!(
+                "one synthesized aggregate was both statically dispositioned and emitted; \
+                 occurrence={occurrence:?}"
+            )));
         }
         let mut ledger = self
             .synthesized_aggregate_representation_consumption
@@ -9468,6 +10731,7 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
         worker_identity: BoundaryUseIdentity,
         residual_id: StaticRecursorWorkerResidualId,
+        emitted_owner: PredeclaredFunctionId,
         parent_origin: StaticOriginId,
         producer_origin: StaticOriginId,
         sibling_position: usize,
@@ -9482,6 +10746,7 @@ impl<'src> StaticTransitionPlan<'src> {
             .find(|record| {
                 record.worker_identity == worker_identity
                     && record.residual_id == residual_id
+                    && record.owner == emitted_owner
                     && record.parent_origin == parent_origin
                     && record.producer_origin == producer_origin
                     && record.sibling_position == sibling_position
@@ -9507,6 +10772,7 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(StaticRecursorWorkerEnvironmentOccurrence {
             worker_identity,
             residual_id,
+            emitted_owner,
         })
     }
 
@@ -9527,6 +10793,7 @@ impl<'src> StaticTransitionPlan<'src> {
             .find(|record| {
                 record.worker_identity == occurrence.worker_identity
                     && record.residual_id == occurrence.residual_id
+                    && record.owner == occurrence.emitted_owner
             })
             .ok_or_else(|| {
                 planner_error("static recursor environment token names no planned occurrence")
@@ -9540,9 +10807,20 @@ impl<'src> StaticTransitionPlan<'src> {
             .static_recursor_worker_environment_consumption
             .borrow_mut();
         let count = ledger.entry(occurrence).or_insert(0);
-        *count = count.checked_add(1).ok_or_else(|| {
-            planner_capacity_error("static recursor environment ledger exhausted")
-        })?;
+        if *count == 1
+            && self.static_recursor_environment_has_affine_case_revisit(record)
+        {
+            // Functionized lowering may visit the same source constructor
+            // through both its composed-value and known-constructor staging
+            // routes. Reborrow is lawful only when one exact reachable
+            // source-case record proves those routes are mutually exclusive
+            // compiler visits to a single affine source occurrence. All other
+            // repeats remain duplicate emissions and fail the exact ledger.
+        } else {
+            *count = count.checked_add(1).ok_or_else(|| {
+                planner_capacity_error("static recursor environment ledger exhausted")
+            })?;
+        }
         #[cfg(test)]
         let mut tag = record.selected_tag;
         #[cfg(not(test))]
@@ -9564,6 +10842,37 @@ impl<'src> StaticTransitionPlan<'src> {
             }
         }
         Ok(AggregateRepresentationToken { tag, class })
+    }
+
+    fn static_recursor_environment_has_affine_case_revisit(
+        &self,
+        record: &PlannedStaticRecursorWorkerEnvironment,
+    ) -> bool {
+        let mut cursor = record.producer_origin;
+        let mut seen = BTreeSet::new();
+        let mut authorities = BTreeSet::new();
+        while seen.insert(cursor) {
+            let Some(edge) = self.operand_edges.iter().find(|edge| edge.child == cursor) else {
+                break;
+            };
+            if edge.role == SourceOperandRole::MatchArm && edge.position > 0 {
+                let ordinal = edge.position - 1;
+                let identity = BoundaryUseIdentity::Source {
+                    emitted_owner: record.owner,
+                    parent: edge.parent,
+                    child: edge.child,
+                    position: edge.position,
+                };
+                if self.boundary_uses.iter().any(|planned| {
+                    planned.identity == identity
+                        && planned.disposition == OperandEdgeDisposition::Forwarding
+                }) {
+                    authorities.insert((edge.parent, ordinal));
+                }
+            }
+            cursor = edge.parent;
+        }
+        authorities.len() == 1
     }
 
     /// The artifact-static constructor identity of a `Construct` occurrence —
@@ -10462,6 +11771,8 @@ impl<'src> StaticTransitionPlan<'src> {
             expected_aggregates,
             expected_synthesized_aggregates,
             expected_worker_environments,
+            expected_source_occurrences,
+            expected_carried_recursor_positions,
         ) = build_producer_flow_plans(self)?;
         if self.case_emissions != expected_cases {
             return Err(planner_error(
@@ -10482,6 +11793,16 @@ impl<'src> StaticTransitionPlan<'src> {
         if self.static_recursor_worker_environments != expected_worker_environments {
             return Err(planner_error(
                 "static recursor worker environments are not the exact producer-flow derivation",
+            ));
+        }
+        if self.emitted_source_occurrences != expected_source_occurrences {
+            return Err(planner_error(
+                "emitted source occurrences are not the exact producer-flow derivation",
+            ));
+        }
+        if self.carried_recursor_positions != expected_carried_recursor_positions {
+            return Err(planner_error(
+                "carried recursor positions are not the exact producer-flow derivation",
             ));
         }
         let mut keys = BTreeSet::new();
@@ -10540,7 +11861,11 @@ impl<'src> StaticTransitionPlan<'src> {
         }
         let mut worker_environment_keys = BTreeSet::new();
         for record in &self.static_recursor_worker_environments {
-            if !worker_environment_keys.insert((record.worker_identity, record.residual_id)) {
+            if !worker_environment_keys.insert((
+                record.worker_identity,
+                record.residual_id,
+                record.owner,
+            )) {
                 return Err(planner_error(
                     "static recursor worker environment plan contains a duplicate occurrence",
                 ));
@@ -12204,6 +13529,7 @@ mod tests {
         assert_eq!(
             edge.identity(),
             BoundaryUseIdentity::Source {
+                emitted_owner: plan.function_owner_for_test(root).unwrap(),
                 parent: root,
                 child: plan.child_static_origin(root, 1).unwrap(),
                 position: 1,
@@ -12412,6 +13738,7 @@ mod tests {
             .static_recursor_worker_environment_occurrence(
                 record.worker_identity,
                 record.residual_id,
+                record.owner,
                 record.parent_origin,
                 record.producer_origin,
                 record.sibling_position as usize,
@@ -12468,6 +13795,7 @@ mod tests {
             .static_recursor_worker_environment_occurrence(
                 record.worker_identity,
                 record.residual_id,
+                record.owner,
                 record.parent_origin,
                 record.producer_origin,
                 record.sibling_position as usize,
@@ -12683,6 +14011,7 @@ mod tests {
         assert_eq!(
             source_edge.identity(),
             BoundaryUseIdentity::Source {
+                emitted_owner: plan.function_owner_for_test(scrutinee).unwrap(),
                 parent: scrutinee,
                 child: closure,
                 position: 0,
@@ -13001,6 +14330,7 @@ mod tests {
             .root_static_origin()
             .expect("the fixture has a root occurrence");
         let source_identity = BoundaryUseIdentity::Source {
+            emitted_owner: plan.function_owner_for_test(root).unwrap(),
             parent: root,
             child: plan
                 .child_static_origin(root, 0)

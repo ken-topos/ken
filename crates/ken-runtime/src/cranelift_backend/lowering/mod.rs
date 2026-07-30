@@ -1759,6 +1759,169 @@ impl From<Lowered> for LoweringOperand {
 /// template from a runtime value, which is the wall this whole node exists to
 /// remove, wearing a different name.
 impl<'a> Lowering<'a> {
+    fn emitted_owner(&self) -> Result<PredeclaredFunctionId, CraneliftBackendError> {
+        self.active_emission_owner.ok_or_else(|| {
+            backend(BackendFailure::PlannerInvariant(
+                "lowering boundary use has no active emitted owner".to_string(),
+            ))
+        })
+    }
+
+    fn operand_edge_token(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        self.static_transition_plan.reached_operand_edge_token_for_owner(
+            self.emitted_owner()?,
+            parent,
+            position,
+            role,
+        )
+    }
+
+    fn effect_operand_edge_token(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+        operation: ken_host::HostOpV1,
+        seat: EffectSemanticSeat,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        self.static_transition_plan
+            .effect_operand_edge_token_for_owner(
+                self.emitted_owner()?,
+                parent,
+                position,
+                role,
+                operation,
+                seat,
+            )
+    }
+
+    fn reached_operand_edge_token(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        self.static_transition_plan
+            .reached_operand_edge_token_for_owner(
+                self.emitted_owner()?,
+                parent,
+                position,
+                role,
+            )
+    }
+
+    fn disposition_operand_edge(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<(), CraneliftBackendError> {
+        self.static_transition_plan
+            .disposition_operand_edge_for_owner(
+                self.emitted_owner()?,
+                parent,
+                position,
+                role,
+            )
+    }
+
+    fn aggregate_representation_token(
+        &self,
+        origin: StaticOriginId,
+        class: BoundaryClass,
+        arity: usize,
+    ) -> Result<AggregateRepresentationToken, CraneliftBackendError> {
+        self.static_transition_plan
+            .aggregate_representation_token_for_owner(
+                self.emitted_owner()?,
+                origin,
+                class,
+                arity,
+            )
+    }
+
+    fn synthesized_aggregate_occurrence(
+        &self,
+        effect_origin: StaticOriginId,
+        site: SynthesizedAggregateSite,
+        role: SynthesizedConstructorRole,
+        arity: usize,
+    ) -> Result<SynthesizedAggregateOccurrence, CraneliftBackendError> {
+        self.static_transition_plan
+            .synthesized_aggregate_occurrence_for_owner(
+                self.emitted_owner()?,
+                effect_origin,
+                site,
+                role,
+                arity,
+            )
+    }
+
+    fn lowering_boundary_use_token(
+        &self,
+        edge: LoweringOnlyOperandEdge,
+        origin: StaticOriginId,
+        position: u32,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        self.static_transition_plan
+            .lowering_boundary_use_token_for_owner(
+                edge,
+                origin,
+                position,
+                self.emitted_owner()?,
+            )
+    }
+
+    fn reached_lowering_boundary_use_token(
+        &self,
+        edge: LoweringOnlyOperandEdge,
+        origin: StaticOriginId,
+        position: u32,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        self.static_transition_plan
+            .reached_lowering_boundary_use_token_for_owner(
+                edge,
+                origin,
+                position,
+                self.emitted_owner()?,
+            )
+    }
+
+    fn close_reached_operand_edge(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<OperandEdgeDisposition, CraneliftBackendError> {
+        self.static_transition_plan
+            .close_reached_operand_edge_for_owner(
+                self.emitted_owner()?,
+                parent,
+                position,
+                role,
+            )
+    }
+
+    fn disposition_lowering_boundary_use_if_planned(
+        &self,
+        edge: LoweringOnlyOperandEdge,
+        origin: StaticOriginId,
+        position: u32,
+    ) -> Result<(), CraneliftBackendError> {
+        self.static_transition_plan
+            .disposition_lowering_boundary_use_if_planned_for_owner(
+                edge,
+                origin,
+                position,
+                self.emitted_owner()?,
+            )
+    }
+
     /// Transfer a compile-time [`Lowered`] into the operational carrier.
     ///
     /// ⚠⚠ **The admissibility walk runs HERE and exactly once, before the first
@@ -1786,7 +1949,7 @@ impl<'a> Lowering<'a> {
         origin: StaticOriginId,
         value: &Lowered,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
-        let edge = self.static_transition_plan.lowering_boundary_use_token(
+        let edge = self.lowering_boundary_use_token(
             LoweringOnlyOperandEdge::CallableCapsuleEscape,
             origin,
             u32::MAX,
@@ -1941,6 +2104,9 @@ impl<'a> Lowering<'a> {
                 "one source join consumed its static result plan more than once".to_string(),
             ));
         }
+        self.function_local
+            .dispositioned_join_origins
+            .remove(&origin);
         Ok(token)
     }
 
@@ -1963,13 +2129,19 @@ impl<'a> Lowering<'a> {
         let joins = match self.body_emission_authority {
             BodyEmissionAuthority::RecursiveDescent => {
                 self.static_transition_plan
-                    .disposition_boundary_uses_in_inline_subtree(root)?;
+                    .disposition_boundary_uses_in_inline_subtree_for_owner(
+                        self.emitted_owner()?,
+                        root,
+                    )?;
                 self.static_transition_plan
                     .source_join_origins_in_inline_subtree(root)?
             }
             BodyEmissionAuthority::FunctionizedUnits => {
                 self.static_transition_plan
-                    .disposition_boundary_uses_in_owner_subtree(root)?;
+                    .disposition_boundary_uses_in_owner_subtree_for_owner(
+                        self.emitted_owner()?,
+                        root,
+                    )?;
                 self.static_transition_plan
                     .source_join_origins_in_owner_subtree(root)?
             }
@@ -2087,13 +2259,12 @@ impl<'a> Lowering<'a> {
             let mut omitted_for_mutation = false;
             for (index, root) in case_bodies.into_iter().enumerate() {
                 if reached_cases.contains(&index) {
-                    self.static_transition_plan.close_reached_operand_edge(
+                    self.close_reached_operand_edge(
                         match_origin,
                         1 + index,
                         SourceOperandRole::MatchArm,
                     )?;
-                    self.static_transition_plan
-                        .disposition_lowering_boundary_use_if_planned(
+                    self.disposition_lowering_boundary_use_if_planned(
                             LoweringOnlyOperandEdge::JoinArm,
                             root,
                             0,
@@ -2108,15 +2279,14 @@ impl<'a> Lowering<'a> {
                     omitted_for_mutation = true;
                     continue;
                 }
-                self.static_transition_plan.disposition_operand_edge(
+                self.disposition_operand_edge(
                     match_origin,
                     1 + index,
                     SourceOperandRole::MatchArm,
                 )?;
                 self.disposition_statically_unselected_source_subtree(root)?;
             }
-            self.static_transition_plan
-                .disposition_lowering_boundary_use_if_planned(
+            self.disposition_lowering_boundary_use_if_planned(
                     LoweringOnlyOperandEdge::JoinArm,
                     match_origin,
                     0,
@@ -2356,6 +2526,37 @@ impl<'a> Lowering<'a> {
                 .into_iter()
                 .flat_map(|blocks| blocks.iter().copied())
                 .collect::<Vec<_>>();
+            let naturally_live = blocks.iter().copied().any(|block| {
+                reachable.contains(&block)
+                    || cfg
+                        .pred_iter(block)
+                        .any(|predecessor| reachable.contains(&predecessor.block))
+                    || {
+                        let params = func.dfg.block_params(block);
+                        reachable.iter().copied().any(|reachable_block| {
+                            func.layout.block_insts(reachable_block).any(|inst| {
+                                func.dfg
+                                    .inst_args(inst)
+                                    .iter()
+                                    .any(|argument| params.contains(argument))
+                            })
+                        })
+                    }
+            });
+            #[cfg(test)]
+            let force_live_disposition_check =
+                D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get)
+                    == JoinConsumptionMutation::DispositionDynamicHostResultMerge;
+            #[cfg(not(test))]
+            let force_live_disposition_check = false;
+            if naturally_live && !force_live_disposition_check {
+                // One source occurrence may be staged through mutually
+                // exclusive continuation clones. A local dead classification
+                // is only a candidate until the completed emitted CFG closes:
+                // a reachable block, predecessor, or use proves that another
+                // clone emitted this exact join occurrence.
+                continue;
+            }
             #[cfg(test)]
             let blocks = match D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get) {
                 JoinConsumptionMutation::AttachEntryToFirstMaterializedDead
@@ -2407,6 +2608,7 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
+    #[track_caller]
     pub(super) fn call_declared_unit(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -2414,6 +2616,12 @@ impl<'a> Lowering<'a> {
         inputs: &[LoweringOperand],
         #[cfg(test)] launch_ingress: Option<cranelift_codegen::ir::Value>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        if format!("{body_origin:?}") == "StaticOriginId(442)" {
+            eprintln!(
+                "TRACE resource-body call site rust={}",
+                std::panic::Location::caller()
+            );
+        }
         let target = self
             .function_local
             .unit_calls
@@ -2517,6 +2725,58 @@ impl<'a> Lowering<'a> {
         #[cfg(test)] launch_ingress: Option<cranelift_codegen::ir::Value>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let inputs = self.split_static_recursor_worker_operands(builder, inputs.to_vec())?;
+        if matches!(
+            format!("{:?}", target.origin).as_str(),
+            "StaticOriginId(442)" | "StaticOriginId(641)"
+        ) {
+            eprintln!(
+                "TRACE resource-body caller emitted_owner={:?} target={:?} function={:?} call_site={:?} inputs={} phases={:?}",
+                self.active_emission_owner,
+                target.origin,
+                target.function,
+                target.call_site_origin,
+                inputs.len(),
+                inputs
+                    .iter()
+                    .map(|input| match input {
+                        LoweringOperand::Carried(_) => "carried".to_string(),
+                        LoweringOperand::Specialized(value) => {
+                            format!("specialized:{:?}", value.variant())
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            );
+            if let Some(LoweringOperand::Carried(word)) = inputs.get(1) {
+                let match_origin = self
+                    .static_transition_plan
+                    .child_static_origin(target.origin, 0)?;
+                let first = self
+                    .static_transition_plan
+                    .case_constructor_identity(match_origin, 0)?
+                    .tag_abi_word()?;
+                let first = i64::try_from(first)
+                    .map_err(|_| backend_module("diagnostic identity exceeds i64".to_string()))?;
+                let second = self
+                    .static_transition_plan
+                    .case_constructor_identity(match_origin, 1)?
+                    .tag_abi_word()?;
+                let second = i64::try_from(second)
+                    .map_err(|_| backend_module("diagnostic identity exceeds i64".to_string()))?;
+                let tag = self.emit_carrier_tag(builder, *word)?;
+                let is_first = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    tag,
+                    first,
+                );
+                let is_second = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    tag,
+                    second,
+                );
+                let valid = builder.ins().bor(is_first, is_second);
+                Self::require_i64(builder, valid, 1);
+            }
+        }
         let declared_inputs = target
             .slots
             .iter()
@@ -2852,10 +3112,18 @@ impl<'a> Lowering<'a> {
                 synthesized_identity,
                 args,
             } => {
+                if constructor.contains("ResourceBodyResult") {
+                    eprintln!(
+                        "TRACE transfer resource-body constructor={constructor} origin={origin:?} \
+                         aggregate_origin={aggregate_origin:?} owner={:?} args={}",
+                        self.active_emission_owner,
+                        args.len()
+                    );
+                }
                 let representation_origin = aggregate_origin.unwrap_or(origin);
                 let representation = match (aggregate_origin, synthesized_identity) {
                     (Some(source_origin), None | Some(ConstructorIdentityV1::Source(_))) => {
-                        Some(self.static_transition_plan.aggregate_representation_token(
+                        Some(self.aggregate_representation_token(
                             *source_origin,
                             BoundaryClass::Constructor,
                             args.len(),
@@ -2957,7 +3225,7 @@ impl<'a> Lowering<'a> {
                 fields,
             } => {
                 let representation_origin = aggregate_origin.unwrap_or(origin);
-                let representation = self.static_transition_plan.aggregate_representation_token(
+                let representation = self.aggregate_representation_token(
                     representation_origin,
                     BoundaryClass::Record,
                     fields.len(),
@@ -3005,18 +3273,37 @@ impl<'a> Lowering<'a> {
                 success, error, ok, ..
             } => {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
-                let ok = self.emit_carrier_transfer(builder, origin, ok)?;
-                let error = self.emit_carrier_transfer(builder, origin, error)?;
-                let word = self.emit_carrier_alloc(builder, tag, class, 2)?;
                 let success = if builder.func.dfg.value_type(*success) == types::I64 {
                     *success
                 } else {
                     builder.ins().uextend(types::I64, *success)
                 };
+                let ok_block = builder.create_block();
+                let error_block = builder.create_block();
+                let merge = builder.create_block();
+                builder.append_block_param(merge, types::I64);
+                builder
+                    .ins()
+                    .brif(success, ok_block, &[], error_block, &[]);
+
+                builder.switch_to_block(ok_block);
+                let ok = self.emit_carrier_transfer(builder, origin, ok)?;
+                let word = self.emit_carrier_alloc(builder, tag, class, 1)?;
                 self.emit_carrier_store_scalar(builder, word, success)?;
                 self.emit_carrier_store_field(builder, word, 0, ok)?;
-                self.emit_carrier_store_field(builder, word, 1, error)?;
-                Ok(word)
+                builder.ins().jump(merge, &[word.word.into()]);
+
+                builder.switch_to_block(error_block);
+                let error = self.emit_carrier_transfer(builder, origin, error)?;
+                let word = self.emit_carrier_alloc(builder, tag, class, 1)?;
+                self.emit_carrier_store_scalar(builder, word, success)?;
+                self.emit_carrier_store_field(builder, word, 0, error)?;
+                builder.ins().jump(merge, &[word.word.into()]);
+
+                builder.switch_to_block(merge);
+                Ok(CarriedBoundaryWord {
+                    word: builder.block_params(merge)[0],
+                })
             }
             Lowered::DynamicConstructor(dynamic) => {
                 self.emit_carrier_dynamic_constructor(builder, origin, dynamic)
@@ -3769,6 +4056,19 @@ impl<'a> Lowering<'a> {
         origin: StaticOriginId,
         dynamic: &DynamicConstructorV1,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        if dynamic.alternatives.len() == 10 {
+            eprintln!(
+                "TRACE resource synthesized identities={:?}",
+                dynamic
+                    .alternatives
+                    .iter()
+                    .map(|alternative| (
+                        alternative.constructor.as_str(),
+                        alternative.identity.tag_abi_word()
+                    ))
+                    .collect::<Vec<_>>()
+            );
+        }
         validate_dynamic_constructor_alternatives(
             dynamic
                 .alternatives
@@ -5440,8 +5740,7 @@ impl<'a> Lowering<'a> {
                     .static_transition_plan
                     .synthesized_constructor_identity(role)?,
                 aggregate: Some(
-                    self.static_transition_plan
-                        .synthesized_aggregate_occurrence(effect_origin, site, role, args.len())?,
+                    self.synthesized_aggregate_occurrence(effect_origin, site, role, args.len())?,
                 ),
             }),
             args,
@@ -5481,8 +5780,7 @@ impl<'a> Lowering<'a> {
             constructor,
             identity: self.synthesized_fixed_identity(role)?,
             aggregate: Some(
-                self.static_transition_plan
-                    .synthesized_aggregate_occurrence(
+                self.synthesized_aggregate_occurrence(
                         effect_origin,
                         site,
                         synthesized_role,
@@ -5526,8 +5824,7 @@ impl<'a> Lowering<'a> {
                             *role,
                         ))?,
                     aggregate: Some(
-                        self.static_transition_plan
-                            .synthesized_aggregate_occurrence(
+                        self.synthesized_aggregate_occurrence(
                                 effect_origin,
                                 SynthesizedAggregateSite::IoError(u32::try_from(tag).map_err(
                                     |_| {
@@ -8003,9 +8300,7 @@ impl<'a> Lowering<'a> {
         // is the recursor closure template itself. A source call consumes the
         // marker from its callee before it executes; its returned semantic
         // value may therefore be carried and must continue unchanged.
-        let edge = self
-            .static_transition_plan
-            .reached_lowering_boundary_use_token(
+        let edge = self.reached_lowering_boundary_use_token(
                 LoweringOnlyOperandEdge::CheckedComputationalIhMarker,
                 marker_origin,
                 0,
@@ -8291,7 +8586,16 @@ impl<'a> Lowering<'a> {
                     }
                     recursive_worker
                 }
-                LoweringOperand::Carried(_) => recursive_worker,
+                LoweringOperand::Carried(_) => {
+                    if recursive_worker.is_none() {
+                        self.static_transition_plan
+                            .disposition_recursor_boundary_use_if_planned(
+                                static_origin,
+                                sibling_position,
+                            )?;
+                    }
+                    recursive_worker
+                }
             }
         };
         let (residual, payload) = decompose_computational_recursor(recursive);
@@ -8494,9 +8798,7 @@ impl<'a> Lowering<'a> {
             ));
         }
         let _ = construct;
-        let edge = self
-            .static_transition_plan
-            .reached_lowering_boundary_use_token(
+        let edge = self.reached_lowering_boundary_use_token(
                 LoweringOnlyOperandEdge::JoinArm,
                 join_plan.origin,
                 0,
@@ -8621,9 +8923,7 @@ impl<'a> Lowering<'a> {
             ));
         }
         let _ = construct;
-        let edge = self
-            .static_transition_plan
-            .reached_lowering_boundary_use_token(
+        let edge = self.reached_lowering_boundary_use_token(
                 LoweringOnlyOperandEdge::JoinArm,
                 join_origin,
                 0,
@@ -9969,6 +10269,12 @@ impl<'a> Lowering<'a> {
         trap: &RuntimeTrap,
     ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
         let identity = self.static_transition_plan.trap_identity(trap)?;
+        eprintln!(
+            "TRACE trap identity={} code={:?} message={}",
+            identity.abi_word(),
+            trap.code,
+            trap.message
+        );
         match self.function_local.trap_exit {
             Some(TrapExitAuthority::UnitFrame { slots, trap_offset }) => {
                 #[cfg(test)]
@@ -10375,9 +10681,7 @@ impl<'a> Lowering<'a> {
             .static_transition_plan
             .synthesized_constructor_identity(synthesized_role)?
             .tag_abi_word()?;
-        let occurrence = self
-            .static_transition_plan
-            .synthesized_aggregate_occurrence(origin, site, synthesized_role, args.len())?;
+        let occurrence = self.synthesized_aggregate_occurrence(origin, site, synthesized_role, args.len())?;
         let representation = self
             .static_transition_plan
             .synthesized_aggregate_representation_token(
@@ -12238,17 +12542,7 @@ fn borrowed_constructor_identity(
     symbols: &crate::NativeProcessSymbols,
     symbol: &str,
 ) -> Option<(i64, usize)> {
-    if symbol == symbols.process_input {
-        Some((1, 3))
-    } else if symbol == symbols.list_nil {
-        Some((2, 0))
-    } else if symbol == symbols.list_cons {
-        Some((3, 2))
-    } else if symbol == symbols.prod {
-        Some((4, 2))
-    } else {
-        None
-    }
+    symbols.borrowed_constructor_identity(symbol)
 }
 
 #[cfg(test)]

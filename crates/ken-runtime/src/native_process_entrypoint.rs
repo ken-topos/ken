@@ -63,6 +63,20 @@ pub struct NativeProcessSymbols {
 }
 
 impl NativeProcessSymbols {
+    pub(crate) fn borrowed_constructor_identity(&self, symbol: &str) -> Option<(i64, usize)> {
+        if symbol == self.process_input {
+            Some((1, 3))
+        } else if symbol == self.list_nil {
+            Some((2, 0))
+        } else if symbol == self.list_cons {
+            Some((3, 2))
+        } else if symbol == self.prod {
+            Some((4, 2))
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn legacy_prelude() -> Self {
         Self {
             process_input: PROCESS_INPUT_CONSTRUCTOR.to_string(),

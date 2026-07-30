@@ -1161,6 +1161,14 @@ fn stage_unit_body<M: Module>(
                 .base_body_origin(),
         };
         let body = compiler.retained_body_occurrence(body_origin)?;
+        eprintln!(
+            "TRACE unit function={:?} origin={:?} body={body_origin:?} definition={:?} params={} captures={}",
+            unit.function,
+            unit.origin,
+            unit.definition,
+            unit.header.parameters,
+            unit.header.captures
+        );
         let lowered = if matches!(
             unit.definition,
             AbiUnitDefinition::TransparentDeclarationClosure { .. }
@@ -1280,6 +1288,9 @@ fn stage_unit_body<M: Module>(
         builder.ins().return_(&[status]);
         builder.seal_all_blocks();
         builder.finalize();
+    }
+    if format!("{:?}", unit.function) == "PredeclaredFunctionId(5)" {
+        eprintln!("TRACE unit5 clif\n{}", func.display());
     }
     compiler.validate_materialized_dead_join_cfg(unit.function, &func)?;
     verify_cranelift_function(&func, module.isa())?;

@@ -717,9 +717,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 // CallableCapsuleEscape authority remains planner-visible for
                 // direct producer tests, but this compilation causally
                 // dispositions that absent ABI crossing.
-                compiler
-                    .static_transition_plan
-                    .disposition_lowering_boundary_use_if_planned(
+                compiler.disposition_lowering_boundary_use_if_planned(
                         LoweringOnlyOperandEdge::CallableCapsuleEscape,
                         root_origin,
                         u32::MAX,
@@ -736,6 +734,34 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 compiler.require_complete_dynamic_splice_edge_consumption()?;
                 match lowered {
                     LoweringOperand::Carried(word) if process_mode => {
+                        let carrier_tag = builder.ins().band_imm(
+                            word.word,
+                            crate::boundary_value::BOUNDARY_TAG_MASK as i64,
+                        );
+                        let already_status = builder.ins().icmp_imm(
+                            cranelift_codegen::ir::condcodes::IntCC::Equal,
+                            carrier_tag,
+                            BoundaryTag::ImmediateExitStatus as i64,
+                        );
+                        let retained = builder.create_block();
+                        let decoded = builder.create_block();
+                        let exit_word = builder.create_block();
+                        builder.append_block_param(exit_word, types::I64);
+                        builder
+                            .ins()
+                            .brif(already_status, retained, &[], decoded, &[]);
+                        builder.switch_to_block(retained);
+                        builder.ins().jump(exit_word, &[word.word.into()]);
+                        builder.switch_to_block(decoded);
+                        let decoded_word =
+                            compiler.transfer_carried_exit_status(&mut builder, word)?;
+                        builder
+                            .ins()
+                            .jump(exit_word, &[decoded_word.word.into()]);
+                        builder.switch_to_block(exit_word);
+                        let word = CarriedBoundaryWord {
+                            word: builder.block_params(exit_word)[0],
+                        };
                         let tag = builder
                             .ins()
                             .band_imm(word.word, crate::boundary_value::BOUNDARY_TAG_MASK as i64);
@@ -1166,7 +1192,7 @@ impl<'a> Lowering<'a> {
         self.enter_source_occurrence_plan(static_origin)?;
         match scrutinee {
             RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
-                self.static_transition_plan.close_reached_operand_edge(
+                self.close_reached_operand_edge(
                     static_origin,
                     0,
                     SourceOperandRole::WrapperBody,
@@ -1192,7 +1218,7 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
-                self.static_transition_plan.close_reached_operand_edge(
+                self.close_reached_operand_edge(
                     static_origin,
                     0,
                     SourceOperandRole::WrapperBody,
@@ -1209,7 +1235,7 @@ impl<'a> Lowering<'a> {
                 result
             }
             RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
-                self.static_transition_plan.close_reached_operand_edge(
+                self.close_reached_operand_edge(
                     static_origin,
                     0,
                     SourceOperandRole::WrapperBody,
@@ -1222,7 +1248,7 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
-                self.static_transition_plan.close_reached_operand_edge(
+                self.close_reached_operand_edge(
                     static_origin,
                     0,
                     SourceOperandRole::WrapperBody,
@@ -1361,7 +1387,7 @@ impl<'a> Lowering<'a> {
                         .get(&static_origin)
                         .cloned()
                     {
-                        let edge = self.static_transition_plan.operand_edge_token(
+                        let edge = self.operand_edge_token(
                             static_origin,
                             0,
                             SourceOperandRole::CallCallee,
@@ -1388,6 +1414,16 @@ impl<'a> Lowering<'a> {
                     }
                 }
                 let callee = self.lower_expr(builder, callee, producer_env)?;
+                let callee_edge = self.reached_operand_edge_token(
+                    static_origin,
+                    0,
+                    SourceOperandRole::CallCallee,
+                )?;
+                if callee_edge.disposition() != OperandEdgeDisposition::SpecializedOnlyLeaf {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "producer callee lost its semantic-inspection disposition".to_string(),
+                    )));
+                }
                 match callee {
                     LoweringOperand::Specialized(Lowered::DeclarationClosure {
                         reference_origin,
@@ -1472,7 +1508,7 @@ impl<'a> Lowering<'a> {
                                         }
                                         LoweringOperand::Specialized(value) => {
                                             let edge =
-                                                self.static_transition_plan.operand_edge_token(
+                                                self.operand_edge_token(
                                                     static_origin,
                                                     1 + position,
                                                     SourceOperandRole::CallArgument,
@@ -1693,7 +1729,7 @@ impl<'a> Lowering<'a> {
                                         }
                                         LoweringOperand::Specialized(value) => {
                                             let edge =
-                                                self.static_transition_plan.operand_edge_token(
+                                                self.operand_edge_token(
                                                     static_origin,
                                                     1 + position,
                                                     SourceOperandRole::CallArgument,
@@ -1823,7 +1859,7 @@ impl<'a> Lowering<'a> {
                             eliminator.static_origin,
                             Some(case_index),
                         )?;
-                        let edge = self.static_transition_plan.operand_edge_token(
+                        let edge = self.operand_edge_token(
                             eliminator.static_origin,
                             1 + case_index,
                             SourceOperandRole::MatchArm,
@@ -2038,6 +2074,7 @@ impl<'a> Lowering<'a> {
                 {
                     return self.lower_known_constructor_operands_composed(
                         builder,
+                        static_origin,
                         constructor,
                         lowered_args,
                         eliminators,
@@ -2070,7 +2107,7 @@ impl<'a> Lowering<'a> {
                 default: producer_default,
             } => {
                 let scrutinee = self.child_occurrence(static_origin, 0, scrutinee)?;
-                let _scrutinee_edge = self.static_transition_plan.operand_edge_token(
+                let _scrutinee_edge = self.operand_edge_token(
                     static_origin,
                     0,
                     SourceOperandRole::MatchScrutinee,
@@ -2201,7 +2238,7 @@ impl<'a> Lowering<'a> {
                         let (lowered, predecessor_origin) = if let Some((index, producer_case)) =
                             dynamic_host_result_producer_case(producer_cases, constructor)?
                         {
-                            let arm_edge = self.static_transition_plan.operand_edge_token(
+                            let arm_edge = self.operand_edge_token(
                                 static_origin,
                                 1 + index,
                                 SourceOperandRole::MatchArm,
@@ -2341,7 +2378,7 @@ impl<'a> Lowering<'a> {
                             | EliminatorFrame::InvocationReturn
                             | EliminatorFrame::Active(_) => continue,
                         };
-                        self.static_transition_plan.disposition_operand_edge(
+                        self.disposition_operand_edge(
                             frame_origin,
                             0,
                             SourceOperandRole::MatchScrutinee,
@@ -2423,7 +2460,7 @@ impl<'a> Lowering<'a> {
                 let scrutinee = self.child_occurrence(static_origin, 0, scrutinee)?;
                 let then_expr = self.child_occurrence(static_origin, 1, then_expr)?;
                 let else_expr = self.child_occurrence(static_origin, 2, else_expr)?;
-                let scrutinee_edge = self.static_transition_plan.reached_operand_edge_token(
+                let scrutinee_edge = self.reached_operand_edge_token(
                     static_origin,
                     0,
                     SourceOperandRole::IfScrutinee,
@@ -2445,7 +2482,7 @@ impl<'a> Lowering<'a> {
                     let unselected = if known { else_expr } else { then_expr };
                     let selected_position = if known { 1 } else { 2 };
                     let unselected_position = if known { 2 } else { 1 };
-                    let selected_edge = self.static_transition_plan.reached_operand_edge_token(
+                    let selected_edge = self.reached_operand_edge_token(
                         static_origin,
                         selected_position,
                         SourceOperandRole::IfArm,
@@ -2455,19 +2492,17 @@ impl<'a> Lowering<'a> {
                             "selected producer If arm lost its forwarding disposition".to_string(),
                         )));
                     }
-                    self.static_transition_plan.disposition_operand_edge(
+                    self.disposition_operand_edge(
                         static_origin,
                         unselected_position,
                         SourceOperandRole::IfArm,
                     )?;
-                    self.static_transition_plan
-                        .disposition_lowering_boundary_use_if_planned(
+                    self.disposition_lowering_boundary_use_if_planned(
                             LoweringOnlyOperandEdge::JoinArm,
                             static_origin,
                             0,
                         )?;
-                    self.static_transition_plan
-                        .disposition_lowering_boundary_use_if_planned(
+                    self.disposition_lowering_boundary_use_if_planned(
                             LoweringOnlyOperandEdge::JoinArm,
                             if known {
                                 then_expr.static_origin
@@ -2563,6 +2598,7 @@ impl<'a> Lowering<'a> {
     fn lower_known_constructor_operands_composed(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        source_producer_origin: StaticOriginId,
         constructor: &str,
         args: Vec<LoweringOperand>,
         eliminators: &[EliminatorFrame<'_>],
@@ -2682,8 +2718,11 @@ impl<'a> Lowering<'a> {
                         .iter()
                         .position(|candidate| *candidate == position)
                         .and_then(|index| ih_slots[index]);
-                    let recursive_worker =
-                        self.selected_static_recursor_worker(frame.static_origin, position)?;
+                    let recursive_worker = self.selected_static_recursor_worker_for_producer(
+                        frame.static_origin,
+                        position,
+                        source_producer_origin,
+                    )?;
                     let induction_hypothesis = self.make_computational_recursor(
                         args[position].clone(),
                         frame.cases.to_vec(),
@@ -2810,6 +2849,14 @@ impl<'a> Lowering<'a> {
         if let LoweringOperand::Carried(word) = scrutinee {
             return match eliminator {
                 EliminatorFrame::Computational(frame) => {
+                    // Carrier dispatch bypasses `specialized_at` below, but it
+                    // still emits and consumes this exact source scrutinee
+                    // occurrence.
+                    let _edge = self.operand_edge_token(
+                        frame.static_origin,
+                        0,
+                        SourceOperandRole::MatchScrutinee,
+                    )?;
                     self.lower_carried_computational_match(builder, word, frame, &eliminators[1..])
                 }
                 // ── ⛔ DEFERRED, and named rather than absorbed ────────────
@@ -2841,7 +2888,7 @@ impl<'a> Lowering<'a> {
         }
         let scrutinee = match eliminator {
             EliminatorFrame::Computational(frame) => {
-                let edge = self.static_transition_plan.operand_edge_token(
+                let edge = self.operand_edge_token(
                     frame.static_origin,
                     0,
                     SourceOperandRole::MatchScrutinee,
@@ -2849,7 +2896,7 @@ impl<'a> Lowering<'a> {
                 scrutinee.specialized_at(edge)?
             }
             EliminatorFrame::Ordinary(frame) => {
-                let edge = self.static_transition_plan.operand_edge_token(
+                let edge = self.operand_edge_token(
                     frame.static_origin,
                     0,
                     SourceOperandRole::MatchScrutinee,
@@ -3011,8 +3058,19 @@ impl<'a> Lowering<'a> {
                         .iter()
                         .position(|candidate| *candidate == position)
                         .and_then(|index| ih_slots[index]);
-                    let recursive_worker =
-                        self.selected_static_recursor_worker(eliminator.static_origin, position)?;
+                    let recursive_worker = match aggregate_origin {
+                        Some(producer_origin) => self
+                            .selected_static_recursor_worker_for_producer(
+                                eliminator.static_origin,
+                                position,
+                                producer_origin,
+                            )?,
+                        None => self
+                            .selected_static_recursor_worker(
+                                eliminator.static_origin,
+                                position,
+                            )?,
+                    };
                     let induction_hypothesis = self.make_computational_recursor(
                         // ⭐ `AC-C4` clause 1 — the SPECIALIZED caller wraps
                         // explicitly, so the phase is stated at the call site
@@ -3467,7 +3525,7 @@ impl<'a> Lowering<'a> {
             }
             // ⭐ These become `outer_scrutinee`'s constructor **template** below,
             // so this is a specialized-only surface, not a spine edge.
-            let edge = self.static_transition_plan.operand_edge_token(
+            let edge = self.operand_edge_token(
                 deferred.construct_origin,
                 deferred.selected_field + 1 + offset,
                 SourceOperandRole::ConstructArgument,
@@ -3551,8 +3609,11 @@ impl<'a> Lowering<'a> {
                         .iter()
                         .position(|candidate| *candidate == position)
                         .and_then(|index| ih_slots[index]);
-                    let recursive_worker =
-                        self.selected_static_recursor_worker(frame.static_origin, position)?;
+                    let recursive_worker = self.selected_static_recursor_worker_for_producer(
+                        frame.static_origin,
+                        position,
+                        deferred.construct_origin,
+                    )?;
                     let induction_hypothesis = self.make_computational_recursor(
                         LoweringOperand::Specialized(constructor_args[position].clone()),
                         frame.cases.to_vec(),
@@ -3604,7 +3665,7 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
-                let edge = self.static_transition_plan.lowering_boundary_use_token(
+                let edge = self.lowering_boundary_use_token(
                     LoweringOnlyOperandEdge::DeferredConstructorTrailingField,
                     deferred.construct_origin,
                     0,
@@ -3719,7 +3780,7 @@ impl<'a> Lowering<'a> {
                     expr
                 } {
                     RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
-                        self.static_transition_plan.close_reached_operand_edge(
+                        self.close_reached_operand_edge(
                             static_origin,
                             0,
                             SourceOperandRole::WrapperBody,
@@ -3736,7 +3797,7 @@ impl<'a> Lowering<'a> {
                         body,
                         ..
                     } => {
-                        self.static_transition_plan.close_reached_operand_edge(
+                        self.close_reached_operand_edge(
                             static_origin,
                             0,
                             SourceOperandRole::WrapperBody,
@@ -3755,7 +3816,7 @@ impl<'a> Lowering<'a> {
                         }
                     }
                     RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
-                        self.static_transition_plan.close_reached_operand_edge(
+                        self.close_reached_operand_edge(
                             static_origin,
                             0,
                             SourceOperandRole::WrapperBody,
@@ -3771,7 +3832,7 @@ impl<'a> Lowering<'a> {
                         body,
                         ..
                     } => {
-                        self.static_transition_plan.close_reached_operand_edge(
+                        self.close_reached_operand_edge(
                             static_origin,
                             0,
                             SourceOperandRole::WrapperBody,
@@ -3800,7 +3861,7 @@ impl<'a> Lowering<'a> {
                         control,
                     },
                     RuntimeExpr::Let { value, body } => {
-                        self.static_transition_plan.close_reached_operand_edge(
+                        self.close_reached_operand_edge(
                             static_origin,
                             0,
                             SourceOperandRole::LetValue,
@@ -4025,8 +4086,7 @@ impl<'a> Lowering<'a> {
                                 value,
                                 LoweringOperand::Specialized(Lowered::RecursiveBackedge)
                             ) {
-                                self.static_transition_plan
-                                    .disposition_lowering_boundary_use_if_planned(
+                                self.disposition_lowering_boundary_use_if_planned(
                                         LoweringOnlyOperandEdge::JoinArm,
                                         edge.producer_origin,
                                         0,
@@ -4075,6 +4135,8 @@ impl<'a> Lowering<'a> {
                                     let word = self.carried_join_arm(
                                         builder,
                                         edge.producer_origin,
+                                        LoweringOnlyOperandEdge::JoinArm,
+                                        0,
                                         value,
                                         Some(edge.target.required_kind),
                                         "NativeJoinPlanV1",
@@ -4098,7 +4160,7 @@ impl<'a> Lowering<'a> {
                             } else if matches!(value, LoweringOperand::Specialized(Lowered::Trap(_))) {
                                 SourceMachineState::Value { value, control }
                             } else {
-                                self.static_transition_plan.close_reached_operand_edge(
+                                self.close_reached_operand_edge(
                                     let_origin,
                                     1,
                                     SourceOperandRole::LetBody,
@@ -4322,7 +4384,7 @@ impl<'a> Lowering<'a> {
                             next,
                         } => {
                             self.enter_source_occurrence_plan(static_origin)?;
-                            self.static_transition_plan.close_reached_operand_edge(
+                            self.close_reached_operand_edge(
                                 static_origin,
                                 0,
                                 SourceOperandRole::MatchScrutinee,
@@ -4515,7 +4577,7 @@ impl<'a> Lowering<'a> {
                             next,
                         } => 'computational_scrutinee: {
                             self.enter_source_occurrence_plan(static_origin)?;
-                            self.static_transition_plan.close_reached_operand_edge(
+                            self.close_reached_operand_edge(
                                 static_origin,
                                 0,
                                 SourceOperandRole::MatchScrutinee,
@@ -4686,7 +4748,11 @@ impl<'a> Lowering<'a> {
                                 }
                                 return Ok(LoweringOperand::Specialized(Lowered::Trap(default)));
                             };
-                            let LoweringOperand::Specialized(Lowered::Constructor { args, .. }) = value else {
+                            let LoweringOperand::Specialized(Lowered::Constructor {
+                                aggregate_origin,
+                                args,
+                                ..
+                            }) = value else {
                                 unreachable!("a selected source case has a constructor value")
                             };
                             if case.argument_binders != args.len() {
@@ -4765,11 +4831,18 @@ impl<'a> Lowering<'a> {
                                         .iter()
                                         .position(|candidate| *candidate == position)
                                         .and_then(|index| ih_slots[index]);
-                                    let recursive_worker = self
-                                        .selected_static_recursor_worker(
+                                    let recursive_worker = match aggregate_origin {
+                                        Some(producer_origin) => self
+                                            .selected_static_recursor_worker_for_producer(
+                                                static_origin,
+                                                position,
+                                                producer_origin,
+                                            )?,
+                                        None => self.selected_static_recursor_worker(
                                             static_origin,
                                             position,
-                                        )?;
+                                        )?,
+                                    };
                                     let induction_hypothesis = self.make_computational_recursor(
                                         LoweringOperand::Specialized(
                                             args[position].clone(),
@@ -4803,9 +4876,7 @@ impl<'a> Lowering<'a> {
                                     induction_hypotheses.push(induction_hypothesis);
                                 }
                             }
-                            let edge = self
-                                .static_transition_plan
-                                .reached_operand_edge_token(
+                            let edge = self.reached_operand_edge_token(
                                 frame.static_origin,
                                 0,
                                 SourceOperandRole::MatchScrutinee,
@@ -5061,6 +5132,25 @@ impl<'a> Lowering<'a> {
                 "the residual environment disagrees with its static worker target",
             ));
         }
+        if matches!(
+            format!("{:?}", worker.closure_origin).as_str(),
+            "StaticOriginId(450)" | "StaticOriginId(731)"
+        ) {
+            let first_capture = captures.first().map(|capture| match capture {
+                LoweringOperand::Carried(word) => format!("carried:{:?}", word.word),
+                LoweringOperand::Specialized(value) => {
+                    format!("specialized:{:?}", value.variant())
+                }
+            });
+            eprintln!(
+                "TRACE prepare worker owner={:?} parent={:?} producer={:?} closure={:?} body={:?} first={first_capture:?}",
+                self.active_emission_owner,
+                worker.parent_origin,
+                worker.producer_origin,
+                worker.closure_origin,
+                worker.body_origin,
+            );
+        }
         let captures = captures
             .into_iter()
             .enumerate()
@@ -5103,6 +5193,11 @@ impl<'a> Lowering<'a> {
             .static_recursor_worker_environment_occurrence(
                 worker.boundary_identity,
                 worker.residual_id,
+                self.active_emission_owner.ok_or_else(|| {
+                    backend(BackendFailure::PlannerInvariant(
+                        "static recursor worker environment has no emitted owner".to_string(),
+                    ))
+                })?,
                 worker.parent_origin,
                 worker.producer_origin,
                 worker.sibling_position,
@@ -6295,13 +6390,13 @@ impl<'a> Lowering<'a> {
         // occurrence. A carried boundary word carries none of those and cannot
         // acquire them (`§2g`: the carrier holds the SSA word and nothing else),
         // so this is a specialized-only surface. ⛔ Fails closed.
-        let edge = self.static_transition_plan.reached_operand_edge_token(
+        let edge = self.reached_operand_edge_token(
             call_origin,
             0,
             SourceOperandRole::CallCallee,
         )?;
         for position in 0..args.len() {
-            let argument = self.static_transition_plan.reached_operand_edge_token(
+            let argument = self.reached_operand_edge_token(
                 call_origin,
                 1 + position,
                 SourceOperandRole::CallArgument,
@@ -6650,8 +6745,7 @@ impl<'a> Lowering<'a> {
             ),
         ] {
             if !consumed {
-                self.static_transition_plan
-                    .disposition_lowering_boundary_use_if_planned(edge, call_origin, 0)?;
+                self.disposition_lowering_boundary_use_if_planned(edge, call_origin, 0)?;
             }
         }
         Ok(())
@@ -6708,13 +6802,13 @@ impl<'a> Lowering<'a> {
         // untouched — that path stays phase-preserving and must not be made to
         // fail closed for a property only the loop needs.
         self.disposition_recursive_declaration_call_alternatives(call_origin, true, false, true)?;
-        let args_edge = self.static_transition_plan.lowering_boundary_use_token(
+        let args_edge = self.lowering_boundary_use_token(
             LoweringOnlyOperandEdge::RecursiveSourceDeclarationArgument,
             call_origin,
             0,
         )?;
         let args = specialized_env_at(&args, args_edge)?;
-        let captures_edge = self.static_transition_plan.lowering_boundary_use_token(
+        let captures_edge = self.lowering_boundary_use_token(
             LoweringOnlyOperandEdge::DeclarationCaptureSpecialization,
             call_origin,
             0,
@@ -6989,13 +7083,17 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         origin: StaticOriginId,
+        boundary_edge: LoweringOnlyOperandEdge,
+        boundary_position: u32,
         lowered: LoweringOperand,
         required_kind: Option<ScalarMergeKind>,
         join: &'static str,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
-        let edge = self
-            .static_transition_plan
-            .reached_lowering_boundary_use_token(LoweringOnlyOperandEdge::JoinArm, origin, 0)?;
+        let edge = self.reached_lowering_boundary_use_token(
+            boundary_edge,
+            origin,
+            boundary_position,
+        )?;
         match lowered {
             LoweringOperand::Carried(word) => {
                 #[cfg(test)]
@@ -7021,18 +7119,34 @@ impl<'a> Lowering<'a> {
             LoweringOperand::Specialized(lowered) => {
                 #[cfg(test)]
                 D8_SPECIALIZED_JOIN_PRODUCTIONS.with(|count| count.set(count.get() + 1));
+                let exit_aggregate_origin = match &lowered {
+                    Lowered::Constructor {
+                        aggregate_origin: Some(origin),
+                        constructor,
+                        ..
+                    } if constructor == &self.process_symbols.exit_success
+                        || constructor == &self.process_symbols.exit_failure =>
+                    {
+                        Some(*origin)
+                    }
+                    _ => None,
+                };
                 let terminal_exit = self.process_object
-                    && (required_kind == Some(ScalarMergeKind::ExitCode)
-                        || self
-                            .function_local
-                            .terminal_result_origins
-                            .contains(&origin))
                     && matches!(
                         &lowered,
                         Lowered::Constructor { constructor, .. }
                             if constructor == &self.process_symbols.exit_success
                                 || constructor == &self.process_symbols.exit_failure
-                    );
+                    )
+                    && (required_kind == Some(ScalarMergeKind::ExitCode)
+                        || self
+                            .function_local
+                            .terminal_result_origins
+                            .contains(&origin)
+                        || exit_aggregate_origin.is_some_and(|origin| {
+                            self.static_transition_plan
+                                .is_terminal_exit_aggregate_origin(origin)
+                        }));
                 if terminal_exit {
                     let status = self.emit_process_exit_status(builder, lowered);
                     self.emit_carrier_immediate(builder, BoundaryTag::ImmediateExitStatus, status)
@@ -7074,6 +7188,32 @@ impl<'a> Lowering<'a> {
         merge_kind: &mut Option<ScalarMergeKind>,
         join: &'static str,
     ) -> Result<(), CraneliftBackendError> {
+        self.jump_planned_join_arm_on_edge(
+            builder,
+            merge,
+            join_plan,
+            origin,
+            LoweringOnlyOperandEdge::JoinArm,
+            0,
+            lowered,
+            merge_kind,
+            join,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn jump_planned_join_arm_on_edge(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        merge: cranelift_codegen::ir::Block,
+        join_plan: &JoinPlanToken,
+        origin: StaticOriginId,
+        boundary_edge: LoweringOnlyOperandEdge,
+        boundary_position: u32,
+        lowered: LoweringOperand,
+        merge_kind: &mut Option<ScalarMergeKind>,
+        join: &'static str,
+    ) -> Result<(), CraneliftBackendError> {
         match join_plan.representation {
             JoinResultRepresentation::NativeScalarPair => {
                 if matches!(lowered, LoweringOperand::Carried(_)) {
@@ -7091,7 +7231,15 @@ impl<'a> Lowering<'a> {
                     .jump(merge, &[value.tag.into(), value.payload.into()]);
             }
             JoinResultRepresentation::CarrierWord => {
-                let word = self.carried_join_arm(builder, origin, lowered, None, join)?;
+                let word = self.carried_join_arm(
+                    builder,
+                    origin,
+                    boundary_edge,
+                    boundary_position,
+                    lowered,
+                    None,
+                    join,
+                )?;
                 builder.ins().jump(merge, &[word.word.into()]);
             }
         }
@@ -7169,10 +7317,31 @@ impl<'a> Lowering<'a> {
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
         if constructor == self.process_symbols.exit_failure {
             if let [LoweringOperand::Carried(code)] = args {
+                eprintln!("TRACE carried failure origin={origin:?}");
+                let edge = if reborrow_source_edges {
+                    self.reached_operand_edge_token(
+                        origin,
+                        0,
+                        SourceOperandRole::ConstructArgument,
+                    )?
+                } else {
+                    self.operand_edge_token(
+                        origin,
+                        0,
+                        SourceOperandRole::ConstructArgument,
+                    )?
+                };
+                if edge.disposition() != OperandEdgeDisposition::SemanticEliminator {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "transparent failure-result payload lost its semantic-eliminator \
+                         disposition"
+                            .to_string(),
+                    )));
+                }
                 return self.transfer_carried_failure_exit_status(builder, *code);
             }
         }
-        let representation = self.static_transition_plan.aggregate_representation_token(
+        let representation = self.aggregate_representation_token(
             origin,
             BoundaryClass::Constructor,
             args.len(),
@@ -7187,13 +7356,13 @@ impl<'a> Lowering<'a> {
                 .static_transition_plan
                 .child_static_origin(origin, position)?;
             let edge = if reborrow_source_edges {
-                self.static_transition_plan.reached_operand_edge_token(
+                self.reached_operand_edge_token(
                     origin,
                     position,
                     SourceOperandRole::ConstructArgument,
                 )?
             } else {
-                self.static_transition_plan.operand_edge_token(
+                self.operand_edge_token(
                     origin,
                     position,
                     SourceOperandRole::ConstructArgument,
@@ -7288,7 +7457,7 @@ impl<'a> Lowering<'a> {
         origin: StaticOriginId,
         fields: &[(String, LoweringOperand)],
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
-        let representation = self.static_transition_plan.aggregate_representation_token(
+        let representation = self.aggregate_representation_token(
             origin,
             BoundaryClass::Record,
             fields.len(),
@@ -7311,7 +7480,7 @@ impl<'a> Lowering<'a> {
             let child = match field {
                 LoweringOperand::Carried(child) => *child,
                 LoweringOperand::Specialized(value) => {
-                    let edge = self.static_transition_plan.operand_edge_token(
+                    let edge = self.operand_edge_token(
                         origin,
                         position,
                         SourceOperandRole::RecordField,
@@ -7327,34 +7496,17 @@ impl<'a> Lowering<'a> {
     /// Preserve the established process-exit mapping when the failure code
     /// crosses a unit edge before its enclosing constructor is lowered.
     ///
-    /// Every valid native exit code is inside the immediate-Int domain. A
-    /// non-immediate Int is therefore invalid without decoding its magnitude;
-    /// the immediate arm reads the scalar through the carrier ABI and applies
-    /// the same `0 -> 1`, `1..=255 -> self`, otherwise `-3` mapping used by
-    /// `emit_process_exit_status`.
+    /// A carried exact `Int` may be either immediate or persistent: crossing
+    /// an emitted aggregate occurrence is allowed to preserve the semantic
+    /// integer in the boundary region. Narrow both representations through
+    /// the checked carrier view, then apply the same `0 -> 1`, `1..=255 ->
+    /// self`, otherwise `-3` mapping used by `emit_process_exit_status`.
     fn transfer_carried_failure_exit_status(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         code: CarriedBoundaryWord,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
-        let tag = builder
-            .ins()
-            .band_imm(code.word, crate::boundary_value::BOUNDARY_TAG_MASK as i64);
-        let immediate = builder.ins().icmp_imm(
-            cranelift_codegen::ir::condcodes::IntCC::Equal,
-            tag,
-            BoundaryTag::ImmediateInt as i64,
-        );
-        let immediate_block = builder.create_block();
-        let invalid_block = builder.create_block();
-        let merge = builder.create_block();
-        builder.append_block_param(merge, types::I64);
-        builder
-            .ins()
-            .brif(immediate, immediate_block, &[], invalid_block, &[]);
-
-        builder.switch_to_block(immediate_block);
-        let value = self.emit_carrier_scalar(builder, code)?;
+        let (value, representable) = self.narrow_carried_exact_int_u64(builder, code)?;
         let zero = builder.ins().iconst(types::I64, 0);
         let one = builder.ins().iconst(types::I64, 1);
         let malformed = builder.ins().iconst(types::I64, -3);
@@ -7368,17 +7520,84 @@ impl<'a> Lowering<'a> {
             value,
             255,
         );
-        let valid = builder.ins().band(positive, within_max);
+        let valid = builder.ins().band(representable, positive);
+        let valid = builder.ins().band(valid, within_max);
         let nonzero = builder.ins().select(valid, value, malformed);
         let is_zero =
             builder
                 .ins()
                 .icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, value, zero);
-        let status = builder.ins().select(is_zero, one, nonzero);
+        let valid_zero = builder.ins().band(representable, is_zero);
+        let status = builder.ins().select(valid_zero, one, nonzero);
+        self.emit_carrier_immediate(
+            builder,
+            BoundaryTag::ImmediateExitStatus,
+            status,
+        )
+    }
+
+    fn transfer_carried_exit_status(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: CarriedBoundaryWord,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let class = self.emit_carrier_class(builder, value)?;
+        Self::require_i64(builder, class, BoundaryClass::Constructor as i64);
+        let tag = self.emit_carrier_tag(builder, value)?;
+        let field_count = self.emit_carrier_field_count(builder, value)?;
+        let success = self
+            .static_transition_plan
+            .terminal_exit_constructor_identity(&self.process_symbols.exit_success)?
+            .tag_abi_word()?;
+        let failure = self
+            .static_transition_plan
+            .terminal_exit_constructor_identity(&self.process_symbols.exit_failure)?
+            .tag_abi_word()?;
+        let success = i64::try_from(success)
+            .map_err(|_| unsupported("ExitCode", "Success identity exceeds the native ABI"))?;
+        let failure = i64::try_from(failure)
+            .map_err(|_| unsupported("ExitCode", "Failure identity exceeds the native ABI"))?;
+
+        let success_block = builder.create_block();
+        let non_success_block = builder.create_block();
+        let failure_block = builder.create_block();
+        let invalid_block = builder.create_block();
+        let merge = builder.create_block();
+        builder.append_block_param(merge, types::I64);
+
+        let is_success = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            tag,
+            success,
+        );
+        builder
+            .ins()
+            .brif(is_success, success_block, &[], non_success_block, &[]);
+
+        builder.switch_to_block(success_block);
+        Self::require_i64(builder, field_count, 0);
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().jump(merge, &[zero.into()]);
+
+        builder.switch_to_block(non_success_block);
+        let is_failure = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            tag,
+            failure,
+        );
+        builder
+            .ins()
+            .brif(is_failure, failure_block, &[], invalid_block, &[]);
+
+        builder.switch_to_block(failure_block);
+        Self::require_i64(builder, field_count, 1);
+        let code = self.emit_carrier_field(builder, value, 0)?;
+        let status = self.transfer_carried_failure_exit_status(builder, code)?;
+        let status = self.emit_carrier_scalar(builder, status)?;
         builder.ins().jump(merge, &[status.into()]);
 
         builder.switch_to_block(invalid_block);
-        let malformed = builder.ins().iconst(types::I64, -3);
+        let malformed = builder.ins().iconst(types::I64, -2);
         builder.ins().jump(merge, &[malformed.into()]);
 
         builder.switch_to_block(merge);
@@ -7446,7 +7665,7 @@ impl<'a> Lowering<'a> {
             .iter()
             .enumerate()
             .map(|(offset, operand)| {
-                let token = self.static_transition_plan.operand_edge_token(
+                let token = self.reached_operand_edge_token(
                     parent,
                     first_position + offset,
                     role,
@@ -7466,7 +7685,7 @@ impl<'a> Lowering<'a> {
         position: usize,
         operand: LoweringOperand,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let edge = self.static_transition_plan.operand_edge_token(
+        let edge = self.operand_edge_token(
             parent,
             position,
             SourceOperandRole::LexicalCapture,
@@ -7509,7 +7728,7 @@ impl<'a> Lowering<'a> {
             }
             match argument_plan.kind() {
                 EmittableStaticCallableArgumentKind::Ordinary => {
-                    let edge = self.static_transition_plan.operand_edge_token(
+                    let edge = self.operand_edge_token(
                         call_origin,
                         1 + position,
                         SourceOperandRole::CallArgument,
@@ -7522,7 +7741,7 @@ impl<'a> Lowering<'a> {
                     ordinary.push(self.lower_expr(builder, argument, env)?);
                 }
                 EmittableStaticCallableArgumentKind::Erased => {
-                    let edge = self.static_transition_plan.operand_edge_token(
+                    let edge = self.operand_edge_token(
                         call_origin,
                         1 + position,
                         SourceOperandRole::CallArgument,
@@ -7541,7 +7760,7 @@ impl<'a> Lowering<'a> {
                                 .to_string(),
                         )));
                     }
-                    let edge = self.static_transition_plan.operand_edge_token(
+                    let edge = self.operand_edge_token(
                         call_origin,
                         1 + position,
                         SourceOperandRole::CallArgument,
@@ -7564,7 +7783,7 @@ impl<'a> Lowering<'a> {
                     body_origin,
                     declared_arity,
                 } => {
-                    let edge = self.static_transition_plan.operand_edge_token(
+                    let edge = self.operand_edge_token(
                         call_origin,
                         1 + position,
                         SourceOperandRole::CallArgument,
@@ -7698,11 +7917,13 @@ impl<'a> Lowering<'a> {
                     "join plan omitted a merge despite a continuing predecessor".to_string(),
                 )
             })?;
-            self.jump_planned_join_arm(
+            self.jump_planned_join_arm_on_edge(
                 builder,
                 merge,
                 &join_plan,
                 static_origin,
+                LoweringOnlyOperandEdge::BorrowedMatchJoinArm,
+                0,
                 borrowed_result,
                 &mut merge_kind,
                 "a carried borrowed-input match",
@@ -7728,11 +7949,13 @@ impl<'a> Lowering<'a> {
                     "join plan omitted a merge despite a continuing predecessor".to_string(),
                 )
             })?;
-            self.jump_planned_join_arm(
+            self.jump_planned_join_arm_on_edge(
                 builder,
                 merge,
                 &join_plan,
                 static_origin,
+                LoweringOnlyOperandEdge::BorrowedMatchJoinArm,
+                1,
                 represented_result,
                 &mut merge_kind,
                 "a carried represented-value match",
@@ -7926,6 +8149,15 @@ impl<'a> Lowering<'a> {
         join_plan: &JoinPlanToken,
         producer_eliminators: Option<&[EliminatorFrame<'_>]>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        if cases
+            .first()
+            .is_some_and(|case| case.constructor.contains("ResourceBodyResult"))
+        {
+            eprintln!(
+                "TRACE resource-body match origin={static_origin:?} owner={:?} worker={:?}",
+                self.active_emission_owner, self.active_static_recursor_result
+            );
+        }
         // Read identity and arity ONCE, ahead of the chain: both are properties
         // of the scrutinee, not of any case, and re-reading per case would be a
         // second answer to a question that has one.
@@ -8090,6 +8322,21 @@ impl<'a> Lowering<'a> {
         worker: StaticRecursorWorker,
         inputs: &mut Vec<LoweringOperand>,
     ) -> Result<(), CraneliftBackendError> {
+        if matches!(
+            format!("{:?}", worker.body_origin).as_str(),
+            "StaticOriginId(442)" | "StaticOriginId(723)"
+        ) {
+            eprintln!(
+                "TRACE append worker owner={:?} active={:?} env={:?} parent={:?} producer={:?} closure={:?} body={:?}",
+                self.active_emission_owner,
+                self.active_static_recursor_result,
+                environment.word,
+                worker.parent_origin,
+                worker.producer_origin,
+                worker.closure_origin,
+                worker.body_origin,
+            );
+        }
         if inputs.len() != worker.declared_arity {
             return Err(unsupported(
                 "StaticRecursorWorker",
@@ -8142,6 +8389,47 @@ impl<'a> Lowering<'a> {
                         .map(|worker| worker.body_origin),
                 )?
         };
+        token
+            .map(|token| {
+                if token.disposition() != OperandEdgeDisposition::CallableCapture {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "selected static recursor residual is not callable-capture".to_string(),
+                    )));
+                }
+                Ok(StaticRecursorWorker {
+                    boundary_identity: token.identity(),
+                    residual_id: token.id,
+                    parent_origin: token.parent_origin,
+                    producer_origin: token.producer_origin,
+                    sibling_position: token.sibling_position as usize,
+                    closure_origin: token.closure_origin,
+                    body_origin: token.body_origin,
+                    declared_arity: token.declared_arity as usize,
+                    capture_count: token.capture_count as usize,
+                })
+            })
+            .transpose()
+    }
+
+    fn selected_static_recursor_worker_for_producer(
+        &self,
+        parent_origin: StaticOriginId,
+        position: usize,
+        producer_origin: StaticOriginId,
+    ) -> Result<Option<StaticRecursorWorker>, CraneliftBackendError> {
+        if matches!(
+            self.body_emission_authority,
+            BodyEmissionAuthority::RecursiveDescent
+        ) {
+            return self.selected_static_recursor_worker(parent_origin, position);
+        }
+        let token = self
+            .static_transition_plan
+            .selected_static_recursor_worker_residual_token_for_producer(
+                parent_origin,
+                position,
+                producer_origin,
+            )?;
         token
             .map(|token| {
                 if token.disposition() != OperandEdgeDisposition::CallableCapture {
@@ -8505,6 +8793,8 @@ impl<'a> Lowering<'a> {
                 let word = self.carried_join_arm(
                     builder,
                     body_origin,
+                    LoweringOnlyOperandEdge::JoinArm,
+                    0,
                     lowered,
                     None,
                     "a carried `ComputationalMatch` arm",
@@ -8599,7 +8889,7 @@ impl<'a> Lowering<'a> {
                 .lower_value(builder, value)
                 .map(LoweringOperand::Specialized),
             RuntimeExpr::CheckedJoinSite { site_id, body } => {
-                self.static_transition_plan.close_reached_operand_edge(
+                self.close_reached_operand_edge(
                     static_origin,
                     0,
                     SourceOperandRole::WrapperBody,
@@ -8621,7 +8911,7 @@ impl<'a> Lowering<'a> {
                 result
             }
             RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
-                self.static_transition_plan.close_reached_operand_edge(
+                self.close_reached_operand_edge(
                     static_origin,
                     0,
                     SourceOperandRole::WrapperBody,
@@ -8642,7 +8932,7 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
-                self.static_transition_plan.close_reached_operand_edge(
+                self.close_reached_operand_edge(
                     static_origin,
                     0,
                     SourceOperandRole::WrapperBody,
@@ -8655,7 +8945,7 @@ impl<'a> Lowering<'a> {
                 result
             }
             RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
-                self.static_transition_plan.close_reached_operand_edge(
+                self.close_reached_operand_edge(
                     static_origin,
                     0,
                     SourceOperandRole::WrapperBody,
@@ -8668,7 +8958,7 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
-                self.static_transition_plan.close_reached_operand_edge(
+                self.close_reached_operand_edge(
                     static_origin,
                     0,
                     SourceOperandRole::WrapperBody,
@@ -8687,7 +8977,7 @@ impl<'a> Lowering<'a> {
             }
             RuntimeExpr::Let { value, body } => {
                 let value = self.child_occurrence(static_origin, 0, value)?;
-                let _value_edge = self.static_transition_plan.operand_edge_token(
+                let _value_edge = self.operand_edge_token(
                     static_origin,
                     0,
                     SourceOperandRole::LetValue,
@@ -8702,7 +8992,7 @@ impl<'a> Lowering<'a> {
                 let mut body_env = vec![lowered_value];
                 body_env.extend_from_slice(env);
                 let body = self.child_occurrence(static_origin, 1, body)?;
-                let _body_edge = self.static_transition_plan.operand_edge_token(
+                let _body_edge = self.operand_edge_token(
                     static_origin,
                     1,
                     SourceOperandRole::LetBody,
@@ -8717,7 +9007,7 @@ impl<'a> Lowering<'a> {
                 let scrutinee = self.child_occurrence(static_origin, 0, scrutinee)?;
                 let then_expr = self.child_occurrence(static_origin, 1, then_expr)?;
                 let else_expr = self.child_occurrence(static_origin, 2, else_expr)?;
-                let _scrutinee_edge = self.static_transition_plan.operand_edge_token(
+                let _scrutinee_edge = self.operand_edge_token(
                     static_origin,
                     0,
                     SourceOperandRole::IfScrutinee,
@@ -8736,24 +9026,22 @@ impl<'a> Lowering<'a> {
                     let unselected = if scrutinee { else_expr } else { then_expr };
                     let selected_position = if scrutinee { 1 } else { 2 };
                     let unselected_position = if scrutinee { 2 } else { 1 };
-                    let _selected_edge = self.static_transition_plan.operand_edge_token(
+                    let _selected_edge = self.operand_edge_token(
                         static_origin,
                         selected_position,
                         SourceOperandRole::IfArm,
                     )?;
-                    self.static_transition_plan.disposition_operand_edge(
+                    self.disposition_operand_edge(
                         static_origin,
                         unselected_position,
                         SourceOperandRole::IfArm,
                     )?;
-                    self.static_transition_plan
-                        .disposition_lowering_boundary_use_if_planned(
+                    self.disposition_lowering_boundary_use_if_planned(
                             LoweringOnlyOperandEdge::JoinArm,
                             static_origin,
                             0,
                         )?;
-                    self.static_transition_plan
-                        .disposition_lowering_boundary_use_if_planned(
+                    self.disposition_lowering_boundary_use_if_planned(
                             LoweringOnlyOperandEdge::JoinArm,
                             if scrutinee {
                                 then_expr.static_origin
@@ -8790,7 +9078,7 @@ impl<'a> Lowering<'a> {
                     } else {
                         2
                     };
-                    let _arm_edge = self.static_transition_plan.operand_edge_token(
+                    let _arm_edge = self.operand_edge_token(
                         static_origin,
                         position,
                         SourceOperandRole::IfArm,
@@ -8832,6 +9120,7 @@ impl<'a> Lowering<'a> {
                 self.finish_planned_join(builder, merge, &join_plan, merge_kind, "If")
             }
             RuntimeExpr::Construct { constructor, args } => {
+                let mut lower_construct = || -> Result<LoweringOperand, CraneliftBackendError> {
                 let lowered_args = args
                     .iter()
                     .enumerate()
@@ -8845,7 +9134,7 @@ impl<'a> Lowering<'a> {
                     .any(|arg| matches!(arg, LoweringOperand::Specialized(Lowered::RecursiveBackedge)))
                 {
                     for position in 0..lowered_args.len() {
-                        self.static_transition_plan.reached_operand_edge_token(
+                        self.reached_operand_edge_token(
                             static_origin,
                             position,
                             SourceOperandRole::ConstructArgument,
@@ -8902,12 +9191,20 @@ impl<'a> Lowering<'a> {
                         SourceOperandRole::ConstructArgument,
                     )?,
                 }))
+                };
+                lower_construct()
             }
             RuntimeExpr::Match {
                 scrutinee,
                 cases,
                 default,
             } => {
+                // Keep the large multi-representation Match dispatcher in its
+                // own stack frame. Deep generated-unit bodies alternate Match
+                // and constructor layers; placing every arm's locals in
+                // `lower_expr` itself exhausts the standard test-thread stack
+                // before the source-machine continuation reaches its leaf.
+                let mut lower_match = || -> Result<LoweringOperand, CraneliftBackendError> {
                 let scrutinee_occurrence = self.child_occurrence(static_origin, 0, scrutinee)?;
                 if requires_heterogeneous_deforestation(scrutinee)
                     || self.declaration_call_produces_deforestable_aggregate(scrutinee)
@@ -8926,7 +9223,7 @@ impl<'a> Lowering<'a> {
                         })],
                     );
                 }
-                let scrutinee_edge = self.static_transition_plan.operand_edge_token(
+                let scrutinee_edge = self.operand_edge_token(
                     static_origin,
                     0,
                     SourceOperandRole::MatchScrutinee,
@@ -9170,6 +9467,8 @@ impl<'a> Lowering<'a> {
                 let case_env = env_with(args, env);
                 let body = self.case_body_occurrence(static_origin, index, &case.body)?;
                 self.lower_expr(builder, body, &case_env)
+                };
+                lower_match()
             }
             RuntimeExpr::ComputationalMatch {
                 scrutinee,
@@ -9208,7 +9507,7 @@ impl<'a> Lowering<'a> {
                 }
                 let mut specialized_fields = Vec::with_capacity(lowered_fields.len());
                 for (position, (name, value)) in lowered_fields.into_iter().enumerate() {
-                    let token = self.static_transition_plan.operand_edge_token(
+                    let token = self.operand_edge_token(
                         static_origin,
                         position,
                         SourceOperandRole::RecordField,
@@ -9334,6 +9633,7 @@ impl<'a> Lowering<'a> {
                 ),
             )),
             RuntimeExpr::Call { callee, args } => {
+                let mut lower_call = || -> Result<LoweringOperand, CraneliftBackendError> {
                 let join_plan = self.consumed_join_plan_token(static_origin)?;
                 if matches!(
                     self.body_emission_authority,
@@ -9342,8 +9642,7 @@ impl<'a> Lowering<'a> {
                     // An inline call has no emitted call-result merge. Its
                     // result continues directly in the enclosing source
                     // traversal, so the native JoinArm alternative is absent.
-                    self.static_transition_plan
-                        .disposition_lowering_boundary_use_if_planned(
+                    self.disposition_lowering_boundary_use_if_planned(
                             LoweringOnlyOperandEdge::JoinArm,
                             static_origin,
                             0,
@@ -9360,7 +9659,7 @@ impl<'a> Lowering<'a> {
                         .get(&static_origin)
                         .cloned()
                     {
-                        let edge = self.static_transition_plan.operand_edge_token(
+                        let edge = self.operand_edge_token(
                             static_origin,
                             0,
                             SourceOperandRole::CallCallee,
@@ -9386,7 +9685,7 @@ impl<'a> Lowering<'a> {
                         body,
                     } = callee.expr
                     {
-                        let edge = self.static_transition_plan.operand_edge_token(
+                        let edge = self.operand_edge_token(
                             static_origin,
                             0,
                             SourceOperandRole::CallCallee,
@@ -9418,7 +9717,7 @@ impl<'a> Lowering<'a> {
                                 )?;
                                 let lowered = self.lower_expr(builder, argument, env)?;
                                 let edge =
-                                    self.static_transition_plan.reached_operand_edge_token(
+                                    self.reached_operand_edge_token(
                                         static_origin,
                                         1 + position,
                                         SourceOperandRole::CallArgument,
@@ -9460,6 +9759,16 @@ impl<'a> Lowering<'a> {
                     }
                 }
                 let lowered_callee = self.lower_expr(builder, callee, env)?;
+                let callee_edge = self.reached_operand_edge_token(
+                    static_origin,
+                    0,
+                    SourceOperandRole::CallCallee,
+                )?;
+                if callee_edge.disposition() != OperandEdgeDisposition::SpecializedOnlyLeaf {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "callee lost its semantic-inspection disposition".to_string(),
+                    )));
+                }
                 match lowered_callee {
                     LoweringOperand::Specialized(Lowered::DeclarationClosure {
                         reference_origin,
@@ -9491,23 +9800,6 @@ impl<'a> Lowering<'a> {
                             false,
                             false,
                         )?;
-                        // A callable body may be emitted once per specialization,
-                        // while this source edge still denotes one exact source
-                        // occurrence. Close that planned occurrence on its first
-                        // reached specialization instead of fabricating one use
-                        // per emitted body.
-                        let disposition =
-                            self.static_transition_plan.close_reached_operand_edge(
-                                static_origin,
-                                0,
-                                SourceOperandRole::CallCallee,
-                            )?;
-                        if disposition != OperandEdgeDisposition::SpecializedOnlyLeaf {
-                            return Err(backend(BackendFailure::PlannerInvariant(
-                                "closure callee lost its semantic-inspection disposition"
-                                    .to_string(),
-                            )));
-                        }
                         let mut call_env = args
                             .iter()
                             .enumerate()
@@ -9516,7 +9808,7 @@ impl<'a> Lowering<'a> {
                                     self.child_occurrence(static_origin, 1 + position, arg)?;
                                 let lowered = self.lower_expr(builder, arg, env)?;
                                 let edge =
-                                    self.static_transition_plan.reached_operand_edge_token(
+                                    self.reached_operand_edge_token(
                                         static_origin,
                                         1 + position,
                                         SourceOperandRole::CallArgument,
@@ -9758,6 +10050,8 @@ impl<'a> Lowering<'a> {
                     }
                     _ => Err(unsupported("Call", "callee is not a closure")),
                 }
+                };
+                lower_call()
             }
             RuntimeExpr::Trap(trap) => Ok(LoweringOperand::Specialized(Lowered::Trap(trap.clone()))),
             // ⚠ HAZARD 2 (D3): the capability occupies child position `0` **only
@@ -9832,7 +10126,7 @@ impl<'a> Lowering<'a> {
         operation: ken_host::HostOpV1,
         seat: EffectSemanticSeat,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        self.static_transition_plan.effect_operand_edge_token(
+        self.effect_operand_edge_token(
             static_origin,
             argument_base + argument_ordinal,
             SourceOperandRole::EffectArgument,
@@ -9853,7 +10147,7 @@ impl<'a> Lowering<'a> {
         operation: ken_host::HostOpV1,
         env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        self.static_transition_plan.effect_operand_edge_token(
+        self.effect_operand_edge_token(
             static_origin,
             0,
             SourceOperandRole::EffectCapability,
@@ -10813,17 +11107,13 @@ impl<'a> Lowering<'a> {
                 let reply_start_int = self.lower_unsigned_u64_int(builder, reply_start)?;
                 // PX8-SPAN-PROV: bind the minted span to this `readAt`'s buffer
                 // operand acquisition (lowered arg 2, the request seat).
-                let LoweringOperand::Specialized(Lowered::ResourceToken { value: span_origin }) =
+                let span_origin = self.effect_opaque_scalar(
+                    builder,
                     read_buffer_operand
                         .as_ref()
-                        .expect("FsReadAt retained its exact buffer seat")
-                else {
-                    return Err(unsupported(
-                        "Effect",
-                        "FsReadAt carried buffer result synthesis is not closed",
-                    ));
-                };
-                let span_origin = *span_origin;
+                        .expect("FsReadAt retained its exact buffer seat"),
+                    false,
+                )?;
                 let span = self.synthesized_constructor(
                     static_origin,
                     SynthesizedAggregateSite::ReadBufferSpan,
@@ -11078,22 +11368,12 @@ impl<'a> Lowering<'a> {
         join_plan: JoinPlanToken,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let _checked_invocation = self.consume_checked_recursive_invocation_call(symbol)?;
-        let callee_edge = self.static_transition_plan.operand_edge_token(
-            call_origin,
-            0,
-            SourceOperandRole::CallCallee,
-        )?;
-        if callee_edge.disposition() != OperandEdgeDisposition::SpecializedOnlyLeaf {
-            return Err(backend(BackendFailure::PlannerInvariant(
-                "declaration callee lost its semantic-inspection disposition".to_string(),
-            )));
-        }
         let lowered_args = args
             .iter()
             .enumerate()
             .map(|(position, arg)| {
                 let arg = self.child_occurrence(call_origin, 1 + position, arg)?;
-                let edge = self.static_transition_plan.operand_edge_token(
+                let edge = self.operand_edge_token(
                     call_origin,
                     1 + position,
                     SourceOperandRole::CallArgument,
@@ -11122,7 +11402,7 @@ impl<'a> Lowering<'a> {
             return self.call_declared_declaration_unit(builder, reference_origin, &inputs);
         }
         self.disposition_recursive_declaration_call_alternatives(call_origin, false, true, true)?;
-        let captures_edge = self.static_transition_plan.lowering_boundary_use_token(
+        let captures_edge = self.lowering_boundary_use_token(
             LoweringOnlyOperandEdge::DeclarationCaptureSpecialization,
             call_origin,
             0,
@@ -11133,7 +11413,7 @@ impl<'a> Lowering<'a> {
         // (`same_recursive_argument_shapes`) and lowered into block params. A
         // carried boundary word has no such shape, so this is a
         // specialized-only surface with the ruled fail-closed arm.
-        let args_edge = self.static_transition_plan.lowering_boundary_use_token(
+        let args_edge = self.lowering_boundary_use_token(
             LoweringOnlyOperandEdge::RecursiveDeclarationArgument,
             call_origin,
             0,
@@ -11754,7 +12034,7 @@ impl<'a> Lowering<'a> {
             };
             let arm_env = env_with([payload], env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
-            let arm_edge = self.static_transition_plan.operand_edge_token(
+            let arm_edge = self.operand_edge_token(
                 static_origin,
                 1 + index,
                 SourceOperandRole::MatchArm,
@@ -11784,7 +12064,15 @@ impl<'a> Lowering<'a> {
                 }
                 JoinResultRepresentation::CarrierWord => {
                     let word =
-                        self.carried_join_arm(builder, body.static_origin, lowered, None, "Match")?;
+                        self.carried_join_arm(
+                            builder,
+                            body.static_origin,
+                            LoweringOnlyOperandEdge::JoinArm,
+                            0,
+                            lowered,
+                            None,
+                            "Match",
+                        )?;
                     builder.ins().jump(merge, &[word.word.into()]);
                 }
             }
@@ -11981,7 +12269,7 @@ impl<'a> Lowering<'a> {
             };
             let arm_env = materialize_dynamic_constructor_env(&alternative, env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
-            let arm_edge = self.static_transition_plan.operand_edge_token(
+            let arm_edge = self.operand_edge_token(
                 static_origin,
                 1 + index,
                 SourceOperandRole::MatchArm,
@@ -12050,7 +12338,7 @@ impl<'a> Lowering<'a> {
             .iter()
             .enumerate()
             .map(|(position, arg)| {
-                let _edge = self.static_transition_plan.operand_edge_token(
+                let _edge = self.operand_edge_token(
                     static_origin,
                     position,
                     SourceOperandRole::PrimitiveArgument,
