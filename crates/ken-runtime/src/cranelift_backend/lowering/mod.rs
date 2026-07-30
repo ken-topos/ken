@@ -78,7 +78,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     CheckedOrientedMarkerSets, ConstructorIdentity, EmittableCallKind,
     EmittableStaticCallableArgumentKind, EmittableStaticCallableBinding,
     EmittableStaticCallableCall, EmittableStaticCallableCapture, EmittableStaticCallableUnit,
-    EmittableUnit, JoinPlanToken, JoinResultRepresentation, LoweringOnlyOperandEdge,
+    EmittableUnit, EffectSemanticSeat, JoinPlanToken, JoinResultRepresentation, LoweringOnlyOperandEdge,
     OperandEdgeDisposition, OperandEdgeToken, PredeclaredFunctionId, SourceOperandRole,
     StaticCallableSpecializationId, StaticOriginId, StaticRecursorWorkerResidualId,
     StaticRecursorCaptureLifetime, StaticTransitionPlan, SynthesizedConstructorRole,
@@ -694,6 +694,8 @@ impl ArtifactHelpers<'_> {
                 store_bytes_len: module
                     .declare_func_in_func(self.boundary_value_abi.store_bytes_len, func),
                 store_byte: module.declare_func_in_func(self.boundary_value_abi.store_byte, func),
+                bytes_view: module
+                    .declare_func_in_func(self.boundary_value_abi.bytes_view, func),
                 store_int_limbs: module
                     .declare_func_in_func(self.boundary_value_abi.store_int_limbs, func),
                 store_int_limb: module
@@ -1365,6 +1367,8 @@ struct BoundaryCarrierRefs {
     store_bytes_len: FuncRef,
     /// `(arena, word, index, byte) -> status` — write one content byte.
     store_byte: FuncRef,
+    /// `(arena, word, out_view) -> status` — checked `{pointer, len}` bytes view.
+    bytes_view: FuncRef,
     /// `(arena, word, sign, len, out) -> status` — claim `len` magnitude limbs
     /// in the node's **own** region for a region-limbed `Int`.
     store_int_limbs: FuncRef,
@@ -1519,10 +1523,11 @@ impl LoweringOperand {
             LoweringOperand::Carried(_) => Err(unsupported(
                 "BoundaryCarrier",
                 format!(
-                    "{} is a specialized-only surface and a carried boundary word has no \
+                    "[owned] {} at {:?} is a specialized-only surface and a carried boundary word has no \
                      compile-time template for it to read; the carrier's ruled route is an \
                      emitted helper call",
-                    edge.label()
+                    edge.label(),
+                    edge.identity()
                 ),
             )),
         }
@@ -1588,10 +1593,11 @@ impl LoweringOperand {
             LoweringOperand::Carried(_) => Err(unsupported(
                 "BoundaryCarrier",
                 format!(
-                    "{} is a specialized-only surface and a carried boundary word has no \
+                    "[ref] {} at {:?} is a specialized-only surface and a carried boundary word has no \
                      compile-time template for it to read; the carrier's ruled route is an \
                      emitted helper call",
-                    edge.label()
+                    edge.label(),
+                    edge.identity()
                 ),
             )),
         }
@@ -1653,10 +1659,11 @@ fn specialized_env_at(
             LoweringOperand::Carried(_) => Err(unsupported(
                 "BoundaryCarrier",
                 format!(
-                    "{} is a specialized-only surface and a carried boundary word has no \
+                    "[env] {} at {:?} is a specialized-only surface and a carried boundary word has no \
                      compile-time template for it to read; the carrier's ruled route is an \
                      emitted helper call",
-                    edge.label()
+                    edge.label(),
+                    edge.identity()
                 ),
             )),
         })
@@ -6751,6 +6758,7 @@ struct SourceJoinTarget<'a> {
 struct SourcePredecessorEdge<'a> {
     target: SourceJoinTarget<'a>,
     predecessor_identity: u64,
+    producer_origin: StaticOriginId,
 }
 /// A cloneable source-evaluation prefix with its terminal edge removed. A
 /// branch fan-out may materialize this prefix once per mutually exclusive CFG
@@ -9572,6 +9580,7 @@ impl<'a> Lowering<'a> {
     fn mint_source_predecessor<'b>(
         &mut self,
         target: SourceJoinTarget<'b>,
+        producer_origin: StaticOriginId,
     ) -> SourcePredecessorEdge<'b> {
         let predecessor_identity = self.next_source_predecessor;
         self.next_source_predecessor = self
@@ -9581,6 +9590,7 @@ impl<'a> Lowering<'a> {
         SourcePredecessorEdge {
             target,
             predecessor_identity,
+            producer_origin,
         }
     }
 
@@ -9802,6 +9812,265 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn wire_carried_bytes(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: CarriedBoundaryWord,
+    ) -> Result<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value), CraneliftBackendError>
+    {
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let view_slot = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            16,
+            3,
+        ));
+        let view = builder.ins().stack_addr(pointer_type, view_slot, 0);
+        let call = builder
+            .ins()
+            .call(refs.bytes_view, &[arena, value.word, view]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        Ok((
+            builder.ins().stack_load(pointer_type, view_slot, 0),
+            builder.ins().stack_load(types::I64, view_slot, 8),
+        ))
+    }
+
+    fn wire_effect_bytes(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: &LoweringOperand,
+    ) -> Result<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value), CraneliftBackendError>
+    {
+        match value {
+            LoweringOperand::Specialized(value) => self.wire_bytes(builder, value),
+            LoweringOperand::Carried(value) => self.wire_carried_bytes(builder, *value),
+        }
+    }
+
+    fn effect_opaque_scalar(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: &LoweringOperand,
+        capability: bool,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        match value {
+            LoweringOperand::Specialized(Lowered::CapabilityToken { value }) if capability => {
+                Ok(*value)
+            }
+            LoweringOperand::Specialized(Lowered::ResourceToken { value }) if !capability => {
+                Ok(*value)
+            }
+            LoweringOperand::Carried(value) => self.emit_carrier_scalar(builder, *value),
+            _ => Err(unsupported(
+                "Effect",
+                if capability {
+                    "effect capability is not an opaque invocation token"
+                } else {
+                    "effect resource is not an opaque resource token"
+                },
+            )),
+        }
+    }
+
+    fn narrow_effect_exact_int_u64(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: &LoweringOperand,
+    ) -> Result<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value), CraneliftBackendError>
+    {
+        match value {
+            LoweringOperand::Specialized(value) => self.narrow_native_int_u64(builder, value),
+            LoweringOperand::Carried(value) => {
+                self.narrow_carried_exact_int_u64(builder, *value)
+            }
+        }
+    }
+
+    fn carried_effect_nullary_tag(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: CarriedBoundaryWord,
+        alternatives: &[(&'static str, i64)],
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let field_count = self.emit_carrier_field_count(builder, value)?;
+        Self::require_i64(builder, field_count, 0);
+        let tag = self.emit_carrier_tag(builder, value)?;
+        let mut expected = Vec::with_capacity(alternatives.len());
+        for (suffix, _) in alternatives {
+            expected.push(
+                self.static_transition_plan
+                    .effect_constructor_tag_word(suffix)? as i64,
+            );
+        }
+        Self::require_one_of_i64(builder, tag, &expected);
+        let mut wire = builder.ins().iconst(types::I64, alternatives[0].1);
+        for ((_, wire_tag), identity) in alternatives.iter().zip(expected) {
+            let matches = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                tag,
+                identity,
+            );
+            let candidate = builder.ins().iconst(types::I64, *wire_tag);
+            wire = builder.ins().select(matches, candidate, wire);
+        }
+        Ok(wire)
+    }
+
+    fn effect_nullary_tag(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: &LoweringOperand,
+        specialized: fn(&Lowered) -> Option<i64>,
+        alternatives: &[(&'static str, i64)],
+        label: &'static str,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        match value {
+            LoweringOperand::Specialized(value) => specialized(value)
+                .map(|tag| builder.ins().iconst(types::I64, tag))
+                .ok_or_else(|| {
+                    unsupported("Effect", format!("effect has a malformed {label} operand"))
+                }),
+            LoweringOperand::Carried(value) => {
+                self.carried_effect_nullary_tag(builder, *value, alternatives)
+            }
+        }
+    }
+
+    fn effect_open_mode_tag(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: &LoweringOperand,
+    ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        let LoweringOperand::Carried(value) = value else {
+            let LoweringOperand::Specialized(value) = value else {
+                unreachable!("lowering operands are a closed phase pair")
+            };
+            return resource_open_mode_tag(value)
+                .map(|tag| builder.ins().iconst(types::I64, tag))
+                .ok_or_else(|| {
+                    unsupported("Effect", "FS.Open has a malformed ResourceOpenMode")
+                });
+        };
+        let tag = self.emit_carrier_tag(builder, *value)?;
+        let read = self
+            .static_transition_plan
+            .effect_constructor_tag_word("::ResourceRead")? as i64;
+        let metadata = self
+            .static_transition_plan
+            .effect_constructor_tag_word("::ResourceMetadata")? as i64;
+        let write = self
+            .static_transition_plan
+            .effect_constructor_tag_word("::ResourceWriteCreate")? as i64;
+        Self::require_one_of_i64(builder, tag, &[read, metadata, write]);
+        let is_read = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            tag,
+            read,
+        );
+        let is_metadata = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            tag,
+            metadata,
+        );
+        let simple = builder.ins().bor(is_read, is_metadata);
+        let simple_block = builder.create_block();
+        let write_block = builder.create_block();
+        let done = builder.create_block();
+        builder.append_block_param(done, types::I64);
+        builder
+            .ins()
+            .brif(simple, simple_block, &[], write_block, &[]);
+        builder.switch_to_block(simple_block);
+        let zero = builder.ins().iconst(types::I64, 0);
+        let one = builder.ins().iconst(types::I64, 1);
+        let simple_tag = builder.ins().select(is_read, zero, one);
+        builder.ins().jump(done, &[simple_tag.into()]);
+        builder.switch_to_block(write_block);
+        let field_count = self.emit_carrier_field_count(builder, *value)?;
+        Self::require_i64(builder, field_count, 1);
+        let policy = self.emit_carrier_field(builder, *value, 0)?;
+        let policy = self.carried_effect_nullary_tag(
+            builder,
+            policy,
+            &[
+                ("::CreateNew", 2),
+                ("::CreateOrTruncate", 3),
+                ("::CreateOrKeep", 4),
+            ],
+        )?;
+        builder.ins().jump(done, &[policy.into()]);
+        builder.switch_to_block(done);
+        Ok(builder.block_params(done)[0])
+    }
+
+    fn emit_effect_carrier_child(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        value: &LoweringOperand,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        match value {
+            LoweringOperand::Specialized(value) => {
+                self.emit_carrier_transfer(builder, origin, value)
+            }
+            LoweringOperand::Carried(value) => Ok(*value),
+        }
+    }
+
+    fn synthesized_effect_carrier_constructor(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        role: SynthesizedFixedConstructorRole,
+        args: &[LoweringOperand],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let identity = self
+            .static_transition_plan
+            .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(role))?
+            .tag_abi_word()?;
+        let word = self.emit_carrier_alloc(
+            builder,
+            BoundaryTag::PersistentGround,
+            BoundaryClass::Constructor,
+            args.len(),
+        )?;
+        self.emit_carrier_store_tag_id(builder, word, identity)?;
+        for (position, argument) in args.iter().enumerate() {
+            let child = self.emit_effect_carrier_child(builder, origin, argument)?;
+            self.emit_carrier_store_field(builder, word, position, child)?;
+        }
+        Ok(LoweringOperand::Carried(word))
+    }
+
+    fn effect_carrier_host_result(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        success: cranelift_codegen::ir::Value,
+        ok: &LoweringOperand,
+        error: &LoweringOperand,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let ok = self.emit_effect_carrier_child(builder, origin, ok)?;
+        let error = self.emit_effect_carrier_child(builder, origin, error)?;
+        let word = self.emit_carrier_alloc(
+            builder,
+            BoundaryTag::InvocationHostResult,
+            BoundaryClass::HostResult,
+            2,
+        )?;
+        let success = if builder.func.dfg.value_type(success) == types::I64 {
+            success
+        } else {
+            builder.ins().uextend(types::I64, success)
+        };
+        self.emit_carrier_store_scalar(builder, word, success)?;
+        self.emit_carrier_store_field(builder, word, 0, ok)?;
+        self.emit_carrier_store_field(builder, word, 1, error)?;
+        Ok(LoweringOperand::Carried(word))
+    }
+
     fn narrow_native_int_u64(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -9834,6 +10103,92 @@ impl<'a> Lowering<'a> {
             .ins()
             .load(types::I64, MemFlags::trusted(), output, 0);
         Ok((value, valid))
+    }
+
+    fn narrow_carried_exact_int_u64(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        value: CarriedBoundaryWord,
+    ) -> Result<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value), CraneliftBackendError>
+    {
+        let tag = builder
+            .ins()
+            .band_imm(value.word, crate::boundary_value::BOUNDARY_TAG_MASK as i64);
+        Self::require_one_of_i64(
+            builder,
+            tag,
+            &[
+                BoundaryTag::ImmediateInt as i64,
+                BoundaryTag::PersistentGround as i64,
+            ],
+        );
+        let immediate = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            tag,
+            BoundaryTag::ImmediateInt as i64,
+        );
+        let immediate_block = builder.create_block();
+        let persistent_block = builder.create_block();
+        let done = builder.create_block();
+        builder.append_block_param(done, types::I64);
+        builder.append_block_param(done, types::I8);
+        builder
+            .ins()
+            .brif(immediate, immediate_block, &[], persistent_block, &[]);
+
+        builder.switch_to_block(immediate_block);
+        let scalar = self.emit_carrier_scalar(builder, value)?;
+        let valid = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThanOrEqual,
+            scalar,
+            0,
+        );
+        builder
+            .ins()
+            .jump(done, &[scalar.into(), valid.into()]);
+
+        builder.switch_to_block(persistent_block);
+        let class = self.emit_carrier_class(builder, value)?;
+        Self::require_i64(builder, class, BoundaryClass::Int as i64);
+        let refs = self.carrier_refs()?;
+        let arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(arena);
+        let view_slot = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            24,
+            3,
+        ));
+        let view = builder.ins().stack_addr(pointer_type, view_slot, 0);
+        let call = builder.ins().call(refs.int_view, &[arena, value.word, view]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        let sign = builder.ins().stack_load(types::I64, view_slot, 0);
+        let len = builder.ins().stack_load(types::I64, view_slot, 8);
+        let limbs = builder.ins().stack_load(pointer_type, view_slot, 16);
+        let nonnegative = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            sign,
+            0,
+        );
+        let one_limb = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            len,
+            1,
+        );
+        let valid = builder.ins().band(nonnegative, one_limb);
+        let load = builder.create_block();
+        let invalid = builder.create_block();
+        builder.ins().brif(valid, load, &[], invalid, &[]);
+        builder.switch_to_block(load);
+        let limb = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), limbs, 0);
+        builder.ins().jump(done, &[limb.into(), valid.into()]);
+        builder.switch_to_block(invalid);
+        let zero = builder.ins().iconst(types::I64, 0);
+        builder.ins().jump(done, &[zero.into(), valid.into()]);
+
+        builder.switch_to_block(done);
+        Ok((builder.block_params(done)[0], builder.block_params(done)[1]))
     }
 
     fn lower_dynamic_small_int(

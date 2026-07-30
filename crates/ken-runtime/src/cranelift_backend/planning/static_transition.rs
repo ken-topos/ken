@@ -466,6 +466,12 @@ pub(in crate::cranelift_backend) enum BoundaryUseNeed {
     PreserveValue,
     PreserveCallableProvenance,
     ReadSpecializedTemplate,
+    ObserveSemanticValue,
+    ObserveEffectCapability,
+    ObserveEffectBytes,
+    ObserveEffectConstructorTag,
+    ObserveEffectExactIntU64,
+    ObserveEffectResource,
     EliminateRuntimeValue,
     ForbidCallableCapsule,
 }
@@ -475,11 +481,12 @@ pub(in crate::cranelift_backend) enum BoundaryUseAvail {
     Value,
     CallableProvenance,
     SpecializedTemplate,
+    SemanticObservation,
     NoRuntimeValue,
     FailClosed,
 }
 
-fn boundary_contract(
+fn non_semantic_boundary_contract(
     disposition: OperandEdgeDisposition,
 ) -> (
     BoundaryUsePhase,
@@ -506,8 +513,13 @@ fn boundary_contract(
             BoundaryUseNeed::EliminateRuntimeValue,
             BoundaryUseAvail::NoRuntimeValue,
         ),
-        OperandEdgeDisposition::SemanticEliminator
-        | OperandEdgeDisposition::SpecializedOnlyLeaf => (
+        OperandEdgeDisposition::SemanticEliminator => (
+            BoundaryUsePhase::OperationalCarrier,
+            BoundaryUseOperation::Inspect,
+            BoundaryUseNeed::ObserveSemanticValue,
+            BoundaryUseAvail::SemanticObservation,
+        ),
+        OperandEdgeDisposition::SpecializedOnlyLeaf => (
             BoundaryUsePhase::SpecializedValue,
             BoundaryUseOperation::Inspect,
             BoundaryUseNeed::ReadSpecializedTemplate,
@@ -520,6 +532,179 @@ fn boundary_contract(
             BoundaryUseAvail::FailClosed,
         ),
     }
+}
+
+/// The exact semantic meaning of one admitted host-effect child.
+///
+/// `EffectArgument` remains source-inventory data. This closed key is the
+/// consumer authority: equal structural roles may require different emitted
+/// observations, and the operation plus semantic seat makes that distinction
+/// before a disposition is selected.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum EffectSemanticSeat {
+    Capability,
+    ConsoleStream,
+    Bytes,
+    CreatePolicy,
+    OpenMode,
+    ExactIntU64,
+    Resource,
+}
+
+impl EffectSemanticSeat {
+    fn need(self) -> BoundaryUseNeed {
+        match self {
+            Self::Capability => BoundaryUseNeed::ObserveEffectCapability,
+            Self::ConsoleStream | Self::CreatePolicy | Self::OpenMode => {
+                BoundaryUseNeed::ObserveEffectConstructorTag
+            }
+            Self::Bytes => BoundaryUseNeed::ObserveEffectBytes,
+            Self::ExactIntU64 => BoundaryUseNeed::ObserveEffectExactIntU64,
+            Self::Resource => BoundaryUseNeed::ObserveEffectResource,
+        }
+    }
+}
+
+fn effect_semantic_seats(
+    operation: ken_host::HostOpV1,
+    has_capability: bool,
+) -> Result<Option<Vec<EffectSemanticSeat>>, CraneliftBackendError> {
+    use EffectSemanticSeat as Seat;
+    use ken_host::HostOpV1 as Op;
+
+    let (expects_capability, arguments): (bool, &[Seat]) = match operation {
+        Op::ConsoleWrite => (false, &[Seat::ConsoleStream, Seat::Bytes]),
+        Op::ConsoleFlush | Op::ConsoleIsTerminal => (false, &[Seat::ConsoleStream]),
+        Op::FsReadFile => (true, &[Seat::Bytes]),
+        Op::FsWriteFile => (
+            true,
+            &[Seat::Bytes, Seat::CreatePolicy, Seat::Bytes],
+        ),
+        Op::FsChangeMode => (true, &[Seat::Bytes, Seat::ExactIntU64]),
+        Op::FsOpen => (true, &[Seat::Bytes, Seat::OpenMode]),
+        Op::FsHandleMetadata | Op::ResourceRelease => (false, &[Seat::Resource]),
+        Op::FsReadAt => (
+            false,
+            &[
+                Seat::Resource,
+                Seat::ExactIntU64,
+                Seat::Resource,
+                Seat::ExactIntU64,
+                Seat::ExactIntU64,
+            ],
+        ),
+        Op::FsWriteAt => (
+            false,
+            &[
+                Seat::Resource,
+                Seat::ExactIntU64,
+                Seat::Resource,
+                Seat::ExactIntU64,
+                Seat::ExactIntU64,
+                Seat::Resource,
+            ],
+        ),
+        Op::BufferAllocate => (false, &[Seat::ExactIntU64]),
+        Op::BufferFreeze => (
+            false,
+            &[
+                Seat::Resource,
+                Seat::ExactIntU64,
+                Seat::ExactIntU64,
+                Seat::Resource,
+            ],
+        ),
+        Op::ConsoleRead
+        | Op::ClockWallNow
+        | Op::ClockMonotonicNow
+        | Op::ClockSleepUntil
+        | Op::FsAppendFile
+        | Op::FsMetadata
+        | Op::FsReadDirectory
+        | Op::FsCreateDirectory
+        | Op::FsRemoveFile
+        | Op::FsRemoveDirectory
+        | Op::FsRename
+        | Op::EntropyRandomBytes => {
+            return Ok(None);
+        }
+    };
+    if has_capability != expects_capability {
+        return Err(planner_error(
+            "host operation capability base does not match its semantic-seat contract",
+        ));
+    }
+    let mut seats = Vec::with_capacity(arguments.len() + usize::from(has_capability));
+    if has_capability {
+        seats.push(Seat::Capability);
+    }
+    seats.extend_from_slice(arguments);
+    Ok(Some(seats))
+}
+
+fn operand_edge_contract(
+    disposition: OperandEdgeDisposition,
+    effect_seat: Option<EffectSemanticSeat>,
+) -> (
+    BoundaryUsePhase,
+    BoundaryUseOperation,
+    BoundaryUseNeed,
+    BoundaryUseAvail,
+) {
+    match effect_seat {
+        Some(seat) => (
+            BoundaryUsePhase::OperationalCarrier,
+            BoundaryUseOperation::Inspect,
+            seat.need(),
+            BoundaryUseAvail::SemanticObservation,
+        ),
+        None => non_semantic_boundary_contract(disposition),
+    }
+}
+
+fn effect_edge_contract(
+    expr: &RuntimeExpr,
+    position: usize,
+    role: SourceOperandRole,
+) -> Result<
+    (
+        Option<ken_host::HostOpV1>,
+        Option<EffectSemanticSeat>,
+    ),
+    CraneliftBackendError,
+> {
+    let RuntimeExpr::Effect {
+        operation,
+        capability,
+        args,
+        ..
+    } = expr
+    else {
+        return Ok((None, None));
+    };
+    let Some(seats) = effect_semantic_seats(*operation, capability.is_some())? else {
+        return Ok((None, None));
+    };
+    if seats.len() != args.len() + usize::from(capability.is_some()) {
+        return Err(planner_error(
+            "host operation semantic-seat population is not exact",
+        ));
+    }
+    let seat = seats
+        .get(position)
+        .copied()
+        .ok_or_else(|| planner_error("effect child has no exact semantic seat"))?;
+    let expected_role = if seat == EffectSemanticSeat::Capability {
+        SourceOperandRole::EffectCapability
+    } else {
+        SourceOperandRole::EffectArgument
+    };
+    if role != expected_role {
+        return Err(planner_error(
+            "effect semantic seat does not match its source-inventory role",
+        ));
+    }
+    Ok((Some(*operation), Some(seat)))
 }
 
 impl LoweringOnlyOperandEdge {
@@ -584,6 +769,8 @@ pub(in crate::cranelift_backend) struct OperandEdgeToken {
     operation: BoundaryUseOperation,
     need: BoundaryUseNeed,
     avail: BoundaryUseAvail,
+    effect_operation: Option<ken_host::HostOpV1>,
+    effect_seat: Option<EffectSemanticSeat>,
 }
 
 impl OperandEdgeToken {
@@ -597,6 +784,14 @@ impl OperandEdgeToken {
 
     pub(in crate::cranelift_backend) fn identity(&self) -> BoundaryUseIdentity {
         self.identity
+    }
+
+    pub(in crate::cranelift_backend) fn need(&self) -> BoundaryUseNeed {
+        self.need
+    }
+
+    pub(in crate::cranelift_backend) fn effect_seat(&self) -> Option<EffectSemanticSeat> {
+        self.effect_seat
     }
 }
 
@@ -692,6 +887,8 @@ enum PlannedBoundaryUsePath {
         parent: StaticOriginId,
         child: StaticOriginId,
         position: u32,
+        effect_operation: Option<ken_host::HostOpV1>,
+        effect_seat: Option<EffectSemanticSeat>,
     },
     Synthesized {
         origin: StaticOriginId,
@@ -779,6 +976,8 @@ struct PlannedOperandEdge {
     child: StaticOriginId,
     position: u32,
     role: SourceOperandRole,
+    effect_operation: Option<ken_host::HostOpV1>,
+    effect_seat: Option<EffectSemanticSeat>,
     disposition: OperandEdgeDisposition,
     producer_phase: BoundaryUsePhase,
     consumer_phase: BoundaryUsePhase,
@@ -2217,6 +2416,8 @@ fn build_operand_edge_matrix(
             let SourceChildRole::Operand(role) = role else {
                 continue;
             };
+            let (effect_operation, effect_seat) =
+                effect_edge_contract(occurrence.expr, position, role)?;
             let position = u32::try_from(position)
                 .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
             let producer_owner = plan
@@ -2224,7 +2425,8 @@ fn build_operand_edge_matrix(
                 .function_owner(child)?
                 .ok_or_else(|| planner_error("source operand producer has no function owner"))?;
             let disposition = derive_operand_edge_disposition(plan, parent, child, position, role)?;
-            let (consumer_phase, operation, need, avail) = boundary_contract(disposition);
+            let (consumer_phase, operation, need, avail) =
+                operand_edge_contract(disposition, effect_seat);
             edges.push(PlannedOperandEdge {
                 owner,
                 producer_owner,
@@ -2232,6 +2434,8 @@ fn build_operand_edge_matrix(
                 child,
                 position,
                 role,
+                effect_operation,
+                effect_seat,
                 disposition,
                 producer_phase: BoundaryUsePhase::SpecializedValue,
                 consumer_phase,
@@ -2351,7 +2555,8 @@ fn build_recursor_boundary_uses(
         .enumerate()
         .map(|(ordinal, (owner, parent_origin, sibling_position))| {
             let disposition = OperandEdgeDisposition::SpecializedOnlyLeaf;
-            let (consumer_phase, operation, need, avail) = boundary_contract(disposition);
+            let (consumer_phase, operation, need, avail) =
+                non_semantic_boundary_contract(disposition);
             let ordinal = u32::try_from(ordinal)
                 .map_err(|_| planner_capacity_error("recursor boundary identity exhausted"))?;
             let identity =
@@ -2426,16 +2631,7 @@ fn build_lowering_boundary_uses(
                 };
                 for position in predecessor_positions {
                     let predecessor = plan.semantic.child_origin(origin, position)?;
-                    let phase = plan
-                        .result_phases
-                        .get(predecessor.0 as usize)
-                        .and_then(Option::as_ref)
-                        .ok_or_else(|| {
-                            planner_error("join predecessor has no planned result-phase authority")
-                        })?;
-                    if phase.continues && phase.phase == ResultPhase::SpecializedOnly {
-                        keys.insert((LoweringOnlyOperandEdge::JoinArm, predecessor, 0));
-                    }
+                    keys.insert((LoweringOnlyOperandEdge::JoinArm, predecessor, 0));
                 }
             } else {
                 keys.insert((LoweringOnlyOperandEdge::JoinArm, origin, 0));
@@ -2571,7 +2767,8 @@ fn build_lowering_boundary_uses(
         .enumerate()
         .map(|(ordinal, (edge, origin, position, owner))| {
             let disposition = edge.disposition();
-            let (consumer_phase, operation, need, avail) = boundary_contract(disposition);
+            let (consumer_phase, operation, need, avail) =
+                non_semantic_boundary_contract(disposition);
             let ordinal = u32::try_from(ordinal)
                 .map_err(|_| planner_capacity_error("lowering boundary identity exhausted"))?;
             let identity =
@@ -2611,6 +2808,8 @@ fn build_boundary_uses(
                 parent: edge.parent,
                 child: edge.child,
                 position: edge.position,
+                effect_operation: edge.effect_operation,
+                effect_seat: edge.effect_seat,
             },
             producer_owner: edge.producer_owner,
             consumer_owner: edge.owner,
@@ -2647,7 +2846,7 @@ fn build_boundary_uses(
                         })?,
                     );
                     let (consumer_phase, operation, need, avail) =
-                        boundary_contract(residual.disposition);
+                        non_semantic_boundary_contract(residual.disposition);
                     Ok(PlannedBoundaryUse {
                         identity,
                         path: PlannedBoundaryUsePath::StaticRecursorWorker {
@@ -2735,7 +2934,7 @@ fn build_boundary_uses(
                 .ok_or_else(|| planner_capacity_error("static recursor capture identity exhausted"))?;
             let disposition = OperandEdgeDisposition::Forwarding;
             let (consumer_phase, operation, need, avail) =
-                boundary_contract(disposition);
+                non_semantic_boundary_contract(disposition);
             uses.push(PlannedBoundaryUse {
                 identity,
                 path: PlannedBoundaryUsePath::StaticRecursorCapture {
@@ -5043,6 +5242,65 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(token)
     }
 
+    /// Consume one exact admitted host-operation semantic seat.
+    ///
+    /// The structural role is checked as inventory, while operation and seat
+    /// are the semantic consumer key. A lowering arm therefore cannot borrow a
+    /// same-role token from another host operation or another argument.
+    pub(in crate::cranelift_backend) fn effect_operand_edge_token(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+        operation: ken_host::HostOpV1,
+        seat: EffectSemanticSeat,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        let child = self.semantic.child_origin(parent, position)?;
+        let position = u32::try_from(position)
+            .map_err(|_| planner_capacity_error("effect-seat position exhausted"))?;
+        let owner = self
+            .semantic
+            .function_owner(parent)?
+            .ok_or_else(|| planner_error("effect-seat edge has no function owner"))?;
+        let edge = self
+            .operand_edges
+            .iter()
+            .find(|edge| {
+                edge.owner == owner
+                    && edge.parent == parent
+                    && edge.child == child
+                    && edge.position == position
+                    && edge.role == role
+                    && edge.effect_operation == Some(operation)
+                    && edge.effect_seat == Some(seat)
+            })
+            .ok_or_else(|| planner_error("effect use has no exact planned semantic seat"))?;
+        let identity = BoundaryUseIdentity::Source {
+            parent: edge.parent,
+            child: edge.child,
+            position: edge.position,
+        };
+        let token =
+            self.planned_boundary_use_token(identity, source_operand_role_label(edge.role))?;
+        if token.effect_operation != Some(operation)
+            || token.effect_seat != Some(seat)
+            || token.need != seat.need()
+            || token.avail != BoundaryUseAvail::SemanticObservation
+        {
+            return Err(planner_error(
+                "effect semantic-seat authority does not satisfy its exact consumer need",
+            ));
+        }
+        if !self
+            .operand_edge_consumption
+            .borrow()
+            .contains_key(&identity)
+        {
+            self.record_boundary_use_consumption(identity)?;
+        }
+        Ok(token)
+    }
+
     fn record_boundary_use_consumption(
         &self,
         identity: BoundaryUseIdentity,
@@ -5404,6 +5662,16 @@ impl<'src> StaticTransitionPlan<'src> {
             operation: planned.operation,
             need: planned.need,
             avail: planned.avail,
+            effect_operation: match &planned.path {
+                PlannedBoundaryUsePath::Source {
+                    effect_operation, ..
+                } => *effect_operation,
+                _ => None,
+            },
+            effect_seat: match &planned.path {
+                PlannedBoundaryUsePath::Source { effect_seat, .. } => *effect_seat,
+                _ => None,
+            },
         })
     }
 
@@ -5453,9 +5721,15 @@ impl<'src> StaticTransitionPlan<'src> {
                 })
             })
             .ok_or_else(|| {
+                let source = self
+                    .source_occurrences
+                    .get(origin.0 as usize)
+                    .and_then(Option::as_ref)
+                    .map(|occurrence| occurrence.expr);
                 planner_error(format!(
                     "lowering transition has no exact planner-issued boundary use: \
-                     edge={edge:?}, origin={origin:?}, position={position}, owner={owner:?}"
+                     edge={edge:?}, origin={origin:?}, position={position}, owner={owner:?}, \
+                     source={source:?}"
                 ))
             })?;
         let identity = planned.identity;
@@ -6118,6 +6392,61 @@ impl<'src> StaticTransitionPlan<'src> {
         origin: StaticOriginId,
     ) -> Result<ConstructorIdentity, CraneliftBackendError> {
         self.semantic.constructor_symbol_identity(origin)
+    }
+
+    /// Resolve one already-interned constructor spelling by a closed semantic
+    /// suffix used by an effect seat.
+    ///
+    /// This does not intern or pack a second identity: it filters the semantic
+    /// plane's existing carrier catalog and requires exactly one result.
+    pub(in crate::cranelift_backend) fn effect_constructor_tag_word(
+        &self,
+        suffix: &'static str,
+    ) -> Result<u64, CraneliftBackendError> {
+        let mut matches = self
+            .semantic
+            .carrier_identity_catalog()?
+            .into_iter()
+            .filter(|(spelling, _)| spelling.ends_with(suffix));
+        if let Some((_, identity)) = matches.next() {
+            if matches.next().is_some() {
+                return Err(planner_error(
+                    "effect constructor suffix names more than one planned identity",
+                ));
+            }
+            return Ok(identity);
+        }
+        let fallback = match suffix {
+            "::Stdin" => SynthesizedFixedConstructorRole::EffectConsoleStdin,
+            "::Stdout" => SynthesizedFixedConstructorRole::EffectConsoleStdout,
+            "::Stderr" => SynthesizedFixedConstructorRole::EffectConsoleStderr,
+            "::CreateNew" => SynthesizedFixedConstructorRole::EffectCreateNew,
+            "::CreateOrTruncate" => {
+                SynthesizedFixedConstructorRole::EffectCreateOrTruncate
+            }
+            "::CreateOrKeep" => SynthesizedFixedConstructorRole::EffectCreateOrKeep,
+            "::ResourceRead" => SynthesizedFixedConstructorRole::EffectResourceRead,
+            "::ResourceMetadata" => {
+                SynthesizedFixedConstructorRole::EffectResourceMetadata
+            }
+            "::ResourceWriteCreate" => {
+                SynthesizedFixedConstructorRole::EffectResourceWriteCreate
+            }
+            _ => {
+                return Err(planner_error(format!(
+                    "effect constructor identity ending in {suffix:?} is absent"
+                )));
+            }
+        };
+        let identity = self
+            .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(fallback))?
+            .tag_abi_word()?;
+        if matches.next().is_some() {
+            return Err(planner_error(
+                "effect constructor suffix names more than one planned identity",
+            ));
+        }
+        Ok(identity)
     }
 
     /// The existing semantic-plane identity for one compiler-synthesized
@@ -7171,6 +7500,8 @@ impl<'src> StaticTransitionPlan<'src> {
                 let SourceChildRole::Operand(role) = role else {
                     continue;
                 };
+                let (effect_operation, effect_seat) =
+                    effect_edge_contract(occurrence.expr, position, role)?;
                 let position = u32::try_from(position)
                     .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
                 let producer_owner = self.semantic.function_owner(child)?.ok_or_else(|| {
@@ -7178,7 +7509,8 @@ impl<'src> StaticTransitionPlan<'src> {
                 })?;
                 let disposition =
                     derive_operand_edge_disposition(self, parent, child, position, role)?;
-                let (consumer_phase, operation, need, avail) = boundary_contract(disposition);
+                let (consumer_phase, operation, need, avail) =
+                    operand_edge_contract(disposition, effect_seat);
                 expected.insert(PlannedOperandEdge {
                     owner,
                     producer_owner,
@@ -7186,6 +7518,8 @@ impl<'src> StaticTransitionPlan<'src> {
                     child,
                     position,
                     role,
+                    effect_operation,
+                    effect_seat,
                     disposition,
                     producer_phase: BoundaryUsePhase::SpecializedValue,
                     consumer_phase,
@@ -8834,7 +9168,8 @@ mod tests {
             .find(|edge| edge.parent == crossing_parent && edge.child == closure_child)
             .expect("crossing closure edge remains planned");
         edge.disposition = OperandEdgeDisposition::SemanticEliminator;
-        let (phase, operation, need, avail) = boundary_contract(edge.disposition);
+        let (phase, operation, need, avail) =
+            operand_edge_contract(edge.disposition, edge.effect_seat);
         edge.consumer_phase = phase;
         edge.operation = operation;
         edge.need = need;

@@ -82,10 +82,19 @@ pub(in crate::cranelift_backend) enum SynthesizedFixedConstructorRole {
     ReadEof,
     Wrote,
     Unit,
+    EffectConsoleStdin,
+    EffectConsoleStdout,
+    EffectConsoleStderr,
+    EffectCreateNew,
+    EffectCreateOrTruncate,
+    EffectCreateOrKeep,
+    EffectResourceRead,
+    EffectResourceMetadata,
+    EffectResourceWriteCreate,
 }
 
 impl SynthesizedFixedConstructorRole {
-    pub(super) const ALL: [Self; 24] = [
+    pub(super) const ALL: [Self; 33] = [
         Self::FileError,
         Self::FileOperationRead,
         Self::FileOperationWrite,
@@ -110,6 +119,15 @@ impl SynthesizedFixedConstructorRole {
         Self::ReadEof,
         Self::Wrote,
         Self::Unit,
+        Self::EffectConsoleStdin,
+        Self::EffectConsoleStdout,
+        Self::EffectConsoleStderr,
+        Self::EffectCreateNew,
+        Self::EffectCreateOrTruncate,
+        Self::EffectCreateOrKeep,
+        Self::EffectResourceRead,
+        Self::EffectResourceMetadata,
+        Self::EffectResourceWriteCreate,
     ];
 
     fn spelling<'a>(self, symbols: &'a crate::NativeProcessSymbols) -> &'a str {
@@ -138,6 +156,19 @@ impl SynthesizedFixedConstructorRole {
             Self::ReadEof => &symbols.read_eof,
             Self::Wrote => &symbols.wrote,
             Self::Unit => &symbols.unit,
+            Self::EffectConsoleStdin => "effect-input:ConsoleStream:Stdin",
+            Self::EffectConsoleStdout => "effect-input:ConsoleStream:Stdout",
+            Self::EffectConsoleStderr => "effect-input:ConsoleStream:Stderr",
+            Self::EffectCreateNew => "effect-input:CreatePolicy:CreateNew",
+            Self::EffectCreateOrTruncate => "effect-input:CreatePolicy:CreateOrTruncate",
+            Self::EffectCreateOrKeep => "effect-input:CreatePolicy:CreateOrKeep",
+            Self::EffectResourceRead => "effect-input:ResourceOpenMode:ResourceRead",
+            Self::EffectResourceMetadata => {
+                "effect-input:ResourceOpenMode:ResourceMetadata"
+            }
+            Self::EffectResourceWriteCreate => {
+                "effect-input:ResourceOpenMode:ResourceWriteCreate"
+            }
         }
     }
 }

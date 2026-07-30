@@ -3887,6 +3887,18 @@ impl<'a> Lowering<'a> {
                                 builder.ins().return_(&[failure]);
                                 return Ok(LoweringOperand::Specialized(Lowered::RecursiveBackedge));
                             }
+                            if matches!(
+                                value,
+                                LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+                            ) {
+                                self.static_transition_plan
+                                    .disposition_lowering_boundary_use_if_planned(
+                                        LoweringOnlyOperandEdge::JoinArm,
+                                        edge.producer_origin,
+                                        0,
+                                    )?;
+                                return Ok(value);
+                            }
                             let value = if edge.target.terminal_active_prefix.is_empty() {
                                 value
                             } else {
@@ -3928,7 +3940,7 @@ impl<'a> Lowering<'a> {
                                 JoinResultRepresentation::CarrierWord => {
                                     let word = self.carried_join_arm(
                                         builder,
-                                        edge.target.result_origin,
+                                        edge.producer_origin,
                                         value,
                                         Some(edge.target.required_kind),
                                         "NativeJoinPlanV1",
@@ -5133,7 +5145,8 @@ impl<'a> Lowering<'a> {
                 .unwrap_or_default();
             let mut arm_env = env_with(arm_env, &[]);
             arm_env.extend_from_slice(env);
-            let edge = self.mint_source_predecessor(target.clone());
+            let edge =
+                self.mint_source_predecessor(target.clone(), case_body.static_origin);
             let continuation =
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let branch_control = SourceControl {
@@ -5293,7 +5306,7 @@ impl<'a> Lowering<'a> {
             [(0, true_block, true_body), (1, false_block, false_body)]
         {
             builder.switch_to_block(block);
-            let edge = self.mint_source_predecessor(target.clone());
+            let edge = self.mint_source_predecessor(target.clone(), body.static_origin);
             let continuation =
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let branch_control = SourceControl {
@@ -5489,7 +5502,13 @@ impl<'a> Lowering<'a> {
                 let payload = CarriedBoundaryWord {
                     word: builder.block_params(block)[0],
                 };
-                let edge = self.mint_source_predecessor(target.clone());
+                let body = self.owned_case_body_occurrence(
+                    static_origin,
+                    index,
+                    case.body.clone(),
+                )?;
+                let edge =
+                    self.mint_source_predecessor(target.clone(), body.static_origin);
                 let continuation =
                     Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
                 let branch_control = SourceControl {
@@ -5502,11 +5521,7 @@ impl<'a> Lowering<'a> {
                     builder,
                     &frame_baseline,
                     &mut frame_union,
-                    self.owned_case_body_occurrence(
-                        static_origin,
-                        index,
-                        case.body.clone(),
-                    )?,
+                    body,
                     env_with_operands([LoweringOperand::Carried(payload)], env),
                     branch_control,
                 )?;
@@ -5547,7 +5562,13 @@ impl<'a> Lowering<'a> {
                         self.emit_carrier_field(builder, scrutinee, position)?,
                     ));
                 }
-                let edge = self.mint_source_predecessor(target.clone());
+                let body = self.owned_case_body_occurrence(
+                    static_origin,
+                    index,
+                    case.body.clone(),
+                )?;
+                let edge =
+                    self.mint_source_predecessor(target.clone(), body.static_origin);
                 let continuation =
                     Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
                 let branch_control = SourceControl {
@@ -5560,11 +5581,7 @@ impl<'a> Lowering<'a> {
                     builder,
                     &frame_baseline,
                     &mut frame_union,
-                    self.owned_case_body_occurrence(
-                        static_origin,
-                        index,
-                        case.body.clone(),
-                    )?,
+                    body,
                     env_with_operands(bindings, env),
                     branch_control,
                 )?;
@@ -5694,7 +5711,7 @@ impl<'a> Lowering<'a> {
             (1, err_block, err_constructor, error),
         ] {
             builder.switch_to_block(block);
-            let edge = self.mint_source_predecessor(target.clone());
+            let edge = self.mint_source_predecessor(target.clone(), static_origin);
             let continuation =
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let branch_control = SourceControl {
@@ -5870,7 +5887,10 @@ impl<'a> Lowering<'a> {
                         continue;
                     }
                 };
-            let edge = self.mint_source_predecessor(target.clone());
+            let body =
+                self.owned_case_body_occurrence(static_origin, case_index, case.body.clone())?;
+            let edge =
+                self.mint_source_predecessor(target.clone(), body.static_origin);
             let continuation =
                 Self::instantiate_source_prefix_template(&fanout.source_prefix_template, edge)?;
             let control = SourceControl {
@@ -5883,7 +5903,7 @@ impl<'a> Lowering<'a> {
                 builder,
                 &frame_baseline,
                 &mut frame_union,
-                self.owned_case_body_occurrence(static_origin, case_index, case.body.clone())?,
+                body,
                 materialize_dynamic_constructor_env(&alternative, env),
                 control,
             )?;
@@ -5981,7 +6001,10 @@ impl<'a> Lowering<'a> {
                         continue;
                     }
                 };
-            let edge = self.mint_source_predecessor(target.clone());
+            let body =
+                self.owned_case_body_occurrence(static_origin, case_index, case.body.clone())?;
+            let edge =
+                self.mint_source_predecessor(target.clone(), body.static_origin);
             let continuation =
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let control = SourceControl {
@@ -5994,7 +6017,7 @@ impl<'a> Lowering<'a> {
                 builder,
                 &frame_baseline,
                 &mut frame_union,
-                self.owned_case_body_occurrence(static_origin, case_index, case.body.clone())?,
+                body,
                 materialize_dynamic_constructor_env(&alternative, env),
                 control,
             )?;
@@ -6688,6 +6711,11 @@ impl<'a> Lowering<'a> {
         required_kind: Option<ScalarMergeKind>,
         join: &'static str,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let edge = self.static_transition_plan.lowering_boundary_use_token(
+            LoweringOnlyOperandEdge::JoinArm,
+            origin,
+            0,
+        )?;
         match lowered {
             LoweringOperand::Carried(word) => {
                 #[cfg(test)]
@@ -6729,11 +6757,6 @@ impl<'a> Lowering<'a> {
                     let status = self.emit_process_exit_status(builder, lowered);
                     self.emit_carrier_immediate(builder, BoundaryTag::ImmediateExitStatus, status)
                 } else {
-                    let edge = self.static_transition_plan.lowering_boundary_use_token(
-                        LoweringOnlyOperandEdge::JoinArm,
-                        origin,
-                        0,
-                    )?;
                     self.transfer_into_carrier_on_planned_edge(builder, origin, &lowered, edge)
                 }
             }
@@ -9337,6 +9360,47 @@ impl<'a> Lowering<'a> {
     /// the same `Option` the planner tested (`static_transition.rs` `Effect`
     /// arm) rather than assumed.
     #[allow(clippy::too_many_arguments)]
+    fn effect_argument_operand(
+        &self,
+        lowered: &[LoweringOperand],
+        static_origin: StaticOriginId,
+        argument_base: usize,
+        argument_ordinal: usize,
+        operation: ken_host::HostOpV1,
+        seat: EffectSemanticSeat,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        self.static_transition_plan.effect_operand_edge_token(
+            static_origin,
+            argument_base + argument_ordinal,
+            SourceOperandRole::EffectArgument,
+            operation,
+            seat,
+        )?;
+        lowered
+            .get(argument_ordinal)
+            .cloned()
+            .ok_or_else(|| unsupported("Effect", "host operation is missing a semantic argument"))
+    }
+
+    fn lower_effect_capability_operand(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        capability: &crate::RuntimeCapabilityUse,
+        static_origin: StaticOriginId,
+        operation: ken_host::HostOpV1,
+        env: &[LoweringOperand],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        self.static_transition_plan.effect_operand_edge_token(
+            static_origin,
+            0,
+            SourceOperandRole::EffectCapability,
+            operation,
+            EffectSemanticSeat::Capability,
+        )?;
+        let value = self.child_occurrence(static_origin, 0, &capability.value)?;
+        self.lower_expr(builder, value, env)
+    }
+
     fn lower_process_host_effect(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -9366,31 +9430,6 @@ impl<'a> Lowering<'a> {
                 self.lower_expr(builder, argument, env)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        // BufferFreeze has two ruled phase-bearing resource seats. Every other
-        // host operation remains specialized-only and crosses the typed phase
-        // boundary only after the checked operation is known.
-        let specialized_lowered = if operation == ken_host::HostOpV1::BufferFreeze {
-            for position in 0..args.len() {
-                let edge = self.static_transition_plan.reached_operand_edge_token(
-                    static_origin,
-                    argument_base + position,
-                    SourceOperandRole::EffectArgument,
-                )?;
-                if edge.disposition() != OperandEdgeDisposition::SemanticEliminator {
-                    return Err(backend(BackendFailure::PlannerInvariant(
-                        "BufferFreeze operand lost its semantic-eliminator disposition".to_string(),
-                    )));
-                }
-            }
-            None
-        } else {
-            Some(self.specialized_source_env_at(
-                &lowered,
-                static_origin,
-                argument_base,
-                SourceOperandRole::EffectArgument,
-            )?)
-        };
         let pointer_type = builder.func.dfg.value_type(
             self.function_local
                 .host_dispatch_context
@@ -9419,6 +9458,8 @@ impl<'a> Lowering<'a> {
             cranelift_codegen::ir::Value,
             cranelift_codegen::ir::Value,
         )> = None;
+        let mut file_path_operand: Option<LoweringOperand> = None;
+        let mut read_buffer_operand: Option<LoweringOperand> = None;
         let mut record_narrow_failure =
             |builder: &mut FunctionBuilder<'_>, invalid, detail: i64| {
                 let detail = builder.ins().iconst(types::I64, detail);
@@ -9434,31 +9475,42 @@ impl<'a> Lowering<'a> {
             ken_host::HostOpV1::ConsoleWrite
             | ken_host::HostOpV1::ConsoleFlush
             | ken_host::HostOpV1::ConsoleIsTerminal => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
                         "ambient Console carried a capability",
                     ));
                 }
-                let stream = lowered
-                    .first()
-                    .and_then(console_stream_tag)
-                    .ok_or_else(|| {
-                        unsupported("Effect", "Console operation has a malformed Stream operand")
-                    })?;
-                let stream = builder.ins().iconst(types::I64, stream);
+                let stream = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    0,
+                    operation,
+                    EffectSemanticSeat::ConsoleStream,
+                )?;
+                let stream = self.effect_nullary_tag(
+                    builder,
+                    &stream,
+                    console_stream_tag,
+                    &[("::Stdin", 0), ("::Stdout", 1), ("::Stderr", 2)],
+                    "Stream",
+                )?;
                 builder
                     .ins()
                     .stack_store(stream, request, request_offset(0));
                 if operation == ken_host::HostOpV1::ConsoleWrite {
-                    let (data, len) = self.wire_bytes(
+                    let bytes = self.effect_argument_operand(
+                        &lowered,
+                        static_origin,
+                        argument_base,
+                        1,
+                        operation,
+                        EffectSemanticSeat::Bytes,
+                    )?;
+                    let (data, len) = self.wire_effect_bytes(
                         builder,
-                        lowered.get(1).ok_or_else(|| {
-                            unsupported("Effect", "Console.Write is missing Bytes")
-                        })?,
+                        &bytes,
                     )?;
                     builder.ins().stack_store(data, request, request_offset(1));
                     builder.ins().stack_store(len, request, request_offset(2));
@@ -9468,46 +9520,63 @@ impl<'a> Lowering<'a> {
             | ken_host::HostOpV1::FsWriteFile
             | ken_host::HostOpV1::FsChangeMode
             | ken_host::HostOpV1::FsOpen => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 let capability = capability
                     .ok_or_else(|| unsupported("Effect", "FS operation has no live capability"))?;
-                // Present ⇒ the capability value is child 0 of this occurrence.
-                let capability_value =
-                    self.child_occurrence(static_origin, 0, &capability.value)?;
-                let token = match self.lower_expr(builder, capability_value, env)? {
-                    LoweringOperand::Specialized(Lowered::CapabilityToken { value }) => value,
-                    LoweringOperand::Carried(word) => self.emit_carrier_scalar(builder, word)?,
-                    _ => {
-                        return Err(unsupported(
-                            "Effect",
-                            "FS capability operand is not the opaque invocation token",
-                        ));
-                    }
-                };
-                builder.ins().stack_store(token, request, request_offset(0));
-                let (path, path_len) = self.wire_bytes(
+                let capability = self.lower_effect_capability_operand(
                     builder,
-                    lowered
-                        .first()
-                        .ok_or_else(|| unsupported("Effect", "FS operation is missing its path"))?,
+                    capability,
+                    static_origin,
+                    operation,
+                    env,
+                )?;
+                let token = self.effect_opaque_scalar(builder, &capability, true)?;
+                builder.ins().stack_store(token, request, request_offset(0));
+                let path = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    0,
+                    operation,
+                    EffectSemanticSeat::Bytes,
+                )?;
+                file_path_operand = Some(path.clone());
+                let (path, path_len) = self.wire_effect_bytes(
+                    builder,
+                    &path,
                 )?;
                 builder.ins().stack_store(path, request, request_offset(1));
                 builder
                     .ins()
                     .stack_store(path_len, request, request_offset(2));
                 if operation == ken_host::HostOpV1::FsWriteFile {
-                    let policy = lowered.get(1).and_then(create_policy_tag).ok_or_else(|| {
-                        unsupported("Effect", "FS.WriteFile has a malformed CreatePolicy")
-                    })?;
-                    let (bytes, bytes_len) = self.wire_bytes(
-                        builder,
-                        lowered.get(2).ok_or_else(|| {
-                            unsupported("Effect", "FS.WriteFile is missing contents")
-                        })?,
+                    let policy = self.effect_argument_operand(
+                        &lowered,
+                        static_origin,
+                        argument_base,
+                        1,
+                        operation,
+                        EffectSemanticSeat::CreatePolicy,
                     )?;
-                    let policy = builder.ins().iconst(types::I64, policy);
+                    let policy = self.effect_nullary_tag(
+                        builder,
+                        &policy,
+                        create_policy_tag,
+                        &[
+                            ("::CreateNew", 0),
+                            ("::CreateOrTruncate", 1),
+                            ("::CreateOrKeep", 2),
+                        ],
+                        "CreatePolicy",
+                    )?;
+                    let contents = self.effect_argument_operand(
+                        &lowered,
+                        static_origin,
+                        argument_base,
+                        2,
+                        operation,
+                        EffectSemanticSeat::Bytes,
+                    )?;
+                    let (bytes, bytes_len) = self.wire_effect_bytes(builder, &contents)?;
                     builder
                         .ins()
                         .stack_store(policy, request, request_offset(3));
@@ -9516,10 +9585,16 @@ impl<'a> Lowering<'a> {
                         .ins()
                         .stack_store(bytes_len, request, request_offset(5));
                 } else if operation == ken_host::HostOpV1::FsChangeMode {
-                    let mode = lowered.get(1).ok_or_else(|| {
-                        unsupported("Effect", "FS.ChangeMode is missing its mode")
-                    })?;
-                    let (mode, valid_int) = self.narrow_native_int_u64(builder, mode)?;
+                    let mode = self.effect_argument_operand(
+                        &lowered,
+                        static_origin,
+                        argument_base,
+                        1,
+                        operation,
+                        EffectSemanticSeat::ExactIntU64,
+                    )?;
+                    let (mode, valid_int) =
+                        self.narrow_effect_exact_int_u64(builder, &mode)?;
                     let in_range = builder.ins().icmp_imm(
                         cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
                         mode,
@@ -9531,54 +9606,55 @@ impl<'a> Lowering<'a> {
                     let mode = builder.ins().select(in_range, narrowed, invalid);
                     builder.ins().stack_store(mode, request, request_offset(3));
                 } else if operation == ken_host::HostOpV1::FsOpen {
-                    let mode =
-                        lowered
-                            .get(1)
-                            .and_then(resource_open_mode_tag)
-                            .ok_or_else(|| {
-                                unsupported("Effect", "FS.Open has a malformed ResourceOpenMode")
-                            })?;
-                    let mode = builder.ins().iconst(types::I64, mode);
+                    let mode = self.effect_argument_operand(
+                        &lowered,
+                        static_origin,
+                        argument_base,
+                        1,
+                        operation,
+                        EffectSemanticSeat::OpenMode,
+                    )?;
+                    let mode = self.effect_open_mode_tag(builder, &mode)?;
                     builder.ins().stack_store(mode, request, request_offset(3));
                 }
             }
             ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
                         "resource operation carried a capability",
                     ));
                 }
-                let Lowered::ResourceToken { value: token } = lowered.first().ok_or_else(|| {
-                    unsupported("Effect", "resource operation is missing its token")
-                })?
-                else {
-                    return Err(unsupported(
-                        "Effect",
-                        "resource operand is not an opaque resource token",
-                    ));
-                };
+                let resource = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    0,
+                    operation,
+                    EffectSemanticSeat::Resource,
+                )?;
+                let token = self.effect_opaque_scalar(builder, &resource, false)?;
                 builder
                     .ins()
-                    .stack_store(*token, request, request_offset(0));
+                    .stack_store(token, request, request_offset(0));
             }
             ken_host::HostOpV1::BufferAllocate => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
                         "buffer allocation carried a capability",
                     ));
                 }
-                let capacity = lowered.first().ok_or_else(|| {
-                    unsupported("Effect", "BufferAllocate is missing its capacity")
-                })?;
-                let (capacity, valid) = self.narrow_native_int_u64(builder, capacity)?;
+                let capacity = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    0,
+                    operation,
+                    EffectSemanticSeat::ExactIntU64,
+                )?;
+                let (capacity, valid) =
+                    self.narrow_effect_exact_int_u64(builder, &capacity)?;
                 let invalid = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
                     valid,
@@ -9593,29 +9669,35 @@ impl<'a> Lowering<'a> {
                 if capability.is_some() {
                     return Err(unsupported("Effect", "BufferFreeze carried a capability"));
                 }
-                let token = self.lower_buffer_freeze_resource_seat(
-                    builder,
-                    lowered.first().ok_or_else(|| {
-                        unsupported("Effect", "BufferFreeze is missing its buffer")
-                    })?,
-                    "buffer",
+                let buffer = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    0,
+                    operation,
+                    EffectSemanticSeat::Resource,
                 )?;
-                let start = lowered
-                    .get(1)
-                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its start"))?;
-                let length = lowered
-                    .get(2)
-                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its length"))?;
-                let (LoweringOperand::Specialized(start), LoweringOperand::Specialized(length)) =
-                    (start, length)
-                else {
-                    return Err(unsupported(
-                        "Effect",
-                        "BufferFreeze start and length must remain specialized Int operands",
-                    ));
-                };
-                let (start, start_valid) = self.narrow_native_int_u64(builder, start)?;
-                let (length, length_valid) = self.narrow_native_int_u64(builder, length)?;
+                let token = self.effect_opaque_scalar(builder, &buffer, false)?;
+                let start = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    1,
+                    operation,
+                    EffectSemanticSeat::ExactIntU64,
+                )?;
+                let length = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    2,
+                    operation,
+                    EffectSemanticSeat::ExactIntU64,
+                )?;
+                let (start, start_valid) =
+                    self.narrow_effect_exact_int_u64(builder, &start)?;
+                let (length, length_valid) =
+                    self.narrow_effect_exact_int_u64(builder, &length)?;
                 let valid = builder.ins().band(start_valid, length_valid);
                 let invalid = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
@@ -9624,13 +9706,16 @@ impl<'a> Lowering<'a> {
                 );
                 record_narrow_failure(builder, invalid, 7);
                 // PX8-SPAN-PROV: trailing `span_origin` acquisition token.
-                let span_origin = self.lower_buffer_freeze_resource_seat(
-                    builder,
-                    lowered.get(3).ok_or_else(|| {
-                        unsupported("Effect", "BufferFreeze is missing its span origin")
-                    })?,
-                    "span origin",
+                let span_origin = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    3,
+                    operation,
+                    EffectSemanticSeat::Resource,
                 )?;
+                let span_origin =
+                    self.effect_opaque_scalar(builder, &span_origin, false)?;
                 for (index, value) in [token, start, length, span_origin].into_iter().enumerate() {
                     builder
                         .ins()
@@ -9638,41 +9723,63 @@ impl<'a> Lowering<'a> {
                 }
             }
             ken_host::HostOpV1::FsReadAt | ken_host::HostOpV1::FsWriteAt => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
                         "positioned resource operation carried a capability",
                     ));
                 }
-                let resource = |index: usize, name: &str| {
-                    let Some(Lowered::ResourceToken { value }) = lowered.get(index) else {
-                        return Err(unsupported(
-                            "Effect",
-                            format!("positioned {name} operand is not a resource"),
-                        ));
-                    };
-                    Ok(*value)
-                };
-                let integer = |index: usize, name: &str| {
-                    let Some(value @ Lowered::Int { .. }) = lowered.get(index) else {
-                        return Err(unsupported(
-                            "Effect",
-                            format!("positioned {name} operand is not Int"),
-                        ));
-                    };
-                    Ok(value)
-                };
-                let file = resource(0, "file")?;
+                let file_operand = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    0,
+                    operation,
+                    EffectSemanticSeat::Resource,
+                )?;
+                let file = self.effect_opaque_scalar(builder, &file_operand, false)?;
+                let file_offset_operand = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    1,
+                    operation,
+                    EffectSemanticSeat::ExactIntU64,
+                )?;
                 let (file_offset, file_offset_valid) =
-                    self.narrow_native_int_u64(builder, integer(1, "file offset")?)?;
-                let buffer = resource(2, "buffer")?;
+                    self.narrow_effect_exact_int_u64(builder, &file_offset_operand)?;
+                let buffer_operand = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    2,
+                    operation,
+                    EffectSemanticSeat::Resource,
+                )?;
+                let buffer = self.effect_opaque_scalar(builder, &buffer_operand, false)?;
+                if operation == ken_host::HostOpV1::FsReadAt {
+                    read_buffer_operand = Some(buffer_operand.clone());
+                }
+                let buffer_start_operand = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    3,
+                    operation,
+                    EffectSemanticSeat::ExactIntU64,
+                )?;
                 let (buffer_start, buffer_start_valid) =
-                    self.narrow_native_int_u64(builder, integer(3, "buffer start")?)?;
+                    self.narrow_effect_exact_int_u64(builder, &buffer_start_operand)?;
+                let length_operand = self.effect_argument_operand(
+                    &lowered,
+                    static_origin,
+                    argument_base,
+                    4,
+                    operation,
+                    EffectSemanticSeat::ExactIntU64,
+                )?;
                 let (length, length_valid) =
-                    self.narrow_native_int_u64(builder, integer(4, "length")?)?;
+                    self.narrow_effect_exact_int_u64(builder, &length_operand)?;
                 positioned_bounds = Some((buffer_start, length));
                 let file_offset_invalid = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
@@ -9691,7 +9798,16 @@ impl<'a> Lowering<'a> {
                     // PX8-SPAN-PROV: `FsWriteAt` carries the trailing
                     // `span_origin` acquisition token; `FsReadAt` mints the span
                     // and has no origin operand.
-                    let span_origin = resource(5, "span origin")?;
+                    let span_origin_operand = self.effect_argument_operand(
+                        &lowered,
+                        static_origin,
+                        argument_base,
+                        5,
+                        operation,
+                        EffectSemanticSeat::Resource,
+                    )?;
+                    let span_origin =
+                        self.effect_opaque_scalar(builder, &span_origin_operand, false)?;
                     for (index, value) in
                         [file, buffer, file_offset, buffer_start, length, span_origin]
                             .into_iter()
@@ -9929,12 +10045,10 @@ impl<'a> Lowering<'a> {
                     | ken_host::HostOpV1::FsChangeMode
                     | ken_host::HostOpV1::FsOpen
             ) {
-                let path = specialized_lowered
+                let path = file_path_operand
                     .as_ref()
-                    .expect("file-result synthesis follows a specialized-only operation")
-                    .first()
                     .cloned()
-                    .expect("validated FS operation has a path");
+                    .expect("validated FS operation retained its exact path seat");
                 let (operation_role, operation_symbol) = match operation {
                     ken_host::HostOpV1::FsReadFile | ken_host::HostOpV1::FsOpen => (
                         SynthesizedFixedConstructorRole::FileOperationRead,
@@ -9952,16 +10066,38 @@ impl<'a> Lowering<'a> {
                 };
                 let operation =
                     self.synthesized_constructor(operation_role, operation_symbol, Vec::new())?;
-                let path = self.synthesized_constructor(
-                    SynthesizedFixedConstructorRole::OptionSome,
-                    self.process_symbols.option_some.clone(),
-                    vec![path],
-                )?;
-                self.synthesized_constructor(
-                    SynthesizedFixedConstructorRole::FileError,
-                    self.process_symbols.file_error.clone(),
-                    vec![operation, path, io_error],
-                )?
+                match path {
+                    LoweringOperand::Specialized(path) => {
+                        let path = self.synthesized_constructor(
+                            SynthesizedFixedConstructorRole::OptionSome,
+                            self.process_symbols.option_some.clone(),
+                            vec![path],
+                        )?;
+                        LoweringOperand::Specialized(self.synthesized_constructor(
+                            SynthesizedFixedConstructorRole::FileError,
+                            self.process_symbols.file_error.clone(),
+                            vec![operation, path, io_error],
+                        )?)
+                    }
+                    carried @ LoweringOperand::Carried(_) => {
+                        let path = self.synthesized_effect_carrier_constructor(
+                            builder,
+                            static_origin,
+                            SynthesizedFixedConstructorRole::OptionSome,
+                            &[carried],
+                        )?;
+                        self.synthesized_effect_carrier_constructor(
+                            builder,
+                            static_origin,
+                            SynthesizedFixedConstructorRole::FileError,
+                            &[
+                                LoweringOperand::Specialized(operation),
+                                path,
+                                LoweringOperand::Specialized(io_error),
+                            ],
+                        )?
+                    }
+                }
             } else if matches!(
                 operation,
                 ken_host::HostOpV1::FsHandleMetadata
@@ -10020,7 +10156,7 @@ impl<'a> Lowering<'a> {
                     self.process_symbols.resource_trace_identity.clone(),
                     vec![identity_low_int, identity_high_int],
                 )?;
-                Lowered::DynamicConstructor(DynamicConstructorV1 {
+                LoweringOperand::Specialized(Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: surface_tag,
                     alternatives: vec![
                         self.synthesized_dynamic_alternative(
@@ -10091,16 +10227,16 @@ impl<'a> Lowering<'a> {
                             Vec::new(),
                         )?,
                     ],
-                })
+                }))
             } else {
-                io_error
+                LoweringOperand::Specialized(io_error)
             };
             let success = builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::Equal,
                 tag,
                 success_tag,
             );
-            let ok = if operation == ken_host::HostOpV1::FsReadFile {
+            let ok = LoweringOperand::Specialized(if operation == ken_host::HostOpV1::FsReadFile {
                 Lowered::ResponseBytes {
                     pointer: builder.ins().stack_load(
                         pointer_type,
@@ -10189,17 +10325,15 @@ impl<'a> Lowering<'a> {
                 let reply_start_int = self.lower_unsigned_u64_int(builder, reply_start)?;
                 // PX8-SPAN-PROV: bind the minted span to this `readAt`'s buffer
                 // operand acquisition (lowered arg 2, the request seat).
-                let Lowered::ResourceToken { value: span_origin } = specialized_lowered
+                let LoweringOperand::Specialized(Lowered::ResourceToken {
+                    value: span_origin,
+                }) = read_buffer_operand
                     .as_ref()
-                    .expect("FsReadAt result synthesis follows a specialized-only operation")
-                    .get(2)
-                    .ok_or_else(|| {
-                        unsupported("Effect", "FsReadAt is missing its buffer operand")
-                    })?
+                    .expect("FsReadAt retained its exact buffer seat")
                 else {
                     return Err(unsupported(
                         "Effect",
-                        "FsReadAt buffer operand is not a resource",
+                        "FsReadAt carried buffer result synthesis is not closed",
                     ));
                 };
                 let span_origin = *span_origin;
@@ -10276,14 +10410,26 @@ impl<'a> Lowering<'a> {
                     self.process_symbols.unit.clone(),
                     Vec::new(),
                 )?
-            };
-            Ok(LoweringOperand::Specialized(Lowered::HostResult {
-                success,
-                error: Box::new(error),
-                ok: Box::new(ok),
-                err_constructor: self.process_symbols.result_err.clone(),
-                ok_constructor: self.process_symbols.result_ok.clone(),
-            }))
+            });
+            match (&error, &ok) {
+                (
+                    LoweringOperand::Specialized(error),
+                    LoweringOperand::Specialized(ok),
+                ) => Ok(LoweringOperand::Specialized(Lowered::HostResult {
+                    success,
+                    error: Box::new(error.clone()),
+                    ok: Box::new(ok.clone()),
+                    err_constructor: self.process_symbols.result_err.clone(),
+                    ok_constructor: self.process_symbols.result_ok.clone(),
+                })),
+                _ => self.effect_carrier_host_result(
+                    builder,
+                    static_origin,
+                    success,
+                    &ok,
+                    &error,
+                ),
+            }
         }
     }
 

@@ -92,6 +92,7 @@ pub const BOUNDARY_LOCAL_HELPERS: &[&str] = &[
     "ken_boundary_store_byte_local",
     // ── content access: the value's BITS, not its identity or its length ──
     "ken_boundary_byte_local",
+    "ken_boundary_bytes_view_local",
     "ken_boundary_int_sign_local",
     "ken_boundary_int_len_local",
     "ken_boundary_int_limb_local",
@@ -192,6 +193,8 @@ pub(crate) struct BoundaryLocalFuncs {
     pub store_byte: FuncId,
     /// `(arena, word, index, out) -> status` — read one content byte.
     pub byte: FuncId,
+    /// `(arena, word, out_view) -> status` — a byte span's `{pointer, len}`.
+    pub bytes_view: FuncId,
     /// `(arena, word, out) -> status` — a spilled `Int`'s sign.
     pub int_sign: FuncId,
     /// `(arena, word, out) -> status` — a spilled `Int`'s limb count.
@@ -230,6 +233,7 @@ struct Graph {
     store_bytes_len: FuncId,
     store_byte: FuncId,
     byte: FuncId,
+    bytes_view: FuncId,
     int_sign: FuncId,
     int_len: FuncId,
     int_limb: FuncId,
@@ -275,6 +279,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     let store_bytes_len = declare(module, "ken_boundary_store_bytes_len_local", 4)?;
     let store_byte = declare(module, "ken_boundary_store_byte_local", 4)?;
     let byte = declare(module, "ken_boundary_byte_local", 4)?;
+    let bytes_view = declare(module, "ken_boundary_bytes_view_local", 3)?;
     let int_sign = declare(module, "ken_boundary_int_sign_local", 3)?;
     let int_len = declare(module, "ken_boundary_int_len_local", 3)?;
     let int_limb = declare(module, "ken_boundary_int_limb_local", 4)?;
@@ -305,6 +310,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         store_bytes_len,
         store_byte,
         byte,
+        bytes_view,
         int_sign,
         int_len,
         int_limb,
@@ -337,6 +343,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
     define_store_bytes_len(module, graph, plan)?;
     define_byte_access(module, graph, graph.store_byte, true, plan)?;
     define_byte_access(module, graph, graph.byte, false, plan)?;
+    define_bytes_view(module, graph, plan)?;
     define_int_part(module, graph, graph.int_sign, IntPart::Sign, plan)?;
     define_int_part(module, graph, graph.int_len, IntPart::Len, plan)?;
     define_int_part(module, graph, graph.int_limb, IntPart::Limb, plan)?;
@@ -367,6 +374,7 @@ pub(crate) fn emit_boundary_value_local_graph<M: Module>(
         store_bytes_len,
         store_byte,
         byte,
+        bytes_view,
         int_sign,
         int_len,
         int_limb,
@@ -2554,6 +2562,48 @@ fn define_byte_access<M: Module>(
         b.finalize();
     }
     finish(module, id, func)
+}
+
+/// `(arena, word, out_view) -> status` — a checked byte span view.
+///
+/// The pointer is formed only after the existing resolver and byte-class guard
+/// have selected the word's owning region. The pair is invocation-borrowed and
+/// is consumed synchronously by the host dispatch; it is never stored in the
+/// boundary carrier or published as a Ken value.
+fn define_bytes_view<M: Module>(
+    module: &mut M,
+    graph: Graph,
+    plan: &crate::boundary_value::BoundaryEmissionPlan,
+) -> Result<(), CraneliftBackendError> {
+    let ptr = module.target_config().pointer_type();
+    let mut func = begin(module, graph.bytes_view, 3);
+    let resolve = module.declare_func_in_func(graph.resolve, &mut func);
+    let mut fctx = FunctionBuilderContext::new();
+    {
+        let mut b = FunctionBuilder::new(&mut func, &mut fctx);
+        let entry = b.create_block();
+        b.append_block_params_for_function_params(entry);
+        b.switch_to_block(entry);
+        let p = b.block_params(entry).to_vec();
+        let (arena, word, out) = (p[0], p[1], p[2]);
+        let Resolved { node, region } = resolve_prologue(&mut b, ptr, resolve, arena, word);
+        class_guard(&mut b, node, plan.byte_span_classes());
+        let len = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_PAYLOAD);
+        let at = b
+            .ins()
+            .load(types::I64, MemFlags::trusted(), node, NODE_EXTENT);
+        let data = b.ins().load(ptr, MemFlags::trusted(), region, ARENA_DATA);
+        let address = b.ins().iadd(data, at);
+        b.ins().store(MemFlags::trusted(), address, out, 0);
+        b.ins().store(MemFlags::trusted(), len, out, 8);
+        let ok = b.ins().iconst(types::I64, BOUNDARY_OK);
+        b.ins().return_(&[ok]);
+        b.seal_all_blocks();
+        b.finalize();
+    }
+    finish(module, graph.bytes_view, func)
 }
 
 /// `(arena, word, native_tag) -> status` — record a spilled `Int`'s
@@ -5186,6 +5236,7 @@ pub(crate) mod tests {
         "ken_boundary_make_immediate_local",
         "ken_boundary_escape_check_local",
         "ken_boundary_byte_local",
+        "ken_boundary_bytes_view_local",
         "ken_boundary_int_sign_local",
         "ken_boundary_int_len_local",
         "ken_boundary_int_limb_local",

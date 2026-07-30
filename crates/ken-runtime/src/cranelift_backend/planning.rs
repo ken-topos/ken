@@ -23,7 +23,7 @@ pub(super) use static_transition::{
     StaticRecursorConsumptionMutation, SynthesizedConsumptionMutation,
 };
 pub(super) use static_transition::{
-    planned_partiality_trap, BoundaryUseIdentity, ConstructorIdentity, JoinPlanToken,
+    planned_partiality_trap, BoundaryUseIdentity, ConstructorIdentity, EffectSemanticSeat, JoinPlanToken,
     JoinResultRepresentation, LoweringOnlyOperandEdge, OperandEdgeDisposition, OperandEdgeToken,
     SourceOperandRole, StaticOriginId, StaticRecursorWorkerResidualId, StaticTransitionPlan,
     StaticRecursorCaptureLifetime,
