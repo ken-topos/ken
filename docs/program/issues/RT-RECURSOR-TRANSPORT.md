@@ -1,7 +1,7 @@
 ---
 id: RT-RECURSOR-TRANSPORT
 title: "Active-recursor transport — an active computational recursor's invocation-local scope/return-hole state cannot cross a functionized unit boundary, retaining two residual classes"
-status: ready
+status: active
 owner: runtime
 size: L
 gate: none
@@ -10,6 +10,29 @@ blocks: [RT-DESCENT-RETIRE]
 github: null
 origin: Operator directive 2026-07-29 — prioritize replacement of RecursiveDescent, migrate the remaining residual classes, do not linger half-migrated. Campaign docs/program/16-recursive-descent-retirement.md. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
+
+> # ⛔⛔ THIS NODE IS IN FLIGHT **NOW**, ATOMICALLY WITH [[RT-DECL-CLOSURE-PORT]]
+>
+> ⚠ **It is not queued, and it is no longer "sixth".** Since 2026-07-29 it is
+> being built as **one candidate** with [[RT-DECL-CLOSURE-PORT]]'s `D7` — the
+> `D7` boundary-use contract and this node's capture transport turned out to be
+> the same mechanism, so they cannot land apart.
+>
+> | fact | value |
+> |---|---|
+> | branch | `wp/RT-DECL-CLOSURE-PORT` — ⚠ **one branch for two nodes** |
+> | PR | **one** PR carries both |
+> | tracker flip | ⛔ both nodes flip `merged` in **one** commit |
+> | CI | `rt_parity_native` is this node's **own** job |
+>
+> ⛔ **`depends_on: []` is deliberate — do NOT "fix" it by adding
+> [[RT-DECL-CLOSURE-PORT]].** A dependency edge encodes *after*; these are
+> **siblings in one atomic set**, not a sequence. The edge that keeps this node
+> off the releasable frontier is its `active` status, nothing else.
+>
+> ⚠ **For whoever publishes:** the branch name names only one of the two nodes.
+> ⛔ Do not describe this node's recursor code as a `D7` deliverable in a PR body
+> or a merge post.
 
 > # ⭐⭐ THIS NODE RETIRES **TWO** RESIDUAL CLASSES, BECAUSE THEY ARE ONE MECHANISM
 >
@@ -39,18 +62,25 @@ a `LexicalClosure` and whose **argument** is such a recursor.
 scope/return-hole state**. Functionizing means that state must be transported
 across a separately owned unit boundary — or be shown not to need to cross.
 
-## ⚠ This is the hard node, and it is sixth
+## ⚠ This is the hard node, and the feasibility risk was retired EARLY
 
-If this proves infeasible as scoped, we learn it after five nodes of investment,
-and *half-migrated* is exactly the state the directive rules out.
+⚠ **This section used to read "and it is sixth", and to offer `D1` as a probe
+that *could* be pulled forward.** Both are now spent: the node was pulled to
+**first** and is in flight atomically with [[RT-DECL-CLOSURE-PORT]] (see the
+banner above), so the risk this section hedged against — learning of
+infeasibility after five nodes of investment — is no longer the risk being run.
 
-⭐ **The mitigation is a deliverable, not a hope.** `D1` is a **feasibility
-probe that can be pulled forward and run at any time**, independently of this
-node's queue position — it needs no code change and no branch of its own. If the
-Architect or the ring wants the risk retired early, run it during
-[[RT-DECL-CLOSURE-PORT]] and re-cut the schedule on the result. ⛔ Do not reorder
-the *build* work to chase it; the transport machinery built earlier in the
-campaign is real preparation for this node.
+⭐ **What actually happened is better than the mitigation.** The transport is
+being built against real refusals on a live branch rather than probed in the
+abstract, and the campaign's remaining nodes now depend on a mechanism that is
+being *proven* rather than *assumed*. ⇒ The residual risk moved from *"can this
+be done at all?"* to *"does this exact candidate go green?"* — which CI answers.
+
+⛔ **What this does NOT license:** treating the later nodes as de-risked. `D1`'s
+feasibility question is answered for **these two** residual classes only;
+[[RT-SEED-CALL-PORT]] and [[RT-PRODUCER-MATCH-PORT]] still owe their own
+measurements, and [[RT-SEED-CALL-PORT]] may yet close for free (its own node
+says so). ⭐ A mechanism proven here is *preparation* for them, not a verdict.
 
 ## Sequencing
 
