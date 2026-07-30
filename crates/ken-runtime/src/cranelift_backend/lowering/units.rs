@@ -1218,6 +1218,9 @@ fn define_unit_body<M: Module>(
         builder.seal_all_blocks();
         builder.finalize();
     }
+    compiler
+        .static_transition_plan
+        .validate_boundary_use_consumption_for_owner(unit.function)?;
     compiler.validate_materialized_dead_join_cfg(unit.function, &func)?;
     verify_cranelift_function(&func, module.isa())?;
     #[cfg(test)]

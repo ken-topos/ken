@@ -21,9 +21,9 @@ pub(super) use static_transition::{
     governed_nested_resource_bracket, plan_static_transition_graph, ScaleBPlanCensus,
 };
 pub(super) use static_transition::{
-    planned_partiality_trap, ConstructorIdentity, JoinPlanToken, JoinResultRepresentation,
-    LoweringOnlyOperandEdge, OperandEdgeDisposition, OperandEdgeToken, SourceOperandRole,
-    StaticOriginId, StaticRecursorWorkerResidualId, StaticTransitionPlan,
+    planned_partiality_trap, BoundaryUseIdentity, ConstructorIdentity, JoinPlanToken,
+    JoinResultRepresentation, LoweringOnlyOperandEdge, OperandEdgeDisposition, OperandEdgeToken,
+    SourceOperandRole, StaticOriginId, StaticRecursorWorkerResidualId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 // `RT-FNSPLIT-B2A-S` `AC-4` — the route counters behind

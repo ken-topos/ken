@@ -6077,7 +6077,11 @@ fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
         ("closure nested at depth 2", &depth_2),
     ] {
         assert_eq!(
-            value.boundary_transfer_admissibility().unwrap_err(),
+            value
+                .boundary_transfer_admissibility(
+                    &LoweringOnlyOperandEdge::CallableCapsuleEscape.token(),
+                )
+                .unwrap_err(),
             expected,
             "{label}: the graph holds a closure and must be refused with the \
              exact closure-transfer error"
@@ -6128,7 +6132,11 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
         ],
     };
     assert!(
-        closure_free.boundary_transfer_admissibility().is_ok(),
+        closure_free
+            .boundary_transfer_admissibility(
+                &LoweringOnlyOperandEdge::CallableCapsuleEscape.token(),
+            )
+            .is_ok(),
         "a constructor whose graph holds no closure must remain admissible; \
          D5 rejects closure-bearing GRAPHS, not the Constructor variant"
     );
@@ -6148,7 +6156,11 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
         ],
     };
     assert!(
-        closure_bearing.boundary_transfer_admissibility().is_err(),
+        closure_bearing
+            .boundary_transfer_admissibility(
+                &LoweringOnlyOperandEdge::CallableCapsuleEscape.token(),
+            )
+            .is_err(),
         "NON-VACUITY: the walk admits a graph differing only by a closure in one \
          leaf position, so it is not discriminating on closures at all"
     );

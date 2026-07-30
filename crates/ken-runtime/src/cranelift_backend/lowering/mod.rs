@@ -75,6 +75,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
+    BoundaryUseIdentity,
     CheckedOrientedMarkerSets, ConstructorIdentity, EmittableCallKind,
     EmittableStaticCallableArgumentKind, EmittableStaticCallableBinding,
     EmittableStaticCallableCall, EmittableStaticCallableCapture, EmittableStaticCallableUnit,
@@ -1500,8 +1501,10 @@ impl LoweringOperand {
                 | OperandEdgeDisposition::SpecializedOnlyLeaf
         ) {
             return Err(backend(BackendFailure::PlannerInvariant(format!(
-                "{} cannot authorize a specialized-only read",
-                edge.label()
+                "{} at {:?} with {:?} cannot authorize a specialized-only read",
+                edge.label(),
+                edge.identity(),
+                edge.disposition(),
             ))));
         }
         match self {
@@ -1567,8 +1570,10 @@ impl LoweringOperand {
                 | OperandEdgeDisposition::SpecializedOnlyLeaf
         ) {
             return Err(backend(BackendFailure::PlannerInvariant(format!(
-                "{} cannot authorize a specialized-only read",
-                edge.label()
+                "{} at {:?} with {:?} cannot authorize a specialized-only read",
+                edge.label(),
+                edge.identity(),
+                edge.disposition(),
             ))));
         }
         match self {
@@ -1579,6 +1584,35 @@ impl LoweringOperand {
                     "{} is a specialized-only surface and a carried boundary word has no \
                      compile-time template for it to read; the carrier's ruled route is an \
                      emitted helper call",
+                    edge.label()
+                ),
+            )),
+        }
+    }
+
+    /// Borrow one invocation-local callable control capsule through its exact
+    /// planner-proved capture edge.
+    ///
+    /// This does not make the capsule transferable: a carried word still
+    /// rejects, and an escape-forbidden or ordinary specialized edge cannot
+    /// authorize this read.
+    fn callable_capture_ref_at(
+        &self,
+        edge: OperandEdgeToken,
+    ) -> Result<&Lowered, CraneliftBackendError> {
+        if edge.disposition() != OperandEdgeDisposition::CallableCapture {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "{} cannot authorize a callable-capture read",
+                edge.label()
+            ))));
+        }
+        match self {
+            LoweringOperand::Specialized(lowered) => Ok(lowered),
+            LoweringOperand::Carried(_) => Err(unsupported(
+                "BoundaryCarrier",
+                format!(
+                    "{} retains compiler-only callable identity and cannot be reconstructed \
+                     from a carried boundary word",
                     edge.label()
                 ),
             )),
@@ -1709,7 +1743,24 @@ impl<'a> Lowering<'a> {
         origin: StaticOriginId,
         value: &Lowered,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
-        value.boundary_transfer_admissibility()?;
+        let edge = LoweringOnlyOperandEdge::CallableCapsuleEscape.token();
+        self.transfer_into_carrier_on_edge(builder, origin, value, edge)
+    }
+
+    /// Transfer through one exact planner-owned crossing.
+    ///
+    /// The caller supplies the same token to the graph-safety walk and the
+    /// carrier emitter.  In particular a source constructor child cannot be
+    /// classified once by the source matrix and again by an anonymous
+    /// whole-capsule gate.
+    fn transfer_into_carrier_on_edge(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        value: &Lowered,
+        edge: OperandEdgeToken,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        value.boundary_transfer_admissibility(&edge)?;
         self.emit_carrier_transfer(builder, origin, value)
     }
 
@@ -2337,7 +2388,8 @@ impl<'a> Lowering<'a> {
         // descending into or publishing any of its phase-bearing captures.
         for input in &inputs {
             if let LoweringOperand::Specialized(value) = input {
-                value.boundary_transfer_admissibility()?;
+                let edge = LoweringOnlyOperandEdge::CallableCapsuleEscape.token();
+                value.boundary_transfer_admissibility(&edge)?;
             }
         }
         let payload = builder.create_sized_stack_slot(StackSlotData::new(
@@ -4742,6 +4794,7 @@ impl Lowered {
     /// transfer" from "nothing transfers yet."
     pub(in crate::cranelift_backend) fn boundary_transfer_admissibility(
         &self,
+        edge: &OperandEdgeToken,
     ) -> Result<(), CraneliftBackendError> {
         match self {
             // ── closures: the rejection this walk exists for ──────────────
@@ -4749,10 +4802,12 @@ impl Lowered {
             // ⛔ One exact typed error at every depth, so a nested rejection is
             // not reported as some enclosing variant's failure.
             Lowered::Closure { .. } | Lowered::DeclarationClosure { .. } => {
-                let edge = LoweringOnlyOperandEdge::CallableCapsuleEscape.token();
-                if edge.disposition() != OperandEdgeDisposition::EscapeForbidden {
+                if matches!(
+                    edge.identity(),
+                    BoundaryUseIdentity::Synthesized(0)
+                ) {
                     return Err(backend(BackendFailure::PlannerInvariant(
-                        "callable capsule escape edge is not fail-closed".to_string(),
+                        "callable capsule boundary use has no exact identity".to_string(),
                     )));
                 }
                 Err(unsupported(
@@ -4770,19 +4825,19 @@ impl Lowered {
             // ── recursive carriers: recurse into EVERY child position ─────
             Lowered::Constructor { args, .. } => {
                 for arg in args {
-                    arg.boundary_transfer_admissibility()?;
+                    arg.boundary_transfer_admissibility(edge)?;
                 }
                 Ok(())
             }
             Lowered::Record { fields } => {
                 for (_, value) in fields {
-                    value.boundary_transfer_admissibility()?;
+                    value.boundary_transfer_admissibility(edge)?;
                 }
                 Ok(())
             }
             Lowered::HostResult { error, ok, .. } => {
-                error.boundary_transfer_admissibility()?;
-                ok.boundary_transfer_admissibility()
+                error.boundary_transfer_admissibility(edge)?;
+                ok.boundary_transfer_admissibility(edge)
             }
             // ⚠ **The child position most easily missed.** `DynamicConstructor`
             // looks like a leaf: its payload is a struct, and the children are
@@ -4792,7 +4847,7 @@ impl Lowered {
             Lowered::DynamicConstructor(dynamic) => {
                 for alternative in &dynamic.alternatives {
                     for field in &alternative.fields {
-                        field.boundary_transfer_admissibility()?;
+                        field.boundary_transfer_admissibility(edge)?;
                     }
                 }
                 Ok(())
@@ -5327,6 +5382,8 @@ struct PendingLetContinuationFrame<'a> {
     /// `child(call_origin, 1 + i)`.
     call_origin: StaticOriginId,
     env: &'a [LoweringOperand],
+    recursor_parent: StaticOriginId,
+    sibling_position: usize,
     recursive_worker: Option<StaticRecursorWorker>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -6492,6 +6549,7 @@ enum SourceContinuation<'a> {
     },
     CheckedComputationalIHInvocationReturn {
         call_template_id: u64,
+        marker_origin: StaticOriginId,
         next: Box<SourceContinuation<'a>>,
     },
     ReturnFromSelectedCase {
@@ -6555,11 +6613,13 @@ enum SourceContinuation<'a> {
         next: Box<SourceContinuation<'a>>,
     },
     CallCallee {
+        call_origin: StaticOriginId,
         args: Vec<OwnedSourceOccurrence>,
         env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
     CallArgument {
+        call_origin: StaticOriginId,
         callee: LoweringOperand,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<LoweringOperand>,
@@ -6619,6 +6679,7 @@ enum SourcePrefixTemplate {
     },
     CheckedComputationalIHInvocationReturn {
         call_template_id: u64,
+        marker_origin: StaticOriginId,
         next: Box<SourcePrefixTemplate>,
     },
     ReturnFromSelectedCase {
@@ -6675,11 +6736,13 @@ enum SourcePrefixTemplate {
         next: Box<SourcePrefixTemplate>,
     },
     CallCallee {
+        call_origin: StaticOriginId,
         args: Vec<OwnedSourceOccurrence>,
         env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
     CallArgument {
+        call_origin: StaticOriginId,
         callee: LoweringOperand,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<LoweringOperand>,
@@ -7530,13 +7593,15 @@ impl<'a> Lowering<'a> {
 
     fn finish_checked_computational_ih_marker(
         &mut self,
+        marker_origin: StaticOriginId,
         value: LoweringOperand,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         // ⭐ The marker consumes a **recursor closure template**; a carried
         // boundary word is not one and never becomes one, so this is a
         // specialized-only surface with the ruled fail-closed arm.
-        let mut value =
-            value.specialized_at(LoweringOnlyOperandEdge::CheckedComputationalIhMarker.token())?;
+        let _ = marker_origin;
+        let edge = LoweringOnlyOperandEdge::CheckedComputationalIhMarker.token();
+        let mut value = value.specialized_at(edge)?;
         let Some(instance) = self.mint_checked_computational_ih_instance(&mut value)? else {
             return Ok(LoweringOperand::Specialized(value));
         };
@@ -7751,7 +7816,11 @@ impl<'a> Lowering<'a> {
                     .static_recursor_worker_residual_token(static_origin, sibling_position, *body)?
                     .ok_or_else(|| {
                         backend(BackendFailure::PlannerInvariant(
-                            "callable recursor residual has no planned matrix member".to_string(),
+                            format!(
+                                "callable recursor residual has no planned matrix member: \
+                                 parent={static_origin:?}, position={sibling_position}, \
+                                 body={body:?}"
+                            ),
                         ))
                     })?;
                 if token.disposition() != OperandEdgeDisposition::CallableCapture
@@ -8666,9 +8735,11 @@ impl<'a> Lowering<'a> {
             }
             SourceContinuation::CheckedComputationalIHInvocationReturn {
                 call_template_id,
+                marker_origin,
                 next,
             } => SourceContinuation::CheckedComputationalIHInvocationReturn {
                 call_template_id,
+                marker_origin,
                 next: Box::new(Self::discard_source_prefix(*next)),
             },
             SourceContinuation::ReturnFromSelectedCase { next, .. } => {
@@ -8705,9 +8776,11 @@ impl<'a> Lowering<'a> {
             }
             SourceContinuation::CheckedComputationalIHInvocationReturn {
                 call_template_id,
+                marker_origin,
                 next,
             } => SourceContinuation::CheckedComputationalIHInvocationReturn {
                 call_template_id,
+                marker_origin,
                 next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
                     stack,
@@ -8840,7 +8913,13 @@ impl<'a> Lowering<'a> {
                     )?),
                 }
             }
-            SourceContinuation::CallCallee { args, env, next } => SourceContinuation::CallCallee {
+            SourceContinuation::CallCallee {
+                call_origin,
+                args,
+                env,
+                next,
+            } => SourceContinuation::CallCallee {
+                call_origin,
                 args,
                 env,
                 next: Box::new(Self::replace_source_terminal_with_unwind(
@@ -8850,12 +8929,14 @@ impl<'a> Lowering<'a> {
                 )?),
             },
             SourceContinuation::CallArgument {
+                call_origin,
                 callee,
                 remaining: arguments,
                 lowered,
                 env,
                 next,
             } => SourceContinuation::CallArgument {
+                call_origin,
                 callee,
                 remaining: arguments,
                 lowered,
@@ -8984,12 +9065,14 @@ impl<'a> Lowering<'a> {
             }
             SourceContinuation::CheckedComputationalIHInvocationReturn {
                 call_template_id,
+                marker_origin,
                 next,
             } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
                 (
                     SourcePrefixTemplate::CheckedComputationalIHInvocationReturn {
                         call_template_id,
+                        marker_origin,
                         next: Box::new(next),
                     },
                     terminal,
@@ -9165,10 +9248,16 @@ impl<'a> Lowering<'a> {
                     terminal,
                 )
             }
-            SourceContinuation::CallCallee { args, env, next } => {
+            SourceContinuation::CallCallee {
+                call_origin,
+                args,
+                env,
+                next,
+            } => {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
                 (
                     SourcePrefixTemplate::CallCallee {
+                        call_origin,
                         args,
                         env,
                         next: Box::new(next),
@@ -9177,6 +9266,7 @@ impl<'a> Lowering<'a> {
                 )
             }
             SourceContinuation::CallArgument {
+                call_origin,
                 callee,
                 remaining,
                 lowered,
@@ -9186,6 +9276,7 @@ impl<'a> Lowering<'a> {
                 let (next, terminal) = Self::split_source_prefix(*next)?;
                 (
                     SourcePrefixTemplate::CallArgument {
+                        call_origin,
                         callee,
                         remaining,
                         lowered,
@@ -9220,9 +9311,11 @@ impl<'a> Lowering<'a> {
             }
             SourcePrefixTemplate::CheckedComputationalIHInvocationReturn {
                 call_template_id,
+                marker_origin,
                 next,
             } => SourceContinuation::CheckedComputationalIHInvocationReturn {
                 call_template_id: *call_template_id,
+                marker_origin: *marker_origin,
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
             SourcePrefixTemplate::ReturnFromSelectedCase { delimiter, next } => {
@@ -9318,20 +9411,28 @@ impl<'a> Lowering<'a> {
                     next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
                 }
             }
-            SourcePrefixTemplate::CallCallee { args, env, next } => {
+            SourcePrefixTemplate::CallCallee {
+                call_origin,
+                args,
+                env,
+                next,
+            } => {
                 SourceContinuation::CallCallee {
+                    call_origin: *call_origin,
                     args: args.clone(),
                     env: env.clone(),
                     next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
                 }
             }
             SourcePrefixTemplate::CallArgument {
+                call_origin,
                 callee,
                 remaining,
                 lowered,
                 env,
                 next,
             } => SourceContinuation::CallArgument {
+                call_origin: *call_origin,
                 callee: callee.clone(),
                 remaining: remaining.clone(),
                 lowered: lowered.clone(),

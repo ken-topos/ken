@@ -777,6 +777,9 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 builder.seal_all_blocks();
                 builder.finalize();
             }
+            compiler
+                .static_transition_plan
+                .validate_boundary_use_consumption()?;
             compiler.validate_recursive_descent_materialized_dead_join_cfg(&ctx.func)?;
             verify_cranelift_function(&ctx.func, module.isa())?;
             #[cfg(test)]
@@ -879,6 +882,8 @@ impl<'a> Lowering<'a> {
         argument_env: &[LoweringOperand],
         saved_producer_env: &[LoweringOperand],
         outer_eliminators: &[EliminatorFrame<'_>],
+        recursor_parent: StaticOriginId,
+        sibling_position: usize,
         recursive_worker: Option<StaticRecursorWorker>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         // ⭐⭐ `AC-C4` — the carried residual, taken BEFORE the specialized
@@ -917,8 +922,10 @@ impl<'a> Lowering<'a> {
                 outer_eliminators,
             );
         }
-        let residual = residual
-            .specialized_ref_at(LoweringOnlyOperandEdge::PendingLetRecursorResidual.token())?;
+        let edge = self
+            .static_transition_plan
+            .recursor_boundary_use_token(recursor_parent, sibling_position)?;
+        let residual = residual.specialized_ref_at(edge)?;
         if let Lowered::BoundedNat(predecessor) = residual {
             if !args.is_empty() {
                 return Err(unsupported(
@@ -1069,6 +1076,8 @@ impl<'a> Lowering<'a> {
                 &continuation_env,
                 continuation.env,
                 &eliminators[1..],
+                continuation.recursor_parent,
+                continuation.sibling_position,
                 continuation.recursive_worker,
             );
         }
@@ -1137,7 +1146,7 @@ impl<'a> Lowering<'a> {
                     producer_env,
                     eliminators,
                 )?;
-                self.finish_checked_computational_ih_marker(value)
+                self.finish_checked_computational_ih_marker(static_origin, value)
             }
             RuntimeExpr::Let { value, body } => {
                 // The `Let`'s own children: value `0`, body `1`. When the body
@@ -1162,6 +1171,9 @@ impl<'a> Lowering<'a> {
                                         "recursor closure carries a continuation delimiter",
                                     );
                                     let recursive_worker = invocation.recursive_worker;
+                                    let recursor_parent =
+                                        invocation.selection.static_origin;
+                                    let sibling_position = invocation.sibling_position;
                                     let resume_cursor = invocation.resume_cursor;
                                     let current =
                                         active_recursor_frame(eliminators).ok_or_else(|| {
@@ -1203,6 +1215,8 @@ impl<'a> Lowering<'a> {
                                             args,
                                             call_origin: body_origin,
                                             env: producer_env,
+                                            recursor_parent,
+                                            sibling_position,
                                             recursive_worker,
                                         },
                                     ));
@@ -1358,11 +1372,20 @@ impl<'a> Lowering<'a> {
                                             LoweringOperand::Carried(word)
                                         }
                                         LoweringOperand::Specialized(value) => {
-                                            LoweringOperand::Carried(self.transfer_into_carrier(
-                                                builder,
-                                                arg.static_origin,
-                                                &value,
-                                            )?)
+                                            let edge =
+                                                self.static_transition_plan.operand_edge_token(
+                                                    static_origin,
+                                                    1 + position,
+                                                    SourceOperandRole::CallArgument,
+                                                )?;
+                                            LoweringOperand::Carried(
+                                                self.transfer_into_carrier_on_edge(
+                                                    builder,
+                                                    arg.static_origin,
+                                                    &value,
+                                                    edge,
+                                                )?,
+                                            )
                                         }
                                     }),
                                 }
@@ -1411,6 +1434,8 @@ impl<'a> Lowering<'a> {
                         let (activation, invocation) =
                             boundary.expect("recursor closure carries an invocation segment");
                         let recursive_worker = invocation.recursive_worker;
+                        let recursor_parent = invocation.selection.static_origin;
+                        let sibling_position = invocation.sibling_position;
                         let current = active_recursor_frame(eliminators).ok_or_else(|| {
                             unsupported(
                                 "ComputationalRecursor",
@@ -1505,9 +1530,10 @@ impl<'a> Lowering<'a> {
                                 eliminators,
                             );
                         }
-                        let base = base.specialized_at(
-                            LoweringOnlyOperandEdge::ProducerCallRecursorResidual.token(),
-                        )?;
+                        let edge = self
+                            .static_transition_plan
+                            .recursor_boundary_use_token(recursor_parent, sibling_position)?;
+                        let base = base.specialized_at(edge)?;
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
                                 return Err(unsupported(
@@ -1565,11 +1591,20 @@ impl<'a> Lowering<'a> {
                                             LoweringOperand::Carried(word)
                                         }
                                         LoweringOperand::Specialized(value) => {
-                                            LoweringOperand::Carried(self.transfer_into_carrier(
-                                                builder,
-                                                arg.static_origin,
-                                                &value,
-                                            )?)
+                                            let edge =
+                                                self.static_transition_plan.operand_edge_token(
+                                                    static_origin,
+                                                    1 + position,
+                                                    SourceOperandRole::CallArgument,
+                                                )?;
+                                            LoweringOperand::Carried(
+                                                self.transfer_into_carrier_on_edge(
+                                                    builder,
+                                                    arg.static_origin,
+                                                    &value,
+                                                    edge,
+                                                )?,
+                                            )
                                         }
                                     }),
                                 }
@@ -1821,9 +1856,11 @@ impl<'a> Lowering<'a> {
                     // ⭐ The prefix rebuilds the enclosing constructor's own
                     // **template** below (`outer_scrutinee`), so it is a
                     // specialized-only surface, not a spine edge.
-                    let lowered_prefix = specialized_env_at(
+                    let lowered_prefix = self.specialized_source_env_at(
                         &lowered_prefix,
-                        LoweringOnlyOperandEdge::DeferredConstructorPrefix.token(),
+                        static_origin,
+                        0,
+                        SourceOperandRole::ConstructArgument,
                     )?;
                     let deferred = DeferredConstructorCaseEnvironment {
                         constructor,
@@ -2602,8 +2639,29 @@ impl<'a> Lowering<'a> {
                 EliminatorFrame::InvocationReturn => Ok(LoweringOperand::Carried(word)),
             };
         }
-        let scrutinee = scrutinee
-            .specialized_at(LoweringOnlyOperandEdge::ComposedComputationalMatchScrutinee.token())?;
+        let scrutinee = match eliminator {
+            EliminatorFrame::Computational(frame) => {
+                let edge = self.static_transition_plan.operand_edge_token(
+                    frame.static_origin,
+                    0,
+                    SourceOperandRole::MatchScrutinee,
+                )?;
+                scrutinee.specialized_at(edge)?
+            }
+            EliminatorFrame::Ordinary(frame) => {
+                let edge = self.static_transition_plan.operand_edge_token(
+                    frame.static_origin,
+                    0,
+                    SourceOperandRole::MatchScrutinee,
+                )?;
+                scrutinee.specialized_at(edge)?
+            }
+            EliminatorFrame::PendingLet(_)
+            | EliminatorFrame::InvocationReturn
+            | EliminatorFrame::Active(_) => scrutinee.specialized_at(
+                LoweringOnlyOperandEdge::ComposedComputationalMatchScrutinee.token(),
+            )?,
+        };
         if let Lowered::BoundedNat(nat) = scrutinee {
             return self.lower_bounded_nat_computational(builder, nat, false, eliminators);
         }
@@ -3196,10 +3254,17 @@ impl<'a> Lowering<'a> {
             }
             // ⭐ These become `outer_scrutinee`'s constructor **template** below,
             // so this is a specialized-only surface, not a spine edge.
-            constructor_args.push(
-                lowered
-                    .specialized_at(LoweringOnlyOperandEdge::DeferredConstructorField.token())?,
-            );
+            let edge = self.static_transition_plan.operand_edge_token(
+                deferred.construct_origin,
+                deferred.selected_field + 1 + offset,
+                SourceOperandRole::ConstructArgument,
+            )?;
+            let lowered = if edge.disposition() == OperandEdgeDisposition::CallableCapture {
+                lowered.callable_capture_ref_at(edge)?.clone()
+            } else {
+                lowered.specialized_at(edge)?
+            };
+            constructor_args.push(lowered);
         }
         let outer_scrutinee = Lowered::Constructor {
             constructor: deferred.constructor.to_string(),
@@ -3477,6 +3542,7 @@ impl<'a> Lowering<'a> {
                         control.continuation =
                             SourceContinuation::CheckedComputationalIHInvocationReturn {
                                 call_template_id,
+                                marker_origin: static_origin,
                                 next: Box::new(control.continuation),
                             };
                         SourceMachineState::Eval {
@@ -3577,6 +3643,7 @@ impl<'a> Lowering<'a> {
                             })
                             .collect::<Result<Vec<_>, _>>()?;
                         control.continuation = SourceContinuation::CallCallee {
+                            call_origin: static_origin,
                             args,
                             env: env.clone(),
                             next: Box::new(control.continuation),
@@ -3785,6 +3852,7 @@ impl<'a> Lowering<'a> {
                         }
                         SourceContinuation::CheckedComputationalIHInvocationReturn {
                             call_template_id,
+                            marker_origin,
                             next,
                         } => {
                             if self
@@ -3796,7 +3864,8 @@ impl<'a> Lowering<'a> {
                                     "computational IH invocation return crossed another marker",
                                 ));
                             }
-                            let value = self.finish_checked_computational_ih_marker(value)?;
+                            let value =
+                                self.finish_checked_computational_ih_marker(marker_origin, value)?;
                             control.continuation = *next;
                             SourceMachineState::Value { value, control }
                         }
@@ -4442,12 +4511,15 @@ impl<'a> Lowering<'a> {
                                     induction_hypotheses.push(induction_hypothesis);
                                 }
                             }
+                            let edge = self.static_transition_plan.operand_edge_token(
+                                frame.static_origin,
+                                0,
+                                SourceOperandRole::MatchScrutinee,
+                            )?;
                             let frame_env = match self.materialize_eliminator_frame_env(
                                 builder,
                                 EliminatorFrame::Computational(frame),
-                                retained.specialized_ref_at(
-                                    LoweringOnlyOperandEdge::EliminatorFrameScrutinee.token(),
-                                )?,
+                                retained.specialized_ref_at(edge)?,
                             )? {
                                 Ok(frame_env) => frame_env,
                                 Err(trap) => return Ok(LoweringOperand::Specialized(Lowered::Trap(trap))),
@@ -4525,6 +4597,7 @@ impl<'a> Lowering<'a> {
                             }
                         }
                         SourceContinuation::CallCallee {
+                            call_origin,
                             mut args,
                             env,
                             next,
@@ -4533,6 +4606,7 @@ impl<'a> Lowering<'a> {
                             if args.is_empty() {
                                 match self.source_call_state(
                                     builder,
+                                    call_origin,
                                     value,
                                     Vec::new(),
                                     env,
@@ -4544,6 +4618,7 @@ impl<'a> Lowering<'a> {
                             } else {
                                 let first = args.remove(0);
                                 control.continuation = SourceContinuation::CallArgument {
+                                    call_origin,
                                     callee: value,
                                     remaining: args,
                                     lowered: Vec::new(),
@@ -4558,6 +4633,7 @@ impl<'a> Lowering<'a> {
                             }
                         }
                         SourceContinuation::CallArgument {
+                            call_origin,
                             callee,
                             mut remaining,
                             mut lowered,
@@ -4568,7 +4644,14 @@ impl<'a> Lowering<'a> {
                             control.continuation = *next;
                             if remaining.is_empty() {
                                 match self
-                                    .source_call_state(builder, callee, lowered, env, control)?
+                                    .source_call_state(
+                                        builder,
+                                        call_origin,
+                                        callee,
+                                        lowered,
+                                        env,
+                                        control,
+                                    )?
                                 {
                                     SourceCallOutcome::Continue(state) => state,
                                     SourceCallOutcome::Complete(value) => return Ok(value),
@@ -4576,6 +4659,7 @@ impl<'a> Lowering<'a> {
                             } else {
                                 let first = remaining.remove(0);
                                 control.continuation = SourceContinuation::CallArgument {
+                                    call_origin,
                                     callee,
                                     remaining,
                                     lowered,
@@ -5500,6 +5584,7 @@ impl<'a> Lowering<'a> {
     fn source_call_state<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        call_origin: StaticOriginId,
         callee: LoweringOperand,
         args: Vec<LoweringOperand>,
         env: Vec<LoweringOperand>,
@@ -5509,7 +5594,12 @@ impl<'a> Lowering<'a> {
         // occurrence. A carried boundary word carries none of those and cannot
         // acquire them (`§2g`: the carrier holds the SSA word and nothing else),
         // so this is a specialized-only surface. ⛔ Fails closed.
-        let callee = callee.specialized_at(LoweringOnlyOperandEdge::SourceMachineCallee.token())?;
+        let edge = self.static_transition_plan.operand_edge_token(
+            call_origin,
+            0,
+            SourceOperandRole::CallCallee,
+        )?;
+        let callee = callee.specialized_at(edge)?;
         match callee {
             Lowered::Closure {
                 captures,
@@ -5613,6 +5703,8 @@ impl<'a> Lowering<'a> {
                 let (activation, invocation) =
                     boundary.expect("recursor closure carries an invocation segment");
                 let recursive_worker = invocation.recursive_worker;
+                let recursor_parent = invocation.selection.static_origin;
+                let sibling_position = invocation.sibling_position;
                 let prepared = self.prepare_static_recursor_residual(base, &invocation)?;
                 if source_active_cursor(
                     &control.selected,
@@ -5719,8 +5811,10 @@ impl<'a> Lowering<'a> {
                         control: suspended,
                     }));
                 }
-                let base = base
-                    .specialized_at(LoweringOnlyOperandEdge::SourceCallRecursorResidual.token())?;
+                let edge = self
+                    .static_transition_plan
+                    .recursor_boundary_use_token(recursor_parent, sibling_position)?;
+                let base = base.specialized_at(edge)?;
                 if let Lowered::BoundedNat(predecessor) = base {
                     if !args.is_empty() {
                         return Err(unsupported(
@@ -6033,6 +6127,8 @@ impl<'a> Lowering<'a> {
         position: usize,
         child: &'x RuntimeExpr,
     ) -> Result<SourceOccurrence<'x>, CraneliftBackendError> {
+        self.static_transition_plan
+            .consume_operand_edge(parent, position)?;
         Ok(SourceOccurrence {
             expr: child,
             static_origin: self
@@ -6051,6 +6147,8 @@ impl<'a> Lowering<'a> {
         position: usize,
         child: RuntimeExpr,
     ) -> Result<OwnedSourceOccurrence, CraneliftBackendError> {
+        self.static_transition_plan
+            .consume_operand_edge(parent, position)?;
         Ok(OwnedSourceOccurrence {
             expr: child,
             static_origin: self
@@ -6276,35 +6374,59 @@ impl<'a> Lowering<'a> {
         // environment or the parent constructor. An exact recursive-position
         // closure is the sole exception to whole-closure transfer: its planner
         // token proves the static worker and its captures are all ordinary.
-        let mut prepared_recursor_residuals = Vec::with_capacity(args.len());
+        let mut prepared_children = Vec::with_capacity(args.len());
         for (position, argument) in args.iter().enumerate() {
             let child_origin = self
                 .static_transition_plan
                 .child_static_origin(origin, position)?;
+            let edge = self.static_transition_plan.operand_edge_token(
+                origin,
+                position,
+                SourceOperandRole::ConstructArgument,
+            )?;
             let prepared = match argument {
                 LoweringOperand::Specialized(value @ Lowered::Closure { .. }) => {
-                    match self.prepare_static_recursor_constructor_residual(
-                        child_origin,
-                        LoweringOperand::Specialized(value.clone()),
-                    )? {
-                        Some(prepared) => Some(prepared),
-                        None => {
-                            value.boundary_transfer_admissibility()?;
-                            None
-                        }
+                    if edge.disposition() == OperandEdgeDisposition::CallableCapture {
+                        Some(
+                            self.prepare_static_recursor_constructor_residual(
+                                child_origin,
+                                LoweringOperand::Specialized(value.clone()),
+                            )?
+                            .ok_or_else(|| {
+                                backend(BackendFailure::PlannerInvariant(
+                                    "callable-capture constructor edge has no exact static \
+                                     recursor worker plan"
+                                        .to_string(),
+                                ))
+                            })?,
+                        )
+                    } else {
+                        value.boundary_transfer_admissibility(&edge)?;
+                        None
                     }
                 }
                 LoweringOperand::Specialized(value) => {
-                    value.boundary_transfer_admissibility()?;
+                    if edge.disposition() == OperandEdgeDisposition::CallableCapture {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "callable-capture constructor edge does not carry a closure"
+                                .to_string(),
+                        )));
+                    }
+                    value.boundary_transfer_admissibility(&edge)?;
                     None
                 }
+                // A governed worker may already have crossed this exact edge
+                // through `materialize_static_recursor_residual`. Its carried
+                // form is the ordinary positional Record envelope, not a
+                // callable capsule, so preserving it here neither reclassifies
+                // the edge nor bypasses whole-Closure rejection.
                 LoweringOperand::Carried(_) => None,
             };
-            prepared_recursor_residuals.push(prepared);
+            prepared_children.push((edge, prepared));
         }
         let mut children = Vec::with_capacity(args.len());
-        for (position, (argument, prepared)) in
-            args.iter().zip(prepared_recursor_residuals).enumerate()
+        for (position, (argument, (edge, prepared))) in
+            args.iter().zip(prepared_children).enumerate()
         {
             let child_origin = self
                 .static_transition_plan
@@ -6320,7 +6442,12 @@ impl<'a> Lowering<'a> {
                 match argument {
                     LoweringOperand::Carried(child) => *child,
                     LoweringOperand::Specialized(value) => {
-                        self.transfer_into_carrier(builder, child_origin, value)?
+                        self.transfer_into_carrier_on_edge(
+                            builder,
+                            child_origin,
+                            value,
+                            edge,
+                        )?
                     }
                 }
             };
@@ -6369,7 +6496,12 @@ impl<'a> Lowering<'a> {
             let child = match field {
                 LoweringOperand::Carried(child) => *child,
                 LoweringOperand::Specialized(value) => {
-                    self.transfer_into_carrier(builder, child_origin, value)?
+                    let edge = self.static_transition_plan.operand_edge_token(
+                        origin,
+                        position,
+                        SourceOperandRole::RecordField,
+                    )?;
+                    self.transfer_into_carrier_on_edge(builder, child_origin, value, edge)?
                 }
             };
             self.emit_carrier_store_field(builder, word, position, child)?;
@@ -6504,7 +6636,11 @@ impl<'a> Lowering<'a> {
                     first_position + offset,
                     role,
                 )?;
-                operand.specialized_ref_at(token).cloned()
+                if token.disposition() == OperandEdgeDisposition::CallableCapture {
+                    operand.callable_capture_ref_at(token).cloned()
+                } else {
+                    operand.specialized_ref_at(token).cloned()
+                }
             })
             .collect()
     }
@@ -7188,7 +7324,7 @@ impl<'a> Lowering<'a> {
                     return Err(backend(BackendFailure::PlannerInvariant(
                         "static recursor worker residual is not callable-capture".to_string(),
                     )));
-        }
+                }
                 Ok(StaticRecursorWorker {
                     residual_id: token.id,
                     parent_origin: token.parent_origin,
@@ -7663,7 +7799,7 @@ impl<'a> Lowering<'a> {
                 self.enter_checked_computational_ih_invocation(*call_template_id)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let value = self.lower_expr(builder, body, env)?;
-                self.finish_checked_computational_ih_marker(value)
+                self.finish_checked_computational_ih_marker(static_origin, value)
             }
             RuntimeExpr::Var(index) => env
                 .get(*index as usize)
@@ -8366,11 +8502,19 @@ impl<'a> Lowering<'a> {
                                                 LoweringOperand::Carried(word)
                                             }
                                             LoweringOperand::Specialized(value) => {
+                                                let edge = self
+                                                    .static_transition_plan
+                                                    .operand_edge_token(
+                                                        static_origin,
+                                                        1 + position,
+                                                        SourceOperandRole::CallArgument,
+                                                    )?;
                                                 LoweringOperand::Carried(
-                                                    self.transfer_into_carrier(
+                                                    self.transfer_into_carrier_on_edge(
                                                         builder,
                                                         arg.static_origin,
                                                         &value,
+                                                        edge,
                                                     )?,
                                                 )
                                             }
@@ -8418,6 +8562,8 @@ impl<'a> Lowering<'a> {
                             "recursor closure carries an invocation segment",
                         );
                         let recursive_worker = invocation.recursive_worker;
+                        let recursor_parent = invocation.selection.static_origin;
+                        let sibling_position = invocation.sibling_position;
                         if !recursor_invocation_is_checked(&invocation) {
                             validate_recursor_invocation_segment(&invocation)?;
                         }
@@ -8491,10 +8637,10 @@ impl<'a> Lowering<'a> {
                             self.leave_oriented_semantic_region(installed.checked);
                             return result;
                         }
-                        let base =
-                            base.specialized_at(
-                                LoweringOnlyOperandEdge::DirectCallRecursorResidual.token(),
-                            )?;
+                        let edge = self
+                            .static_transition_plan
+                            .recursor_boundary_use_token(recursor_parent, sibling_position)?;
+                        let base = base.specialized_at(edge)?;
                         if let Lowered::BoundedNat(predecessor) = base {
                             if !args.is_empty() {
                                 return Err(unsupported(
