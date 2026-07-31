@@ -6,7 +6,8 @@ use ken_kernel::Term;
 
 const COLLECTIONS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
-const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str =
+    include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const LAWFUL_FUNCTORS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/Classes/LawfulFunctors.ken.md");
 

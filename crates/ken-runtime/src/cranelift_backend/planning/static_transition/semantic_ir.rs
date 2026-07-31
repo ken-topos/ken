@@ -12,9 +12,9 @@ use crate::{
     RuntimeExpr, RuntimeIntV1, RuntimePartiality, RuntimePrimitive, RuntimeTrap, RuntimeTrapCode,
     RuntimeValue, Sign,
 };
-use std::collections::BTreeMap;
 #[cfg(test)]
 use std::cell::Cell;
+use std::collections::BTreeMap;
 
 #[cfg(test)]
 thread_local! {
@@ -47,7 +47,7 @@ pub(in crate::cranelift_backend) struct StaticOriginId(pub(super) u32);
 /// record-field identity are different namespaces, and a comparison across them
 /// is meaningless. Two newtypes over one authority make that error **fail to
 /// compile** rather than merely never happening to be written.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub(in crate::cranelift_backend) struct ConstructorIdentity(pub(super) DenseRange);
 
@@ -163,12 +163,8 @@ impl SynthesizedFixedConstructorRole {
             Self::EffectCreateOrTruncate => "effect-input:CreatePolicy:CreateOrTruncate",
             Self::EffectCreateOrKeep => "effect-input:CreatePolicy:CreateOrKeep",
             Self::EffectResourceRead => "effect-input:ResourceOpenMode:ResourceRead",
-            Self::EffectResourceMetadata => {
-                "effect-input:ResourceOpenMode:ResourceMetadata"
-            }
-            Self::EffectResourceWriteCreate => {
-                "effect-input:ResourceOpenMode:ResourceWriteCreate"
-            }
+            Self::EffectResourceMetadata => "effect-input:ResourceOpenMode:ResourceMetadata",
+            Self::EffectResourceWriteCreate => "effect-input:ResourceOpenMode:ResourceWriteCreate",
         }
     }
 }
@@ -300,7 +296,7 @@ pub(super) enum SemanticOwner {
     TrapTerminal,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(C)]
 pub(super) struct DenseRange {
     pub(super) start: u32,
@@ -719,8 +715,8 @@ pub(super) fn build_synthesized_constructor_inventory(
         })?);
         let span = arena.intern(spelling.as_bytes())?;
         #[cfg(test)]
-        let omit = OMIT_LAST_IO_ERROR_ROLE.with(Cell::get)
-            && position + 1 == symbols.io_errors.len();
+        let omit =
+            OMIT_LAST_IO_ERROR_ROLE.with(Cell::get) && position + 1 == symbols.io_errors.len();
         #[cfg(not(test))]
         let omit = false;
         if !omit {
@@ -1003,14 +999,13 @@ fn partition_function_units(
 
     let mut outgoing = vec![Vec::new(); nodes.len()];
     for edge in edges {
-        if matches!(
-            edge.kind,
-            EdgeKind::StaticBody | EdgeKind::DeclarationCall
-        ) {
+        if matches!(edge.kind, EdgeKind::StaticBody | EdgeKind::DeclarationCall) {
             continue;
         }
         if edge.to.0 as usize >= nodes.len() {
-            return Err(planner_error("transfer edge target is outside the planned nodes"));
+            return Err(planner_error(
+                "transfer edge target is outside the planned nodes",
+            ));
         }
         outgoing
             .get_mut(edge.from.0 as usize)
@@ -1123,11 +1118,16 @@ pub(super) fn build_semantic_plane(
 
         // Positional re-lay of the material the source walk already emitted for
         // this origin. Nothing is re-derived here, and no placeholder is minted.
-        let operand_range =
-            DenseRange::at_end(&plane.operands, source.material.len as usize, "semantic operand")?;
-        plane
-            .operands
-            .extend_from_slice(arena_slice(&arena.atoms, source.material, "semantic operand")?);
+        let operand_range = DenseRange::at_end(
+            &plane.operands,
+            source.material.len as usize,
+            "semantic operand",
+        )?;
+        plane.operands.extend_from_slice(arena_slice(
+            &arena.atoms,
+            source.material,
+            "semantic operand",
+        )?);
 
         let child_origin_range = DenseRange::at_end(
             &plane.child_origins,
@@ -1340,7 +1340,9 @@ impl SemanticPlane {
         let expected = SynthesizedFixedConstructorRole::ALL
             .len()
             .checked_add(self.synthesized_io_error_roles.len())
-            .ok_or_else(|| planner_capacity_error("synthesized constructor role count exhausted"))?;
+            .ok_or_else(|| {
+                planner_capacity_error("synthesized constructor role count exhausted")
+            })?;
         if self.synthesized_constructor_roles.len() != expected {
             return Err(planner_error(
                 "synthesized constructor inventory is not exact for its closed role population",
@@ -1640,11 +1642,7 @@ impl SemanticPlane {
         &self,
         edges: &[StaticEdge],
     ) -> Result<
-        Vec<(
-            PredeclaredFunctionId,
-            PredeclaredFunctionId,
-            StaticOriginId,
-        )>,
+        Vec<(PredeclaredFunctionId, PredeclaredFunctionId, StaticOriginId)>,
         CraneliftBackendError,
     > {
         let owner_of = |node: StaticNodeId| -> Result<SemanticOwner, CraneliftBackendError> {
@@ -1712,16 +1710,9 @@ impl SemanticPlane {
             let callee_origin = self
                 .functions
                 .get(callee.0 as usize)
-                .ok_or_else(|| {
-                    planner_error("declaration call callee has no function descriptor")
-                })?
+                .ok_or_else(|| planner_error("declaration call callee has no function descriptor"))?
                 .origin;
-            call_edges.push((
-                caller,
-                callee,
-                callee_origin,
-                StaticOriginId(edge.from.0),
-            ));
+            call_edges.push((caller, callee, callee_origin, StaticOriginId(edge.from.0)));
         }
         Ok(call_edges)
     }
@@ -1856,9 +1847,7 @@ impl SemanticPlane {
                 }
             } else if edge.kind == EdgeKind::DeclarationCall {
                 let SemanticOwner::Function(to_unit) = to else {
-                    return Err(planner_error(
-                        "declaration call edge targets a shared exit",
-                    ));
+                    return Err(planner_error("declaration call edge targets a shared exit"));
                 };
                 if to_unit == from_unit {
                     return Err(planner_error(
@@ -1873,8 +1862,7 @@ impl SemanticPlane {
                 let source = node_indexed_sources
                     .get(edge.from.0 as usize)
                     .ok_or_else(|| planner_error("declaration call source has no semantic seed"))?;
-                if source.source
-                    != SemanticSourceKind::Expression(RuntimeExprShape::DeclarationRef)
+                if source.source != SemanticSourceKind::Expression(RuntimeExprShape::DeclarationRef)
                 {
                     return Err(planner_error(
                         "declaration call edge source is not a DeclarationRef occurrence",
@@ -1978,14 +1966,13 @@ impl SemanticPlane {
         }
         self.validate_function_units(nodes, edges, entries, &node_indexed_sources)?;
 
-        let expected_operands =
-            node_indexed_sources
-                .iter()
-                .try_fold(0usize, |total, source| {
-                    total
-                        .checked_add(source.source_material_elements as usize)
-                        .ok_or_else(|| planner_capacity_error("semantic operand count exhausted"))
-                })?;
+        let expected_operands = node_indexed_sources
+            .iter()
+            .try_fold(0usize, |total, source| {
+                total
+                    .checked_add(source.source_material_elements as usize)
+                    .ok_or_else(|| planner_capacity_error("semantic operand count exhausted"))
+            })?;
         // D4.4 — one-visit affine bound over the WHOLE material: this
         // occurrence's atoms plus its child references. The budget is unchanged
         // by the atom/child partition, so a superlinear arena still fails here.
@@ -2169,8 +2156,11 @@ impl SemanticPlane {
                 record.child_origins,
                 "semantic child-origin range is outside its closed arena",
             )?;
-            let expected_child_origins =
-                arena_slice(&arena.child_origins, source.children, "semantic child origin")?;
+            let expected_child_origins = arena_slice(
+                &arena.child_origins,
+                source.children,
+                "semantic child origin",
+            )?;
             if record_child_origins != expected_child_origins {
                 return Err(planner_error(
                     "semantic child origins are not occurrence-exact for their source positions",
@@ -2596,7 +2586,9 @@ fn emit_value_atoms(
     arena: &mut SemanticMaterialArena,
 ) -> Result<(), CraneliftBackendError> {
     match value {
-        RuntimeValue::Bool(flag) => arena.push_numeric(SemanticAtomKind::ValueBool, u64::from(*flag)),
+        RuntimeValue::Bool(flag) => {
+            arena.push_numeric(SemanticAtomKind::ValueBool, u64::from(*flag))
+        }
         RuntimeValue::Int(int) => match int {
             RuntimeIntV1::Small(value) => {
                 arena.push_numeric(SemanticAtomKind::ValueIntSmall, *value as u64)
@@ -2613,7 +2605,11 @@ fn emit_value_atoms(
                     bytes.extend_from_slice(&limb.to_le_bytes());
                 }
                 let span = arena.intern(&bytes)?;
-                arena.push_atom(SemanticAtomKind::ValueIntBig, span, checked_u64(limbs.len())?)
+                arena.push_atom(
+                    SemanticAtomKind::ValueIntBig,
+                    span,
+                    checked_u64(limbs.len())?,
+                )
             }
         },
         RuntimeValue::Bytes(bytes) => {

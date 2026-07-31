@@ -12,9 +12,7 @@
 
 use ken_kernel::env::Context;
 use ken_kernel::term::{Level, Term};
-use ken_kernel::{
-    convert, declare_inductive, infer, CtorSpec, GlobalEnv, GlobalId, InductiveSpec,
-};
+use ken_kernel::{convert, declare_inductive, infer, CtorSpec, GlobalEnv, GlobalId, InductiveSpec};
 
 struct Std {
     bool_: GlobalId,
@@ -32,8 +30,14 @@ fn std_env() -> (GlobalEnv, Std) {
         indices: vec![],
         level: Level::zero(),
         constructors: vec![
-            CtorSpec { args: vec![], target_indices: vec![] },
-            CtorSpec { args: vec![], target_indices: vec![] },
+            CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            },
+            CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            },
         ],
     })
     .expect("Bool");
@@ -42,7 +46,14 @@ fn std_env() -> (GlobalEnv, Std) {
         (cs[0].id, cs[1].id)
     };
 
-    (env, Std { bool_, true_, false_ })
+    (
+        env,
+        Std {
+            bool_,
+            true_,
+            false_,
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -57,7 +68,10 @@ fn sigma_subset_relevant_stays_type() {
     let (env, s) = std_env();
     let ctx = Context::new();
     let bool_t = Term::indformer(s.bool_, vec![]);
-    let top_t = Term::Const { id: env.top_id(), level_args: vec![] };
+    let top_t = Term::Const {
+        id: env.top_id(),
+        level_args: vec![],
+    };
     // Σ(Bool, λ_. Top) — carrier Bool : Type 0 (relevant), prop Top : Ω_0
     let sigma = Term::sigma(bool_t, top_t);
     assert_eq!(
@@ -80,15 +94,24 @@ fn sigma_subset_pairs_not_proof_irrelevant() {
     let (env, s) = std_env();
     let mut ctx = Context::new();
     let bool_t = Term::indformer(s.bool_, vec![]);
-    let top_t = Term::Const { id: env.top_id(), level_args: vec![] };
+    let top_t = Term::Const {
+        id: env.top_id(),
+        level_args: vec![],
+    };
     ctx.push(top_t.clone()); // t : Top (var 0)
     let sigma = Term::sigma(bool_t, top_t.clone());
     let pair_true = Term::pair(
-        Term::Constructor { id: s.true_, level_args: vec![] },
+        Term::Constructor {
+            id: s.true_,
+            level_args: vec![],
+        },
         Term::var(0),
     );
     let pair_false = Term::pair(
-        Term::Constructor { id: s.false_, level_args: vec![] },
+        Term::Constructor {
+            id: s.false_,
+            level_args: vec![],
+        },
         Term::var(0),
     );
     // Ω-PI must NOT collapse (true, t) ≡ (false, t) — Σ(Bool,Top) is Type 0
@@ -109,7 +132,10 @@ fn sigma_subset_pairs_not_proof_irrelevant() {
 fn sigma_conjunction_both_omega_stays_omega() {
     let env = GlobalEnv::new();
     let ctx = Context::new();
-    let top_t = Term::Const { id: env.top_id(), level_args: vec![] };
+    let top_t = Term::Const {
+        id: env.top_id(),
+        level_args: vec![],
+    };
     // Σ(Top, λ_. Top) = Top ∧ Top — both components in Ω_0
     let sigma = Term::sigma(top_t.clone(), top_t);
     assert_eq!(
@@ -132,7 +158,10 @@ fn pi_into_prop_is_prop_codomain_keyed() {
     let (env, s) = std_env();
     let ctx = Context::new();
     let bool_t = Term::indformer(s.bool_, vec![]);
-    let top_t = Term::Const { id: env.top_id(), level_args: vec![] };
+    let top_t = Term::Const {
+        id: env.top_id(),
+        level_args: vec![],
+    };
     // (x : Bool) → Top — Π with relevant domain (Bool : Type 0), Ω codomain
     let pi = Term::pi(bool_t.clone(), top_t.clone());
     assert_eq!(
@@ -161,7 +190,10 @@ fn k1_sigma_nat_nat_regression() {
         indices: vec![],
         level: Level::zero(),
         constructors: vec![
-            CtorSpec { args: vec![], target_indices: vec![] },
+            CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            },
             CtorSpec {
                 args: vec![Term::indformer(nat, vec![])],
                 target_indices: vec![],

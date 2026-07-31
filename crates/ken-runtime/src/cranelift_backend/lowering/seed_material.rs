@@ -239,9 +239,12 @@ impl SeedMaterialRefs {
     ) -> Option<cranelift_codegen::ir::Value> {
         let base = *self.bases.get(symbol)?;
         let address = builder.ins().global_value(self.pointer_type, base);
-        let word = builder
-            .ins()
-            .load(types::I64, MemFlags::trusted(), address, SEED_PAYLOAD_OFFSET);
+        let word = builder.ins().load(
+            types::I64,
+            MemFlags::trusted(),
+            address,
+            SEED_PAYLOAD_OFFSET,
+        );
         // ⛔ Counted HERE, adjacent to the `load` that IS the borrow — not at
         // the call site in `lower_seed_capture`, and not on entry to this
         // method. ⭐ A counter one frame out measures that the capture path was
@@ -377,9 +380,7 @@ pub(in crate::cranelift_backend) fn mint_seed_material<M: Module>(
 /// ⛔ **Self-describing and relocation-free.** Nested values are encoded inline
 /// rather than as pointers to further objects, so one seed symbol is one object
 /// and there is no second address space for a reader to get wrong.
-fn encode_ground_value(
-    value: &RuntimeGroundValue,
-) -> Result<Vec<u8>, CraneliftBackendError> {
+fn encode_ground_value(value: &RuntimeGroundValue) -> Result<Vec<u8>, CraneliftBackendError> {
     let mut out = Vec::new();
     encode_into(value, 0, &mut out)?;
     if out.len() > MAX_SEED_BYTES {

@@ -330,11 +330,8 @@ fn refuted_goal_false_with_forcing_world() {
     );
 
     let mut invalid_path = cm.clone();
-    invalid_path
-        .failure
-        .as_mut()
-        .expect("failure")
-        .subformula = FormRef(FormulaPath(vec![FormulaStep::PiDomain]));
+    invalid_path.failure.as_mut().expect("failure").subformula =
+        FormRef(FormulaPath(vec![FormulaStep::PiDomain]));
     assert!(
         invalid_path
             .validate(&triple.phi)
@@ -347,11 +344,8 @@ fn refuted_goal_false_with_forcing_world() {
     // proposition edge. A FormRef must reject it before forcing can treat the
     // literal as an atom.
     let mut literal_path = cm.clone();
-    literal_path
-        .failure
-        .as_mut()
-        .expect("failure")
-        .subformula = FormRef(FormulaPath(vec![FormulaStep::EqLeft]));
+    literal_path.failure.as_mut().expect("failure").subformula =
+        FormRef(FormulaPath(vec![FormulaStep::EqLeft]));
     assert_eq!(
         literal_path.validate(&triple.phi),
         Err("formula path enters non-proposition role EqLeft".into()),
@@ -364,15 +358,15 @@ fn refuted_goal_false_with_forcing_world() {
     let repeated = Term::sigma(repeated_atom.clone(), repeated_atom);
     let first = FormRef::root().child(FormulaStep::SigmaFirst);
     let second = FormRef::root().child(FormulaStep::SigmaSecond);
-    assert_ne!(first, second, "repeated subformula nodes have distinct paths");
+    assert_ne!(
+        first, second,
+        "repeated subformula nodes have distinct paths"
+    );
     let repeated_model = KripkeCountermodel {
         verdict: DiagnosticTag::False,
         worlds: vec![WorldId("w0".into())],
         order: vec![(WorldId("w0".into()), WorldId("w0".into()))],
-        forcing: vec![(
-            WorldId("w0".into()),
-            AtomId::Formula(first.clone()),
-        )],
+        forcing: vec![(WorldId("w0".into()), AtomId::Formula(first.clone()))],
         failure: Some(ken_elaborator::diagnostics::FailureWitness {
             world: WorldId("w0".into()),
             subformula: second.clone(),
@@ -502,10 +496,7 @@ fn refuted_goal_false_with_forcing_world() {
     // Monotonicity discriminator: forcing the root atom at w0 but not its
     // extension must reject before semantic witness validation.
     let mut non_monotone = cm.clone();
-    non_monotone.forcing = vec![(
-        WorldId("w0".into()),
-        AtomId::Formula(root_formula.clone()),
-    )];
+    non_monotone.forcing = vec![(WorldId("w0".into()), AtomId::Formula(root_formula.clone()))];
     assert!(
         non_monotone
             .validate(&triple.phi)

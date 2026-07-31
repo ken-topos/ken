@@ -14,18 +14,18 @@
 //!   interface + transitivity/boundary property; the runtime membrane and
 //!   audit-record emission are DEFERRED to `40-runtime`/`Ward`.
 
-use ken_kernel::{GlobalEnv, Level, Term, declare_postulate};
+use ken_kernel::{declare_postulate, GlobalEnv, Level, Term};
 
-use crate::effects::check::{EffectError, check_capabilities};
+use crate::effects::check::{check_capabilities, EffectError};
 use crate::effects::infer::EffectDecl;
 use crate::effects::row::{EffectName, EffectRow};
 use crate::extract::ObligationId;
 use crate::ifc::{FlowCtx, FlowError, FlowResult, Label};
-use crate::prover::{ProverResult, attempt_with_cert};
+use crate::prover::{attempt_with_cert, ProverResult};
 
 pub use ken_host::capability::{
-    AUTH_FULL, AUTH_NONE, AUTH_PARTIAL, Authority, Cap, FsHandle, FsIdentity, FsRootSpec, FsScope,
-    RightSet, SymlinkPolicy, authority_flows_to, authority_meet, rights_for_authority,
+    authority_flows_to, authority_meet, rights_for_authority, Authority, Cap, FsHandle, FsIdentity,
+    FsRootSpec, FsScope, RightSet, SymlinkPolicy, AUTH_FULL, AUTH_NONE, AUTH_PARTIAL,
 };
 
 pub fn authority(cap: &Cap) -> Authority {

@@ -49,8 +49,13 @@ fn arrow_returned_from_view_body_is_a_real_pi() {
     let mut env = fresh_env();
     // `Int -> Int` written as the BODY, not an annotation — unreachable by
     // the old surface (`->` was type-position only).
-    let id = env.elaborate_decl("const t : Type = Int -> Int").expect("arrow as body value");
-    assert!(matches!(body_of(&env, id), Term::Pi(_, _)), "must lower to a real Term::Pi");
+    let id = env
+        .elaborate_decl("const t : Type = Int -> Int")
+        .expect("arrow as body value");
+    assert!(
+        matches!(body_of(&env, id), Term::Pi(_, _)),
+        "must lower to a real Term::Pi"
+    );
 }
 
 #[test]
@@ -59,19 +64,26 @@ fn arrow_let_bound_is_a_real_pi() {
     let id = env
         .elaborate_decl("const t : Type = let ty = Int -> Bool in ty")
         .expect("arrow let-bound");
-    assert!(contains_pi(&body_of(&env, id)), "let-bound arrow must lower to Term::Pi");
+    assert!(
+        contains_pi(&body_of(&env, id)),
+        "let-bound arrow must lower to Term::Pi"
+    );
 }
 
 #[test]
 fn arrow_passed_as_an_ordinary_function_argument() {
     let mut env = fresh_env();
-    env.elaborate_decl("const id_ty (t : Type) : Type = t").expect("id_ty declares");
+    env.elaborate_decl("const id_ty (t : Type) : Type = t")
+        .expect("id_ty declares");
     let id = env
         .elaborate_decl("const t : Type = id_ty (Int -> Bool)")
         .expect("arrow passed as a function argument");
     // `id_ty` is the identity on Type, so the body contains the argument's
     // core term (wrapped in the `App(Const(id_ty), _)` call).
-    assert!(contains_pi(&body_of(&env, id)), "argument-position arrow must lower to Term::Pi");
+    assert!(
+        contains_pi(&body_of(&env, id)),
+        "argument-position arrow must lower to Term::Pi"
+    );
 }
 
 #[test]
@@ -80,7 +92,10 @@ fn dependent_arrow_in_expr_position_is_a_real_pi() {
     let id = env
         .elaborate_decl("const t : Type = (x : Int) -> Bool")
         .expect("dependent arrow as body value");
-    assert!(matches!(body_of(&env, id), Term::Pi(_, _)), "dependent arrow must lower to Term::Pi");
+    assert!(
+        matches!(body_of(&env, id), Term::Pi(_, _)),
+        "dependent arrow must lower to Term::Pi"
+    );
 }
 
 #[test]
@@ -92,7 +107,10 @@ fn arrow_is_right_associative() {
     // `Int -> Int -> Bool` = `Int -> (Int -> Bool)`: outer Pi's codomain is
     // itself a Pi (not the other possible grouping).
     match body_of(&env, id) {
-        Term::Pi(_, cod) => assert!(matches!(*cod, Term::Pi(_, _)), "must group as Int -> (Int -> Bool)"),
+        Term::Pi(_, cod) => assert!(
+            matches!(*cod, Term::Pi(_, _)),
+            "must group as Int -> (Int -> Bool)"
+        ),
         other => panic!("expected a Term::Pi, got {other:?}"),
     }
 }
@@ -115,7 +133,10 @@ fn ill_typed_arrow_domain_is_still_kernel_rejected() {
     // well-formedness checking.
     let mut env = fresh_env();
     let res = env.elaborate_decl("const t : Type = 5 -> Bool");
-    assert!(res.is_err(), "an arrow with a non-type domain must be rejected, got {res:?}");
+    assert!(
+        res.is_err(),
+        "an arrow with a non-type domain must be rejected, got {res:?}"
+    );
 }
 
 #[test]

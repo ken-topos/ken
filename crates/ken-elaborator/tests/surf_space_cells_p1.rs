@@ -160,8 +160,7 @@ fn ac_s2_middle_write_preserves_both_neighbors() {
         .expect("three-cell space must elaborate");
     let unit_type = Term::indformer(env.prelude_env.unit_id, vec![]);
 
-    let (_, written_state) =
-        run_operation(&env, "Registers", "Registers.write_middle", unit_type);
+    let (_, written_state) = run_operation(&env, "Registers", "Registers.write_middle", unit_type);
     let actual = state3(written_state);
     println!("AC-S2 actual post-write state: {actual:?}");
     assert_eq!(
@@ -180,14 +179,9 @@ fn ac_s3_reads_each_of_three_pairwise_distinct_components() {
 
     let (left, left_state) =
         run_operation(&env, "Registers", "Registers.read_left", int_type.clone());
-    let (middle, middle_state) = run_operation(
-        &env,
-        "Registers",
-        "Registers.read_middle",
-        int_type.clone(),
-    );
-    let (right, right_state) =
-        run_operation(&env, "Registers", "Registers.read_right", int_type);
+    let (middle, middle_state) =
+        run_operation(&env, "Registers", "Registers.read_middle", int_type.clone());
+    let (right, right_state) = run_operation(&env, "Registers", "Registers.read_right", int_type);
 
     assert_eq!(
         (
@@ -249,12 +243,10 @@ fn ac_s5_space_label_is_emitted_and_required() {
         Some(&RowType::singleton("Registers")),
         "the emitted operation row must carry its space label"
     );
-    let wide_row = RowType::concrete(
-        ken_elaborator::effects::EffectRow::from_effects([
-            "Registers".to_string(),
-            "Console".to_string(),
-        ]),
-    );
+    let wide_row = RowType::concrete(ken_elaborator::effects::EffectRow::from_effects([
+        "Registers".to_string(),
+        "Console".to_string(),
+    ]));
     assert_eq!(
         env.effect_rows.get("Registers.write_middle_wide"),
         Some(&wide_row),
@@ -370,8 +362,7 @@ fn generated_initial_state_does_not_claim_the_initial_member() {
     );
 
     let int_type = Term::const_(env.globals["Int"], vec![]);
-    let (result, final_state) =
-        run_operation(&env, "Collision", "Collision.initial", int_type);
+    let (result, final_state) = run_operation(&env, "Collision", "Collision.initial", int_type);
     assert_eq!(
         (int(&result), int(&final_state)),
         (7, 7),

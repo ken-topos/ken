@@ -173,7 +173,11 @@ fn multi_provider_direct_use_without_a_boundary_fails_closed() {
             head_type,
             ..
         }) => assert_eq!(
-            (defining_package.as_str(), class.as_str(), head_type.as_str()),
+            (
+                defining_package.as_str(),
+                class.as_str(),
+                head_type.as_str()
+            ),
             ("P", "RenderP", "Int")
         ),
         other => panic!("multi-provider direct use needs an explicit boundary, got {other:?}"),
@@ -267,8 +271,8 @@ fn sole_external_source_provider_self_admits_without_boundary() {
          fn useP (x : Int) : Int where Mark Int = x\n",
     );
 
-    let env = load(&root, "Entry")
-        .expect("a boundary-less closure self-admits its sole source provider");
+    let env =
+        load(&root, "Entry").expect("a boundary-less closure self-admits its sole source provider");
     let provenance = env
         .class_env
         .resolution_provenance

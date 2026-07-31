@@ -78,7 +78,10 @@ fn ac2_orphan_check_accept_and_reject() {
     // (a) Instance declared in the same module as the class (module 0) → accepted.
     // The class is in module 0; current_module is also 0. Should accept.
     let r = elab(&mut env, "instance Ord Int { }");
-    assert!(r.is_ok(), "AC2(a): instance in class's module must be accepted");
+    assert!(
+        r.is_ok(),
+        "AC2(a): instance in class's module must be accepted"
+    );
 
     // (b) Instance declared in a different module (module 1) → OrphanInstance.
     // We need the head type (Bool) to also be from a different module.
@@ -137,7 +140,7 @@ fn ac3_overlap_check_first_ok_second_errors() {
     // Manually register a first instance in the env to test the overlap check.
     let mut env3 = mk_env();
     elab(&mut env3, "class Flag A { }").unwrap(); // property class (zero fields → RecordNil → Omega)
-    // Register first instance (property class → no overlap, but test structure below).
+                                                  // Register first instance (property class → no overlap, but test structure below).
     elab(&mut env3, "instance Flag Int { }").unwrap();
     // Second instance under same key — property class (Ω) → no overlap error
     // (multiple instances of a property class are coherence-free via Ω-PI).
@@ -185,7 +188,11 @@ fn ac3_overlap_check_first_ok_second_errors() {
     );
     // (a) First lookup resolves to the registered GlobalId(999).
     let resolved = env4.class_env.instance_search("Eq2", "Int");
-    assert_eq!(resolved, Some(GlobalId(999)), "AC3(a): first instance should resolve");
+    assert_eq!(
+        resolved,
+        Some(GlobalId(999)),
+        "AC3(a): first instance should resolve"
+    );
     let _ = r2;
 }
 
@@ -205,16 +212,25 @@ fn ac4_property_vs_structure_sort_discriminant() {
     elab(&mut env_prop, "class Trivial A { }").unwrap();
     // Two instances for the same head type → property class → both accepted.
     let r1 = elab(&mut env_prop, "instance Trivial Int { }");
-    assert!(r1.is_ok(), "AC4(a): first instance of property class must be accepted");
+    assert!(
+        r1.is_ok(),
+        "AC4(a): first instance of property class must be accepted"
+    );
     // Second instance — property class → no overlap error.
     let r2 = elab(&mut env_prop, "instance Trivial Bool { }"); // different head type for simplicity
-    assert!(r2.is_ok(), "AC4(a): second instance of property class (different head) accepted");
+    assert!(
+        r2.is_ok(),
+        "AC4(a): second instance of property class (different head) accepted"
+    );
 
     // For two instances of the same property class on the same head:
     // In our implementation, property classes allow overwriting the registry
     // (the overlap check is skipped for Ω classes). Verify no error.
     let r3 = elab(&mut env_prop, "instance Trivial Int { }");
-    assert!(r3.is_ok(), "AC4(a): second instance of property class on same head accepted");
+    assert!(
+        r3.is_ok(),
+        "AC4(a): second instance of property class on same head accepted"
+    );
 
     // (b) Structure class: a class with a Nat field → sort_sigma(Type, Omega) = Type.
     let mut env_str = mk_env();
@@ -299,7 +315,11 @@ fn ac5_explicit_bypasses_implicit_canonical() {
     );
     // Implicit search must still return the canonical.
     let implicit_result = env2.class_env.instance_search("Ord3", "Int");
-    assert_eq!(implicit_result, Some(canonical3), "AC5: implicit must return canonical");
+    assert_eq!(
+        implicit_result,
+        Some(canonical3),
+        "AC5: implicit must return canonical"
+    );
 }
 
 // ============================================================================

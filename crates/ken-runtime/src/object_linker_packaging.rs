@@ -438,7 +438,8 @@ pub struct ObjectLinkerPackagingOptions {
     /// `validate_options`, ⭐ **before any object is emitted or anything is
     /// linked** — which is `AC-7`'s whole point, and is a different observation
     /// from a starter that links, runs, and then declines to execute.
-    pub boundary_resource_profile: Option<crate::boundary_resource_profile::BoundaryResourceProfileV1>,
+    pub boundary_resource_profile:
+        Option<crate::boundary_resource_profile::BoundaryResourceProfileV1>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -2749,8 +2750,14 @@ mod tests {
         };
         let executable = build_process_starter_executable_artifact(&entry, &output_dir)
             .expect("process starter links");
-        assert!(!process_starter_c_stub(&crate::boundary_resource_profile::starter_smoke_profile()).contains("fnv"));
-        assert!(!process_starter_c_stub(&crate::boundary_resource_profile::starter_smoke_profile()).contains("discriminator"));
+        assert!(
+            !process_starter_c_stub(&crate::boundary_resource_profile::starter_smoke_profile())
+                .contains("fnv")
+        );
+        assert!(
+            !process_starter_c_stub(&crate::boundary_resource_profile::starter_smoke_profile())
+                .contains("discriminator")
+        );
 
         let argument_one = OsString::from_vec(vec![0xff, b'a', b'1']);
         let key_one = OsString::from_vec(vec![b'K', 0xfd]);
@@ -2925,10 +2932,7 @@ mod tests {
             },
         );
         assert_eq!(retained_root_trap.status.code(), Some(1));
-        assert!(
-            String::from_utf8_lossy(&retained_root_trap.stderr)
-                .contains("explicit entry trap")
-        );
+        assert!(String::from_utf8_lossy(&retained_root_trap.stderr).contains("explicit entry trap"));
     }
 
     #[cfg(target_os = "linux")]

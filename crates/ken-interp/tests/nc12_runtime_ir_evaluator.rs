@@ -135,7 +135,9 @@ fn oracle_observation(
     } = interpreter_add_2_3_fixture();
     let value = eval(&[], &term, &globals, &mut store);
     let observation = match value {
-        EvalVal::Int(value) => RuntimeObservation::Returned(RuntimeGroundValue::Int((value).into())),
+        EvalVal::Int(value) => {
+            RuntimeObservation::Returned(RuntimeGroundValue::Int((value).into()))
+        }
         other => panic!("runtime IR oracle fixture must return Int, got {other:?}"),
     };
     RuntimeInterpreterObservation {
@@ -481,12 +483,9 @@ fn add_int_overflow_promotes_without_host_panic_or_wrap() {
     };
     let program = runtime_program(example.clone(), 0x1210);
 
-    let report = evaluate_runtime_ir_example(
-        &program,
-        &example,
-        &RuntimeIrSeedEnvironment::empty(),
-    )
-    .expect("overflowing add_int promotes before wrapping");
+    let report =
+        evaluate_runtime_ir_example(&program, &example, &RuntimeIrSeedEnvironment::empty())
+            .expect("overflowing add_int promotes before wrapping");
     assert_eq!(report.observation.observation, example.observation);
 }
 

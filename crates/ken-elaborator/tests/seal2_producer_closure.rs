@@ -135,7 +135,10 @@ fn position_closure_holds_under_every_structural_former() {
 
     let carrier_positions = [
         ("app-argument", Term::App(b(filler.clone()), b(bs.clone()))),
-        ("sigma-codomain", Term::Sigma(b(filler.clone()), b(bs.clone()))),
+        (
+            "sigma-codomain",
+            Term::Sigma(b(filler.clone()), b(bs.clone())),
+        ),
         ("pair-second", Term::Pair(b(filler.clone()), b(bs.clone()))),
         (
             "eq-rhs",
@@ -157,7 +160,10 @@ fn position_closure_holds_under_every_structural_former() {
     }
 
     // A wrapper containing NO carrier must not be a false positive.
-    let no_carrier = Term::Sigma(b(filler.clone()), b(Term::App(b(filler.clone()), b(filler))));
+    let no_carrier = Term::Sigma(
+        b(filler.clone()),
+        b(Term::App(b(filler.clone()), b(filler))),
+    );
     assert!(
         !result_type_produces(&env.env, &no_carrier, env.globals["BufferSpan"]),
         "a carrier-free result type must not be reported"
@@ -441,8 +447,10 @@ fn a_source_visible_producer_is_rejected_by_the_upstream_inventory() {
 #[should_panic(expected = "is neither a declaration nor a constructor")]
 fn unclassifiable_global_member_fails_loudly() {
     let mut env = ElabEnv::empty().expect("prelude");
-    env.globals
-        .insert("escaped_unknown_id".to_string(), ken_kernel::GlobalId(u32::MAX));
+    env.globals.insert(
+        "escaped_unknown_id".to_string(),
+        ken_kernel::GlobalId(u32::MAX),
+    );
     let _ = closed_producers(&env, "BufferSpan");
 }
 

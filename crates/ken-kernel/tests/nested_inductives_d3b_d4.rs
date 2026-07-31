@@ -124,8 +124,14 @@ fn declare_poly_box(env: &mut GlobalEnv) -> GlobalId {
         indices: vec![],
         level: level_u(),
         constructors: vec![
-            CtorSpec { args: vec![], target_indices: vec![] },
-            CtorSpec { args: vec![Term::var(0)], target_indices: vec![] },
+            CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            },
+            CtorSpec {
+                args: vec![Term::var(0)],
+                target_indices: vec![],
+            },
         ],
     })
     .expect("polymorphic unary PolyBox declaration")
@@ -186,10 +192,7 @@ fn polymorphic_former_transport_preserves_guest_levels() {
     let box_ctor = poly.constructors[1].id;
     let d0 = Term::indformer(family, vec![Level::zero()]);
     let boxed_leaf = Term::app(
-        Term::app(
-            Term::constructor(box_ctor, vec![Level::zero()]),
-            d0.clone(),
-        ),
+        Term::app(Term::constructor(box_ctor, vec![Level::zero()]), d0.clone()),
         Term::constructor(leaf, vec![Level::zero()]),
     );
     let motive = Term::Ascript(
@@ -205,11 +208,14 @@ fn polymorphic_former_transport_preserves_guest_levels() {
         wrap_domains[0].clone(),
         Term::lam(wrap_domains[1].clone(), Term::Type(Level::zero())),
     );
-    check(&env, &Context::new(), &leaf_method,
-          &method_type(&env, declaration, 0, &motive, &[], &[Level::zero()]).unwrap())
-        .expect("PolyBox leaf method");
-    check(&env, &Context::new(), &wrap_method, &wrap_method_type)
-        .expect("PolyBox Former method");
+    check(
+        &env,
+        &Context::new(),
+        &leaf_method,
+        &method_type(&env, declaration, 0, &motive, &[], &[Level::zero()]).unwrap(),
+    )
+    .expect("PolyBox leaf method");
+    check(&env, &Context::new(), &wrap_method, &wrap_method_type).expect("PolyBox Former method");
     let methods = vec![leaf_method, wrap_method];
     let eliminator = Term::Elim {
         fam: family,
@@ -226,15 +232,24 @@ fn polymorphic_former_transport_preserves_guest_levels() {
     let elim_ty = infer(&env, &Context::new(), &eliminator).expect("guest eliminator");
     check(&env, &Context::new(), &eliminator, &elim_ty).expect("checked guest eliminator");
     let reduct = iota_reduct(
-        &env, declaration, 1, &[Level::zero()], &[], &motive, &methods,
+        &env,
+        declaration,
+        1,
+        &[Level::zero()],
+        &[],
+        &motive,
+        &methods,
         std::slice::from_ref(&boxed_leaf),
-    ).expect("PolyBox Former iota");
+    )
+    .expect("PolyBox Former iota");
     let (_, args) = peel_app(&reduct);
     let supplied = args.last().expect("supplied Former lift");
     let supplied_type = ken_kernel::subst::subst0(&wrap_domains[1], &boxed_leaf);
-    check(&env, &Context::new(), supplied, &supplied_type)
-        .expect("checked type-level Former lift");
-    if let Term::Elim { fam, level_args, .. } = supplied {
+    check(&env, &Context::new(), supplied, &supplied_type).expect("checked type-level Former lift");
+    if let Term::Elim {
+        fam, level_args, ..
+    } = supplied
+    {
         assert_eq!(*fam, poly_box);
         assert_eq!(level_args, &vec![Level::zero()]);
     } else {
@@ -456,8 +471,7 @@ fn declared_positive_former_lift_builds_dependent_host_evidence() {
         Box::new(Term::pi(family_type.clone(), ty0())),
     );
     let wrap_method_type =
-        method_type(&env, declaration, 1, &motive, &[], &[])
-            .expect("Former method lift");
+        method_type(&env, declaration, 1, &motive, &[], &[]).expect("Former method lift");
     let (wrap_domains, _) = peel_pi(&wrap_method_type);
     assert_eq!(wrap_domains.len(), 2);
     let methods = vec![
@@ -466,10 +480,7 @@ fn declared_positive_former_lift_builds_dependent_host_evidence() {
             wrap_domains[0].clone(),
             Term::lam(
                 wrap_domains[1].clone(),
-                Term::pair(
-                    Term::Refl(Box::new(Term::var(1))),
-                    constructor(leaf),
-                ),
+                Term::pair(Term::Refl(Box::new(Term::var(1))), constructor(leaf)),
             ),
         ),
     ];

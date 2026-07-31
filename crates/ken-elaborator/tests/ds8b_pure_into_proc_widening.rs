@@ -138,9 +138,7 @@ fn ac8_negative_effectful_witness_still_rejected_for_fn_field() {
         .expect_err("an effectful witness for an fn class field must still be rejected");
     let msg = format!("{err:?}");
     assert!(
-        msg.contains("Pure.compute")
-            && msg.contains("requires")
-            && msg.contains("effectful"),
+        msg.contains("Pure.compute") && msg.contains("requires") && msg.contains("effectful"),
         "must reject via the specific effectful-witness-for-pure-field message, \
          not a generic error: {msg}"
     );
@@ -253,7 +251,8 @@ fn non_regression_malformed_proc_field_marker_still_rejected_at_class_decl() {
         .expect_err("a value-shaped/no-latent-effect proc field must still reject at class-decl");
     let msg = format!("{err:?}");
     assert!(
-        msg.contains("`proc` class field `pure_step`") && msg.contains("no latent or row-polymorphic effect"),
+        msg.contains("`proc` class field `pure_step`")
+            && msg.contains("no latent or row-polymorphic effect"),
         "DS-8b must not affect the class-decl-time marker/shape check: {msg}"
     );
 }

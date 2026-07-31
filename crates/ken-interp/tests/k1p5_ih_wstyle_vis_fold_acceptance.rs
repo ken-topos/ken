@@ -43,13 +43,23 @@ fn mk_bool(env: &mut GlobalEnv) -> BoolEnv {
         indices: vec![],
         level: Level::zero(),
         constructors: vec![
-            CtorSpec { args: vec![], target_indices: vec![] },
-            CtorSpec { args: vec![], target_indices: vec![] },
+            CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            },
+            CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            },
         ],
     })
     .unwrap();
     let decl = env.inductive(id).unwrap();
-    BoolEnv { id, false_id: decl.constructors[0].id, true_id: decl.constructors[1].id }
+    BoolEnv {
+        id,
+        false_id: decl.constructors[0].id,
+        true_id: decl.constructors[1].id,
+    }
 }
 
 struct NatEnv {
@@ -66,13 +76,23 @@ fn mk_nat(env: &mut GlobalEnv) -> NatEnv {
         indices: vec![],
         level: Level::zero(),
         constructors: vec![
-            CtorSpec { args: vec![], target_indices: vec![] },
-            CtorSpec { args: vec![Term::indformer(nat, vec![])], target_indices: vec![] },
+            CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            },
+            CtorSpec {
+                args: vec![Term::indformer(nat, vec![])],
+                target_indices: vec![],
+            },
         ],
     })
     .unwrap();
     let decl = env.inductive(id).unwrap();
-    NatEnv { id, zero_id: decl.constructors[0].id, suc_id: decl.constructors[1].id }
+    NatEnv {
+        id,
+        zero_id: decl.constructors[0].id,
+        suc_id: decl.constructors[1].id,
+    }
 }
 
 struct ITreeEnv {
@@ -93,7 +113,10 @@ fn mk_itree(env: &mut GlobalEnv, bool_id: GlobalId) -> ITreeEnv {
         level: Level::zero(),
         constructors: vec![
             // Ret : (r : R) -> ITree R      [in ctx [R]: R = Var(0)]
-            CtorSpec { args: vec![Term::var(0)], target_indices: vec![] },
+            CtorSpec {
+                args: vec![Term::var(0)],
+                target_indices: vec![],
+            },
             // Vis : (Bool -> ITree R) -> ITree R
             //   in ctx [R]: Pi(Bool, App(ITree, Var(1)))
             CtorSpec {
@@ -107,11 +130,18 @@ fn mk_itree(env: &mut GlobalEnv, bool_id: GlobalId) -> ITreeEnv {
     })
     .unwrap();
     let decl = env.inductive(id).unwrap();
-    ITreeEnv { id, ret_id: decl.constructors[0].id, vis_id: decl.constructors[1].id }
+    ITreeEnv {
+        id,
+        ret_id: decl.constructors[0].id,
+        vis_id: decl.constructors[1].id,
+    }
 }
 
 fn ctor(id: GlobalId) -> Term {
-    Term::Constructor { id, level_args: vec![] }
+    Term::Constructor {
+        id,
+        level_args: vec![],
+    }
 }
 fn fmr(id: GlobalId) -> Term {
     Term::indformer(id, vec![])
@@ -183,11 +213,17 @@ fn wstyle_ih_folds_at_depth_two() {
     let result = eval(&[], &elim, &env, &mut store);
     let expected = eval(
         &[],
-        &Term::app(ctor(nat.suc_id), Term::app(ctor(nat.suc_id), ctor(nat.zero_id))),
+        &Term::app(
+            ctor(nat.suc_id),
+            Term::app(ctor(nat.suc_id), ctor(nat.zero_id)),
+        ),
         &env,
         &mut store,
     );
-    assert_eq!(result, expected, "size of a depth-2 Vis chain must be 2 (suc (suc zero))");
+    assert_eq!(
+        result, expected,
+        "size of a depth-2 Vis chain must be 2 (suc (suc zero))"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -214,7 +250,10 @@ fn wstyle_pair_valued_fold_threads_state_through_vis() {
     // mr = λ(r:Bool). λ(s:Bool). Pair(r, s)
     let mr = Term::lam(
         fmr(b.id),
-        Term::lam(fmr(b.id), Term::Pair(Box::new(Term::var(1)), Box::new(Term::var(0)))),
+        Term::lam(
+            fmr(b.id),
+            Term::Pair(Box::new(Term::var(1)), Box::new(Term::var(0))),
+        ),
     );
     // mv = λ(k:Bool→ITree Bool). λ(ih:Bool→Bool→Pair Bool Bool). λ(s:Bool).
     //        (ih s) s     -- "get": feed current state as the response,
@@ -224,9 +263,15 @@ fn wstyle_pair_valued_fold_threads_state_through_vis() {
         Term::lam(
             Term::pi(
                 fmr(b.id),
-                Term::pi(fmr(b.id), Term::Pair(Box::new(fmr(b.id)), Box::new(fmr(b.id)))),
+                Term::pi(
+                    fmr(b.id),
+                    Term::Pair(Box::new(fmr(b.id)), Box::new(fmr(b.id))),
+                ),
             ),
-            Term::lam(fmr(b.id), Term::app(Term::app(Term::var(1), Term::var(0)), Term::var(0))),
+            Term::lam(
+                fmr(b.id),
+                Term::app(Term::app(Term::var(1), Term::var(0)), Term::var(0)),
+            ),
         ),
     );
 
@@ -253,7 +298,10 @@ fn wstyle_pair_valued_fold_threads_state_through_vis() {
     match &run_false {
         EvalVal::Pair { fst, snd, .. } => {
             assert_eq!(**fst, false_val, "run from False: result must be False");
-            assert_eq!(**snd, false_val, "run from False: final state must be False");
+            assert_eq!(
+                **snd, false_val,
+                "run from False: final state must be False"
+            );
         }
         other => panic!("expected a Pair; got {:?}", other),
     }
@@ -269,7 +317,10 @@ fn wstyle_pair_valued_fold_threads_state_through_vis() {
         }
         other => panic!("expected a Pair; got {:?}", other),
     }
-    assert_ne!(run_false, run_true, "two initial states must yield two independent pairs (AC4 shape)");
+    assert_ne!(
+        run_false, run_true,
+        "two initial states must yield two independent pairs (AC4 shape)"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -301,7 +352,10 @@ fn wstyle_unused_ih_is_dead_code_skipped() {
     // mv = λk. λih. suc zero   -- ih (Var 0) is NEVER referenced.
     let mv = Term::lam(
         Term::pi(fmr(b.id), Term::app(fmr(it.id), r_ty.clone())),
-        Term::lam(Term::pi(fmr(b.id), fmr(nat.id)), Term::app(ctor(nat.suc_id), ctor(nat.zero_id))),
+        Term::lam(
+            Term::pi(fmr(b.id), fmr(nat.id)),
+            Term::app(ctor(nat.suc_id), ctor(nat.zero_id)),
+        ),
     );
 
     let k = Term::lam(fmr(b.id), Term::var(0)); // self-referential; never forced
@@ -318,8 +372,16 @@ fn wstyle_unused_ih_is_dead_code_skipped() {
     };
 
     let result = eval(&[], &elim, &env, &mut store);
-    let expected = eval(&[], &Term::app(ctor(nat.suc_id), ctor(nat.zero_id)), &env, &mut store);
-    assert_eq!(result, expected, "unused W-style IH must be skipped, not eagerly folded");
+    let expected = eval(
+        &[],
+        &Term::app(ctor(nat.suc_id), ctor(nat.zero_id)),
+        &env,
+        &mut store,
+    );
+    assert_eq!(
+        result, expected,
+        "unused W-style IH must be skipped, not eagerly folded"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -352,7 +414,10 @@ fn mixed_direct_and_wstyle_positions_fold_together() {
                 ],
                 target_indices: vec![],
             },
-            CtorSpec { args: vec![], target_indices: vec![] }, // Leaf
+            CtorSpec {
+                args: vec![],
+                target_indices: vec![],
+            }, // Leaf
         ],
     })
     .unwrap();
@@ -406,12 +471,23 @@ fn mixed_direct_and_wstyle_positions_fold_together() {
     match result {
         EvalVal::Pair { fst, snd, .. } => {
             // ih_direct = elim_Mixed(Leaf) = ml = zero, so fst = suc zero.
-            let expected_fst = eval(&[], &Term::app(ctor(nat.suc_id), ctor(nat.zero_id)), &env, &mut store);
+            let expected_fst = eval(
+                &[],
+                &Term::app(ctor(nat.suc_id), ctor(nat.zero_id)),
+                &env,
+                &mut store,
+            );
             // ih_w False = elim_Mixed(k_fn False) = elim_Mixed(Leaf) = ml = zero
             // directly (no extra `suc` — `mm` only wraps ih_direct in `suc`).
             let expected_snd = eval(&[], &ctor(nat.zero_id), &env, &mut store);
-            assert_eq!(*fst, expected_fst, "direct IH must fold the Leaf field to (suc zero)");
-            assert_eq!(*snd, expected_snd, "W-style IH applied to False must fold the Leaf field to zero");
+            assert_eq!(
+                *fst, expected_fst,
+                "direct IH must fold the Leaf field to (suc zero)"
+            );
+            assert_eq!(
+                *snd, expected_snd,
+                "W-style IH applied to False must fold the Leaf field to zero"
+            );
         }
         other => panic!("expected a Pair combining both IHs; got {:?}", other),
     }

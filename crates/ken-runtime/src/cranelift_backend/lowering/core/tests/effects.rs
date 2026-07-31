@@ -45,6 +45,7 @@ fn run_checked_bounded_nat_fixture(
         seed_env: &seed_env,
         active_emission_owner: None,
         active_static_recursor_result: None,
+        active_static_recursor_selection: None,
         declarations: BTreeMap::new(),
         static_transition_plan: inert_test_plan(),
         declaration_stack: Vec::new(),
@@ -58,6 +59,7 @@ fn run_checked_bounded_nat_fixture(
         next_source_join: 0,
         next_source_predecessor: 0,
         live_source_continuations: 0,
+        returned_source_continuation_result_origin: None,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
         active_carried_computational_eliminations: Vec::new(),
@@ -105,6 +107,14 @@ fn run_checked_bounded_nat_fixture(
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             static_callable_calls: BTreeMap::new(),
+            continuation_specialization_calls: BTreeMap::new(),
+            consumed_unit_calls: BTreeSet::new(),
+            active_unit_inputs: Vec::new(),
+            continuation_specialization_environments: BTreeMap::new(),
+            consumed_continuation_specialization_calls: BTreeSet::new(),
+            dispositioned_continuation_specialization_calls: BTreeSet::new(),
+            reached_continuation_specialization_results: BTreeSet::new(),
+            transported_continuation_subtrees: BTreeSet::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
@@ -306,11 +316,13 @@ fn run_checked_bounded_nat_fixture(
                 }
             };
             let fixture_origin = compiler.static_transition_plan.root_static_origin()?;
-            let edge = compiler.static_transition_plan.lowering_boundary_use_token(
-                LoweringOnlyOperandEdge::TestFixtureResult,
-                fixture_origin,
-                0,
-            )?;
+            let edge = compiler
+                .static_transition_plan
+                .lowering_boundary_use_token(
+                    LoweringOnlyOperandEdge::TestFixtureResult,
+                    fixture_origin,
+                    0,
+                )?;
             match lowered.specialized_at(edge)? {
                 Lowered::Int { value, .. } => value,
                 other => compiler.emit_result(&mut builder, other)?.0,

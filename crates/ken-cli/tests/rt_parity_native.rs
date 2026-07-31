@@ -378,6 +378,12 @@ fn differential(case: &str, entry: &str) -> Differential {
         },
     )
     .unwrap_or_else(|error| panic!("{case}: linked artifact runs: {error:?}"));
+    if std::env::var_os("KEN_KEEP_ARTIFACT").is_some() {
+        eprintln!(
+            "CONTSPEC_ARTIFACT_EXECUTABLE={}",
+            output.artifact.executable_path.display()
+        );
+    }
 
     let mut host = ken_interp::PosixHost::new_at(&root);
     let interpreted = ken_cli::run_program_effect_observation(
@@ -390,7 +396,11 @@ fn differential(case: &str, entry: &str) -> Differential {
     )
     .unwrap_or_else(|error| panic!("{case}: source runs in interpreter: {error:?}"));
 
-    std::fs::remove_dir_all(&root).unwrap();
+    if std::env::var_os("KEN_KEEP_ARTIFACT").is_some() {
+        eprintln!("CONTSPEC_ARTIFACT_ROOT={}", root.display());
+    } else {
+        std::fs::remove_dir_all(&root).unwrap();
+    }
     Differential {
         interpreted,
         native,
@@ -426,6 +436,9 @@ fn assert_narrowed_alike(
         interpreted,
         native,
     } = differential(case, entry);
+    eprintln!(
+        "CONTSPEC_DIFFERENTIAL interpreted={interpreted:?} native={native:?}"
+    );
 
     // Axis 1 -- exact public variant. The fixture exits 0 only on
     // `expected_variant`; any other `ResourceError` constructor exits non-zero.

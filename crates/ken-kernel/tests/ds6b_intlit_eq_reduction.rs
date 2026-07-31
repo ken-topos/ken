@@ -11,8 +11,8 @@ use std::collections::BTreeSet;
 use ken_kernel::env::{Context, Decl, PrimReduction};
 use ken_kernel::term::{Level, Term};
 use ken_kernel::{
-    check, declare_deceq_certificate, declare_inductive, declare_primitive, infer, whnf,
-    CtorSpec, GlobalEnv, GlobalId, InductiveSpec, KernelError,
+    check, declare_deceq_certificate, declare_inductive, declare_primitive, infer, whnf, CtorSpec,
+    GlobalEnv, GlobalId, InductiveSpec, KernelError,
 };
 
 /// Minimal env: `Bool` (`True | False`) + an opaque primitive `PrimT` with a
@@ -136,8 +136,13 @@ fn over_equate_distinct_literals_rejected() {
     // it's already fully reduced to `Bottom`), but `TypeMismatch` against
     // the fully-reduced `Bottom` goal: `Bottom` has no valid introduction
     // form at all, which IS the soundness property under test.
-    let err = check(&env, &ctx, &Term::Refl(Box::new(Term::IntLit(BigInt::from(5)))), &goal)
-        .expect_err("Refl must not prove 5 = 6");
+    let err = check(
+        &env,
+        &ctx,
+        &Term::Refl(Box::new(Term::IntLit(BigInt::from(5)))),
+        &goal,
+    )
+    .expect_err("Refl must not prove 5 = 6");
     assert!(
         matches!(err, KernelError::TypeMismatch { .. }),
         "expected TypeMismatch, got {:?}",

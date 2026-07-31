@@ -72,18 +72,21 @@ pub(in crate::cranelift_backend) use crate::{
 pub(in crate::cranelift_backend) use super::compiled::{CompiledModule, ResultDecoder};
 pub(in crate::cranelift_backend) use super::planning::{
     collect_checked_oriented_markers, collect_checked_subcontinuation_frames,
-    plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
+    plan_static_transition_graph_with_symbols,
+    plan_static_transition_graph_with_symbols_and_control,
+    validate_oriented_subcontinuation_transport,
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
     AggregateRepresentationToken, BoundaryUseIdentity, CheckedOrientedMarkerSets,
     ConstructorIdentity, EffectSemanticSeat, EmittableCallKind,
-    EmittableStaticCallableArgumentKind, EmittableStaticCallableBinding,
-    EmittableStaticCallableCall, EmittableStaticCallableCapture, EmittableStaticCallableUnit,
-    EmittableUnit, JoinPlanToken, JoinResultRepresentation, LoweringOnlyOperandEdge,
-    OperandEdgeDisposition, OperandEdgeToken, PredeclaredFunctionId, SourceOperandRole,
-    StaticCallableSpecializationId, StaticOriginId, StaticRecursorCaptureLifetime,
-    StaticRecursorWorkerResidualId, StaticTransitionPlan, SynthesizedAggregateOccurrence,
-    SynthesizedAggregateSite, SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
+    EmittableContinuationSpecialization, EmittableStaticCallableArgumentKind,
+    EmittableStaticCallableBinding, EmittableStaticCallableCall, EmittableStaticCallableCapture,
+    EmittableStaticCallableUnit, EmittableUnit, JoinPlanToken, JoinResultRepresentation,
+    LoweringOnlyOperandEdge, OperandEdgeDisposition, OperandEdgeToken, PredeclaredFunctionId,
+    SourceOperandRole, StaticCallableSpecializationId, StaticOriginId,
+    StaticRecursorCaptureLifetime, StaticRecursorWorkerResidualId, StaticTransitionPlan,
+    SynthesizedAggregateOccurrence, SynthesizedAggregateSite, SynthesizedConstructorRole,
+    SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use super::planning::{
@@ -661,6 +664,14 @@ impl ArtifactHelpers<'_> {
             unit_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             static_callable_calls: BTreeMap::new(),
+            continuation_specialization_calls: BTreeMap::new(),
+            consumed_unit_calls: BTreeSet::new(),
+            active_unit_inputs: Vec::new(),
+            continuation_specialization_environments: BTreeMap::new(),
+            reached_continuation_specialization_results: BTreeSet::new(),
+            consumed_continuation_specialization_calls: BTreeSet::new(),
+            dispositioned_continuation_specialization_calls: BTreeSet::new(),
+            transported_continuation_subtrees: BTreeSet::new(),
             trap_exit,
             terminal_result_origins: BTreeSet::new(),
             consumed_join_origins: BTreeSet::new(),
@@ -766,9 +777,43 @@ struct FunctionLocalRefs {
     /// the inert threading the node forbids: present, plausible, and never
     /// reaching an emitted call.
     boundary_carrier: Option<BoundaryCarrierRefs>,
-    unit_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    unit_calls: BTreeMap<(StaticOriginId, u32), units::DeclaredUnitCall>,
     declaration_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     static_callable_calls: BTreeMap<StaticOriginId, units::DeclaredStaticCallableCall>,
+    continuation_specialization_calls:
+        BTreeMap<StaticOriginId, Vec<units::DeclaredContinuationSpecializationCall>>,
+    consumed_unit_calls: BTreeSet<(StaticOriginId, u32)>,
+    /// The exact ordinary ABI operands loaded at this emitted unit's entry.
+    ///
+    /// Continuation-specialization producer edges borrow a planner-declared
+    /// prefix from this population. Values remain ordinary operands and never
+    /// participate in specialization identity.
+    active_unit_inputs: Vec<LoweringOperand>,
+    /// Exact caller-owned environments captured when an emitted source match
+    /// installs its checked continuation. Branch-local producer edges consult
+    /// this map before falling back to unit-entry inputs, so local binders are
+    /// transported without becoming specialization key material.
+    continuation_specialization_environments:
+        BTreeMap<StaticOriginId, Vec<LoweringOperand>>,
+    /// Producer-result occurrences actually reached while lowering this
+    /// emitted owner.
+    ///
+    /// This is deliberately independent of direct-call consumption. Removing
+    /// a required call still leaves its producer occurrence reached, so the
+    /// exact call ledger fails rather than silently classifying the omission
+    /// as dead.
+    reached_continuation_specialization_results: BTreeSet<StaticOriginId>,
+    /// Causal producer occurrences whose exact branch-local specialization
+    /// edge was emitted in this unit. Equality with the declared edge map is
+    /// closed before any function is published.
+    consumed_continuation_specialization_calls: BTreeSet<(StaticOriginId, u32)>,
+    /// Declared causal calls whose complete caller suffix moved into an exact
+    /// out-of-line continuation unit.
+    dispositioned_continuation_specialization_calls: BTreeSet<(StaticOriginId, u32)>,
+    /// Caller-owned suffix roots moved out of this producer unit. Aggregate
+    /// occurrence disposition waits until generated-function closure, after
+    /// every causal clone has had a chance to emit.
+    transported_continuation_subtrees: BTreeSet<StaticOriginId>,
     /// The current function's closed trap-exit authority. Absence is an error
     /// state, never an implicit Root.
     trap_exit: Option<TrapExitAuthority>,
@@ -991,6 +1036,15 @@ struct Lowering<'a> {
     /// Static worker whose direct result is currently being lowered through
     /// its caller-owned continuation. Compiler-only; never an ABI value.
     active_static_recursor_result: Option<StaticRecursorWorker>,
+    /// Exact worker selected by a continuation-specialization result while
+    /// lowering the caller suffix that remains after the out-of-line call.
+    ///
+    /// This is deliberately distinct from `active_static_recursor_result`:
+    /// the returned value is no longer a direct result of the worker, so its
+    /// source-result constructor population must not prune later matches. The
+    /// worker identity remains relevant only to selecting a recursive-position
+    /// call occurrence.
+    active_static_recursor_selection: Option<StaticRecursorWorker>,
     /// Everything resolved into the ONE generated function this `Lowering`
     /// emits into. ⛔ See [`FunctionLocalRefs`] — none of it is portable.
     function_local: FunctionLocalRefs,
@@ -1025,6 +1079,9 @@ struct Lowering<'a> {
     next_source_join: u64,
     next_source_predecessor: u64,
     live_source_continuations: usize,
+    /// Exact producer-result occurrence returned by the most recent owned
+    /// source-machine terminal. Compiler-only metadata; never an ABI operand.
+    returned_source_continuation_result_origin: Option<StaticOriginId>,
     source_control_root: Option<ContinuationCursorId>,
     active_oriented_semantic_regions: usize,
     /// ⛔⛔ **`AC-C4`'s TERMINATION GUARD — the carried computational
@@ -1070,7 +1127,7 @@ struct Lowering<'a> {
     root_terminal_authority: Option<RootTerminalAnswerAuthority>,
     active_join_site: Option<u64>,
     oriented_subcontinuation_plan: Option<crate::OrientedSubcontinuationPlanV1>,
-    consumed_subcontinuation_frames: BTreeSet<(u64, u64)>,
+    consumed_subcontinuation_frames: BTreeSet<(Option<PredeclaredFunctionId>, u64, u64)>,
     active_subcontinuation_frame: Option<u64>,
     consumed_recursive_call_templates: BTreeSet<u64>,
     pending_recursive_call: Option<CheckedRecursiveInvocationInstance>,
@@ -1773,12 +1830,8 @@ impl<'a> Lowering<'a> {
         position: usize,
         role: SourceOperandRole,
     ) -> Result<OperandEdgeToken, CraneliftBackendError> {
-        self.static_transition_plan.reached_operand_edge_token_for_owner(
-            self.emitted_owner()?,
-            parent,
-            position,
-            role,
-        )
+        self.static_transition_plan
+            .reached_operand_edge_token_for_owner(self.emitted_owner()?, parent, position, role)
     }
 
     fn effect_operand_edge_token(
@@ -1807,12 +1860,7 @@ impl<'a> Lowering<'a> {
         role: SourceOperandRole,
     ) -> Result<OperandEdgeToken, CraneliftBackendError> {
         self.static_transition_plan
-            .reached_operand_edge_token_for_owner(
-                self.emitted_owner()?,
-                parent,
-                position,
-                role,
-            )
+            .reached_operand_edge_token_for_owner(self.emitted_owner()?, parent, position, role)
     }
 
     fn disposition_operand_edge(
@@ -1822,7 +1870,17 @@ impl<'a> Lowering<'a> {
         role: SourceOperandRole,
     ) -> Result<(), CraneliftBackendError> {
         self.static_transition_plan
-            .disposition_operand_edge_for_owner(
+            .disposition_operand_edge_for_owner(self.emitted_owner()?, parent, position, role)
+    }
+
+    fn disposition_unreached_operand_edge(
+        &self,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<(), CraneliftBackendError> {
+        self.static_transition_plan
+            .disposition_unreached_operand_edge_for_owner(
                 self.emitted_owner()?,
                 parent,
                 position,
@@ -1837,12 +1895,7 @@ impl<'a> Lowering<'a> {
         arity: usize,
     ) -> Result<AggregateRepresentationToken, CraneliftBackendError> {
         self.static_transition_plan
-            .aggregate_representation_token_for_owner(
-                self.emitted_owner()?,
-                origin,
-                class,
-                arity,
-            )
+            .aggregate_representation_token_for_owner(self.emitted_owner()?, origin, class, arity)
     }
 
     fn synthesized_aggregate_occurrence(
@@ -1869,12 +1922,7 @@ impl<'a> Lowering<'a> {
         position: u32,
     ) -> Result<OperandEdgeToken, CraneliftBackendError> {
         self.static_transition_plan
-            .lowering_boundary_use_token_for_owner(
-                edge,
-                origin,
-                position,
-                self.emitted_owner()?,
-            )
+            .lowering_boundary_use_token_for_owner(edge, origin, position, self.emitted_owner()?)
     }
 
     fn reached_lowering_boundary_use_token(
@@ -1899,12 +1947,7 @@ impl<'a> Lowering<'a> {
         role: SourceOperandRole,
     ) -> Result<OperandEdgeDisposition, CraneliftBackendError> {
         self.static_transition_plan
-            .close_reached_operand_edge_for_owner(
-                self.emitted_owner()?,
-                parent,
-                position,
-                role,
-            )
+            .close_reached_operand_edge_for_owner(self.emitted_owner()?, parent, position, role)
     }
 
     fn disposition_lowering_boundary_use_if_planned(
@@ -2146,10 +2189,103 @@ impl<'a> Lowering<'a> {
                     .source_join_origins_in_owner_subtree(root)?
             }
         };
+        self.disposition_continuation_specialization_calls_in_source_subtree(root)?;
         for origin in joins {
             self.function_local
                 .dispositioned_join_origins
                 .insert(origin);
+        }
+        Ok(())
+    }
+
+    /// Close every exact causal continuation call whose producer occurrence is
+    /// contained in a source subtree already proved not to emit in this unit.
+    ///
+    /// The subtree root comes from the planner's case-emission or transported
+    /// suffix authority. The planned calls supply their own exact sequence
+    /// identities; lowering neither reconstructs nor renumbers that population.
+    fn disposition_continuation_specialization_calls_in_source_subtree(
+        &mut self,
+        root: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        let identities = self
+            .function_local
+            .continuation_specialization_calls
+            .iter()
+            .flat_map(|(origin, calls)| {
+                calls
+                    .iter()
+                    .map(move |call| (*origin, call.target.call_site_sequence))
+            })
+            .collect::<Vec<_>>();
+        for identity @ (origin, _) in identities {
+            let contained = self
+                .static_transition_plan
+                .source_origin_is_in_subtree(root, origin)?;
+            eprintln!(
+                "CONTSPEC_DEAD_SUBTREE owner={:?} root={root:?} identity={identity:?} contained={contained}",
+                self.active_emission_owner,
+            );
+            if !contained
+                || self
+                    .function_local
+                    .consumed_continuation_specialization_calls
+                    .contains(&identity)
+            {
+                continue;
+            }
+            self.function_local
+                .dispositioned_continuation_specialization_calls
+                .insert(identity);
+        }
+        Ok(())
+    }
+
+    /// Close a caller suffix transported into an out-of-line continuation
+    /// specialization. Unlike a dead source branch, the suffix may already
+    /// have one emitted occurrence in this function; only joins not reached
+    /// here are dispositioned. The planner-owned unit carries the corresponding
+    /// source and boundary population in its own emitted owner.
+    fn disposition_out_of_line_continuation_subtree(
+        &mut self,
+        root: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        self.function_local
+            .transported_continuation_subtrees
+            .insert(root);
+        // The producer branch calls the out-of-line continuation instead of
+        // inspecting this source scrutinee locally. Other branches may already
+        // have consumed the same emitted occurrence, so close only the exact
+        // still-unreached source edge.
+        self.disposition_unreached_operand_edge(root, 0, SourceOperandRole::MatchScrutinee)?;
+        match self.body_emission_authority {
+            BodyEmissionAuthority::RecursiveDescent => self
+                .static_transition_plan
+                .disposition_boundary_uses_only_in_inline_subtree_for_owner(
+                    self.emitted_owner()?,
+                    root,
+                )?,
+            BodyEmissionAuthority::FunctionizedUnits => self
+                .static_transition_plan
+                .disposition_boundary_uses_only_in_owner_subtree_for_owner(
+                    self.emitted_owner()?,
+                    root,
+                )?,
+        }
+        let joins = match self.body_emission_authority {
+            BodyEmissionAuthority::RecursiveDescent => self
+                .static_transition_plan
+                .source_join_origins_in_inline_subtree(root)?,
+            BodyEmissionAuthority::FunctionizedUnits => self
+                .static_transition_plan
+                .source_join_origins_in_owner_subtree(root)?,
+        };
+        for origin in joins {
+            if !self.function_local.consumed_join_origins.contains(&origin) {
+                self.function_local
+                    .dispositioned_join_origins
+                    .insert(origin);
+            }
         }
         Ok(())
     }
@@ -2265,10 +2401,10 @@ impl<'a> Lowering<'a> {
                         SourceOperandRole::MatchArm,
                     )?;
                     self.disposition_lowering_boundary_use_if_planned(
-                            LoweringOnlyOperandEdge::JoinArm,
-                            root,
-                            0,
-                        )?;
+                        LoweringOnlyOperandEdge::JoinArm,
+                        root,
+                        0,
+                    )?;
                     continue;
                 }
                 #[cfg(test)]
@@ -2287,10 +2423,10 @@ impl<'a> Lowering<'a> {
                 self.disposition_statically_unselected_source_subtree(root)?;
             }
             self.disposition_lowering_boundary_use_if_planned(
-                    LoweringOnlyOperandEdge::JoinArm,
-                    match_origin,
-                    0,
-                )?;
+                LoweringOnlyOperandEdge::JoinArm,
+                match_origin,
+                0,
+            )?;
         }
         Ok(())
     }
@@ -2348,6 +2484,22 @@ impl<'a> Lowering<'a> {
         function: PredeclaredFunctionId,
     ) -> Result<(), CraneliftBackendError> {
         self.close_statically_unselected_match_cases()?;
+        let transported = self
+            .function_local
+            .transported_continuation_subtrees
+            .iter()
+            .copied()
+            .collect::<Vec<_>>();
+        for root in transported {
+            match self.body_emission_authority {
+                BodyEmissionAuthority::RecursiveDescent => self
+                    .static_transition_plan
+                    .disposition_boundary_uses_in_inline_subtree_for_owner(function, root)?,
+                BodyEmissionAuthority::FunctionizedUnits => self
+                    .static_transition_plan
+                    .disposition_boundary_uses_in_owner_subtree_for_owner(function, root)?,
+            }
+        }
         let required = self
             .static_transition_plan
             .required_join_origins(function)?;
@@ -2544,9 +2696,9 @@ impl<'a> Lowering<'a> {
                     }
             });
             #[cfg(test)]
-            let force_live_disposition_check =
-                D8_JOIN_CONSUMPTION_MUTATION.with(std::cell::Cell::get)
-                    == JoinConsumptionMutation::DispositionDynamicHostResultMerge;
+            let force_live_disposition_check = D8_JOIN_CONSUMPTION_MUTATION
+                .with(std::cell::Cell::get)
+                == JoinConsumptionMutation::DispositionDynamicHostResultMerge;
             #[cfg(not(test))]
             let force_live_disposition_check = false;
             if naturally_live && !force_live_disposition_check {
@@ -2616,24 +2768,75 @@ impl<'a> Lowering<'a> {
         inputs: &[LoweringOperand],
         #[cfg(test)] launch_ingress: Option<cranelift_codegen::ir::Value>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        if format!("{body_origin:?}") == "StaticOriginId(442)" {
+        if matches!(
+            format!("{body_origin:?}").as_str(),
+            "StaticOriginId(442)" | "StaticOriginId(761)"
+        ) {
             eprintln!(
                 "TRACE resource-body call site rust={}",
                 std::panic::Location::caller()
             );
         }
+        let repeated_worker_phase = self
+            .active_emission_owner
+            .and_then(|owner| {
+                self.static_transition_plan
+                    .continuation_specialization_for_function(owner)
+            })
+            .is_some();
+        let call_site_sequence = if repeated_worker_phase {
+            self.function_local
+                .unit_calls
+                .keys()
+                .filter(|(origin, _)| *origin == body_origin)
+                .map(|(_, sequence)| *sequence)
+                .find(|sequence| {
+                    !self
+                        .function_local
+                        .consumed_unit_calls
+                        .contains(&(body_origin, *sequence))
+                })
+                .ok_or_else(|| {
+                    backend(BackendFailure::PlannerInvariant(format!(
+                        "continuation specialization emitted more worker calls than planned: \
+                         owner={:?}, body={body_origin:?}, planned={:?}, consumed={:?}",
+                        self.active_emission_owner,
+                        self.function_local
+                            .unit_calls
+                            .keys()
+                            .filter(|(origin, _)| *origin == body_origin)
+                            .collect::<Vec<_>>(),
+                        self.function_local
+                            .consumed_unit_calls
+                            .iter()
+                            .filter(|(origin, _)| *origin == body_origin)
+                            .collect::<Vec<_>>(),
+                    )))
+                })?
+        } else {
+            0
+        };
         let target = self
             .function_local
             .unit_calls
-            .get(&body_origin)
+            .get(&(body_origin, call_site_sequence))
             .cloned()
             .ok_or_else(|| {
-                backend_module(
-                    "retained body has no graph-derived call target in this unit".to_string(),
-                )
+                backend_module(format!(
+                    "retained body has no graph-derived emitted call occurrence in this unit: \
+                     body={body_origin:?}, sequence={call_site_sequence}",
+                ))
             })?;
-        let flattened_inputs;
-        let inputs = if let Some(binding) = target.static_callable_body.as_ref() {
+        if !self
+            .function_local
+            .consumed_unit_calls
+            .insert((body_origin, call_site_sequence))
+        {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "one declared unit-call occurrence was emitted twice".to_string(),
+            )));
+        }
+        let mut inputs = if let Some(binding) = target.static_callable_body.as_ref() {
             let arity = usize::try_from(binding.declared_arity()).map_err(|_| {
                 backend_module("static callable body arity exceeds usize".to_string())
             })?;
@@ -2648,7 +2851,7 @@ impl<'a> Lowering<'a> {
                     "static callable body capture shape changed after planning".to_string(),
                 )));
             }
-            flattened_inputs = {
+            {
                 let mut flattened = inputs[..arity].to_vec();
                 for (capture, capture_binding) in captures.iter().zip(binding.captures()) {
                     match capture_binding {
@@ -2661,18 +2864,112 @@ impl<'a> Lowering<'a> {
                     }
                 }
                 flattened
-            };
-            flattened_inputs.as_slice()
+            }
         } else {
-            inputs
+            inputs.to_vec()
         };
+        if let Some(owner) = self.active_emission_owner {
+            let producer_environment = self
+                .static_transition_plan
+                .continuation_environment_for_producer_call(owner, target.unit)?;
+            let producer_count = producer_environment.map(|(_, count)| count);
+            let worker_environment = self
+                .static_transition_plan
+                .continuation_specialization_worker_environment(owner, target.unit)?;
+            let worker_count = worker_environment.map(|(_, count)| count);
+            if producer_count.is_some() && worker_count.is_some() && producer_count != worker_count
+            {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "producer and continuation-worker environment counts disagree".to_string(),
+                )));
+            }
+            if let Some(count) = producer_count.or(worker_count) {
+                let count = usize::try_from(count).map_err(|_| {
+                    backend_module(
+                        "continuation specialization environment exceeds usize".to_string(),
+                    )
+                })?;
+                let start = if producer_environment.is_some() {
+                    0
+                } else {
+                    worker_environment.map(|(start, _)| start).unwrap_or(0)
+                };
+                let start = usize::try_from(start).map_err(|_| {
+                    backend_module(
+                        "continuation specialization environment offset exceeds usize".to_string(),
+                    )
+                })?;
+                let end = start.checked_add(count).ok_or_else(|| {
+                    backend_module(
+                        "continuation specialization environment range exceeds usize".to_string(),
+                    )
+                })?;
+                let environment = producer_environment
+                    .and_then(|(origin, _)| {
+                        self.function_local
+                            .continuation_specialization_environments
+                            .get(&origin)
+                    })
+                    .unwrap_or(&self.function_local.active_unit_inputs);
+                let forwarded = environment
+                    .get(start..end)
+                    .ok_or_else(|| {
+                        backend_module(
+                            "producer call omits its exact planned continuation environment"
+                                .to_string(),
+                        )
+                    })?;
+                inputs.extend_from_slice(forwarded);
+            }
+        }
         self.call_declared_unit_target(
             builder,
             target,
-            inputs,
+            &inputs,
             #[cfg(test)]
             launch_ingress,
         )
+    }
+
+    pub(super) fn disposition_unconsumed_unit_calls(
+        &mut self,
+    ) -> Result<(), CraneliftBackendError> {
+        let calls = self
+            .function_local
+            .unit_calls
+            .iter()
+            .filter(|(identity, _)| {
+                !self
+                    .function_local
+                    .consumed_unit_calls
+                    .contains(identity)
+            })
+            .map(|(_, target)| target.clone())
+            .collect::<Vec<_>>();
+        for target in calls {
+            let input_count = target
+                .slots
+                .iter()
+                .filter(|slot| {
+                    matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture)
+                })
+                .count();
+            for position in 0..input_count {
+                self.static_transition_plan
+                    .disposition_lowering_boundary_use_for_emitted_occurrence(
+                        LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                        target.call_site_origin,
+                        u32::try_from(position).map_err(|_| {
+                            backend_module(
+                                "untaken unit-call input position exceeds u32".to_string(),
+                            )
+                        })?,
+                        target.call_site_sequence,
+                        self.emitted_owner()?,
+                    )?;
+            }
+        }
+        Ok(())
     }
 
     fn call_declared_declaration_unit(
@@ -2725,67 +3022,19 @@ impl<'a> Lowering<'a> {
         #[cfg(test)] launch_ingress: Option<cranelift_codegen::ir::Value>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let inputs = self.split_static_recursor_worker_operands(builder, inputs.to_vec())?;
-        if matches!(
-            format!("{:?}", target.origin).as_str(),
-            "StaticOriginId(442)" | "StaticOriginId(641)"
-        ) {
-            eprintln!(
-                "TRACE resource-body caller emitted_owner={:?} target={:?} function={:?} call_site={:?} inputs={} phases={:?}",
-                self.active_emission_owner,
-                target.origin,
-                target.function,
-                target.call_site_origin,
-                inputs.len(),
-                inputs
-                    .iter()
-                    .map(|input| match input {
-                        LoweringOperand::Carried(_) => "carried".to_string(),
-                        LoweringOperand::Specialized(value) => {
-                            format!("specialized:{:?}", value.variant())
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            );
-            if let Some(LoweringOperand::Carried(word)) = inputs.get(1) {
-                let match_origin = self
-                    .static_transition_plan
-                    .child_static_origin(target.origin, 0)?;
-                let first = self
-                    .static_transition_plan
-                    .case_constructor_identity(match_origin, 0)?
-                    .tag_abi_word()?;
-                let first = i64::try_from(first)
-                    .map_err(|_| backend_module("diagnostic identity exceeds i64".to_string()))?;
-                let second = self
-                    .static_transition_plan
-                    .case_constructor_identity(match_origin, 1)?
-                    .tag_abi_word()?;
-                let second = i64::try_from(second)
-                    .map_err(|_| backend_module("diagnostic identity exceeds i64".to_string()))?;
-                let tag = self.emit_carrier_tag(builder, *word)?;
-                let is_first = builder.ins().icmp_imm(
-                    cranelift_codegen::ir::condcodes::IntCC::Equal,
-                    tag,
-                    first,
-                );
-                let is_second = builder.ins().icmp_imm(
-                    cranelift_codegen::ir::condcodes::IntCC::Equal,
-                    tag,
-                    second,
-                );
-                let valid = builder.ins().bor(is_first, is_second);
-                Self::require_i64(builder, valid, 1);
-            }
-        }
         let declared_inputs = target
             .slots
             .iter()
             .filter(|slot| matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture))
             .count();
         if declared_inputs != inputs.len() {
-            return Err(backend_module(
-                "caller inputs do not exactly match the callee descriptor".to_string(),
-            ));
+            return Err(backend_module(format!(
+                "caller inputs do not exactly match callee {:?} descriptor in emitted unit {:?}: \
+                 planned={declared_inputs}, actual={}",
+                target.origin,
+                self.active_emission_owner,
+                inputs.len(),
+            )));
         }
         // D7/#24: close the whole input graph before the first frame allocation
         // or store. In particular a callable capsule is rejected here without
@@ -2797,10 +3046,11 @@ impl<'a> Lowering<'a> {
             })?;
             let edge = self
                 .static_transition_plan
-                .lowering_boundary_use_token_for_owner(
+                .lowering_boundary_use_token_for_emitted_occurrence(
                     LoweringOnlyOperandEdge::CallableCapsuleEscape,
                     target.call_site_origin,
                     position,
+                    target.call_site_sequence,
                     target.boundary_owner,
                 )?;
             if let LoweringOperand::Specialized(value) = input {
@@ -2971,7 +3221,24 @@ impl<'a> Lowering<'a> {
             .ins()
             .brif(failed, failure_block, &[], trap_check_block, &[]);
         builder.switch_to_block(failure_block);
-        builder.ins().return_(&[unit_status]);
+        let diagnostic = match format!("{:?}", target.unit).as_str() {
+            "PredeclaredFunctionId(8)" => Some(-2),
+            "PredeclaredFunctionId(10)" => Some(-3),
+            "PredeclaredFunctionId(16)" => Some(-4),
+            _ => None,
+        };
+        if let Some(diagnostic) = diagnostic {
+            let unclassified = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                unit_status,
+                -1,
+            );
+            let diagnostic = builder.ins().iconst(types::I64, diagnostic);
+            let status = builder.ins().select(unclassified, diagnostic, unit_status);
+            builder.ins().return_(&[status]);
+        } else {
+            builder.ins().return_(&[unit_status]);
+        }
         builder.seal_block(failure_block);
         builder.switch_to_block(trap_check_block);
         builder.seal_block(trap_check_block);
@@ -3282,9 +3549,7 @@ impl<'a> Lowering<'a> {
                 let error_block = builder.create_block();
                 let merge = builder.create_block();
                 builder.append_block_param(merge, types::I64);
-                builder
-                    .ins()
-                    .brif(success, ok_block, &[], error_block, &[]);
+                builder.ins().brif(success, ok_block, &[], error_block, &[]);
 
                 builder.switch_to_block(ok_block);
                 let ok = self.emit_carrier_transfer(builder, origin, ok)?;
@@ -4200,6 +4465,7 @@ impl<'a> Lowering<'a> {
     /// it is the very word the producer wrote with `store_tag_id`, and that
     /// shared authority is `D2`. ⛔ It is not an ordinal, not a `LoweredVariant`
     /// discriminant, and not portable across artifacts.
+    #[track_caller]
     fn emit_carrier_tag(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -4210,7 +4476,30 @@ impl<'a> Lowering<'a> {
         let pointer_type = builder.func.dfg.value_type(arena);
         let (slot, out) = Self::carrier_out_slot(builder, pointer_type);
         let call = builder.ins().call(refs.tag, &[arena, target.word, out]);
-        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        let status = builder.inst_results(call)[0];
+        let passed = builder.create_block();
+        let failed = builder.create_block();
+        let ok = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            status,
+            BOUNDARY_OK,
+        );
+        builder.ins().brif(ok, passed, &[], failed, &[]);
+        builder.switch_to_block(failed);
+        let owner = self
+            .active_emission_owner
+            .and_then(|owner| {
+                self.static_transition_plan
+                    .emittable_units()
+                    .ok()?
+                    .iter()
+                    .position(|unit| unit.function() == owner)
+            })
+            .and_then(|position| i64::try_from(position).ok())
+            .map_or(199, |position| 100 + position);
+        let failure = builder.ins().iconst(types::I64, owner);
+        builder.ins().return_(&[failure]);
+        builder.switch_to_block(passed);
         Ok(builder.ins().stack_load(types::I64, slot, 0))
     }
 
@@ -4353,11 +4642,17 @@ impl<'a> Lowering<'a> {
     /// so the same guard has to be emitted — and it must still *be* a guard:
     /// binding *n* binders over a value with fewer children would read past the
     /// node.
+    #[track_caller]
     fn emit_carrier_field_count(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         target: CarriedBoundaryWord,
     ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
+        eprintln!(
+            "CONTSPEC_FIELD_COUNT_SITE owner={:?} caller={}",
+            self.active_emission_owner,
+            std::panic::Location::caller(),
+        );
         let refs = self.carrier_refs()?;
         let arena = self.carrier_arena()?;
         let pointer_type = builder.func.dfg.value_type(arena);
@@ -4365,7 +4660,22 @@ impl<'a> Lowering<'a> {
         let call = builder
             .ins()
             .call(refs.field_count, &[arena, target.word, out]);
-        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        let status = builder.inst_results(call)[0];
+        let valid = builder.create_block();
+        let invalid = builder.create_block();
+        let matches = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            status,
+            BOUNDARY_OK,
+        );
+        builder.ins().brif(matches, valid, &[], invalid, &[]);
+        builder.switch_to_block(invalid);
+        let failure = builder.ins().iconst(
+            types::I64,
+            i64::from(std::panic::Location::caller().line() % 200 + 10),
+        );
+        builder.ins().return_(&[failure]);
+        builder.switch_to_block(valid);
         Ok(builder.ins().stack_load(types::I64, slot, 0))
     }
 
@@ -5739,9 +6049,12 @@ impl<'a> Lowering<'a> {
                 identity: self
                     .static_transition_plan
                     .synthesized_constructor_identity(role)?,
-                aggregate: Some(
-                    self.synthesized_aggregate_occurrence(effect_origin, site, role, args.len())?,
-                ),
+                aggregate: Some(self.synthesized_aggregate_occurrence(
+                    effect_origin,
+                    site,
+                    role,
+                    args.len(),
+                )?),
             }),
             args,
         })
@@ -5779,14 +6092,12 @@ impl<'a> Lowering<'a> {
             tag,
             constructor,
             identity: self.synthesized_fixed_identity(role)?,
-            aggregate: Some(
-                self.synthesized_aggregate_occurrence(
-                        effect_origin,
-                        site,
-                        synthesized_role,
-                        fields.len(),
-                    )?,
-            ),
+            aggregate: Some(self.synthesized_aggregate_occurrence(
+                effect_origin,
+                site,
+                synthesized_role,
+                fields.len(),
+            )?),
             fields,
         })
     }
@@ -5823,22 +6134,18 @@ impl<'a> Lowering<'a> {
                         .synthesized_constructor_identity(SynthesizedConstructorRole::IoError(
                             *role,
                         ))?,
-                    aggregate: Some(
-                        self.synthesized_aggregate_occurrence(
-                                effect_origin,
-                                SynthesizedAggregateSite::IoError(u32::try_from(tag).map_err(
-                                    |_| {
-                                        unsupported(
-                                            "DynamicConstructor",
-                                            "the IOError alternative population exceeds the ABI \
+                    aggregate: Some(self.synthesized_aggregate_occurrence(
+                        effect_origin,
+                        SynthesizedAggregateSite::IoError(u32::try_from(tag).map_err(|_| {
+                            unsupported(
+                                "DynamicConstructor",
+                                "the IOError alternative population exceeds the ABI \
                                          discriminator",
-                                        )
-                                    },
-                                )?),
-                                SynthesizedConstructorRole::IoError(*role),
-                                usize::from(tag == last),
-                            )?,
-                    ),
+                            )
+                        })?),
+                        SynthesizedConstructorRole::IoError(*role),
+                        usize::from(tag == last),
+                    )?),
                     fields: (tag == last)
                         .then(|| vec![payload.clone()])
                         .unwrap_or_default(),
@@ -7278,6 +7585,7 @@ enum SourceContinuation<'a> {
         static_origin: StaticOriginId,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<LoweringOperand>,
+        continuation_result_origin: Option<StaticOriginId>,
         env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
@@ -7410,6 +7718,7 @@ enum SourcePrefixTemplate {
         static_origin: StaticOriginId,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<LoweringOperand>,
+        continuation_result_origin: Option<StaticOriginId>,
         env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
@@ -7549,6 +7858,14 @@ enum SourceMachineState<'a> {
     },
     Value {
         value: LoweringOperand,
+        /// Exact producer-result alternative whose compiler-only callable
+        /// identity must be discharged before the next computational join.
+        ///
+        /// This is value-flow state, not structural ancestry: semantic
+        /// consumers clear it, transparent checked wrappers preserve it, and
+        /// aggregate construction carries at most one proved alternative into
+        /// the completed aggregate.
+        continuation_result_origin: Option<StaticOriginId>,
         control: SourceControl<'a>,
     },
 }
@@ -8301,10 +8618,10 @@ impl<'a> Lowering<'a> {
         // marker from its callee before it executes; its returned semantic
         // value may therefore be carried and must continue unchanged.
         let edge = self.reached_lowering_boundary_use_token(
-                LoweringOnlyOperandEdge::CheckedComputationalIhMarker,
-                marker_origin,
-                0,
-            )?;
+            LoweringOnlyOperandEdge::CheckedComputationalIhMarker,
+            marker_origin,
+            0,
+        )?;
         if self.pending_computational_ih_call.is_none() {
             return Ok(value);
         }
@@ -8390,10 +8707,11 @@ impl<'a> Lowering<'a> {
             .active_recursive_invocations
             .last()
             .map_or(0, |instance| instance.invocation_instance_id);
-        if !self
-            .consumed_subcontinuation_frames
-            .insert((invocation_id, frame_id))
-        {
+        if !self.consumed_subcontinuation_frames.insert((
+            self.active_emission_owner,
+            invocation_id,
+            frame_id,
+        )) {
             return Err(unsupported(
                 "OrientedSubcontinuationPlanV1",
                 "checked Runtime frame marker was consumed more than once",
@@ -8799,10 +9117,10 @@ impl<'a> Lowering<'a> {
         }
         let _ = construct;
         let edge = self.reached_lowering_boundary_use_token(
-                LoweringOnlyOperandEdge::JoinArm,
-                join_plan.origin,
-                0,
-            )?;
+            LoweringOnlyOperandEdge::JoinArm,
+            join_plan.origin,
+            0,
+        )?;
         let lowered = lowered.specialized_join_arm(edge)?;
         let checked_root_exit_representation = self.has_checked_root_exit_representation();
         let lowered = if checked_root_exit_representation {
@@ -8924,10 +9242,10 @@ impl<'a> Lowering<'a> {
         }
         let _ = construct;
         let edge = self.reached_lowering_boundary_use_token(
-                LoweringOnlyOperandEdge::JoinArm,
-                join_origin,
-                0,
-            )?;
+            LoweringOnlyOperandEdge::JoinArm,
+            join_origin,
+            0,
+        )?;
         let lowered = lowered.specialized_join_arm(edge)?;
         if required_kind == Some(ScalarMergeKind::ExitCode) {
             let lowered = Self::unwrap_terminal_ret(lowered);
@@ -9362,7 +9680,17 @@ impl<'a> Lowering<'a> {
             "OrientedSubcontinuationPlanV1",
             format!(
                 "checked lowering left affine dynamic splice edges unconsumed: {:?}",
-                self.dynamic_splice_edges.keys().collect::<Vec<_>>(),
+                self.dynamic_splice_edges
+                    .values()
+                    .map(|edge| (
+                        edge.edge_id,
+                        edge.child_invocation_instance_id,
+                        edge.parent_invocation_instance_id,
+                        edge.checked_call_template_id,
+                        edge.parent_frame_template_id,
+                        edge.segment_site_id,
+                    ))
+                    .collect::<Vec<_>>(),
             ),
         ))
     }
@@ -9624,6 +9952,7 @@ impl<'a> Lowering<'a> {
                 static_origin,
                 remaining: arguments,
                 lowered,
+                continuation_result_origin,
                 env,
                 next,
             } => SourceContinuation::ConstructArgument {
@@ -9631,6 +9960,7 @@ impl<'a> Lowering<'a> {
                 static_origin,
                 remaining: arguments,
                 lowered,
+                continuation_result_origin,
                 env,
                 next: Box::new(Self::replace_source_terminal_with_unwind(
                     *next,
@@ -9959,6 +10289,7 @@ impl<'a> Lowering<'a> {
                 static_origin,
                 remaining,
                 lowered,
+                continuation_result_origin,
                 env,
                 next,
             } => {
@@ -9969,6 +10300,7 @@ impl<'a> Lowering<'a> {
                         static_origin,
                         remaining,
                         lowered,
+                        continuation_result_origin,
                         env,
                         next: Box::new(next),
                     },
@@ -10147,6 +10479,7 @@ impl<'a> Lowering<'a> {
                 static_origin,
                 remaining,
                 lowered,
+                continuation_result_origin,
                 env,
                 next,
             } => SourceContinuation::ConstructArgument {
@@ -10154,6 +10487,7 @@ impl<'a> Lowering<'a> {
                 static_origin: *static_origin,
                 remaining: remaining.clone(),
                 lowered: lowered.clone(),
+                continuation_result_origin: *continuation_result_origin,
                 env: env.clone(),
                 next: Box::new(Self::instantiate_source_prefix_template(next, edge)?),
             },
@@ -10681,7 +11015,8 @@ impl<'a> Lowering<'a> {
             .static_transition_plan
             .synthesized_constructor_identity(synthesized_role)?
             .tag_abi_word()?;
-        let occurrence = self.synthesized_aggregate_occurrence(origin, site, synthesized_role, args.len())?;
+        let occurrence =
+            self.synthesized_aggregate_occurrence(origin, site, synthesized_role, args.len())?;
         let representation = self
             .static_transition_plan
             .synthesized_aggregate_representation_token(
@@ -10885,6 +11220,7 @@ impl<'a> Lowering<'a> {
         false
     }
 
+    #[track_caller]
     fn require_i64(
         builder: &mut FunctionBuilder<'_>,
         actual: cranelift_codegen::ir::Value,
@@ -10899,7 +11235,10 @@ impl<'a> Lowering<'a> {
         );
         builder.ins().brif(matches, valid, &[], invalid, &[]);
         builder.switch_to_block(invalid);
-        let failure = builder.ins().iconst(types::I64, -1);
+        let failure = builder.ins().iconst(
+            types::I64,
+            i64::from(std::panic::Location::caller().line() % 200 + 10),
+        );
         builder.ins().return_(&[failure]);
         builder.switch_to_block(valid);
     }

@@ -406,7 +406,10 @@ mod nfc_construction_tests {
             panic!("Ok payload must be String");
         };
         assert_eq!(decoded.as_str(), "\u{E9}");
-        assert_eq!(round_trip_string(decoded, &ids, &mut store), decoded.clone());
+        assert_eq!(
+            round_trip_string(decoded, &ids, &mut store),
+            decoded.clone()
+        );
     }
 
     #[test]
@@ -416,8 +419,7 @@ mod nfc_construction_tests {
         let mut store = EvalStore::new();
 
         let decomposed = build_list_char("e\u{301}", &ids, &mut store);
-        let raw =
-            list_char_to_evalval_string(&decomposed, &ids).expect("well-formed List Char");
+        let raw = list_char_to_evalval_string(&decomposed, &ids).expect("well-formed List Char");
         let from_list = ken_elaborator::NfcString::new(raw);
         assert_eq!(from_list.as_str(), "\u{E9}");
         assert_eq!(round_trip_string(&from_list, &ids, &mut store), from_list);
@@ -2702,9 +2704,12 @@ impl HostHandler for PosixHost {
         // read the error propagates and the operation reports unavailable
         // (ABI-S3 D3).
         use std::io::Read;
-        let mut bytes = vec![0u8; usize::try_from(count).map_err(|_| {
-            io::Error::new(io::ErrorKind::InvalidInput, "entropy request too large")
-        })?];
+        let mut bytes = vec![
+            0u8;
+            usize::try_from(count).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidInput, "entropy request too large")
+            })?
+        ];
         std::fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
         Ok(bytes)
     }
@@ -3467,9 +3472,7 @@ impl HostHandler for CaptureHost {
     }
 
     fn clock_monotonic_now(&mut self) -> BigInt {
-        let index = self
-            .monotonic_cursor
-            .min(self.monotonic_script.len() - 1);
+        let index = self.monotonic_cursor.min(self.monotonic_script.len() - 1);
         let nanoseconds = self.monotonic_script[index].clone();
         self.monotonic_cursor = self.monotonic_cursor.saturating_add(1);
         self.clock_trace.push(ClockTrace::MonotonicNow {
@@ -4448,10 +4451,7 @@ impl<H: HostHandler> ken_host::HostEffectBackendV1 for InterpreterHostBackend<'_
         self.handler.clock_sleep_until(BigInt::from(deadline));
     }
 
-    fn entropy_random_bytes(
-        &mut self,
-        count: u64,
-    ) -> Result<Vec<u8>, ken_host::IoErrorIdentityV1> {
+    fn entropy_random_bytes(&mut self, count: u64) -> Result<Vec<u8>, ken_host::IoErrorIdentityV1> {
         self.handler
             .entropy_random_bytes(count)
             .map_err(|error| ken_host::io_error_identity_v1(&error))
@@ -6603,7 +6603,11 @@ mod px5b_effect_observation_tests {
         };
         assert_eq!(*span_id, fs.private_buffer_span_id);
         // PX8-SPAN-PROV AC-5: budget is span_args[2] now ([origin, start, budget]).
-        assert_eq!(nat_value(&span_args[2], &fs), 4, "span must be capacity-full");
+        assert_eq!(
+            nat_value(&span_args[2], &fs),
+            4,
+            "span must be capacity-full"
+        );
         let EvalVal::Ctor {
             id: transfer_count_id,
             args: count_args,
@@ -7385,10 +7389,7 @@ mod px5b_effect_observation_tests {
         // they reify to DIFFERENT constructors, so a wall reading cannot be
         // substituted where a monotonic one is required.
         assert_eq!(constructor(&wall_first), clock.mkinstant_id);
-        assert_eq!(
-            constructor(&monotonic_first),
-            clock.mk_monotonic_instant_id
-        );
+        assert_eq!(constructor(&monotonic_first), clock.mk_monotonic_instant_id);
         assert_ne!(constructor(&wall_first), constructor(&monotonic_first));
     }
 
@@ -7501,10 +7502,7 @@ mod px5b_effect_observation_tests {
             None
         );
         assert_eq!(
-            decode_deadline(
-                &ctor(clock.mk_deadline_id, vec![instant(vec![])]),
-                &clock
-            ),
+            decode_deadline(&ctor(clock.mk_deadline_id, vec![instant(vec![])]), &clock),
             None
         );
 
@@ -7520,12 +7518,8 @@ mod px5b_effect_observation_tests {
             ))
         ));
         assert!(
-            decode_clock_request(
-                clock.sleep_until_id,
-                &[good, cancellation.clone()],
-                &clock
-            )
-            .is_none(),
+            decode_clock_request(clock.sleep_until_id, &[good, cancellation.clone()], &clock)
+                .is_none(),
             "a SleepUntil carrying a second operand must not decode"
         );
 

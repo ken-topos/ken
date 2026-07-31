@@ -3,7 +3,8 @@
 use ken_cli::{run_program, ProgramOutcome, SourceFormat};
 use ken_interp::{CaptureHost, ClockTrace, HostHandler};
 
-const CLOCK_PACKAGE: &str = include_str!("../../../catalog/packages/Capability/Time/WallClock.ken.md");
+const CLOCK_PACKAGE: &str =
+    include_str!("../../../catalog/packages/Capability/Time/WallClock.ken.md");
 
 const CLOCK_BODY: &str = r#"
   bind (Coproduct (FSOp APartial) AmbientOp)

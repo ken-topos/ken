@@ -720,11 +720,9 @@ fn define_export_parts<M: Module>(
         let pair = b.ins().stack_addr(ptr, pair_slot, 0);
         let call = b.ins().call(intern, &[p[0], p[1], p[2], p[3], pair]);
         let status = b.inst_results(call)[0];
-        let valid = b.ins().icmp_imm(
-            cranelift_codegen::ir::condcodes::IntCC::Equal,
-            status,
-            0,
-        );
+        let valid = b
+            .ins()
+            .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, status, 0);
         let emit = b.create_block();
         let fail = b.create_block();
         b.ins().brif(valid, emit, &[], fail, &[]);

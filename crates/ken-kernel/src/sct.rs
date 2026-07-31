@@ -322,7 +322,9 @@ fn enter_method<'a>(
     let mut cur_recon = recon.clone();
     loop {
         if pending.is_empty() {
-            collect_calls(term, caller_idx, n_caller, group, &cur_prov, &cur_recon, env, out);
+            collect_calls(
+                term, caller_idx, n_caller, group, &cur_prov, &cur_recon, env, out,
+            );
             return;
         }
         match term {
@@ -341,7 +343,9 @@ fn enter_method<'a>(
             _ => break,
         }
     }
-    collect_calls(term, caller_idx, n_caller, group, &cur_prov, &cur_recon, env, out);
+    collect_calls(
+        term, caller_idx, n_caller, group, &cur_prov, &cur_recon, env, out,
+    );
 }
 
 /// Shared `Term::Elim` dispatch: scan `params`/`motive`/`indices`/`scrut`
@@ -395,11 +399,23 @@ fn dispatch_elim_methods(
             }
             let c = &ind.constructors[k];
             let n_fields = c.args.len();
-            let n_ihs = c.args.iter().filter(|a| is_recursive_field(a, *fam)).count();
+            let n_ihs = c
+                .args
+                .iter()
+                .filter(|a| is_recursive_field(a, *fam))
+                .count();
             let mut own_pending = ctor_pending(n_fields, n_ihs, field_prov, c.id);
             own_pending.extend_from_slice(continuation);
             enter_method(
-                method, &own_pending, prov, recon, caller_idx, n_caller, group, env, out,
+                method,
+                &own_pending,
+                prov,
+                recon,
+                caller_idx,
+                n_caller,
+                group,
+                env,
+                out,
             );
         }
     } else {
@@ -474,7 +490,17 @@ fn collect_calls(
             collect_calls(body, caller_idx, n_caller, group, &p2, &r2, env, out);
         }
         Term::Elim { .. } => {
-            dispatch_elim_methods(term, caller_idx, n_caller, group, prov, recon, env, out, &[]);
+            dispatch_elim_methods(
+                term,
+                caller_idx,
+                n_caller,
+                group,
+                prov,
+                recon,
+                env,
+                out,
+                &[],
+            );
         }
         // Terms with no binders: recurse uniformly.
         Term::Pair(a, b) | Term::Ascript(a, b) | Term::Quot(a, b) => {
@@ -734,14 +760,22 @@ mod tests {
     }
 
     fn tag(param_idx: usize, ctor: GlobalId, n_fields: usize, field_pos: usize) -> ReconTag {
-        ReconTag { param_idx, ctor, n_fields, field_pos }
+        ReconTag {
+            param_idx,
+            ctor,
+            n_fields,
+            field_pos,
+        }
     }
 
     #[test]
     fn is_exact_reconstruction_positive() {
         // `C x0 x1` reconstructing param 0's C-destructuring, exact position.
         let recon = recons(vec![Some(tag(0, CTOR_A, 2, 0)), Some(tag(0, CTOR_A, 2, 1))]);
-        let arg = Term::app(Term::app(Term::constructor(CTOR_A, vec![]), Term::var(0)), Term::var(1));
+        let arg = Term::app(
+            Term::app(Term::constructor(CTOR_A, vec![]), Term::var(0)),
+            Term::var(1),
+        );
         assert!(is_exact_reconstruction(0, &arg, &recon));
         // A different param's check must fail (recon targets param 0, not 1).
         assert!(!is_exact_reconstruction(1, &arg, &recon));
@@ -751,7 +785,10 @@ mod tests {
     fn is_exact_reconstruction_reorder_rejected() {
         // `C x1 x0` — same fields, same ctor, POSITIONALLY SWAPPED.
         let recon = recons(vec![Some(tag(0, CTOR_A, 2, 0)), Some(tag(0, CTOR_A, 2, 1))]);
-        let arg = Term::app(Term::app(Term::constructor(CTOR_A, vec![]), Term::var(1)), Term::var(0));
+        let arg = Term::app(
+            Term::app(Term::constructor(CTOR_A, vec![]), Term::var(1)),
+            Term::var(0),
+        );
         assert!(
             !is_exact_reconstruction(0, &arg, &recon),
             "positional swap must not be treated as an exact reconstruction"
@@ -762,8 +799,15 @@ mod tests {
     fn is_exact_reconstruction_wrong_field_rejected() {
         // `C x0 z` — z is an in-scope var with NO tag (not a field of this
         // destructuring at all).
-        let recon = recons(vec![Some(tag(0, CTOR_A, 2, 0)), Some(tag(0, CTOR_A, 2, 1)), None]);
-        let arg = Term::app(Term::app(Term::constructor(CTOR_A, vec![]), Term::var(0)), Term::var(2));
+        let recon = recons(vec![
+            Some(tag(0, CTOR_A, 2, 0)),
+            Some(tag(0, CTOR_A, 2, 1)),
+            None,
+        ]);
+        let arg = Term::app(
+            Term::app(Term::constructor(CTOR_A, vec![]), Term::var(0)),
+            Term::var(2),
+        );
         assert!(
             !is_exact_reconstruction(0, &arg, &recon),
             "substituting an untagged var must not be treated as an exact reconstruction"
@@ -774,7 +818,10 @@ mod tests {
     fn is_exact_reconstruction_wrong_ctor_rejected() {
         // `D x0 x1` — fields tagged for ctor A, reconstructed via ctor B.
         let recon = recons(vec![Some(tag(0, CTOR_A, 2, 0)), Some(tag(0, CTOR_A, 2, 1))]);
-        let arg = Term::app(Term::app(Term::constructor(CTOR_B, vec![]), Term::var(0)), Term::var(1));
+        let arg = Term::app(
+            Term::app(Term::constructor(CTOR_B, vec![]), Term::var(0)),
+            Term::var(1),
+        );
         assert!(
             !is_exact_reconstruction(0, &arg, &recon),
             "reconstructing via a different constructor must not be treated as an exact reconstruction"
@@ -786,8 +833,14 @@ mod tests {
         // `C (C x0 x1) x1` — arg 0 is itself a further application, not a
         // bare Var (badAck2's `Suc (Suc m2)` shape, generalized).
         let recon = recons(vec![Some(tag(0, CTOR_A, 2, 0)), Some(tag(0, CTOR_A, 2, 1))]);
-        let inner = Term::app(Term::app(Term::constructor(CTOR_A, vec![]), Term::var(0)), Term::var(1));
-        let arg = Term::app(Term::app(Term::constructor(CTOR_A, vec![]), inner), Term::var(1));
+        let inner = Term::app(
+            Term::app(Term::constructor(CTOR_A, vec![]), Term::var(0)),
+            Term::var(1),
+        );
+        let arg = Term::app(
+            Term::app(Term::constructor(CTOR_A, vec![]), inner),
+            Term::var(1),
+        );
         assert!(
             !is_exact_reconstruction(0, &arg, &recon),
             "a net structural increase (non-bare-Var field) must not be treated as an exact reconstruction"

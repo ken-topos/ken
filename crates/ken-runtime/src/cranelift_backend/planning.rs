@@ -13,7 +13,10 @@ use crate::{RuntimeDeclaration, RuntimeDeclarationKind, RuntimeExpr, RuntimeProg
 
 mod static_transition;
 
-pub(super) use static_transition::plan_static_transition_graph_with_symbols;
+pub(super) use static_transition::{
+    plan_static_transition_graph_with_symbols,
+    plan_static_transition_graph_with_symbols_and_control,
+};
 #[cfg(test)]
 pub(super) use static_transition::{
     governed_nested_resource_bracket, plan_static_transition_graph,
@@ -47,9 +50,10 @@ pub(super) use static_transition::{
 pub(super) use static_transition::{
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition, EmittableCallKind,
-    EmittableStaticCallableArgumentKind, EmittableStaticCallableBinding,
-    EmittableStaticCallableCall, EmittableStaticCallableCapture, EmittableStaticCallableUnit,
-    EmittableUnit, PredeclaredFunctionId, StaticCallableSpecializationId,
+    EmittableContinuationSpecialization, EmittableStaticCallableArgumentKind,
+    EmittableStaticCallableBinding, EmittableStaticCallableCall, EmittableStaticCallableCapture,
+    EmittableStaticCallableUnit, EmittableUnit, PredeclaredFunctionId,
+    StaticCallableSpecializationId,
 };
 
 pub(super) fn native_join_plan_for_program(

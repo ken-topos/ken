@@ -19,7 +19,11 @@ use super::{
 };
 use crate::boundary_value::{BoundaryClass, BoundaryReferentOwner, BoundaryTag};
 use crate::{RuntimeExpr, RuntimePartiality, RuntimeSymbol, RuntimeTrap, RuntimeTrapCode};
-use abi::{build_abi_plane, extend_static_callable_abi, AbiPlane};
+use abi::{
+    build_abi_plane, continuation_producer_capture_extension, continuation_producer_input_start,
+    extend_continuation_producer_abi, extend_continuation_specialization_abi,
+    extend_static_callable_abi, AbiPlane,
+};
 use semantic_ir::{
     build_semantic_plane, build_synthesized_constructor_inventory, SemanticMaterialArena,
     SemanticPlane, SemanticSourceKind, SemanticSourceSeed,
@@ -900,6 +904,7 @@ struct PlannedLoweringBoundaryUse {
     edge: LoweringOnlyOperandEdge,
     origin: StaticOriginId,
     position: u32,
+    emitted_occurrence: u32,
     owner: PredeclaredFunctionId,
     producer_phase: BoundaryUsePhase,
     consumer_phase: BoundaryUsePhase,
@@ -921,6 +926,7 @@ enum PlannedBoundaryUsePath {
     Synthesized {
         origin: StaticOriginId,
         position: u32,
+        emitted_occurrence: u32,
     },
     StaticRecursorWorker {
         parent_origin: StaticOriginId,
@@ -1022,6 +1028,58 @@ struct PlannedOperandEdge {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub(in crate::cranelift_backend) struct StaticCallableSpecializationId(u32);
+
+/// Dense identity of one planner-interned continuation/return-hole
+/// specialization.
+///
+/// The identity is compiler-only. In particular, no worker body, continuation
+/// selector, or capture value is admitted to the emitted ABI.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub(in crate::cranelift_backend) struct ContinuationSpecializationId(u32);
+
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct ContinuationSpecializationKey {
+    producer_owner: PredeclaredFunctionId,
+    producer_result_origin: StaticOriginId,
+    producer_construct_origin: StaticOriginId,
+    consumer_owner: PredeclaredFunctionId,
+    continuation_origin: StaticOriginId,
+    checked_frame_id: Option<u64>,
+    recursive_position: u32,
+    worker_closure_origin: StaticOriginId,
+    worker_body_origin: StaticOriginId,
+    worker_declared_arity: u32,
+    worker_captures: Vec<StaticRecursorCaptureProvenance>,
+    producer_base_inputs: u32,
+    producer_fields_flattened: bool,
+    ordinary_parameters: u32,
+    continuation_captures: u32,
+    continuation_environment_is_local: bool,
+    continuation_environment_is_extension: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PlannedContinuationSpecialization {
+    id: ContinuationSpecializationId,
+    function: PredeclaredFunctionId,
+    key: ContinuationSpecializationKey,
+    worker: PlannedStaticRecursorWorkerResidual,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct PlannedContinuationSpecializationCall {
+    producer_owner: PredeclaredFunctionId,
+    producer_result_origin: StaticOriginId,
+    producer_construct_origin: StaticOriginId,
+    producer_alternative: u32,
+    /// Structural distance is used only to order already-authorized nested
+    /// result-flow continuations from inner to outer. It never admits an edge.
+    continuation_distance: u32,
+    consumer_owner: PredeclaredFunctionId,
+    worker_body_origin: StaticOriginId,
+    specialization: ContinuationSpecializationId,
+}
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum StaticCallableCapturePhase {
@@ -2580,6 +2638,20 @@ fn build_static_recursor_worker_residuals(
     Ok(residuals)
 }
 
+fn build_all_static_recursor_worker_residuals(
+    plan: &StaticTransitionPlan<'_>,
+) -> Result<Vec<PlannedStaticRecursorWorkerResidual>, CraneliftBackendError> {
+    let mut residuals = build_static_recursor_worker_residuals(plan)?;
+    residuals.extend(
+        plan.continuation_specializations
+            .iter()
+            .map(|specialization| specialization.worker.clone()),
+    );
+    residuals.sort();
+    residuals.dedup();
+    Ok(residuals)
+}
+
 fn build_recursor_boundary_uses(
     plan: &StaticTransitionPlan<'_>,
 ) -> Result<Vec<PlannedRecursorBoundaryUse>, CraneliftBackendError> {
@@ -2738,6 +2810,7 @@ fn build_lowering_boundary_uses(
                     LoweringOnlyOperandEdge::CallableCapsuleEscape,
                     descriptor.origin,
                     u32::MAX,
+                    0,
                     descriptor.function,
                 ));
             } else {
@@ -2765,6 +2838,7 @@ fn build_lowering_boundary_uses(
                         LoweringOnlyOperandEdge::CallableCapsuleEscape,
                         descriptor.origin,
                         input,
+                        0,
                         descriptor.function,
                     ));
                     input = input.checked_add(1).ok_or_else(|| {
@@ -2796,6 +2870,7 @@ fn build_lowering_boundary_uses(
                         LoweringOnlyOperandEdge::CallableCapsuleEscape,
                         call.call_site_origin,
                         input,
+                        call.call_site_sequence,
                         call.caller,
                     ));
                     input = input.checked_add(1).ok_or_else(|| {
@@ -2810,9 +2885,7 @@ fn build_lowering_boundary_uses(
         let mut owners = plan
             .emitted_source_occurrences
             .iter()
-            .filter_map(|(owner, emitted_origin)| {
-                (*emitted_origin == origin).then_some(*owner)
-            })
+            .filter_map(|(owner, emitted_origin)| (*emitted_origin == origin).then_some(*owner))
             .collect::<Vec<_>>();
         if owners.is_empty() {
             owners.push(
@@ -2824,7 +2897,7 @@ fn build_lowering_boundary_uses(
         resolved_keys.extend(
             owners
                 .into_iter()
-                .map(|owner| (edge, origin, position, owner)),
+                .map(|owner| (edge, origin, position, 0, owner)),
         );
     }
     resolved_keys.extend(owner_bound_keys);
@@ -2832,30 +2905,34 @@ fn build_lowering_boundary_uses(
     resolved_keys
         .into_iter()
         .enumerate()
-        .map(|(ordinal, (edge, origin, position, owner))| {
-            let disposition = edge.disposition();
-            let (consumer_phase, operation, need, avail) =
-                non_semantic_boundary_contract(disposition);
-            let ordinal = u32::try_from(ordinal)
-                .map_err(|_| planner_capacity_error("lowering boundary identity exhausted"))?;
-            let identity =
-                BoundaryUseIdentity::Synthesized(0x5000_0000u32.checked_add(ordinal).ok_or_else(
-                    || planner_capacity_error("lowering boundary identity exhausted"),
-                )?);
-            Ok(PlannedLoweringBoundaryUse {
-                identity,
-                edge,
-                origin,
-                position,
-                owner,
-                producer_phase: BoundaryUsePhase::SpecializedValue,
-                consumer_phase,
-                operation,
-                need,
-                disposition,
-                avail,
-            })
-        })
+        .map(
+            |(ordinal, (edge, origin, position, emitted_occurrence, owner))| {
+                let disposition = edge.disposition();
+                let (consumer_phase, operation, need, avail) =
+                    non_semantic_boundary_contract(disposition);
+                let ordinal = u32::try_from(ordinal)
+                    .map_err(|_| planner_capacity_error("lowering boundary identity exhausted"))?;
+                let identity = BoundaryUseIdentity::Synthesized(
+                    0x5000_0000u32.checked_add(ordinal).ok_or_else(|| {
+                        planner_capacity_error("lowering boundary identity exhausted")
+                    })?,
+                );
+                Ok(PlannedLoweringBoundaryUse {
+                    identity,
+                    edge,
+                    origin,
+                    position,
+                    emitted_occurrence,
+                    owner,
+                    producer_phase: BoundaryUsePhase::SpecializedValue,
+                    consumer_phase,
+                    operation,
+                    need,
+                    disposition,
+                    avail,
+                })
+            },
+        )
         .collect()
 }
 
@@ -2874,8 +2951,9 @@ fn build_boundary_uses(
             if emitted_owners.is_empty() {
                 emitted_owners.push(edge.owner);
             }
-            emitted_owners.into_iter().map(move |emitted_owner| {
-                PlannedBoundaryUse {
+            emitted_owners
+                .into_iter()
+                .map(move |emitted_owner| PlannedBoundaryUse {
                     identity: BoundaryUseIdentity::Source {
                         emitted_owner,
                         parent: edge.parent,
@@ -2901,8 +2979,7 @@ fn build_boundary_uses(
                     need: edge.need,
                     disposition: edge.disposition,
                     avail: edge.avail,
-                }
-            })
+                })
         })
         .collect::<Vec<_>>();
     let mut uses = source_uses
@@ -2966,6 +3043,7 @@ fn build_boundary_uses(
                     path: PlannedBoundaryUsePath::Synthesized {
                         origin: edge.parent_origin,
                         position: edge.sibling_position,
+                        emitted_occurrence: 0,
                     },
                     producer_owner: edge.owner,
                     consumer_owner: edge.owner,
@@ -2985,6 +3063,7 @@ fn build_boundary_uses(
                     path: PlannedBoundaryUsePath::Synthesized {
                         origin: edge.origin,
                         position: edge.position,
+                        emitted_occurrence: edge.emitted_occurrence,
                     },
                     producer_owner: edge.owner,
                     consumer_owner: edge.owner,
@@ -3164,7 +3243,7 @@ struct PlannedJoinResult {
 /// untracked, or otherwise not closed by the planner. It is never inferred from
 /// an empty observation. `Closed` is the monotone union of canonical
 /// constructor identities supplied by exact source producers.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum ScrutineeProducerSet {
     Open,
     Closed(Vec<ConstructorIdentity>),
@@ -3482,6 +3561,17 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     static_callable_specializations: Vec<PlannedStaticCallableSpecialization>,
     /// One exact call-site edge per use of an interned specialization.
     static_callable_calls: Vec<PlannedStaticCallableCall>,
+    /// Finite, planner-interned return-hole specializations. Capture values are
+    /// deliberately absent; each key retains only exact causal provenance.
+    continuation_specializations: Vec<PlannedContinuationSpecialization>,
+    /// Exact producer-result alternatives that enter one specialization before
+    /// callable identity is erased by a join.
+    continuation_specialization_calls: Vec<PlannedContinuationSpecializationCall>,
+    /// Checked control-plan binding from each affine IH call template to the
+    /// recursive slot it invokes. Static source markers carry the two
+    /// identities separately; this exact relation is the authority that lets
+    /// continuation planning count branch-local worker-call occurrences.
+    computational_ih_call_slots: BTreeMap<u64, u64>,
     /// Exact residual crossings materialized before the generated-unit fixed
     /// point closes. Lowering can only consume this population; it cannot
     /// recover a residual by searching source occurrences.
@@ -3490,12 +3580,15 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// environment, derived from the worker's ordered capture provenance and
     /// the producer-flow referent-owner meet.
     static_recursor_worker_environments: Vec<PlannedStaticRecursorWorkerEnvironment>,
-    carried_recursor_positions:
-        BTreeSet<(PredeclaredFunctionId, StaticOriginId, u32)>,
+    carried_recursor_positions: BTreeSet<(PredeclaredFunctionId, StaticOriginId, u32)>,
     /// Exact worker environments whose move-only representation authority was
     /// consumed before allocation.
     static_recursor_worker_environment_consumption:
         RefCell<BTreeMap<StaticRecursorWorkerEnvironmentOccurrence, u32>>,
+    /// Worker-environment occurrences proven absent because their source
+    /// suffix is transported into an out-of-line continuation unit.
+    static_recursor_worker_environment_dispositions:
+        RefCell<BTreeSet<StaticRecursorWorkerEnvironmentOccurrence>>,
     recursor_boundary_uses: Vec<PlannedRecursorBoundaryUse>,
     lowering_boundary_uses: Vec<PlannedLoweringBoundaryUse>,
     boundary_uses: Vec<PlannedBoundaryUse>,
@@ -4189,6 +4282,12 @@ fn build_join_result_plan(
     let mut joins = vec![None; plan.source_occurrences.len()];
     let mut phases = vec![None; plan.source_occurrences.len()];
     for descriptor in &plan.abi.descriptors {
+        if matches!(
+            descriptor.definition,
+            AbiUnitDefinition::ContinuationSpecialization { .. }
+        ) {
+            continue;
+        }
         let mut root = descriptor.origin;
         if let Some(root_occurrence) = plan.root_occurrence {
             if plan.semantic.function_owner(root_occurrence)? == Some(descriptor.function) {
@@ -4313,6 +4412,7 @@ struct ProducerCallable {
     closure_origin: StaticOriginId,
     body_origin: StaticOriginId,
     recursor_origin: Option<StaticOriginId>,
+    producer_origin: Option<StaticOriginId>,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -4399,24 +4499,28 @@ impl ReferentOwnerFact {
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct ConstructorPayloadOccurrence {
+    producer_owner: PredeclaredFunctionId,
     producer_origin: StaticOriginId,
+    child_constructors: Vec<ScrutineeProducerSet>,
+    child_payload_alternatives: Vec<u32>,
     child_callables: Vec<ProducerCallableSet>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ProducerValue {
     constructors: ProducerFact,
-    constructor_payloads:
-        Vec<(
-            ConstructorIdentity,
-            ConstructorPayloadOccurrence,
-            Vec<ProducerValue>,
-        )>,
+    constructor_payloads: Vec<(
+        ConstructorIdentity,
+        ConstructorPayloadOccurrence,
+        Vec<ProducerValue>,
+    )>,
     record_fields: Vec<(FieldIdentity, ProducerValue)>,
     callables: ProducerCallableSet,
     referent_owners: ReferentOwnerFact,
     aggregate_origins: BTreeSet<StaticOriginId>,
     effect_origins: BTreeSet<StaticOriginId>,
+    continuation_result_origins: BTreeSet<StaticOriginId>,
+    input_provenance: BTreeSet<(PredeclaredFunctionId, u32)>,
     carried: bool,
 }
 
@@ -4430,6 +4534,8 @@ impl ProducerValue {
             referent_owners: ReferentOwnerFact::Bottom,
             aggregate_origins: BTreeSet::new(),
             effect_origins: BTreeSet::new(),
+            continuation_result_origins: BTreeSet::new(),
+            input_provenance: BTreeSet::new(),
             carried: false,
         }
     }
@@ -4443,6 +4549,8 @@ impl ProducerValue {
             referent_owners: ReferentOwnerFact::Unrepresented,
             aggregate_origins: BTreeSet::new(),
             effect_origins: BTreeSet::new(),
+            continuation_result_origins: BTreeSet::new(),
+            input_provenance: BTreeSet::new(),
             carried: false,
         }
     }
@@ -4450,11 +4558,12 @@ impl ProducerValue {
     fn join(&self, other: &Self) -> Self {
         let mut constructor_payloads = self.constructor_payloads.clone();
         for (identity, occurrence, incoming) in &other.constructor_payloads {
-            if let Some((_, _, known)) = constructor_payloads
-                .iter_mut()
-                .find(|(candidate, candidate_occurrence, _)| {
-                    candidate == identity && candidate_occurrence == occurrence
-                })
+            if let Some((_, _, known)) =
+                constructor_payloads
+                    .iter_mut()
+                    .find(|(candidate, candidate_occurrence, _)| {
+                        candidate == identity && candidate_occurrence == occurrence
+                    })
             {
                 if known.len() == incoming.len() {
                     for (slot, value) in known.iter_mut().zip(incoming) {
@@ -4464,11 +4573,7 @@ impl ProducerValue {
                     known.clear();
                 }
             } else {
-                constructor_payloads.push((
-                    *identity,
-                    occurrence.clone(),
-                    incoming.clone(),
-                ));
+                constructor_payloads.push((*identity, occurrence.clone(), incoming.clone()));
             }
         }
         let mut record_fields = self.record_fields.clone();
@@ -4498,9 +4603,61 @@ impl ProducerValue {
                 .union(&other.effect_origins)
                 .copied()
                 .collect(),
+            continuation_result_origins: self
+                .continuation_result_origins
+                .union(&other.continuation_result_origins)
+                .copied()
+                .collect(),
+            input_provenance: self
+                .input_provenance
+                .union(&other.input_provenance)
+                .copied()
+                .collect(),
             carried: self.carried || other.carried,
         }
     }
+}
+
+fn emitted_result_alternatives(
+    result: &ProducerValue,
+) -> Result<usize, CraneliftBackendError> {
+    result
+        .constructor_payloads
+        .iter()
+        .try_fold(0usize, |total, (_, occurrence, _)| {
+            let occurrence_count = occurrence
+                .child_payload_alternatives
+                .iter()
+                .zip(&occurrence.child_constructors)
+                .try_fold(1usize, |count, (payload_count, constructors)| {
+                    let constructor_count = match constructors {
+                        ScrutineeProducerSet::Open => 1,
+                        ScrutineeProducerSet::Closed(identities) => {
+                            identities.len().max(1)
+                        }
+                    };
+                    count
+                        .checked_mul(
+                            usize::try_from(*payload_count)
+                                .map_err(|_| {
+                                    planner_capacity_error(
+                                        "continuation result alternative population exhausted",
+                                    )
+                                })?
+                                .max(constructor_count),
+                        )
+                        .ok_or_else(|| {
+                            planner_capacity_error(
+                                "continuation result alternative population exhausted",
+                            )
+                        })
+                })?;
+            total.checked_add(occurrence_count).ok_or_else(|| {
+                planner_capacity_error(
+                    "continuation result alternative population exhausted",
+                )
+            })
+        })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -4539,12 +4696,8 @@ impl AggregateObservation {
                     (
                         *origin,
                         if carried && owners == ReferentOwnerFact::Bottom {
-                            ReferentOwnerFact::owner(
-                                BoundaryReferentOwner::NoReferent,
-                            )
-                        } else if carried
-                            && owners == ReferentOwnerFact::Unrepresented
-                        {
+                            ReferentOwnerFact::owner(BoundaryReferentOwner::NoReferent)
+                        } else if carried && owners == ReferentOwnerFact::Unrepresented {
                             ReferentOwnerFact::carrier_universe()
                         } else {
                             owners
@@ -4567,6 +4720,10 @@ struct ProducerAnalysis<'plan, 'src> {
     captures: BTreeMap<(PredeclaredFunctionId, StaticOriginId), Vec<ProducerValue>>,
     computational_scrutinees: BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerValue>,
     computational_results: BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerValue>,
+    computational_continuation_inputs:
+        BTreeMap<(StaticOriginId, PredeclaredFunctionId), u32>,
+    computational_continuation_environments:
+        BTreeMap<(StaticOriginId, PredeclaredFunctionId), Vec<ProducerValue>>,
     computational_result_origins: BTreeSet<StaticOriginId>,
     match_scrutinees: BTreeMap<(StaticOriginId, PredeclaredFunctionId), ProducerFact>,
     aggregate_occurrences: BTreeMap<(StaticOriginId, PredeclaredFunctionId), AggregateObservation>,
@@ -4624,16 +4781,17 @@ impl ProducerAnalysis<'_, '_> {
         let candidates = self
             .captures
             .keys()
-            .filter_map(|(owner, origin)| {
-                (*origin == residual.closure_origin).then_some(*owner)
-            })
+            .filter_map(|(owner, origin)| (*origin == residual.closure_origin).then_some(*owner))
             .collect::<BTreeSet<_>>();
         if candidates.len() == 1 {
             return candidates.into_iter().next().ok_or_else(|| {
                 planner_error("static recursor closure owner population disappeared")
             });
         }
-        let producer_owner = self.plan.semantic.function_owner(residual.producer_origin)?;
+        let producer_owner = self
+            .plan
+            .semantic
+            .function_owner(residual.producer_origin)?;
         let narrowed = candidates
             .into_iter()
             .filter(|owner| Some(*owner) == producer_owner)
@@ -4650,27 +4808,9 @@ impl ProducerAnalysis<'_, '_> {
     }
 
     fn mark_carried(&mut self, value: &mut ProducerValue) {
-        if self.active_owner.0 == 5
-            && value
-                .aggregate_origins
-                .contains(&StaticOriginId(483))
-        {
-            eprintln!(
-                "TRACE carried owner={:?} aggregates={:?} flow={:?}",
-                self.active_owner,
-                value.aggregate_origins,
-                value
-                    .constructors
-                    .flow
-                    .iter()
-                    .map(|edge| edge.kind)
-                    .collect::<BTreeSet<_>>()
-            );
-        }
         value.carried = true;
         if value.referent_owners == ReferentOwnerFact::Bottom {
-            value.referent_owners =
-                ReferentOwnerFact::owner(BoundaryReferentOwner::NoReferent);
+            value.referent_owners = ReferentOwnerFact::owner(BoundaryReferentOwner::NoReferent);
         } else if matches!(value.referent_owners, ReferentOwnerFact::Unrepresented) {
             // A value admitted to the boundary carrier has already crossed the
             // representation gate. Its exact payload may remain opaque to
@@ -4707,9 +4847,12 @@ impl ProducerAnalysis<'_, '_> {
         incoming: &[ProducerValue],
     ) -> Result<bool, CraneliftBackendError> {
         if slots.len() != incoming.len() {
-            return Err(planner_error(
-                "producer-flow environment arity disagrees with the planned ABI",
-            ));
+            return Err(planner_error(format!(
+                "producer-flow environment arity disagrees with the planned ABI: \
+                 slots={}, incoming={}",
+                slots.len(),
+                incoming.len(),
+            )));
         }
         let mut changed = false;
         for (slot, value) in slots.iter_mut().zip(incoming) {
@@ -4733,17 +4876,6 @@ impl ProducerAnalysis<'_, '_> {
             ));
         }
         let carried = carried || self.carried_aggregates.contains(&origin);
-        if self.active_owner.0 == 3 && origin.0 == 581 {
-            eprintln!(
-                "TRACE owner3 aggregate581 carried={carried} children={children:?}"
-            );
-        }
-        if self.active_owner.0 == 5 && origin.0 == 483 {
-            eprintln!(
-                "TRACE aggregate owner={:?} origin={origin:?} carried={carried}",
-                self.active_owner
-            );
-        }
         let observation = AggregateObservation {
             class,
             identity,
@@ -4751,16 +4883,9 @@ impl ProducerAnalysis<'_, '_> {
                 .into_iter()
                 .zip(children)
                 .map(|(origin, value)| {
-                    let owners = if carried
-                        && value.referent_owners == ReferentOwnerFact::Bottom
-                    {
-                        ReferentOwnerFact::owner(
-                            BoundaryReferentOwner::NoReferent,
-                        )
-                    } else if carried
-                        && value.referent_owners
-                            == ReferentOwnerFact::Unrepresented
-                    {
+                    let owners = if carried && value.referent_owners == ReferentOwnerFact::Bottom {
+                        ReferentOwnerFact::owner(BoundaryReferentOwner::NoReferent)
+                    } else if carried && value.referent_owners == ReferentOwnerFact::Unrepresented {
                         ReferentOwnerFact::carrier_universe()
                     } else {
                         value.referent_owners.clone()
@@ -4851,10 +4976,23 @@ impl ProducerAnalysis<'_, '_> {
                 closure_origin: origin,
                 body_origin,
                 recursor_origin: None,
+                producer_origin: None,
             }])),
             referent_owners,
             aggregate_origins,
             effect_origins,
+            continuation_result_origins: self
+                .plan
+                .continuation_specialization_calls
+                .iter()
+                .any(|call| {
+                    call.producer_owner == self.active_owner
+                        && call.producer_result_origin == origin
+                })
+                .then_some(origin)
+                .into_iter()
+                .collect(),
+            input_provenance: BTreeSet::new(),
             carried: false,
         })
     }
@@ -4912,10 +5050,23 @@ impl ProducerAnalysis<'_, '_> {
                 closure_origin: binding.closure_origin,
                 body_origin: binding.body_origin,
                 recursor_origin: None,
+                producer_origin: None,
             }])),
             referent_owners,
             aggregate_origins,
             effect_origins,
+            continuation_result_origins: self
+                .plan
+                .continuation_specialization_calls
+                .iter()
+                .any(|call| {
+                    call.producer_owner == self.active_owner
+                        && call.producer_result_origin == binding.closure_origin
+                })
+                .then_some(binding.closure_origin)
+                .into_iter()
+                .collect(),
+            input_provenance: BTreeSet::new(),
             carried: false,
         })
     }
@@ -4944,13 +5095,6 @@ impl ProducerAnalysis<'_, '_> {
                 })
                 .cloned()
                 .collect::<Vec<_>>();
-            if owner.0 == 3 {
-                eprintln!(
-                    "TRACE owner3 environment residuals={:?} capture_keys={:?}",
-                    residuals,
-                    self.captures.keys().collect::<Vec<_>>()
-                );
-            }
             for residual in &residuals {
                 if !self
                     .captures
@@ -4968,33 +5112,246 @@ impl ProducerAnalysis<'_, '_> {
                     continue;
                 };
                 let parameter_count = residual.declared_arity as usize;
-                if raw.len() != parameter_count + captures.len() {
+                let continuation_captures =
+                    usize::try_from(continuation_producer_capture_extension(
+                        &self.plan.continuation_specializations,
+                        owner,
+                    )?)
+                    .map_err(|_| {
+                        planner_capacity_error("producer-flow continuation environment exhausted")
+                    })?;
+                if raw.len()
+                    != parameter_count
+                        .checked_add(captures.len())
+                        .and_then(|count| count.checked_add(continuation_captures))
+                        .ok_or_else(|| {
+                            planner_capacity_error(
+                                "producer-flow static recursor environment exhausted",
+                            )
+                        })?
+                {
                     return Err(planner_error(
                         "producer-flow static recursor capture environment disagrees with its ABI",
                     ));
                 }
-                for (slot, capture) in raw[parameter_count..].iter_mut().zip(&captures) {
+                for (slot, capture) in raw[parameter_count..parameter_count + captures.len()]
+                    .iter_mut()
+                    .zip(&captures)
+                {
                     Self::merge_value(slot, capture);
                 }
             }
-            if owner.0 == 6 {
-                eprintln!(
-                    "TRACE owner6 residuals={:?} environment={:?}",
-                    residuals,
-                    raw.iter()
-                        .map(|value| (
-                            &value.constructors.population,
-                            &value.constructors.producer_origins,
-                            value
-                                .constructors
-                                .flow
-                                .iter()
-                                .map(|edge| edge.kind)
-                                .collect::<BTreeSet<_>>()
-                        ))
-                        .collect::<Vec<_>>()
-                );
+        }
+        if let AbiUnitDefinition::ContinuationSpecialization {
+            specialization, ..
+        } = definition
+        {
+            let specialization = self
+                .plan
+                .continuation_specializations
+                .get(specialization.0 as usize)
+                .ok_or_else(|| {
+                    planner_error(
+                        "producer-flow continuation specialization is outside the plan",
+                    )
+                })?;
+            if !specialization.key.producer_fields_flattened {
+                return Ok(raw);
             }
+            let ordinary_count =
+                usize::try_from(specialization.key.ordinary_parameters)
+                    .map_err(|_| {
+                        planner_capacity_error(
+                            "producer-flow continuation ordinary ABI exhausted",
+                        )
+                    })?;
+            let continuation = raw
+                .get(ordinary_count..)
+                .ok_or_else(|| {
+                    planner_error(
+                        "producer-flow continuation omits its caller environment",
+                    )
+                })?
+                .to_vec();
+            let producer = self.plan.source_occurrence(
+                specialization.key.producer_construct_origin,
+            )?;
+            let RuntimeExpr::Construct { args, .. } = producer else {
+                return Err(planner_error(
+                    "producer-flow continuation names a non-constructor result",
+                ));
+            };
+            let worker_position =
+                usize::try_from(specialization.key.recursive_position)
+                    .map_err(|_| {
+                        planner_capacity_error(
+                            "producer-flow continuation worker position exhausted",
+                        )
+                    })?;
+            let worker_capture_count = specialization.worker.captures.len();
+            let producer_has_recursive_worker = worker_position < args.len()
+                && ordinary_count
+                    == args
+                        .len()
+                        .saturating_sub(1)
+                        .saturating_add(worker_capture_count);
+            let mut flattened = raw[..ordinary_count].iter().cloned();
+            let mut payload = Vec::with_capacity(args.len());
+            for position in 0..args.len() {
+                if producer_has_recursive_worker && position == worker_position {
+                    let captures = flattened
+                        .by_ref()
+                        .take(worker_capture_count)
+                        .collect::<Vec<_>>();
+                    if captures.len() != worker_capture_count {
+                        return Err(planner_error(
+                            "producer-flow continuation omits worker captures",
+                        ));
+                    }
+                    let referent_owners =
+                        ReferentOwnerFact::aggregate(&captures);
+                    let aggregate_origins = captures
+                        .iter()
+                        .flat_map(|capture| {
+                            capture.aggregate_origins.iter().copied()
+                        })
+                        .collect();
+                    let effect_origins = captures
+                        .iter()
+                        .flat_map(|capture| {
+                            capture.effect_origins.iter().copied()
+                        })
+                        .collect();
+                    payload.push(ProducerValue {
+                        constructors: ProducerFact::empty(),
+                        constructor_payloads: Vec::new(),
+                        record_fields: Vec::new(),
+                        callables: ProducerCallableSet::Closed(
+                            BTreeSet::from([ProducerCallable {
+                                closure_owner: specialization.function,
+                                closure_origin: specialization
+                                    .worker
+                                    .closure_origin,
+                                body_origin: specialization.worker.body_origin,
+                                recursor_origin: Some(
+                                    specialization.key.continuation_origin,
+                                ),
+                                producer_origin: Some(
+                                    specialization.worker.producer_origin,
+                                ),
+                            }]),
+                        ),
+                        referent_owners,
+                        aggregate_origins,
+                        effect_origins,
+                        continuation_result_origins: BTreeSet::new(),
+                        input_provenance: BTreeSet::new(),
+                        carried: false,
+                    });
+                } else {
+                    payload.push(flattened.next().ok_or_else(|| {
+                        planner_error(
+                            "producer-flow continuation omits a producer field",
+                        )
+                    })?);
+                }
+            }
+            if flattened.next().is_some() {
+                return Err(planner_error(
+                    "producer-flow continuation has excess producer fields",
+                ));
+            }
+            let constructor = match producer {
+                RuntimeExpr::Construct { constructor, .. } => constructor,
+                _ => unreachable!("producer was checked as a constructor"),
+            };
+            let identity = match self
+                .plan
+                .source_occurrence(
+                    specialization.key.continuation_origin,
+                )?
+            {
+                RuntimeExpr::ComputationalMatch { cases, .. } => cases
+                    .iter()
+                    .position(|case| case.constructor == *constructor)
+                    .map(|case| {
+                        self.plan.semantic.case_constructor_identity(
+                            specialization.key.continuation_origin,
+                            case,
+                        )
+                    })
+                    .transpose()?
+                    .unwrap_or(
+                        self.plan.constructor_symbol_identity(
+                            specialization.key.producer_construct_origin,
+                        )?,
+                    ),
+                _ => self.plan.constructor_symbol_identity(
+                    specialization.key.producer_construct_origin,
+                )?,
+            };
+            let referent_owners = ReferentOwnerFact::aggregate(&payload);
+            let aggregate_origins = payload
+                .iter()
+                .flat_map(|field| field.aggregate_origins.iter().copied())
+                .collect();
+            let effect_origins = payload
+                .iter()
+                .flat_map(|field| field.effect_origins.iter().copied())
+                .collect();
+            let scrutinee = ProducerValue {
+                constructors: ProducerFact::constructor(
+                    specialization.key.producer_construct_origin,
+                    identity,
+                ),
+                constructor_payloads: vec![(
+                    identity,
+                    ConstructorPayloadOccurrence {
+                        producer_owner: specialization.function,
+                        producer_origin: specialization
+                            .key
+                            .producer_construct_origin,
+                        child_constructors: payload
+                            .iter()
+                            .map(|field| {
+                                field.constructors.population.clone()
+                            })
+                            .collect(),
+                        child_payload_alternatives: payload
+                            .iter()
+                            .map(|field| {
+                                u32::try_from(
+                                    field.constructor_payloads.len().max(1),
+                                )
+                                .map_err(|_| {
+                                    planner_capacity_error(
+                                        "producer-flow continuation child \
+                                         population exhausted",
+                                    )
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()?,
+                        child_callables: payload
+                            .iter()
+                            .map(|field| field.callables.clone())
+                            .collect(),
+                    },
+                    payload,
+                )],
+                record_fields: Vec::new(),
+                callables: ProducerCallableSet::Closed(BTreeSet::new()),
+                referent_owners,
+                aggregate_origins,
+                effect_origins,
+                continuation_result_origins: BTreeSet::new(),
+                input_provenance: BTreeSet::new(),
+                carried: true,
+            };
+            let mut environment =
+                Vec::with_capacity(1 + continuation.len());
+            environment.push(scrutinee);
+            environment.extend(continuation);
+            return Ok(environment);
         }
         let AbiUnitDefinition::StaticCallableSpecialization { specialization, .. } = definition
         else {
@@ -5142,22 +5499,73 @@ impl ProducerAnalysis<'_, '_> {
             let mut incoming = arguments.iter().rev().cloned().collect::<Vec<_>>();
             incoming.extend(captures);
             if let Some(recursor_origin) = callable.recursor_origin {
-                let mut residuals =
-                    self.static_recursor_worker_residuals
-                        .iter()
-                        .filter(|residual| {
-                            residual.parent_origin == recursor_origin
-                                && residual.closure_origin == callable.closure_origin
-                                && residual.body_origin == callable.body_origin
-                        });
-                let residual = residuals.next().ok_or_else(|| {
-                    planner_error("static recursor call has no exact worker residual")
-                })?;
-                if residuals.next().is_some() {
+                let mut causal_specializations = self
+                    .plan
+                    .continuation_specialization_calls
+                    .iter()
+                    .filter(|call| {
+                        call.producer_owner == self.active_owner
+                            && call.worker_body_origin == callable.body_origin
+                            && call.producer_result_origin == call_origin
+                    })
+                    .filter_map(|call| {
+                        self.plan
+                            .continuation_specializations
+                            .get(call.specialization.0 as usize)
+                    })
+                    .filter(|specialization| {
+                        specialization.key.continuation_origin == recursor_origin
+                            && specialization.worker.closure_origin == callable.closure_origin
+                    });
+                let causal_specialization = causal_specializations.next().cloned();
+                if causal_specializations.next().is_some() {
                     return Err(planner_error(
-                        "static recursor call has ambiguous worker residual authority",
+                        "one emitted recursor call has multiple causal specialization authorities",
                     ));
                 }
+                let residual = if let Some(specialization) = causal_specialization {
+                    specialization.worker
+                } else if let Some(specialization) = self
+                    .plan
+                    .continuation_specialization_for_function(self.active_owner)
+                    .and_then(|id| self.plan.continuation_specializations.get(id.0 as usize))
+                    .filter(|specialization| {
+                        specialization.key.continuation_origin == recursor_origin
+                            && specialization.worker.closure_origin == callable.closure_origin
+                            && specialization.worker.body_origin == callable.body_origin
+                    })
+                {
+                    specialization.worker.clone()
+                } else {
+                    let mut residuals =
+                        self.static_recursor_worker_residuals
+                            .iter()
+                            .filter(|residual| {
+                                residual.parent_origin == recursor_origin
+                                    && residual.closure_origin == callable.closure_origin
+                                    && residual.body_origin == callable.body_origin
+                                    && callable.producer_origin.is_none_or(|producer_origin| {
+                                        residual.producer_origin == producer_origin
+                                    })
+                            });
+                    let residual = residuals.next().ok_or_else(|| {
+                        planner_error(format!(
+                            "static recursor call has no exact worker residual: \
+                             active_owner={:?}, recursor={recursor_origin:?}, \
+                             callable={callable:?}",
+                            self.active_owner,
+                        ))
+                    })?;
+                    if residuals.next().is_some() {
+                        return Err(planner_error(format!(
+                            "static recursor call has ambiguous worker residual authority: \
+                             active_owner={:?}, recursor={recursor_origin:?}, \
+                             callable={callable:?}",
+                            self.active_owner,
+                        )));
+                    }
+                    residual.clone()
+                };
                 let expected = usize::try_from(residual.declared_arity)
                     .ok()
                     .and_then(|arity| arity.checked_add(residual.captures.len()))
@@ -5173,6 +5581,48 @@ impl ProducerAnalysis<'_, '_> {
                     value.referent_owners =
                         ReferentOwnerFact::owner(BoundaryReferentOwner::InvocationArena);
                 }
+            }
+            if let Some((continuation_origin, count)) = self
+                .plan
+                .continuation_environment_for_producer_call(self.active_owner, owner)?
+            {
+                let count = usize::try_from(count).map_err(|_| {
+                    planner_capacity_error("producer-flow continuation environment exhausted")
+                })?;
+                let forwarded = self
+                    .computational_continuation_environments
+                    .get(&(continuation_origin, self.active_owner))
+                    .and_then(|environment| environment.get(..count))
+                    .ok_or_else(|| {
+                        planner_error(
+                            "producer-flow call omits its exact continuation environment",
+                        )
+                    })?
+                    .to_vec();
+                incoming.extend(forwarded);
+            }
+            let expected_inputs =
+                self.inputs.get(&owner).map(Vec::len).ok_or_else(|| {
+                    planner_error("producer-flow callable owner has no ABI inputs")
+                })?;
+            if incoming.len() < expected_inputs
+                && self
+                    .plan
+                    .continuation_specialization_for_function(self.active_owner)
+                    .is_some()
+            {
+                let missing = expected_inputs - incoming.len();
+                let forwarded = self
+                    .inputs
+                    .get(&self.active_owner)
+                    .and_then(|environment| environment.get(1..1usize.checked_add(missing)?))
+                    .ok_or_else(|| {
+                        planner_error(
+                            "producer-flow continuation unit omits forwarded caller captures",
+                        )
+                    })?
+                    .to_vec();
+                incoming.extend(forwarded);
             }
             // A source call crosses one generated-unit result edge even when a
             // recursive call returns to the currently analysed owner. Never
@@ -5191,6 +5641,15 @@ impl ProducerAnalysis<'_, '_> {
                 .inputs
                 .get_mut(&owner)
                 .ok_or_else(|| planner_error("producer-flow callable owner has no ABI inputs"))?;
+            if slots.len() != incoming.len() {
+                return Err(planner_error(format!(
+                    "producer-flow source call ABI mismatch: active={:?}, call={call_origin:?}, \
+                     owner={owner:?}, callable={callable:?}, slots={}, incoming={}",
+                    self.active_owner,
+                    slots.len(),
+                    incoming.len(),
+                )));
+            }
             self.changed |= Self::merge_values(slots, &incoming)?;
             self.changed |= self.reached_owners.insert(owner);
             self.changed |= self.called_owners.insert(owner);
@@ -5254,15 +5713,6 @@ impl ProducerAnalysis<'_, '_> {
             .and_then(Option::as_ref)
             .ok_or_else(|| planner_error("producer-flow names no source occurrence"))?;
         let child = |position| self.plan.semantic.child_origin(origin, position);
-        if matches!(
-            origin.0,
-            441 | 442 | 449 | 450 | 483 | 640 | 641 | 650 | 761 | 767
-        ) {
-            eprintln!(
-                "TRACE selected expr owner={:?} origin={origin:?} expr={:?}",
-                self.active_owner, occurrence.expr
-            );
-        }
         let value = match occurrence.expr {
             RuntimeExpr::CheckedJoinSite { .. }
             | RuntimeExpr::CheckedSubcontinuationFrame { .. }
@@ -5281,17 +5731,7 @@ impl ProducerAnalysis<'_, '_> {
                 let mut result = self
                     .eval(child(0)?, env)?
                     .with_forward(origin, ProducerFlowKind::CallResult);
-                if self.active_owner == PredeclaredFunctionId(5) {
-                    eprintln!(
-                        "TRACE owner5 checked invocation origin={origin:?} child={:?} callables={:?}",
-                        child(0)?,
-                        result.callables
-                    );
-                }
-                if matches!(
-                    result.referent_owners,
-                    ReferentOwnerFact::Unrepresented
-                ) {
+                if matches!(result.referent_owners, ReferentOwnerFact::Unrepresented) {
                     result.referent_owners = ReferentOwnerFact::Closed(BTreeSet::from([
                         BoundaryReferentOwner::NoReferent,
                         BoundaryReferentOwner::PersistentStore,
@@ -5362,12 +5802,80 @@ impl ProducerAnalysis<'_, '_> {
                     .iter()
                     .flat_map(|child| child.effect_origins.iter().copied())
                     .collect();
+                let mut continuation_result_origins = BTreeSet::new();
+                for (position, child) in payload.iter().enumerate() {
+                    for result_origin in &child.continuation_result_origins {
+                        let retained = self
+                            .plan
+                            .continuation_specialization_calls
+                            .iter()
+                            .filter(|call| {
+                                call.producer_owner == self.active_owner
+                                    && call.producer_result_origin == *result_origin
+                            })
+                            .filter_map(|call| {
+                                self.plan
+                                    .continuation_specializations
+                                    .get(call.specialization.0 as usize)
+                            })
+                            .any(|specialization| {
+                                specialization.key.recursive_position as usize == position
+                                    && match &child.callables {
+                                        ProducerCallableSet::Open => false,
+                                        ProducerCallableSet::Closed(callables) => {
+                                            callables.iter().any(|callable| {
+                                                callable.closure_origin
+                                                    == specialization.worker.closure_origin
+                                                    && callable.body_origin
+                                                        == specialization.worker.body_origin
+                                            })
+                                        }
+                                    }
+                            });
+                        if retained {
+                            continuation_result_origins.insert(*result_origin);
+                        }
+                    }
+                }
+                if self
+                    .plan
+                    .continuation_specialization_calls
+                    .iter()
+                    .any(|call| {
+                        call.producer_owner == self.active_owner
+                            && call.producer_result_origin == origin
+                    })
+                {
+                    continuation_result_origins.insert(origin);
+                }
+                let input_provenance = payload
+                    .iter()
+                    .flat_map(|child| child.input_provenance.iter().copied())
+                    .collect();
                 ProducerValue {
                     constructors: ProducerFact::constructor(origin, identity),
                     constructor_payloads: vec![(
                         identity,
                         ConstructorPayloadOccurrence {
+                            producer_owner: self.active_owner,
                             producer_origin: origin,
+                            child_constructors: payload
+                                .iter()
+                                .map(|child| child.constructors.population.clone())
+                                .collect(),
+                            child_payload_alternatives: payload
+                                .iter()
+                                .map(|child| {
+                                    u32::try_from(child.constructor_payloads.len().max(1)).map_err(
+                                        |_| {
+                                            planner_capacity_error(
+                                                "constructor child alternative population \
+                                                 exhausted",
+                                            )
+                                        },
+                                    )
+                                })
+                                .collect::<Result<Vec<_>, _>>()?,
                             child_callables: payload
                                 .iter()
                                 .map(|child| child.callables.clone())
@@ -5380,25 +5888,13 @@ impl ProducerAnalysis<'_, '_> {
                     referent_owners,
                     aggregate_origins,
                     effect_origins,
+                    continuation_result_origins,
+                    input_provenance,
                     carried,
                 }
             }
             RuntimeExpr::Match { cases, .. } => {
                 let scrutinee_origin = child(0)?;
-                if self.active_owner.0 == 6 && origin.0 == 268 {
-                    eprintln!(
-                        "TRACE owner6 match268 expr={:?} child={:?}",
-                        occurrence.expr,
-                        self.plan.source_occurrence(scrutinee_origin)?
-                    );
-                    eprintln!(
-                        "TRACE owner6 sources 12={:?} 270={:?} 271={:?} 385={:?}",
-                        self.plan.source_occurrence(StaticOriginId(12)).ok(),
-                        self.plan.source_occurrence(StaticOriginId(270)).ok(),
-                        self.plan.source_occurrence(StaticOriginId(271)).ok(),
-                        self.plan.source_occurrence(StaticOriginId(385)).ok()
-                    );
-                }
                 let mut scrutinee = self.eval(scrutinee_origin, env)?;
                 let operational_carrier = self.plan.operand_edges.iter().any(|edge| {
                     edge.parent == origin
@@ -5406,9 +5902,11 @@ impl ProducerAnalysis<'_, '_> {
                         && edge.role == SourceOperandRole::MatchScrutinee
                         && edge.consumer_phase == BoundaryUsePhase::OperationalCarrier
                 });
-                let continuation_capture = scrutinee.constructors.flow.iter().any(|edge| {
-                    edge.kind == ProducerFlowKind::Capture
-                });
+                let continuation_capture = scrutinee
+                    .constructors
+                    .flow
+                    .iter()
+                    .any(|edge| edge.kind == ProducerFlowKind::Capture);
                 let effect_dispatch = cases.iter().any(|case| {
                     matches!(
                         case.body,
@@ -5416,42 +5914,28 @@ impl ProducerAnalysis<'_, '_> {
                             if matches!(value.as_ref(), RuntimeExpr::Effect { .. })
                     )
                 });
-                if self.active_owner.0 == 6 && origin.0 == 268 {
-                    eprintln!(
-                        "TRACE owner6 match268 scrutinee={:?} comp={} continuation={} \
-                         effect_dispatch={}",
-                        scrutinee.constructors,
-                        false,
-                        continuation_capture,
-                        effect_dispatch
-                    );
-                }
-                if self.active_owner.0 == 5 && matches!(origin.0, 487 | 494) {
-                    eprintln!(
-                        "TRACE ordinary owner={:?} origin={origin:?} population={:?} \
-                         carried={} operational={} continuation={} flow={:?}",
-                        self.active_owner,
-                        scrutinee.constructors.population,
-                        scrutinee.carried,
-                        operational_carrier,
-                        continuation_capture,
-                        scrutinee
-                            .constructors
-                            .flow
-                            .iter()
-                            .map(|edge| edge.kind)
-                            .collect::<BTreeSet<_>>()
-                    );
-                    eprintln!(
-                        "TRACE ordinary producers={:?}",
-                        scrutinee.constructors.producer_origins
-                    );
-                }
-                if operational_carrier && continuation_capture && !effect_dispatch {
+                let exact_continuation_specialization = self
+                    .plan
+                    .continuation_specialization_for_function(self.active_owner)
+                    .is_some();
+                if operational_carrier
+                    && continuation_capture
+                    && !effect_dispatch
+                    && !exact_continuation_specialization
+                {
                     scrutinee.carried = true;
                     scrutinee.constructors = scrutinee
                         .constructors
                         .join(&ProducerFact::open(scrutinee_origin));
+                    if matches!(
+                        scrutinee.referent_owners,
+                        ReferentOwnerFact::Bottom | ReferentOwnerFact::Unrepresented
+                    ) {
+                        scrutinee.referent_owners = ReferentOwnerFact::carrier_universe();
+                    }
+                }
+                if operational_carrier {
+                    scrutinee.carried = true;
                     if matches!(
                         scrutinee.referent_owners,
                         ReferentOwnerFact::Bottom | ReferentOwnerFact::Unrepresented
@@ -5497,8 +5981,7 @@ impl ProducerAnalysis<'_, '_> {
                             (0..case.binders)
                                 .map(|_| {
                                     let mut value = ProducerValue::open(origin);
-                                    value.referent_owners =
-                                        scrutinee.referent_owners.clone();
+                                    value.referent_owners = scrutinee.referent_owners.clone();
                                     value
                                 })
                                 .collect(),
@@ -5515,12 +5998,11 @@ impl ProducerAnalysis<'_, '_> {
                                 .forwarded(origin, ProducerFlowKind::Forward);
                         }
                         case_env.extend_from_slice(env);
-                        result =
-                            result.join(&self.eval(child(1 + index)?, &case_env)?);
+                        let case_result = self.eval(child(1 + index)?, &case_env)?;
+                        result = result.join(&case_result);
                     }
                 }
-                let mut result =
-                    result.with_forward(origin, ProducerFlowKind::Alternative);
+                let mut result = result.with_forward(origin, ProducerFlowKind::Alternative);
                 result
                     .effect_origins
                     .extend(scrutinee.effect_origins.iter().copied());
@@ -5531,18 +6013,145 @@ impl ProducerAnalysis<'_, '_> {
             }
             RuntimeExpr::ComputationalMatch { cases, .. } => {
                 let scrutinee_origin = child(0)?;
-                let mut incoming_scrutinee = self.eval(scrutinee_origin, env)?;
+                let active_specialization = self
+                    .plan
+                    .continuation_specialization_for_function(self.active_owner)
+                    .and_then(|id| self.plan.continuation_specializations.get(id.0 as usize))
+                    .filter(|specialization| specialization.key.continuation_origin == origin);
+                let (mut incoming_scrutinee, continuation_env) = if active_specialization.is_some()
+                {
+                    (
+                        env.first().cloned().ok_or_else(|| {
+                            planner_error("continuation specialization omits its producer result")
+                        })?,
+                        env.get(1..).ok_or_else(|| {
+                            planner_error("continuation specialization environment is malformed")
+                        })?,
+                    )
+                } else {
+                    (self.eval(scrutinee_origin, env)?, env)
+                };
+                let continuation_input_count =
+                    u32::try_from(continuation_env.len()).map_err(|_| {
+                        planner_capacity_error(
+                            "producer-flow continuation environment exhausted",
+                        )
+                    })?;
+                match self
+                    .computational_continuation_inputs
+                    .entry((origin, self.active_owner))
+                {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(continuation_input_count);
+                    }
+                    std::collections::btree_map::Entry::Occupied(entry)
+                        if *entry.get() == continuation_input_count => {}
+                    std::collections::btree_map::Entry::Occupied(entry) => {
+                        return Err(planner_error(format!(
+                            "one computational continuation has incompatible environments: \
+                             continuation={origin:?}, owner={:?}, \
+                             existing={}, observed={continuation_input_count}",
+                            self.active_owner,
+                            entry.get(),
+                        )));
+                    }
+                }
+                match self
+                    .computational_continuation_environments
+                    .entry((origin, self.active_owner))
+                {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(continuation_env.to_vec());
+                    }
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        Self::merge_values(entry.get_mut(), continuation_env)?;
+                    }
+                }
+                if let Some(specialization) = active_specialization {
+                    let exact_callable = ProducerCallable {
+                        closure_owner: self
+                            .exact_closure_owner_for_residual(&specialization.worker)?,
+                        closure_origin: specialization.worker.closure_origin,
+                        body_origin: specialization.worker.body_origin,
+                        recursor_origin: None,
+                        producer_origin: Some(specialization.worker.producer_origin),
+                    };
+                    let exact_callables =
+                        ProducerCallableSet::Closed(BTreeSet::from([exact_callable]));
+                    let exact_position = specialization.key.recursive_position as usize;
+                    for (_, occurrence, payload) in &mut incoming_scrutinee.constructor_payloads {
+                        if let Some(callables) = occurrence.child_callables.get_mut(exact_position)
+                        {
+                            *callables = exact_callables.clone();
+                        }
+                        if let Some(value) = payload.get_mut(exact_position) {
+                            value.callables = exact_callables.clone();
+                        }
+                    }
+                    let observed_workers = incoming_scrutinee
+                        .constructor_payloads
+                        .iter()
+                        .flat_map(|(_, occurrence, payload)| {
+                            let position = specialization.key.recursive_position as usize;
+                            occurrence
+                                .child_callables
+                                .get(position)
+                                .or_else(|| payload.get(position).map(|value| &value.callables))
+                                .into_iter()
+                        })
+                        .flat_map(|callables| match callables {
+                            ProducerCallableSet::Open => Vec::new(),
+                            ProducerCallableSet::Closed(callables) => callables
+                                .iter()
+                                .map(|callable| (callable.closure_origin, callable.body_origin))
+                                .collect(),
+                        })
+                        .collect::<BTreeSet<_>>();
+                    let position =
+                        usize::try_from(specialization.key.recursive_position).map_err(|_| {
+                            planner_capacity_error("continuation specialization position exhausted")
+                        })?;
+                    incoming_scrutinee
+                        .constructor_payloads
+                        .retain(|(_, occurrence, payload)| {
+                            occurrence
+                                .child_callables
+                                .get(position)
+                                .or_else(|| payload.get(position).map(|value| &value.callables))
+                                .is_some_and(|callables| match callables {
+                                    ProducerCallableSet::Open => false,
+                                    ProducerCallableSet::Closed(callables) => {
+                                        callables.iter().any(|callable| {
+                                            callable.closure_origin
+                                                == specialization.worker.closure_origin
+                                                && callable.body_origin
+                                                    == specialization.worker.body_origin
+                                        })
+                                    }
+                                })
+                        });
+                    if incoming_scrutinee.constructor_payloads.is_empty()
+                        && !self.observe_emitted_aggregates
+                    {
+                        let _ = observed_workers;
+                        return Ok(ProducerValue::empty());
+                    }
+                }
                 let operational_carrier = self.plan.operand_edges.iter().any(|edge| {
                     edge.parent == origin
                         && edge.position == 0
                         && edge.role == SourceOperandRole::MatchScrutinee
                         && edge.consumer_phase == BoundaryUsePhase::OperationalCarrier
                 });
-                let continuation_capture =
-                    incoming_scrutinee.constructors.flow.iter().any(|edge| {
-                        edge.kind == ProducerFlowKind::Capture
-                    });
-                if operational_carrier && continuation_capture {
+                let continuation_capture = incoming_scrutinee
+                    .constructors
+                    .flow
+                    .iter()
+                    .any(|edge| edge.kind == ProducerFlowKind::Capture);
+                if operational_carrier
+                    && continuation_capture
+                    && active_specialization.is_none()
+                {
                     incoming_scrutinee.carried = true;
                     incoming_scrutinee.constructors = incoming_scrutinee
                         .constructors
@@ -5551,23 +6160,8 @@ impl ProducerAnalysis<'_, '_> {
                         incoming_scrutinee.referent_owners,
                         ReferentOwnerFact::Bottom | ReferentOwnerFact::Unrepresented
                     ) {
-                        incoming_scrutinee.referent_owners =
-                            ReferentOwnerFact::carrier_universe();
+                        incoming_scrutinee.referent_owners = ReferentOwnerFact::carrier_universe();
                     }
-                }
-                if self.active_owner.0 == 5 && origin.0 == 460 {
-                    eprintln!(
-                        "TRACE computational owner={:?} origin={origin:?} \
-                         population={:?} carried={} flow={:?}",
-                        self.active_owner,
-                        incoming_scrutinee.constructors.population,
-                        incoming_scrutinee.carried,
-                        incoming_scrutinee
-                            .constructors
-                            .flow
-                            .iter()
-                            .collect::<BTreeSet<_>>()
-                    );
                 }
                 let key = (origin, self.active_owner);
                 match self.computational_scrutinees.entry(key) {
@@ -5608,25 +6202,42 @@ impl ProducerAnalysis<'_, '_> {
                             .constructor_payloads
                             .iter()
                             .filter(|(constructor, _, payload)| {
-                                *constructor == identity
-                                    && payload.len() == case.argument_binders
+                                *constructor == identity && payload.len() == case.argument_binders
                             })
-                            .map(|(_, _, payload)| payload.clone())
+                            .map(|(_, occurrence, payload)| {
+                                (Some(occurrence.clone()), payload.clone())
+                            })
                             .collect(),
                     };
                     if alternatives.is_empty() {
-                        alternatives.push(
-                            (0..case.argument_binders)
-                                .map(|_| {
-                                    let mut value = ProducerValue::open(origin);
-                                    value.referent_owners =
-                                        scrutinee.referent_owners.clone();
-                                    value
-                                })
-                                .collect(),
-                        );
+                        let mut payload = (0..case.argument_binders)
+                            .map(|_| {
+                                let mut value = ProducerValue::open(origin);
+                                value.referent_owners = scrutinee.referent_owners.clone();
+                                value
+                            })
+                            .collect::<Vec<_>>();
+                        if let Some(specialization) = active_specialization {
+                            let position = specialization.key.recursive_position as usize;
+                            if let Some(value) = payload.get_mut(position) {
+                                value.callables = ProducerCallableSet::Closed(BTreeSet::from([
+                                    ProducerCallable {
+                                        closure_owner: self.exact_closure_owner_for_residual(
+                                            &specialization.worker,
+                                        )?,
+                                        closure_origin: specialization.worker.closure_origin,
+                                        body_origin: specialization.worker.body_origin,
+                                        recursor_origin: None,
+                                        producer_origin: Some(
+                                            specialization.worker.producer_origin,
+                                        ),
+                                    },
+                                ]));
+                            }
+                        }
+                        alternatives.push((None, payload));
                     }
-                    for mut arguments in alternatives {
+                    for (payload_occurrence, mut arguments) in alternatives {
                         for argument in &mut arguments {
                             if scrutinee.carried {
                                 self.mark_carried(argument);
@@ -5653,6 +6264,41 @@ impl ProducerAnalysis<'_, '_> {
                                             selected.insert(*callable);
                                             continue;
                                         }
+                                        let active_specialization_owns_crossing = self
+                                            .plan
+                                            .continuation_specialization_for_function(
+                                                self.active_owner,
+                                            )
+                                            .and_then(|specialization| {
+                                                self.plan
+                                                    .continuation_specializations
+                                                    .get(specialization.0 as usize)
+                                            })
+                                            .is_some_and(|specialization| {
+                                                specialization.key.continuation_origin == origin
+                                                    && specialization.key.recursive_position
+                                                        == u32::try_from(position)
+                                                            .unwrap_or(u32::MAX)
+                                                    && specialization.worker.closure_origin
+                                                        == callable.closure_origin
+                                                    && specialization.worker.body_origin
+                                                        == callable.body_origin
+                                            });
+                                        let emitted_callable_owns_crossing = self
+                                            .plan
+                                            .continuation_specialization_for_function(
+                                                callable.closure_owner,
+                                            )
+                                            .is_some();
+                                        if active_specialization_owns_crossing
+                                            || emitted_callable_owns_crossing
+                                        {
+                                            selected.insert(ProducerCallable {
+                                                recursor_origin: Some(origin),
+                                                ..*callable
+                                            });
+                                            continue;
+                                        }
                                         let mut residuals = self
                                             .plan
                                             .static_recursor_worker_residuals
@@ -5664,8 +6310,20 @@ impl ProducerAnalysis<'_, '_> {
                                                             .unwrap_or(u32::MAX)
                                                     && residual.closure_origin
                                                         == callable.closure_origin
-                                                    && residual.body_origin
-                                                        == callable.body_origin
+                                                    && residual.body_origin == callable.body_origin
+                                                    && callable
+                                                        .producer_origin
+                                                        .or_else(|| {
+                                                            payload_occurrence.as_ref().map(
+                                                                |occurrence| {
+                                                                    occurrence.producer_origin
+                                                                },
+                                                            )
+                                                        })
+                                                        .is_none_or(|producer_origin| {
+                                                            residual.producer_origin
+                                                                == producer_origin
+                                                        })
                                             });
                                         let residual = residuals.next().ok_or_else(|| {
                                             let candidates = self
@@ -5688,9 +6346,11 @@ impl ProducerAnalysis<'_, '_> {
                                                 .collect::<Vec<_>>();
                                             planner_error(format!(
                                                 "causal recursive payload has no exact worker; \
+                                                 active={:?}; \
                                                  match={origin:?}; position={position}; \
                                                  callable={callable:?}; \
-                                                 candidates={candidates:?}"
+                                                 candidates={candidates:?}",
+                                                self.active_owner,
                                             ))
                                         })?;
                                         if residuals.next().is_some() {
@@ -5704,6 +6364,7 @@ impl ProducerAnalysis<'_, '_> {
                                             closure_origin: residual.closure_origin,
                                             body_origin: residual.body_origin,
                                             recursor_origin: Some(origin),
+                                            producer_origin: Some(residual.producer_origin),
                                         });
                                     }
                                     if selected.is_empty() {
@@ -5721,14 +6382,15 @@ impl ProducerAnalysis<'_, '_> {
                                 referent_owners: ReferentOwnerFact::Unrepresented,
                                 aggregate_origins: BTreeSet::new(),
                                 effect_origins: BTreeSet::new(),
+                                continuation_result_origins: BTreeSet::new(),
+                                input_provenance: BTreeSet::new(),
                                 carried: false,
                             });
                         }
                         let mut case_env = induction_hypotheses;
                         case_env.extend(arguments);
-                        case_env.extend_from_slice(env);
-                        result =
-                            result.join(&self.eval(child(1 + index)?, &case_env)?);
+                        case_env.extend_from_slice(continuation_env);
+                        result = result.join(&self.eval(child(1 + index)?, &case_env)?);
                     }
                 }
                 result
@@ -5823,6 +6485,10 @@ impl ProducerAnalysis<'_, '_> {
                     .iter()
                     .flat_map(|child| child.effect_origins.iter().copied())
                     .collect();
+                let continuation_result_origins = payload
+                    .iter()
+                    .flat_map(|child| child.continuation_result_origins.iter().copied())
+                    .collect();
                 ProducerValue {
                     constructors: ProducerFact::empty(),
                     constructor_payloads: Vec::new(),
@@ -5831,6 +6497,11 @@ impl ProducerAnalysis<'_, '_> {
                     referent_owners: ReferentOwnerFact::aggregate(&payload),
                     aggregate_origins,
                     effect_origins,
+                    continuation_result_origins,
+                    input_provenance: payload
+                        .iter()
+                        .flat_map(|child| child.input_provenance.iter().copied())
+                        .collect(),
                     carried,
                 }
             }
@@ -5892,6 +6563,295 @@ impl ProducerAnalysis<'_, '_> {
             }
             RuntimeExpr::ImportedDeclarationRef { .. } => ProducerValue::open(origin),
         };
+        let mut value = value;
+        if self
+            .plan
+            .continuation_specialization_calls
+            .iter()
+            .any(|call| {
+                call.producer_owner == self.active_owner
+                    && call.producer_result_origin == origin
+            })
+        {
+            value.continuation_result_origins.insert(origin);
+        }
+        let mut calls = self
+            .plan
+            .continuation_specialization_calls
+            .iter()
+            .filter(|call| {
+                !value.constructor_payloads.is_empty()
+                    && call.producer_owner == self.active_owner
+                    && value
+                        .continuation_result_origins
+                        .contains(&call.producer_result_origin)
+            })
+            .copied()
+            .collect::<Vec<_>>();
+        let selected_distance = calls
+            .iter()
+            .map(|call| call.continuation_distance)
+            .min();
+        let producer_value = value.clone();
+        let mut continuation_results: Option<ProducerValue> = None;
+        for call in calls {
+            let selected =
+                selected_distance == Some(call.continuation_distance);
+            let specialization = self
+                .plan
+                .continuation_specializations
+                .get(call.specialization.0 as usize)
+                .ok_or_else(|| {
+                    planner_error("producer-flow continuation call has no specialization")
+                })?;
+            let input_start = usize::try_from(continuation_producer_input_start(
+                &self.plan.continuation_specializations,
+                specialization,
+                self.active_owner,
+            )?)
+            .map_err(|_| {
+                planner_capacity_error("producer-flow continuation input offset exhausted")
+            })?;
+            let input_capture_count = specialization
+                .key
+                .continuation_captures
+                .checked_add(continuation_producer_capture_extension(
+                    &self.plan.continuation_specializations,
+                    specialization.function,
+                )?)
+                .ok_or_else(|| {
+                    planner_capacity_error(
+                        "producer-flow continuation environment exhausted",
+                    )
+                })?;
+            let capture_count =
+                usize::try_from(input_capture_count).map_err(|_| {
+                    planner_capacity_error("producer-flow continuation environment exhausted")
+                })?;
+            let input_end = input_start.checked_add(capture_count).ok_or_else(|| {
+                planner_capacity_error("producer-flow continuation input range exhausted")
+            })?;
+            let continuation = self
+                .computational_continuation_environments
+                .get(&(
+                    specialization.key.continuation_origin,
+                    self.active_owner,
+                ))
+                .and_then(|environment| environment.get(..capture_count))
+                .or_else(|| {
+                    self.plan
+                        .continuation_specialization_for_function(self.active_owner)
+                        .and_then(|_| {
+                            self.inputs
+                                .get(&self.active_owner)
+                                .and_then(|inputs| inputs.get(input_start..input_end))
+                        })
+                })
+                .or_else(|| {
+                    self.computational_continuation_environments
+                        .get(&(
+                            specialization.key.continuation_origin,
+                            specialization.key.consumer_owner,
+                        ))
+                        .and_then(|environment| environment.get(..capture_count))
+                })
+                .or_else(|| env.get(input_start..input_end))
+                .or_else(|| {
+                    self.inputs
+                        .get(&self.active_owner)
+                        .and_then(|inputs| inputs.get(input_start..input_end))
+                })
+                .ok_or_else(|| {
+                    planner_error(format!(
+                        "producer-flow continuation call omits its environment: \
+                         owner={:?}, target={:?}, input_start={input_start}, \
+                         input_end={input_end}, available={}, key={:?}",
+                        self.active_owner,
+                        specialization.function,
+                        self.inputs.get(&self.active_owner).map_or(0, Vec::len),
+                        specialization.key,
+                    ))
+                })?
+                .to_vec();
+            if (12..=18).contains(&self.active_owner.0) {
+                eprintln!(
+                    "CONTSPEC_CALL_PROJECTION owner={:?} result={:?} target={:?} \
+                     continuation={:?}",
+                    self.active_owner,
+                    call.producer_result_origin,
+                    specialization.function,
+                    continuation
+                        .iter()
+                        .map(|value| value.input_provenance.clone())
+                        .collect::<Vec<_>>(),
+                );
+            }
+            if self.active_owner == PredeclaredFunctionId(12) {
+                eprintln!(
+                    "CONTSPEC_ANALYSIS_ENV owner={:?} target={:?} start={input_start} \
+                     count={capture_count} values={:?}",
+                    self.active_owner,
+                    specialization.function,
+                    continuation
+                        .iter()
+                        .map(|value| (
+                            value.constructors.population.clone(),
+                            value.constructor_payloads.len(),
+                            value.callables.clone(),
+                        ))
+                        .collect::<Vec<_>>(),
+                );
+            }
+            let mut ordinary = if specialization.key.producer_fields_flattened {
+                let (_, occurrence, payload) = producer_value
+                    .constructor_payloads
+                    .iter()
+                    .find(|(_, occurrence, _)| {
+                        occurrence.producer_owner == self.active_owner
+                            && occurrence.producer_origin == call.producer_construct_origin
+                    })
+                    .ok_or_else(|| {
+                        planner_error(format!(
+                            "producer-flow continuation call has no exact constructor payload: \
+                             owner={:?}, result={:?}, construct={:?}, available={:?}",
+                            self.active_owner,
+                            call.producer_result_origin,
+                            call.producer_construct_origin,
+                            producer_value
+                                .constructor_payloads
+                                .iter()
+                                .map(|(_, occurrence, _)| (
+                                    occurrence.producer_owner,
+                                    occurrence.producer_origin,
+                                ))
+                                .collect::<Vec<_>>(),
+                        ))
+                    })?;
+                let worker_position =
+                    usize::try_from(specialization.key.recursive_position).map_err(|_| {
+                        planner_capacity_error(
+                            "producer-flow continuation worker position exhausted",
+                        )
+                    })?;
+                let producer_has_recursive_worker =
+                    worker_position < payload.len()
+                        && specialization.key.ordinary_parameters as usize
+                            == payload
+                                .len()
+                                .saturating_sub(1)
+                                .saturating_add(
+                                    specialization.worker.captures.len(),
+                                );
+                let captures = if producer_has_recursive_worker {
+                    occurrence
+                        .child_callables
+                        .get(worker_position)
+                        .ok_or_else(|| {
+                            planner_error(
+                                "producer-flow continuation worker position exceeds constructor payload",
+                            )
+                        })?;
+                    let closure_owner = self
+                        .exact_closure_owner_for_residual(
+                            &specialization.worker,
+                        )?;
+                    let captures = self
+                        .captures
+                        .get(&(
+                            closure_owner,
+                            specialization.worker.closure_origin,
+                        ))
+                        .ok_or_else(|| {
+                            planner_error(format!(
+                                "producer-flow continuation constructor omits worker captures: \
+                                 producer={:?}, closure_owner={closure_owner:?}, closure={:?}",
+                                self.active_owner,
+                                specialization.worker.closure_origin,
+                            ))
+                        })?;
+                    if captures.len() != specialization.worker.captures.len() {
+                        return Err(planner_error(
+                            "producer-flow continuation worker capture ABI changed arity",
+                        ));
+                    }
+                    captures.as_slice()
+                } else {
+                    &[]
+                };
+                let mut flattened = Vec::with_capacity(
+                    payload
+                        .len()
+                        .checked_sub(1)
+                        .and_then(|count| count.checked_add(captures.len()))
+                        .ok_or_else(|| {
+                            planner_capacity_error(
+                                "producer-flow continuation ordinary ABI exhausted",
+                            )
+                        })?,
+                );
+                for (position, field) in payload.iter().enumerate() {
+                    if producer_has_recursive_worker
+                        && position == worker_position
+                    {
+                        flattened.extend(captures.iter().cloned());
+                    } else {
+                        flattened.push(field.clone());
+                    }
+                }
+                flattened
+            } else {
+                vec![producer_value.clone()]
+            };
+            if ordinary.len() as u32 != specialization.key.ordinary_parameters {
+                return Err(planner_error(
+                    "producer-flow continuation constructor disagrees with its ordinary ABI",
+                ));
+            }
+            for field in &mut ordinary {
+                self.mark_carried(field);
+            }
+            let mut incoming = Vec::with_capacity(ordinary.len() + continuation.len());
+            incoming.extend(ordinary);
+            incoming.extend(continuation);
+            let slots = self
+                .inputs
+                .get_mut(&specialization.function)
+                .ok_or_else(|| {
+                    planner_error("producer-flow continuation target has no ABI inputs")
+                })?;
+            if slots.len() != incoming.len() {
+                return Err(planner_error(format!(
+                    "producer-flow continuation call ABI mismatch: owner={:?}, \
+                     origin={origin:?}, target={:?}, slots={}, incoming={}, \
+                     captures={}, input_start={input_start}",
+                    self.active_owner,
+                    specialization.function,
+                    slots.len(),
+                    incoming.len(),
+                    specialization.key.continuation_captures,
+                )));
+            }
+            self.changed |= Self::merge_values(slots, &incoming)?;
+            self.changed |= self.reached_owners.insert(specialization.function);
+            self.changed |= self.called_owners.insert(specialization.function);
+            if !selected {
+                continue;
+            }
+            let mut result = self
+                .results
+                .get(&specialization.function)
+                .cloned()
+                .unwrap_or_else(ProducerValue::empty);
+            result.continuation_result_origins.clear();
+            self.mark_carried(&mut result);
+            continuation_results = Some(match continuation_results {
+                Some(known) => known.join(&result),
+                None => result,
+            });
+        }
+        if let Some(result) = continuation_results {
+            value = result;
+        }
         Ok(value)
     }
 }
@@ -6115,6 +7075,8 @@ fn build_producer_flow_plans(
         Vec<PlannedStaticRecursorWorkerEnvironment>,
         BTreeSet<(PredeclaredFunctionId, StaticOriginId)>,
         BTreeSet<(PredeclaredFunctionId, StaticOriginId, u32)>,
+        Vec<PlannedContinuationSpecialization>,
+        Vec<PlannedContinuationSpecializationCall>,
     ),
     CraneliftBackendError,
 > {
@@ -6231,6 +7193,16 @@ fn build_producer_flow_plans(
                 value.carried = true;
             }
         }
+        for (position, value) in environment.iter_mut().enumerate() {
+            value.input_provenance.insert((
+                descriptor.function,
+                u32::try_from(position).map_err(|_| {
+                    planner_capacity_error(
+                        "producer-flow input provenance position exhausted",
+                    )
+                })?,
+            ));
+        }
         inputs.insert(descriptor.function, environment);
         let body_origin = match descriptor.definition {
             // This unit only forwards into its separately owned closure body.
@@ -6246,6 +7218,27 @@ fn build_producer_flow_plans(
                         planner_error("producer-flow specialization is outside the plan")
                     })?
                     .base_body_origin
+            }
+            AbiUnitDefinition::ContinuationSpecialization {
+                specialization,
+                continuation_origin,
+            } => {
+                let planned = plan
+                    .continuation_specializations
+                    .get(specialization.0 as usize)
+                    .ok_or_else(|| {
+                        planner_error(
+                            "producer-flow continuation specialization is outside the plan",
+                        )
+                    })?;
+                if planned.function != descriptor.function
+                    || planned.key.continuation_origin != continuation_origin
+                {
+                    return Err(planner_error(
+                        "producer-flow continuation unit disagrees with its interned key",
+                    ));
+                }
+                continuation_origin
             }
             AbiUnitDefinition::SchedulingEntry { .. } => {
                 if plan.root_occurrence.is_some_and(|root| {
@@ -6267,7 +7260,7 @@ fn build_producer_flow_plans(
     // omission/reclassification mutations from failing at an unrelated
     // aggregate observation before exact population validation can reject
     // them.
-    let static_recursor_worker_residuals = build_static_recursor_worker_residuals(plan)?;
+    let static_recursor_worker_residuals = build_all_static_recursor_worker_residuals(plan)?;
     // A literal closure used as a Call callee has an exact source call edge
     // even when static selection later places that call in unreachable CFG.
     // Seed those result crossings directly from the Call child relation.
@@ -6315,6 +7308,12 @@ fn build_producer_flow_plans(
             .ok_or_else(|| planner_error("static recursor worker body has no ABI descriptor"))?;
         let capture_count = u32::try_from(residual.captures.len())
             .map_err(|_| planner_capacity_error("static recursor capture count exhausted"))?;
+        let capture_count = capture_count
+            .checked_add(continuation_producer_capture_extension(
+                &plan.continuation_specializations,
+                owner,
+            )?)
+            .ok_or_else(|| planner_capacity_error("static recursor capture count exhausted"))?;
         if descriptor.origin != residual.body_origin
             || descriptor.header.parameters != residual.declared_arity
             || descriptor.header.captures != capture_count
@@ -6323,12 +7322,9 @@ fn build_producer_flow_plans(
                 "static recursor worker residual disagrees with its body ABI",
             ));
         }
-        if !bodies
-            .iter()
-            .any(|(body_owner, body_origin, _)| {
-                *body_owner == owner && *body_origin == residual.body_origin
-            })
-        {
+        if !bodies.iter().any(|(body_owner, body_origin, _)| {
+            *body_owner == owner && *body_origin == residual.body_origin
+        }) {
             bodies.push((owner, residual.body_origin, descriptor.definition));
         }
         called_owners.insert(owner);
@@ -6348,6 +7344,8 @@ fn build_producer_flow_plans(
         captures: BTreeMap::new(),
         computational_scrutinees: BTreeMap::new(),
         computational_results: BTreeMap::new(),
+        computational_continuation_inputs: BTreeMap::new(),
+        computational_continuation_environments: BTreeMap::new(),
         computational_result_origins: computational_scrutinee_results.clone(),
         match_scrutinees: BTreeMap::new(),
         aggregate_occurrences: BTreeMap::new(),
@@ -6370,6 +7368,13 @@ fn build_producer_flow_plans(
         analysis.changed = false;
         for (owner, body_origin, definition) in bodies.iter().copied() {
             if !analysis.reached_owners.contains(&owner) {
+                continue;
+            }
+            if matches!(
+                definition,
+                AbiUnitDefinition::ContinuationSpecialization { .. }
+            ) && !analysis.called_owners.contains(&owner)
+            {
                 continue;
             }
             analysis.active_owner = owner;
@@ -6422,36 +7427,8 @@ fn build_producer_flow_plans(
             "constructor producer-flow fixed point did not close monotonically",
         ));
     }
-    if plan.source_occurrences.len() > 761 {
-        eprintln!(
-            "TRACE owner5 result callables={:?}",
-            analysis
-                .results
-                .get(&PredeclaredFunctionId(5))
-                .map(|value| &value.callables)
-        );
-        if let Some(value) = analysis.results.get(&PredeclaredFunctionId(5)) {
-            for (identity, occurrence, payload) in &value.constructor_payloads {
-                eprintln!(
-                    "TRACE owner5 result constructor={identity:?} \
-                     occurrence={occurrence:?} \
-                     payload_callables={:?}",
-                    payload
-                        .iter()
-                        .map(|child| &child.callables)
-                        .collect::<Vec<_>>()
-                );
-            }
-        }
-        for ((origin, owner), value) in &analysis.computational_results {
-            if *owner == PredeclaredFunctionId(5) {
-                eprintln!(
-                    "TRACE owner5 computational result origin={origin:?} callables={:?}",
-                    value.callables
-                );
-            }
-        }
-    }
+    let (continuation_specializations, continuation_specialization_calls) =
+        derive_continuation_specializations(plan, &analysis)?;
     // Lowering emits the complete CFG of every separately generated recursor
     // worker even when exact producer flow proves that only one branch can run.
     // Derive representation authority for those emitted-but-unreached
@@ -6461,6 +7438,46 @@ fn build_producer_flow_plans(
     // above.
     let mut emitted_aggregate_analysis = analysis.clone();
     emitted_aggregate_analysis.observe_emitted_aggregates = true;
+    for descriptor in &plan.abi.descriptors {
+        let start = descriptor.slots.start as usize;
+        let end = start
+            .checked_add(descriptor.slots.len as usize)
+            .ok_or_else(|| planner_capacity_error("producer-flow ABI slot range exhausted"))?;
+        let input_slots = plan
+            .abi
+            .slots
+            .get(start..end)
+            .ok_or_else(|| planner_error("producer-flow ABI slot range is outside the plan"))?
+            .iter()
+            .filter(|slot| matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture))
+            .collect::<Vec<_>>();
+        let environment = emitted_aggregate_analysis
+            .inputs
+            .get_mut(&descriptor.function)
+            .ok_or_else(|| planner_error("emitted aggregate owner has no ABI environment"))?;
+        if environment.len() != input_slots.len() {
+            return Err(planner_error(
+                "emitted aggregate ABI environment is not positional",
+            ));
+        }
+        for (value, slot) in environment.iter_mut().zip(input_slots) {
+            if value.referent_owners != ReferentOwnerFact::Bottom {
+                continue;
+            }
+            value.referent_owners = match slot.carrier {
+                AbiCarrier::ValueWord => ReferentOwnerFact::carrier_universe(),
+                AbiCarrier::GroundValueCarrier => ReferentOwnerFact::Closed(BTreeSet::from([
+                    BoundaryReferentOwner::NoReferent,
+                    BoundaryReferentOwner::PersistentStore,
+                ])),
+                _ => ReferentOwnerFact::Unrepresented,
+            };
+            value.carried = matches!(
+                slot.carrier,
+                AbiCarrier::ValueWord | AbiCarrier::GroundValueCarrier
+            );
+        }
+    }
     for _ in 0..population_bound {
         emitted_aggregate_analysis.changed = false;
         for (owner, body_origin, definition) in bodies.iter().copied() {
@@ -6468,8 +7485,7 @@ fn build_producer_flow_plans(
                 continue;
             }
             emitted_aggregate_analysis.active_owner = owner;
-            let environment =
-                emitted_aggregate_analysis.source_environment(owner, definition)?;
+            let environment = emitted_aggregate_analysis.source_environment(owner, definition)?;
             let mut value = emitted_aggregate_analysis.eval(body_origin, &environment)?;
             let result_phase = plan
                 .result_phases
@@ -6487,8 +7503,7 @@ fn build_producer_flow_plans(
                 .results
                 .entry(owner)
                 .or_insert_with(ProducerValue::empty);
-            emitted_aggregate_analysis.changed |=
-                ProducerAnalysis::merge_value(result, &value);
+            emitted_aggregate_analysis.changed |= ProducerAnalysis::merge_value(result, &value);
         }
         if !emitted_aggregate_analysis.changed {
             break;
@@ -6499,19 +7514,58 @@ fn build_producer_flow_plans(
             "emitted aggregate occurrence fixed point did not close monotonically",
         ));
     }
-    analysis
-        .carried_aggregates
-        .extend(emitted_aggregate_analysis.carried_aggregates.iter().copied());
-    if plan.source_occurrences.len() > 483 {
-        eprintln!(
-            "TRACE emitted aggregate483={:?} carried={}",
-            emitted_aggregate_analysis
-                .aggregate_occurrences
-                .get(&(StaticOriginId(483), PredeclaredFunctionId(5))),
-            emitted_aggregate_analysis
-                .carried_aggregates
-                .contains(&StaticOriginId(483))
-        );
+    analysis.carried_aggregates.extend(
+        emitted_aggregate_analysis
+            .carried_aggregates
+            .iter()
+            .copied(),
+    );
+    analysis.carried_effects.extend(
+        emitted_aggregate_analysis
+            .carried_effects
+            .iter()
+            .copied(),
+    );
+    for (identity, operands) in &emitted_aggregate_analysis.effect_operands {
+        match analysis.effect_operands.entry(*identity) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(operands.clone());
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                if entry.get().len() != operands.len() {
+                    return Err(planner_error(
+                        "emitted effect operand-owner population changed arity",
+                    ));
+                }
+                let joined = entry
+                    .get()
+                    .iter()
+                    .zip(operands)
+                    .map(|(left, right)| left.join(right))
+                    .collect::<Vec<_>>();
+                if entry.get() != &joined {
+                    entry.insert(joined);
+                }
+            }
+        }
+    }
+    for (identity, captures) in &emitted_aggregate_analysis.captures {
+        match analysis.captures.entry(*identity) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(captures.clone());
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                ProducerAnalysis::merge_values(entry.get_mut(), captures)?;
+            }
+        }
+    }
+    for (identity, scrutinee) in &emitted_aggregate_analysis.match_scrutinees {
+        match analysis.match_scrutinees.entry(*identity) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(scrutinee.clone());
+            }
+            std::collections::btree_map::Entry::Occupied(_) => {}
+        }
     }
     for (identity, observation) in emitted_aggregate_analysis.aggregate_occurrences {
         analysis
@@ -6529,8 +7583,7 @@ fn build_producer_flow_plans(
             .get(origin.0 as usize)
             .and_then(Option::as_ref)
             .map(|summary| summary.phase);
-        let is_carried =
-            observation.carried || analysis.carried_aggregates.contains(origin);
+        let is_carried = observation.carried || analysis.carried_aggregates.contains(origin);
         let is_control = plan.terminal_exit_aggregate_origins.contains(origin)
             || (computational_scrutinee_results.contains(origin)
                 && !is_carried
@@ -6686,8 +7739,84 @@ fn build_producer_flow_plans(
     }
     synthesized_aggregate_records
         .sort_by_key(|record| (record.owner, record.effect_origin, record.site));
+    let mut emitted_source_occurrences = analysis
+        .emitted_source_occurrences
+        .iter()
+        .copied()
+        .filter(|(owner, _)| emittable_owners.contains(owner))
+        .collect::<BTreeSet<_>>();
+    for specialization in &plan.continuation_specializations {
+        emitted_source_occurrences.extend(
+            continuation_specialization_emitted_source_origins(plan, specialization)?
+                .into_iter()
+                .map(|origin| (specialization.function, origin)),
+        );
+    }
+    let continuation_producers = plan
+        .continuation_specialization_calls
+        .iter()
+        .map(|call| call.producer_owner)
+        .filter(|owner| {
+            plan.continuation_specialization_for_function(*owner)
+                .is_none()
+        })
+        .collect::<BTreeSet<_>>();
+    for owner in continuation_producers {
+        let descriptor = plan
+            .abi
+            .descriptors
+            .iter()
+            .find(|descriptor| descriptor.function == owner)
+            .ok_or_else(|| {
+                planner_error("continuation producer has no exact emitted descriptor")
+            })?;
+        let body_origin = match descriptor.definition {
+            AbiUnitDefinition::SchedulingEntry { .. } => plan.root_static_origin()?,
+            AbiUnitDefinition::TransparentDeclarationClosure {
+                defining_origin, ..
+            } => plan.semantic.child_origin(defining_origin, 0)?,
+            AbiUnitDefinition::ClosureBody { .. } => descriptor.origin,
+            AbiUnitDefinition::StaticCallableSpecialization { specialization, .. } => {
+                plan.static_callable_specializations
+                    .get(specialization.0 as usize)
+                    .ok_or_else(|| {
+                        planner_error(
+                            "static callable descriptor has no exact interned specialization",
+                        )
+                    })?
+                    .base_body_origin
+            }
+            AbiUnitDefinition::ContinuationSpecialization { .. } => {
+                return Err(planner_error(
+                    "base continuation producer unexpectedly names a continuation unit",
+                ));
+            }
+        };
+        emitted_source_occurrences.extend(
+            emitted_source_origins_in_owner_subtree(plan, body_origin)?
+                .into_iter()
+                .map(|origin| (owner, origin)),
+        );
+    }
     let mut static_recursor_worker_environments = Vec::new();
     for residual in &analysis.static_recursor_worker_residuals {
+        let direct_environment_residual = direct_worker_environment_residual_for_closure(
+            plan,
+            &analysis.static_recursor_worker_residuals,
+            residual.closure_origin,
+        )?
+        .ok_or_else(|| {
+            planner_error("static recursor worker closure has no direct environment residual")
+        })?;
+        let specialization_uses_exact_residual = plan
+            .continuation_specializations
+            .iter()
+            .any(|specialization| specialization.worker == *residual);
+        if residual != direct_environment_residual
+            && !specialization_uses_exact_residual
+        {
+            continue;
+        }
         let planned_worker = plan
             .boundary_uses
             .iter()
@@ -6719,10 +7848,73 @@ fn build_producer_flow_plans(
         let mut emitted_owners = analysis
             .emitted_source_occurrences
             .iter()
-            .filter_map(|(owner, origin)| {
-                (*origin == residual.closure_origin).then_some(*owner)
-            })
+            .filter_map(|(owner, origin)| (*origin == residual.closure_origin).then_some(*owner))
             .collect::<BTreeSet<_>>();
+        for specialization in &plan.continuation_specializations {
+            if specialization.key.producer_fields_flattened
+                && specialization.worker.id == residual.id
+                && specialization.worker.parent_origin == residual.parent_origin
+                && specialization.worker.producer_origin == residual.producer_origin
+                && specialization.worker.sibling_position == residual.sibling_position
+                && specialization.worker.closure_origin == residual.closure_origin
+                && specialization.worker.body_origin == residual.body_origin
+            {
+                // Only a flattened producer result emits this worker as an
+                // ordinary specialization input. Merely naming the worker in
+                // an opaque producer-result key is static provenance, not an
+                // emitted environment occurrence.
+                emitted_owners.insert(specialization.function);
+            }
+            let continuation = plan
+                .source_occurrences
+                .get(specialization.key.continuation_origin.0 as usize)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| {
+                    planner_error("continuation specialization names no source occurrence")
+                })?;
+            let RuntimeExpr::ComputationalMatch { cases, .. } = continuation.expr else {
+                return Err(planner_error(
+                    "continuation specialization names a non-computational continuation",
+                ));
+            };
+            let mut emitted_here = false;
+            for index in 0..cases.len() {
+                let case_origin = plan
+                    .semantic
+                    .child_origin(specialization.key.continuation_origin, 1 + index)?;
+                let identity = plan.semantic.case_constructor_identity(
+                    specialization.key.continuation_origin,
+                    index,
+                )?;
+                let case_reachable = plan
+                    .emitted_source_occurrences
+                    .contains(&(specialization.function, case_origin))
+                    || match analysis.computational_scrutinees.get(&(
+                        specialization.key.continuation_origin,
+                        specialization.function,
+                    )) {
+                        Some(scrutinee) => match &scrutinee.constructors.population {
+                            ScrutineeProducerSet::Open => true,
+                            ScrutineeProducerSet::Closed(constructors) => {
+                                constructors.contains(&identity)
+                            }
+                        },
+                        None => analysis
+                            .captures
+                            .contains_key(&(specialization.function, residual.closure_origin)),
+                    };
+                if !case_reachable {
+                    continue;
+                }
+                if plan.source_origin_is_in_subtree(case_origin, residual.closure_origin)? {
+                    emitted_here = true;
+                    break;
+                }
+            }
+            if emitted_here {
+                emitted_owners.insert(specialization.function);
+            }
+        }
         if emitted_owners.is_empty() {
             emitted_owners.insert(planned_worker.consumer_owner);
         }
@@ -6742,6 +7934,12 @@ fn build_producer_flow_plans(
                     ],
                     StaticRecursorCaptureSource::Lexical(_) => capture_values
                         .and_then(|values| values.get(capture.ordinal as usize))
+                        .or_else(|| {
+                            analysis
+                                .captures
+                                .get(&(capture.owner, residual.closure_origin))
+                                .and_then(|values| values.get(capture.ordinal as usize))
+                        })
                         .and_then(|value| value.referent_owners.closed_owners())
                         .ok_or_else(|| {
                             planner_error(format!(
@@ -6808,9 +8006,7 @@ fn build_producer_flow_plans(
                 .case_constructor_identity(*match_origin, case_index)?;
             let case_reachable = match &scrutinee.constructors.population {
                 ScrutineeProducerSet::Open => true,
-                ScrutineeProducerSet::Closed(constructors) => {
-                    constructors.contains(&identity)
-                }
+                ScrutineeProducerSet::Closed(constructors) => constructors.contains(&identity),
             };
             let constructor_crosses_carrier = scrutinee
                 .constructors
@@ -6833,9 +8029,8 @@ fn build_producer_flow_plans(
                 .map(|(_, _, payload)| payload)
                 .collect::<Vec<_>>();
             for position in case.recursive_positions.iter().copied() {
-                let position = u32::try_from(position).map_err(|_| {
-                    planner_capacity_error("carried recursor position exhausted")
-                })?;
+                let position = u32::try_from(position)
+                    .map_err(|_| planner_capacity_error("carried recursor position exhausted"))?;
                 let requires_template = case_reachable
                     && !scrutinee.carried
                     && !constructor_crosses_carrier
@@ -6851,16 +8046,22 @@ fn build_producer_flow_plans(
                     .or_insert(requires_template);
             }
         }
-        carried_recursor_positions.extend(
-            position_requires_template
-                .into_iter()
-                .filter_map(|(position, requires_template)| {
-                    (!requires_template).then_some((*owner, *match_origin, position))
-                }),
-        );
+        carried_recursor_positions.extend(position_requires_template.into_iter().filter_map(
+            |(position, requires_template)| {
+                (!requires_template).then_some((*owner, *match_origin, position))
+            },
+        ));
     }
     let mut records = Vec::new();
     for ((match_origin, owner), fact) in analysis.match_scrutinees {
+        if match_origin == StaticOriginId(268)
+            && owner == PredeclaredFunctionId(22)
+        {
+            eprintln!(
+                "CONTSPEC_CASE_SOURCE owner={owner:?} emittable={} fact={fact:?}",
+                emittable_owners.contains(&owner),
+            );
+        }
         if !emittable_owners.contains(&owner) {
             continue;
         }
@@ -6904,6 +8105,248 @@ fn build_producer_flow_plans(
             });
         }
     }
+    // A generated continuation specialization can clone an already-interned
+    // semantic unit under a new causal producer occurrence. The clone emits
+    // its own source-case occurrences, while the case reachability authority
+    // remains the same exact worker/checked-continuation fact. Re-key that
+    // authority to the emitted owner; do not fall back to a source owner at
+    // lowering time, because aggregate and boundary ledgers remain
+    // occurrence-specific.
+    let source_records = records.clone();
+    for record in source_records.iter().filter(|record| {
+        record.owner == PredeclaredFunctionId(15)
+            && record.match_origin == StaticOriginId(268)
+    }) {
+        eprintln!(
+            "CONTSPEC_DIRECT_CASE owner={:?} ordinal={} status={:?} authority={:?}",
+            record.owner,
+            record.ordinal,
+            record.status,
+            record.authority.producers,
+        );
+    }
+    let direct_case_keys = source_records
+        .iter()
+        .map(|record| (record.owner, record.match_origin, record.ordinal))
+        .collect::<BTreeSet<_>>();
+    let direct_open_case_keys = source_records
+        .iter()
+        .filter(|record| {
+            matches!(
+                record.authority.producers,
+                ScrutineeProducerSet::Open
+            )
+        })
+        .map(|record| (record.owner, record.match_origin, record.ordinal))
+        .collect::<BTreeSet<_>>();
+    let mut exact_records = records
+        .into_iter()
+        .map(|record| ((record.owner, record.match_origin, record.ordinal), record))
+        .collect::<BTreeMap<_, _>>();
+    for target in &plan.continuation_specializations {
+        let emitted =
+            continuation_specialization_emitted_source_origins(plan, target)?;
+        for template in plan.continuation_specializations.iter().filter(|template| {
+            template.function != target.function
+                && template.key.continuation_origin == target.key.continuation_origin
+                && template.key.checked_frame_id == target.key.checked_frame_id
+                && template.key.recursive_position == target.key.recursive_position
+                && template.key.continuation_captures == target.key.continuation_captures
+                && template.key.continuation_environment_is_local
+                    == target.key.continuation_environment_is_local
+                && template.worker == target.worker
+        }) {
+            for record in source_records.iter().filter(|record| {
+                record.owner == template.function
+                    && emitted.contains(&record.match_origin)
+            }) {
+                let mut cloned = record.clone();
+                cloned.owner = target.function;
+                let key = (cloned.owner, cloned.match_origin, cloned.ordinal);
+                if direct_case_keys.contains(&key)
+                    && !direct_open_case_keys.contains(&key)
+                {
+                    // The target's own emitted occurrence has a complete
+                    // producer-flow fact. A template is fallback authority for
+                    // an absent clone only; joining it here would let an Open
+                    // sibling erase this owner's exact closed population.
+                    continue;
+                }
+                match exact_records.entry(key) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(cloned);
+                    }
+                    std::collections::btree_map::Entry::Occupied(mut entry) => {
+                        let existing = entry.get_mut();
+                        if existing.match_origin != cloned.match_origin
+                            || existing.scrutinee_origin != cloned.scrutinee_origin
+                            || existing.phase != cloned.phase
+                            || existing.ordinal != cloned.ordinal
+                            || existing.body_origin != cloned.body_origin
+                            || existing.constructor != cloned.constructor
+                        {
+                            return Err(planner_error(
+                                "one emitted continuation clone has conflicting case authority",
+                            ));
+                        }
+                        if direct_open_case_keys.contains(&key)
+                            && matches!(
+                                cloned.authority.producers,
+                                ScrutineeProducerSet::Closed(_)
+                            )
+                            && matches!(
+                                existing.authority.producers,
+                                ScrutineeProducerSet::Open
+                            )
+                        {
+                            *existing = cloned;
+                            continue;
+                        }
+                        existing.authority.producers = existing
+                            .authority
+                            .producers
+                            .join(&cloned.authority.producers);
+                        for (identity, origins) in cloned.authority.producer_origins {
+                            if let Some((_, existing_origins)) = existing
+                                .authority
+                                .producer_origins
+                                .iter_mut()
+                                .find(|(candidate, _)| *candidate == identity)
+                            {
+                                existing_origins.extend(origins);
+                            } else {
+                                existing
+                                    .authority
+                                    .producer_origins
+                                    .push((identity, origins));
+                            }
+                        }
+                        existing.authority.flow.extend(cloned.authority.flow);
+                        if cloned.status == CaseEmissionStatus::Reachable {
+                            existing.status = CaseEmissionStatus::Reachable;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    // Reassert every directly analyzed emitted occurrence after fallback
+    // cloning. Provisional generated-unit ids can be compacted while the
+    // fixed point is still growing; regardless of that temporary aliasing, a
+    // direct owner fact is the sole authority for its final owner/key and must
+    // dominate every cloned template.
+    for record in source_records {
+        let key = (record.owner, record.match_origin, record.ordinal);
+        if matches!(
+            record.authority.producers,
+            ScrutineeProducerSet::Open
+        ) && exact_records.get(&key).is_some_and(|replacement| {
+            matches!(
+                replacement.authority.producers,
+                ScrutineeProducerSet::Closed(_)
+            )
+        }) {
+            continue;
+        }
+        exact_records.insert(key, record);
+    }
+    records = exact_records.into_values().collect();
+    let source_aggregates = aggregate_records.clone();
+    let source_synthesized_aggregates = synthesized_aggregate_records.clone();
+    let direct_aggregate_keys = source_aggregates
+        .iter()
+        .map(|record| (record.owner, record.origin))
+        .collect::<BTreeSet<_>>();
+    let direct_synthesized_aggregate_keys = source_synthesized_aggregates
+        .iter()
+        .map(|record| (record.owner, record.effect_origin, record.site))
+        .collect::<BTreeSet<_>>();
+    let mut exact_aggregates = aggregate_records
+        .into_iter()
+        .map(|record| ((record.owner, record.origin), record))
+        .collect::<BTreeMap<_, _>>();
+    let mut exact_synthesized_aggregates = synthesized_aggregate_records
+        .into_iter()
+        .map(|record| ((record.owner, record.effect_origin, record.site), record))
+        .collect::<BTreeMap<_, _>>();
+    for target in &plan.continuation_specializations {
+        let emitted =
+            continuation_specialization_emitted_source_origins(plan, target)?;
+        for template in plan.continuation_specializations.iter().filter(|template| {
+            template.function != target.function
+                && template.key.continuation_origin == target.key.continuation_origin
+                && template.key.checked_frame_id == target.key.checked_frame_id
+                && template.key.recursive_position == target.key.recursive_position
+                && template.key.producer_fields_flattened
+                    == target.key.producer_fields_flattened
+                && template.key.ordinary_parameters == target.key.ordinary_parameters
+                && template.key.continuation_captures == target.key.continuation_captures
+                && template.key.continuation_environment_is_local
+                    == target.key.continuation_environment_is_local
+                && template.worker == target.worker
+        }) {
+            for record in source_aggregates.iter().filter(|record| {
+                record.owner == template.function && emitted.contains(&record.origin)
+            }) {
+                let mut cloned = record.clone();
+                cloned.owner = target.function;
+                let key = (cloned.owner, cloned.origin);
+                match exact_aggregates.entry(key) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(cloned);
+                    }
+                    std::collections::btree_map::Entry::Occupied(entry)
+                        if entry.get() == &cloned => {}
+                    std::collections::btree_map::Entry::Occupied(_)
+                        if direct_aggregate_keys.contains(&key) =>
+                    {
+                        // Producer analysis for the exact emitted target is
+                        // authoritative over clone backfill. It can lawfully
+                        // narrow a child-owner meet that remains broad in a
+                        // differently reached template.
+                    }
+                    std::collections::btree_map::Entry::Occupied(_) => {
+                        return Err(planner_error(
+                            "one emitted continuation clone has conflicting aggregate authority",
+                        ));
+                    }
+                }
+            }
+            for record in source_synthesized_aggregates.iter().filter(|record| {
+                record.owner == template.function
+                    && emitted.contains(&record.effect_origin)
+            }) {
+                let mut cloned = record.clone();
+                cloned.owner = target.function;
+                let key = (cloned.owner, cloned.effect_origin, cloned.site);
+                match exact_synthesized_aggregates.entry(key) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(cloned);
+                    }
+                    std::collections::btree_map::Entry::Occupied(entry)
+                        if entry.get() == &cloned => {}
+                    std::collections::btree_map::Entry::Occupied(_)
+                        if direct_synthesized_aggregate_keys.contains(&key) =>
+                    {
+                        // Preserve the exact target occurrence for the same
+                        // reason as source aggregate authority above.
+                    }
+                    std::collections::btree_map::Entry::Occupied(_) => {
+                        return Err(planner_error(
+                            "one emitted continuation clone has conflicting synthesized aggregate \
+                             authority",
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    aggregate_records = exact_aggregates.into_values().collect();
+    aggregate_records.sort_by_key(|record| (record.owner, record.origin));
+    synthesized_aggregate_records =
+        exact_synthesized_aggregates.into_values().collect();
+    synthesized_aggregate_records
+        .sort_by_key(|record| (record.owner, record.effect_origin, record.site));
     records.sort_by_key(|record| (record.owner, record.match_origin, record.ordinal));
     for occurrence in plan.source_occurrences.iter().flatten() {
         if !matches!(
@@ -6917,8 +8360,11 @@ fn build_producer_flow_plans(
         }
         let mut cursor = occurrence.static_origin;
         for _ in 0..32 {
-            let Some(parent) = plan.source_occurrences.iter().flatten().find_map(
-                |candidate| {
+            let Some(parent) = plan
+                .source_occurrences
+                .iter()
+                .flatten()
+                .find_map(|candidate| {
                     plan.semantic
                         .child_origins(candidate.static_origin)
                         .ok()
@@ -6928,33 +8374,16 @@ fn build_producer_flow_plans(
                                 .position(|child| *child == cursor)
                                 .map(|position| (candidate, position))
                         })
-                },
-            ) else {
+                })
+            else {
                 break;
             };
             if matches!(parent.0.expr, RuntimeExpr::Match { .. }) {
-                eprintln!(
-                    "TRACE append effect={:?} match={:?} child_position={} records={:?}",
-                    occurrence.static_origin,
-                    parent.0.static_origin,
-                    parent.1,
-                    records
-                        .iter()
-                        .filter(|record| {
-                            record.match_origin == parent.0.static_origin
-                        })
-                        .collect::<Vec<_>>()
-                );
                 break;
             }
             cursor = parent.0.static_origin;
         }
     }
-    let emitted_source_occurrences = analysis
-        .emitted_source_occurrences
-        .into_iter()
-        .filter(|(owner, _)| emittable_owners.contains(owner))
-        .collect();
     Ok((
         records,
         aggregate_records,
@@ -6962,7 +8391,2622 @@ fn build_producer_flow_plans(
         static_recursor_worker_environments,
         emitted_source_occurrences,
         carried_recursor_positions,
+        continuation_specializations,
+        continuation_specialization_calls,
     ))
+}
+
+/// Enumerate the source occurrences whose expressions are emitted as part of
+/// one function body.
+///
+/// Syntax children with an operand role are lowered in the current emitted
+/// function. A `StaticBody` child is a separately emitted function and is not
+/// part of this occurrence population even though it is structurally contained
+/// by the closure expression.
+fn emitted_source_origins_in_owner_subtree(
+    plan: &StaticTransitionPlan<'_>,
+    root: StaticOriginId,
+) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+    let owner = plan
+        .semantic
+        .function_owner(root)?
+        .ok_or_else(|| planner_error("source subtree root has no function owner"))?;
+    let mut pending = vec![root];
+    let mut origins = BTreeSet::new();
+    while let Some(origin) = pending.pop() {
+        if plan.semantic.function_owner(origin)? != Some(owner) || !origins.insert(origin) {
+            continue;
+        }
+        let occurrence = plan.source_occurrence(origin)?;
+        let children = plan.semantic.child_origins(origin)?;
+        let roles = source_child_roles(occurrence);
+        if children.len() != roles.len() {
+            return Err(planner_error(
+                "source emission census is not positional with semantic children",
+            ));
+        }
+        pending.extend(children.iter().zip(roles).filter_map(|(child, role)| {
+            (!matches!(role, SourceChildRole::StaticBody)).then_some(*child)
+        }));
+    }
+    Ok(origins)
+}
+
+/// Select the innermost recursor boundary that directly owns allocation of a
+/// closure's environment.
+///
+/// One lexical closure can flow through several enclosing recursive positions.
+/// Those outer residuals consume the already-created environment; they do not
+/// synthesize it again. Structural ancestry is authoritative here only for the
+/// allocation site itself: the direct owner is the residual parent with the
+/// shortest exact path to the closure occurrence. Result-flow selection still
+/// governs every later worker call.
+fn direct_worker_environment_residual_for_closure<'a>(
+    plan: &StaticTransitionPlan<'_>,
+    residuals: &'a [PlannedStaticRecursorWorkerResidual],
+    closure_origin: StaticOriginId,
+) -> Result<Option<&'a PlannedStaticRecursorWorkerResidual>, CraneliftBackendError> {
+    let mut candidates = Vec::new();
+    for residual in residuals
+        .iter()
+        .filter(|residual| residual.closure_origin == closure_origin)
+    {
+        let producer_contains_closure =
+            source_descendant_distance(plan, residual.producer_origin, closure_origin)?.is_some();
+        let Some(distance) =
+            source_descendant_distance(plan, residual.parent_origin, closure_origin)?
+        else {
+            // Result-flow can carry this already-created closure through an
+            // outer recursor whose source subtree does not contain the
+            // allocation site. Such a residual consumes the environment; it
+            // is not a candidate to allocate it.
+            continue;
+        };
+        candidates.push((!producer_contains_closure, distance, residual));
+    }
+    candidates.sort_by_key(|(indirect, distance, _)| (*indirect, *distance));
+    let Some((indirect, distance, selected)) = candidates.first().copied() else {
+        return Ok(None);
+    };
+    for (_, _, candidate) in candidates
+        .iter()
+        .skip(1)
+        .take_while(|(candidate_indirect, candidate_distance, _)| {
+            *candidate_indirect == indirect && *candidate_distance == distance
+        })
+    {
+        if candidate.parent_origin != selected.parent_origin
+            || candidate.closure_origin != selected.closure_origin
+            || candidate.body_origin != selected.body_origin
+            || candidate.declared_arity != selected.declared_arity
+            || candidate.captures != selected.captures
+        {
+            return Err(planner_error(
+                "static recursor worker closure has ambiguous direct environment residuals",
+            ));
+        }
+    }
+    Ok(Some(selected))
+}
+
+/// Enumerate the source occurrences whose code belongs to one out-of-line
+/// continuation unit.
+///
+/// The supplied producer result replaces the root scrutinee expression, while
+/// every root case body is emitted. Deeper occurrences remain governed by the
+/// exact producer walk: specialized effect/call lowering can consume a case
+/// root without emitting the structurally contained source spelling.
+fn continuation_specialization_emitted_source_origins(
+    plan: &StaticTransitionPlan<'_>,
+    specialization: &PlannedContinuationSpecialization,
+) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+    let root = specialization.key.continuation_origin;
+    let root_occurrence = plan.source_occurrence(root)?;
+    let RuntimeExpr::ComputationalMatch { cases, .. } = root_occurrence else {
+        return Err(planner_error(
+            "continuation specialization names a non-computational source root",
+        ));
+    };
+    let mut origins = BTreeSet::from([root]);
+    for index in 0..cases.len() {
+        origins.extend(emitted_source_origins_in_owner_subtree(
+            plan,
+            plan.semantic.child_origin(root, 1 + index)?,
+        )?);
+    }
+    Ok(origins)
+}
+
+fn continuation_specialization_worker_call_origins(
+    plan: &StaticTransitionPlan<'_>,
+    specialization: &PlannedContinuationSpecialization,
+) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+    if !plan
+        .emitted_source_occurrences
+        .iter()
+        .any(|(owner, _)| *owner == specialization.function)
+    {
+        return Ok(BTreeSet::new());
+    }
+    let continuation = plan.source_occurrence(specialization.key.continuation_origin)?;
+    let RuntimeExpr::ComputationalMatch { cases, .. } = continuation else {
+        return Err(planner_error(
+            "continuation specialization names a non-computational continuation",
+        ));
+    };
+    let producer_identity = plan
+        .semantic
+        .constructor_symbol_identity(
+            specialization.key.producer_construct_origin,
+        )?;
+    let selected_cases = cases
+        .iter()
+        .enumerate()
+        .filter_map(|(case_index, case)| {
+            (plan
+                .semantic
+                .case_constructor_identity(
+                    specialization.key.continuation_origin,
+                    case_index,
+                )
+                .ok()
+                == Some(producer_identity.clone()))
+            .then_some(case)
+        })
+        .collect::<Vec<_>>();
+    let [selected_case] = selected_cases.as_slice() else {
+        return Err(planner_error(
+            "continuation specialization producer does not select one checked case",
+        ));
+    };
+    let recursive_position =
+        usize::try_from(specialization.key.recursive_position).map_err(|_| {
+            planner_capacity_error("continuation recursive position exceeds addressable space")
+        })?;
+    if !selected_case
+        .recursive_positions
+        .contains(&recursive_position)
+    {
+        return Ok(BTreeSet::new());
+    }
+    let mut worker_slot_templates = BTreeSet::new();
+    for (case_index, case) in cases.iter().enumerate() {
+        let Some(slot_ordinal) = case
+            .recursive_positions
+            .iter()
+            .position(|position| *position == recursive_position)
+        else {
+            continue;
+        };
+        let case_origin = plan.semantic.child_origin(
+            specialization.key.continuation_origin,
+            1 + case_index,
+        )?;
+        for occurrence in plan.source_occurrences.iter().flatten() {
+            if !plan.source_origin_is_in_subtree(case_origin, occurrence.static_origin)? {
+                continue;
+            }
+            if !plan
+                .emitted_source_occurrences
+                .contains(&(specialization.function, occurrence.static_origin))
+            {
+                continue;
+            }
+            let mut eliminated_by_case_authority = false;
+            for case in plan
+                .case_emissions
+                .iter()
+                .filter(|case| case.owner == specialization.function)
+            {
+                if plan.source_origin_is_in_subtree(
+                    case.body_origin,
+                    occurrence.static_origin,
+                )? && case.status == CaseEmissionStatus::Eliminated
+                {
+                    eliminated_by_case_authority = true;
+                    break;
+                }
+            }
+            if eliminated_by_case_authority {
+                continue;
+            }
+            let RuntimeExpr::CheckedComputationalIHSlots {
+                slot_template_ids,
+                ..
+            } = occurrence.expr
+            else {
+                continue;
+            };
+            let template = slot_template_ids.get(slot_ordinal).ok_or_else(|| {
+                planner_error("continuation recursive position has no checked slot template")
+            })?;
+            worker_slot_templates.insert(*template);
+        }
+    }
+    if worker_slot_templates.is_empty() {
+        return Ok(BTreeSet::new());
+    }
+    let mut worker_calls = BTreeSet::new();
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        let RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id,
+            body,
+            ..
+        } = occurrence.expr
+        else {
+            continue;
+        };
+        if !matches!(body.as_ref(), RuntimeExpr::Call { .. })
+            || !plan
+                .computational_ih_call_slots
+                .get(call_template_id)
+                .is_some_and(|slot| worker_slot_templates.contains(slot))
+            || !plan
+                .emitted_source_occurrences
+                .contains(&(specialization.function, occurrence.static_origin))
+            || !plan.source_origin_is_in_subtree(
+                specialization.key.continuation_origin,
+                occurrence.static_origin,
+            )?
+        {
+            continue;
+        }
+        let mut enclosing_cases = Vec::new();
+        for record in plan
+            .case_emissions
+            .iter()
+            .filter(|record| record.owner == specialization.function)
+        {
+            if let Some(distance) =
+                source_descendant_distance(plan, record.body_origin, occurrence.static_origin)?
+            {
+                enclosing_cases.push((distance, record));
+            }
+        }
+        enclosing_cases.sort_by_key(|(distance, _)| *distance);
+        if enclosing_cases
+            .iter()
+            .any(|(_, record)| record.status == CaseEmissionStatus::Eliminated)
+        {
+            continue;
+        }
+        worker_calls.insert(
+            plan.semantic
+                .child_origin(occurrence.static_origin, 0)?,
+        );
+    }
+    Ok(worker_calls)
+}
+
+fn derive_continuation_specializations(
+    plan: &StaticTransitionPlan<'_>,
+    analysis: &ProducerAnalysis<'_, '_>,
+) -> Result<
+    (
+        Vec<PlannedContinuationSpecialization>,
+        Vec<PlannedContinuationSpecializationCall>,
+    ),
+    CraneliftBackendError,
+> {
+    fn required_external_environment(
+        expr: &RuntimeExpr,
+        bound: u32,
+    ) -> Result<u32, CraneliftBackendError> {
+        fn shifted(bound: u32, binders: usize) -> Result<u32, CraneliftBackendError> {
+            bound
+                .checked_add(
+                    u32::try_from(binders).map_err(|_| {
+                        planner_capacity_error(
+                            "continuation specialization binder depth exhausted",
+                        )
+                    })?,
+                )
+                .ok_or_else(|| {
+                    planner_capacity_error(
+                        "continuation specialization binder depth exhausted",
+                    )
+                })
+        }
+
+        fn maximum(
+            expressions: impl IntoIterator<Item = Result<u32, CraneliftBackendError>>,
+        ) -> Result<u32, CraneliftBackendError> {
+            expressions
+                .into_iter()
+                .try_fold(0, |maximum, count| Ok(maximum.max(count?)))
+        }
+
+        match expr {
+            RuntimeExpr::Var(index) if *index >= bound => index
+                .checked_sub(bound)
+                .and_then(|index| index.checked_add(1))
+                .ok_or_else(|| {
+                    planner_capacity_error(
+                        "continuation specialization environment exhausted",
+                    )
+                }),
+            RuntimeExpr::Var(_) => Ok(0),
+            RuntimeExpr::CheckedJoinSite { body, .. }
+            | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+            | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+            | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+            | RuntimeExpr::CheckedComputationalIHInvocation { body, .. }
+            | RuntimeExpr::Project { record: body, .. } => {
+                required_external_environment(body, bound)
+            }
+            RuntimeExpr::Let { value, body } => Ok(required_external_environment(value, bound)?
+                .max(required_external_environment(body, shifted(bound, 1)?)?)),
+            RuntimeExpr::If {
+                scrutinee,
+                then_expr,
+                else_expr,
+            } => maximum([
+                required_external_environment(scrutinee, bound),
+                required_external_environment(then_expr, bound),
+                required_external_environment(else_expr, bound),
+            ]),
+            RuntimeExpr::PrimitiveCall { args, .. }
+            | RuntimeExpr::Construct { args, .. } => maximum(
+                args.iter()
+                    .map(|argument| required_external_environment(argument, bound)),
+            ),
+            RuntimeExpr::Match {
+                scrutinee, cases, ..
+            } => maximum(
+                std::iter::once(required_external_environment(scrutinee, bound)).chain(
+                    cases.iter().map(|case| {
+                        required_external_environment(
+                            &case.body,
+                            shifted(bound, case.binders)?,
+                        )
+                    }),
+                ),
+            ),
+            RuntimeExpr::ComputationalMatch {
+                scrutinee, cases, ..
+            } => maximum(
+                std::iter::once(required_external_environment(scrutinee, bound)).chain(
+                    cases.iter().map(|case| {
+                        let binders = case
+                            .argument_binders
+                            .checked_add(case.recursive_positions.len())
+                            .ok_or_else(|| {
+                                planner_capacity_error(
+                                    "continuation specialization binder population exhausted",
+                                )
+                            })?;
+                        required_external_environment(
+                            &case.body,
+                            shifted(bound, binders)?,
+                        )
+                    }),
+                ),
+            ),
+            RuntimeExpr::Record { fields } => maximum(
+                fields
+                    .iter()
+                    .map(|(_, value)| required_external_environment(value, bound)),
+            ),
+            RuntimeExpr::LexicalClosure { captures, .. } => maximum(
+                captures
+                    .iter()
+                    .map(|capture| required_external_environment(capture, bound)),
+            ),
+            RuntimeExpr::Call { callee, args } => maximum(
+                std::iter::once(required_external_environment(callee, bound)).chain(
+                    args.iter()
+                        .map(|argument| required_external_environment(argument, bound)),
+                ),
+            ),
+            RuntimeExpr::Effect {
+                capability, args, ..
+            } => maximum(
+                capability
+                    .iter()
+                    .map(|capability| {
+                        required_external_environment(&capability.value, bound)
+                    })
+                    .chain(
+                        args.iter()
+                            .map(|argument| required_external_environment(argument, bound)),
+                    ),
+            ),
+            RuntimeExpr::Closure { .. }
+            | RuntimeExpr::Value(_)
+            | RuntimeExpr::DeclarationRef { .. }
+            | RuntimeExpr::ImportedDeclarationRef { .. }
+            | RuntimeExpr::Trap(_) => Ok(0),
+        }
+    }
+
+    fn diagnostic_shape(expr: &RuntimeExpr) -> &'static str {
+        match expr {
+            RuntimeExpr::CheckedJoinSite { .. } => "CheckedJoinSite",
+            RuntimeExpr::CheckedSubcontinuationFrame { .. } => {
+                "CheckedSubcontinuationFrame"
+            }
+            RuntimeExpr::CheckedRecursiveInvocation { .. } => {
+                "CheckedRecursiveInvocation"
+            }
+            RuntimeExpr::CheckedComputationalIHSlots { .. } => {
+                "CheckedComputationalIHSlots"
+            }
+            RuntimeExpr::CheckedComputationalIHInvocation { .. } => {
+                "CheckedComputationalIHInvocation"
+            }
+            RuntimeExpr::Value(_) => "Value",
+            RuntimeExpr::Var(_) => "Var",
+            RuntimeExpr::Let { .. } => "Let",
+            RuntimeExpr::If { .. } => "If",
+            RuntimeExpr::PrimitiveCall { .. } => "PrimitiveCall",
+            RuntimeExpr::Construct { .. } => "Construct",
+            RuntimeExpr::Match { .. } => "Match",
+            RuntimeExpr::ComputationalMatch { .. } => "ComputationalMatch",
+            RuntimeExpr::Record { .. } => "Record",
+            RuntimeExpr::Project { .. } => "Project",
+            RuntimeExpr::Closure { .. } => "Closure",
+            RuntimeExpr::LexicalClosure { .. } => "LexicalClosure",
+            RuntimeExpr::DeclarationRef { .. } => "DeclarationRef",
+            RuntimeExpr::ImportedDeclarationRef { .. } => {
+                "ImportedDeclarationRef"
+            }
+            RuntimeExpr::Call { .. } => "Call",
+            RuntimeExpr::Effect { .. } => "Effect",
+            RuntimeExpr::Trap(_) => "Trap",
+        }
+    }
+    for origin in [
+        442, 455, 465, 505, 641, 650, 655, 665, 723, 731, 741, 761,
+    ] {
+        let origin = StaticOriginId(origin);
+        let occurrence = plan.source_occurrence(origin);
+        let detail = occurrence.map(|expr| match expr {
+            RuntimeExpr::Construct { constructor, args } => format!(
+                "Construct({constructor}, {:?})",
+                args.iter().map(diagnostic_shape).collect::<Vec<_>>(),
+            ),
+            RuntimeExpr::LexicalClosure {
+                captures,
+                params,
+                body,
+            } => format!(
+                "LexicalClosure(captures={}, params={}, body={})",
+                captures.len(),
+                params.len(),
+                diagnostic_shape(body.as_ref()),
+            ),
+            expr => diagnostic_shape(expr).to_string(),
+        });
+        eprintln!("CONTSPEC_SOURCE_SHAPE origin={origin:?} detail={detail:?}");
+    }
+    for target in [StaticOriginId(126), StaticOriginId(146)] {
+        let mut paths = Vec::new();
+        for candidate in plan.source_occurrences.iter().flatten() {
+            if source_descendant_distance(plan, candidate.static_origin, target)?
+                .is_some()
+            {
+                paths.push((
+                    source_descendant_distance(plan, candidate.static_origin, target)?
+                        .expect("a containing source occurrence has a distance"),
+                    candidate.static_origin,
+                    diagnostic_shape(candidate.expr),
+                ));
+            }
+        }
+        paths.sort_by_key(|(distance, _, _)| std::cmp::Reverse(*distance));
+        eprintln!("CONTSPEC_INVOCATION_PATH target={target:?} path={paths:?}");
+    }
+    fn same_static_identity(
+        existing: &ContinuationSpecializationKey,
+        requested: &ContinuationSpecializationKey,
+    ) -> bool {
+        existing.producer_owner == requested.producer_owner
+            && same_static_unit_identity(existing, requested)
+    }
+
+    fn same_static_unit_identity(
+        existing: &ContinuationSpecializationKey,
+        requested: &ContinuationSpecializationKey,
+    ) -> bool {
+        existing.producer_result_origin
+                == requested.producer_result_origin
+            && existing.producer_construct_origin
+                == requested.producer_construct_origin
+            && existing.consumer_owner == requested.consumer_owner
+            && existing.continuation_origin == requested.continuation_origin
+            && existing.checked_frame_id == requested.checked_frame_id
+            && existing.recursive_position == requested.recursive_position
+            && existing.worker_closure_origin
+                == requested.worker_closure_origin
+            && existing.worker_body_origin == requested.worker_body_origin
+            && existing.worker_declared_arity
+                == requested.worker_declared_arity
+            && existing.worker_captures == requested.worker_captures
+            && existing.producer_fields_flattened
+                == requested.producer_fields_flattened
+            && existing.ordinary_parameters
+                == requested.ordinary_parameters
+            && existing.continuation_environment_is_extension
+                == requested.continuation_environment_is_extension
+    }
+
+    fn reuse_specialization(
+        specializations: &mut [PlannedContinuationSpecialization],
+        requested: &ContinuationSpecializationKey,
+    ) -> Option<ContinuationSpecializationId> {
+        let reusable = specializations.iter().position(|specialization| {
+            if same_static_identity(&specialization.key, requested) {
+                return true;
+            }
+            if !same_static_unit_identity(&specialization.key, requested) {
+                return false;
+            }
+            let existing_producer = specializations
+                .iter()
+                .find(|producer| {
+                    producer.function == specialization.key.producer_owner
+                });
+            let requested_producer = specializations
+                .iter()
+                .find(|producer| producer.function == requested.producer_owner);
+            matches!(
+                (existing_producer, requested_producer),
+                (Some(existing_producer), Some(requested_producer))
+                    if same_static_unit_identity(
+                        &existing_producer.key,
+                        &requested_producer.key,
+                    )
+            )
+        })?;
+        let specialization = &mut specializations[reusable];
+        specialization.key.producer_base_inputs = specialization
+            .key
+            .producer_base_inputs
+            .max(requested.producer_base_inputs);
+        specialization.key.continuation_captures = specialization
+            .key
+            .continuation_captures
+            .max(requested.continuation_captures);
+        specialization.key.continuation_environment_is_local |=
+            requested.continuation_environment_is_local;
+        Some(specialization.id)
+    }
+
+    let mut interned = plan
+        .continuation_specializations
+        .iter()
+        .map(|specialization| (specialization.key.clone(), specialization.id))
+        .collect::<BTreeMap<_, _>>();
+    let mut specializations = plan.continuation_specializations.clone();
+    let mut calls = plan
+        .continuation_specialization_calls
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let mut producer_alternatives = BTreeMap::new();
+    for ((origin, owner), fact) in &analysis.match_scrutinees {
+        if origin.0 == 268 {
+            eprintln!(
+                "CONTSPEC_MATCH_FACT owner={owner:?} origin={origin:?} fact={fact:?}"
+            );
+        }
+    }
+    for ((continuation_origin, consumer_owner), scrutinee) in &analysis.computational_scrutinees {
+        if (12..=18).contains(&consumer_owner.0) {
+            let environment = analysis
+                .computational_continuation_environments
+                .get(&(*continuation_origin, *consumer_owner));
+            eprintln!(
+                "CONTSPEC_ENV_PROJECTION consumer={consumer_owner:?} continuation={:?} \
+                 environment_len={:?} equal_inputs={:?}",
+                continuation_origin,
+                environment.map(Vec::len),
+                environment.map(|environment| {
+                    analysis
+                        .inputs
+                        .get(consumer_owner)
+                        .map(|inputs| {
+                            environment
+                                .iter()
+                                .map(|value| {
+                                    inputs
+                                        .iter()
+                                        .enumerate()
+                                        .filter_map(|(position, input)| {
+                                            (value == input).then_some(position)
+                                        })
+                                        .collect::<Vec<_>>()
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                }),
+            );
+        }
+        let active_consumer_specialization = plan
+            .continuation_specialization_for_function(*consumer_owner)
+            .and_then(|id| plan.continuation_specializations.get(id.0 as usize))
+            .filter(|specialization| {
+                specialization.key.continuation_origin == *continuation_origin
+            });
+        let continuation_consumer_owner = active_consumer_specialization
+            .map(|specialization| specialization.key.consumer_owner)
+            .unwrap_or(*consumer_owner);
+        if active_consumer_specialization.is_some() {
+            eprintln!(
+                "CONTSPEC_GENERATED_SCRUTINEE owner={consumer_owner:?} \
+                 continuation={continuation_origin:?} payloads={:?}",
+                scrutinee
+                    .constructor_payloads
+                    .iter()
+                    .map(|(identity, occurrence, _)| (
+                        identity,
+                        occurrence.producer_owner,
+                        occurrence.producer_origin,
+                        &occurrence.child_callables,
+                    ))
+                    .collect::<Vec<_>>(),
+            );
+        }
+        let occurrence = plan.source_occurrence(*continuation_origin)?;
+        let RuntimeExpr::ComputationalMatch { cases, .. } = occurrence else {
+            return Err(planner_error(
+                "continuation specialization authority names a non-computational match",
+            ));
+        };
+        let observed_continuation_inputs = analysis
+            .computational_continuation_inputs
+            .get(&(*continuation_origin, *consumer_owner))
+            .copied()
+            .or_else(|| {
+                active_consumer_specialization
+                    .map(|consumer| consumer.key.continuation_captures)
+            })
+            .or_else(|| {
+                plan.abi
+                    .descriptors
+                    .iter()
+                    .find(|descriptor| descriptor.function == *consumer_owner)
+                    .and_then(|descriptor| {
+                        descriptor
+                            .header
+                            .parameters
+                            .checked_add(descriptor.header.captures)
+                    })
+            })
+            .ok_or_else(|| {
+                planner_error("continuation consumer has no exact ABI environment")
+            })?;
+        let consumer_environment_floor = active_consumer_specialization
+            .map(|consumer| consumer.key.continuation_captures)
+            .or_else(|| {
+                plan.abi
+                    .descriptors
+                    .iter()
+                    .find(|descriptor| descriptor.function == *consumer_owner)
+                    .and_then(|descriptor| {
+                        descriptor
+                            .header
+                            .parameters
+                            .checked_add(descriptor.header.captures)
+                    })
+                    .and_then(|inputs| {
+                        continuation_producer_capture_extension(
+                            &plan.continuation_specializations,
+                            *consumer_owner,
+                        )
+                        .ok()
+                        .and_then(|extension| inputs.checked_sub(extension))
+                    })
+            })
+            .ok_or_else(|| {
+                planner_error("continuation consumer has no intrinsic ABI environment")
+            })?;
+        let required_continuation_inputs = cases
+            .iter()
+            .map(|case| {
+                let binders = case
+                    .argument_binders
+                    .checked_add(case.recursive_positions.len())
+                    .ok_or_else(|| {
+                        planner_capacity_error(
+                            "continuation specialization binder population exhausted",
+                        )
+                    })?;
+                required_external_environment(
+                    &case.body,
+                    u32::try_from(binders).map_err(|_| {
+                        planner_capacity_error(
+                            "continuation specialization binder population exhausted",
+                        )
+                    })?,
+                )
+            })
+            .try_fold(0u32, |maximum, count| Ok(maximum.max(count?)))?;
+        let continuation_capture_floor =
+            consumer_environment_floor.max(required_continuation_inputs);
+        if continuation_capture_floor > observed_continuation_inputs {
+            return Err(planner_error(
+                "continuation specialization requires an unavailable caller environment",
+            ));
+        }
+        for (identity, payload_occurrence, payload) in &scrutinee.constructor_payloads {
+            let generated_terminal_completion =
+                active_consumer_specialization.is_some_and(|active| {
+                    if payload_occurrence.producer_owner != active.function {
+                        return false;
+                    }
+                    let terminal_result = plan
+                        .source_occurrence(payload_occurrence.producer_origin)
+                        .ok()
+                        .and_then(|expr| match expr {
+                            RuntimeExpr::Construct { constructor, .. } => {
+                                Some(cases.iter().any(|case| {
+                                    case.constructor == *constructor
+                                        && case.recursive_positions.is_empty()
+                                }))
+                            }
+                            _ => None,
+                        })
+                        .unwrap_or(false);
+                    terminal_result
+                        && specializations.iter().any(|candidate| {
+                            candidate.worker.closure_origin
+                                == active.worker.closure_origin
+                                && candidate.worker.body_origin
+                                    == active.worker.body_origin
+                                && candidate.worker.declared_arity
+                                    == active.worker.declared_arity
+                                && candidate.worker.captures
+                                    == active.worker.captures
+                                && candidate.key.continuation_origin
+                                    != active.key.continuation_origin
+                                && source_descendant_distance(
+                                    plan,
+                                    candidate.key.continuation_origin,
+                                    active.key.continuation_origin,
+                                )
+                                .ok()
+                                .flatten()
+                                .is_some()
+                        })
+                });
+            if let Some(producer) = plan
+                .continuation_specialization_for_function(payload_occurrence.producer_owner)
+                .and_then(|id| plan.continuation_specializations.get(id.0 as usize))
+            {
+                let producer_continuation = producer.key.continuation_origin;
+                if producer_continuation == *continuation_origin
+                    || source_descendant_distance(
+                        plan,
+                        producer_continuation,
+                        *continuation_origin,
+                    )?
+                    .is_some()
+                {
+                    if generated_terminal_completion {
+                        // This generated terminal result has finished the
+                        // active inner return hole and must form its exact
+                        // direct edge to the nearest outer hole below.
+                    } else {
+                    // The producer unit has already consumed this return hole
+                    // and every hole structurally below it. Recursive results
+                    // at the same hole are bound separately to exact emitted
+                    // worker-call origins below; rediscovering either class
+                    // through the joined source graph would create a second
+                    // consumer for one causal result.
+                    continue;
+                    }
+                }
+            }
+            let outer_consumer_specialization = active_consumer_specialization
+                .and_then(|active| {
+                    specializations
+                        .iter()
+                        .filter(|candidate| {
+                            candidate.worker.closure_origin
+                                == active.worker.closure_origin
+                                && candidate.worker.body_origin
+                                    == active.worker.body_origin
+                                && candidate.worker.declared_arity
+                                    == active.worker.declared_arity
+                                && candidate.worker.captures
+                                    == active.worker.captures
+                                && candidate.key.continuation_origin
+                                    != active.key.continuation_origin
+                        })
+                        .filter_map(|candidate| {
+                            source_descendant_distance(
+                                plan,
+                                candidate.key.continuation_origin,
+                                active.key.continuation_origin,
+                            )
+                            .ok()
+                            .flatten()
+                            .map(|distance| (distance, candidate.clone()))
+                        })
+                        .min_by_key(|(distance, _)| *distance)
+                        .map(|(_, candidate)| candidate)
+                });
+            if let (Some(active), Some(outer)) = (
+                active_consumer_specialization,
+                outer_consumer_specialization.as_ref(),
+            ) {
+                let producer_expr =
+                    plan.source_occurrence(payload_occurrence.producer_origin)?;
+                if let RuntimeExpr::Construct { constructor, args } = producer_expr {
+                    let terminal_case = cases.iter().any(|case| {
+                        case.constructor == *constructor
+                            && case.recursive_positions.is_empty()
+                    });
+                    if terminal_case
+                        && payload_occurrence.producer_owner
+                            == active.function
+                    {
+                        let producer_owner = payload_occurrence.producer_owner;
+                        let producer_descriptor = plan
+                            .abi
+                            .descriptors
+                            .iter()
+                            .find(|descriptor| {
+                                descriptor.function == producer_owner
+                            })
+                            .ok_or_else(|| {
+                                planner_error(
+                                    "terminal continuation producer has no ABI descriptor",
+                                )
+                            })?;
+                        let producer_extension =
+                            continuation_producer_capture_extension(
+                                &plan.continuation_specializations,
+                                producer_owner,
+                            )?;
+                        let producer_base_inputs = producer_descriptor
+                            .header
+                            .parameters
+                            .checked_add(producer_descriptor.header.captures)
+                            .and_then(|count| {
+                                count.checked_sub(producer_extension)
+                            })
+                            .ok_or_else(|| {
+                                planner_capacity_error(
+                                    "terminal continuation producer input population exhausted",
+                                )
+                            })?;
+                        let mut key = outer.key.clone();
+                        key.producer_owner = producer_owner;
+                        key.producer_result_origin =
+                            payload_occurrence.producer_origin;
+                        key.producer_construct_origin =
+                            payload_occurrence.producer_origin;
+                        key.producer_base_inputs = producer_base_inputs;
+                        key.producer_fields_flattened = true;
+                        key.ordinary_parameters =
+                            u32::try_from(args.len()).map_err(|_| {
+                                planner_capacity_error(
+                                    "terminal continuation result arity exhausted",
+                                )
+                            })?;
+                        let target_consumer_owner = key.consumer_owner;
+                        let target_continuation_origin =
+                            key.continuation_origin;
+                        let id = if let Some(id) = specializations
+                            .iter()
+                            .find(|specialization| {
+                                same_static_identity(
+                                    &specialization.key,
+                                    &key,
+                                ) && specialization.worker == outer.worker
+                            })
+                            .map(|specialization| specialization.id)
+                        {
+                            id
+                        } else if let Some(id) =
+                            reuse_specialization(&mut specializations, &key)
+                        {
+                            id
+                        } else {
+                            let id = ContinuationSpecializationId(
+                                u32::try_from(interned.len()).map_err(|_| {
+                                    planner_capacity_error(
+                                        "continuation specialization identity exhausted",
+                                    )
+                                })?,
+                            );
+                            interned.insert(key.clone(), id);
+                            let base_descriptor_count = plan
+                                .abi
+                                .descriptors
+                                .len()
+                                .checked_sub(
+                                    plan.continuation_specializations.len(),
+                                )
+                                .ok_or_else(|| {
+                                    planner_error(
+                                        "continuation specialization ABI population underflowed",
+                                    )
+                                })?;
+                            let function = PredeclaredFunctionId(
+                                u32::try_from(
+                                    base_descriptor_count
+                                        .checked_add(specializations.len())
+                                        .ok_or_else(|| {
+                                            planner_capacity_error(
+                                                "continuation specialization function exhausted",
+                                            )
+                                        })?,
+                                )
+                                .map_err(|_| {
+                                    planner_capacity_error(
+                                        "continuation specialization function exhausted",
+                                    )
+                                })?,
+                            );
+                            specializations.push(
+                                PlannedContinuationSpecialization {
+                                    id,
+                                    function,
+                                    key,
+                                    worker: outer.worker.clone(),
+                                },
+                            );
+                            id
+                        };
+                        let alternative = producer_alternatives
+                            .entry((
+                                producer_owner,
+                                payload_occurrence.producer_origin,
+                                payload_occurrence.producer_origin,
+                                target_consumer_owner,
+                                target_continuation_origin,
+                                active.worker.body_origin,
+                            ))
+                            .or_insert(0u32);
+                        let producer_alternative =
+                            if payload_occurrence.producer_origin
+                                == active.worker.body_origin
+                            {
+                                0
+                            } else {
+                                let producer_alternative = *alternative;
+                                *alternative = alternative.checked_add(1).ok_or_else(
+                                    || {
+                                        planner_capacity_error(
+                                            "terminal continuation alternative population exhausted",
+                                        )
+                                    },
+                                )?;
+                                producer_alternative
+                            };
+                        let continuation_distance =
+                            if let Some(distance) =
+                                source_descendant_distance(
+                                    plan,
+                                    target_continuation_origin,
+                                    payload_occurrence.producer_origin,
+                                )?
+                            {
+                                distance
+                            } else if let Some(producer) = plan
+                                .continuation_specialization_for_function(
+                                    producer_owner,
+                                )
+                                .and_then(|producer_id| {
+                                    plan.continuation_specializations
+                                        .get(producer_id.0 as usize)
+                                })
+                            {
+                                source_descendant_distance(
+                                    plan,
+                                    producer.key.continuation_origin,
+                                    payload_occurrence.producer_origin,
+                                )?
+                                .ok_or_else(|| {
+                                    planner_error(
+                                        "terminal continuation result has no exact emitted source occurrence",
+                                    )
+                                })?
+                                .checked_add(1)
+                                .ok_or_else(|| {
+                                    planner_capacity_error(
+                                        "terminal continuation distance exhausted",
+                                    )
+                                })?
+                            } else {
+                                return Err(planner_error(
+                                    "terminal continuation result has no enclosing source path",
+                                ));
+                            };
+                        calls.insert(
+                            PlannedContinuationSpecializationCall {
+                                producer_owner,
+                                producer_result_origin:
+                                    payload_occurrence.producer_origin,
+                                producer_construct_origin:
+                                    payload_occurrence.producer_origin,
+                                producer_alternative,
+                                continuation_distance,
+                                consumer_owner: target_consumer_owner,
+                                worker_body_origin:
+                                    active.worker.body_origin,
+                                specialization: id,
+                            },
+                        );
+                        continue;
+                    }
+                }
+            }
+            let recursive_positions = cases
+                .iter()
+                .enumerate()
+                .filter_map(|(case_index, case)| {
+                    (plan
+                        .semantic
+                        .case_constructor_identity(*continuation_origin, case_index)
+                        .ok()
+                        == Some(*identity))
+                    .then_some(&case.recursive_positions)
+                })
+                .flatten()
+                .copied()
+                .collect::<BTreeSet<_>>();
+            for position in recursive_positions {
+                let callable_set = payload_occurrence
+                    .child_callables
+                    .get(position)
+                    .or_else(|| payload.get(position).map(|value| &value.callables))
+                    .ok_or_else(|| {
+                        planner_error(
+                            "continuation specialization recursive position has no payload",
+                        )
+                    })?;
+                let ProducerCallableSet::Closed(callables) = callable_set else {
+                    return Err(planner_error(format!(
+                        "continuation specialization worker population is open: \
+                         continuation={continuation_origin:?}, consumer={consumer_owner:?}, \
+                         producer={:?}, position={position}",
+                        payload_occurrence.producer_origin,
+                    )));
+                };
+                if callables.is_empty() {
+                    continue;
+                }
+                for callable in callables {
+                    let shares_joined_source_origin = scrutinee
+                        .constructor_payloads
+                        .iter()
+                        .filter(|(_, candidate, _)| {
+                            candidate.producer_owner == payload_occurrence.producer_owner
+                                && candidate.producer_origin == payload_occurrence.producer_origin
+                        })
+                        .count()
+                        > 1;
+                    let causal_result_origin = if shares_joined_source_origin {
+                        callable.closure_origin
+                    } else {
+                        payload_occurrence.producer_origin
+                    };
+                    // A computational recursor retains the complete checked
+                    // frame environment, not only the prefix referenced
+                    // directly by the selected case body. Recursive IH
+                    // invocation can re-enter another case, so trimming this
+                    // to `required_external_environment` loses live caller
+                    // values after the first host result.
+                    let continuation_captures = observed_continuation_inputs;
+                    let closure = plan
+                        .source_occurrences
+                        .get(callable.closure_origin.0 as usize)
+                        .and_then(Option::as_ref)
+                        .ok_or_else(|| {
+                            planner_error(
+                                "continuation specialization worker has no closure occurrence",
+                            )
+                        })?;
+                    let producer_construct_origin =
+                        if causal_result_origin == callable.closure_origin {
+                            let mut exact_constructs = Vec::new();
+                            for candidate in plan.source_occurrences.iter().flatten() {
+                                let RuntimeExpr::Construct { args, .. } = candidate.expr else {
+                                    continue;
+                                };
+                                if position >= args.len()
+                                    || plan
+                                        .semantic
+                                        .function_owner(candidate.static_origin)?
+                                        != Some(payload_occurrence.producer_owner)
+                                    || plan
+                                        .semantic
+                                        .constructor_symbol_identity(candidate.static_origin)?
+                                        != *identity
+                                {
+                                    continue;
+                                }
+                                let recursive_child = plan
+                                    .semantic
+                                    .child_origin(candidate.static_origin, position)?;
+                                if let Some(distance) = source_descendant_distance(
+                                    plan,
+                                    recursive_child,
+                                    callable.closure_origin,
+                                )? {
+                                    exact_constructs.push((distance, candidate.static_origin));
+                                }
+                            }
+                            exact_constructs
+                                .into_iter()
+                                .min()
+                                .map(|(_, origin)| origin)
+                                .unwrap_or(payload_occurrence.producer_origin)
+                        } else {
+                            payload_occurrence.producer_origin
+                        };
+                    let worker = build_static_recursor_worker_residual(
+                        plan,
+                        *continuation_origin,
+                        payload_occurrence.producer_origin,
+                        position,
+                        closure,
+                    )?;
+                    if worker.body_origin != callable.body_origin {
+                        return Err(planner_error(
+                            "continuation specialization callable body disagrees with its closure",
+                        ));
+                    }
+                    if active_consumer_specialization.is_some_and(|active| {
+                        active.key.producer_owner == payload_occurrence.producer_owner
+                            && active.key.producer_result_origin == causal_result_origin
+                            && active.key.producer_construct_origin == producer_construct_origin
+                            && active.worker.closure_origin == worker.closure_origin
+                            && active.worker.body_origin == worker.body_origin
+                            && active.worker.declared_arity == worker.declared_arity
+                            && active.worker.captures == worker.captures
+                    }) {
+                        // This is the exact producer alternative already
+                        // consumed by the active out-of-line unit. Other
+                        // alternatives observed after invoking its worker are
+                        // new causal result edges and must be interned before
+                        // the same-tag result joins back into this match.
+                        continue;
+                    }
+                    // The exact source branch is the emitted producer
+                    // occurrence. A generated continuation unit forwards its
+                    // caller environment into this worker; the worker branch
+                    // then calls the selected return-hole unit before its
+                    // result reaches an identity-erasing join.
+                    let producer_owner = payload_occurrence.producer_owner;
+                    let producer_descriptor = plan
+                        .abi
+                        .descriptors
+                        .iter()
+                        .find(|descriptor| descriptor.function == producer_owner)
+                        .ok_or_else(|| {
+                            planner_error(
+                                "continuation specialization producer has no ABI descriptor",
+                            )
+                        })?;
+                    let producer_extension = continuation_producer_capture_extension(
+                        &plan.continuation_specializations,
+                        producer_owner,
+                    )?;
+                    let producer_base_inputs = producer_descriptor
+                        .header
+                        .parameters
+                        .checked_add(producer_descriptor.header.captures)
+                        .and_then(|count| count.checked_sub(producer_extension))
+                        .ok_or_else(|| {
+                            planner_capacity_error(
+                                "continuation producer input population exhausted",
+                            )
+                        })?;
+                    let checked_frame_id =
+                        plan.checked_subcontinuation_frame_for_match(*continuation_origin)?;
+                    let recursive_producer = plan
+                        .continuation_specialization_for_function(producer_owner)
+                        .and_then(|producer_id| {
+                            plan.continuation_specializations
+                                .get(producer_id.0 as usize)
+                        })
+                        .filter(|producer| {
+                            producer.key.consumer_owner
+                                == continuation_consumer_owner
+                                && producer.key.continuation_origin == *continuation_origin
+                                && producer.key.checked_frame_id == checked_frame_id
+                                && producer.worker.closure_origin == worker.closure_origin
+                                && producer.worker.body_origin == worker.body_origin
+                                && producer.worker.declared_arity == worker.declared_arity
+                                && producer.worker.captures == worker.captures
+                        });
+                    // An edge formed at an exact source `Construct`
+                    // occurrence carries its ordered fields directly into
+                    // the out-of-line return hole, before the constructor
+                    // reaches its identity-erasing result join. A generated
+                    // unit-result completion has no live branch fields and
+                    // remains one carried result.
+                    let producer_fields_flattened = matches!(
+                        plan.source_occurrence(producer_construct_origin)?,
+                        RuntimeExpr::Construct { .. }
+                    );
+                    let key = ContinuationSpecializationKey {
+                        producer_owner,
+                        producer_result_origin: causal_result_origin,
+                        producer_construct_origin,
+                        consumer_owner: continuation_consumer_owner,
+                        continuation_origin: *continuation_origin,
+                        checked_frame_id,
+                        recursive_position: u32::try_from(position).map_err(|_| {
+                            planner_capacity_error("continuation specialization position exhausted")
+                        })?,
+                        worker_closure_origin: worker.closure_origin,
+                        worker_body_origin: worker.body_origin,
+                        worker_declared_arity: worker.declared_arity,
+                        worker_captures: worker.captures.clone(),
+                        producer_base_inputs,
+                        producer_fields_flattened,
+                        ordinary_parameters: if producer_fields_flattened {
+                            u32::try_from(
+                                payload
+                                    .len()
+                                    .checked_sub(1)
+                                    .and_then(|count| {
+                                        count.checked_add(worker.captures.len())
+                                    })
+                                    .ok_or_else(|| {
+                                        planner_capacity_error(
+                                            "continuation specialization result arity exhausted",
+                                        )
+                                    })?,
+                            )
+                            .map_err(|_| {
+                                planner_capacity_error(
+                                    "continuation specialization result arity exhausted",
+                                )
+                            })?
+                        } else {
+                            1
+                        },
+                        continuation_captures,
+                        continuation_environment_is_local:
+                            observed_continuation_inputs > consumer_environment_floor,
+                        continuation_environment_is_extension: false,
+                    };
+                    let recursive_fold = recursive_producer.map(|producer| producer.id);
+                    let id = if let Some(id) = recursive_fold {
+                        id
+                    } else if let Some(id) =
+                        reuse_specialization(&mut specializations, &key)
+                    {
+                        id
+                    } else {
+                        // Intern before any recursive discovery. This exact
+                        // insertion is what folds A→B→A back to a finite id.
+                        let id = ContinuationSpecializationId(
+                            u32::try_from(interned.len()).map_err(|_| {
+                                planner_capacity_error(
+                                    "continuation specialization identity exhausted",
+                                )
+                            })?,
+                        );
+                        interned.insert(key.clone(), id);
+                        let base_descriptor_count = plan
+                            .abi
+                            .descriptors
+                            .len()
+                            .checked_sub(plan.continuation_specializations.len())
+                            .ok_or_else(|| {
+                                planner_error(
+                                    "continuation specialization ABI population underflowed",
+                                )
+                            })?;
+                        let function = PredeclaredFunctionId(
+                            u32::try_from(
+                                base_descriptor_count
+                                    .checked_add(specializations.len())
+                                    .ok_or_else(|| {
+                                        planner_capacity_error(
+                                            "continuation specialization function exhausted",
+                                        )
+                                    })?,
+                            )
+                            .map_err(|_| {
+                                planner_capacity_error(
+                                    "continuation specialization function exhausted",
+                                )
+                            })?,
+                        );
+                        specializations.push(PlannedContinuationSpecialization {
+                            id,
+                            function,
+                            key: key.clone(),
+                            worker: worker.clone(),
+                        });
+                        id
+                    };
+                    let payload_alternatives = payload_occurrence
+                        .child_constructors
+                        .iter()
+                        .zip(&payload_occurrence.child_payload_alternatives)
+                        .enumerate()
+                        .filter(|(child_position, _)| *child_position != position)
+                        .try_fold(1usize, |count, (_, (population, payload_count))| {
+                            let constructor_alternatives = match population {
+                                ScrutineeProducerSet::Open => 1,
+                                ScrutineeProducerSet::Closed(identities) => {
+                                    identities.len().max(1)
+                                }
+                            };
+                            let alternatives = constructor_alternatives.max(
+                                usize::try_from(*payload_count).map_err(|_| {
+                                    planner_capacity_error(
+                                        "continuation child alternative population exhausted",
+                                    )
+                                })?,
+                            );
+                            count.checked_mul(alternatives).ok_or_else(|| {
+                                planner_capacity_error(
+                                    "continuation producer alternative population exhausted",
+                                )
+                            })
+                        })?;
+                    let direct_computational_result = plan
+                        .source_occurrences
+                        .iter()
+                        .flatten()
+                        .find_map(|candidate| {
+                            let children = plan
+                                .semantic
+                                .child_origins(candidate.static_origin)
+                                .ok()?;
+                            let child_position = children
+                                .iter()
+                                .position(|origin| *origin == causal_result_origin)?;
+                            matches!(
+                                plan.source_occurrence(candidate.static_origin).ok()?,
+                                RuntimeExpr::ComputationalMatch { .. }
+                            )
+                            .then_some((candidate.static_origin, child_position))
+                        })
+                        .filter(|(_, child_position)| *child_position > 0);
+                    let emitted_alternatives =
+                        if let Some((computational_origin, _)) =
+                            direct_computational_result
+                        {
+                            let local_alternatives = analysis
+                                .computational_results
+                                .get(&(computational_origin, producer_owner))
+                                .map(emitted_result_alternatives)
+                                .transpose()?
+                                .unwrap_or(payload_alternatives)
+                                .max(1);
+                            local_alternatives.max(
+                                analysis
+                                    .computational_results
+                                    .get(&(*continuation_origin, *consumer_owner))
+                                    .map(emitted_result_alternatives)
+                                    .transpose()?
+                                    .unwrap_or(1)
+                                    .max(1),
+                            )
+                        } else {
+                            payload_alternatives
+                        };
+                    if causal_result_origin.0 == 455 {
+                        let alternative_summary = |value: &ProducerValue| {
+                            value
+                                .constructor_payloads
+                                .iter()
+                                .map(|(_, occurrence, _)| {
+                                    (
+                                        occurrence.producer_origin,
+                                        occurrence
+                                            .child_payload_alternatives
+                                            .iter()
+                                            .zip(&occurrence.child_constructors)
+                                            .map(|(payloads, constructors)| {
+                                                (
+                                                    *payloads,
+                                                    match constructors {
+                                                        ScrutineeProducerSet::Open => 1,
+                                                        ScrutineeProducerSet::Closed(
+                                                            identities,
+                                                        ) => identities.len().max(1),
+                                                    },
+                                                )
+                                            })
+                                            .collect::<Vec<_>>(),
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                        };
+                        eprintln!(
+                            "CONTSPEC_ALT_COUNT result={causal_result_origin:?} \
+                             construct={producer_construct_origin:?} \
+                             direct={direct_computational_result:?} \
+                             payload={payload_alternatives} emitted={emitted_alternatives} \
+                             local={:?} continuation={:?}",
+                            direct_computational_result.and_then(|(origin, _)| {
+                                analysis
+                                    .computational_results
+                                    .get(&(origin, producer_owner))
+                                    .map(|value| (
+                                        emitted_result_alternatives(value),
+                                        alternative_summary(value),
+                                    ))
+                            }),
+                            analysis
+                                .computational_results
+                                .get(&(*continuation_origin, *consumer_owner))
+                                .map(|value| (
+                                    emitted_result_alternatives(value),
+                                    alternative_summary(value),
+                                )),
+                        );
+                    }
+                    for _ in 0..emitted_alternatives {
+                        let alternative = producer_alternatives
+                            .entry((
+                                producer_owner,
+                                causal_result_origin,
+                                producer_construct_origin,
+                                continuation_consumer_owner,
+                                *continuation_origin,
+                                worker.body_origin,
+                            ))
+                            .or_insert(0u32);
+                        let producer_alternative = *alternative;
+                        *alternative = alternative.checked_add(1).ok_or_else(|| {
+                            planner_capacity_error(
+                                "continuation producer alternative population exhausted",
+                            )
+                        })?;
+                        calls.insert(PlannedContinuationSpecializationCall {
+                            producer_owner,
+                            producer_result_origin: causal_result_origin,
+                            producer_construct_origin,
+                            producer_alternative,
+                            continuation_distance: if let Some(distance) = source_descendant_distance(
+                            plan,
+                            *continuation_origin,
+                            causal_result_origin,
+                        )? {
+                            distance
+                        } else if let Some(producer) = plan
+                            .continuation_specialization_for_function(producer_owner)
+                            .and_then(|id| plan.continuation_specializations.get(id.0 as usize))
+                        {
+                            source_descendant_distance(
+                                plan,
+                                producer.key.continuation_origin,
+                                causal_result_origin,
+                            )?
+                            .ok_or_else(|| {
+                                planner_error(
+                                    "generated continuation result has no exact emitted source \
+                                     occurrence",
+                                )
+                            })?
+                            .checked_add(1)
+                            .ok_or_else(|| {
+                                planner_capacity_error("generated continuation distance exhausted")
+                            })?
+                        } else {
+                            return Err(planner_error(format!(
+                                "continuation result-flow edge has no enclosing source path: \
+                                 continuation={continuation_origin:?}, \
+                                 result={causal_result_origin:?}, \
+                                 producer={producer_owner:?}, consumer={consumer_owner:?}",
+                            )));
+                        },
+                            consumer_owner: continuation_consumer_owner,
+                            worker_body_origin: worker.body_origin,
+                            specialization: id,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    // A generated unit that emits a recursive worker call has already moved
+    // the worker's initial `Vis` result through one or more caller-owned return
+    // holes. When that direct worker call later returns a terminal result, it
+    // resumes at the exact preceding hole in the planned call relation. It
+    // must not re-enter the outermost unit that happened to emit the host
+    // operation: doing so interprets a terminal `Ret` as the original `Vis`
+    // and reverses nested continuation order.
+    //
+    // The predecessor call is the authority for the return hole. The worker
+    // body's exact result-flow population is the authority for the terminal
+    // constructor. Both identities are compiler-only; the emitted edge carries
+    // the ordinary returned carrier plus the predecessor's ordinary
+    // continuation environment.
+    let source_calls = calls.iter().copied().collect::<Vec<_>>();
+    let generated_producers = specializations.clone();
+    let generated_calls = calls.iter().copied().collect::<Vec<_>>();
+    for producer in &generated_producers {
+        let invocation_origins =
+            continuation_specialization_worker_call_origins(plan, producer)?;
+        if invocation_origins.is_empty() {
+            continue;
+        }
+        for incoming in generated_calls
+            .iter()
+            .filter(|call| call.specialization == producer.id)
+        {
+            let Some(predecessor) = generated_producers
+                .iter()
+                .find(|candidate| candidate.function == incoming.producer_owner)
+            else {
+                continue;
+            };
+            if predecessor.worker.closure_origin
+                != producer.worker.closure_origin
+                || predecessor.worker.body_origin != producer.worker.body_origin
+                || predecessor.worker.declared_arity
+                    != producer.worker.declared_arity
+                || predecessor.worker.captures != producer.worker.captures
+                || source_descendant_distance(
+                    plan,
+                    producer.key.continuation_origin,
+                    predecessor.key.continuation_origin,
+                )?
+                .is_none()
+            {
+                continue;
+            }
+            let predecessor_continuation =
+                plan.source_occurrence(predecessor.key.continuation_origin)?;
+            let RuntimeExpr::ComputationalMatch { cases, .. } =
+                predecessor_continuation
+            else {
+                return Err(planner_error(
+                    "continuation predecessor is not a computational match",
+                ));
+            };
+            let terminal_results = plan
+                .source_result_origins_in_owner_subtree(
+                    producer.worker.body_origin,
+                )?
+                .into_iter()
+                .filter_map(|result_origin| {
+                    let result = plan.source_occurrence(result_origin).ok()?;
+                    let RuntimeExpr::Construct { .. } = result else {
+                        return None;
+                    };
+                    let identity = plan
+                        .semantic
+                        .constructor_symbol_identity(result_origin)
+                        .ok()?;
+                    cases
+                        .iter()
+                        .enumerate()
+                        .any(|(case_index, case)| {
+                            case.recursive_positions.is_empty()
+                                && plan
+                                    .semantic
+                                    .case_constructor_identity(
+                                        predecessor.key.continuation_origin,
+                                        case_index,
+                                    )
+                                    .ok()
+                                    == Some(identity)
+                        })
+                        .then_some(result_origin)
+                })
+                .collect::<BTreeSet<_>>();
+            let terminal_result = match terminal_results.len() {
+                0 => continue,
+                1 => *terminal_results
+                    .first()
+                    .expect("one terminal result was counted"),
+                _ => {
+                    return Err(planner_error(
+                        "one recursive worker invocation has multiple terminal producer alternatives",
+                    ));
+                }
+            };
+            for invocation_origin in &invocation_origins {
+                let mut key = producer.key.clone();
+                key.producer_owner = producer.function;
+                key.producer_result_origin = *invocation_origin;
+                key.producer_construct_origin = terminal_result;
+                key.producer_base_inputs = producer
+                    .key
+                    .ordinary_parameters
+                    .checked_add(producer.key.continuation_captures)
+                    .ok_or_else(|| {
+                        planner_capacity_error(
+                            "recursive continuation producer input population exhausted",
+                        )
+                    })?;
+                key.producer_fields_flattened = false;
+                key.ordinary_parameters = 1;
+                key.continuation_captures = key
+                    .continuation_captures
+                    .max(predecessor.key.continuation_captures);
+                key.continuation_environment_is_local = false;
+                key.continuation_environment_is_extension = true;
+                let specialization = if let Some(id) =
+                    reuse_specialization(&mut specializations, &key)
+                {
+                    id
+                } else {
+                    let id = ContinuationSpecializationId(
+                        u32::try_from(interned.len()).map_err(|_| {
+                            planner_capacity_error(
+                                "continuation specialization identity exhausted",
+                            )
+                        })?,
+                    );
+                    interned.insert(key.clone(), id);
+                    let base_descriptor_count = plan
+                        .abi
+                        .descriptors
+                        .len()
+                        .checked_sub(plan.continuation_specializations.len())
+                        .ok_or_else(|| {
+                            planner_error(
+                                "continuation specialization ABI population underflowed",
+                            )
+                        })?;
+                    let function = PredeclaredFunctionId(
+                        u32::try_from(
+                            base_descriptor_count
+                                .checked_add(specializations.len())
+                                .ok_or_else(|| {
+                                    planner_capacity_error(
+                                        "continuation specialization function exhausted",
+                                    )
+                                })?,
+                        )
+                        .map_err(|_| {
+                            planner_capacity_error(
+                                "continuation specialization function exhausted",
+                            )
+                        })?,
+                    );
+                    specializations.push(PlannedContinuationSpecialization {
+                        id,
+                        function,
+                        key,
+                        worker: producer.worker.clone(),
+                    });
+                    id
+                };
+                calls.insert(PlannedContinuationSpecializationCall {
+                    producer_owner: producer.function,
+                    producer_result_origin: *invocation_origin,
+                    producer_construct_origin: terminal_result,
+                    producer_alternative: 0,
+                    continuation_distance: 0,
+                    consumer_owner: producer.key.consumer_owner,
+                    worker_body_origin: producer.worker.body_origin,
+                    specialization,
+                });
+            }
+        }
+    }
+    for outer in generated_producers
+        .iter()
+        .map(|specialization| specialization.key.continuation_origin)
+        .collect::<BTreeSet<_>>()
+    {
+        for inner in generated_producers
+            .iter()
+            .map(|specialization| specialization.key.continuation_origin)
+            .collect::<BTreeSet<_>>()
+        {
+            if outer != inner {
+                if let Some(distance) = source_descendant_distance(plan, outer, inner)? {
+                    eprintln!(
+                        "CONTSPEC_NEST outer={outer:?} inner={inner:?} distance={distance}"
+                    );
+                }
+            }
+        }
+    }
+    for producer in &generated_producers {
+        eprintln!(
+            "CONTSPEC_UNIT_RESULT function={:?} continuation={:?} called={} inputs={:?} result={:?}",
+            producer.function,
+            producer.key.continuation_origin,
+            analysis.called_owners.contains(&producer.function),
+            analysis.inputs.get(&producer.function).map(|inputs| {
+                inputs
+                    .iter()
+                    .map(|input| {
+                        (
+                            input.constructor_payloads.len(),
+                            input.callables.clone(),
+                            input.continuation_result_origins.clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            }),
+            analysis.results.get(&producer.function).map(|result| {
+                result
+                    .constructor_payloads
+                    .iter()
+                    .map(|(_, occurrence, _)| {
+                        (
+                            occurrence.producer_owner,
+                            occurrence.producer_origin,
+                            occurrence.child_callables.clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            }),
+        );
+        let emitted_results = if producer.key.producer_fields_flattened {
+            let producer_identity = plan.semantic.constructor_symbol_identity(
+                producer.key.producer_construct_origin,
+            )?;
+            let continuation =
+                plan.source_occurrence(producer.key.continuation_origin)?;
+            let RuntimeExpr::ComputationalMatch { cases, .. } = continuation else {
+                return Err(planner_error(
+                    "continuation specialization names a non-computational continuation",
+                ));
+            };
+            let matching_cases = cases
+                .iter()
+                .enumerate()
+                .filter_map(|(case_index, _)| {
+                    (plan
+                        .semantic
+                        .case_constructor_identity(
+                            producer.key.continuation_origin,
+                            case_index,
+                        )
+                        .ok()
+                        == Some(producer_identity))
+                    .then_some(case_index)
+                })
+                .collect::<Vec<_>>();
+            let [case_index] = matching_cases.as_slice() else {
+                return Err(planner_error(
+                    "exact continuation producer does not select one checked case",
+                ));
+            };
+            plan.source_result_origins_in_owner_subtree(
+                plan.semantic.child_origin(
+                    producer.key.continuation_origin,
+                    1 + case_index,
+                )?,
+            )?
+        } else {
+            plan.source_result_origins_in_owner_subtree(
+                producer.key.continuation_origin,
+            )?
+        };
+        eprintln!(
+            "CONTSPEC_RESULTS continuation={:?} results={emitted_results:?}",
+            producer.key.continuation_origin,
+        );
+        for call in &source_calls {
+            if call.producer_owner == producer.function
+                || !emitted_results.contains(&call.producer_result_origin)
+            {
+                continue;
+            }
+            let target = specializations
+                .get(call.specialization.0 as usize)
+                .cloned()
+                .ok_or_else(|| planner_error("continuation call lost its interned target"))?;
+            let target_position =
+                usize::try_from(target.key.recursive_position).map_err(|_| {
+                    planner_capacity_error(
+                        "generated continuation worker position exhausted",
+                    )
+                })?;
+            let causal_crossing = analysis
+                .computational_scrutinees
+                .get(&(target.key.continuation_origin, target.function))
+                .is_some_and(|scrutinee| {
+                    scrutinee.constructor_payloads.iter().any(
+                        |(_, occurrence, _)| {
+                            occurrence.producer_owner == producer.function
+                                && occurrence.producer_origin
+                                    == call.producer_result_origin
+                                && occurrence
+                                    .child_callables
+                                    .get(target_position)
+                                    .is_some_and(|callables| {
+                                        matches!(
+                                            callables,
+                                            ProducerCallableSet::Closed(callables)
+                                                if callables.iter().any(|callable| {
+                                                    callable.closure_origin
+                                                        == target.worker.closure_origin
+                                                        && callable.body_origin
+                                                            == target.worker.body_origin
+                                                })
+                                        )
+                                    })
+                        },
+                    )
+                });
+            if !causal_crossing {
+                continue;
+            }
+            if call.producer_result_origin == producer.key.continuation_origin
+                && (target.worker.closure_origin
+                    != producer.worker.closure_origin
+                    || target.worker.body_origin != producer.worker.body_origin
+                    || target.worker.declared_arity
+                        != producer.worker.declared_arity
+                    || target.worker.captures != producer.worker.captures)
+            {
+                // A unit-boundary completion retains the worker identity
+                // interned in that producer. Unlike a branch-local source
+                // result, the root result occurrence has no alternative
+                // discriminator from which to select another worker.
+                continue;
+            }
+            if target.key.continuation_origin == producer.key.continuation_origin
+                || source_descendant_distance(
+                    plan,
+                    target.key.continuation_origin,
+                    producer.key.continuation_origin,
+                )?
+                .is_none()
+            {
+                continue;
+            }
+            let mut key = target.key.clone();
+            key.producer_owner = producer.function;
+            key.producer_result_origin = call.producer_result_origin;
+            key.producer_construct_origin = call.producer_construct_origin;
+            key.producer_base_inputs = producer
+                .key
+                .ordinary_parameters
+                .checked_add(producer.key.continuation_captures)
+                .ok_or_else(|| {
+                    planner_capacity_error(
+                        "generated continuation producer input population exhausted",
+                    )
+                })?;
+            let producer_result =
+                plan.source_occurrence(call.producer_construct_origin)?;
+            if let RuntimeExpr::Construct { args, .. } = producer_result {
+                key.producer_fields_flattened = true;
+                key.ordinary_parameters =
+                    u32::try_from(
+                        args.len()
+                            .checked_sub(1)
+                            .and_then(|count| {
+                                count.checked_add(target.worker.captures.len())
+                            })
+                            .ok_or_else(|| {
+                                planner_capacity_error(
+                                    "generated continuation branch result arity exhausted",
+                                )
+                            })?,
+                    )
+                    .map_err(|_| {
+                        planner_capacity_error(
+                            "generated continuation branch result arity exhausted",
+                        )
+                    })?;
+            } else {
+                key.producer_fields_flattened = false;
+                key.ordinary_parameters = 1;
+            }
+            let specialization = if let Some(id) =
+                reuse_specialization(&mut specializations, &key)
+            {
+                id
+            } else {
+                let id = ContinuationSpecializationId(
+                    u32::try_from(interned.len()).map_err(|_| {
+                        planner_capacity_error(
+                            "continuation specialization identity exhausted",
+                        )
+                    })?,
+                );
+                let base_descriptor_count = plan
+                    .abi
+                    .descriptors
+                    .len()
+                    .checked_sub(plan.continuation_specializations.len())
+                    .ok_or_else(|| {
+                        planner_error(
+                            "continuation specialization ABI population underflowed",
+                        )
+                    })?;
+                let function = PredeclaredFunctionId(
+                    u32::try_from(
+                        base_descriptor_count
+                            .checked_add(specializations.len())
+                            .ok_or_else(|| {
+                                planner_capacity_error(
+                                    "continuation specialization function exhausted",
+                                )
+                            })?,
+                    )
+                    .map_err(|_| {
+                        planner_capacity_error(
+                            "continuation specialization function exhausted",
+                        )
+                    })?,
+                );
+                interned.insert(key.clone(), id);
+                specializations.push(PlannedContinuationSpecialization {
+                    id,
+                    function,
+                    key,
+                    worker: target.worker.clone(),
+                });
+                id
+            };
+            calls.insert(PlannedContinuationSpecializationCall {
+                producer_owner: producer.function,
+                producer_result_origin: call.producer_result_origin,
+                producer_construct_origin: call.producer_construct_origin,
+                producer_alternative: call.producer_alternative,
+                continuation_distance: call.continuation_distance,
+                consumer_owner: call.consumer_owner,
+                worker_body_origin: call.worker_body_origin,
+                specialization,
+            });
+        }
+    }
+    for specialization in &specializations {
+        eprintln!(
+            "CONTSPEC_ALL_SPEC id={:?} function={:?} producer={:?} result={:?} \
+             consumer={:?} continuation={:?} worker={:?} key={:?}",
+            specialization.id,
+            specialization.function,
+            specialization.key.producer_owner,
+            specialization.key.producer_result_origin,
+            specialization.key.consumer_owner,
+            specialization.key.continuation_origin,
+            specialization.worker.body_origin,
+            specialization.key,
+        );
+    }
+    for closure in [StaticOriginId(650), StaticOriginId(731)] {
+        for ((owner, origin), captures) in &analysis.captures {
+            if *origin == closure {
+                eprintln!(
+                    "CONTSPEC_CAPTURE_FACTS owner={owner:?} closure={closure:?} captures={:?}",
+                    captures
+                        .iter()
+                        .enumerate()
+                        .map(|(position, value)| (
+                            position,
+                            value.constructors.population.clone(),
+                            value.callables.clone(),
+                            value.continuation_result_origins.clone(),
+                        ))
+                        .collect::<Vec<_>>(),
+                );
+            }
+        }
+    }
+    for call in &calls {
+        eprintln!("CONTSPEC_ALL_CALL {call:?}");
+    }
+    let directly_crossed_constructs = calls
+        .iter()
+        .filter(|call| {
+            call.producer_result_origin == call.producer_construct_origin
+        })
+        .map(|call| {
+            (
+                call.producer_owner,
+                call.producer_construct_origin,
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    calls.retain(|call| {
+        call.producer_result_origin == call.producer_construct_origin
+            || !directly_crossed_constructs.contains(&(
+                call.producer_owner,
+                call.producer_construct_origin,
+            ))
+    });
+    // When a constructor field itself selects a nearer return hole, that
+    // branch-local call replaces the original fields with its ordinary
+    // result. A later hole reached from the enclosing constructor therefore
+    // consumes one carried result; it cannot flatten the now-absent source
+    // fields a second time.
+    let nested_constructs = calls
+        .iter()
+        .filter(|call| {
+            call.producer_result_origin != call.producer_construct_origin
+        })
+        .map(|call| {
+            (
+                call.producer_owner,
+                call.producer_construct_origin,
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    for call in &calls {
+        if call.producer_result_origin == call.producer_construct_origin
+            && nested_constructs.contains(&(
+                call.producer_owner,
+                call.producer_construct_origin,
+            ))
+        {
+            let specialization = specializations
+                .get_mut(call.specialization.0 as usize)
+                .ok_or_else(|| {
+                    planner_error(
+                        "nested continuation call lost its interned target",
+                    )
+                })?;
+            specialization.key.producer_fields_flattened = false;
+            specialization.key.ordinary_parameters = 1;
+        }
+    }
+    // One emitted producer alternative enters its nearest checked return hole.
+    // Outer holes are discovered again while lowering that interned unit; a
+    // second call from the original branch would be a post-join suffix lookup
+    // disguised as specialization.
+    let mut nearest = BTreeMap::new();
+    for call in &calls {
+        nearest
+            .entry((
+                call.producer_owner,
+                call.producer_result_origin,
+                call.producer_alternative,
+            ))
+            .and_modify(|distance: &mut u32| {
+                *distance = (*distance).min(call.continuation_distance);
+            })
+            .or_insert(call.continuation_distance);
+    }
+    calls.retain(|call| {
+        nearest
+            .get(&(
+                call.producer_owner,
+                call.producer_result_origin,
+                call.producer_alternative,
+            ))
+            .is_some_and(|distance| *distance == call.continuation_distance)
+    });
+    // Equal path lengths can still name nested return holes: source origins
+    // are shared across generated clones, so both enclosing continuations see
+    // the same producer-result distance. The inner (structurally descendant)
+    // hole runs first; its generated result lets the fixed point discover the
+    // next outer hole. Retaining both here would make one causal occurrence
+    // branch to two unordered suffixes.
+    let same_distance = calls.iter().copied().collect::<Vec<_>>();
+    let mut shadowed_outer_calls = BTreeSet::new();
+    for call in &same_distance {
+        let call_continuation = specializations
+            .get(call.specialization.0 as usize)
+            .ok_or_else(|| planner_error("continuation call lost its interned target"))?
+            .key
+            .continuation_origin;
+        for candidate in &same_distance {
+            if call == candidate
+                || call.producer_owner != candidate.producer_owner
+                || call.producer_result_origin != candidate.producer_result_origin
+                || call.producer_alternative != candidate.producer_alternative
+                || call.continuation_distance != candidate.continuation_distance
+            {
+                continue;
+            }
+            let candidate_continuation = specializations
+                .get(candidate.specialization.0 as usize)
+                .ok_or_else(|| planner_error("continuation call lost its interned target"))?
+                .key
+                .continuation_origin;
+            if call_continuation != candidate_continuation
+                && source_descendant_distance(
+                    plan,
+                    call_continuation,
+                    candidate_continuation,
+                )?
+                .is_some()
+            {
+                shadowed_outer_calls.insert(*call);
+            }
+        }
+    }
+    for call in shadowed_outer_calls {
+        calls.remove(&call);
+    }
+    // A generated inner return hole must retain every ordered caller
+    // environment field required by the outer unit it can reach. Propagate
+    // that prefix requirement backwards over the exact generated call graph;
+    // the values remain ordinary ABI operands and never enter the key.
+    loop {
+        let requirements = calls
+            .iter()
+            .filter_map(|call| {
+                let producer = specializations
+                    .iter()
+                    .position(|specialization| specialization.function == call.producer_owner)?;
+                let target = specializations.get(call.specialization.0 as usize)?;
+                let target_captures = target
+                    .key
+                    .continuation_captures
+                    .checked_add(
+                        continuation_producer_capture_extension(
+                            &specializations,
+                            target.function,
+                        )
+                        .ok()?,
+                    )?;
+                ((specializations[producer].key.consumer_owner
+                    == target.key.consumer_owner
+                    || target.key.continuation_environment_is_extension)
+                    && specializations[producer].key.continuation_captures
+                        < target_captures)
+                    .then_some((
+                        producer,
+                        target_captures,
+                        target.key.continuation_environment_is_local,
+                        target.key.continuation_environment_is_extension,
+                    ))
+            })
+            .collect::<Vec<_>>();
+        if requirements.is_empty() {
+            break;
+        }
+        for (producer, captures, local, extension) in requirements {
+            specializations[producer].key.continuation_captures = captures;
+            specializations[producer]
+                .key
+                .continuation_environment_is_local |= local;
+            specializations[producer]
+                .key
+                .continuation_environment_is_extension |= extension;
+        }
+    }
+    let generated_producer_inputs = specializations
+        .iter()
+        .map(|specialization| {
+            specialization
+                .key
+                .ordinary_parameters
+                .checked_add(specialization.key.continuation_captures)
+                .map(|inputs| (specialization.function, inputs))
+                .ok_or_else(|| {
+                    planner_capacity_error(
+                        "generated continuation producer input population exhausted",
+                    )
+                })
+        })
+        .collect::<Result<BTreeMap<_, _>, CraneliftBackendError>>()?;
+    for specialization in &mut specializations {
+        if let Some(inputs) = generated_producer_inputs
+            .get(&specialization.key.producer_owner)
+        {
+            specialization.key.producer_base_inputs = *inputs;
+        }
+    }
+    eprintln!(
+        "CONTSPEC_PRECHAIN units={} calls={:?}",
+        specializations.len(),
+        calls
+    );
+
+    // Generated-unit result edges are derived from the producer analysis
+    // above and intern their own exact producer/suffix key. Structural
+    // descendant chaining would reuse a base producer's unit without giving
+    // the generated producer an ABI environment or a causal edge identity.
+    for active in &plan.continuation_specializations {
+        let Some(result) = analysis.results.get(&active.function) else {
+            continue;
+        };
+        let returns_to_enclosing_constructor = calls.iter().any(|nested| {
+            nested.producer_result_origin
+                != nested.producer_construct_origin
+                && specializations
+                    .get(nested.specialization.0 as usize)
+                    .is_some_and(|target| {
+                        target.function == active.function
+                    })
+                && calls.iter().any(|outer| {
+                    outer.producer_owner == nested.producer_owner
+                        && outer.producer_result_origin
+                            == nested.producer_construct_origin
+                        && outer.producer_construct_origin
+                            == nested.producer_construct_origin
+                })
+        });
+        if returns_to_enclosing_constructor {
+            continue;
+        }
+        let outer = specializations
+            .iter()
+            .filter(|candidate| {
+                candidate.worker.closure_origin
+                    == active.worker.closure_origin
+                    && candidate.worker.body_origin
+                        == active.worker.body_origin
+                    && candidate.worker.declared_arity
+                        == active.worker.declared_arity
+                    && candidate.worker.captures == active.worker.captures
+                    && candidate.key.continuation_origin
+                        != active.key.continuation_origin
+            })
+            .filter_map(|candidate| {
+                source_descendant_distance(
+                    plan,
+                    candidate.key.continuation_origin,
+                    active.key.continuation_origin,
+                )
+                .ok()
+                .flatten()
+                .map(|distance| (distance, candidate.clone()))
+            })
+            .min_by_key(|(distance, _)| *distance)
+            .map(|(_, candidate)| candidate);
+        let Some(outer) = outer else {
+            continue;
+        };
+        let producer_descriptor = plan
+            .abi
+            .descriptors
+            .iter()
+            .find(|descriptor| descriptor.function == active.function)
+            .ok_or_else(|| {
+                planner_error(
+                    "generated continuation result has no producer ABI descriptor",
+                )
+            })?;
+        let producer_extension = continuation_producer_capture_extension(
+            &plan.continuation_specializations,
+            active.function,
+        )?;
+        let producer_base_inputs = producer_descriptor
+            .header
+            .parameters
+            .checked_add(producer_descriptor.header.captures)
+            .and_then(|count| count.checked_sub(producer_extension))
+            .ok_or_else(|| {
+                planner_capacity_error(
+                    "generated continuation producer input population exhausted",
+                )
+            })?;
+        for (_, occurrence, _) in &result.constructor_payloads {
+            if occurrence.producer_owner != active.function {
+                continue;
+            }
+            let position =
+                usize::try_from(outer.key.recursive_position).map_err(|_| {
+                    planner_capacity_error(
+                        "generated continuation recursive position exhausted",
+                    )
+                })?;
+            let worker_matches = occurrence
+                .child_callables
+                .get(position)
+                .is_some_and(|callables| {
+                    matches!(
+                        callables,
+                        ProducerCallableSet::Closed(callables)
+                            if callables.iter().any(|callable| {
+                                callable.closure_origin
+                                    == active.worker.closure_origin
+                                    && callable.body_origin
+                                        == active.worker.body_origin
+                            })
+                    )
+                });
+            if !worker_matches {
+                continue;
+            }
+            let RuntimeExpr::Construct { args, .. } =
+                plan.source_occurrence(occurrence.producer_origin)?
+            else {
+                return Err(planner_error(
+                    "generated continuation result is not its recorded constructor",
+                ));
+            };
+            let mut key = outer.key.clone();
+            key.producer_owner = active.function;
+            key.producer_result_origin = occurrence.producer_origin;
+            key.producer_construct_origin = occurrence.producer_origin;
+            key.producer_base_inputs = producer_base_inputs;
+            key.producer_fields_flattened = true;
+            key.ordinary_parameters = u32::try_from(
+                args.len()
+                    .checked_sub(1)
+                    .and_then(|count| {
+                        count.checked_add(active.worker.captures.len())
+                    })
+                    .ok_or_else(|| {
+                        planner_capacity_error(
+                            "generated continuation result arity exhausted",
+                        )
+                    })?,
+            )
+            .map_err(|_| {
+                planner_capacity_error(
+                    "generated continuation result arity exhausted",
+                )
+            })?;
+            let target_consumer_owner = key.consumer_owner;
+            let target_continuation_origin = key.continuation_origin;
+            let id = if let Some(id) =
+                reuse_specialization(&mut specializations, &key)
+            {
+                id
+            } else {
+                let id = ContinuationSpecializationId(
+                    u32::try_from(interned.len()).map_err(|_| {
+                        planner_capacity_error(
+                            "continuation specialization identity exhausted",
+                        )
+                    })?,
+                );
+                interned.insert(key.clone(), id);
+                let base_descriptor_count = plan
+                    .abi
+                    .descriptors
+                    .len()
+                    .checked_sub(plan.continuation_specializations.len())
+                    .ok_or_else(|| {
+                        planner_error(
+                            "continuation specialization ABI population underflowed",
+                        )
+                    })?;
+                let function = PredeclaredFunctionId(
+                    u32::try_from(
+                        base_descriptor_count
+                            .checked_add(specializations.len())
+                            .ok_or_else(|| {
+                                planner_capacity_error(
+                                    "continuation specialization function exhausted",
+                                )
+                            })?,
+                    )
+                    .map_err(|_| {
+                        planner_capacity_error(
+                            "continuation specialization function exhausted",
+                        )
+                    })?,
+                );
+                specializations.push(PlannedContinuationSpecialization {
+                    id,
+                    function,
+                    key,
+                    worker: outer.worker.clone(),
+                });
+                id
+            };
+            let alternative = producer_alternatives
+                .entry((
+                    active.function,
+                    occurrence.producer_origin,
+                    occurrence.producer_origin,
+                    target_consumer_owner,
+                    target_continuation_origin,
+                    active.worker.body_origin,
+                ))
+                .or_insert(0u32);
+            let producer_alternative = *alternative;
+            *alternative = alternative.checked_add(1).ok_or_else(|| {
+                planner_capacity_error(
+                    "generated continuation alternative population exhausted",
+                )
+            })?;
+            let continuation_distance = source_descendant_distance(
+                plan,
+                target_continuation_origin,
+                occurrence.producer_origin,
+            )?
+            .ok_or_else(|| {
+                planner_error(
+                    "generated continuation result has no exact outer source path",
+                )
+            })?;
+            calls.insert(PlannedContinuationSpecializationCall {
+                producer_owner: active.function,
+                producer_result_origin: occurrence.producer_origin,
+                producer_construct_origin: occurrence.producer_origin,
+                producer_alternative,
+                continuation_distance,
+                consumer_owner: target_consumer_owner,
+                worker_body_origin: active.worker.body_origin,
+                specialization: id,
+            });
+        }
+    }
+    loop {
+        let requirements = calls
+            .iter()
+            .filter_map(|call| {
+                let producer = specializations
+                    .iter()
+                    .position(|specialization| {
+                        specialization.function == call.producer_owner
+                    })?;
+                let target =
+                    specializations.get(call.specialization.0 as usize)?;
+                let target_captures = target
+                    .key
+                    .continuation_captures
+                    .checked_add(
+                        continuation_producer_capture_extension(
+                            &specializations,
+                            target.function,
+                        )
+                        .ok()?,
+                    )?;
+                ((specializations[producer].key.consumer_owner
+                    == target.key.consumer_owner
+                    || target.key.continuation_environment_is_extension)
+                    && specializations[producer]
+                        .key
+                        .continuation_captures
+                        < target_captures)
+                    .then_some((
+                        producer,
+                        target_captures,
+                        target.key.continuation_environment_is_local,
+                        target.key.continuation_environment_is_extension,
+                    ))
+            })
+            .collect::<Vec<_>>();
+        if requirements.is_empty() {
+            break;
+        }
+        for (producer, captures, local, extension) in requirements {
+            specializations[producer].key.continuation_captures =
+                captures;
+            specializations[producer]
+                .key
+                .continuation_environment_is_local |= local;
+            specializations[producer]
+                .key
+                .continuation_environment_is_extension |= extension;
+        }
+    }
+    let generated_producer_inputs = specializations
+        .iter()
+        .map(|specialization| {
+            specialization
+                .key
+                .ordinary_parameters
+                .checked_add(specialization.key.continuation_captures)
+                .map(|inputs| (specialization.function, inputs))
+                .ok_or_else(|| {
+                    planner_capacity_error(
+                        "generated continuation producer input population exhausted",
+                    )
+                })
+        })
+        .collect::<Result<BTreeMap<_, _>, CraneliftBackendError>>()?;
+    for specialization in &mut specializations {
+        if let Some(inputs) = generated_producer_inputs
+            .get(&specialization.key.producer_owner)
+        {
+            specialization.key.producer_base_inputs = *inputs;
+        }
+    }
+    eprintln!(
+        "CONTSPEC_POSTCHAIN units={} calls={:?}",
+        specializations.len(),
+        calls
+    );
+
+    let mut retained_ids = calls
+        .iter()
+        .map(|call| call.specialization)
+        .collect::<BTreeSet<_>>();
+    eprintln!("CONTSPEC_RETAINED ids={retained_ids:?}");
+    let base_descriptor_count = plan
+        .abi
+        .descriptors
+        .len()
+        .checked_sub(plan.continuation_specializations.len())
+        .ok_or_else(|| planner_error("continuation specialization ABI population underflowed"))?;
+    let provisional_generated_functions = specializations
+        .iter()
+        .map(|specialization| specialization.function)
+        .collect::<BTreeSet<_>>();
+    let mut remapped = BTreeMap::new();
+    let mut remapped_functions = BTreeMap::new();
+    let mut retained_specializations = Vec::new();
+    for mut specialization in specializations {
+        if !retained_ids.contains(&specialization.id) {
+            continue;
+        }
+        let id =
+            ContinuationSpecializationId(u32::try_from(retained_specializations.len()).map_err(
+                |_| planner_capacity_error("continuation specialization identity exhausted"),
+            )?);
+        remapped.insert(specialization.id, id);
+        let prior_function = specialization.function;
+        specialization.id = id;
+        specialization.function = PredeclaredFunctionId(
+            u32::try_from(
+                base_descriptor_count
+                    .checked_add(retained_specializations.len())
+                    .ok_or_else(|| {
+                        planner_capacity_error("continuation specialization function exhausted")
+                    })?,
+            )
+            .map_err(|_| {
+                planner_capacity_error("continuation specialization function exhausted")
+            })?,
+        );
+        remapped_functions.insert(prior_function, specialization.function);
+        retained_specializations.push(specialization);
+    }
+    for specialization in &mut retained_specializations {
+        if let Some(function) = remapped_functions
+            .get(&specialization.key.producer_owner)
+            .copied()
+        {
+            specialization.key.producer_owner = function;
+        }
+        if let Some(function) = remapped_functions
+            .get(&specialization.key.consumer_owner)
+            .copied()
+        {
+            specialization.key.consumer_owner = function;
+        }
+    }
+    specializations = retained_specializations;
+    let calls = calls
+        .into_iter()
+        .filter_map(|mut call| {
+            // Calls discovered while analyzing a provisional generated unit
+            // carry that unit's pre-filter function id. Retaining a closed
+            // specialization subset renumbers every generated unit densely,
+            // so remap every generated producer occurrence—not only the
+            // explicit chaining pass—before publishing the call census.
+            if let Some(function) = remapped_functions.get(&call.producer_owner).copied() {
+                call.producer_owner = function;
+            } else if provisional_generated_functions.contains(&call.producer_owner) {
+                // A provisional unit with no retained incoming edge is not
+                // emitted. Its analyzed outgoing edges are likewise outside
+                // the closed reachable population.
+                return None;
+            }
+            let specialization = match remapped.get(&call.specialization).copied() {
+                Some(specialization) => specialization,
+                None => {
+                    return Some(Err(planner_error(
+                        "retained continuation call lost its interned specialization",
+                    )));
+                }
+            };
+            call.specialization = specialization;
+            Some(Ok(call))
+        })
+        .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+    if let Some(pair) = calls.windows(2).find(|pair| {
+        pair[0].producer_owner == pair[1].producer_owner
+            && pair[0].producer_result_origin == pair[1].producer_result_origin
+            && pair[0].producer_alternative == pair[1].producer_alternative
+            && pair[0].continuation_distance == pair[1].continuation_distance
+    }) {
+        return Err(planner_error(format!(
+            "one causal continuation occurrence has two unordered suffixes: {pair:?}",
+        )));
+    }
+    Ok((specializations, calls))
+}
+
+fn source_descendant_distance(
+    plan: &StaticTransitionPlan<'_>,
+    root: StaticOriginId,
+    target: StaticOriginId,
+) -> Result<Option<u32>, CraneliftBackendError> {
+    let mut pending = vec![(root, 0u32)];
+    let mut visited = BTreeSet::new();
+    while let Some((origin, distance)) = pending.pop() {
+        if !visited.insert(origin) {
+            continue;
+        }
+        if origin == target {
+            return Ok(Some(distance));
+        }
+        let next = distance
+            .checked_add(1)
+            .ok_or_else(|| planner_capacity_error("continuation source-path depth exhausted"))?;
+        for child in plan.semantic.child_origins(origin)? {
+            pending.push((*child, next));
+        }
+    }
+    Ok(None)
 }
 
 impl<'src> Planner<'src> {
@@ -7013,10 +11057,14 @@ impl<'src> Planner<'src> {
                 operand_edges: Vec::new(),
                 static_callable_specializations: Vec::new(),
                 static_callable_calls: Vec::new(),
+                continuation_specializations: Vec::new(),
+                continuation_specialization_calls: Vec::new(),
+                computational_ih_call_slots: BTreeMap::new(),
                 static_recursor_worker_residuals: Vec::new(),
                 static_recursor_worker_environments: Vec::new(),
                 carried_recursor_positions: BTreeSet::new(),
                 static_recursor_worker_environment_consumption: RefCell::new(BTreeMap::new()),
+                static_recursor_worker_environment_dispositions: RefCell::new(BTreeSet::new()),
                 recursor_boundary_uses: Vec::new(),
                 lowering_boundary_uses: Vec::new(),
                 boundary_uses: Vec::new(),
@@ -7806,9 +11854,10 @@ impl<'src> Planner<'src> {
             &self.plan.semantic,
             &self.plan.static_callable_specializations,
         )?;
+        let continuation_base_abi = self.plan.abi.clone();
         self.plan.operand_edges = build_operand_edge_matrix(&self.plan)?;
         self.plan.static_recursor_worker_residuals =
-            build_static_recursor_worker_residuals(&self.plan)?;
+            build_all_static_recursor_worker_residuals(&self.plan)?;
         // The first edge pass supplies exact lexical-capture provenance needed
         // to derive the residual population. Rebuild once that population is
         // closed so every recursively reached constructor child receives its
@@ -7818,18 +11867,144 @@ impl<'src> Planner<'src> {
         self.plan.lowering_boundary_uses = build_lowering_boundary_uses(&self.plan)?;
         self.plan.boundary_uses = build_boundary_uses(&self.plan)?;
         let (
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            continuation_specializations,
+            continuation_specialization_calls,
+        ) = build_producer_flow_plans(&self.plan)?;
+        self.plan.continuation_specializations = continuation_specializations;
+        self.plan.continuation_specialization_calls = continuation_specialization_calls;
+        // Continuation-specialization discovery is a generated-unit fixed
+        // point. Each pass starts from the closed base/static-callable ABI,
+        // appends the already-interned continuation population, and may
+        // discover only additional emitted-owner call edges and units. Starting
+        // from the base ABI is load-bearing: extending the previous pass in
+        // place would duplicate caller environments and make capture counts a
+        // function of iteration count.
+        let continuation_fixed_point_bound = self
+            .plan
+            .source_occurrences
+            .len()
+            .checked_add(1)
+            .ok_or_else(|| {
+                planner_capacity_error("continuation specialization fixed-point bound exhausted")
+            })?;
+        let mut continuation_fixed_point_iteration = 0usize;
+        let (
             case_emissions,
             aggregate_representations,
             synthesized_aggregate_representations,
             static_recursor_worker_environments,
-            emitted_source_occurrences,
+            final_emitted_source_occurrences,
             carried_recursor_positions,
-        ) = build_producer_flow_plans(&self.plan)?;
+            _,
+            _,
+        ) = loop {
+            if continuation_fixed_point_iteration >= continuation_fixed_point_bound {
+                return Err(planner_error(
+                    "continuation specialization fixed point did not close",
+                ));
+            }
+            continuation_fixed_point_iteration += 1;
+            eprintln!(
+                "CONTSPEC_FIXED_POINT iteration={} units={} calls={}",
+                continuation_fixed_point_iteration,
+                self.plan.continuation_specializations.len(),
+                self.plan.continuation_specialization_calls.len(),
+            );
+            self.plan.abi = continuation_base_abi.clone();
+            extend_continuation_specialization_abi(
+                &mut self.plan.abi,
+                &self.plan.semantic,
+                &self.plan.continuation_specializations,
+            )?;
+            // Append the complete current unit census before extending
+            // producer environments. A continuation-specialization unit may
+            // itself produce the next specialization edge, so restricting
+            // extension to the base descriptors would omit the caller
+            // environment precisely on nested return holes.
+            extend_continuation_producer_abi(
+                &mut self.plan.abi,
+                &self.plan.continuation_specializations,
+            )?;
+            self.plan.operand_edges = build_operand_edge_matrix(&self.plan)?;
+            self.plan.static_recursor_worker_residuals =
+                build_all_static_recursor_worker_residuals(&self.plan)?;
+            self.plan.operand_edges = build_operand_edge_matrix(&self.plan)?;
+            self.plan.recursor_boundary_uses = build_recursor_boundary_uses(&self.plan)?;
+            self.plan.lowering_boundary_uses = build_lowering_boundary_uses(&self.plan)?;
+            self.plan.boundary_uses = build_boundary_uses(&self.plan)?;
+            let producer_flow = build_producer_flow_plans(&self.plan)?;
+            let occurrence_population_stable = self.plan.case_emissions == producer_flow.0
+                && self.plan.aggregate_representations == producer_flow.1
+                && self.plan.synthesized_aggregate_representations == producer_flow.2
+                && self.plan.static_recursor_worker_environments == producer_flow.3
+                && self.plan.emitted_source_occurrences == producer_flow.4
+                && self.plan.carried_recursor_positions == producer_flow.5;
+            if occurrence_population_stable
+                && self.plan.continuation_specializations == producer_flow.6
+                && self.plan.continuation_specialization_calls == producer_flow.7
+            {
+                for specialization in &producer_flow.6 {
+                    eprintln!(
+                        "CONTSPEC_FINAL_SPEC id={:?} function={:?} producer={:?} result={:?} construct={:?} consumer={:?} continuation={:?} worker={:?}",
+                        specialization.id,
+                        specialization.function,
+                        specialization.key.producer_owner,
+                        specialization.key.producer_result_origin,
+                        specialization.key.producer_construct_origin,
+                        specialization.key.consumer_owner,
+                        specialization.key.continuation_origin,
+                        specialization.key.worker_body_origin,
+                    );
+                }
+                for call in &producer_flow.7 {
+                    eprintln!(
+                        "CONTSPEC_FINAL_CALL producer={:?} result={:?} construct={:?} consumer={:?} worker={:?} specialization={:?}",
+                        call.producer_owner,
+                        call.producer_result_origin,
+                        call.producer_construct_origin,
+                        call.consumer_owner,
+                        call.worker_body_origin,
+                        call.specialization,
+                    );
+                }
+                break producer_flow;
+            }
+            for call in producer_flow
+                .7
+                .iter()
+                .filter(|call| !self.plan.continuation_specialization_calls.contains(call))
+            {
+                let specialization = &producer_flow.6[call.specialization.0 as usize];
+                eprintln!(
+                    "CONTSPEC_FIXED_POINT new producer={:?} result={:?} \
+                     consumer={:?} continuation={:?} worker={:?}",
+                    call.producer_owner,
+                    call.producer_result_origin,
+                    call.consumer_owner,
+                    specialization.key.continuation_origin,
+                    call.worker_body_origin,
+                );
+            }
+            self.plan.case_emissions = producer_flow.0;
+            self.plan.aggregate_representations = producer_flow.1;
+            self.plan.synthesized_aggregate_representations = producer_flow.2;
+            self.plan.static_recursor_worker_environments = producer_flow.3;
+            self.plan.emitted_source_occurrences = producer_flow.4;
+            self.plan.carried_recursor_positions = producer_flow.5;
+            self.plan.continuation_specializations = producer_flow.6;
+            self.plan.continuation_specialization_calls = producer_flow.7;
+        };
         self.plan.case_emissions = case_emissions;
         self.plan.aggregate_representations = aggregate_representations;
         self.plan.synthesized_aggregate_representations = synthesized_aggregate_representations;
         self.plan.static_recursor_worker_environments = static_recursor_worker_environments;
-        self.plan.emitted_source_occurrences = emitted_source_occurrences;
+        self.plan.emitted_source_occurrences = final_emitted_source_occurrences;
         self.plan.carried_recursor_positions = carried_recursor_positions;
         // Emitted identities are minted only after the generated-unit and
         // producer-flow fixed points close. Rebuild both the lowering-only
@@ -7900,6 +12075,7 @@ impl<'src> Planner<'src> {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(in crate::cranelift_backend) struct EmittableCallEdge {
     caller: PredeclaredFunctionId,
+    call_site_sequence: u32,
     callee: PredeclaredFunctionId,
     callee_origin: StaticOriginId,
     call_site_origin: StaticOriginId,
@@ -7911,6 +12087,7 @@ pub(in crate::cranelift_backend) enum EmittableCallKind {
     StaticBody,
     Declaration,
     StaticCallableSpecialization,
+    ContinuationSpecialization,
 }
 
 impl EmittableCallEdge {
@@ -7923,6 +12100,10 @@ impl EmittableCallEdge {
     /// `UnitBundle::function`, whose `None` is a real answer.
     pub(in crate::cranelift_backend) fn callee(self) -> PredeclaredFunctionId {
         self.callee
+    }
+
+    pub(in crate::cranelift_backend) fn call_site_sequence(self) -> u32 {
+        self.call_site_sequence
     }
 
     pub(in crate::cranelift_backend) fn callee_origin(self) -> StaticOriginId {
@@ -8089,6 +12270,97 @@ impl EmittableStaticCallableUnit {
         &self,
     ) -> Option<&EmittableStaticCallableBinding> {
         self.body_binding.as_ref()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct EmittableContinuationSpecialization {
+    id: ContinuationSpecializationId,
+    consumer_owner: PredeclaredFunctionId,
+    continuation_origin: StaticOriginId,
+    checked_frame_id: Option<u64>,
+    producer_result_origin: StaticOriginId,
+    producer_construct_origin: StaticOriginId,
+    producer_fields_flattened: bool,
+    ordinary_parameter_count: u32,
+    worker_position: u32,
+    worker_closure_origin: StaticOriginId,
+    worker_body_origin: StaticOriginId,
+    worker_declared_arity: u32,
+    worker_capture_count: u32,
+    continuation_input_start: u32,
+    continuation_capture_count: u32,
+    input_capture_count: u32,
+    continuation_environment_is_local: bool,
+}
+
+impl EmittableContinuationSpecialization {
+    pub(in crate::cranelift_backend) fn id(self) -> ContinuationSpecializationId {
+        self.id
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_origin(self) -> StaticOriginId {
+        self.continuation_origin
+    }
+
+    pub(in crate::cranelift_backend) fn checked_frame_id(self) -> Option<u64> {
+        self.checked_frame_id
+    }
+
+    pub(in crate::cranelift_backend) fn consumer_owner(self) -> PredeclaredFunctionId {
+        self.consumer_owner
+    }
+
+    pub(in crate::cranelift_backend) fn producer_result_origin(self) -> StaticOriginId {
+        self.producer_result_origin
+    }
+
+    pub(in crate::cranelift_backend) fn producer_construct_origin(self) -> StaticOriginId {
+        self.producer_construct_origin
+    }
+
+    pub(in crate::cranelift_backend) fn ordinary_parameter_count(self) -> u32 {
+        self.ordinary_parameter_count
+    }
+
+    pub(in crate::cranelift_backend) fn producer_fields_flattened(self) -> bool {
+        self.producer_fields_flattened
+    }
+
+    pub(in crate::cranelift_backend) fn worker_position(self) -> u32 {
+        self.worker_position
+    }
+
+    pub(in crate::cranelift_backend) fn worker_closure_origin(self) -> StaticOriginId {
+        self.worker_closure_origin
+    }
+
+    pub(in crate::cranelift_backend) fn worker_body_origin(self) -> StaticOriginId {
+        self.worker_body_origin
+    }
+
+    pub(in crate::cranelift_backend) fn worker_declared_arity(self) -> u32 {
+        self.worker_declared_arity
+    }
+
+    pub(in crate::cranelift_backend) fn worker_capture_count(self) -> u32 {
+        self.worker_capture_count
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_capture_count(self) -> u32 {
+        self.continuation_capture_count
+    }
+
+    pub(in crate::cranelift_backend) fn input_capture_count(self) -> u32 {
+        self.input_capture_count
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_environment_is_local(self) -> bool {
+        self.continuation_environment_is_local
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_input_start(self) -> u32 {
+        self.continuation_input_start
     }
 }
 
@@ -8459,9 +12731,7 @@ impl<'src> StaticTransitionPlan<'src> {
             .semantic
             .function_owner(parent)?
             .ok_or_else(|| planner_error("effect-seat edge has no function owner"))?;
-        self.effect_operand_edge_token_for_owner(
-            owner, parent, position, role, operation, seat,
-        )
+        self.effect_operand_edge_token_for_owner(owner, parent, position, role, operation, seat)
     }
 
     pub(in crate::cranelift_backend) fn effect_operand_edge_token_for_owner(
@@ -8519,14 +12789,33 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
         identity: BoundaryUseIdentity,
     ) -> Result<(), CraneliftBackendError> {
+        if self
+            .boundary_use_dispositions
+            .borrow()
+            .contains(&identity)
+            && self.boundary_use_has_continuation_specialization_occurrence(identity)
+        {
+            // The same planner-issued worker/capture authority can appear in
+            // the transported source suffix and in its generated continuation
+            // owner. Definition order may disposition the local spelling
+            // before the generated occurrence is emitted; the emitted
+            // occurrence is the sole causal consumer and therefore wins.
+            self.boundary_use_dispositions
+                .borrow_mut()
+                .remove(&identity);
+        }
         let mut ledger = self.operand_edge_consumption.borrow_mut();
         let count = ledger.entry(identity).or_insert(0);
-        if *count == 1 && self.boundary_use_has_affine_worker_revisit(identity) {
-            // The exact source MatchArm authority proves this is a second
-            // compiler visit to one mutually exclusive worker occurrence, not
-            // a second emitted transition. Worker, ordered captures, and its
-            // callable-capsule preflight must reborrow as one indivisible
-            // occurrence; unrelated repeated identities still count and fail.
+        if *count == 1
+            && (self.boundary_use_has_affine_worker_revisit(identity)
+                || self.boundary_use_has_continuation_specialization_occurrence(identity))
+        {
+            // Worker and capture identities describe the one semantic source
+            // crossing. Generated continuation clones bind their distinct
+            // emitted allocations in the owner-keyed worker-environment
+            // ledger; revisiting the shared source authority here must not
+            // turn those exact occurrences into duplicate source crossings.
+            // Unrelated repeated identities still count and fail.
         } else {
             *count = count.checked_add(1).ok_or_else(|| {
                 planner_capacity_error("boundary-use consumption count exhausted")
@@ -8535,36 +12824,67 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(())
     }
 
-    fn boundary_use_has_affine_worker_revisit(&self, identity: BoundaryUseIdentity) -> bool {
-        let Some(worker_identity) = self
-            .boundary_uses
-            .iter()
-            .find_map(|planned| {
+    fn boundary_use_has_continuation_specialization_occurrence(
+        &self,
+        identity: BoundaryUseIdentity,
+    ) -> bool {
+        let worker_identity = self.boundary_uses.iter().find_map(|planned| {
             (planned.identity == identity).then(|| match &planned.path {
                 PlannedBoundaryUsePath::StaticRecursorWorker { .. } => Some(identity),
                 PlannedBoundaryUsePath::StaticRecursorCapture {
                     worker_identity, ..
                 } => Some(*worker_identity),
-                PlannedBoundaryUsePath::Synthesized { origin, .. } => self
-                    .lowering_boundary_uses
-                    .iter()
-                    .find(|lowering| {
-                        lowering.identity == identity
-                            && lowering.edge == LoweringOnlyOperandEdge::CallableCapsuleEscape
-                    })
-                    .and_then(|_| {
-                        self.static_recursor_worker_environments
-                            .iter()
-                            .find(|record| {
-                                self.static_recursor_worker_residuals.iter().any(|residual| {
-                                    residual.id == record.residual_id
-                                        && residual.body_origin == *origin
-                                })
-                            })
-                            .map(|record| record.worker_identity)
-                    }),
-                PlannedBoundaryUsePath::Source { .. } => None,
+                _ => None,
             })
+        });
+        let Some(Some(worker_identity)) = worker_identity else {
+            return false;
+        };
+        self.static_recursor_worker_environments
+            .iter()
+            .filter(|record| record.worker_identity == worker_identity)
+            .any(|record| {
+                self.continuation_specializations
+                    .iter()
+                    .any(|specialization| {
+                        specialization.function == record.owner
+                            || specialization.worker.id == record.residual_id
+                    })
+            })
+    }
+
+    fn boundary_use_has_affine_worker_revisit(&self, identity: BoundaryUseIdentity) -> bool {
+        let Some(worker_identity) = self
+            .boundary_uses
+            .iter()
+            .find_map(|planned| {
+                (planned.identity == identity).then(|| match &planned.path {
+                    PlannedBoundaryUsePath::StaticRecursorWorker { .. } => Some(identity),
+                    PlannedBoundaryUsePath::StaticRecursorCapture {
+                        worker_identity, ..
+                    } => Some(*worker_identity),
+                    PlannedBoundaryUsePath::Synthesized { origin, .. } => self
+                        .lowering_boundary_uses
+                        .iter()
+                        .find(|lowering| {
+                            lowering.identity == identity
+                                && lowering.edge == LoweringOnlyOperandEdge::CallableCapsuleEscape
+                        })
+                        .and_then(|_| {
+                            self.static_recursor_worker_environments
+                                .iter()
+                                .find(|record| {
+                                    self.static_recursor_worker_residuals
+                                        .iter()
+                                        .any(|residual| {
+                                            residual.id == record.residual_id
+                                                && residual.body_origin == *origin
+                                        })
+                                })
+                                .map(|record| record.worker_identity)
+                        }),
+                    PlannedBoundaryUsePath::Source { .. } => None,
+                })
             })
             .flatten()
         else {
@@ -8615,6 +12935,43 @@ impl<'src> StaticTransitionPlan<'src> {
             child: edge.child,
             position: edge.position,
         };
+        self.record_boundary_use_disposition(identity)
+    }
+
+    pub(in crate::cranelift_backend) fn disposition_unreached_operand_edge_for_owner(
+        &self,
+        emitted_owner: PredeclaredFunctionId,
+        parent: StaticOriginId,
+        position: usize,
+        role: SourceOperandRole,
+    ) -> Result<(), CraneliftBackendError> {
+        let child = self.semantic.child_origin(parent, position)?;
+        let position = u32::try_from(position)
+            .map_err(|_| planner_capacity_error("operand-edge position exhausted"))?;
+        let edge = self
+            .operand_edges
+            .iter()
+            .find(|edge| {
+                edge.parent == parent
+                    && edge.child == child
+                    && edge.position == position
+                    && edge.role == role
+            })
+            .ok_or_else(|| planner_error("unreached source edge has no planned disposition"))?;
+        let identity = BoundaryUseIdentity::Source {
+            emitted_owner,
+            parent: edge.parent,
+            child: edge.child,
+            position: edge.position,
+        };
+        if self
+            .operand_edge_consumption
+            .borrow()
+            .contains_key(&identity)
+            || self.boundary_use_dispositions.borrow().contains(&identity)
+        {
+            return Ok(());
+        }
         self.record_boundary_use_disposition(identity)
     }
 
@@ -8716,7 +13073,18 @@ impl<'src> StaticTransitionPlan<'src> {
         emitted_owner: PredeclaredFunctionId,
         root: StaticOriginId,
     ) -> Result<(), CraneliftBackendError> {
-        self.disposition_boundary_uses_in_subtree_for_owner(root, false, emitted_owner)
+        self.disposition_boundary_uses_in_subtree_for_owner(root, false, emitted_owner, true)
+    }
+
+    /// Close only the still-unreached boundary identities in a transported
+    /// suffix. Aggregate occurrence reachability is closed later, after every
+    /// causal clone of the suffix has been visited.
+    pub(in crate::cranelift_backend) fn disposition_boundary_uses_only_in_owner_subtree_for_owner(
+        &self,
+        emitted_owner: PredeclaredFunctionId,
+        root: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        self.disposition_boundary_uses_in_subtree_for_owner(root, false, emitted_owner, false)
     }
 
     /// Disposition a dead source subtree across the closure-body owner
@@ -8733,7 +13101,15 @@ impl<'src> StaticTransitionPlan<'src> {
         emitted_owner: PredeclaredFunctionId,
         root: StaticOriginId,
     ) -> Result<(), CraneliftBackendError> {
-        self.disposition_boundary_uses_in_subtree_for_owner(root, true, emitted_owner)
+        self.disposition_boundary_uses_in_subtree_for_owner(root, true, emitted_owner, true)
+    }
+
+    pub(in crate::cranelift_backend) fn disposition_boundary_uses_only_in_inline_subtree_for_owner(
+        &self,
+        emitted_owner: PredeclaredFunctionId,
+        root: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        self.disposition_boundary_uses_in_subtree_for_owner(root, true, emitted_owner, false)
     }
 
     fn disposition_boundary_uses_in_subtree(
@@ -8745,7 +13121,12 @@ impl<'src> StaticTransitionPlan<'src> {
             .semantic
             .function_owner(root)?
             .ok_or_else(|| planner_error("dead source subtree has no function owner"))?;
-        self.disposition_boundary_uses_in_subtree_for_owner(root, inline_closure_bodies, owner)
+        self.disposition_boundary_uses_in_subtree_for_owner(
+            root,
+            inline_closure_bodies,
+            owner,
+            true,
+        )
     }
 
     fn disposition_boundary_uses_in_subtree_for_owner(
@@ -8753,6 +13134,7 @@ impl<'src> StaticTransitionPlan<'src> {
         root: StaticOriginId,
         inline_closure_bodies: bool,
         emitted_owner: PredeclaredFunctionId,
+        disposition_aggregates: bool,
     ) -> Result<(), CraneliftBackendError> {
         let owner = self
             .semantic
@@ -8799,15 +13181,15 @@ impl<'src> StaticTransitionPlan<'src> {
             .boundary_uses
             .iter()
             .filter_map(|planned| {
-                let (origin, exact_static_worker_path) = match &planned.path {
-                    PlannedBoundaryUsePath::Source { parent, .. } => (*parent, false),
-                    PlannedBoundaryUsePath::Synthesized { origin, .. } => (*origin, false),
+                let (origin, source_path, exact_static_worker_path) = match &planned.path {
+                    PlannedBoundaryUsePath::Source { parent, .. } => (*parent, true, false),
+                    PlannedBoundaryUsePath::Synthesized { origin, .. } => (*origin, false, false),
                     PlannedBoundaryUsePath::StaticRecursorWorker {
                         producer_origin, ..
-                    } => (*producer_origin, true),
+                    } => (*producer_origin, false, true),
                     PlannedBoundaryUsePath::StaticRecursorCapture {
                         producer_origin, ..
-                    } => (*producer_origin, true),
+                    } => (*producer_origin, false, true),
                 };
                 let dead_worker_call_input = dead_worker_origins.contains_key(&origin)
                     && self.lowering_boundary_uses.iter().any(|lowering| {
@@ -8816,8 +13198,10 @@ impl<'src> StaticTransitionPlan<'src> {
                             && lowering.position != u32::MAX
                     });
                 let exact_static_worker = exact_static_worker_path || dead_worker_call_input;
-                let in_dead_population = ((inline_closure_bodies
-                    || planned.producer_owner == owner)
+                let in_dead_population = ((source_path
+                    || inline_closure_bodies
+                    || planned.producer_owner == owner
+                    || planned.producer_owner == emitted_owner)
                     && origins.contains(&origin))
                     || dead_worker_origins
                         .get(&origin)
@@ -8835,6 +13219,32 @@ impl<'src> StaticTransitionPlan<'src> {
         drop(consumption);
         for identity in identities {
             self.record_boundary_use_disposition(identity)?;
+        }
+        let environment_consumption = self
+            .static_recursor_worker_environment_consumption
+            .borrow();
+        let environment_dispositions = self
+            .static_recursor_worker_environments
+            .iter()
+            .filter(|record| {
+                record.owner == emitted_owner
+                    && (origins.contains(&record.parent_origin)
+                        || origins.contains(&record.producer_origin)
+                        || origins.contains(&record.closure_origin))
+            })
+            .map(|record| StaticRecursorWorkerEnvironmentOccurrence {
+                worker_identity: record.worker_identity,
+                residual_id: record.residual_id,
+                emitted_owner: record.owner,
+            })
+            .filter(|occurrence| !environment_consumption.contains_key(occurrence))
+            .collect::<Vec<_>>();
+        drop(environment_consumption);
+        self.static_recursor_worker_environment_dispositions
+            .borrow_mut()
+            .extend(environment_dispositions);
+        if !disposition_aggregates {
+            return Ok(());
         }
         let consumption = self.aggregate_representation_consumption.borrow();
         // Source-machine specializations can classify one clone of a semantic
@@ -8902,10 +13312,38 @@ impl<'src> StaticTransitionPlan<'src> {
         position: u32,
         owner: PredeclaredFunctionId,
     ) -> Result<(), CraneliftBackendError> {
+        let consumption = self.operand_edge_consumption.borrow();
+        let dispositions = self.boundary_use_dispositions.borrow();
+        let planned = self.lowering_boundary_uses.iter().find(|planned| {
+            planned.edge == edge
+                && planned.origin == origin
+                && planned.position == position
+                && planned.owner == owner
+                && !consumption.contains_key(&planned.identity)
+                && !dispositions.contains(&planned.identity)
+        });
+        let Some(planned) = planned else {
+            return Ok(());
+        };
+        let identity = planned.identity;
+        drop(dispositions);
+        drop(consumption);
+        self.record_boundary_use_disposition(identity)
+    }
+
+    pub(in crate::cranelift_backend) fn disposition_lowering_boundary_use_for_emitted_occurrence(
+        &self,
+        edge: LoweringOnlyOperandEdge,
+        origin: StaticOriginId,
+        position: u32,
+        emitted_occurrence: u32,
+        owner: PredeclaredFunctionId,
+    ) -> Result<(), CraneliftBackendError> {
         let Some(planned) = self.lowering_boundary_uses.iter().find(|planned| {
             planned.edge == edge
                 && planned.origin == origin
                 && planned.position == position
+                && planned.emitted_occurrence == emitted_occurrence
                 && planned.owner == owner
         }) else {
             return Ok(());
@@ -8914,6 +13352,10 @@ impl<'src> StaticTransitionPlan<'src> {
             .operand_edge_consumption
             .borrow()
             .contains_key(&planned.identity)
+            || self
+                .boundary_use_dispositions
+                .borrow()
+                .contains(&planned.identity)
         {
             return Ok(());
         }
@@ -8975,9 +13417,7 @@ impl<'src> StaticTransitionPlan<'src> {
         let actual = ledger
             .iter()
             .filter_map(|(identity, count)| match identity {
-                BoundaryUseIdentity::Source { emitted_owner, .. }
-                    if *emitted_owner == owner =>
-                {
+                BoundaryUseIdentity::Source { emitted_owner, .. } if *emitted_owner == owner => {
                     (!dispositions.contains(identity)).then_some((*identity, *count))
                 }
                 _ => None,
@@ -9152,6 +13592,9 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
     ) -> Result<(), CraneliftBackendError> {
         let dispositions = self.boundary_use_dispositions.borrow();
+        let environment_dispositions = self
+            .static_recursor_worker_environment_dispositions
+            .borrow();
         let expected = self
             .static_recursor_worker_environments
             .iter()
@@ -9161,6 +13604,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 residual_id: record.residual_id,
                 emitted_owner: record.owner,
             })
+            .filter(|occurrence| !environment_dispositions.contains(occurrence))
             .collect::<BTreeSet<_>>();
         let ledger = self.static_recursor_worker_environment_consumption.borrow();
         let duplicates = ledger
@@ -9175,6 +13619,16 @@ impl<'src> StaticTransitionPlan<'src> {
             )));
         }
         let actual = ledger.keys().copied().collect::<BTreeSet<_>>();
+        let overlap = actual
+            .intersection(&environment_dispositions)
+            .copied()
+            .collect::<Vec<_>>();
+        if !overlap.is_empty() {
+            return Err(planner_error(format!(
+                "static recursor worker environments were both emitted and dispositioned; \
+                 occurrences={overlap:?}"
+            )));
+        }
         if actual != expected {
             let missing = expected.difference(&actual).copied().collect::<Vec<_>>();
             let extra = actual.difference(&expected).copied().collect::<Vec<_>>();
@@ -9267,10 +13721,7 @@ impl<'src> StaticTransitionPlan<'src> {
             // allocations and synthesized sites nested below the arm, before
             // global exact-ledger validation. Merely dispositioning the arm's
             // parent edge leaves those independently planned events orphaned.
-            self.disposition_boundary_uses_in_owner_subtree_for_owner(
-                emitted_owner,
-                child,
-            )?;
+            self.disposition_boundary_uses_in_owner_subtree_for_owner(emitted_owner, child)?;
             self.record_boundary_use_disposition(identity)?;
         }
         Ok(())
@@ -9414,7 +13865,12 @@ impl<'src> StaticTransitionPlan<'src> {
             .boundary_uses
             .iter()
             .find(|planned| planned.identity == identity)
-            .ok_or_else(|| planner_error("boundary transition has no exact unified planned use"))?;
+            .ok_or_else(|| {
+                planner_error(format!(
+                    "boundary transition has no exact unified planned use: \
+                     identity={identity:?}, label={label}"
+                ))
+            })?;
         Ok(OperandEdgeToken {
             disposition: planned.disposition,
             label,
@@ -9553,6 +14009,25 @@ impl<'src> StaticTransitionPlan<'src> {
         position: u32,
         owner: PredeclaredFunctionId,
     ) -> Result<OperandEdgeToken, CraneliftBackendError> {
+        self.lowering_boundary_use_token_for_emitted_occurrence(edge, origin, position, 0, owner)
+    }
+
+    /// Consume the exact planner-issued input authority for one emitted call
+    /// occurrence.
+    ///
+    /// Source origin and operand position are provenance, not emitted-code
+    /// identity: a generated continuation can contain two direct calls at the
+    /// same semantic site (the initial producer-result transfer and its
+    /// recursive loop transfer). The planner's call-site sequence keeps those
+    /// instructions distinct without placing any selector in the runtime ABI.
+    pub(in crate::cranelift_backend) fn lowering_boundary_use_token_for_emitted_occurrence(
+        &self,
+        edge: LoweringOnlyOperandEdge,
+        origin: StaticOriginId,
+        position: u32,
+        emitted_occurrence: u32,
+        owner: PredeclaredFunctionId,
+    ) -> Result<OperandEdgeToken, CraneliftBackendError> {
         #[cfg(test)]
         if DENY_LOWERING_BOUNDARY_USE_ISSUANCE.with(Cell::get) {
             return Err(planner_error(
@@ -9567,6 +14042,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 planned.edge == edge
                     && planned.origin == origin
                     && planned.position == position
+                    && planned.emitted_occurrence == emitted_occurrence
                     && planned.owner == owner
                     && !ledger.contains_key(&planned.identity)
             })
@@ -9575,6 +14051,7 @@ impl<'src> StaticTransitionPlan<'src> {
                     planned.edge == edge
                         && planned.origin == origin
                         && planned.position == position
+                        && planned.emitted_occurrence == emitted_occurrence
                         && planned.owner == owner
                 })
             })
@@ -9586,13 +14063,21 @@ impl<'src> StaticTransitionPlan<'src> {
                     .map(|occurrence| occurrence.expr);
                 planner_error(format!(
                     "lowering transition has no exact planner-issued boundary use: \
-                     edge={edge:?}, origin={origin:?}, position={position}, owner={owner:?}, \
-                     source={source:?}"
+                     edge={edge:?}, origin={origin:?}, position={position}, \
+                     emitted_occurrence={emitted_occurrence}, owner={owner:?}, source={source:?}"
                 ))
             })?;
         let identity = planned.identity;
         let label = planned.edge.label();
         drop(ledger);
+        // Generated source paths can classify an occurrence dead in one clone
+        // before another clone reaches the same emitted transition. The exact
+        // later emitted occurrence wins over that local dead classification;
+        // final set equality still rejects any identity that is neither
+        // consumed nor dispositioned.
+        self.boundary_use_dispositions
+            .borrow_mut()
+            .remove(&identity);
         let token = self.planned_boundary_use_token(identity, label)?;
         #[cfg(test)]
         {
@@ -9669,7 +14154,10 @@ impl<'src> StaticTransitionPlan<'src> {
             .operand_edge_consumption
             .borrow()
             .contains_key(&edge.identity)
-            || self.boundary_use_dispositions.borrow().contains(&edge.identity)
+            || self
+                .boundary_use_dispositions
+                .borrow()
+                .contains(&edge.identity)
         {
             return Ok(());
         }
@@ -9713,10 +14201,11 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
         closure_origin: StaticOriginId,
     ) -> Result<Option<StaticRecursorWorkerResidualToken>, CraneliftBackendError> {
-        let Some(residual) = self
-            .static_recursor_worker_residuals
-            .iter()
-            .find(|residual| residual.closure_origin == closure_origin)
+        let Some(residual) = direct_worker_environment_residual_for_closure(
+            self,
+            &self.static_recursor_worker_residuals,
+            closure_origin,
+        )?
         else {
             return Ok(None);
         };
@@ -9790,14 +14279,6 @@ impl<'src> StaticTransitionPlan<'src> {
                     && live_producers.contains(&residual.producer_origin)
             })
             .collect::<Vec<_>>();
-        if parent_origin == StaticOriginId(12)
-            && predecessor_body == Some(StaticOriginId(761))
-        {
-            eprintln!(
-                "TRACE selection parent={parent_origin:?} predecessor={predecessor_body:?} \
-                 live={live_producers:?} candidates={candidates:?}"
-            );
-        }
         if candidates.is_empty() {
             return Ok(None);
         }
@@ -10148,6 +14629,35 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
         function: PredeclaredFunctionId,
     ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+        if let Some(specialization) = self
+            .continuation_specializations
+            .iter()
+            .find(|specialization| specialization.function == function)
+        {
+            let origin = specialization.key.continuation_origin;
+            let occurrence = self
+                .source_occurrences
+                .get(origin.0 as usize)
+                .and_then(Option::as_ref)
+                .ok_or_else(|| {
+                    planner_error("continuation specialization names no source occurrence")
+                })?;
+            let RuntimeExpr::ComputationalMatch { cases, .. } = occurrence.expr else {
+                return Err(planner_error(
+                    "continuation specialization names a non-computational continuation",
+                ));
+            };
+            // The out-of-line unit receives the producer result as its first
+            // ABI operand. It emits the eliminator and case continuations, not
+            // the match's producer/scrutinee subtree.
+            let mut required = BTreeSet::from([origin]);
+            for index in 0..cases.len() {
+                required.extend(self.source_join_origins_in_owner_subtree(
+                    self.semantic.child_origin(origin, 1 + index)?,
+                )?);
+            }
+            return Ok(required);
+        }
         let source_function = self
             .static_callable_specializations
             .iter()
@@ -10168,7 +14678,9 @@ impl<'src> StaticTransitionPlan<'src> {
                     "join consumption population is not keyed by source origin",
                 ));
             }
-            if self.semantic.function_owner(occurrence.static_origin)? == Some(source_function) {
+            let source_owned =
+                self.semantic.function_owner(occurrence.static_origin)? == Some(source_function);
+            if source_owned {
                 required.insert(occurrence.static_origin);
             }
         }
@@ -10314,6 +14826,47 @@ impl<'src> StaticTransitionPlan<'src> {
             }
         }
         Ok(results)
+    }
+
+    /// The exact compiler-private checked frame wrapping one computational
+    /// continuation, when that continuation is checked.
+    ///
+    /// The wrapper's source-child edge is the authority. A frame id found by
+    /// matching a fingerprint, constructor family, or emitted shape would
+    /// collapse distinct checked return holes.
+    fn checked_subcontinuation_frame_for_match(
+        &self,
+        match_origin: StaticOriginId,
+    ) -> Result<Option<u64>, CraneliftBackendError> {
+        let occurrence = self
+            .source_occurrences
+            .get(match_origin.0 as usize)
+            .and_then(Option::as_ref)
+            .ok_or_else(|| {
+                planner_error("continuation specialization names no source occurrence")
+            })?;
+        if occurrence.static_origin != match_origin
+            || !matches!(occurrence.expr, RuntimeExpr::ComputationalMatch { .. })
+        {
+            return Err(planner_error(
+                "continuation specialization names a non-computational continuation",
+            ));
+        }
+        let mut checked_frame_id = None;
+        for wrapper in self.source_occurrences.iter().flatten() {
+            let RuntimeExpr::CheckedSubcontinuationFrame { frame_id, .. } = wrapper.expr else {
+                continue;
+            };
+            if self.semantic.child_origin(wrapper.static_origin, 0)? != match_origin {
+                continue;
+            }
+            if checked_frame_id.replace(*frame_id).is_some() {
+                return Err(planner_error(
+                    "computational continuation has multiple checked frame wrappers",
+                ));
+            }
+        }
+        Ok(checked_frame_id)
     }
 
     /// Constructor identities which can be returned by one exact source
@@ -10486,6 +15039,18 @@ impl<'src> StaticTransitionPlan<'src> {
                 ledger.insert(key, 1);
             }
         }
+        if (owner == PredeclaredFunctionId(15)
+            || owner == PredeclaredFunctionId(22))
+            && match_origin == StaticOriginId(268)
+        {
+            eprintln!(
+                "CONTSPEC_CASE_TOKEN owner={owner:?} match={match_origin:?} ordinal={ordinal} \
+                 constructor={:?} status={:?} authority={:?}",
+                record.constructor,
+                record.status,
+                record.authority.producers,
+            );
+        }
         Ok(CaseEmissionToken {
             match_origin,
             ordinal,
@@ -10534,15 +15099,17 @@ impl<'src> StaticTransitionPlan<'src> {
                 let mut ancestry = vec![origin];
                 let mut cursor = origin;
                 for _ in 0..32 {
-                    let parent = self.source_occurrences.iter().flatten().find_map(
-                        |occurrence| {
+                    let parent = self
+                        .source_occurrences
+                        .iter()
+                        .flatten()
+                        .find_map(|occurrence| {
                             self.semantic
                                 .child_origins(occurrence.static_origin)
                                 .ok()
                                 .filter(|children| children.contains(&cursor))
                                 .map(|_| occurrence.static_origin)
-                        },
-                    );
+                        });
                     let Some(parent) = parent else {
                         break;
                     };
@@ -10609,6 +15176,45 @@ impl<'src> StaticTransitionPlan<'src> {
         })
     }
 
+    pub(in crate::cranelift_backend) fn disposition_aggregate_representation_for_owner(
+        &self,
+        owner: PredeclaredFunctionId,
+        origin: StaticOriginId,
+    ) -> Result<(), CraneliftBackendError> {
+        let key = (owner, origin);
+        let record = self
+            .aggregate_representations
+            .iter()
+            .find(|record| record.owner == owner && record.origin == origin)
+            .ok_or_else(|| {
+                planner_error(
+                    "direct continuation edge has no exact aggregate representation authority",
+                )
+            })?;
+        if record.phase != ResultPhase::CarrierRequired {
+            return Ok(());
+        }
+        if self
+            .aggregate_representation_consumption
+            .borrow()
+            .contains_key(&key)
+        {
+            return Err(planner_error(
+                "one aggregate occurrence was both emitted and transferred directly",
+            ));
+        }
+        if !self
+            .aggregate_representation_dispositions
+            .borrow_mut()
+            .insert(key)
+        {
+            return Err(planner_error(format!(
+                "one direct continuation edge dispositioned its aggregate twice: {key:?}"
+            )));
+        }
+        Ok(())
+    }
+
     pub(in crate::cranelift_backend) fn synthesized_aggregate_occurrence(
         &self,
         effect_origin: StaticOriginId,
@@ -10620,13 +15226,7 @@ impl<'src> StaticTransitionPlan<'src> {
             .semantic
             .function_owner(effect_origin)?
             .ok_or_else(|| planner_error("synthesized aggregate has no function owner"))?;
-        self.synthesized_aggregate_occurrence_for_owner(
-            owner,
-            effect_origin,
-            site,
-            role,
-            arity,
-        )
+        self.synthesized_aggregate_occurrence_for_owner(owner, effect_origin, site, role, arity)
     }
 
     pub(in crate::cranelift_backend) fn synthesized_aggregate_occurrence_for_owner(
@@ -10754,7 +15354,13 @@ impl<'src> StaticTransitionPlan<'src> {
                     && record.captures.len() == capture_count
             })
             .ok_or_else(|| {
-                planner_error("static recursor worker environment has no exact planned occurrence")
+                planner_error(format!(
+                    "static recursor worker environment has no exact planned occurrence: \
+                     worker={worker_identity:?}, residual={residual_id:?}, \
+                     owner={emitted_owner:?}, parent={parent_origin:?}, \
+                     producer={producer_origin:?}, position={sibling_position}, \
+                     closure={closure_origin:?}, captures={capture_count}",
+                ))
             })?;
         if record
             .captures
@@ -10803,13 +15409,29 @@ impl<'src> StaticTransitionPlan<'src> {
                 "static recursor environment allocation disagrees with its planned occurrence",
             ));
         }
+        if self
+            .static_recursor_worker_environment_dispositions
+            .borrow()
+            .contains(&occurrence)
+            && self
+                .continuation_specializations
+                .iter()
+                .any(|specialization| specialization.worker.id == occurrence.residual_id)
+        {
+            // Transported source suffixes can classify one clone of this
+            // residual dead before another clone emits its exact causal
+            // specialization edge. The worker environment is indivisible
+            // from that emitted edge, so the reached occurrence wins exactly
+            // as it does for the worker and capture BoundaryUse identities.
+            self.static_recursor_worker_environment_dispositions
+                .borrow_mut()
+                .remove(&occurrence);
+        }
         let mut ledger = self
             .static_recursor_worker_environment_consumption
             .borrow_mut();
         let count = ledger.entry(occurrence).or_insert(0);
-        if *count == 1
-            && self.static_recursor_environment_has_affine_case_revisit(record)
-        {
+        if *count == 1 && self.static_recursor_environment_has_affine_case_revisit(record) {
             // Functionized lowering may visit the same source constructor
             // through both its composed-value and known-constructor staging
             // routes. Reborrow is lawful only when one exact reachable
@@ -10844,6 +15466,37 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(AggregateRepresentationToken { tag, class })
     }
 
+    pub(in crate::cranelift_backend) fn disposition_static_recursor_worker_environment_if_planned(
+        &self,
+        worker_identity: BoundaryUseIdentity,
+        residual_id: StaticRecursorWorkerResidualId,
+        emitted_owner: PredeclaredFunctionId,
+    ) {
+        let occurrence = StaticRecursorWorkerEnvironmentOccurrence {
+            worker_identity,
+            residual_id,
+            emitted_owner,
+        };
+        if !self
+            .static_recursor_worker_environments
+            .iter()
+            .any(|record| {
+                record.worker_identity == worker_identity
+                    && record.residual_id == residual_id
+                    && record.owner == emitted_owner
+            })
+            || self
+                .static_recursor_worker_environment_consumption
+                .borrow()
+                .contains_key(&occurrence)
+        {
+            return;
+        }
+        self.static_recursor_worker_environment_dispositions
+            .borrow_mut()
+            .insert(occurrence);
+    }
+
     fn static_recursor_environment_has_affine_case_revisit(
         &self,
         record: &PlannedStaticRecursorWorkerEnvironment,
@@ -10872,7 +15525,43 @@ impl<'src> StaticTransitionPlan<'src> {
             }
             cursor = edge.parent;
         }
-        authorities.len() == 1
+        if authorities.len() == 1 {
+            return true;
+        }
+        let Some(specialization) = self
+            .continuation_specializations
+            .iter()
+            .find(|specialization| specialization.function == record.owner)
+        else {
+            return false;
+        };
+        let Ok(worker_calls) =
+            continuation_specialization_worker_call_origins(self, specialization)
+        else {
+            return false;
+        };
+        let mut emitted_cases = BTreeSet::new();
+        for call_origin in worker_calls {
+            let mut enclosing = self
+                .case_emissions
+                .iter()
+                .filter(|case| {
+                    case.owner == record.owner
+                        && case.status == CaseEmissionStatus::Reachable
+                })
+                .filter_map(|case| {
+                    source_descendant_distance(self, case.body_origin, call_origin)
+                        .ok()
+                        .flatten()
+                        .map(|distance| (distance, case.match_origin, case.ordinal))
+                })
+                .collect::<Vec<_>>();
+            enclosing.sort_by_key(|(distance, _, _)| *distance);
+            if let Some((_, match_origin, ordinal)) = enclosing.first() {
+                emitted_cases.insert((*match_origin, *ordinal));
+            }
+        }
+        !emitted_cases.is_empty()
     }
 
     /// The artifact-static constructor identity of a `Construct` occurrence —
@@ -11128,6 +15817,7 @@ impl<'src> StaticTransitionPlan<'src> {
             })
             .map(|(caller, callee, callee_origin)| EmittableCallEdge {
                 caller,
+                call_site_sequence: 0,
                 callee,
                 callee_origin,
                 call_site_origin: callee_origin,
@@ -11148,6 +15838,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 .map(
                     |(caller, callee, callee_origin, call_site_origin)| EmittableCallEdge {
                         caller,
+                        call_site_sequence: 0,
                         callee,
                         callee_origin,
                         call_site_origin,
@@ -11163,6 +15854,17 @@ impl<'src> StaticTransitionPlan<'src> {
         // edges. The residual's result-flow derivation is the authority; no
         // runtime body identity or selector participates.
         for residual in &self.static_recursor_worker_residuals {
+            if self
+                .continuation_specializations
+                .iter()
+                .any(|specialization| specialization.worker == *residual)
+            {
+                // The causal producer branch now calls the exact out-of-line
+                // return hole. Retaining the former post-join source-owner
+                // worker edge would plan a second call that has no lawful
+                // emitted occurrence.
+                continue;
+            }
             let caller = self
                 .semantic
                 .function_owner(residual.parent_origin)?
@@ -11175,11 +15877,110 @@ impl<'src> StaticTransitionPlan<'src> {
                 .ok_or_else(|| planner_error("static recursor worker has no function owner"))?;
             calls.push(EmittableCallEdge {
                 caller,
+                call_site_sequence: 0,
                 callee,
                 callee_origin: residual.body_origin,
                 call_site_origin: residual.body_origin,
                 kind: EmittableCallKind::StaticBody,
             });
+        }
+        // Each out-of-line return-hole unit binds one exact worker. Its
+        // computational continuation therefore owns a direct edge to that
+        // worker. Source provenance is not emitted-occurrence identity:
+        // omitting this unit-qualified edge leaves the specialization to
+        // rediscover a target from the joined environment word, which is
+        // precisely the information loss this unit class prevents.
+        for specialization in &self.continuation_specializations {
+            let callee = self
+                .semantic
+                .function_owner(specialization.worker.body_origin)?
+                .ok_or_else(|| {
+                    planner_error("continuation specialization worker has no function owner")
+                })?;
+            // A checked-IH invocation, rather than a producer alternative,
+            // owns one emitted worker call. Several alternatives can enter
+            // the same out-of-line continuation while its exact case
+            // partition emits only one of those calls (and conversely one
+            // continuation can emit several branch-local invocations). Bind
+            // the recursive slot template selected by this specialization,
+            // then retain only invocation occurrences whose nearest ordinary
+            // case is reachable in this emitted owner.
+            let emitted_call_count = u32::try_from(
+                continuation_specialization_worker_call_origins(self, specialization)?.len(),
+            )
+            .map_err(|_| {
+                planner_capacity_error(
+                    "continuation worker emitted-occurrence population exhausted",
+                )
+            })?;
+            for call_site_sequence in 0..emitted_call_count {
+                calls.push(EmittableCallEdge {
+                    caller: specialization.function,
+                    call_site_sequence,
+                    callee,
+                    callee_origin: specialization.worker.body_origin,
+                    call_site_origin: specialization.worker.body_origin,
+                    kind: EmittableCallKind::StaticBody,
+                });
+            }
+        }
+        let mut continuation_sequences = BTreeMap::new();
+        for call in &self.continuation_specialization_calls {
+            let specialization = self
+                .continuation_specializations
+                .get(call.specialization.0 as usize)
+                .ok_or_else(|| {
+                    planner_error("continuation specialization call names no specialization")
+                })?;
+            let recursive_fold = self
+                .continuation_specialization_for_function(call.producer_owner)
+                .and_then(|producer_id| {
+                    self.continuation_specializations
+                        .get(producer_id.0 as usize)
+                })
+                .is_some_and(|producer| {
+                    producer.key.consumer_owner == call.consumer_owner
+                        && producer.key.continuation_origin
+                            == specialization.key.continuation_origin
+                        && producer.worker == specialization.worker
+                });
+            let generated_chain = self
+                .continuation_specialization_for_function(call.producer_owner)
+                .and_then(|producer_id| {
+                    self.continuation_specializations
+                        .get(producer_id.0 as usize)
+                })
+                .is_some_and(|producer| {
+                    self.source_result_origins_in_owner_subtree(producer.key.continuation_origin)
+                        .is_ok_and(|origins| origins.contains(&call.producer_result_origin))
+                });
+            if (!(recursive_fold || generated_chain)
+                && (specialization.key.producer_owner != call.producer_owner
+                    || specialization.key.producer_result_origin != call.producer_result_origin))
+                || specialization.key.consumer_owner != call.consumer_owner
+                || specialization.key.worker_body_origin != call.worker_body_origin
+            {
+                return Err(planner_error(format!(
+                    "continuation specialization call disagrees with its interned key: \
+                     call={call:?}, key={:?}, recursive_fold={recursive_fold}, \
+                     generated_chain={generated_chain}",
+                    specialization.key,
+                )));
+            }
+            let sequence = continuation_sequences
+                .entry((call.producer_owner, call.producer_result_origin))
+                .or_insert(0u32);
+            calls.push(EmittableCallEdge {
+                caller: call.producer_owner,
+                call_site_sequence: *sequence,
+                callee: specialization.function,
+                callee_origin: specialization.key.continuation_origin,
+                call_site_origin: call.producer_result_origin,
+                kind: EmittableCallKind::ContinuationSpecialization,
+            });
+            *sequence = sequence
+                .checked_add(1)
+                .ok_or_else(|| planner_capacity_error("continuation call sequence exhausted"))?;
         }
         let callable_body_callee =
             |binding: &StaticCallableBindingKey|
@@ -11237,6 +16038,7 @@ impl<'src> StaticTransitionPlan<'src> {
                         }
                         calls.push(EmittableCallEdge {
                             caller: specialization.function,
+                            call_site_sequence: 0,
                             callee: callable_body_callee(binding)?,
                             callee_origin: binding.body_origin,
                             call_site_origin: binding.body_origin,
@@ -11270,6 +16072,7 @@ impl<'src> StaticTransitionPlan<'src> {
                         }
                         calls.push(EmittableCallEdge {
                             caller: specialization.function,
+                            call_site_sequence: 0,
                             callee: callable_body_callee(nested)?,
                             callee_origin: nested.body_origin,
                             call_site_origin: nested.body_origin,
@@ -11286,6 +16089,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 if caller == specialization.body_function && !eliminated_literal {
                     calls.push(EmittableCallEdge {
                         caller: specialization.function,
+                        call_site_sequence: 0,
                         callee,
                         callee_origin,
                         call_site_origin: callee_origin,
@@ -11304,6 +16108,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 {
                     calls.push(EmittableCallEdge {
                         caller: specialization.function,
+                        call_site_sequence: 0,
                         callee,
                         callee_origin,
                         call_site_origin,
@@ -11319,6 +16124,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 .ok_or_else(|| planner_error("static callable call names no specialization"))?;
             calls.push(EmittableCallEdge {
                 caller: call.caller,
+                call_site_sequence: 0,
                 callee: specialization.function,
                 callee_origin: specialization.base_origin,
                 call_site_origin: call.call_origin,
@@ -11327,9 +16133,23 @@ impl<'src> StaticTransitionPlan<'src> {
         }
         calls.sort();
         calls.dedup();
+        for call in &calls {
+            if self
+                .continuation_specialization_for_function(call.caller)
+                .is_some()
+                || call.caller == PredeclaredFunctionId(5)
+            {
+                eprintln!("CONTSPEC_EDGE {call:?}");
+            }
+        }
         let mut sites = BTreeSet::new();
         for call in &calls {
-            if !sites.insert((call.caller, call.call_site_origin, call.kind)) {
+            if !sites.insert((
+                call.caller,
+                call.call_site_origin,
+                call.call_site_sequence,
+                call.kind,
+            )) {
                 return Err(planner_error(
                     "one generated function has two targets for one typed call edge",
                 ));
@@ -11461,6 +16281,450 @@ impl<'src> StaticTransitionPlan<'src> {
             bindings,
             body_binding,
         })
+    }
+
+    pub(in crate::cranelift_backend) fn emittable_continuation_specialization(
+        &self,
+        id: ContinuationSpecializationId,
+        producer_owner: PredeclaredFunctionId,
+        producer_result_origin: StaticOriginId,
+    ) -> Result<EmittableContinuationSpecialization, CraneliftBackendError> {
+        let specialization = self
+            .continuation_specializations
+            .get(id.0 as usize)
+            .ok_or_else(|| planner_error("continuation specialization id is outside the plan"))?;
+        if specialization.id != id {
+            return Err(planner_error(
+                "continuation specialization is not keyed by its dense identity",
+            ));
+        }
+        let producer_construct_origin = self
+            .continuation_specialization_calls
+            .iter()
+            .find(|call| {
+                call.producer_owner == producer_owner
+                    && call.producer_result_origin == producer_result_origin
+                    && call.specialization == id
+            })
+            .map(|call| call.producer_construct_origin)
+            .unwrap_or(specialization.key.producer_construct_origin);
+        let continuation_input_start = continuation_producer_input_start(
+            &self.continuation_specializations,
+            specialization,
+            producer_owner,
+        )?;
+        let input_capture_count = specialization
+            .key
+            .continuation_captures
+            .checked_add(continuation_producer_capture_extension(
+                &self.continuation_specializations,
+                specialization.function,
+            )?)
+            .ok_or_else(|| {
+                planner_capacity_error(
+                    "continuation specialization input capture population exhausted",
+                )
+            })?;
+        eprintln!(
+            "CONTSPEC_ABI producer={producer_owner:?} result={producer_result_origin:?} \
+             target={:?} consumer={:?} start={continuation_input_start} captures={} \
+             producer_base={} ordinary={} construct={producer_construct_origin:?} \
+             worker_closure={:?} worker_body={:?} continuation={:?}",
+            specialization.function,
+            specialization.key.consumer_owner,
+            specialization.key.continuation_captures,
+            specialization.key.producer_base_inputs,
+            specialization.key.ordinary_parameters,
+            specialization.worker.closure_origin,
+            specialization.worker.body_origin,
+            specialization.key.continuation_origin,
+        );
+        Ok(EmittableContinuationSpecialization {
+            id,
+            consumer_owner: specialization.key.consumer_owner,
+            continuation_origin: specialization.key.continuation_origin,
+            checked_frame_id: specialization.key.checked_frame_id,
+            producer_result_origin,
+            producer_construct_origin,
+            producer_fields_flattened: specialization.key.producer_fields_flattened,
+            ordinary_parameter_count: specialization.key.ordinary_parameters,
+            worker_position: specialization.key.recursive_position,
+            worker_closure_origin: specialization.worker.closure_origin,
+            worker_body_origin: specialization.worker.body_origin,
+            worker_declared_arity: specialization.worker.declared_arity,
+            worker_capture_count: u32::try_from(specialization.worker.captures.len()).map_err(
+                |_| {
+                    planner_capacity_error(
+                        "continuation specialization capture population exhausted",
+                    )
+                },
+            )?,
+            continuation_input_start,
+            continuation_capture_count: specialization.key.continuation_captures,
+            input_capture_count,
+            continuation_environment_is_local:
+                specialization.key.continuation_environment_is_local,
+        })
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_specialization_worker_token(
+        &self,
+        id: ContinuationSpecializationId,
+    ) -> Result<StaticRecursorWorkerResidualToken, CraneliftBackendError> {
+        let specialization = self
+            .continuation_specializations
+            .get(id.0 as usize)
+            .ok_or_else(|| planner_error("continuation specialization id is outside the plan"))?;
+        let planned = self
+            .boundary_uses
+            .iter()
+            .find(|planned| {
+                matches!(
+                    &planned.path,
+                    PlannedBoundaryUsePath::StaticRecursorWorker {
+                        parent_origin,
+                        producer_origin,
+                        sibling_position,
+                        closure_origin,
+                        body_origin,
+                        declared_arity,
+                        captures,
+                    } if *parent_origin == specialization.worker.parent_origin
+                        && *producer_origin == specialization.worker.producer_origin
+                        && *sibling_position == specialization.worker.sibling_position
+                        && *closure_origin == specialization.worker.closure_origin
+                        && *body_origin == specialization.worker.body_origin
+                        && *declared_arity == specialization.worker.declared_arity
+                        && captures == &specialization.worker.captures
+                )
+            })
+            .ok_or_else(|| {
+                planner_error(
+                    "continuation specialization worker has no exact unified boundary use",
+                )
+            })?;
+        if self
+            .operand_edge_consumption
+            .borrow()
+            .contains_key(&planned.identity)
+        {
+            return self.static_recursor_worker_residual_token_value(
+                &specialization.worker,
+                planned.identity,
+            );
+        }
+        self.issue_static_recursor_worker_residual_token(&specialization.worker)
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_specialization_for_function(
+        &self,
+        function: PredeclaredFunctionId,
+    ) -> Option<ContinuationSpecializationId> {
+        self.continuation_specializations
+            .iter()
+            .find(|specialization| specialization.function == function)
+            .map(|specialization| specialization.id)
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_specialization_producer_constructor(
+        &self,
+        function: PredeclaredFunctionId,
+    ) -> Result<Option<ConstructorIdentity>, CraneliftBackendError> {
+        self.continuation_specialization_for_function(function)
+            .map(|id| {
+                let specialization = self
+                    .continuation_specializations
+                    .get(id.0 as usize)
+                    .ok_or_else(|| {
+                        planner_error(
+                            "continuation specialization function lost its dense identity",
+                        )
+                    })?;
+                self.semantic.constructor_symbol_identity(
+                    specialization.key.producer_construct_origin,
+                )
+            })
+            .transpose()
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_specialization_transitively_exits_owner(
+        &self,
+        id: ContinuationSpecializationId,
+        owner: PredeclaredFunctionId,
+    ) -> Result<bool, CraneliftBackendError> {
+        let mut pending = vec![id];
+        let mut visited = BTreeSet::new();
+        while let Some(id) = pending.pop() {
+            if !visited.insert(id) {
+                continue;
+            }
+            let specialization = self
+                .continuation_specializations
+                .get(id.0 as usize)
+                .ok_or_else(|| {
+                    planner_error(
+                        "continuation exit query names an absent specialization",
+                    )
+                })?;
+            if specialization.key.consumer_owner != owner {
+                return Ok(true);
+            }
+            pending.extend(
+                self.continuation_specialization_calls
+                    .iter()
+                    .filter(|call| {
+                        call.producer_owner == specialization.function
+                    })
+                    .map(|call| call.specialization),
+            );
+        }
+        Ok(false)
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_specialization_checked_frame(
+        &self,
+        function: PredeclaredFunctionId,
+    ) -> Option<u64> {
+        self.continuation_specializations
+            .iter()
+            .find(|specialization| specialization.function == function)
+            .and_then(|specialization| specialization.key.checked_frame_id)
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_environment_for_producer_call(
+        &self,
+        consumer: PredeclaredFunctionId,
+        producer: PredeclaredFunctionId,
+    ) -> Result<Option<(StaticOriginId, u32)>, CraneliftBackendError> {
+        if consumer == producer {
+            return Ok(None);
+        }
+        let environments = self
+            .continuation_specializations
+            .iter()
+            .filter(|specialization| {
+                specialization.key.consumer_owner == consumer
+                    && specialization.key.producer_owner == producer
+            })
+            .map(|specialization| {
+                (
+                    specialization.key.continuation_origin,
+                    specialization.key.continuation_captures,
+                )
+            })
+            .collect::<BTreeSet<_>>();
+        if environments.len() > 1 {
+            Err(planner_error(
+                "one producer call has incompatible continuation environments",
+            ))
+        } else {
+            Ok(environments.into_iter().next())
+        }
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_specialization_worker_environment(
+        &self,
+        specialization_function: PredeclaredFunctionId,
+        worker_function: PredeclaredFunctionId,
+    ) -> Result<Option<(u32, u32)>, CraneliftBackendError> {
+        let specialization = self
+            .continuation_specializations
+            .iter()
+            .find(|specialization| specialization.function == specialization_function);
+        let Some(specialization) = specialization else {
+            return Ok(None);
+        };
+        if self
+            .semantic
+            .function_owner(specialization.worker.body_origin)?
+            != Some(worker_function)
+        {
+            return Ok(None);
+        }
+        let extension = continuation_producer_capture_extension(
+            &self.continuation_specializations,
+            worker_function,
+        )?;
+        if extension > specialization.key.continuation_captures {
+            return Err(planner_error(format!(
+                "continuation worker requires an environment absent from its specialization: \
+                 specialization={specialization_function:?}, worker={worker_function:?}, \
+                 extension={extension}, captures={}",
+                specialization.key.continuation_captures,
+            )));
+        }
+        Ok((extension > 0).then_some((specialization.key.ordinary_parameters, extension)))
+    }
+
+    pub(in crate::cranelift_backend) fn producer_call_specializes_continuation(
+        &self,
+        consumer: PredeclaredFunctionId,
+        producer: PredeclaredFunctionId,
+        continuation: StaticOriginId,
+    ) -> bool {
+        self.continuation_specializations
+            .iter()
+            .any(|specialization| {
+                specialization.key.consumer_owner == consumer
+                    && specialization.key.producer_owner == producer
+                    && specialization.key.continuation_origin == continuation
+            })
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_specialized_suffix_origins(
+        &self,
+        producer_owner: PredeclaredFunctionId,
+        producer_result_origin: StaticOriginId,
+    ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+        let mut pending = self
+            .continuation_specialization_calls
+            .iter()
+            .filter(|call| {
+                call.producer_owner == producer_owner
+                    && call.producer_result_origin == producer_result_origin
+            })
+            .map(|call| call.specialization)
+            .collect::<Vec<_>>();
+        if pending.is_empty() {
+            return Err(planner_error(
+                "continuation result occurrence has no planned direct specialization",
+            ));
+        }
+        let mut visited = BTreeSet::new();
+        let mut suffixes = BTreeSet::new();
+        while let Some(id) = pending.pop() {
+            if !visited.insert(id) {
+                continue;
+            }
+            let specialization = self
+                .continuation_specializations
+                .get(id.0 as usize)
+                .ok_or_else(|| {
+                    planner_error("continuation call names an absent specialization")
+                })?;
+            suffixes.insert(specialization.key.continuation_origin);
+            pending.extend(
+                self.continuation_specialization_calls
+                    .iter()
+                    .filter(|call| call.producer_owner == specialization.function)
+                    .map(|call| call.specialization),
+            );
+        }
+        Ok(suffixes)
+    }
+
+    pub(in crate::cranelift_backend) fn producer_call_has_continuation_specialization(
+        &self,
+        consumer: PredeclaredFunctionId,
+        producer: PredeclaredFunctionId,
+    ) -> bool {
+        if self
+            .continuation_specializations
+            .iter()
+            .any(|specialization| {
+                specialization.key.consumer_owner == consumer
+                    && specialization.key.producer_owner == producer
+            })
+        {
+            return true;
+        }
+        let Some(generated_consumer) = self
+            .continuation_specializations
+            .iter()
+            .find(|specialization| specialization.function == consumer)
+        else {
+            return false;
+        };
+        let binds_producer = self
+            .semantic
+            .function_owner(generated_consumer.worker.body_origin)
+            .is_ok_and(|owner| owner == Some(producer));
+        binds_producer
+            && self
+                .continuation_specialization_calls
+                .iter()
+                .any(|call| {
+                    (call.producer_owner == producer)
+                        || (call.producer_owner == consumer
+                            && call.specialization == generated_consumer.id
+                            && call.worker_body_origin
+                                == generated_consumer.worker.body_origin)
+                })
+    }
+
+    pub(in crate::cranelift_backend) fn recursive_continuation_specialization_result_origin(
+        &self,
+        owner: PredeclaredFunctionId,
+        worker_body_origin: StaticOriginId,
+        invocation_origin: StaticOriginId,
+    ) -> Result<Option<StaticOriginId>, CraneliftBackendError> {
+        let Some(_specialization) = self
+            .continuation_specialization_for_function(owner)
+            .and_then(|id| self.continuation_specializations.get(id.0 as usize))
+        else {
+            return Ok(None);
+        };
+        let origins = self
+            .continuation_specialization_calls
+            .iter()
+            .filter(|call| {
+                call.producer_owner == owner
+                    && call.worker_body_origin == worker_body_origin
+                    && call.producer_result_origin == invocation_origin
+            })
+            .map(|call| call.producer_result_origin)
+            .collect::<BTreeSet<_>>();
+        match origins.len() {
+            0 => Ok(None),
+            1 => Ok(origins.into_iter().next()),
+            _ => Err(planner_error(
+                "one recursive continuation fold names multiple producer results",
+            )),
+        }
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_position_is_specialized_for_consumer(
+        &self,
+        consumer: PredeclaredFunctionId,
+        continuation: StaticOriginId,
+        position: usize,
+    ) -> Result<bool, CraneliftBackendError> {
+        let position = u32::try_from(position).map_err(|_| {
+            planner_capacity_error("continuation specialization recursive position exhausted")
+        })?;
+        Ok(self
+            .continuation_specializations
+            .iter()
+            .any(|specialization| {
+                specialization.key.consumer_owner == consumer
+                    && specialization.key.continuation_origin == continuation
+                    && specialization.key.recursive_position == position
+            }))
+    }
+
+    pub(in crate::cranelift_backend) fn continuation_specialization_in_owner_subtree(
+        &self,
+        owner: PredeclaredFunctionId,
+        root: StaticOriginId,
+    ) -> Result<bool, CraneliftBackendError> {
+        for call in self
+            .continuation_specialization_calls
+            .iter()
+            .filter(|call| call.producer_owner == owner)
+        {
+            if source_descendant_distance(self, root, call.producer_result_origin)?.is_some() {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    pub(in crate::cranelift_backend) fn source_origin_is_in_subtree(
+        &self,
+        root: StaticOriginId,
+        target: StaticOriginId,
+    ) -> Result<bool, CraneliftBackendError> {
+        Ok(source_descendant_distance(self, root, target)?.is_some())
     }
 
     pub(in crate::cranelift_backend) fn root_emittable_unit(
@@ -11759,6 +17023,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 .ok_or_else(|| planner_error("plan has no root scheduling entry"))?,
             self.root_ingress,
             &self.static_callable_specializations,
+            &self.continuation_specializations,
         )?;
         self.validate_source_occurrence_table()?;
         self.validate_join_result_plan()?;
@@ -11771,9 +17036,108 @@ impl<'src> StaticTransitionPlan<'src> {
             expected_aggregates,
             expected_synthesized_aggregates,
             expected_worker_environments,
-            expected_source_occurrences,
+            mut expected_source_occurrences,
             expected_carried_recursor_positions,
+            expected_continuation_specializations,
+            expected_continuation_specialization_calls,
         ) = build_producer_flow_plans(self)?;
+        // Re-derive the post-fixed-point occurrence population independently
+        // from the closed plan. Provisional generated function ids are reused
+        // while the interned population is renumbered, but no provisional unit
+        // is emitted. Only the final pass therefore owns boundary identities.
+        let root_entry = self
+            .root_entry
+            .ok_or_else(|| planner_error("plan has no root scheduling entry"))?;
+        let mut base_plan = self.clone();
+        base_plan.abi = build_abi_plane(
+            &base_plan.semantic,
+            &base_plan.nodes,
+            &base_plan.semantic_sources,
+            &base_plan.edges,
+            &base_plan.entries,
+            root_entry,
+            base_plan.root_ingress,
+        )?;
+        extend_static_callable_abi(
+            &mut base_plan.abi,
+            &base_plan.semantic,
+            &base_plan.static_callable_specializations,
+        )?;
+        base_plan.continuation_specializations.clear();
+        base_plan.continuation_specialization_calls.clear();
+        base_plan.case_emissions.clear();
+        base_plan.aggregate_representations.clear();
+        base_plan
+            .synthesized_aggregate_representations
+            .clear();
+        base_plan.static_recursor_worker_environments.clear();
+        base_plan.emitted_source_occurrences.clear();
+        base_plan.carried_recursor_positions.clear();
+        base_plan.operand_edges = build_operand_edge_matrix(&base_plan)?;
+        base_plan.static_recursor_worker_residuals =
+            build_all_static_recursor_worker_residuals(&base_plan)?;
+        base_plan.operand_edges = build_operand_edge_matrix(&base_plan)?;
+        base_plan.recursor_boundary_uses = build_recursor_boundary_uses(&base_plan)?;
+        base_plan.lowering_boundary_uses = build_lowering_boundary_uses(&base_plan)?;
+        base_plan.boundary_uses = build_boundary_uses(&base_plan)?;
+        let continuation_base_abi = base_plan.abi.clone();
+        let initial_flow = build_producer_flow_plans(&base_plan)?;
+        expected_source_occurrences = initial_flow.4.clone();
+        base_plan.continuation_specializations = initial_flow.6;
+        base_plan.continuation_specialization_calls = initial_flow.7;
+        let fixed_point_bound = base_plan
+            .source_occurrences
+            .len()
+            .checked_add(1)
+            .ok_or_else(|| {
+                planner_capacity_error("continuation occurrence validation bound exhausted")
+            })?;
+        for iteration in 0..fixed_point_bound {
+            base_plan.abi = continuation_base_abi.clone();
+            extend_continuation_specialization_abi(
+                &mut base_plan.abi,
+                &base_plan.semantic,
+                &base_plan.continuation_specializations,
+            )?;
+            extend_continuation_producer_abi(
+                &mut base_plan.abi,
+                &base_plan.continuation_specializations,
+            )?;
+            base_plan.operand_edges = build_operand_edge_matrix(&base_plan)?;
+            base_plan.static_recursor_worker_residuals =
+                build_all_static_recursor_worker_residuals(&base_plan)?;
+            base_plan.operand_edges = build_operand_edge_matrix(&base_plan)?;
+            base_plan.recursor_boundary_uses = build_recursor_boundary_uses(&base_plan)?;
+            base_plan.lowering_boundary_uses = build_lowering_boundary_uses(&base_plan)?;
+            base_plan.boundary_uses = build_boundary_uses(&base_plan)?;
+            let flow = build_producer_flow_plans(&base_plan)?;
+            expected_source_occurrences = flow.4.clone();
+            let occurrence_population_stable = base_plan.case_emissions == flow.0
+                && base_plan.aggregate_representations == flow.1
+                && base_plan.synthesized_aggregate_representations == flow.2
+                && base_plan.static_recursor_worker_environments == flow.3
+                && base_plan.emitted_source_occurrences == flow.4
+                && base_plan.carried_recursor_positions == flow.5;
+            if occurrence_population_stable
+                && base_plan.continuation_specializations == flow.6
+                && base_plan.continuation_specialization_calls == flow.7
+            {
+                break;
+            }
+            if iteration + 1 == fixed_point_bound {
+                return Err(planner_error(
+                    "continuation occurrence validation did not close",
+                ));
+            }
+            base_plan.case_emissions = flow.0;
+            base_plan.aggregate_representations = flow.1;
+            base_plan.synthesized_aggregate_representations = flow.2;
+            base_plan.static_recursor_worker_environments = flow.3;
+            base_plan.emitted_source_occurrences = flow.4;
+            base_plan.carried_recursor_positions = flow.5;
+            base_plan.continuation_specializations = flow.6;
+            base_plan.continuation_specialization_calls = flow.7;
+        }
         if self.case_emissions != expected_cases {
             return Err(planner_error(
                 "case-emission partition is not the exact producer-flow derivation",
@@ -11798,6 +17162,13 @@ impl<'src> StaticTransitionPlan<'src> {
         if self.emitted_source_occurrences != expected_source_occurrences {
             return Err(planner_error(
                 "emitted source occurrences are not the exact producer-flow derivation",
+            ));
+        }
+        if self.continuation_specializations != expected_continuation_specializations
+            || self.continuation_specialization_calls != expected_continuation_specialization_calls
+        {
+            return Err(planner_error(
+                "continuation specialization plan is not the exact producer-flow derivation",
             ));
         }
         if self.carried_recursor_positions != expected_carried_recursor_positions {
@@ -12204,7 +17575,7 @@ impl<'src> StaticTransitionPlan<'src> {
     }
 
     fn validate_static_recursor_worker_residuals(&self) -> Result<(), CraneliftBackendError> {
-        let expected = build_static_recursor_worker_residuals(self)?;
+        let expected = build_all_static_recursor_worker_residuals(self)?;
         if self.static_recursor_worker_residuals != expected {
             return Err(planner_error(
                 "static recursor worker residual population is not exact",
@@ -12840,9 +18211,41 @@ pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols<'s
     root_ingress: AbiRootIngress,
     functionized_units: bool,
 ) -> Result<StaticTransitionPlan<'src>, CraneliftBackendError> {
+    plan_static_transition_graph_with_symbols_and_control(
+        entry,
+        declarations,
+        symbols,
+        root_ingress,
+        functionized_units,
+        None,
+    )
+}
+
+pub(in crate::cranelift_backend) fn plan_static_transition_graph_with_symbols_and_control<'src>(
+    entry: &'src RuntimeExpr,
+    declarations: &BTreeMap<&str, &'src RuntimeDeclaration>,
+    symbols: &crate::NativeProcessSymbols,
+    root_ingress: AbiRootIngress,
+    functionized_units: bool,
+    oriented_subcontinuation_plan: Option<&crate::OrientedSubcontinuationPlanV1>,
+) -> Result<StaticTransitionPlan<'src>, CraneliftBackendError> {
     #[cfg(test)]
     reset_recursive_lowering_frame_count();
     let mut planner = Planner::new()?;
+    if let Some(control_plan) = oriented_subcontinuation_plan {
+        for call in &control_plan.computational_ih_calls {
+            if planner
+                .plan
+                .computational_ih_call_slots
+                .insert(call.call_template_id, call.slot_template_id)
+                .is_some()
+            {
+                return Err(planner_error(
+                    "checked control plan repeats a computational IH call template",
+                ));
+            }
+        }
+    }
     let empty = PersistentNodeId(0);
     let context = PlanContext {
         environment: empty,
@@ -17910,6 +23313,7 @@ mod tests {
                     plan.root_entry.expect("root entry"),
                     plan.root_ingress,
                     &plan.static_callable_specializations,
+                    &plan.continuation_specializations,
                 )
                 .unwrap_err(),
             planner_error("abi descriptor is not positional for its function unit"),
@@ -17929,6 +23333,7 @@ mod tests {
                     plan.root_entry.expect("root entry"),
                     plan.root_ingress,
                     &plan.static_callable_specializations,
+                    &plan.continuation_specializations,
                 )
                 .unwrap_err(),
             planner_error("abi descriptor parameter count is not its origin's declared arity"),
@@ -17950,6 +23355,7 @@ mod tests {
                     plan.root_entry.expect("root entry"),
                     plan.root_ingress,
                     &plan.static_callable_specializations,
+                    &plan.continuation_specializations,
                 )
                 .unwrap_err(),
             planner_error("abi descriptor definition is not the unit's derived definition"),
@@ -18842,6 +24248,7 @@ mod tests {
                 plan.root_entry.expect("root entry"),
                 plan.root_ingress,
                 &plan.static_callable_specializations,
+                &plan.continuation_specializations,
             )
             .expect_err("AC-1: dropping a descriptor must be refused");
         // ⛔ The EXACT failure, not `is_err()`. A control that reddens does not
@@ -19027,6 +24434,7 @@ mod tests {
                 shallow.root_entry.expect("root entry"),
                 shallow.root_ingress,
                 &shallow.static_callable_specializations,
+                &shallow.continuation_specializations,
             )
             .expect_err("AC-4/C3: an implicit caller-environment tail must be REFUSED");
         assert!(
@@ -19356,6 +24764,7 @@ mod tests {
                 plan.root_entry.expect("root entry"),
                 plan.root_ingress,
                 &plan.static_callable_specializations,
+                &plan.continuation_specializations,
             ) {
                 Ok(()) => "NO WITNESS -- the mutation was accepted".to_string(),
                 Err(err) => format!("{err:?}"),
@@ -19431,6 +24840,7 @@ mod tests {
             lexical_plan.root_entry.expect("root entry"),
             lexical_plan.root_ingress,
             &lexical_plan.static_callable_specializations,
+            &lexical_plan.continuation_specializations,
         ) {
             Ok(()) => "NO WITNESS -- the layout skew was accepted".to_string(),
             Err(err) => format!("{err:?}"),
@@ -19688,7 +25098,8 @@ mod tests {
                 }
                 AbiUnitDefinition::TransparentDeclarationClosure { .. }
                 | AbiUnitDefinition::ClosureBody { .. }
-                | AbiUnitDefinition::StaticCallableSpecialization { .. } => None,
+                | AbiUnitDefinition::StaticCallableSpecialization { .. }
+                | AbiUnitDefinition::ContinuationSpecialization { .. } => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(
@@ -19746,7 +25157,8 @@ mod tests {
                 AbiUnitDefinition::ClosureBody { .. } => Some(unit.header().captures),
                 AbiUnitDefinition::TransparentDeclarationClosure { .. }
                 | AbiUnitDefinition::SchedulingEntry { .. }
-                | AbiUnitDefinition::StaticCallableSpecialization { .. } => None,
+                | AbiUnitDefinition::StaticCallableSpecialization { .. }
+                | AbiUnitDefinition::ContinuationSpecialization { .. } => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(capture_counts, vec![2]);
@@ -19768,7 +25180,8 @@ mod tests {
                 AbiUnitDefinition::ClosureBody { .. } => Some(unit.header().captures),
                 AbiUnitDefinition::TransparentDeclarationClosure { .. }
                 | AbiUnitDefinition::SchedulingEntry { .. }
-                | AbiUnitDefinition::StaticCallableSpecialization { .. } => None,
+                | AbiUnitDefinition::StaticCallableSpecialization { .. }
+                | AbiUnitDefinition::ContinuationSpecialization { .. } => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(

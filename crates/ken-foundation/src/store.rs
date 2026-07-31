@@ -76,10 +76,7 @@ pub enum InternResult {
     /// The value already existed at this slot.
     Hit(SlotId),
     /// The store is at capacity.
-    CapacityExhausted {
-        limit: u64,
-        current: u64,
-    },
+    CapacityExhausted { limit: u64, current: u64 },
 }
 
 /// Store statistics (the witness surface).
@@ -136,9 +133,7 @@ impl Store {
 
             if bucket.slot_id == NULL_SLOT && !bucket.tombstone {
                 // Empty — new slot.
-                if self.capacity_limit > 0
-                    && (self.next_slot_id - 1) >= self.capacity_limit
-                {
+                if self.capacity_limit > 0 && (self.next_slot_id - 1) >= self.capacity_limit {
                     self.total_interns += 1;
                     return InternResult::CapacityExhausted {
                         limit: self.capacity_limit,
@@ -147,8 +142,7 @@ impl Store {
                 }
 
                 // Maybe resize before inserting.
-                if (self.occupied + 1) as f64 >= self.buckets.len() as f64 * MAX_LOAD
-                {
+                if (self.occupied + 1) as f64 >= self.buckets.len() as f64 * MAX_LOAD {
                     self.resize();
                     // Recompute probe after resize — hash is the same, capacity doubled.
                     return self.intern(value);
@@ -415,7 +409,7 @@ mod tests {
         // Both should produce the same slot — Map ordering is canonical.
         let id1 = match r1 {
             InternResult::New(id) => id,
-            InternResult::Hit(id) => id,  // may already exist from prior test
+            InternResult::Hit(id) => id, // may already exist from prior test
             _ => unreachable!(),
         };
         let id2 = match r2 {

@@ -128,14 +128,20 @@ fn const_(id: GlobalId) -> Term {
 #[test]
 fn eq_congruence_reconstructed_lhs_converts() {
     let (mut env, b) = mk_env();
-    let x = declare_postulate(&mut env, "test postulate".to_string(), vec![], bool_t(&b)).expect("x : Bool");
+    let x = declare_postulate(&mut env, "test postulate".to_string(), vec![], bool_t(&b))
+        .expect("x : Bool");
     let h_ty = Term::Eq(
         Box::new(bool_t(&b)),
         Box::new(id_b_app(&b, const_(x))),
         Box::new(true_c(&b)),
     );
-    let h = declare_postulate(&mut env, "test postulate".to_string(), vec![], h_ty).expect("h : Eq Bool (idB x) True");
-    let expected_ty = Term::Eq(Box::new(bool_t(&b)), Box::new(const_(x)), Box::new(true_c(&b)));
+    let h = declare_postulate(&mut env, "test postulate".to_string(), vec![], h_ty)
+        .expect("h : Eq Bool (idB x) True");
+    let expected_ty = Term::Eq(
+        Box::new(bool_t(&b)),
+        Box::new(const_(x)),
+        Box::new(true_c(&b)),
+    );
     assert!(
         check(&env, &Context::new(), &const_(h), &expected_ty).is_ok(),
         "h : Eq Bool (idB x) True must check at Eq Bool x True (AC3, post-fix)"
@@ -150,15 +156,22 @@ fn eq_congruence_reconstructed_lhs_converts() {
 #[test]
 fn eq_congruence_both_sides_reconstructed_converts() {
     let (mut env, b) = mk_env();
-    let x = declare_postulate(&mut env, "test postulate".to_string(), vec![], bool_t(&b)).expect("x : Bool");
-    let y = declare_postulate(&mut env, "test postulate".to_string(), vec![], bool_t(&b)).expect("y : Bool");
+    let x = declare_postulate(&mut env, "test postulate".to_string(), vec![], bool_t(&b))
+        .expect("x : Bool");
+    let y = declare_postulate(&mut env, "test postulate".to_string(), vec![], bool_t(&b))
+        .expect("y : Bool");
     let h_ty = Term::Eq(
         Box::new(bool_t(&b)),
         Box::new(id_b_app(&b, const_(x))),
         Box::new(id_b_app(&b, const_(y))),
     );
-    let h = declare_postulate(&mut env, "test postulate".to_string(), vec![], h_ty).expect("h : Eq Bool (idB x) (idB y)");
-    let expected_ty = Term::Eq(Box::new(bool_t(&b)), Box::new(const_(x)), Box::new(const_(y)));
+    let h = declare_postulate(&mut env, "test postulate".to_string(), vec![], h_ty)
+        .expect("h : Eq Bool (idB x) (idB y)");
+    let expected_ty = Term::Eq(
+        Box::new(bool_t(&b)),
+        Box::new(const_(x)),
+        Box::new(const_(y)),
+    );
     assert!(
         check(&env, &Context::new(), &const_(h), &expected_ty).is_ok(),
         "h : Eq Bool (idB x) (idB y) must check at Eq Bool x y (both components reconstructed)"
@@ -173,14 +186,20 @@ fn eq_congruence_both_sides_reconstructed_converts() {
 #[test]
 fn eq_congruence_distinct_endpoint_stays_rejected() {
     let (mut env, b) = mk_env();
-    let x = declare_postulate(&mut env, "test postulate".to_string(), vec![], bool_t(&b)).expect("x : Bool");
+    let x = declare_postulate(&mut env, "test postulate".to_string(), vec![], bool_t(&b))
+        .expect("x : Bool");
     let h_ty = Term::Eq(
         Box::new(bool_t(&b)),
         Box::new(id_b_app(&b, const_(x))),
         Box::new(true_c(&b)),
     );
-    let h = declare_postulate(&mut env, "test postulate".to_string(), vec![], h_ty).expect("h : Eq Bool (idB x) True");
-    let bad_ty = Term::Eq(Box::new(bool_t(&b)), Box::new(const_(x)), Box::new(false_c(&b)));
+    let h = declare_postulate(&mut env, "test postulate".to_string(), vec![], h_ty)
+        .expect("h : Eq Bool (idB x) True");
+    let bad_ty = Term::Eq(
+        Box::new(bool_t(&b)),
+        Box::new(const_(x)),
+        Box::new(false_c(&b)),
+    );
     assert!(
         check(&env, &Context::new(), &const_(h), &bad_ty).is_err(),
         "h : Eq Bool (idB x) True must NOT check at Eq Bool x False (distinct endpoint)"

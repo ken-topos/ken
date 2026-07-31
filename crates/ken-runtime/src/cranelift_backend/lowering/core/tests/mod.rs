@@ -101,11 +101,8 @@ fn inert_test_plan() -> StaticTransitionPlan<'static> {
 fn planned_root_occurrence<'src>(
     expr: &'src RuntimeExpr,
 ) -> (StaticTransitionPlan<'src>, StaticOriginId) {
-    let plan = plan_static_transition_graph_with_test_fixture_boundary_use(
-        expr,
-        &BTreeMap::new(),
-    )
-    .expect("test fixture is plannable");
+    let plan = plan_static_transition_graph_with_test_fixture_boundary_use(expr, &BTreeMap::new())
+        .expect("test fixture is plannable");
     let root = plan
         .root_static_origin()
         .expect("a planned graph has a root source occurrence");

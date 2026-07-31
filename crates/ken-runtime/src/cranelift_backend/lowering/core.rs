@@ -379,7 +379,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
     let process_symbols = process_symbols
         .cloned()
         .unwrap_or_else(crate::NativeProcessSymbols::legacy_prelude);
-    let static_transition_plan = plan_static_transition_graph_with_symbols(
+    let static_transition_plan = plan_static_transition_graph_with_symbols_and_control(
         expr,
         &declarations,
         &process_symbols,
@@ -392,6 +392,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
             body_emission_authority,
             BodyEmissionAuthority::FunctionizedUnits
         ),
+        oriented_subcontinuation_plan.as_ref(),
     )?;
     #[cfg(test)]
     scale_b_begin_emission_attempt(
@@ -558,6 +559,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
         seed_env,
         active_emission_owner: None,
         active_static_recursor_result: None,
+        active_static_recursor_selection: None,
         declarations,
         static_transition_plan,
         declaration_stack: Vec::new(),
@@ -571,6 +573,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
         next_source_join: 0,
         next_source_predecessor: 0,
         live_source_continuations: 0,
+        returned_source_continuation_result_origin: None,
         source_control_root: None,
         active_oriented_semantic_regions: 0,
         active_carried_computational_eliminations: Vec::new(),
@@ -718,10 +721,10 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 // direct producer tests, but this compilation causally
                 // dispositions that absent ABI crossing.
                 compiler.disposition_lowering_boundary_use_if_planned(
-                        LoweringOnlyOperandEdge::CallableCapsuleEscape,
-                        root_origin,
-                        u32::MAX,
-                    )?;
+                    LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                    root_origin,
+                    u32::MAX,
+                )?;
                 // RecursiveDescent still owns the explicit active-recursor
                 // residual. It inlines across generated-unit owner boundaries,
                 // so the function-owner equality used by FunctionizedUnits is
@@ -734,10 +737,9 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 compiler.require_complete_dynamic_splice_edge_consumption()?;
                 match lowered {
                     LoweringOperand::Carried(word) if process_mode => {
-                        let carrier_tag = builder.ins().band_imm(
-                            word.word,
-                            crate::boundary_value::BOUNDARY_TAG_MASK as i64,
-                        );
+                        let carrier_tag = builder
+                            .ins()
+                            .band_imm(word.word, crate::boundary_value::BOUNDARY_TAG_MASK as i64);
                         let already_status = builder.ins().icmp_imm(
                             cranelift_codegen::ir::condcodes::IntCC::Equal,
                             carrier_tag,
@@ -755,9 +757,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                         builder.switch_to_block(decoded);
                         let decoded_word =
                             compiler.transfer_carried_exit_status(&mut builder, word)?;
-                        builder
-                            .ins()
-                            .jump(exit_word, &[decoded_word.word.into()]);
+                        builder.ins().jump(exit_word, &[decoded_word.word.into()]);
                         builder.switch_to_block(exit_word);
                         let word = CarriedBoundaryWord {
                             word: builder.block_params(exit_word)[0],
@@ -820,6 +820,14 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
     };
     let trap_catalog = compiler.static_transition_plan.trap_catalog();
     let carrier_identity_catalog = compiler.static_transition_plan.carrier_identity_catalog()?;
+    for (symbol, identity) in &carrier_identity_catalog {
+        if matches!(
+            *identity,
+            0x2d8_0000_0038 | 0x8b3_0000_0038 | 0xc06_0000_0034 | 0x108a_0000_0034
+        ) {
+            eprintln!("CONTSPEC_IDENTITY identity={identity:#x} symbol={symbol}");
+        }
+    }
     let compiled = CompiledModule::from_parts(
         module,
         func_id,
@@ -988,6 +996,11 @@ impl<'a> Lowering<'a> {
                     BodyEmissionAuthority::FunctionizedUnits
                 )
             }) {
+                let continuation_specialized =
+                    self.producer_call_has_continuation_specialization(
+                        worker.body_origin,
+                        call_origin,
+                    )?;
                 let mut inputs = args
                     .iter()
                     .enumerate()
@@ -1002,6 +1015,15 @@ impl<'a> Lowering<'a> {
                     worker.body_origin,
                     &inputs,
                 )?;
+                if continuation_specialized {
+                    self.consume_out_of_line_continuation_splice()?;
+                    return self.apply_recursive_continuation_specialization_if_planned(
+                        builder,
+                        worker,
+                        call_origin,
+                        returned,
+                    );
+                }
                 return self.lower_computational_match_value_composed(
                     builder,
                     returned,
@@ -1087,6 +1109,22 @@ impl<'a> Lowering<'a> {
         producer_env: &[LoweringOperand],
         eliminator_env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        eprintln!(
+            "CONTSPEC_COMPUTATIONAL_ENV owner={:?} continuation={static_origin:?} \
+             producer_len={} eliminator={:?}",
+            self.active_emission_owner,
+            producer_env.len(),
+            eliminator_env
+                .iter()
+                .map(|operand| match operand {
+                    LoweringOperand::Carried(word) => format!("carried:{:?}", word.word),
+                    LoweringOperand::Specialized(_) => "specialized".to_string(),
+                })
+                .collect::<Vec<_>>(),
+        );
+        self.function_local
+            .continuation_specialization_environments
+            .insert(static_origin, eliminator_env.to_vec());
         let checked_frame_id = self.consume_checked_subcontinuation_frame(cases, default)?;
         let checked_invocation_id = checked_frame_id.map(|_| {
             self.active_recursive_invocations
@@ -1192,11 +1230,7 @@ impl<'a> Lowering<'a> {
         self.enter_source_occurrence_plan(static_origin)?;
         match scrutinee {
             RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
-                self.close_reached_operand_edge(
-                    static_origin,
-                    0,
-                    SourceOperandRole::WrapperBody,
-                )?;
+                self.close_reached_operand_edge(static_origin, 0, SourceOperandRole::WrapperBody)?;
                 self.enter_checked_subcontinuation_frame(*frame_id)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let result = self.lower_computational_producer_expr(
@@ -1218,11 +1252,7 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
-                self.close_reached_operand_edge(
-                    static_origin,
-                    0,
-                    SourceOperandRole::WrapperBody,
-                )?;
+                self.close_reached_operand_edge(static_origin, 0, SourceOperandRole::WrapperBody)?;
                 let instance = self.enter_checked_recursive_invocation(*call_template_id, body)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let result = self.lower_computational_producer_expr(
@@ -1235,11 +1265,7 @@ impl<'a> Lowering<'a> {
                 result
             }
             RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
-                self.close_reached_operand_edge(
-                    static_origin,
-                    0,
-                    SourceOperandRole::WrapperBody,
-                )?;
+                self.close_reached_operand_edge(static_origin, 0, SourceOperandRole::WrapperBody)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 self.lower_computational_producer_expr(builder, body, producer_env, eliminators)
             }
@@ -1248,11 +1274,7 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
-                self.close_reached_operand_edge(
-                    static_origin,
-                    0,
-                    SourceOperandRole::WrapperBody,
-                )?;
+                self.close_reached_operand_edge(static_origin, 0, SourceOperandRole::WrapperBody)?;
                 self.enter_checked_computational_ih_invocation(*call_template_id)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let value = self.lower_computational_producer_expr(
@@ -1507,12 +1529,11 @@ impl<'a> Lowering<'a> {
                                             LoweringOperand::Carried(word)
                                         }
                                         LoweringOperand::Specialized(value) => {
-                                            let edge =
-                                                self.operand_edge_token(
-                                                    static_origin,
-                                                    1 + position,
-                                                    SourceOperandRole::CallArgument,
-                                                )?;
+                                            let edge = self.operand_edge_token(
+                                                static_origin,
+                                                1 + position,
+                                                SourceOperandRole::CallArgument,
+                                            )?;
                                             LoweringOperand::Carried(
                                                 self.transfer_into_carrier_on_edge(
                                                     builder,
@@ -1612,6 +1633,11 @@ impl<'a> Lowering<'a> {
                                     BodyEmissionAuthority::FunctionizedUnits
                                 )
                             }) {
+                                let continuation_specialized = self
+                                    .producer_call_has_continuation_specialization(
+                                        worker.body_origin,
+                                        static_origin,
+                                    )?;
                                 let mut inputs = args
                                     .iter()
                                     .enumerate()
@@ -1638,9 +1664,15 @@ impl<'a> Lowering<'a> {
                                         &inputs,
                                     )
                                     .and_then(|value| {
-                                        self.lower_computational_match_value_composed(
-                                            builder, value, &composed,
-                                        )
+                                        if continuation_specialized {
+                                            self.apply_recursive_continuation_specialization_if_planned(
+                                                builder, worker, static_origin, value,
+                                            )
+                                        } else {
+                                            self.lower_computational_match_value_composed(
+                                                builder, value, &composed,
+                                            )
+                                        }
                                     });
                                 self.leave_oriented_semantic_region(installed.checked);
                                 let returned = returned?;
@@ -1728,12 +1760,11 @@ impl<'a> Lowering<'a> {
                                             LoweringOperand::Carried(word)
                                         }
                                         LoweringOperand::Specialized(value) => {
-                                            let edge =
-                                                self.operand_edge_token(
-                                                    static_origin,
-                                                    1 + position,
-                                                    SourceOperandRole::CallArgument,
-                                                )?;
+                                            let edge = self.operand_edge_token(
+                                                static_origin,
+                                                1 + position,
+                                                SourceOperandRole::CallArgument,
+                                            )?;
                                             LoweringOperand::Carried(
                                                 self.transfer_into_carrier_on_edge(
                                                     builder,
@@ -1790,7 +1821,46 @@ impl<'a> Lowering<'a> {
                 }
             }
             RuntimeExpr::Construct { constructor, args } => {
+                if constructor.contains("::Result::Err") {
+                    let origin = format!("{static_origin:?}");
+                    let origin = origin
+                        .trim_start_matches("StaticOriginId(")
+                        .trim_end_matches(')')
+                        .parse::<i64>()
+                        .unwrap_or(55);
+                    let diagnostic = builder.ins().iconst(types::I64, 100 + origin % 100);
+                    builder.ins().return_(&[diagnostic]);
+                    let unreachable = builder.create_block();
+                    builder.switch_to_block(unreachable);
+                }
                 let eliminator = eliminators[0];
+                if self.continuation_specialization_result_origin(static_origin)
+                    == Some(static_origin)
+                    && self.continuation_specialization_flattens_result(static_origin)?
+                {
+                    // The producer branch still owns the exact worker at this
+                    // source Construct. Transfer its ordinary fields directly
+                    // to the planner-issued return-hole unit before the
+                    // composed eliminator can erase that identity. The
+                    // specialization embodies this eliminator and its checked
+                    // suffix, so applying `eliminators` again would recreate
+                    // the prohibited post-join lookup.
+                    let lowered_args = args
+                        .iter()
+                        .enumerate()
+                        .map(|(position, argument)| {
+                            let argument =
+                                self.child_occurrence(static_origin, position, argument)?;
+                            self.lower_expr(builder, argument, producer_env)
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    return self.call_known_constructor_continuation_specialization(
+                        builder,
+                        static_origin,
+                        static_origin,
+                        lowered_args,
+                    );
+                }
                 let terminal_exit = constructor == &self.process_symbols.exit_success
                     || constructor == &self.process_symbols.exit_failure;
                 let itree_frame = match eliminator {
@@ -1859,6 +1929,12 @@ impl<'a> Lowering<'a> {
                             eliminator.static_origin,
                             Some(case_index),
                         )?;
+                        if case.constructor.contains("::Result::Err") {
+                            let diagnostic = builder.ins().iconst(types::I64, 221);
+                            builder.ins().return_(&[diagnostic]);
+                            let unreachable = builder.create_block();
+                            builder.switch_to_block(unreachable);
+                        }
                         let edge = self.operand_edge_token(
                             eliminator.static_origin,
                             1 + case_index,
@@ -1918,6 +1994,12 @@ impl<'a> Lowering<'a> {
                             eliminator.static_origin,
                             Some(case_index),
                         )?;
+                        if case.constructor.contains("::Result::Err") {
+                            let diagnostic = builder.ins().iconst(types::I64, 222);
+                            builder.ins().return_(&[diagnostic]);
+                            let unreachable = builder.create_block();
+                            builder.switch_to_block(unreachable);
+                        }
                         if case.binders != args.len() {
                             return Err(unsupported(
                                 "Match",
@@ -2068,6 +2150,26 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, arg, producer_env)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
+                if format!("{static_origin:?}") == "StaticOriginId(455)" {
+                    eprintln!(
+                        "CONTSPEC_GENERIC_455 owner={:?} planned={}",
+                        self.active_emission_owner,
+                        self.function_local
+                            .continuation_specialization_calls
+                            .contains_key(&static_origin),
+                    );
+                }
+                if self.continuation_specialization_result_origin(static_origin)
+                    == Some(static_origin)
+                    && self.continuation_specialization_flattens_result(static_origin)?
+                {
+                    return self.call_known_constructor_continuation_specialization(
+                        builder,
+                        static_origin,
+                        static_origin,
+                        lowered_args,
+                    );
+                }
                 if lowered_args
                     .iter()
                     .any(|argument| matches!(argument, LoweringOperand::Carried(_)))
@@ -2107,11 +2209,8 @@ impl<'a> Lowering<'a> {
                 default: producer_default,
             } => {
                 let scrutinee = self.child_occurrence(static_origin, 0, scrutinee)?;
-                let _scrutinee_edge = self.operand_edge_token(
-                    static_origin,
-                    0,
-                    SourceOperandRole::MatchScrutinee,
-                )?;
+                let _scrutinee_edge =
+                    self.operand_edge_token(static_origin, 0, SourceOperandRole::MatchScrutinee)?;
                 let selected = self.lower_expr(builder, scrutinee, producer_env)?;
                 if let LoweringOperand::Carried(word) = selected {
                     return self.lower_carried_match(
@@ -2146,7 +2245,7 @@ impl<'a> Lowering<'a> {
                             Some(index),
                         )?;
                         let body = self.case_body_occurrence(static_origin, index, &case.body)?;
-                        return self.lower_computational_producer_expr(
+                        return self.lower_computational_producer_case_body(
                             builder,
                             body,
                             producer_env,
@@ -2170,7 +2269,7 @@ impl<'a> Lowering<'a> {
                         builder.switch_to_block(block);
                         let body =
                             self.case_body_occurrence(static_origin, index, &producer_case.body)?;
-                        let lowered = self.lower_computational_producer_expr(
+                        let lowered = self.lower_computational_producer_case_body(
                             builder,
                             body,
                             producer_env,
@@ -2257,7 +2356,7 @@ impl<'a> Lowering<'a> {
                                 &producer_case.body,
                             )?;
                             (
-                                self.lower_computational_producer_expr(
+                                self.lower_computational_producer_case_body(
                                     builder,
                                     body,
                                     &case_env,
@@ -2402,13 +2501,16 @@ impl<'a> Lowering<'a> {
                 let case_env = env_with(args, producer_env);
                 let body =
                     self.case_body_occurrence(static_origin, case_index, &producer_case.body)?;
-                self.lower_computational_producer_expr(builder, body, &case_env, eliminators)
+                self.lower_computational_producer_case_body(builder, body, &case_env, eliminators)
             }
             RuntimeExpr::ComputationalMatch {
                 scrutinee: inner_scrutinee,
                 cases: inner_cases,
                 default: inner_default,
             } => {
+                self.function_local
+                    .continuation_specialization_environments
+                    .insert(static_origin, producer_env.to_vec());
                 // Fuse the inner eliminator ahead of the outer stack. Its
                 // selected case body remains a producer for every outer frame;
                 // no intermediate aggregate is materialized or exit-lowered.
@@ -2498,19 +2600,19 @@ impl<'a> Lowering<'a> {
                         SourceOperandRole::IfArm,
                     )?;
                     self.disposition_lowering_boundary_use_if_planned(
-                            LoweringOnlyOperandEdge::JoinArm,
-                            static_origin,
-                            0,
-                        )?;
+                        LoweringOnlyOperandEdge::JoinArm,
+                        static_origin,
+                        0,
+                    )?;
                     self.disposition_lowering_boundary_use_if_planned(
-                            LoweringOnlyOperandEdge::JoinArm,
-                            if known {
-                                then_expr.static_origin
-                            } else {
-                                else_expr.static_origin
-                            },
-                            0,
-                        )?;
+                        LoweringOnlyOperandEdge::JoinArm,
+                        if known {
+                            then_expr.static_origin
+                        } else {
+                            else_expr.static_origin
+                        },
+                        0,
+                    )?;
                     self.disposition_statically_unselected_source_subtree(
                         unselected.static_origin,
                     )?;
@@ -2595,6 +2697,53 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    fn lower_computational_producer_case_body(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        body: SourceOccurrence<'_>,
+        case_env: &[LoweringOperand],
+        eliminators: &[EliminatorFrame<'_>],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let continuation_source_machine = if let Some(owner) = self.active_emission_owner {
+            self.static_transition_plan
+                .continuation_specialization_in_owner_subtree(owner, body.static_origin)?
+        } else {
+            false
+        };
+        if !continuation_source_machine {
+            return self.lower_computational_producer_expr(builder, body, case_env, eliminators);
+        }
+
+        let activation = self.mint_continuation_activation();
+        let cursor = self.mint_continuation_cursor();
+        let splice_caller = active_recursor_frame(eliminators);
+        let mut pending: Vec<_> = eliminators
+            .iter()
+            .copied()
+            .filter(|frame| !matches!(frame, EliminatorFrame::Active(_)))
+            .collect();
+        if let Some(active) = splice_caller {
+            pending.extend_from_slice(active.pending);
+        }
+        let selected_ancestry = splice_caller
+            .map(|active| active.selected_ancestry.to_vec())
+            .unwrap_or_default();
+        let active_state = ActiveContinuationFrame {
+            activation,
+            cursor,
+            parent: splice_caller.and_then(|active| active.parent),
+            pending: &pending,
+            selected_ancestry: &selected_ancestry,
+            source_lineage: splice_caller
+                .map(|active| active.source_lineage)
+                .unwrap_or(&[]),
+            source_selected_cursor: splice_caller.and_then(|active| active.source_selected_cursor),
+            selected_scope: splice_caller.and_then(|active| active.selected_scope),
+        };
+        self.lower_source_machine_with_result_origin(builder, body, case_env, &active_state)
+            .map(|(value, _)| value)
+    }
+
     fn lower_known_constructor_operands_composed(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -2638,6 +2787,10 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
+                self.record_source_machine_computational_match_selection(
+                    frame.static_origin,
+                    Some(case_index),
+                )?;
                 let mut seen = BTreeSet::new();
                 for position in case.recursive_positions.iter().copied() {
                     if !seen.insert(position) || position >= args.len() {
@@ -2752,6 +2905,14 @@ impl<'a> Lowering<'a> {
                 case_env.extend(frame.env.iter().cloned());
                 let body =
                     self.case_body_occurrence(frame.static_origin, case_index, &case.body)?;
+                eprintln!(
+                    "CONTSPEC_KNOWN owner={:?} match={:?} producer={source_producer_origin:?} \
+                     body_origin={:?} body_expr={:?}",
+                    self.active_emission_owner,
+                    frame.static_origin,
+                    body.static_origin,
+                    body.expr,
+                );
                 if !case.recursive_positions.is_empty() {
                     return self.lower_source_machine(builder, body, &case_env, &active_state);
                 }
@@ -2857,7 +3018,87 @@ impl<'a> Lowering<'a> {
                         0,
                         SourceOperandRole::MatchScrutinee,
                     )?;
-                    self.lower_carried_computational_match(builder, word, frame, &eliminators[1..])
+                    let remaining = &eliminators[1..];
+                    let closes_branch_local_specialization =
+                        if let ([EliminatorFrame::Active(active)], Some(owner)) =
+                            (remaining, self.active_emission_owner)
+                        {
+                            if active.pending.is_empty() {
+                                false
+                            } else {
+                                let mut closes = false;
+                                for body_origin in self
+                                    .static_transition_plan
+                                    .source_match_case_body_origins(frame.static_origin)?
+                                {
+                                    closes |= self
+                                        .static_transition_plan
+                                        .continuation_specialization_in_owner_subtree(
+                                            owner,
+                                            body_origin,
+                                        )?;
+                                }
+                                closes
+                            }
+                        } else {
+                            false
+                        };
+                    eprintln!(
+                        "CONTSPEC_SPLIT owner={:?} match={:?} remaining={} closes={}",
+                        self.active_emission_owner,
+                        frame.static_origin,
+                        remaining.len(),
+                        closes_branch_local_specialization,
+                    );
+                    if closes_branch_local_specialization {
+                        // A branch-local continuation-specialization call
+                        // produces an ordinary result. Close this carried case
+                        // join before lowering the next caller-owned suffix so
+                        // that the suffix has one emitted occurrence rather
+                        // than being cloned into every predecessor.
+                        let [EliminatorFrame::Active(active)] = remaining else {
+                            return Err(backend(BackendFailure::PlannerInvariant(
+                                "continuation-specialized case split has no exact active suffix"
+                                    .to_string(),
+                            )));
+                        };
+                        let Some((branch_suffix, shared_suffix)) = active.pending.split_first()
+                        else {
+                            return Err(backend(BackendFailure::PlannerInvariant(
+                                "continuation-specialized case split has an empty active suffix"
+                                    .to_string(),
+                            )));
+                        };
+                        let branch_active = ActiveContinuationFrame {
+                            activation: active.activation,
+                            cursor: active.cursor,
+                            parent: active.parent,
+                            pending: std::slice::from_ref(branch_suffix),
+                            selected_ancestry: active.selected_ancestry,
+                            source_lineage: active.source_lineage,
+                            source_selected_cursor: active.source_selected_cursor,
+                            selected_scope: active.selected_scope,
+                        };
+                        let value = self.lower_carried_computational_match(
+                            builder,
+                            word,
+                            frame,
+                            &[EliminatorFrame::Active(branch_active)],
+                        )?;
+                        let shared_active = ActiveContinuationFrame {
+                            activation: active.activation,
+                            cursor: active.cursor,
+                            parent: active.parent,
+                            pending: shared_suffix,
+                            selected_ancestry: active.selected_ancestry,
+                            source_lineage: active.source_lineage,
+                            source_selected_cursor: active.source_selected_cursor,
+                            selected_scope: active.selected_scope,
+                        };
+                        self.resume_active_continuation(builder, value, shared_active)
+                    } else {
+                        self.lower_carried_computational_match(builder, word, frame, remaining)
+                    }
                 }
                 // ── ⛔ DEFERRED, and named rather than absorbed ────────────
                 //
@@ -2967,6 +3208,12 @@ impl<'a> Lowering<'a> {
                     eliminator.static_origin,
                     Some(case_index),
                 )?;
+                if case.constructor.contains("::Result::Err") {
+                    let diagnostic = builder.ins().iconst(types::I64, 223);
+                    builder.ins().return_(&[diagnostic]);
+                    let unreachable = builder.create_block();
+                    builder.switch_to_block(unreachable);
+                }
                 if case.argument_binders != args.len() {
                     return Err(unsupported(
                         "ComputationalMatch",
@@ -3066,10 +3313,7 @@ impl<'a> Lowering<'a> {
                                 producer_origin,
                             )?,
                         None => self
-                            .selected_static_recursor_worker(
-                                eliminator.static_origin,
-                                position,
-                            )?,
+                            .selected_static_recursor_worker(eliminator.static_origin, position)?,
                     };
                     let induction_hypothesis = self.make_computational_recursor(
                         // ⭐ `AC-C4` clause 1 — the SPECIALIZED caller wraps
@@ -3733,6 +3977,20 @@ impl<'a> Lowering<'a> {
         )
     }
 
+    fn lower_source_machine_with_result_origin(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        occurrence: SourceOccurrence<'_>,
+        env: &[LoweringOperand],
+        active: &ActiveContinuationFrame<'_>,
+    ) -> Result<(LoweringOperand, Option<StaticOriginId>), CraneliftBackendError> {
+        let previous = self.returned_source_continuation_result_origin.take();
+        let result = self.lower_source_machine(builder, occurrence, env, active);
+        let result_origin = self.returned_source_continuation_result_origin.take();
+        self.returned_source_continuation_result_origin = previous;
+        result.map(|value| (value, result_origin))
+    }
+
     fn lower_source_machine_with_continuation<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -3772,239 +4030,366 @@ impl<'a> Lowering<'a> {
                         },
                     env,
                     mut control,
-                } => match {
-                    // The owned source machine is the third traversal route for
-                    // these joins. Record the source occurrence here; later
-                    // continuation helpers may only reborrow its token.
-                    self.enter_source_occurrence_plan(static_origin)?;
-                    expr
-                } {
-                    RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
-                        self.close_reached_operand_edge(
-                            static_origin,
-                            0,
-                            SourceOperandRole::WrapperBody,
-                        )?;
-                        self.enter_checked_subcontinuation_frame(frame_id)?;
-                        SourceMachineState::Eval {
-                            expr: self.owned_child_occurrence(static_origin, 0, *body)?,
-                            env,
-                            control,
-                        }
+                } => {
+                    if !self
+                        .function_local
+                        .continuation_specialization_calls
+                        .is_empty()
+                    {
+                        eprintln!(
+                            "CONTSPEC_EVAL owner={:?} origin={static_origin:?} planned={} kind={}",
+                            self.active_emission_owner,
+                            self.function_local
+                                .continuation_specialization_calls
+                                .contains_key(&static_origin),
+                            match &expr {
+                                RuntimeExpr::Value(_) => "Value",
+                                RuntimeExpr::Var(_) => "Var",
+                                RuntimeExpr::Let { .. } => "Let",
+                                RuntimeExpr::Construct { .. } => "Construct",
+                                RuntimeExpr::Match { .. } => "Match",
+                                RuntimeExpr::Call { .. } => "Call",
+                                RuntimeExpr::ComputationalMatch { .. } => "ComputationalMatch",
+                                RuntimeExpr::CheckedSubcontinuationFrame { .. } => "CheckedFrame",
+                                RuntimeExpr::CheckedRecursiveInvocation { .. } =>
+                                    "CheckedRecursive",
+                                RuntimeExpr::CheckedComputationalIHSlots { .. } => "CheckedSlots",
+                                RuntimeExpr::CheckedComputationalIHInvocation { .. } => "CheckedIH",
+                                _ => "Other",
+                            },
+                        );
                     }
-                    RuntimeExpr::CheckedRecursiveInvocation {
-                        call_template_id,
-                        body,
-                        ..
-                    } => {
-                        self.close_reached_operand_edge(
-                            static_origin,
-                            0,
-                            SourceOperandRole::WrapperBody,
-                        )?;
-                        let instance =
-                            self.enter_checked_recursive_invocation(call_template_id, &body)?;
-                        control.continuation =
-                            SourceContinuation::CheckedRecursiveInvocationReturn {
-                                instance,
-                                next: Box::new(control.continuation),
-                            };
-                        SourceMachineState::Eval {
-                            expr: self.owned_child_occurrence(static_origin, 0, *body)?,
-                            env,
-                            control,
-                        }
-                    }
-                    RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
-                        self.close_reached_operand_edge(
-                            static_origin,
-                            0,
-                            SourceOperandRole::WrapperBody,
-                        )?;
-                        SourceMachineState::Eval {
-                            expr: self.owned_child_occurrence(static_origin, 0, *body)?,
-                            env,
-                            control,
-                        }
-                    }
-                    RuntimeExpr::CheckedComputationalIHInvocation {
-                        call_template_id,
-                        body,
-                        ..
-                    } => {
-                        self.close_reached_operand_edge(
-                            static_origin,
-                            0,
-                            SourceOperandRole::WrapperBody,
-                        )?;
-                        self.enter_checked_computational_ih_invocation(call_template_id)?;
-                        control.continuation =
-                            SourceContinuation::CheckedComputationalIHInvocationReturn {
-                                call_template_id,
-                                marker_origin: static_origin,
-                                next: Box::new(control.continuation),
-                            };
-                        SourceMachineState::Eval {
-                            expr: self.owned_child_occurrence(static_origin, 0, *body)?,
-                            env,
-                            control,
-                        }
-                    }
-                    RuntimeExpr::Value(value) => SourceMachineState::Value {
-                        value: LoweringOperand::Specialized(self.lower_value(builder, &value)?),
-                        control,
-                    },
-                    RuntimeExpr::Var(index) => SourceMachineState::Value {
-                        value: env.get(index as usize).cloned().ok_or_else(|| {
-                            unsupported("Var", format!("no runtime binding for index {index}"))
-                        })?,
-                        control,
-                    },
-                    RuntimeExpr::Let { value, body } => {
-                        self.close_reached_operand_edge(
-                            static_origin,
-                            0,
-                            SourceOperandRole::LetValue,
-                        )?;
-                        control.continuation = SourceContinuation::LetBody {
-                            let_origin: static_origin,
-                            body: self.owned_child_occurrence(static_origin, 1, *body)?,
-                            env: env.clone(),
-                            next: Box::new(control.continuation),
-                        };
-                        SourceMachineState::Eval {
-                            expr: self.owned_child_occurrence(static_origin, 0, *value)?,
-                            env: env.clone(),
-                            control,
-                        }
-                    }
-                    RuntimeExpr::Construct {
-                        constructor,
-                        mut args,
-                    } => {
-                        if args.is_empty() {
-                            SourceMachineState::Value {
-                                value: LoweringOperand::Specialized(
-                                    self.finish_source_constructor(
-                                        builder,
-                                        constructor,
-                                        static_origin,
-                                        vec![],
-                                    )?,
-                                ),
-                                control,
-                            }
-                        } else {
-                            // Argument *i* is child *i*; the suffix keeps each
-                            // pending term paired with its own origin, so the
-                            // machine's positions cannot drift as it consumes them.
-                            let first = args.remove(0);
-                            let remaining = args
-                                .into_iter()
-                                .enumerate()
-                                .map(|(offset, arg)| {
-                                    self.owned_child_occurrence(static_origin, 1 + offset, arg)
-                                })
-                                .collect::<Result<Vec<_>, _>>()?;
-                            control.continuation = SourceContinuation::ConstructArgument {
-                                constructor,
+                    match {
+                        // The owned source machine is the third traversal route for
+                        // these joins. Record the source occurrence here; later
+                        // continuation helpers may only reborrow its token.
+                        self.enter_source_occurrence_plan(static_origin)?;
+                        expr
+                    } {
+                        RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
+                            self.close_reached_operand_edge(
                                 static_origin,
-                                remaining,
-                                lowered: Vec::new(),
-                                env: env.clone(),
-                                next: Box::new(control.continuation),
-                            };
+                                0,
+                                SourceOperandRole::WrapperBody,
+                            )?;
+                            self.enter_checked_subcontinuation_frame(frame_id)?;
                             SourceMachineState::Eval {
-                                expr: self.owned_child_occurrence(static_origin, 0, first)?,
+                                expr: self.owned_child_occurrence(static_origin, 0, *body)?,
                                 env,
                                 control,
                             }
                         }
-                    }
-                    RuntimeExpr::Match {
-                        scrutinee,
-                        cases,
-                        default,
-                    } => {
-                        control.continuation = SourceContinuation::MatchScrutinee {
-                            cases,
-                            default,
-                            env: env.clone(),
-                            static_origin,
-                            next: Box::new(control.continuation),
-                        };
-                        SourceMachineState::Eval {
-                            expr: self.owned_child_occurrence(static_origin, 0, *scrutinee)?,
-                            env,
-                            control,
-                        }
-                    }
-                    RuntimeExpr::Call { callee, args } => {
-                        let args = args
-                            .into_iter()
-                            .enumerate()
-                            .map(|(position, arg)| {
-                                self.owned_child_occurrence(static_origin, 1 + position, arg)
-                            })
-                            .collect::<Result<Vec<_>, _>>()?;
-                        control.continuation = SourceContinuation::CallCallee {
-                            call_origin: static_origin,
-                            args,
-                            env: env.clone(),
-                            next: Box::new(control.continuation),
-                        };
-                        SourceMachineState::Eval {
-                            expr: self.owned_child_occurrence(static_origin, 0, *callee)?,
-                            env,
-                            control,
-                        }
-                    }
-                    RuntimeExpr::ComputationalMatch {
-                        scrutinee,
-                        cases,
-                        default,
-                    } => {
-                        let checked_frame_id =
-                            self.consume_checked_subcontinuation_frame(&cases, &default)?;
-                        control.continuation = SourceContinuation::ComputationalMatchScrutinee {
-                            cases,
-                            default,
-                            env: env.clone(),
-                            static_origin,
-                            provenance: self.mint_recursor_frame_provenance(),
-                            checked_frame_id,
-                            answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
-                            next: Box::new(control.continuation),
-                        };
-                        SourceMachineState::Eval {
-                            expr: self.owned_child_occurrence(static_origin, 0, *scrutinee)?,
-                            env,
-                            control,
-                        }
-                    }
-                    // ⭐ The delegation point. Every form this dispatcher does not
-                    // handle — closures included — goes to `lower_expr` here, and
-                    // it now goes **as the same occurrence**: same term, same
-                    // origin. This arm is why a "machine-only" subset could never
-                    // have been threaded soundly.
-                    other => SourceMachineState::Value {
-                        value: self.lower_expr(
-                            builder,
-                            SourceOccurrence {
-                                expr: &other,
+                        RuntimeExpr::CheckedRecursiveInvocation {
+                            call_template_id,
+                            body,
+                            ..
+                        } => {
+                            self.close_reached_operand_edge(
                                 static_origin,
+                                0,
+                                SourceOperandRole::WrapperBody,
+                            )?;
+                            let instance =
+                                self.enter_checked_recursive_invocation(call_template_id, &body)?;
+                            control.continuation =
+                                SourceContinuation::CheckedRecursiveInvocationReturn {
+                                    instance,
+                                    next: Box::new(control.continuation),
+                                };
+                            SourceMachineState::Eval {
+                                expr: self.owned_child_occurrence(static_origin, 0, *body)?,
+                                env,
+                                control,
+                            }
+                        }
+                        RuntimeExpr::CheckedComputationalIHSlots { body, .. } => {
+                            self.close_reached_operand_edge(
+                                static_origin,
+                                0,
+                                SourceOperandRole::WrapperBody,
+                            )?;
+                            SourceMachineState::Eval {
+                                expr: self.owned_child_occurrence(static_origin, 0, *body)?,
+                                env,
+                                control,
+                            }
+                        }
+                        RuntimeExpr::CheckedComputationalIHInvocation {
+                            call_template_id,
+                            body,
+                            ..
+                        } => {
+                            self.close_reached_operand_edge(
+                                static_origin,
+                                0,
+                                SourceOperandRole::WrapperBody,
+                            )?;
+                            self.enter_checked_computational_ih_invocation(call_template_id)?;
+                            control.continuation =
+                                SourceContinuation::CheckedComputationalIHInvocationReturn {
+                                    call_template_id,
+                                    marker_origin: static_origin,
+                                    next: Box::new(control.continuation),
+                                };
+                            SourceMachineState::Eval {
+                                expr: self.owned_child_occurrence(static_origin, 0, *body)?,
+                                env,
+                                control,
+                            }
+                        }
+                        RuntimeExpr::Value(value) => SourceMachineState::Value {
+                            value: LoweringOperand::Specialized(self.lower_value(builder, &value)?),
+                            continuation_result_origin: None,
+                            control,
+                        },
+                        RuntimeExpr::Var(index) => {
+                            let value = env.get(index as usize).cloned().ok_or_else(|| {
+                                unsupported("Var", format!("no runtime binding for index {index}"))
+                            })?;
+                            eprintln!(
+                                "CONTSPEC_VAR owner={:?} origin={static_origin:?} \
+                                 index={index} phase={}",
+                                self.active_emission_owner,
+                                match &value {
+                                    LoweringOperand::Carried(word) =>
+                                        format!("carried:{:?}", word.word),
+                                    LoweringOperand::Specialized(
+                                        Lowered::ComputationalRecursorClosure { .. },
+                                    ) => "recursor".to_string(),
+                                    LoweringOperand::Specialized(_) => "specialized".to_string(),
+                                },
+                            );
+                            SourceMachineState::Value {
+                                value,
+                                continuation_result_origin: None,
+                                control,
+                            }
+                        }
+                        RuntimeExpr::Let { value, body } => {
+                            self.close_reached_operand_edge(
+                                static_origin,
+                                0,
+                                SourceOperandRole::LetValue,
+                            )?;
+                            control.continuation = SourceContinuation::LetBody {
+                                let_origin: static_origin,
+                                body: self.owned_child_occurrence(static_origin, 1, *body)?,
+                                env: env.clone(),
+                                next: Box::new(control.continuation),
+                            };
+                            SourceMachineState::Eval {
+                                expr: self.owned_child_occurrence(static_origin, 0, *value)?,
+                                env: env.clone(),
+                                control,
+                            }
+                        }
+                        RuntimeExpr::Construct {
+                            constructor,
+                            mut args,
+                        } => {
+                            if args.is_empty() {
+                                SourceMachineState::Value {
+                                    value: LoweringOperand::Specialized(
+                                        self.finish_source_constructor(
+                                            builder,
+                                            constructor,
+                                            static_origin,
+                                            vec![],
+                                        )?,
+                                    ),
+                                    continuation_result_origin: self
+                                        .continuation_specialization_result_origin(static_origin),
+                                    control,
+                                }
+                            } else {
+                                // Argument *i* is child *i*; the suffix keeps each
+                                // pending term paired with its own origin, so the
+                                // machine's positions cannot drift as it consumes them.
+                                let first = args.remove(0);
+                                let remaining = args
+                                    .into_iter()
+                                    .enumerate()
+                                    .map(|(offset, arg)| {
+                                        self.owned_child_occurrence(static_origin, 1 + offset, arg)
+                                    })
+                                    .collect::<Result<Vec<_>, _>>()?;
+                                control.continuation = SourceContinuation::ConstructArgument {
+                                    constructor,
+                                    static_origin,
+                                    remaining,
+                                    lowered: Vec::new(),
+                                    continuation_result_origin: None,
+                                    env: env.clone(),
+                                    next: Box::new(control.continuation),
+                                };
+                                SourceMachineState::Eval {
+                                    expr: self.owned_child_occurrence(static_origin, 0, first)?,
+                                    env,
+                                    control,
+                                }
+                            }
+                        }
+                        RuntimeExpr::Match {
+                            scrutinee,
+                            cases,
+                            default,
+                        } => {
+                            control.continuation = SourceContinuation::MatchScrutinee {
+                                cases,
+                                default,
+                                env: env.clone(),
+                                static_origin,
+                                next: Box::new(control.continuation),
+                            };
+                            SourceMachineState::Eval {
+                                expr: self.owned_child_occurrence(static_origin, 0, *scrutinee)?,
+                                env,
+                                control,
+                            }
+                        }
+                        RuntimeExpr::Call { callee, args } => {
+                            let args = args
+                                .into_iter()
+                                .enumerate()
+                                .map(|(position, arg)| {
+                                    self.owned_child_occurrence(static_origin, 1 + position, arg)
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
+                            control.continuation = SourceContinuation::CallCallee {
+                                call_origin: static_origin,
+                                args,
+                                env: env.clone(),
+                                next: Box::new(control.continuation),
+                            };
+                            SourceMachineState::Eval {
+                                expr: self.owned_child_occurrence(static_origin, 0, *callee)?,
+                                env,
+                                control,
+                            }
+                        }
+                        RuntimeExpr::ComputationalMatch {
+                            scrutinee,
+                            cases,
+                            default,
+                        } => {
+                            eprintln!(
+                                "CONTSPEC_ENV owner={:?} continuation={static_origin:?} len={} phases={:?}",
+                                self.active_emission_owner,
+                                env.len(),
+                                env.iter()
+                                    .map(|operand| match operand {
+                                        LoweringOperand::Carried(word) => {
+                                            format!("carried:{:?}", word.word)
+                                        }
+                                        LoweringOperand::Specialized(_) => {
+                                            "specialized".to_string()
+                                        }
+                                    })
+                                    .collect::<Vec<_>>(),
+                            );
+                            self.function_local
+                                .continuation_specialization_environments
+                                .insert(static_origin, env.clone());
+                            let checked_frame_id =
+                                self.consume_checked_subcontinuation_frame(&cases, &default)?;
+                            control.continuation =
+                                SourceContinuation::ComputationalMatchScrutinee {
+                                    cases,
+                                    default,
+                                    env: env.clone(),
+                                    static_origin,
+                                    provenance: self.mint_recursor_frame_provenance(),
+                                    checked_frame_id,
+                                    answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
+                                    next: Box::new(control.continuation),
+                                };
+                            SourceMachineState::Eval {
+                                expr: self.owned_child_occurrence(static_origin, 0, *scrutinee)?,
+                                env,
+                                control,
+                            }
+                        }
+                        // ⭐ The delegation point. Every form this dispatcher does not
+                        // handle — closures included — goes to `lower_expr` here, and
+                        // it now goes **as the same occurrence**: same term, same
+                        // origin. This arm is why a "machine-only" subset could never
+                        // have been threaded soundly.
+                        other => SourceMachineState::Value {
+                            value: self.lower_expr(
+                                builder,
+                                SourceOccurrence {
+                                    expr: &other,
+                                    static_origin,
+                                },
+                                &env,
+                            )?,
+                            continuation_result_origin: self
+                                .continuation_specialization_result_origin(static_origin),
+                            control,
+                        },
+                    }
+                }
+                SourceMachineState::Value {
+                    value,
+                    continuation_result_origin,
+                    mut control,
+                } => {
+                    if continuation_result_origin.is_some() {
+                        eprintln!(
+                            "CONTSPEC_VALUE owner={:?} pending={continuation_result_origin:?} continuation={}",
+                            self.active_emission_owner,
+                            match &control.continuation {
+                                SourceContinuation::Terminal(terminal) => match terminal {
+                                    SourceContinuationTerminal::ReturnValue => {
+                                        "TerminalReturnValue"
+                                    }
+                                    SourceContinuationTerminal::ReturnToProducerHole { .. } => {
+                                        "TerminalProducerHole"
+                                    }
+                                    SourceContinuationTerminal::ResumeOuter { .. } => {
+                                        "TerminalResumeOuter"
+                                    }
+                                    SourceContinuationTerminal::JumpToJoin(_) => {
+                                        "TerminalJumpToJoin"
+                                    }
+                                },
+                                SourceContinuation::LetBody { .. } => "LetBody",
+                                SourceContinuation::CheckedRecursiveInvocationReturn { .. } => {
+                                    "CheckedRecursiveReturn"
+                                }
+                                SourceContinuation::CheckedComputationalIHInvocationReturn {
+                                    ..
+                                } => "CheckedIHReturn",
+                                SourceContinuation::ReturnFromSelectedCase { .. } => {
+                                    "ReturnSelected"
+                                }
+                                SourceContinuation::ApplyRecursorSelection { .. } => {
+                                    "ApplyRecursor"
+                                }
+                                SourceContinuation::UnwindRecursorSegment { .. } => {
+                                    "UnwindRecursor"
+                                }
+                                SourceContinuation::ConstructArgument { .. } => {
+                                    "ConstructArgument"
+                                }
+                                SourceContinuation::MatchScrutinee { .. } => "MatchScrutinee",
+                                SourceContinuation::IfScrutinee { .. } => "IfScrutinee",
+                                SourceContinuation::ProjectRecord { .. } => "ProjectRecord",
+                                SourceContinuation::ComputationalMatchScrutinee { .. } => {
+                                    "ComputationalMatchScrutinee"
+                                }
+                                SourceContinuation::CallCallee { .. } => "CallCallee",
+                                SourceContinuation::CallArgument { .. } => "CallArgument",
                             },
-                            &env,
-                        )?,
-                        control,
-                    },
-                },
-                SourceMachineState::Value { value, mut control } => {
+                        );
+                    }
                     if matches!(value, LoweringOperand::Specialized(Lowered::Trap(_))) {
                         control.continuation = Self::discard_source_prefix(control.continuation);
                     }
                     match control.continuation {
                         SourceContinuation::Terminal(SourceContinuationTerminal::ReturnValue) => {
+                            self.returned_source_continuation_result_origin =
+                                continuation_result_origin;
                             return Ok(value);
                         }
                         SourceContinuation::Terminal(
@@ -4051,7 +4436,11 @@ impl<'a> Lowering<'a> {
                                     },
                                 )),
                             };
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value {
+                                value,
+                                continuation_result_origin,
+                                control,
+                            }
                         }
                         SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                             expected,
@@ -4072,11 +4461,58 @@ impl<'a> Lowering<'a> {
                             if matches!(value, LoweringOperand::Specialized(Lowered::Trap(_))) {
                                 return Ok(value);
                             }
-                            return self.resume_active_continuation(builder, value, *active);
+                            let mut active =
+                                control.selected.as_active(&control.selected_lineage);
+                            let value = if let Some(producer_origin) =
+                                continuation_result_origin
+                            {
+                                let worker = self
+                                    .continuation_specialization_worker_for_result(
+                                        producer_origin,
+                                    )?;
+                                let exits_emitted_owner = self
+                                    .continuation_specialization_exits_emitted_owner(
+                                        producer_origin,
+                                    )?;
+                                active = self
+                                    .bypass_active_continuation_specializations_for_result(
+                                        producer_origin,
+                                        active,
+                                    )?;
+                                let value = self.call_continuation_specialization_if_planned(
+                                    builder,
+                                    producer_origin,
+                                    value,
+                                )?;
+                                if exits_emitted_owner {
+                                    return Ok(value);
+                                }
+                                let previous = worker
+                                    .map(|worker| {
+                                        self.active_static_recursor_selection.replace(worker)
+                                    })
+                                    .flatten();
+                                let result =
+                                    self.resume_active_continuation(builder, value, active);
+                                if worker.is_some() {
+                                    self.active_static_recursor_selection = previous;
+                                }
+                                return result;
+                            } else {
+                                value
+                            };
+                            return self.resume_active_continuation(builder, value, active);
                         }
                         SourceContinuation::Terminal(SourceContinuationTerminal::JumpToJoin(
                             edge,
                         )) => {
+                            if continuation_result_origin.is_some() {
+                                eprintln!(
+                                    "CONTSPEC_JUMP owner={:?} pending={continuation_result_origin:?} edge={:?}",
+                                    self.active_emission_owner,
+                                    edge.producer_origin,
+                                );
+                            }
                             if matches!(value, LoweringOperand::Specialized(Lowered::Trap(_))) {
                                 let failure = builder.ins().iconst(types::I64, -4);
                                 builder.ins().return_(&[failure]);
@@ -4102,6 +4538,28 @@ impl<'a> Lowering<'a> {
                                     builder, value, &prefix,
                                 )?
                             };
+                            let continuation_result_origin =
+                                continuation_result_origin.unwrap_or(edge.producer_origin);
+                            let exits_emitted_owner = self
+                                .function_local
+                                .continuation_specialization_calls
+                                .contains_key(&continuation_result_origin)
+                                && self.continuation_specialization_exits_emitted_owner(
+                                    continuation_result_origin,
+                                )?;
+                            let value = self.call_continuation_specialization_if_planned(
+                                builder,
+                                continuation_result_origin,
+                                value,
+                            )?;
+                            if exits_emitted_owner {
+                                self.disposition_lowering_boundary_use_if_planned(
+                                    LoweringOnlyOperandEdge::JoinArm,
+                                    edge.producer_origin,
+                                    0,
+                                )?;
+                                return Ok(value);
+                            }
                             match edge.target.join_plan.representation {
                                 JoinResultRepresentation::NativeScalarPair => {
                                     let (value, actual_kind) =
@@ -4156,9 +4614,17 @@ impl<'a> Lowering<'a> {
                         } => {
                             control.continuation = *next;
                             if matches!(value, LoweringOperand::Specialized(Lowered::RecursiveBackedge)) {
-                                SourceMachineState::Value { value, control }
+                                SourceMachineState::Value {
+                                    value,
+                                    continuation_result_origin: None,
+                                    control,
+                                }
                             } else if matches!(value, LoweringOperand::Specialized(Lowered::Trap(_))) {
-                                SourceMachineState::Value { value, control }
+                                SourceMachineState::Value {
+                                    value,
+                                    continuation_result_origin: None,
+                                    control,
+                                }
                             } else {
                                 self.close_reached_operand_edge(
                                     let_origin,
@@ -4176,7 +4642,11 @@ impl<'a> Lowering<'a> {
                         SourceContinuation::CheckedRecursiveInvocationReturn { instance, next } => {
                             self.leave_checked_recursive_invocation(instance)?;
                             control.continuation = *next;
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value {
+                                value,
+                                continuation_result_origin,
+                                control,
+                            }
                         }
                         SourceContinuation::CheckedComputationalIHInvocationReturn {
                             call_template_id,
@@ -4195,7 +4665,11 @@ impl<'a> Lowering<'a> {
                             let value =
                                 self.finish_checked_computational_ih_marker(marker_origin, value)?;
                             control.continuation = *next;
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value {
+                                value,
+                                continuation_result_origin,
+                                control,
+                            }
                         }
                         SourceContinuation::ReturnFromSelectedCase { delimiter, next } => {
                             let scope =
@@ -4224,7 +4698,11 @@ impl<'a> Lowering<'a> {
                             })?;
                             control.selected = previous;
                             control.continuation = *next;
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value {
+                                value,
+                                continuation_result_origin,
+                                control,
+                            }
                         }
                         SourceContinuation::ApplyRecursorSelection { layer, next } => {
                             #[cfg(test)]
@@ -4257,7 +4735,11 @@ impl<'a> Lowering<'a> {
                                     answer_route,
                                     next,
                                 };
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value {
+                                value,
+                                continuation_result_origin,
+                                control,
+                            }
                         }
                         SourceContinuation::UnwindRecursorSegment {
                             mut stack,
@@ -4306,10 +4788,18 @@ impl<'a> Lowering<'a> {
                                             next,
                                         }),
                                     };
-                                SourceMachineState::Value { value, control }
+                                SourceMachineState::Value {
+                                    value,
+                                    continuation_result_origin,
+                                    control,
+                                }
                             } else {
                                 control.continuation = *next;
-                                SourceMachineState::Value { value, control }
+                                SourceMachineState::Value {
+                                    value,
+                                    continuation_result_origin,
+                                    control,
+                                }
                             }
                         }
                         SourceContinuation::ConstructArgument {
@@ -4317,47 +4807,219 @@ impl<'a> Lowering<'a> {
                             static_origin,
                             mut remaining,
                             mut lowered,
+                            continuation_result_origin:
+                                mut constructed_continuation_result_origin,
                             env,
                             next,
                         } => {
+                            constructed_continuation_result_origin =
+                                Self::merge_continuation_result_origins(
+                                    constructed_continuation_result_origin,
+                                    continuation_result_origin,
+                                )?;
                             lowered.push(value);
                             control.continuation = *next;
                             if remaining.is_empty() {
-                                if lowered.iter().any(|argument| {
-                                    matches!(argument, LoweringOperand::Carried(_))
-                                }) {
+                                let own_continuation_result_origin = self
+                                    .continuation_specialization_result_origin(static_origin);
+                                let must_cross_specialization =
+                                    own_continuation_result_origin.is_some();
+                                let (
+                                    nearest_continuation_result_origin,
+                                    retained_continuation_result_origin,
+                                ) = match (
+                                    constructed_continuation_result_origin,
+                                    own_continuation_result_origin,
+                                ) {
+                                    (Some(inner), Some(outer)) if inner != outer => {
+                                        (Some(inner), Some(outer))
+                                    }
+                                    (retained, own) => {
+                                        (
+                                            Self::merge_continuation_result_origins(
+                                                retained, own,
+                                            )?,
+                                            None,
+                                        )
+                                    }
+                                };
+                                let flattens_nearest = match
+                                    nearest_continuation_result_origin
+                                {
+                                    Some(producer_origin) => self
+                                        .continuation_specialization_flattens_result(
+                                            producer_origin,
+                                        )?,
+                                    None => false,
+                                };
+                                if flattens_nearest {
+                                    let producer_origin =
+                                        nearest_continuation_result_origin
+                                            .expect("flattened continuation result exists");
+                                    let exits_emitted_owner = self
+                                        .continuation_specialization_exits_emitted_owner(
+                                        producer_origin,
+                                    )?;
+                                    let completed = self
+                                        .call_known_constructor_continuation_specialization(
+                                            builder,
+                                            producer_origin,
+                                            static_origin,
+                                            lowered,
+                                        )?;
+                                    if retained_continuation_result_origin.is_some() {
+                                        state = SourceMachineState::Value {
+                                            value: completed,
+                                            continuation_result_origin:
+                                                retained_continuation_result_origin,
+                                            control,
+                                        };
+                                        continue;
+                                    }
+                                    let continuation = control.continuation;
+                                    if exits_emitted_owner {
+                                        match continuation {
+                                            SourceContinuation::Terminal(
+                                                SourceContinuationTerminal::ResumeOuter {
+                                                    active,
+                                                    ..
+                                                },
+                                            ) => {
+                                                self.bypass_active_continuation_specializations_for_result(
+                                                    producer_origin,
+                                                    *active,
+                                                )?;
+                                            }
+                                            continuation @
+                                            SourceContinuation::ComputationalMatchScrutinee {
+                                                ..
+                                            } => {
+                                                self.bypass_continuation_specializations_for_result(
+                                                    producer_origin,
+                                                    continuation,
+                                                )?;
+                                            }
+                                            _ => {
+                                                return Err(backend(
+                                                    BackendFailure::PlannerInvariant(
+                                                        "known continuation result is not adjacent \
+                                                         to its checked out-of-line suffix"
+                                                            .to_string(),
+                                                    ),
+                                                ));
+                                            }
+                                        }
+                                        return Ok(completed);
+                                    }
+                                    match continuation {
+                                        SourceContinuation::Terminal(
+                                            SourceContinuationTerminal::ResumeOuter {
+                                                expected,
+                                                active,
+                                                root_authority,
+                                            },
+                                        ) => {
+                                            if active.cursor != expected {
+                                                return Err(unsupported(
+                                                    "ComputationalRecursor",
+                                                    "source continuation terminal cursor mismatch",
+                                                ));
+                                            }
+                                            self.restore_root_terminal_authority(
+                                                root_authority,
+                                                expected,
+                                            )?;
+                                            let active = self
+                                                .bypass_active_continuation_specializations_for_result(
+                                                    producer_origin,
+                                                    *active,
+                                                )?;
+                                            return self.resume_active_continuation(
+                                                builder,
+                                                completed,
+                                                active,
+                                            );
+                                        }
+                                        continuation => {
+                                            control.continuation = self
+                                                .bypass_continuation_specializations_for_result(
+                                                    producer_origin,
+                                                    continuation,
+                                                )?;
+                                            state = SourceMachineState::Value {
+                                                value: completed,
+                                                continuation_result_origin: None,
+                                                control,
+                                            };
+                                            continue;
+                                        }
+                                    }
+                                }
+                                let mut completed = if must_cross_specialization
+                                    || lowered.iter().any(|argument| {
+                                        matches!(argument, LoweringOperand::Carried(_))
+                                    })
+                                {
                                     let lowered =
                                         self.split_static_recursor_worker_operands(
                                             builder, lowered,
                                         )?;
-                                    SourceMachineState::Value {
-                                        value: LoweringOperand::Carried(
-                                            self.transfer_constructor_operands(
-                                                builder,
-                                                static_origin,
-                                                &constructor,
-                                                &lowered,
-                                            )?,
-                                        ),
-                                        control,
-                                    }
+                                    let lowered = self
+                                        .materialize_continuation_specialization_worker_operands(
+                                            builder,
+                                            static_origin,
+                                            lowered,
+                                        )?;
+                                    LoweringOperand::Carried(
+                                        self.transfer_constructor_operands(
+                                            builder,
+                                            static_origin,
+                                            &constructor,
+                                            &lowered,
+                                        )?,
+                                    )
                                 } else {
-                                    SourceMachineState::Value {
-                                        value: LoweringOperand::Specialized(
-                                            self.finish_source_constructor(
-                                                builder,
-                                                constructor,
+                                    LoweringOperand::Specialized(
+                                        self.finish_source_constructor(
+                                            builder,
+                                            constructor,
+                                            static_origin,
+                                            self.specialized_source_env_at(
+                                                &lowered,
                                                 static_origin,
-                                                self.specialized_source_env_at(
-                                                    &lowered,
-                                                    static_origin,
-                                                    0,
-                                                    SourceOperandRole::ConstructArgument,
-                                                )?,
+                                                0,
+                                                SourceOperandRole::ConstructArgument,
                                             )?,
-                                        ),
-                                        control,
-                                    }
+                                        )?,
+                                    )
+                                };
+                                let completed_continuation_result_origin =
+                                    match (
+                                        constructed_continuation_result_origin,
+                                        own_continuation_result_origin,
+                                    ) {
+                                        (Some(inner), Some(outer)) if inner != outer => {
+                                            completed = self
+                                                .call_continuation_specialization_if_planned(
+                                                    builder, inner, completed,
+                                                )?;
+                                            Some(outer)
+                                        }
+                                        (retained, own) => {
+                                            Self::merge_continuation_result_origins(retained, own)?
+                                        }
+                                    };
+                                if completed_continuation_result_origin.is_some() {
+                                    eprintln!(
+                                        "CONTSPEC_COMPLETE owner={:?} origin={static_origin:?} pending={completed_continuation_result_origin:?}",
+                                        self.active_emission_owner,
+                                    );
+                                }
+                                SourceMachineState::Value {
+                                    value: completed,
+                                    continuation_result_origin:
+                                        completed_continuation_result_origin,
+                                    control,
                                 }
                             } else {
                                 let first = remaining.remove(0);
@@ -4366,6 +5028,8 @@ impl<'a> Lowering<'a> {
                                     static_origin,
                                     remaining,
                                     lowered,
+                                    continuation_result_origin:
+                                        constructed_continuation_result_origin,
                                     env: env.clone(),
                                     next: Box::new(control.continuation),
                                 };
@@ -4462,6 +5126,14 @@ impl<'a> Lowering<'a> {
                                     } else {
                                         let (true_index, true_case) = true_case;
                                         let (false_index, false_case) = false_case;
+                                        self.disposition_statically_unselected_match_cases(
+                                            static_origin,
+                                            Some(true_index),
+                                        )?;
+                                        self.disposition_statically_unselected_match_cases(
+                                            static_origin,
+                                            Some(false_index),
+                                        )?;
                                         let true_body = self.case_body_occurrence(
                                             static_origin,
                                             true_index,
@@ -4576,6 +5248,38 @@ impl<'a> Lowering<'a> {
                             answer_route,
                             next,
                         } => 'computational_scrutinee: {
+                            self.function_local
+                                .continuation_specialization_environments
+                                .insert(static_origin, env.clone());
+                            if let Some(producer_origin) = continuation_result_origin {
+                                let continuation =
+                                    SourceContinuation::ComputationalMatchScrutinee {
+                                        cases,
+                                        default,
+                                        env,
+                                        static_origin,
+                                        provenance,
+                                        checked_frame_id,
+                                        answer_route,
+                                        next,
+                                    };
+                                let value = self
+                                    .call_continuation_specialization_if_planned(
+                                        builder,
+                                        producer_origin,
+                                        value,
+                                    )?;
+                                control.continuation = self
+                                    .bypass_continuation_specializations_for_result(
+                                        producer_origin,
+                                        continuation,
+                                    )?;
+                                break 'computational_scrutinee SourceMachineState::Value {
+                                    value,
+                                    continuation_result_origin: None,
+                                    control,
+                                };
+                            }
                             self.enter_source_occurrence_plan(static_origin)?;
                             self.close_reached_operand_edge(
                                 static_origin,
@@ -4626,6 +5330,7 @@ impl<'a> Lowering<'a> {
                                 control.continuation = *next;
                                 break 'computational_scrutinee SourceMachineState::Value {
                                     value: eliminated,
+                                    continuation_result_origin: None,
                                     control,
                                 };
                             }
@@ -5343,6 +6048,63 @@ impl<'a> Lowering<'a> {
             .collect()
     }
 
+    fn materialize_continuation_specialization_worker_operands(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        producer_origin: StaticOriginId,
+        mut operands: Vec<LoweringOperand>,
+    ) -> Result<Vec<LoweringOperand>, CraneliftBackendError> {
+        let Some(calls) = self
+            .function_local
+            .continuation_specialization_calls
+            .get(&producer_origin)
+            .cloned()
+        else {
+            return Ok(operands);
+        };
+        for call in calls {
+            let token = self
+                .static_transition_plan
+                .continuation_specialization_worker_token(call.plan.id())?;
+            let position = usize::try_from(token.sibling_position).map_err(|_| {
+                backend_module(
+                    "continuation specialization worker position exceeds usize".to_string(),
+                )
+            })?;
+            let operand = operands.get(position).cloned().ok_or_else(|| {
+                backend(BackendFailure::PlannerInvariant(
+                    "continuation specialization worker position exceeds producer payload"
+                        .to_string(),
+                ))
+            })?;
+            if matches!(operand, LoweringOperand::Carried(_)) {
+                continue;
+            }
+            let worker = StaticRecursorWorker {
+                boundary_identity: token.identity(),
+                residual_id: token.id,
+                parent_origin: token.parent_origin,
+                producer_origin: token.producer_origin,
+                sibling_position: position,
+                closure_origin: token.closure_origin,
+                body_origin: token.body_origin,
+                declared_arity: usize::try_from(token.declared_arity).map_err(|_| {
+                    backend_module(
+                        "continuation specialization worker arity exceeds usize".to_string(),
+                    )
+                })?,
+                capture_count: usize::try_from(token.capture_count).map_err(|_| {
+                    backend_module(
+                        "continuation specialization capture count exceeds usize".to_string(),
+                    )
+                })?,
+            };
+            let prepared = self.prepare_planned_static_recursor_worker(operand, worker)?;
+            operands[position] = self.materialize_static_recursor_residual(builder, prepared)?;
+        }
+        Ok(operands)
+    }
+
     fn lower_source_bounded_nat_match<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -5366,6 +6128,8 @@ impl<'a> Lowering<'a> {
                 "structural Nat source match requires exact Zero and Suc predecessor arms",
             ));
         };
+        self.disposition_statically_unselected_match_cases(static_origin, Some(zero_index))?;
+        self.disposition_statically_unselected_match_cases(static_origin, Some(suc_index))?;
         let zero_body = self.case_body_occurrence(static_origin, zero_index, &zero.body)?;
         let suc_body = self.case_body_occurrence(static_origin, suc_index, &suc.body)?;
 
@@ -5524,7 +6288,8 @@ impl<'a> Lowering<'a> {
     /// lawful activation per arm*, not a repeated consumption of one activation.
     /// `consumed_subcontinuation_frames` is a single per-lowering set, so without
     /// this fork the second arm's lawful consume of the same
-    /// `(invocation_id, frame_id)` is misreported as "consumed more than once"
+    /// `(emitted_owner, invocation_id, frame_id)` is misreported as "consumed
+    /// more than once"
     /// (RT-ESCAPE: e.g. an escaped resource used by a host op whose `Result`
     /// match fans out). Rewinding to the pre-match baseline before each arm
     /// preserves the affine check *within* a single control-flow path — a real
@@ -5535,8 +6300,8 @@ impl<'a> Lowering<'a> {
     fn lower_forked_branch<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        frame_baseline: &std::collections::BTreeSet<(u64, u64)>,
-        frame_union: &mut std::collections::BTreeSet<(u64, u64)>,
+        frame_baseline: &std::collections::BTreeSet<(Option<PredeclaredFunctionId>, u64, u64)>,
+        frame_union: &mut std::collections::BTreeSet<(Option<PredeclaredFunctionId>, u64, u64)>,
         expr: OwnedSourceOccurrence,
         env: Vec<LoweringOperand>,
         control: SourceControl<'b>,
@@ -5772,6 +6537,12 @@ impl<'a> Lowering<'a> {
                 .brif(is_host_result, host_result, &[], represented, &[]);
 
             builder.switch_to_block(host_result);
+            if format!("{static_origin:?}") == "StaticOriginId(294)" {
+                let diagnostic = builder.ins().iconst(types::I64, 210);
+                builder.ins().return_(&[diagnostic]);
+                let unreachable = builder.create_block();
+                builder.switch_to_block(unreachable);
+            }
             let success = self.emit_carrier_host_success(builder, scrutinee)?;
             let payload = self.emit_carrier_host_payload(builder, scrutinee)?;
             builder.ins().brif(
@@ -5815,6 +6586,12 @@ impl<'a> Lowering<'a> {
 
             for (block, (index, case)) in [(ok_block, ok_case), (err_block, err_case)] {
                 builder.switch_to_block(block);
+                if index == err_case.0 {
+                    let diagnostic = builder.ins().iconst(types::I64, 225);
+                    builder.ins().return_(&[diagnostic]);
+                    let unreachable = builder.create_block();
+                    builder.switch_to_block(unreachable);
+                }
                 let payload = CarriedBoundaryWord {
                     word: builder.block_params(block)[0],
                 };
@@ -5859,6 +6636,12 @@ impl<'a> Lowering<'a> {
                     .static_transition_plan
                     .case_constructor_identity(static_origin, index)?
                     .tag_abi_word()?;
+                eprintln!(
+                    "CONTSPEC_ORDINARY_MATCH owner={:?} match={static_origin:?} case={index} \
+                     constructor={} tag={identity:#x}",
+                    self.active_emission_owner,
+                    case.constructor,
+                );
                 let identity = Self::carrier_identity_immediate(builder, identity);
                 let selected = builder.create_block();
                 let next = builder.create_block();
@@ -5869,6 +6652,39 @@ impl<'a> Lowering<'a> {
                 );
                 builder.ins().brif(matched, selected, &[], next, &[]);
                 builder.switch_to_block(selected);
+                if case.constructor.contains("::ResourceError::") {
+                    let diagnostic = builder.ins().iconst(
+                        types::I64,
+                        200 + i64::try_from(index).unwrap_or(55),
+                    );
+                    builder.ins().return_(&[diagnostic]);
+                    let unreachable = builder.create_block();
+                    builder.switch_to_block(unreachable);
+                }
+                if case.constructor.contains("::FileError::") {
+                    let diagnostic = builder.ins().iconst(
+                        types::I64,
+                        160 + i64::try_from(index).unwrap_or(55),
+                    );
+                    builder.ins().return_(&[diagnostic]);
+                    let unreachable = builder.create_block();
+                    builder.switch_to_block(unreachable);
+                }
+                if case.constructor.contains("::Result::Err") {
+                    let origin = format!("{static_origin:?}");
+                    let origin = origin
+                        .trim_start_matches("StaticOriginId(")
+                        .trim_end_matches(')')
+                        .parse::<i64>()
+                        .unwrap_or(55);
+                    let diagnostic = builder.ins().iconst(
+                        types::I64,
+                        30 + origin % 60,
+                    );
+                    builder.ins().return_(&[diagnostic]);
+                    let unreachable = builder.create_block();
+                    builder.switch_to_block(unreachable);
+                }
                 let binders = i64::try_from(case.binders).map_err(|_| {
                     unsupported(
                         "BoundaryCarrier",
@@ -5907,6 +6723,17 @@ impl<'a> Lowering<'a> {
                     "carried constructor predecessor",
                 )?;
                 builder.switch_to_block(next);
+            }
+            if cases
+                .first()
+                .is_some_and(|case| case.constructor.contains("::ResourceError::"))
+            {
+                let modulus = builder.ins().iconst(types::I64, 200);
+                let diagnostic = builder.ins().urem(tag, modulus);
+                let diagnostic = builder.ins().iadd_imm(diagnostic, 20);
+                builder.ins().return_(&[diagnostic]);
+                let unreachable = builder.create_block();
+                builder.switch_to_block(unreachable);
             }
             let defaulted = LoweringOperand::Specialized(Lowered::Trap(default.clone()));
             if !self.seal_source_trap_branch(builder, &defaulted)? {
@@ -6041,6 +6868,7 @@ impl<'a> Lowering<'a> {
                 .enumerate()
                 .find(|(_, case)| case.constructor == constructor && case.binders == 1)
             {
+                self.disposition_statically_unselected_match_cases(static_origin, Some(index))?;
                 let arm_env = env_with([payload], env);
                 let body =
                     self.owned_case_body_occurrence(static_origin, index, case.body.clone())?;
@@ -6053,6 +6881,7 @@ impl<'a> Lowering<'a> {
                     branch_control,
                 )?
             } else {
+                self.disposition_statically_unselected_match_cases(static_origin, None)?;
                 // ⚠ THE ONE SYNTHESIZED TERM in the whole lowering: no source
                 // occurrence exists for "this alternative has no case", so the
                 // machine is handed a fresh `Trap` built from the match's own
@@ -6195,8 +7024,15 @@ impl<'a> Lowering<'a> {
             builder.switch_to_block(arm);
             let (case_index, case) =
                 match select_dynamic_constructor_case(cases, &alternative, default)? {
-                    Ok(selected) => selected,
+                    Ok(selected) => {
+                        self.disposition_statically_unselected_match_cases(
+                            static_origin,
+                            Some(selected.0),
+                        )?;
+                        selected
+                    }
                     Err(_) => {
+                        self.disposition_statically_unselected_match_cases(static_origin, None)?;
                         let failure = builder.ins().iconst(types::I64, -4);
                         builder.ins().return_(&[failure]);
                         test_block = next;
@@ -6308,8 +7144,15 @@ impl<'a> Lowering<'a> {
             builder.switch_to_block(arm);
             let (case_index, case) =
                 match select_dynamic_constructor_case(cases, &alternative, default)? {
-                    Ok(selected) => selected,
+                    Ok(selected) => {
+                        self.disposition_statically_unselected_match_cases(
+                            static_origin,
+                            Some(selected.0),
+                        )?;
+                        selected
+                    }
                     Err(_) => {
+                        self.disposition_statically_unselected_match_cases(static_origin, None)?;
                         let failure = builder.ins().iconst(types::I64, -4);
                         builder.ins().return_(&[failure]);
                         test_block = next;
@@ -6390,11 +7233,8 @@ impl<'a> Lowering<'a> {
         // occurrence. A carried boundary word carries none of those and cannot
         // acquire them (`§2g`: the carrier holds the SSA word and nothing else),
         // so this is a specialized-only surface. ⛔ Fails closed.
-        let edge = self.reached_operand_edge_token(
-            call_origin,
-            0,
-            SourceOperandRole::CallCallee,
-        )?;
+        let edge =
+            self.reached_operand_edge_token(call_origin, 0, SourceOperandRole::CallCallee)?;
         for position in 0..args.len() {
             let argument = self.reached_operand_edge_token(
                 call_origin,
@@ -6566,17 +7406,28 @@ impl<'a> Lowering<'a> {
                         BodyEmissionAuthority::FunctionizedUnits
                     )
                 {
+                    let worker = recursive_worker.expect("prepared worker retains static identity");
+                    let continuation_specialized =
+                        self.producer_call_has_continuation_specialization(
+                            worker.body_origin,
+                            call_origin,
+                        )?;
                     let mut suspended = armed.suspended;
-                    suspended.continuation = self.install_recursor_invocation(
-                        suspended.continuation,
-                        activation,
-                        invocation,
-                        checked_ih_invocation,
-                    )?;
+                    if continuation_specialized {
+                        suspended.continuation =
+                            Self::discard_source_prefix(suspended.continuation);
+                        self.consume_out_of_line_continuation_splice()?;
+                    } else {
+                        suspended.continuation = self.install_recursor_invocation(
+                            suspended.continuation,
+                            activation,
+                            invocation,
+                            checked_ih_invocation,
+                        )?;
+                    }
                     let LoweringOperand::Carried(word) = base else {
                         unreachable!("a prepared worker materializes one carried environment")
                     };
-                    let worker = recursive_worker.expect("prepared worker retains static identity");
                     let mut inputs = args;
                     self.append_static_recursor_worker_captures(
                         builder,
@@ -6584,14 +7435,24 @@ impl<'a> Lowering<'a> {
                         worker,
                         &mut inputs,
                     )?;
-                    let value = self.call_declared_recursive_position_unit(
+                    let mut value = self.call_declared_recursive_position_unit(
                         builder,
                         worker.body_origin,
                         &inputs,
                     )?;
-                    self.active_static_recursor_result = Some(worker);
+                    if continuation_specialized {
+                        value = self.apply_recursive_continuation_specialization_if_planned(
+                            builder,
+                            worker,
+                            call_origin,
+                            value,
+                        )?;
+                    } else {
+                        self.active_static_recursor_result = Some(worker);
+                    }
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                         value,
+                        continuation_result_origin: None,
                         control: suspended,
                     }));
                 }
@@ -6602,18 +7463,29 @@ impl<'a> Lowering<'a> {
                 // ordering control 5 measures.
                 if let LoweringOperand::Carried(word) = base {
                     let mut suspended = armed.suspended;
-                    suspended.continuation = self.install_recursor_invocation(
-                        suspended.continuation,
-                        activation,
-                        invocation,
-                        checked_ih_invocation,
-                    )?;
                     if let Some(worker) = recursive_worker.filter(|_| {
                         matches!(
                             self.body_emission_authority,
                             BodyEmissionAuthority::FunctionizedUnits
                         )
                     }) {
+                        let continuation_specialized =
+                            self.producer_call_has_continuation_specialization(
+                                worker.body_origin,
+                                call_origin,
+                            )?;
+                        if continuation_specialized {
+                            suspended.continuation =
+                                Self::discard_source_prefix(suspended.continuation);
+                            self.consume_out_of_line_continuation_splice()?;
+                        } else {
+                            suspended.continuation = self.install_recursor_invocation(
+                                suspended.continuation,
+                                activation,
+                                invocation,
+                                checked_ih_invocation,
+                            )?;
+                        }
                         let mut inputs = args;
                         self.append_static_recursor_worker_captures(
                             builder,
@@ -6621,20 +7493,37 @@ impl<'a> Lowering<'a> {
                             worker,
                             &mut inputs,
                         )?;
-                        let value = self.call_declared_recursive_position_unit(
+                        let mut value = self.call_declared_recursive_position_unit(
                             builder,
                             worker.body_origin,
                             &inputs,
                         )?;
-                        self.active_static_recursor_result = Some(worker);
+                        if continuation_specialized {
+                            value = self.apply_recursive_continuation_specialization_if_planned(
+                                builder,
+                                worker,
+                                call_origin,
+                                value,
+                            )?;
+                        } else {
+                            self.active_static_recursor_result = Some(worker);
+                        }
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                             value,
+                            continuation_result_origin: None,
                             control: suspended,
                         }));
                     }
+                    suspended.continuation = self.install_recursor_invocation(
+                        suspended.continuation,
+                        activation,
+                        invocation,
+                        checked_ih_invocation,
+                    )?;
                     Self::reject_carried_residual_arguments(args.len())?;
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                         value: LoweringOperand::Carried(word),
+                        continuation_result_origin: None,
                         control: suspended,
                     }));
                 }
@@ -6660,6 +7549,7 @@ impl<'a> Lowering<'a> {
                     )?;
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                         value: LoweringOperand::Specialized(Lowered::BoundedNat(predecessor)),
+                        continuation_result_origin: None,
                         control: suspended,
                     }));
                 } else {
@@ -6701,6 +7591,7 @@ impl<'a> Lowering<'a> {
                             self.call_declared_recursive_position_unit(builder, body, &call_env)?;
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                             value,
+                            continuation_result_origin: None,
                             control: suspended,
                         }));
                     }
@@ -6771,6 +7662,7 @@ impl<'a> Lowering<'a> {
             let value = self.call_declared_declaration_unit(builder, reference_origin, &inputs)?;
             return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                 value,
+                continuation_result_origin: None,
                 control,
             }));
         }
@@ -6838,6 +7730,7 @@ impl<'a> Lowering<'a> {
             if let Some(induction) = active.induction {
                 return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                     value: LoweringOperand::Specialized(induction),
+                    continuation_result_origin: None,
                     control,
                 }));
             }
@@ -7089,11 +7982,8 @@ impl<'a> Lowering<'a> {
         required_kind: Option<ScalarMergeKind>,
         join: &'static str,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
-        let edge = self.reached_lowering_boundary_use_token(
-            boundary_edge,
-            origin,
-            boundary_position,
-        )?;
+        let edge =
+            self.reached_lowering_boundary_use_token(boundary_edge, origin, boundary_position)?;
         match lowered {
             LoweringOperand::Carried(word) => {
                 #[cfg(test)]
@@ -7287,6 +8177,7 @@ impl<'a> Lowering<'a> {
     /// the static plan.  A carried child is stored unchanged; a specialized
     /// sibling crosses through the sole producer before both are joined in the
     /// same runtime node.
+    #[track_caller]
     pub(super) fn transfer_constructor_operands(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -7307,6 +8198,7 @@ impl<'a> Lowering<'a> {
         self.transfer_constructor_operands_with_edge_mode(builder, origin, constructor, args, true)
     }
 
+    #[track_caller]
     fn transfer_constructor_operands_with_edge_mode(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -7315,6 +8207,24 @@ impl<'a> Lowering<'a> {
         args: &[LoweringOperand],
         reborrow_source_edges: bool,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        if constructor.contains("::ITree::Vis") {
+            eprintln!(
+                "CONTSPEC_VIS_TRANSFER owner={:?} origin={origin:?} phases={:?} rust={}",
+                self.active_emission_owner,
+                args.iter()
+                    .map(|arg| match arg {
+                        LoweringOperand::Carried(word) => {
+                            format!("carried:{:?}", word.word)
+                        }
+                        LoweringOperand::Specialized(
+                            Lowered::ComputationalRecursorClosure { .. },
+                        ) => "recursor".to_string(),
+                        LoweringOperand::Specialized(_) => "specialized".to_string(),
+                    })
+                    .collect::<Vec<_>>(),
+                std::panic::Location::caller(),
+            );
+        }
         if constructor == self.process_symbols.exit_failure {
             if let [LoweringOperand::Carried(code)] = args {
                 eprintln!("TRACE carried failure origin={origin:?}");
@@ -7325,11 +8235,7 @@ impl<'a> Lowering<'a> {
                         SourceOperandRole::ConstructArgument,
                     )?
                 } else {
-                    self.operand_edge_token(
-                        origin,
-                        0,
-                        SourceOperandRole::ConstructArgument,
-                    )?
+                    self.operand_edge_token(origin, 0, SourceOperandRole::ConstructArgument)?
                 };
                 if edge.disposition() != OperandEdgeDisposition::SemanticEliminator {
                     return Err(backend(BackendFailure::PlannerInvariant(
@@ -7341,11 +8247,8 @@ impl<'a> Lowering<'a> {
                 return self.transfer_carried_failure_exit_status(builder, *code);
             }
         }
-        let representation = self.aggregate_representation_token(
-            origin,
-            BoundaryClass::Constructor,
-            args.len(),
-        )?;
+        let representation =
+            self.aggregate_representation_token(origin, BoundaryClass::Constructor, args.len())?;
         // Preflight the complete child graph before allocating either a child
         // environment or the parent constructor. An exact recursive-position
         // closure is the sole exception to whole-closure transfer: its planner
@@ -7362,11 +8265,7 @@ impl<'a> Lowering<'a> {
                     SourceOperandRole::ConstructArgument,
                 )?
             } else {
-                self.operand_edge_token(
-                    origin,
-                    position,
-                    SourceOperandRole::ConstructArgument,
-                )?
+                self.operand_edge_token(origin, position, SourceOperandRole::ConstructArgument)?
             };
             let prepared = match argument {
                 LoweringOperand::Specialized(value @ Lowered::Closure { .. }) => {
@@ -7457,11 +8356,8 @@ impl<'a> Lowering<'a> {
         origin: StaticOriginId,
         fields: &[(String, LoweringOperand)],
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
-        let representation = self.aggregate_representation_token(
-            origin,
-            BoundaryClass::Record,
-            fields.len(),
-        )?;
+        let representation =
+            self.aggregate_representation_token(origin, BoundaryClass::Record, fields.len())?;
         let word = self.emit_carrier_alloc(
             builder,
             representation.tag(),
@@ -7480,11 +8376,8 @@ impl<'a> Lowering<'a> {
             let child = match field {
                 LoweringOperand::Carried(child) => *child,
                 LoweringOperand::Specialized(value) => {
-                    let edge = self.operand_edge_token(
-                        origin,
-                        position,
-                        SourceOperandRole::RecordField,
-                    )?;
+                    let edge =
+                        self.operand_edge_token(origin, position, SourceOperandRole::RecordField)?;
                     self.transfer_into_carrier_on_edge(builder, child_origin, value, edge)?
                 }
             };
@@ -7529,11 +8422,7 @@ impl<'a> Lowering<'a> {
                 .icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, value, zero);
         let valid_zero = builder.ins().band(representable, is_zero);
         let status = builder.ins().select(valid_zero, one, nonzero);
-        self.emit_carrier_immediate(
-            builder,
-            BoundaryTag::ImmediateExitStatus,
-            status,
-        )
+        self.emit_carrier_immediate(builder, BoundaryTag::ImmediateExitStatus, status)
     }
 
     fn transfer_carried_exit_status(
@@ -7565,11 +8454,10 @@ impl<'a> Lowering<'a> {
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
 
-        let is_success = builder.ins().icmp_imm(
-            cranelift_codegen::ir::condcodes::IntCC::Equal,
-            tag,
-            success,
-        );
+        let is_success =
+            builder
+                .ins()
+                .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, tag, success);
         builder
             .ins()
             .brif(is_success, success_block, &[], non_success_block, &[]);
@@ -7580,11 +8468,10 @@ impl<'a> Lowering<'a> {
         builder.ins().jump(merge, &[zero.into()]);
 
         builder.switch_to_block(non_success_block);
-        let is_failure = builder.ins().icmp_imm(
-            cranelift_codegen::ir::condcodes::IntCC::Equal,
-            tag,
-            failure,
-        );
+        let is_failure =
+            builder
+                .ins()
+                .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, tag, failure);
         builder
             .ins()
             .brif(is_failure, failure_block, &[], invalid_block, &[]);
@@ -7665,11 +8552,8 @@ impl<'a> Lowering<'a> {
             .iter()
             .enumerate()
             .map(|(offset, operand)| {
-                let token = self.reached_operand_edge_token(
-                    parent,
-                    first_position + offset,
-                    role,
-                )?;
+                let token =
+                    self.reached_operand_edge_token(parent, first_position + offset, role)?;
                 if token.disposition() == OperandEdgeDisposition::CallableCapture {
                     operand.callable_capture_ref_at(token).cloned()
                 } else {
@@ -7685,11 +8569,7 @@ impl<'a> Lowering<'a> {
         position: usize,
         operand: LoweringOperand,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let edge = self.operand_edge_token(
-            parent,
-            position,
-            SourceOperandRole::LexicalCapture,
-        )?;
+        let edge = self.operand_edge_token(parent, position, SourceOperandRole::LexicalCapture)?;
         if edge.disposition() != OperandEdgeDisposition::CallableCapture {
             return Err(backend(BackendFailure::PlannerInvariant(
                 "lexical capture edge is not callable-capture".to_string(),
@@ -8042,6 +8922,12 @@ impl<'a> Lowering<'a> {
                 .brif(is_host_result, host_result, &[], constructor, &[]);
 
             builder.switch_to_block(host_result);
+            if format!("{static_origin:?}") == "StaticOriginId(294)" {
+                let diagnostic = builder.ins().iconst(types::I64, 210);
+                builder.ins().return_(&[diagnostic]);
+                let unreachable = builder.create_block();
+                builder.switch_to_block(unreachable);
+            }
             let success = self.emit_carrier_host_success(builder, scrutinee)?;
             let payload = self.emit_carrier_host_payload(builder, scrutinee)?;
             builder.ins().brif(
@@ -8053,6 +8939,12 @@ impl<'a> Lowering<'a> {
             );
 
             builder.switch_to_block(constructor);
+            if format!("{static_origin:?}") == "StaticOriginId(294)" {
+                let diagnostic = builder.ins().iconst(types::I64, 211);
+                builder.ins().return_(&[diagnostic]);
+                let unreachable = builder.create_block();
+                builder.switch_to_block(unreachable);
+            }
             let tag = self.emit_carrier_tag(builder, scrutinee)?;
             let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
             for (body_block, (index, _case)) in [(ok_body, ok_case), (err_body, err_case)] {
@@ -8085,6 +8977,18 @@ impl<'a> Lowering<'a> {
 
             for (block, (index, case)) in [(ok_body, ok_case), (err_body, err_case)] {
                 builder.switch_to_block(block);
+                if index == err_case.0 {
+                    let origin = format!("{static_origin:?}");
+                    let origin = origin
+                        .trim_start_matches("StaticOriginId(")
+                        .trim_end_matches(')')
+                        .parse::<i64>()
+                        .unwrap_or(55);
+                    let diagnostic = builder.ins().iconst(types::I64, 100 + origin % 100);
+                    builder.ins().return_(&[diagnostic]);
+                    let unreachable = builder.create_block();
+                    builder.switch_to_block(unreachable);
+                }
                 let payload = CarriedBoundaryWord {
                     word: builder.block_params(block)[0],
                 };
@@ -8192,6 +9096,39 @@ impl<'a> Lowering<'a> {
             builder.ins().brif(matched, selected, &[], next, &[]);
 
             builder.switch_to_block(selected);
+            if case.constructor.contains("::ResourceError::") {
+                let diagnostic = builder.ins().iconst(
+                    types::I64,
+                    200 + i64::try_from(index).unwrap_or(55),
+                );
+                builder.ins().return_(&[diagnostic]);
+                let unreachable = builder.create_block();
+                builder.switch_to_block(unreachable);
+            }
+            if case.constructor.contains("::FileError::") {
+                let diagnostic = builder.ins().iconst(
+                    types::I64,
+                    170 + i64::try_from(index).unwrap_or(55),
+                );
+                builder.ins().return_(&[diagnostic]);
+                let unreachable = builder.create_block();
+                builder.switch_to_block(unreachable);
+            }
+            if case.constructor.contains("::Result::Err") {
+                let origin = format!("{static_origin:?}");
+                let origin = origin
+                    .trim_start_matches("StaticOriginId(")
+                    .trim_end_matches(')')
+                    .parse::<i64>()
+                    .unwrap_or(55);
+                let diagnostic = builder.ins().iconst(
+                    types::I64,
+                    90 + origin % 60,
+                );
+                builder.ins().return_(&[diagnostic]);
+                let unreachable = builder.create_block();
+                builder.switch_to_block(unreachable);
+            }
             // ⚠ **The arity check the specialized route performs while
             // compiling has to be EMITTED here**, because neither operand is
             // known until the value exists. It is a real guard, not ceremony:
@@ -8244,6 +9181,18 @@ impl<'a> Lowering<'a> {
             builder.switch_to_block(next);
         }
 
+        if cases
+            .first()
+            .is_some_and(|case| case.constructor.contains("::ResourceError::"))
+        {
+            let modulus = builder.ins().iconst(types::I64, 200);
+            let diagnostic = builder.ins().urem(tag, modulus);
+            let diagnostic = builder.ins().iadd_imm(diagnostic, 20);
+            builder.ins().return_(&[diagnostic]);
+            let unreachable = builder.create_block();
+            builder.switch_to_block(unreachable);
+        }
+
         // ── ⛔ THE CLOSED DEFAULT — `AC-C3`'s negative arm ─────────────────
         //
         // ⭐ Routed through the existing [`Self::seal_source_trap_branch`]
@@ -8278,6 +9227,7 @@ impl<'a> Lowering<'a> {
     /// Keeping this as a distinct operation makes the S1 boundary mechanical:
     /// a recursive position cannot accidentally return to source-body
     /// re-lowering without bypassing the one operation that emits its call.
+    #[track_caller]
     fn call_declared_recursive_position_unit(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -8294,6 +9244,1394 @@ impl<'a> Lowering<'a> {
         #[cfg(test)]
         RECURSIVE_POSITION_UNIT_CALLS.with(|calls| calls.set(calls.get() + 1));
         Ok(result)
+    }
+
+    /// Apply the exact caller-owned continuation selected by this producer
+    /// occurrence before its value reaches an identity-erasing join.
+    fn continuation_specialization_result_origin(
+        &mut self,
+        origin: StaticOriginId,
+    ) -> Option<StaticOriginId> {
+        let reached = self
+            .function_local
+            .continuation_specialization_calls
+            .contains_key(&origin)
+            .then_some(origin);
+        if reached.is_some() {
+            self.function_local
+                .reached_continuation_specialization_results
+                .insert(origin);
+        }
+        reached
+    }
+
+    fn continuation_specialization_flattens_result(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<bool, CraneliftBackendError> {
+        let calls = self
+            .function_local
+            .continuation_specialization_calls
+            .get(&origin)
+            .ok_or_else(|| {
+                backend(BackendFailure::PlannerInvariant(
+                    "continuation result occurrence has no planned direct edges".to_string(),
+                ))
+            })?;
+        let conventions = calls
+            .iter()
+            .map(|call| call.plan.producer_fields_flattened())
+            .collect::<BTreeSet<_>>();
+        if conventions.len() != 1 {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "one continuation result mixes ordinary ABI conventions".to_string(),
+            )));
+        }
+        Ok(conventions
+            .into_iter()
+            .next()
+            .expect("one continuation ABI convention"))
+    }
+
+    fn continuation_specialization_worker_for_result(
+        &self,
+        producer_origin: StaticOriginId,
+    ) -> Result<Option<StaticRecursorWorker>, CraneliftBackendError> {
+        let Some(calls) = self
+            .function_local
+            .continuation_specialization_calls
+            .get(&producer_origin)
+        else {
+            return Ok(None);
+        };
+        let mut selected_worker = None;
+        for call in calls {
+            let token = self
+                .static_transition_plan
+                .continuation_specialization_worker_token(call.plan.id())?;
+            let exact_worker = StaticRecursorWorker {
+                boundary_identity: token.identity(),
+                residual_id: token.id,
+                parent_origin: token.parent_origin,
+                producer_origin: token.producer_origin,
+                sibling_position: usize::try_from(token.sibling_position).map_err(|_| {
+                    backend_module(
+                        "continuation specialization worker position exceeds usize".to_string(),
+                    )
+                })?,
+                closure_origin: token.closure_origin,
+                body_origin: token.body_origin,
+                declared_arity: usize::try_from(token.declared_arity).map_err(|_| {
+                    backend_module(
+                        "continuation specialization worker arity exceeds usize".to_string(),
+                    )
+                })?,
+                capture_count: usize::try_from(token.capture_count).map_err(|_| {
+                    backend_module(
+                        "continuation specialization capture count exceeds usize".to_string(),
+                    )
+                })?,
+            };
+            match selected_worker {
+                None => selected_worker = Some(exact_worker),
+                Some(expected) if expected == exact_worker => {}
+                Some(_) => {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "one causal continuation result selects multiple workers".to_string(),
+                    )));
+                }
+            }
+        }
+        Ok(selected_worker)
+    }
+
+    fn merge_continuation_result_origins(
+        retained: Option<StaticOriginId>,
+        next: Option<StaticOriginId>,
+    ) -> Result<Option<StaticOriginId>, CraneliftBackendError> {
+        match (retained, next) {
+            (None, next) | (next, None) => Ok(next),
+            (Some(retained), Some(next)) if retained == next => Ok(Some(retained)),
+            (Some(_), Some(_)) => Err(backend(BackendFailure::PlannerInvariant(
+                "one aggregate carries two continuation-specialization producer alternatives"
+                    .to_string(),
+            ))),
+        }
+    }
+
+    #[track_caller]
+    fn call_continuation_specialization_if_planned(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        producer_origin: StaticOriginId,
+        mut value: LoweringOperand,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        eprintln!(
+            "CONTSPEC_CALL_SITE owner={:?} producer={producer_origin:?} rust={}",
+            self.active_emission_owner,
+            std::panic::Location::caller(),
+        );
+        let Some(calls) = self
+            .function_local
+            .continuation_specialization_calls
+            .get(&producer_origin)
+            .cloned()
+        else {
+            return Ok(value);
+        };
+        for call in calls {
+            if call.plan.producer_result_origin() != producer_origin {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "continuation specialization moved to another producer occurrence".to_string(),
+                )));
+            }
+            let identity = (producer_origin, call.target.call_site_sequence);
+            self.function_local
+                .dispositioned_continuation_specialization_calls
+                .remove(&identity);
+            if !self
+                .function_local
+                .consumed_continuation_specialization_calls
+                .insert(identity)
+            {
+                return Err(backend(BackendFailure::PlannerInvariant(format!(
+                    "one causal continuation-specialization edge was emitted twice: \
+                     {identity:?}"
+                ))));
+            }
+            let capture_count =
+                usize::try_from(call.plan.input_capture_count()).map_err(|_| {
+                    backend_module(
+                        "continuation specialization capture count exceeds usize".to_string(),
+                    )
+                })?;
+            let planned_input_start =
+                usize::try_from(call.plan.continuation_input_start()).map_err(|_| {
+                    backend_module(
+                        "continuation specialization input offset exceeds usize".to_string(),
+                    )
+                })?;
+            let exact_environment = call
+                .plan
+                .continuation_environment_is_local()
+                .then(|| {
+                    self.function_local
+                        .continuation_specialization_environments
+                        .get(&call.plan.continuation_origin())
+                })
+                .flatten();
+            let continuation_environment =
+                exact_environment.unwrap_or(&self.function_local.active_unit_inputs);
+            let input_start = if exact_environment.is_some() {
+                continuation_environment
+                    .len()
+                    .checked_sub(capture_count)
+                    .ok_or_else(|| {
+                        backend_module(
+                            "local continuation environment is shorter than its planned capture \
+                             population"
+                                .to_string(),
+                        )
+                    })?
+            } else {
+                planned_input_start
+            };
+            let input_end = input_start.checked_add(capture_count).ok_or_else(|| {
+                backend_module("continuation specialization input range exceeds usize".to_string())
+            })?;
+            eprintln!(
+                "CONTSPEC_ENV_USE owner={:?} producer={producer_origin:?} continuation={:?} exact={} start={input_start} count={capture_count} len={}",
+                self.active_emission_owner,
+                call.plan.continuation_origin(),
+                exact_environment.is_some(),
+                continuation_environment.len(),
+            );
+            let continuation = continuation_environment
+                .get(input_start..input_end)
+                .ok_or_else(|| {
+                    backend_module(
+                        "continuation specialization omits its caller-owned environment"
+                            .to_string(),
+                    )
+                })?
+                .to_vec();
+            let ordinary_count =
+                usize::try_from(call.plan.ordinary_parameter_count()).map_err(|_| {
+                    backend_module(
+                        "continuation specialization ordinary input count exceeds usize"
+                            .to_string(),
+                    )
+                })?;
+            let mut inputs =
+                Vec::with_capacity(ordinary_count + continuation.len());
+            if call.plan.producer_fields_flattened() {
+                let LoweringOperand::Carried(producer) = value else {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "flattened continuation result is not carried".to_string(),
+                    )));
+                };
+                let field_count = self.emit_carrier_field_count(builder, producer)?;
+                Self::require_i64(
+                    builder,
+                    field_count,
+                    i64::try_from(ordinary_count).map_err(|_| {
+                        backend_module(
+                            "continuation specialization field count exceeds i64"
+                                .to_string(),
+                        )
+                    })?,
+                );
+                for position in 0..ordinary_count {
+                    inputs.push(LoweringOperand::Carried(
+                        self.emit_carrier_field(builder, producer, position)?,
+                    ));
+                }
+            } else {
+                if ordinary_count != 1 {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "carried continuation result has a non-scalar ordinary ABI"
+                            .to_string(),
+                    )));
+                }
+                inputs.push(value);
+            }
+            inputs.extend(continuation);
+            value = self.call_declared_unit_target(
+                builder,
+                call.target,
+                &inputs,
+                #[cfg(test)]
+                None,
+            )?;
+        }
+        Ok(value)
+    }
+
+    fn apply_recursive_continuation_specialization_if_planned(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        worker: StaticRecursorWorker,
+        invocation_origin: StaticOriginId,
+        value: LoweringOperand,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let owner = self.active_emission_owner.ok_or_else(|| {
+            backend(BackendFailure::PlannerInvariant(
+                "recursive continuation fold has no emitted owner".to_string(),
+            ))
+        })?;
+        let Some(producer_origin) = self
+            .static_transition_plan
+            .recursive_continuation_specialization_result_origin(
+                owner,
+                worker.body_origin,
+                invocation_origin,
+            )?
+        else {
+            return Ok(value);
+        };
+        self.function_local
+            .reached_continuation_specialization_results
+            .insert(producer_origin);
+        self.call_continuation_specialization_if_planned(builder, producer_origin, value)
+    }
+
+    /// Transfer one exact, statically known producer constructor to its
+    /// out-of-line return hole without first allocating an identity-free
+    /// wrapper carrier. The constructor's ordered fields are the unit's
+    /// planner-declared ordinary parameters.
+    #[track_caller]
+    fn call_known_constructor_continuation_specialization(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        producer_origin: StaticOriginId,
+        producer_construct_origin: StaticOriginId,
+        operands: Vec<LoweringOperand>,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let calls = self
+            .function_local
+            .continuation_specialization_calls
+            .get(&producer_origin)
+            .cloned()
+            .ok_or_else(|| {
+                backend(BackendFailure::PlannerInvariant(
+                    "known continuation result has no planned direct edge".to_string(),
+                ))
+            })?;
+        let operand_kinds = operands
+            .iter()
+            .map(|operand| match operand {
+                LoweringOperand::Specialized(Lowered::Closure {
+                    body,
+                    captures,
+                    ..
+                }) => {
+                    format!(
+                        "closure:{body:?}:{:?}",
+                        captures
+                            .iter()
+                            .map(|capture| match capture {
+                                LoweringOperand::Carried(word) => {
+                                    format!("carried:{:?}", word.word)
+                                }
+                                LoweringOperand::Specialized(
+                                    Lowered::BorrowedNativeValue { pointer },
+                                ) => format!("borrowed:{pointer:?}"),
+                                LoweringOperand::Specialized(
+                                    Lowered::CapabilityToken { value },
+                                ) => format!("capability:{value:?}"),
+                                LoweringOperand::Specialized(_) => {
+                                    "specialized".to_string()
+                                }
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                }
+                LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure {
+                    residual,
+                    ..
+                }) => match residual.as_ref() {
+                    LoweringOperand::Specialized(Lowered::Closure { body, .. }) => {
+                        format!("recursor-closure:{body:?}")
+                    }
+                    LoweringOperand::Specialized(_) => "recursor-specialized".to_string(),
+                    LoweringOperand::Carried(_) => "recursor-carried".to_string(),
+                },
+                LoweringOperand::Specialized(_) => "specialized".to_string(),
+                LoweringOperand::Carried(_) => "carried".to_string(),
+            })
+            .collect::<Vec<_>>();
+        eprintln!(
+            "CONTSPEC_KNOWN_OPERANDS owner={:?} producer={producer_origin:?} \
+             construct={producer_construct_origin:?} operands={operand_kinds:?} \
+             recursor={:?} selection={:?} rust={}",
+            self.active_emission_owner,
+            self.active_static_recursor_result,
+            self.active_static_recursor_selection,
+            std::panic::Location::caller(),
+        );
+        let active_specialization_worker_body = self
+            .active_emission_owner
+            .and_then(|owner| {
+                self.static_transition_plan
+                    .continuation_specialization_for_function(owner)
+            })
+            .map(|id| {
+                self.static_transition_plan
+                    .continuation_specialization_worker_token(id)
+                    .map(|worker| worker.body_origin)
+            })
+            .transpose()?;
+        let call = calls
+            .iter()
+            .find(|call| {
+                let Ok(worker_position) = usize::try_from(call.plan.worker_position()) else {
+                    return false;
+                };
+                let worker_body = match operands.get(worker_position) {
+                    Some(LoweringOperand::Specialized(Lowered::Closure { body, .. })) => {
+                        Some(*body)
+                    }
+                    Some(LoweringOperand::Specialized(
+                        Lowered::ComputationalRecursorClosure { residual, .. },
+                    )) => match residual.as_ref() {
+                        LoweringOperand::Specialized(Lowered::Closure { body, .. }) => {
+                            Some(*body)
+                        }
+                        LoweringOperand::Carried(_) => self
+                            .active_static_recursor_result
+                            .or(self.active_static_recursor_selection)
+                            .map(|worker| worker.body_origin)
+                            .or(active_specialization_worker_body),
+                        LoweringOperand::Specialized(_) => None,
+                    },
+                    Some(LoweringOperand::Specialized(_))
+                    | Some(LoweringOperand::Carried(_))
+                    | None => None,
+                };
+                let identity = (producer_origin, call.target.call_site_sequence);
+                call.plan.producer_construct_origin() == producer_construct_origin
+                    && worker_body == Some(call.plan.worker_body_origin())
+                    && !self
+                        .function_local
+                        .consumed_continuation_specialization_calls
+                        .contains(&identity)
+            })
+            .cloned()
+            .ok_or_else(|| {
+                backend(BackendFailure::PlannerInvariant(format!(
+                    "known continuation result has no unconsumed direct edge: \
+                     owner={:?}, producer={producer_origin:?}, construct={producer_construct_origin:?}, \
+                     candidates={:?}, consumed={:?}, dispositioned={:?}",
+                    self.active_emission_owner,
+                    calls
+                        .iter()
+                        .map(|call| call.target.call_site_sequence)
+                        .collect::<Vec<_>>(),
+                    self.function_local
+                        .consumed_continuation_specialization_calls,
+                    self.function_local
+                        .dispositioned_continuation_specialization_calls,
+                )))
+            })?;
+        if call.plan.producer_result_origin() != producer_origin
+            || call.plan.producer_construct_origin() != producer_construct_origin
+            || !call.plan.producer_fields_flattened()
+        {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "known continuation result disagrees with its planned ordinary ABI: \
+                 result={producer_origin:?}, construct={producer_construct_origin:?}, \
+                 planned_construct={:?}, planned_fields={}, actual_fields={}",
+                call.plan.producer_construct_origin(),
+                call.plan.ordinary_parameter_count(),
+                operands.len(),
+            ))));
+        }
+        let worker = self
+            .static_transition_plan
+            .continuation_specialization_worker_token(call.plan.id())?;
+        let worker_position = usize::try_from(call.plan.worker_position()).map_err(|_| {
+            backend_module(
+                "continuation specialization worker position exceeds usize".to_string(),
+            )
+        })?;
+        let mut flattened = Vec::new();
+        for (position, operand) in operands.iter().cloned().enumerate() {
+            if position != worker_position {
+                flattened.push(operand);
+                continue;
+            }
+            let (captures, params, body) = match operand {
+                LoweringOperand::Specialized(Lowered::Closure {
+                    captures,
+                    params,
+                    body,
+                }) => {
+                    self.static_transition_plan
+                        .disposition_static_recursor_worker_environment_if_planned(
+                            worker.identity(),
+                            worker.id,
+                            self.emitted_owner()?,
+                        );
+                    (captures, params, body)
+                }
+                LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure {
+                    residual,
+                    activation,
+                    invocation,
+                }) => {
+                    let invocation_owned_worker = invocation.recursive_worker.is_some();
+                    let invocation_worker = invocation
+                        .recursive_worker
+                        .or(self.active_static_recursor_result)
+                        .or(self.active_static_recursor_selection)
+                        .ok_or_else(|| {
+                            backend(BackendFailure::PlannerInvariant(
+                                "continuation specialization recursor field has no exact worker \
+                                 edge"
+                                    .to_string(),
+                            ))
+                        })?;
+                    if invocation_worker.closure_origin != worker.closure_origin
+                        || invocation_worker.body_origin != worker.body_origin
+                        || invocation_worker.declared_arity != worker.declared_arity as usize
+                        || invocation_worker.capture_count != worker.capture_count as usize
+                    {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "continuation specialization recursor field disagrees with its exact \
+                             worker provenance"
+                                .to_string(),
+                        )));
+                    }
+                    let dynamic_splice_edges = self.take_dynamic_splice_edges(&invocation)?;
+                    let installed = compose_oriented_subcontinuation(
+                        self.oriented_subcontinuation_plan.as_ref(),
+                        None,
+                        activation,
+                        invocation,
+                        dynamic_splice_edges,
+                    )?;
+                    if !installed.checked
+                        || (invocation_owned_worker
+                            && !installed.semantic_frames.iter().any(|frame| {
+                                frame.static_origin == invocation_worker.parent_origin
+                            }))
+                    {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "continuation specialization recursor does not contain its checked \
+                             producer continuation"
+                                .to_string(),
+                        )));
+                    }
+                    match *residual {
+                        LoweringOperand::Specialized(Lowered::Closure {
+                            captures,
+                            params,
+                            body,
+                        }) => {
+                            self.static_transition_plan
+                                .disposition_static_recursor_worker_environment_if_planned(
+                                    invocation_worker.boundary_identity,
+                                    invocation_worker.residual_id,
+                                    self.emitted_owner()?,
+                                );
+                            (captures, params, body)
+                        }
+                        LoweringOperand::Carried(environment) => {
+                            let class = self.emit_carrier_class(builder, environment)?;
+                            Self::require_i64(builder, class, BoundaryClass::Record as i64);
+                            let field_count =
+                                self.emit_carrier_field_count(builder, environment)?;
+                            Self::require_i64(
+                                builder,
+                                field_count,
+                                i64::try_from(invocation_worker.capture_count).map_err(|_| {
+                                    backend_module(
+                                        "continuation specialization capture count exceeds i64"
+                                            .to_string(),
+                                    )
+                                })?,
+                            );
+                            let captures = (0..invocation_worker.capture_count)
+                                .map(|position| {
+                                    self.emit_carrier_field(builder, environment, position)
+                                        .map(LoweringOperand::Carried)
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
+                            (
+                                captures,
+                                vec![String::new(); invocation_worker.declared_arity],
+                                invocation_worker.body_origin,
+                            )
+                        }
+                        LoweringOperand::Specialized(_) => {
+                            return Err(backend(BackendFailure::PlannerInvariant(
+                                "continuation specialization recursor has no closure residual"
+                                    .to_string(),
+                            )));
+                        }
+                    }
+                }
+                LoweringOperand::Specialized(_) | LoweringOperand::Carried(_) => {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "continuation specialization worker field is not a closure".to_string(),
+                    )));
+                }
+            };
+            if body != worker.body_origin
+                || params.len() != worker.declared_arity as usize
+                || captures.len() != worker.capture_count as usize
+            {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "continuation specialization worker field disagrees with its plan"
+                        .to_string(),
+                )));
+            }
+            for (ordinal, capture) in captures.into_iter().enumerate() {
+                let token = self.static_transition_plan.static_recursor_capture_token(
+                    worker.identity(),
+                    worker.id,
+                    worker.parent_origin,
+                    worker.producer_origin,
+                    worker.sibling_position as usize,
+                    worker.closure_origin,
+                    ordinal,
+                )?;
+                if token.ordinal as usize != ordinal
+                    || token.phase != OperandEdgeDisposition::CallableCapture
+                    || token.lifetime != StaticRecursorCaptureLifetime::ActivationOwned
+                {
+                    return Err(backend(BackendFailure::PlannerInvariant(
+                        "continuation specialization capture contract changed after planning"
+                            .to_string(),
+                    )));
+                }
+                flattened.push(match capture {
+                    LoweringOperand::Carried(capture) => {
+                        LoweringOperand::Carried(capture)
+                    }
+                    LoweringOperand::Specialized(value) => {
+                        LoweringOperand::Carried(self.emit_carrier_transfer(
+                            builder,
+                            token.source_origin,
+                            &value,
+                        )?)
+                    }
+                });
+            }
+        }
+        if usize::try_from(call.plan.ordinary_parameter_count()).ok()
+            != Some(flattened.len())
+        {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "known continuation result flattened to the wrong ordinary ABI: \
+                 planned_fields={}, actual_fields={}",
+                call.plan.ordinary_parameter_count(),
+                flattened.len(),
+            ))));
+        }
+        for position in 0..operands.len() {
+            self.disposition_unreached_operand_edge(
+                producer_construct_origin,
+                position,
+                SourceOperandRole::ConstructArgument,
+            )?;
+        }
+        if call.target.call_site_sequence == 0
+            && self
+                .static_transition_plan
+                .continuation_specialization_for_function(
+                    self.emitted_owner()?,
+                )
+                .is_some()
+        {
+            self.static_transition_plan
+                .disposition_aggregate_representation_for_owner(
+                    self.emitted_owner()?,
+                    producer_construct_origin,
+                )?;
+        }
+        let identity = (producer_origin, call.target.call_site_sequence);
+        self.function_local
+            .dispositioned_continuation_specialization_calls
+            .remove(&identity);
+        if !self
+            .function_local
+            .consumed_continuation_specialization_calls
+            .insert(identity)
+        {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "one causal continuation-specialization edge was emitted twice: {identity:?}"
+            ))));
+        }
+        for alternative in &calls {
+            let alternative_identity = (
+                producer_origin,
+                alternative.target.call_site_sequence,
+            );
+            if alternative_identity != identity
+                && !self
+                    .function_local
+                    .consumed_continuation_specialization_calls
+                    .contains(&alternative_identity)
+            {
+                let ordinary = alternative.plan.ordinary_parameter_count();
+                let captures = alternative.plan.input_capture_count();
+                let input_count = ordinary.checked_add(captures).ok_or_else(|| {
+                    backend_module(
+                        "continuation specialization alternative input population exhausted"
+                            .to_string(),
+                    )
+                })?;
+                for position in 0..input_count {
+                    self.static_transition_plan
+                        .disposition_lowering_boundary_use_for_emitted_occurrence(
+                            LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                            alternative.target.call_site_origin,
+                            position,
+                            alternative.target.call_site_sequence,
+                            self.emitted_owner()?,
+                        )?;
+                }
+                self.function_local
+                    .dispositioned_continuation_specialization_calls
+                    .insert(alternative_identity);
+            }
+        }
+        let capture_count =
+            usize::try_from(call.plan.input_capture_count()).map_err(|_| {
+                backend_module(
+                    "continuation specialization capture count exceeds usize".to_string(),
+                )
+            })?;
+        let planned_input_start =
+            usize::try_from(call.plan.continuation_input_start()).map_err(|_| {
+                backend_module(
+                    "continuation specialization input offset exceeds usize".to_string(),
+                )
+            })?;
+        let local_environment = call
+            .plan
+            .continuation_environment_is_local()
+            .then(|| {
+                self.function_local
+                    .continuation_specialization_environments
+                    .get(&call.plan.continuation_origin())
+            })
+            .flatten();
+        let continuation_environment =
+            local_environment.unwrap_or(&self.function_local.active_unit_inputs);
+        let input_start = if local_environment.is_some() {
+            continuation_environment
+                .len()
+                .checked_sub(capture_count)
+                .ok_or_else(|| {
+                    backend_module(
+                        "local continuation environment is shorter than its planned capture \
+                         population"
+                            .to_string(),
+                    )
+                })?
+        } else {
+            planned_input_start
+        };
+        let input_end = input_start.checked_add(capture_count).ok_or_else(|| {
+            backend_module("continuation specialization input range exceeds usize".to_string())
+        })?;
+        eprintln!(
+            "CONTSPEC_KNOWN_ENV owner={:?} target={:?} selected={:?} available={:?}",
+            self.active_emission_owner,
+            call.plan.continuation_origin(),
+            continuation_environment
+                .iter()
+                .map(|operand| match operand {
+                    LoweringOperand::Carried(word) => format!("carried:{:?}", word.word),
+                    LoweringOperand::Specialized(_) => "specialized".to_string(),
+                })
+                .collect::<Vec<_>>(),
+            self.function_local
+                .continuation_specialization_environments
+                .iter()
+                .map(|(origin, environment)| {
+                    (
+                        *origin,
+                        environment
+                            .iter()
+                            .map(|operand| match operand {
+                                LoweringOperand::Carried(word) => {
+                                    format!("carried:{:?}", word.word)
+                                }
+                                LoweringOperand::Specialized(_) => "specialized".to_string(),
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+        );
+        let continuation = continuation_environment
+            .get(input_start..input_end)
+            .ok_or_else(|| {
+                backend_module(
+                    "continuation specialization omits its caller-owned environment".to_string(),
+                )
+            })?
+            .to_vec();
+        let mut inputs = Vec::with_capacity(flattened.len() + continuation.len());
+        inputs.extend(flattened);
+        inputs.extend(continuation);
+        self.call_declared_unit_target(
+            builder,
+            call.target.clone(),
+            &inputs,
+            #[cfg(test)]
+            None,
+        )
+    }
+
+    fn continuation_specialization_exits_emitted_owner(
+        &self,
+        producer_origin: StaticOriginId,
+    ) -> Result<bool, CraneliftBackendError> {
+        let owner = self.active_emission_owner.ok_or_else(|| {
+            backend(BackendFailure::PlannerInvariant(
+                "continuation specialization has no emitted producer owner".to_string(),
+            ))
+        })?;
+        let calls = self
+            .function_local
+            .continuation_specialization_calls
+            .get(&producer_origin)
+            .ok_or_else(|| {
+                backend(BackendFailure::PlannerInvariant(
+                    "continuation result occurrence has no planned direct edges".to_string(),
+                ))
+            })?;
+        let active_specialization = self
+            .static_transition_plan
+            .continuation_specialization_for_function(owner);
+        let mut exits_owner = false;
+        for call in calls {
+                let Some(active_specialization) = active_specialization else {
+                    exits_owner |= self
+                        .static_transition_plan
+                        .continuation_specialization_transitively_exits_owner(
+                            call.plan.id(),
+                            owner,
+                        )?;
+                    continue;
+                };
+                let active = self
+                    .static_transition_plan
+                    .emittable_continuation_specialization(
+                        active_specialization,
+                        owner,
+                        producer_origin,
+                    )?;
+                let active_origin = active.continuation_origin();
+                let target_origin = call.plan.continuation_origin();
+                if active_origin == target_origin {
+                    // A recursive fold at the same return hole already
+                    // includes this generated unit's result. Resuming the
+                    // caller-side suffix here would execute it once per
+                    // recursive layer.
+                    exits_owner = true;
+                    continue;
+                }
+                if self
+                    .static_transition_plan
+                    .source_origin_is_in_subtree(target_origin, active_origin)?
+                {
+                    // A strict outer return hole is lowered by another
+                    // out-of-line unit, but the continuation after that hole
+                    // remains owned by this call site's active source
+                    // continuation. Resume it exactly once after the outer
+                    // unit returns.
+                    continue;
+                }
+                if self
+                    .static_transition_plan
+                    .source_origin_is_in_subtree(active_origin, target_origin)?
+                {
+                    // A strict inner return hole is merely one operation in
+                    // this generated unit's source body. Resume the remaining
+                    // caller-owned suffix after the out-of-line call returns.
+                    if exits_owner {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "continuation suffix orders an inner edge after an outer edge"
+                                .to_string(),
+                        )));
+                    }
+                    continue;
+                }
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "generated continuation call names an unrelated return hole".to_string(),
+                )));
+        }
+        Ok(exits_owner)
+    }
+
+    fn bypass_continuation_specializations_for_result<'b>(
+        &mut self,
+        producer_origin: StaticOriginId,
+        mut continuation: SourceContinuation<'b>,
+    ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
+        let owner = self.active_emission_owner.ok_or_else(|| {
+            backend(BackendFailure::PlannerInvariant(
+                "continuation result occurrence has no emitted owner".to_string(),
+            ))
+        })?;
+        let suffixes = self
+            .static_transition_plan
+            .continuation_specialized_suffix_origins(owner, producer_origin)?;
+        loop {
+            let static_origin = match &continuation {
+                SourceContinuation::ComputationalMatchScrutinee {
+                    static_origin, ..
+                } => *static_origin,
+                _ => break,
+            };
+            if !suffixes.contains(&static_origin) {
+                break;
+            }
+            self.disposition_out_of_line_continuation_subtree(static_origin)?;
+            let SourceContinuation::ComputationalMatchScrutinee { next, .. } = continuation else {
+                unreachable!("the continuation variant was checked above")
+            };
+            continuation = *next;
+        }
+        Ok(continuation)
+    }
+
+    fn bypass_active_continuation_specializations_for_result<'b>(
+        &mut self,
+        producer_origin: StaticOriginId,
+        mut active: ActiveContinuationFrame<'b>,
+    ) -> Result<ActiveContinuationFrame<'b>, CraneliftBackendError> {
+        let owner = self.active_emission_owner.ok_or_else(|| {
+            backend(BackendFailure::PlannerInvariant(
+                "continuation result occurrence has no emitted owner".to_string(),
+            ))
+        })?;
+        let suffixes = self
+            .static_transition_plan
+            .continuation_specialized_suffix_origins(owner, producer_origin)?;
+        loop {
+            if active.pending.is_empty() {
+                let Some(parent) = active.parent else {
+                    break;
+                };
+                active = *parent;
+                continue;
+            }
+            let Some((frame, tail)) = active.pending.split_first() else {
+                unreachable!("empty active continuation was handled above")
+            };
+            let EliminatorFrame::Computational(frame) = frame else {
+                break;
+            };
+            let contained = suffixes.iter().try_fold(false, |contained, root| {
+                Ok::<_, CraneliftBackendError>(
+                    contained
+                        || self
+                            .static_transition_plan
+                            .source_origin_is_in_subtree(*root, frame.static_origin)?,
+                )
+            })?;
+            if !contained {
+                break;
+            }
+            self.disposition_out_of_line_continuation_subtree(frame.static_origin)?;
+            active.pending = tail;
+        }
+        eprintln!(
+            "CONTSPEC_BYPASS_ACTIVE owner={owner:?} producer={producer_origin:?} \
+             pending={} parent={} parent_frames={:?} suffixes={suffixes:?}",
+            active.pending.len(),
+            active.parent.is_some(),
+            active
+                .parent
+                .into_iter()
+                .flat_map(|parent| parent.pending)
+                .map(|frame| match frame {
+                    EliminatorFrame::Computational(frame) => {
+                        Some(frame.static_origin)
+                    }
+                    EliminatorFrame::Ordinary(_)
+                    | EliminatorFrame::PendingLet(_)
+                    | EliminatorFrame::InvocationReturn
+                    | EliminatorFrame::Active(_) => None,
+                })
+                .collect::<Vec<_>>(),
+        );
+        Ok(active)
+    }
+
+    fn producer_call_has_continuation_specialization(
+        &self,
+        body_origin: StaticOriginId,
+        invocation_origin: StaticOriginId,
+    ) -> Result<bool, CraneliftBackendError> {
+        let Some(owner) = self.active_emission_owner else {
+            return Ok(false);
+        };
+        let target = self
+            .function_local
+            .unit_calls
+            .get(&(body_origin, 0))
+            .ok_or_else(|| {
+                backend_module(format!(
+                    "retained body {body_origin:?} has no graph-derived call target in emitted \
+                     unit {:?}",
+                    self.active_emission_owner,
+                ))
+            })?;
+        Ok(self
+            .static_transition_plan
+            .producer_call_has_continuation_specialization(owner, target.unit)
+            && self
+                .static_transition_plan
+                .recursive_continuation_specialization_result_origin(
+                    owner,
+                    body_origin,
+                    invocation_origin,
+                )?
+                .is_some())
+    }
+
+    fn consume_out_of_line_continuation_splice(&mut self) -> Result<(), CraneliftBackendError> {
+        let owner = self.active_emission_owner.ok_or_else(|| {
+            backend(BackendFailure::PlannerInvariant(
+                "out-of-line continuation splice has no emitted owner".to_string(),
+            ))
+        })?;
+        let frame = self
+            .static_transition_plan
+            .continuation_specialization_checked_frame(owner)
+            .ok_or_else(|| {
+                backend(BackendFailure::PlannerInvariant(
+                    "out-of-line continuation splice has no checked frame".to_string(),
+                ))
+            })?;
+        let edges = self
+            .dynamic_splice_edges
+            .iter()
+            .filter_map(|(id, edge)| (edge.parent_frame_template_id == frame).then_some(*id))
+            .collect::<Vec<_>>();
+        let [edge] = edges.as_slice() else {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "out-of-line continuation splice is not exact for frame {frame}: {edges:?}"
+            ))));
+        };
+        self.dynamic_splice_edges.remove(edge).ok_or_else(|| {
+            backend(BackendFailure::PlannerInvariant(
+                "out-of-line continuation splice disappeared before consumption".to_string(),
+            ))
+        })?;
+        Ok(())
+    }
+
+    fn bypass_continuation_specialized_suffixes<'b>(
+        &self,
+        producer_body_origin: StaticOriginId,
+        mut continuation: SourceContinuation<'b>,
+    ) -> Result<SourceContinuation<'b>, CraneliftBackendError> {
+        let consumer = self.active_emission_owner.ok_or_else(|| {
+            backend(BackendFailure::PlannerInvariant(
+                "continuation-specialized producer call has no emitted consumer".to_string(),
+            ))
+        })?;
+        let producer = self
+            .function_local
+            .unit_calls
+            .get(&(producer_body_origin, 0))
+            .ok_or_else(|| {
+                backend_module(
+                    "continuation-specialized producer body has no declared unit target"
+                        .to_string(),
+                )
+            })?
+            .unit;
+        loop {
+            let continuation_origin = match &continuation {
+                SourceContinuation::ComputationalMatchScrutinee { static_origin, .. } => {
+                    *static_origin
+                }
+                _ => break,
+            };
+            if !self
+                .static_transition_plan
+                .producer_call_specializes_continuation(consumer, producer, continuation_origin)
+            {
+                break;
+            }
+            let SourceContinuation::ComputationalMatchScrutinee { next, .. } = continuation else {
+                unreachable!("the continuation variant was checked above")
+            };
+            continuation = *next;
+        }
+        Ok(continuation)
+    }
+
+    pub(super) fn validate_continuation_specialization_calls(
+        &self,
+    ) -> Result<(), CraneliftBackendError> {
+        let expected = self
+            .function_local
+            .continuation_specialization_calls
+            .iter()
+            .flat_map(|(origin, calls)| {
+                calls
+                    .iter()
+                    .map(move |call| (*origin, call.target.call_site_sequence))
+            })
+            .collect::<BTreeSet<_>>();
+        let actual = &self
+            .function_local
+            .consumed_continuation_specialization_calls;
+        let dispositioned = &self
+            .function_local
+            .dispositioned_continuation_specialization_calls;
+        if !actual.is_disjoint(dispositioned) {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "one causal continuation-specialization edge was both emitted and transported"
+                    .to_string(),
+            )));
+        }
+        let covered = actual
+            .union(dispositioned)
+            .copied()
+            .collect::<BTreeSet<_>>();
+        if covered != expected {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "causal continuation-specialization emitted/dispositioned edge population is \
+                 not exact; expected={expected:?}; emitted={actual:?}; \
+                 dispositioned={dispositioned:?}",
+            ))));
+        }
+        Ok(())
+    }
+
+    /// Close planned direct edges whose producer result occurrence was absent
+    /// from this emitted owner's completed lowering traversal.
+    ///
+    /// Producer reachability is recorded independently at the source-machine
+    /// result seam. Consequently this can close genuinely absent alternatives
+    /// without making an omitted direct call appear dead: if the producer was
+    /// reached, its unconsumed identity remains missing and validation reds.
+    pub(super) fn disposition_unreached_continuation_specialization_calls(
+        &mut self,
+    ) -> Result<(), CraneliftBackendError> {
+        let calls = self
+            .function_local
+            .continuation_specialization_calls
+            .iter()
+            .flat_map(|(origin, calls)| {
+                calls.iter().filter_map(|call| {
+                    let identity = (*origin, call.target.call_site_sequence);
+                    (!self
+                        .function_local
+                        .reached_continuation_specialization_results
+                        .contains(origin)
+                        && !self
+                            .function_local
+                            .consumed_continuation_specialization_calls
+                            .contains(&identity)
+                        && !self
+                            .function_local
+                            .dispositioned_continuation_specialization_calls
+                            .contains(&identity))
+                    .then_some((identity, call.clone()))
+                })
+            })
+            .collect::<Vec<_>>();
+        for (identity, call) in calls {
+            let input_count = call
+                .plan
+                .ordinary_parameter_count()
+                .checked_add(call.plan.input_capture_count())
+                .ok_or_else(|| {
+                    backend_module(
+                        "continuation specialization input population exhausted".to_string(),
+                    )
+                })?;
+            for position in 0..input_count {
+                self.static_transition_plan
+                    .disposition_lowering_boundary_use_for_emitted_occurrence(
+                        LoweringOnlyOperandEdge::CallableCapsuleEscape,
+                        call.target.call_site_origin,
+                        position,
+                        call.target.call_site_sequence,
+                        self.emitted_owner()?,
+                    )?;
+            }
+            self.function_local
+                .dispositioned_continuation_specialization_calls
+                .insert(identity);
+        }
+        Ok(())
+    }
+
+    /// Lower one planner-interned continuation/return hole. Its ordinary
+    /// operands are the exact fields of one statically known producer
+    /// constructor; the remaining operands are the caller environment. Worker
+    /// and constructor identity stay compiler-only in the plan.
+    #[track_caller]
+    pub(super) fn lower_continuation_specialization(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        specialization: EmittableContinuationSpecialization,
+        env: &[LoweringOperand],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let continuation_capture_count =
+            usize::try_from(specialization.continuation_capture_count()).map_err(|_| {
+                backend_module(
+                    "continuation specialization capture count exceeds usize".to_string(),
+                )
+            })?;
+        let input_capture_count =
+            usize::try_from(specialization.input_capture_count()).map_err(|_| {
+                backend_module(
+                    "continuation specialization input capture count exceeds usize".to_string(),
+                )
+            })?;
+        let ordinary_count =
+            usize::try_from(specialization.ordinary_parameter_count()).map_err(|_| {
+                backend_module(
+                    "continuation specialization ordinary input count exceeds usize".to_string(),
+                )
+            })?;
+        if env.len() != ordinary_count + input_capture_count {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "continuation specialization inputs disagree with its ABI".to_string(),
+            )));
+        }
+        let occurrence = self.retained_body_occurrence(specialization.continuation_origin())?;
+        self.function_local
+            .continuation_specialization_environments
+            .insert(occurrence.static_origin, env.to_vec());
+        let RuntimeExpr::ComputationalMatch { cases, default, .. } = occurrence.expr else {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "continuation specialization names a non-computational continuation".to_string(),
+            )));
+        };
+        self.enter_source_occurrence_plan(occurrence.static_origin)?;
+        self.close_reached_operand_edge(
+            occurrence.static_origin,
+            0,
+            SourceOperandRole::MatchScrutinee,
+        )?;
+        if let Some(frame_id) = specialization.checked_frame_id() {
+            self.enter_checked_subcontinuation_frame(frame_id)?;
+        }
+        let checked_frame_id = self.consume_checked_subcontinuation_frame(cases, default)?;
+        let frame = ComputationalEliminatorFrame {
+            cases,
+            default,
+            env: &env[ordinary_count..ordinary_count + continuation_capture_count],
+            static_origin: occurrence.static_origin,
+            retained_scrutinee_index: None,
+            deferred_constructor_case: None,
+            provenance: self.mint_recursor_frame_provenance(),
+            checked_frame_id,
+            checked_invocation_id: None,
+            checked_invocation_source: None,
+            checked_invocation_depth: 0,
+        };
+        let result = if specialization.producer_fields_flattened() {
+            let producer =
+                self.retained_body_occurrence(specialization.producer_construct_origin())?;
+            let RuntimeExpr::Construct { constructor, args } = producer.expr else {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "continuation specialization names a non-constructor producer result"
+                        .to_string(),
+                )));
+            };
+            let worker_position =
+                usize::try_from(specialization.worker_position()).map_err(|_| {
+                    backend_module(
+                        "continuation specialization worker position exceeds usize"
+                            .to_string(),
+                    )
+                })?;
+            let worker_capture_count =
+                usize::try_from(specialization.worker_capture_count()).map_err(|_| {
+                    backend_module(
+                        "continuation specialization worker capture count exceeds usize"
+                            .to_string(),
+                    )
+                })?;
+            let flattened_count = args
+                .len()
+                .checked_sub(1)
+                .and_then(|count| count.checked_add(worker_capture_count))
+                .ok_or_else(|| {
+                    backend_module(
+                        "continuation specialization producer shape exhausted".to_string(),
+                    )
+                })?;
+            if worker_position >= args.len() || flattened_count != ordinary_count {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "continuation specialization producer shape disagrees with its ABI"
+                        .to_string(),
+                )));
+            }
+            eprintln!(
+                "CONTSPEC_FLAT_TAG owner={:?} producer={:?} constructor={} tag={:#x}",
+                self.active_emission_owner,
+                producer.static_origin,
+                constructor,
+                self.static_transition_plan
+                    .constructor_symbol_identity(producer.static_origin)?
+                    .tag_abi_word()?,
+            );
+            let token = self
+                .static_transition_plan
+                .continuation_specialization_worker_token(specialization.id())?;
+            let worker = StaticRecursorWorker {
+                boundary_identity: token.identity(),
+                residual_id: token.id,
+                parent_origin: token.parent_origin,
+                producer_origin: token.producer_origin,
+                sibling_position: usize::try_from(token.sibling_position).map_err(|_| {
+                    backend_module(
+                        "continuation specialization worker position exceeds usize".to_string(),
+                    )
+                })?,
+                closure_origin: token.closure_origin,
+                body_origin: token.body_origin,
+                declared_arity: usize::try_from(token.declared_arity).map_err(|_| {
+                    backend_module(
+                        "continuation specialization worker arity exceeds usize".to_string(),
+                    )
+                })?,
+                capture_count: usize::try_from(token.capture_count).map_err(|_| {
+                    backend_module(
+                        "continuation specialization capture count exceeds usize".to_string(),
+                    )
+                })?,
+            };
+            let previous = self.active_static_recursor_result.replace(worker);
+            let mut flattened = env[..ordinary_count].iter().cloned();
+            let mut producer_operands = Vec::with_capacity(args.len());
+            eprintln!(
+                "CONTSPEC_ENTRY owner={:?} result={:?} env={:?}",
+                self.active_emission_owner,
+                specialization.producer_result_origin(),
+                env.iter()
+                    .map(|value| match value {
+                        LoweringOperand::Carried(word) => {
+                            format!("carried:{:?}", word.word)
+                        }
+                        LoweringOperand::Specialized(_) => "specialized".to_string(),
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            for position in 0..args.len() {
+                if position == worker_position {
+                    let captures = flattened
+                        .by_ref()
+                        .take(worker_capture_count)
+                        .collect::<Vec<_>>();
+                    if captures.len() != worker_capture_count {
+                        return Err(backend(BackendFailure::PlannerInvariant(
+                            "continuation specialization omits a worker capture".to_string(),
+                        )));
+                    }
+                    producer_operands.push(LoweringOperand::Specialized(
+                        Lowered::Closure {
+                            captures,
+                            params: vec![
+                                String::new();
+                                usize::try_from(
+                                    specialization.worker_declared_arity(),
+                                )
+                                .map_err(|_| {
+                                    backend_module(
+                                        "continuation specialization worker arity exceeds usize"
+                                            .to_string(),
+                                    )
+                                })?
+                            ],
+                            body: specialization.worker_body_origin(),
+                        },
+                    ));
+                } else {
+                    producer_operands.push(flattened.next().ok_or_else(|| {
+                        backend(BackendFailure::PlannerInvariant(
+                            "continuation specialization omits a producer field".to_string(),
+                        ))
+                    })?);
+                }
+            }
+            if flattened.next().is_some() {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "continuation specialization has excess producer fields".to_string(),
+                )));
+            }
+            let result = self.lower_known_constructor_operands_composed(
+                builder,
+                producer.static_origin,
+                constructor,
+                producer_operands,
+                &[EliminatorFrame::Computational(frame)],
+            );
+            if self.active_static_recursor_result == Some(worker) {
+                self.active_static_recursor_result = previous;
+            }
+            result
+        } else {
+            let [LoweringOperand::Carried(scrutinee)] = &env[..ordinary_count] else {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "continuation specialization received a non-carried producer result"
+                        .to_string(),
+                )));
+            };
+            self.lower_carried_computational_match(builder, *scrutinee, frame, &[])
+        }?;
+        self.call_continuation_specialization_if_planned(
+            builder,
+            specialization.continuation_origin(),
+            result,
+        )
     }
 
     fn lower_static_recursor_worker_result_composed(
@@ -8324,7 +10662,7 @@ impl<'a> Lowering<'a> {
     ) -> Result<(), CraneliftBackendError> {
         if matches!(
             format!("{:?}", worker.body_origin).as_str(),
-            "StaticOriginId(442)" | "StaticOriginId(723)"
+            "StaticOriginId(442)" | "StaticOriginId(723)" | "StaticOriginId(761)"
         ) {
             eprintln!(
                 "TRACE append worker owner={:?} active={:?} env={:?} parent={:?} producer={:?} closure={:?} body={:?}",
@@ -8368,7 +10706,42 @@ impl<'a> Lowering<'a> {
         parent_origin: StaticOriginId,
         position: usize,
     ) -> Result<Option<StaticRecursorWorker>, CraneliftBackendError> {
-        let token = if matches!(
+        eprintln!(
+            "CONTSPEC_SELECT parent={parent_origin:?} position={position} owner={:?} \
+             authority={:?} active_result={:?} active_selection={:?}",
+            self.active_emission_owner,
+            self.body_emission_authority,
+            self.active_static_recursor_result
+                .map(|worker| worker.body_origin),
+            self.active_static_recursor_selection
+                .map(|worker| worker.body_origin),
+        );
+        if let Some(owner) = self.active_emission_owner {
+            if self
+                .static_transition_plan
+                .continuation_specialization_for_function(owner)
+                .is_none()
+                && self
+                    .static_transition_plan
+                    .continuation_position_is_specialized_for_consumer(
+                        owner,
+                        parent_origin,
+                        position,
+                    )?
+            {
+                return Ok(None);
+            }
+        }
+        let continuation_specialization = self.active_emission_owner.and_then(|owner| {
+            self.static_transition_plan
+                .continuation_specialization_for_function(owner)
+        });
+        let token = if let Some(specialization) = continuation_specialization {
+            Some(
+                self.static_transition_plan
+                    .continuation_specialization_worker_token(specialization)?,
+            )
+        } else if matches!(
             self.body_emission_authority,
             BodyEmissionAuthority::RecursiveDescent
         ) {
@@ -8386,6 +10759,7 @@ impl<'a> Lowering<'a> {
                     parent_origin,
                     position,
                     self.active_static_recursor_result
+                        .or(self.active_static_recursor_selection)
                         .map(|worker| worker.body_origin),
                 )?
         };
@@ -8417,6 +10791,17 @@ impl<'a> Lowering<'a> {
         position: usize,
         producer_origin: StaticOriginId,
     ) -> Result<Option<StaticRecursorWorker>, CraneliftBackendError> {
+        if let Some(worker) = self
+            .active_static_recursor_result
+            .or(self.active_static_recursor_selection)
+        {
+            if worker.parent_origin == parent_origin
+                && worker.sibling_position == position
+                && worker.producer_origin == producer_origin
+            {
+                return Ok(Some(worker));
+            }
+        }
         if matches!(
             self.body_emission_authority,
             BodyEmissionAuthority::RecursiveDescent
@@ -8483,6 +10868,7 @@ impl<'a> Lowering<'a> {
     /// counters — the carried word contributes the *value* and nothing else.
     /// That separation is the ruling's clause 5, and it is what control 3
     /// perturbs.
+    #[track_caller]
     fn lower_carried_computational_match(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -8544,6 +10930,7 @@ impl<'a> Lowering<'a> {
         lowered
     }
 
+    #[track_caller]
     fn lower_carried_computational_match_inner(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -8569,14 +10956,21 @@ impl<'a> Lowering<'a> {
 
         let tag = self.emit_carrier_tag(builder, scrutinee)?;
         let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
-        let phase_constructors = self
-            .active_static_recursor_result
-            .map(|worker| {
-                self.static_transition_plan
-                    .source_result_constructor_identities_in_owner_subtree(worker.body_origin)
-            })
-            .transpose()?
-            .filter(|constructors| !constructors.is_empty());
+        let phase_constructors = if let Some(worker) = self.active_static_recursor_result {
+            Some(self.static_transition_plan
+                .source_result_constructor_identities_in_owner_subtree(worker.body_origin)?
+            )
+        } else if let Some(owner) = self.active_emission_owner {
+            self.static_transition_plan
+                .continuation_specialization_producer_constructor(owner)?
+                .map(|identity| vec![identity])
+        } else {
+            None
+        }
+        .filter(|constructors: &Vec<_>| !constructors.is_empty());
+        if phase_constructors.is_some() {
+            self.disposition_statically_unselected_match_cases(eliminator.static_origin, None)?;
+        }
 
         let merge = builder.create_block();
         builder.append_block_param(merge, types::I64);
@@ -8589,6 +10983,10 @@ impl<'a> Lowering<'a> {
                 if !constructors.iter().any(|candidate| candidate == &identity) {
                     continue;
                 }
+                self.disposition_statically_unselected_match_cases(
+                    eliminator.static_origin,
+                    Some(index),
+                )?;
             }
             // ⛔ Malformed recursive positions are rejected before any code is
             // emitted for this case, exactly as the specialized composed path
@@ -8612,6 +11010,13 @@ impl<'a> Lowering<'a> {
                 .static_transition_plan
                 .case_constructor_identity(eliminator.static_origin, index)?
                 .tag_abi_word()?;
+            eprintln!(
+                "CONTSPEC_CASE_TAG owner={:?} match={:?} case={} constructor={} tag={identity:#x}",
+                self.active_emission_owner,
+                eliminator.static_origin,
+                index,
+                case.constructor,
+            );
             let identity = Self::carrier_identity_immediate(builder, identity);
             let selected = builder.create_block();
             let next = builder.create_block();
@@ -8623,6 +11028,39 @@ impl<'a> Lowering<'a> {
             builder.ins().brif(matched, selected, &[], next, &[]);
 
             builder.switch_to_block(selected);
+            if case.constructor.contains("::ResourceError::") {
+                let diagnostic = builder.ins().iconst(
+                    types::I64,
+                    130 + i64::try_from(index).unwrap_or(55),
+                );
+                builder.ins().return_(&[diagnostic]);
+                let unreachable = builder.create_block();
+                builder.switch_to_block(unreachable);
+            }
+            if case.constructor.contains("::FileError::") {
+                let diagnostic = builder.ins().iconst(
+                    types::I64,
+                    180 + i64::try_from(index).unwrap_or(55),
+                );
+                builder.ins().return_(&[diagnostic]);
+                let unreachable = builder.create_block();
+                builder.switch_to_block(unreachable);
+            }
+            if case.constructor.contains("::Result::Err") {
+                let origin = format!("{:?}", eliminator.static_origin);
+                let origin = origin
+                    .trim_start_matches("StaticOriginId(")
+                    .trim_end_matches(')')
+                    .parse::<i64>()
+                    .unwrap_or(55);
+                let diagnostic = builder.ins().iconst(
+                    types::I64,
+                    150 + origin % 60,
+                );
+                builder.ins().return_(&[diagnostic]);
+                let unreachable = builder.create_block();
+                builder.switch_to_block(unreachable);
+            }
             let binders = i64::try_from(case.argument_binders).map_err(|_| {
                 unsupported(
                     "BoundaryCarrier",
@@ -8725,7 +11163,33 @@ impl<'a> Lowering<'a> {
 
             let body = self.case_body_occurrence(eliminator.static_origin, index, &case.body)?;
             let body_origin = body.static_origin;
-            let lowered =
+            eprintln!(
+                "CONTSPEC_CASE owner={:?} match={:?} case={} body={:?} remaining={:?}",
+                self.active_emission_owner,
+                eliminator.static_origin,
+                index,
+                body_origin,
+                remaining_eliminators
+                    .iter()
+                    .filter_map(|frame| match frame {
+                        EliminatorFrame::Computational(frame) => Some(frame.static_origin),
+                        EliminatorFrame::Ordinary(frame) => Some(frame.static_origin),
+                        EliminatorFrame::PendingLet(frame) => Some(frame.call_origin),
+                        EliminatorFrame::InvocationReturn | EliminatorFrame::Active(_) => None,
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            let continuation_source_machine = if active_scope.is_none() {
+                if let Some(owner) = self.active_emission_owner {
+                    self.static_transition_plan
+                        .continuation_specialization_in_owner_subtree(owner, body.static_origin)?
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            let (lowered, continuation_result_origin) =
                 if let Some((activation, cursor, producer_origin, splice_caller)) = active_scope {
                     // ⭐ A case with recursive positions descends through the SOURCE
                     // MACHINE, as the specialized composed path does — the body's IH
@@ -8775,21 +11239,79 @@ impl<'a> Lowering<'a> {
                             .and_then(|active| active.source_selected_cursor),
                         selected_scope: Some(&selected_scope),
                     };
-                    self.lower_source_machine(builder, body, &case_env, &active_state)?
-                } else if remaining_eliminators.is_empty() {
-                    self.lower_expr(builder, body, &case_env)?
-                } else {
-                    self.lower_computational_producer_expr(
+                    self.lower_source_machine_with_result_origin(
                         builder,
                         body,
                         &case_env,
-                        remaining_eliminators,
+                        &active_state,
                     )?
+                } else if continuation_source_machine {
+                    // A non-recursive case can still contain one of the exact
+                    // producer alternatives whose callable identity would be
+                    // erased by this carried case join. Run that case through
+                    // the owned source machine as well: its pending Construct
+                    // frame retains the complete produced value while a
+                    // branch-local Closure origin selects the planner-issued
+                    // continuation unit.
+                    let activation = self.mint_continuation_activation();
+                    let cursor = self.mint_continuation_cursor();
+                    let splice_caller = active_recursor_frame(remaining_eliminators);
+                    let mut pending: Vec<_> = remaining_eliminators
+                        .iter()
+                        .copied()
+                        .filter(|frame| !matches!(frame, EliminatorFrame::Active(_)))
+                        .collect();
+                    if let Some(active) = splice_caller {
+                        pending.extend_from_slice(active.pending);
+                    }
+                    let selected_ancestry = splice_caller
+                        .map(|active| active.selected_ancestry.to_vec())
+                        .unwrap_or_default();
+                    let active_state = ActiveContinuationFrame {
+                        activation,
+                        cursor,
+                        parent: splice_caller.and_then(|active| active.parent),
+                        pending: &pending,
+                        selected_ancestry: &selected_ancestry,
+                        source_lineage: splice_caller
+                            .map(|active| active.source_lineage)
+                            .unwrap_or(&[]),
+                        source_selected_cursor: splice_caller
+                            .and_then(|active| active.source_selected_cursor),
+                        selected_scope: splice_caller.and_then(|active| active.selected_scope),
+                    };
+                    self.lower_source_machine_with_result_origin(
+                        builder,
+                        body,
+                        &case_env,
+                        &active_state,
+                    )?
+                } else if remaining_eliminators.is_empty() {
+                    (self.lower_expr(builder, body, &case_env)?, None)
+                } else {
+                    (
+                        self.lower_computational_producer_expr(
+                            builder,
+                            body,
+                            &case_env,
+                            remaining_eliminators,
+                        )?,
+                        None,
+                    )
                 };
             if !matches!(
                 lowered,
                 LoweringOperand::Specialized(Lowered::RecursiveBackedge)
             ) {
+                let lowered = if let Some(producer_origin) = continuation_result_origin {
+                    self.call_continuation_specialization_if_planned(
+                        builder,
+                        producer_origin,
+                        lowered,
+                    )?
+                } else {
+                    lowered
+                };
                 let word = self.carried_join_arm(
                     builder,
                     body_origin,
@@ -8803,6 +11325,24 @@ impl<'a> Lowering<'a> {
             }
 
             builder.switch_to_block(next);
+        }
+
+        if eliminator
+            .cases
+            .first()
+            .is_some_and(|case| case.constructor.contains("::ResourceError::"))
+        {
+            if let Some(TrapExitAuthority::UnitFrame { slots, trap_offset }) =
+                self.function_local.trap_exit
+            {
+                builder
+                    .ins()
+                    .store(MemFlags::trusted(), tag, slots, trap_offset);
+                let returned = builder.ins().iconst(types::I64, 0);
+                builder.ins().return_(&[returned]);
+                let unreachable = builder.create_block();
+                builder.switch_to_block(unreachable);
+            }
         }
 
         let defaulted = LoweringOperand::Specialized(Lowered::Trap(eliminator.default.clone()));
@@ -9120,6 +11660,18 @@ impl<'a> Lowering<'a> {
                 self.finish_planned_join(builder, merge, &join_plan, merge_kind, "If")
             }
             RuntimeExpr::Construct { constructor, args } => {
+                if constructor.contains("::Result::Err") {
+                    let origin = format!("{static_origin:?}");
+                    let origin = origin
+                        .trim_start_matches("StaticOriginId(")
+                        .trim_end_matches(')')
+                        .parse::<i64>()
+                        .unwrap_or(55);
+                    let diagnostic = builder.ins().iconst(types::I64, 200 + origin % 50);
+                    builder.ins().return_(&[diagnostic]);
+                    let unreachable = builder.create_block();
+                    builder.switch_to_block(unreachable);
+                }
                 let mut lower_construct = || -> Result<LoweringOperand, CraneliftBackendError> {
                 let lowered_args = args
                     .iter()
@@ -9129,6 +11681,17 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, arg, env)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
+                if self.continuation_specialization_result_origin(static_origin)
+                    == Some(static_origin)
+                    && self.continuation_specialization_flattens_result(static_origin)?
+                {
+                    return self.call_known_constructor_continuation_specialization(
+                        builder,
+                        static_origin,
+                        static_origin,
+                        lowered_args,
+                    );
+                }
                 if lowered_args
                     .iter()
                     .any(|arg| matches!(arg, LoweringOperand::Specialized(Lowered::RecursiveBackedge)))
@@ -9453,6 +12016,12 @@ impl<'a> Lowering<'a> {
                     static_origin,
                     Some(index),
                 )?;
+                if case.constructor.contains("::Result::Err") {
+                    let diagnostic = builder.ins().iconst(types::I64, 224);
+                    builder.ins().return_(&[diagnostic]);
+                    let unreachable = builder.create_block();
+                    builder.switch_to_block(unreachable);
+                }
                 if case.binders != args.len() {
                     return Err(unsupported(
                         "Match",
@@ -9916,6 +12485,11 @@ impl<'a> Lowering<'a> {
                                     BodyEmissionAuthority::FunctionizedUnits
                                 )
                             }) {
+                                let continuation_specialized = self
+                                    .producer_call_has_continuation_specialization(
+                                        worker.body_origin,
+                                        static_origin,
+                                    )?;
                                 let mut inputs = args
                                     .iter()
                                     .enumerate()
@@ -9942,12 +12516,27 @@ impl<'a> Lowering<'a> {
                                         &inputs,
                                     )
                                     .and_then(|value| {
-                                        self.lower_static_recursor_worker_result_composed(
-                                            builder,
-                                            value,
-                                            &frames,
-                                            worker,
-                                        )
+                                        if continuation_specialized {
+                                            // The producer branch has already
+                                            // transferred this exact suffix
+                                            // to its out-of-line
+                                            // ContinuationSpecialization
+                                            // edge. Reapplying the composed
+                                            // frames here would recreate the
+                                            // identity-erasing post-join
+                                            // continuation that the unit
+                                            // replaced.
+                                            self.apply_recursive_continuation_specialization_if_planned(
+                                                builder, worker, static_origin, value,
+                                            )
+                                        } else {
+                                            self.lower_static_recursor_worker_result_composed(
+                                                builder,
+                                                value,
+                                                &frames,
+                                                worker,
+                                            )
+                                        }
                                     });
                                 self.leave_oriented_semantic_region(installed.checked);
                                 return result;
@@ -10020,6 +12609,11 @@ impl<'a> Lowering<'a> {
                             self.body_emission_authority,
                             BodyEmissionAuthority::FunctionizedUnits
                         ) {
+                            let continuation_specialized =
+                                self.producer_call_has_continuation_specialization(
+                                    body,
+                                    static_origin,
+                                )?;
                             self.enter_oriented_semantic_region(installed.checked);
                             let result = self
                                 .call_declared_recursive_position_unit(
@@ -10028,11 +12622,13 @@ impl<'a> Lowering<'a> {
                                     &call_env,
                                 )
                                 .and_then(|value| {
-                                    self.lower_computational_match_value_composed(
-                                        builder,
-                                        value,
-                                        &frames,
-                                    )
+                                    if continuation_specialized {
+                                        Ok(value)
+                                    } else {
+                                        self.lower_computational_match_value_composed(
+                                            builder, value, &frames,
+                                        )
+                                    }
                                 });
                             self.leave_oriented_semantic_region(installed.checked);
                             return result;
@@ -12034,11 +14630,8 @@ impl<'a> Lowering<'a> {
             };
             let arm_env = env_with([payload], env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
-            let arm_edge = self.operand_edge_token(
-                static_origin,
-                1 + index,
-                SourceOperandRole::MatchArm,
-            )?;
+            let arm_edge =
+                self.operand_edge_token(static_origin, 1 + index, SourceOperandRole::MatchArm)?;
             if arm_edge.disposition() != OperandEdgeDisposition::Forwarding {
                 return Err(backend(BackendFailure::PlannerInvariant(
                     "dynamic HostResult match arm lost its forwarding disposition".to_string(),
@@ -12063,16 +14656,15 @@ impl<'a> Lowering<'a> {
                         .jump(merge, &[value.tag.into(), value.payload.into()]);
                 }
                 JoinResultRepresentation::CarrierWord => {
-                    let word =
-                        self.carried_join_arm(
-                            builder,
-                            body.static_origin,
-                            LoweringOnlyOperandEdge::JoinArm,
-                            0,
-                            lowered,
-                            None,
-                            "Match",
-                        )?;
+                    let word = self.carried_join_arm(
+                        builder,
+                        body.static_origin,
+                        LoweringOnlyOperandEdge::JoinArm,
+                        0,
+                        lowered,
+                        None,
+                        "Match",
+                    )?;
                     builder.ins().jump(merge, &[word.word.into()]);
                 }
             }
@@ -12269,11 +14861,8 @@ impl<'a> Lowering<'a> {
             };
             let arm_env = materialize_dynamic_constructor_env(&alternative, env);
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
-            let arm_edge = self.operand_edge_token(
-                static_origin,
-                1 + index,
-                SourceOperandRole::MatchArm,
-            )?;
+            let arm_edge =
+                self.operand_edge_token(static_origin, 1 + index, SourceOperandRole::MatchArm)?;
             if arm_edge.disposition() != OperandEdgeDisposition::Forwarding {
                 return Err(backend(BackendFailure::PlannerInvariant(
                     "dynamic constructor match arm lost its forwarding disposition".to_string(),

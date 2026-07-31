@@ -1105,10 +1105,7 @@ mod tests {
     }
 
     fn encode_roundtrip(bytes: &[u8]) -> CanonicalRequestV1 {
-        let mut cursor = Cursor {
-            bytes,
-            position: 0,
-        };
+        let mut cursor = Cursor { bytes, position: 0 };
         get_request(&mut cursor).expect("decodes")
     }
 

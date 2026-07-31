@@ -21,8 +21,8 @@ pub enum Value {
     // --- immediate scalars (§1) ---
     Bool(bool),
     Char(char),
-    Float(u64),      // f64 bits as u64 for Eq/Ord
-    Float32(u32),    // f32 bits
+    Float(u64),   // f64 bits as u64 for Eq/Ord
+    Float32(u32), // f32 bits
     Int8(i8),
     Int16(i16),
     Int32(i32),
@@ -31,7 +31,7 @@ pub enum Value {
     UInt16(u16),
     UInt32(u32),
     UInt64(u64),
-    SmallInt(i64),   // Int within i64 range
+    SmallInt(i64), // Int within i64 range
     SmallDecimal {
         coefficient: i64,
         exponent: i32,
@@ -53,7 +53,7 @@ pub enum Value {
     },
     Record {
         type_id: u32,
-        fields: Vec<Value>,  // declaration order
+        fields: Vec<Value>, // declaration order
     },
     String(String),
     Bytes(Vec<u8>),

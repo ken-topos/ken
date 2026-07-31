@@ -548,7 +548,10 @@ fn debug_header<'a>(
             constructor_id,
             args,
         } => {
-            write!(f, "Constructor {{ constructor_id: {constructor_id}, args: [")?;
+            write!(
+                f,
+                "Constructor {{ constructor_id: {constructor_id}, args: ["
+            )?;
             stack.push(DebugStep::Lit("] }"));
             push_debug_children(args, stack);
             Ok(())

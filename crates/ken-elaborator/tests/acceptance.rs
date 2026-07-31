@@ -100,7 +100,11 @@ fn apply_elaborates_checks() {
     let body = last_body(&env, id);
     // Find the innermost non-Lam: should be App(Var1, Var0)
     fn peel_lam(t: &Term) -> &Term {
-        if let Term::Lam(_, b) = t { peel_lam(b) } else { t }
+        if let Term::Lam(_, b) = t {
+            peel_lam(b)
+        } else {
+            t
+        }
     }
     let core = peel_lam(&body);
     let expected = Term::app(Term::var(1), Term::var(0));
@@ -182,8 +186,7 @@ fn type_mismatch_rejected() {
 #[test]
 fn wrong_return_app_rejected() {
     let mut env = mk_env();
-    let result = env
-        .elaborate_decl("fn badApp (f : (x : Nat) -> Bool) (x : Nat) : Nat = f x");
+    let result = env.elaborate_decl("fn badApp (f : (x : Nat) -> Bool) (x : Nat) : Nat = f x");
     assert!(
         matches!(result, Err(ElabError::KernelRejected { .. })),
         "wrong-return-app-rejected: expected KernelRejected, got {:?}",
@@ -195,8 +198,7 @@ fn wrong_return_app_rejected() {
 #[test]
 fn wrong_arity_rejected() {
     let mut env = mk_env();
-    let result =
-        env.elaborate_decl("fn badLam (x : Nat) : (y : Nat) -> Nat = \\y . \\z . x");
+    let result = env.elaborate_decl("fn badLam (x : Nat) : (y : Nat) -> Nat = \\y . \\z . x");
     assert!(
         matches!(result, Err(ElabError::LambdaVsNonFunction { .. })),
         "wrong-arity-rejected: expected LambdaVsNonFunction (caught by V0), got {:?}",
@@ -287,7 +289,13 @@ fn shadow_outer_not_captured() {
     };
 
     let mut env2 = mk_env();
-    let result = elaborate_rdecl(&mut env2.env, &mut env2.globals, &mut env2.num_values, &env2.numeric_env, &bug_rdecl);
+    let result = elaborate_rdecl(
+        &mut env2.env,
+        &mut env2.globals,
+        &mut env2.num_values,
+        &env2.numeric_env,
+        &bug_rdecl,
+    );
     assert!(
         matches!(result, Err(ElabError::KernelRejected { .. })),
         "shadow guard: capture bug must be rejected by the kernel, got {:?}",
@@ -328,21 +336,23 @@ fn shadow_resolver_emits_outer_index() {
 fn nested_app_each_binder() {
     let mut env = mk_env();
     let id = env
-        .elaborate_decl(
-            "fn nested (A : Type) (f : (x : A) -> A) (x : A) : A = f (f x)",
-        )
+        .elaborate_decl("fn nested (A : Type) (f : (x : A) -> A) (x : A) : A = f (f x)")
         .expect("nested-app should elaborate");
 
     let body = last_body(&env, id);
     fn peel_lam(t: &Term) -> &Term {
-        if let Term::Lam(_, b) = t { peel_lam(b) } else { t }
+        if let Term::Lam(_, b) = t {
+            peel_lam(b)
+        } else {
+            t
+        }
     }
     let core = peel_lam(&body);
-    let expected = Term::app(
-        Term::var(1),
-        Term::app(Term::var(1), Term::var(0)),
+    let expected = Term::app(Term::var(1), Term::app(Term::var(1), Term::var(0)));
+    assert_eq!(
+        core, &expected,
+        "nested body must be App(Var1, App(Var1, Var0))"
     );
-    assert_eq!(core, &expected, "nested body must be App(Var1, App(Var1, Var0))");
 }
 
 /// `surface/elaboration/unbound-name-rejected-at-resolution`
@@ -397,10 +407,7 @@ fn pipeline_emits_explicit_core() {
     let mut env = mk_env();
     let cases = [
         ("fn id (A : Type) (x : A) : A = x", "id"),
-        (
-            "fn konst (A B : Type) (x : A) (y : B) : A = x",
-            "konst",
-        ),
+        ("fn konst (A B : Type) (x : A) (y : B) : A = x", "konst"),
         (
             "fn apply (A B : Type) (f : (x : A) -> B) (x : A) : B = f x",
             "apply",
@@ -541,7 +548,7 @@ fn two_distinct_levels() {
 /// `convLevel` decides level equality; non-cumulative: `Type 1 ≢ Type 2`.
 #[test]
 fn level_equality_decidable() {
-    use ken_kernel::{level_eq, convert_type, Context, GlobalEnv};
+    use ken_kernel::{convert_type, level_eq, Context, GlobalEnv};
 
     let env = GlobalEnv::new();
     let ctx = Context::new();
@@ -558,7 +565,10 @@ fn level_equality_decidable() {
     let univ1 = Term::ty(lv(1));
     let univ2 = Term::ty(lv(2));
     let converts = convert_type(&env, &ctx, &univ1, &univ2);
-    assert!(!converts, "Type 1 must not convert to Type 2 (non-cumulative)");
+    assert!(
+        !converts,
+        "Type 1 must not convert to Type 2 (non-cumulative)"
+    );
 }
 
 // ----- Regression: on-main elaboration invariants still hold -----
@@ -585,5 +595,8 @@ fn existing_invariants_still_green() {
     // core is Lam(Univ 0, Lam(Var 0, Var 0)) — no metas.
     let expected = Term::lam(Term::ty(lv(0)), Term::lam(Term::var(0), Term::var(0)));
     assert_eq!(core, expected, "existing-invariants: core mismatch");
-    assert_eq!(ty, Term::pi(Term::ty(lv(0)), Term::pi(Term::var(0), Term::var(1))));
+    assert_eq!(
+        ty,
+        Term::pi(Term::ty(lv(0)), Term::pi(Term::var(0), Term::var(1)))
+    );
 }

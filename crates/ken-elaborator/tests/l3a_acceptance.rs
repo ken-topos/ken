@@ -390,7 +390,9 @@ fn structurally_equal_lists_share_slot() {
     let mut store = EvalStore::new();
     let mkdecimalpair_id = env.prelude_env.mkdecimalpair_id;
     for (id, lit) in &env.num_values {
-        store.num_values.insert(*id, lit_to_evalval(lit, mkdecimalpair_id));
+        store
+            .num_values
+            .insert(*id, lit_to_evalval(lit, mkdecimalpair_id));
     }
     // Two structurally-equal lists share one slot (content-addressed dedup).
     let v12a = eval(&[], &t12, &env.env, &mut store);

@@ -120,7 +120,8 @@ fn batch3_stage1_breaks_high_and_keeps_each_fitting_child_horizontal() {
     assert_eq!(token_shape(assoc), token_shape(assoc_expected));
     assert_eq!(ast_shape(assoc), ast_shape(assoc_expected));
 
-    let lawful_functors = include_str!("../../../catalog/packages/Core/Classes/LawfulFunctors.ken.md");
+    let lawful_functors =
+        include_str!("../../../catalog/packages/Core/Classes/LawfulFunctors.ken.md");
     assert_eq!(format_ken_md(lawful_functors).unwrap(), lawful_functors);
     assert!(lawful_functors.contains(
         "  fusion_law :\n    (a : Type)\n    → (b : Type)\n    → (c : Type)\n    → (g : b → c)"

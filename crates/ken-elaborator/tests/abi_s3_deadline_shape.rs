@@ -83,10 +83,7 @@ fn abi_s3_the_deadline_type_carries_exactly_its_reading_and_no_cancellation_fiel
         .constructor(*env.globals.get("MkDeadline").expect("MkDeadline"))
         .expect("MkDeadline is a constructor")
         .0;
-    assert_eq!(
-        admitted.id, deadline,
-        "MkDeadline belongs to Deadline"
-    );
+    assert_eq!(admitted.id, deadline, "MkDeadline belongs to Deadline");
     assert_eq!(
         admitted.constructors.len(),
         1,

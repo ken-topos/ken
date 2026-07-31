@@ -560,7 +560,10 @@ mod tests {
             unsafe { ken_boundary_store_v1_open(&wrong_version, &mut store) },
             KEN_ACTIVATION_ERR_PROFILE
         );
-        assert!(store.is_null(), "a refused open must not hand back a handle");
+        assert!(
+            store.is_null(),
+            "a refused open must not hand back a handle"
+        );
 
         let mut wrong_size = c_profile();
         wrong_size.size += 8;
@@ -599,12 +602,7 @@ mod tests {
         );
         assert_eq!(
             unsafe {
-                ken_activation_v1_finish(
-                    std::ptr::null_mut(),
-                    std::ptr::null_mut(),
-                    0,
-                    &mut word,
-                )
+                ken_activation_v1_finish(std::ptr::null_mut(), std::ptr::null_mut(), 0, &mut word)
             },
             KEN_ACTIVATION_ERR_NULL
         );
@@ -670,7 +668,10 @@ mod tests {
 /// most-significant limb is printed *unpadded* and every lower limb is padded to
 /// 16 hex digits. Padding the top limb too would emit leading zeroes that the C
 /// stub never emitted.
-pub fn format_final_export(export: Option<crate::native_int::RuntimeIntV1>, fallback: i64) -> String {
+pub fn format_final_export(
+    export: Option<crate::native_int::RuntimeIntV1>,
+    fallback: i64,
+) -> String {
     use crate::native_int::RuntimeIntV1;
     use crate::values::Sign;
     match export {
@@ -714,7 +715,10 @@ mod export_rendering_tests {
     fn the_rendered_export_matches_the_c_stubs_bytes_for_every_shape() {
         assert_eq!(format_final_export(None, 42), "42\n");
         assert_eq!(format_final_export(None, -7), "-7\n");
-        assert_eq!(format_final_export(Some(RuntimeIntV1::Small(42)), 0), "42\n");
+        assert_eq!(
+            format_final_export(Some(RuntimeIntV1::Small(42)), 0),
+            "42\n"
+        );
         assert_eq!(
             format_final_export(Some(RuntimeIntV1::Small(-42)), 0),
             "-42\n"

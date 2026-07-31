@@ -159,14 +159,12 @@ fn ac4_strict_evaluation_and_effectful_lowering_keep_source_order() {
         "let first = print_line \"first\" in let second = print_line \"second\" in second";
     let mut effect_grouped_env = ElabEnv::new().unwrap();
     let mut effect_nested_env = ElabEnv::new().unwrap();
-    let (effect_grouped_core, effect_grouped_ty) =
-        effect_grouped_env
-            .elaborate_expr("ac4_effectful_lowering_source_order", effect_grouped)
-            .unwrap();
-    let (effect_nested_core, effect_nested_ty) =
-        effect_nested_env
-            .elaborate_expr("ac4_effectful_lowering_source_order", effect_nested)
-            .unwrap();
+    let (effect_grouped_core, effect_grouped_ty) = effect_grouped_env
+        .elaborate_expr("ac4_effectful_lowering_source_order", effect_grouped)
+        .unwrap();
+    let (effect_nested_core, effect_nested_ty) = effect_nested_env
+        .elaborate_expr("ac4_effectful_lowering_source_order", effect_nested)
+        .unwrap();
     assert_eq!(effect_grouped_core, effect_nested_core);
     assert_eq!(effect_grouped_ty, effect_nested_ty);
     let Term::Let {

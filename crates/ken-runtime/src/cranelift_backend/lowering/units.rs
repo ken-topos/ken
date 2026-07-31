@@ -199,22 +199,27 @@ impl CallEdgeTargets {
 
 #[derive(Clone)]
 pub(in crate::cranelift_backend) struct ResolvedUnitTarget {
+    unit: PredeclaredFunctionId,
     function: FuncId,
     origin: StaticOriginId,
     call_site_origin: StaticOriginId,
+    call_site_sequence: u32,
     kind: EmittableCallKind,
     header: AbiFrameHeader,
     slots: Vec<AbiSlot>,
     offsets: Vec<u32>,
     static_callable: Option<EmittableStaticCallableCall>,
     static_callable_body: Option<EmittableStaticCallableBinding>,
+    continuation_specialization: Option<EmittableContinuationSpecialization>,
 }
 
 #[derive(Clone)]
 pub(in crate::cranelift_backend) struct DeclaredUnitCall {
+    pub(in crate::cranelift_backend) unit: PredeclaredFunctionId,
     pub(in crate::cranelift_backend) function: FuncRef,
     pub(in crate::cranelift_backend) origin: StaticOriginId,
     pub(in crate::cranelift_backend) call_site_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) call_site_sequence: u32,
     pub(in crate::cranelift_backend) boundary_owner: PredeclaredFunctionId,
     pub(in crate::cranelift_backend) header: AbiFrameHeader,
     pub(in crate::cranelift_backend) slots: Vec<AbiSlot>,
@@ -228,11 +233,20 @@ pub(in crate::cranelift_backend) struct DeclaredStaticCallableCall {
     pub(in crate::cranelift_backend) plan: EmittableStaticCallableCall,
 }
 
+#[derive(Clone)]
+pub(in crate::cranelift_backend) struct DeclaredContinuationSpecializationCall {
+    pub(in crate::cranelift_backend) target: DeclaredUnitCall,
+    pub(in crate::cranelift_backend) plan: EmittableContinuationSpecialization,
+}
+
 pub(in crate::cranelift_backend) struct DeclaredUnitCalls {
-    pub(in crate::cranelift_backend) static_bodies: BTreeMap<StaticOriginId, DeclaredUnitCall>,
+    pub(in crate::cranelift_backend) static_bodies:
+        BTreeMap<(StaticOriginId, u32), DeclaredUnitCall>,
     pub(in crate::cranelift_backend) declarations: BTreeMap<StaticOriginId, DeclaredUnitCall>,
     pub(in crate::cranelift_backend) static_callables:
         BTreeMap<StaticOriginId, DeclaredStaticCallableCall>,
+    pub(in crate::cranelift_backend) continuation_specializations:
+        BTreeMap<StaticOriginId, Vec<DeclaredContinuationSpecializationCall>>,
 }
 
 fn rebuild_static_callable_binding(
@@ -280,26 +294,41 @@ impl CallEdgeTargets {
         let mut static_bodies = BTreeMap::new();
         let mut declarations = BTreeMap::new();
         let mut static_callables = BTreeMap::new();
+        let mut continuation_specializations = BTreeMap::new();
         for target in self.targets_in(caller) {
             let call = DeclaredUnitCall {
+                unit: target.unit,
                 function: module.declare_func_in_func(target.function, func),
                 origin: target.origin,
                 call_site_origin: target.call_site_origin,
+                call_site_sequence: target.call_site_sequence,
                 boundary_owner: caller,
                 header: target.header,
                 slots: target.slots.clone(),
                 offsets: target.offsets.clone(),
                 static_callable_body: target.static_callable_body.clone(),
             };
-            let (calls, duplicate) = match target.kind {
-                EmittableCallKind::StaticBody => (
-                    &mut static_bodies,
-                    "one caller has two static-body calls to the same body origin",
-                ),
-                EmittableCallKind::Declaration => (
-                    &mut declarations,
-                    "one declaration-reference occurrence has two planner-derived call targets",
-                ),
+            match target.kind {
+                EmittableCallKind::StaticBody => {
+                    if static_bodies
+                        .insert((target.call_site_origin, target.call_site_sequence), call)
+                        .is_some()
+                    {
+                        return Err(backend_module(
+                            "one emitted static-body occurrence has two planner-derived targets"
+                                .to_string(),
+                        ));
+                    }
+                }
+                EmittableCallKind::Declaration => {
+                    if declarations.insert(target.call_site_origin, call).is_some() {
+                        return Err(backend_module(
+                            "one declaration-reference occurrence has two planner-derived call \
+                             targets"
+                                .to_string(),
+                        ));
+                    }
+                }
                 EmittableCallKind::StaticCallableSpecialization => {
                     let plan = target.static_callable.clone().ok_or_else(|| {
                         backend_module(
@@ -320,15 +349,29 @@ impl CallEdgeTargets {
                     }
                     continue;
                 }
-            };
-            if calls.insert(target.call_site_origin, call).is_some() {
-                return Err(backend_module(duplicate.to_string()));
+                EmittableCallKind::ContinuationSpecialization => {
+                    let plan = target.continuation_specialization.ok_or_else(|| {
+                        backend_module(
+                            "continuation specialization edge has no compiler plan".to_string(),
+                        )
+                    })?;
+                    let calls = continuation_specializations
+                        .entry(target.call_site_origin)
+                        .or_insert_with(Vec::new);
+                    if target.call_site_sequence != calls.len() as u32 {
+                        return Err(backend_module(
+                            "continuation specialization call sequence is not dense".to_string(),
+                        ));
+                    }
+                    calls.push(DeclaredContinuationSpecializationCall { target: call, plan });
+                }
             }
         }
         Ok(DeclaredUnitCalls {
             static_bodies,
             declarations,
             static_callables,
+            continuation_specializations,
         })
     }
 }
@@ -407,9 +450,11 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
         edges.push((
             edge.caller(),
             ResolvedUnitTarget {
+                unit: edge.callee(),
                 function: target,
                 origin: edge.callee_origin(),
                 call_site_origin: edge.call_site_origin(),
+                call_site_sequence: edge.call_site_sequence(),
                 kind: edge.kind(),
                 header: unit.header(),
                 slots: unit.slots().to_vec(),
@@ -438,6 +483,27 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
                             .body_binding()
                             .cloned(),
                         _ => None,
+                    }
+                } else {
+                    None
+                },
+                continuation_specialization: if edge.kind()
+                    == EmittableCallKind::ContinuationSpecialization
+                {
+                    match unit.definition() {
+                        AbiUnitDefinition::ContinuationSpecialization {
+                            specialization, ..
+                        } => Some(plan.emittable_continuation_specialization(
+                            specialization,
+                            edge.caller(),
+                            edge.call_site_origin(),
+                        )?),
+                        _ => {
+                            return Err(backend_module(
+                                "continuation specialization edge targets another unit class"
+                                    .to_string(),
+                            ));
+                        }
                     }
                 } else {
                     None
@@ -575,11 +641,13 @@ pub(super) fn stage_root_adapter<M: Module>(
     );
     let root_origin = root.origin();
     function_local.unit_calls.insert(
-        root_origin,
+        (root_origin, 0),
         DeclaredUnitCall {
+            unit: root.function(),
             function: module.declare_func_in_func(root_id, &mut func),
             origin: root_origin,
             call_site_origin: root_origin,
+            call_site_sequence: 0,
             boundary_owner: root.function(),
             header: root.header(),
             slots: root.slots().to_vec(),
@@ -883,6 +951,7 @@ fn stage_unit_body<M: Module>(
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
     function_local.static_callable_calls = declared_calls.static_callables;
+    function_local.continuation_specialization_calls = declared_calls.continuation_specializations;
     let mut func_ctx = FunctionBuilderContext::new();
     let root_outcome;
     {
@@ -1112,6 +1181,7 @@ fn stage_unit_body<M: Module>(
                 env = rebuilt;
             }
         }
+        let active_unit_inputs = env.clone();
         // The in-process validation API historically stages one ground
         // `RuntimeValue` as the root environment.  It is compile-time material,
         // not launch ingress and not a generated-call transfer, so it does not
@@ -1125,6 +1195,7 @@ fn stage_unit_body<M: Module>(
                 ));
             }
         }
+        compiler.function_local.active_unit_inputs = active_unit_inputs;
         if is_root {
             compiler.root_terminal_authority =
                 compiler.take_distinguished_root_answer_authority()?;
@@ -1134,6 +1205,21 @@ fn stage_unit_body<M: Module>(
         // source record belongs to the distinct root occurrence.  Body
         // selection therefore uses the recorded occurrence only after the
         // unmintable entry has selected the descriptor.
+        let continuation_specialization = match unit.definition {
+            AbiUnitDefinition::ContinuationSpecialization { specialization, .. } => Some(
+                compiler
+                    .static_transition_plan
+                    .emittable_continuation_specialization(
+                        specialization,
+                        unit.function,
+                        unit.origin,
+                    )?,
+            ),
+            AbiUnitDefinition::SchedulingEntry { .. }
+            | AbiUnitDefinition::TransparentDeclarationClosure { .. }
+            | AbiUnitDefinition::ClosureBody { .. }
+            | AbiUnitDefinition::StaticCallableSpecialization { .. } => None,
+        };
         let body_origin = match unit.definition {
             AbiUnitDefinition::TransparentDeclarationClosure {
                 defining_origin, ..
@@ -1159,6 +1245,9 @@ fn stage_unit_body<M: Module>(
                 .static_transition_plan
                 .emittable_static_callable_unit(specialization)?
                 .base_body_origin(),
+            AbiUnitDefinition::ContinuationSpecialization { .. } => continuation_specialization
+                .expect("continuation definition resolved above")
+                .continuation_origin(),
         };
         let body = compiler.retained_body_occurrence(body_origin)?;
         eprintln!(
@@ -1169,7 +1258,10 @@ fn stage_unit_body<M: Module>(
             unit.header.parameters,
             unit.header.captures
         );
-        let lowered = if matches!(
+        let lowered = if let Some(specialization) = continuation_specialization {
+            compiler.select_terminal_result_origins(body_origin, body.expr)?;
+            compiler.lower_continuation_specialization(&mut builder, specialization, &env)?
+        } else if matches!(
             unit.definition,
             AbiUnitDefinition::TransparentDeclarationClosure { .. }
         ) {
@@ -1184,7 +1276,10 @@ fn stage_unit_body<M: Module>(
             compiler.select_terminal_result_origins(body_origin, body.expr)?;
             compiler.lower_expr(&mut builder, body, &env)?
         };
+        compiler.disposition_unreached_continuation_specialization_calls()?;
+        compiler.disposition_unconsumed_unit_calls()?;
         compiler.validate_join_plan_consumption(unit.function)?;
+        compiler.validate_continuation_specialization_calls()?;
         let (result, outcome) = if is_root {
             match lowered {
                 LoweringOperand::Carried(word) if !compiler.process_object => (
@@ -1288,9 +1383,6 @@ fn stage_unit_body<M: Module>(
         builder.ins().return_(&[status]);
         builder.seal_all_blocks();
         builder.finalize();
-    }
-    if format!("{:?}", unit.function) == "PredeclaredFunctionId(5)" {
-        eprintln!("TRACE unit5 clif\n{}", func.display());
     }
     compiler.validate_materialized_dead_join_cfg(unit.function, &func)?;
     verify_cranelift_function(&func, module.isa())?;

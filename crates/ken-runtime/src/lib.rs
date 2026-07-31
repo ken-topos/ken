@@ -9,9 +9,6 @@
 //! - Arena page chaining beyond a single flat Vec (`44 §1b`)
 //! - `unknown` propagation (Kleene/Heyting logic, `41 §6`)
 
-/// `RT-FNSPLIT-B2F` `S6` — the fixed activation-services record generated code
-/// receives beside its frame. ⛔ Host runtime services, never a Ken value.
-pub mod activation_services;
 /// `RT-FNSPLIT-C3-ACTIVATION` `D4` — the deployment-supplied capacity
 /// authority for boundary storage. ⛔ Resource policy, never emitter-derived.
 /// `RT-FNSPLIT-C3-ACTIVATION` `D3` — the Rust-owned activation: the
@@ -19,9 +16,12 @@ pub mod activation_services;
 /// `RT-FNSPLIT-C3-ACTIVATION` `D2` — the small C ABI over an opaque
 /// activation handle. ⛔ C stores a pointer and a status, nothing else.
 pub mod activation_abi;
+/// `RT-FNSPLIT-B2F` `S6` — the fixed activation-services record generated code
+/// receives beside its frame. ⛔ Host runtime services, never a Ken value.
+pub mod activation_services;
+pub mod artifact_validation;
 pub mod boundary_activation;
 pub mod boundary_resource_profile;
-pub mod artifact_validation;
 /// `RT-FNSPLIT-B2V` — the executable boundary-value ABI: one closed 64-bit
 /// tagged word for every source-valued boundary transfer.
 pub mod boundary_value;
@@ -55,9 +55,9 @@ pub mod target_abi;
 pub mod unknown;
 pub mod values;
 
+pub use activation_abi::*;
 pub use activation_services::*;
 pub use artifact_validation::*;
-pub use activation_abi::*;
 pub use boundary_activation::*;
 pub use boundary_resource_profile::*;
 pub use canonical::Canonical;
@@ -71,9 +71,8 @@ pub use ken_host::{
     observe_effective_uid_v1, CanonicalOutcomeV1, CanonicalReplyV1, CanonicalRequestV1,
     ConsoleStreamV1, EffectEvent, EffectObservation, EffectiveUidSnapshotV1, FsDeltaV1,
     FsNodeKindV1, FsNodeObservationV1, HomeRootResolutionFailureV1, HostOpV1, IoErrorIdentityV1,
-    LinkedEffectTrace, ReadProgressV1, ResourceBindingRole, ResourceErrorV1,
-    RootExecutionDeniedV1, SemanticErrorV1, TerminalErrorV1, TerminalExitClass, TransferCountV1,
-    WriteProgressV1,
+    LinkedEffectTrace, ReadProgressV1, ResourceBindingRole, ResourceErrorV1, RootExecutionDeniedV1,
+    SemanticErrorV1, TerminalErrorV1, TerminalExitClass, TransferCountV1, WriteProgressV1,
 };
 pub use native_execution_differential::*;
 pub use native_int::*;

@@ -57,10 +57,7 @@ impl ITree {
     }
 
     /// Construct `Vis e k` from a closure.
-    pub fn vis(
-        effect: impl Into<EffectName>,
-        cont: impl Fn(Response) -> ITree + 'static,
-    ) -> Self {
+    pub fn vis(effect: impl Into<EffectName>, cont: impl Fn(Response) -> ITree + 'static) -> Self {
         Self::vis_labeled(effect, BOTTOM, cont)
     }
 
@@ -139,7 +136,11 @@ pub fn perform(effect: impl Into<EffectName>) -> ITree {
 pub fn bind(tree: ITree, f: Rc<dyn Fn(Value) -> ITree>) -> ITree {
     match tree {
         ITree::Ret(v) => f(v),
-        ITree::Vis { effect, label, cont } => {
+        ITree::Vis {
+            effect,
+            label,
+            cont,
+        } => {
             let f2 = Rc::clone(&f);
             ITree::vis_labeled(effect, label, move |r| bind(cont(r), Rc::clone(&f2)))
         }
@@ -150,7 +151,11 @@ pub fn bind(tree: ITree, f: Rc<dyn Fn(Value) -> ITree>) -> ITree {
 pub fn incl(tree: ITree, inject: Rc<dyn Fn(EffectName) -> EffectName>) -> ITree {
     match tree {
         ITree::Ret(v) => ITree::ret(v),
-        ITree::Vis { effect, label, cont } => {
+        ITree::Vis {
+            effect,
+            label,
+            cont,
+        } => {
             let inject2 = Rc::clone(&inject);
             ITree::vis_labeled(inject(effect), label, move |r| {
                 incl(cont(r), Rc::clone(&inject2))
@@ -177,7 +182,10 @@ pub struct HandlerCase {
 
 impl HandlerCase {
     pub fn new(effect: impl Into<EffectName>, response: Response) -> Self {
-        Self { effect: effect.into(), response }
+        Self {
+            effect: effect.into(),
+            response,
+        }
     }
 }
 
@@ -196,7 +204,11 @@ impl HandlerCase {
 pub fn handler_fold(tree: ITree, cases: Rc<[HandlerCase]>) -> ITree {
     match tree {
         ITree::Ret(v) => ITree::ret(v),
-        ITree::Vis { effect, label, cont } => {
+        ITree::Vis {
+            effect,
+            label,
+            cont,
+        } => {
             if let Some(case) = cases.iter().find(|c| c.effect == effect) {
                 // Tail-resumptive: provide the response, continue the fold.
                 let resp = case.response;

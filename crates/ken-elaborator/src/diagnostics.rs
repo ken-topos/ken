@@ -115,11 +115,7 @@ impl KripkeCountermodel {
     /// kernel-checked `q : ¬φ`. Atomic forcing is empty for the present unequal
     /// equality: recursive negation holds because no accessible world forces
     /// that equality atom.
-    pub fn from_v3(
-        tag: DiagnosticTag,
-        v3: &Countermodel,
-        formula: &Term,
-    ) -> Result<Self, String> {
+    pub fn from_v3(tag: DiagnosticTag, v3: &Countermodel, formula: &Term) -> Result<Self, String> {
         let root = WorldId("w0".to_owned());
         let extension = WorldId("w1".to_owned());
         let model = Self {
@@ -205,9 +201,7 @@ impl KripkeCountermodel {
         }
         for (lower, middle) in &self.order {
             for (same_middle, upper) in &self.order {
-                if middle == same_middle
-                    && !self.order.contains(&(lower.clone(), upper.clone()))
-                {
+                if middle == same_middle && !self.order.contains(&(lower.clone(), upper.clone())) {
                     return Err(format!(
                         "Kripke preorder is not transitive: {} <= {} <= {}",
                         lower.0, middle.0, upper.0
@@ -217,16 +211,17 @@ impl KripkeCountermodel {
         }
         for (world, atom) in &self.forcing {
             if !self.worlds.contains(world) {
-                return Err(format!("Kripke forcing references unknown world {}", world.0));
+                return Err(format!(
+                    "Kripke forcing references unknown world {}",
+                    world.0
+                ));
             }
             match atom {
                 AtomId::Formula(formula) => {
                     formula.resolve(root)?;
                 }
                 AtomId::Named(name) => {
-                    return Err(format!(
-                        "Kripke forcing atom is not structural: {name}"
-                    ));
+                    return Err(format!("Kripke forcing atom is not structural: {name}"));
                 }
             }
         }
@@ -278,7 +273,7 @@ impl FormRef {
     }
 
     fn resolve<'a>(&self, root: &'a Term) -> Result<&'a Term, String> {
-        for step in &self.0.0 {
+        for step in &self.0 .0 {
             match (step, root) {
                 (FormulaStep::PiDomain, Term::Pi(_, _))
                 | (FormulaStep::PiCodomain, Term::Pi(_, _))
@@ -293,9 +288,7 @@ impl FormRef {
                 | (FormulaStep::EqType, Term::Eq(_, _, _))
                 | (FormulaStep::EqLeft, Term::Eq(_, _, _))
                 | (FormulaStep::EqRight, Term::Eq(_, _, _)) => {
-                    return Err(format!(
-                        "formula path enters non-proposition role {step:?}"
-                    ));
+                    return Err(format!("formula path enters non-proposition role {step:?}"));
                 }
                 _ => {
                     return Err(format!(
@@ -444,8 +437,7 @@ pub fn project_diagnostic(result: &ProverResult, triple: &ObligationTriple) -> O
         // disproved → false tag, S_{¬φ} region, countermodel (24 §1)
         Verdict::Disproved { countermodel } => {
             let tag = DiagnosticTag::False;
-            let cm =
-                KripkeCountermodel::from_v3(tag.clone(), countermodel, &triple.phi).ok();
+            let cm = KripkeCountermodel::from_v3(tag.clone(), countermodel, &triple.phi).ok();
             Some(Diagnostic {
                 obligation_id: result.obligation_id.clone(),
                 tag,

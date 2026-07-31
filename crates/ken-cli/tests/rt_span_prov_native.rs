@@ -327,8 +327,14 @@ fn sp_a_foreign_span_freeze_rejects_own_span_succeeds_on_both_engines() {
             "sp-a-freeze: exit status must agree; native={:?} interp={:?}",
             diff.native, diff.interpreted
         );
-        assert_eq!(diff.interpreted.exit_status, 0, "sp-a-freeze: interpreter exits Success");
-        assert_eq!(diff.native.exit_status, 0, "sp-a-freeze: native exits Success");
+        assert_eq!(
+            diff.interpreted.exit_status, 0,
+            "sp-a-freeze: interpreter exits Success"
+        );
+        assert_eq!(
+            diff.native.exit_status, 0,
+            "sp-a-freeze: native exits Success"
+        );
         // The load-bearing assertion: exact foreign/own freeze outcomes.
         let native = buffer_freeze_outcomes(&diff.native);
         let interp = buffer_freeze_outcomes(&diff.interpreted);
@@ -597,12 +603,20 @@ fn sp_a_own_span_write_succeeds_with_bytes_interp() {
     in_large_stack_thread("sp-a-write-own-interp", || {
         let (obs, files) = interpret_reading("sp-a-write-own", SP_A_WRITE_OWN, &["dest.bin"]);
         let writes = write_outcomes(&obs);
-        assert_eq!(writes.len(), 1, "expected one FsWriteAt event, got {writes:?}");
+        assert_eq!(
+            writes.len(),
+            1,
+            "expected one FsWriteAt event, got {writes:?}"
+        );
         match &writes[0] {
-            ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::WriteProgress(
-                ken_runtime::WriteProgressV1::Wrote(count),
-            )) if count.get() == 4 && count.effective_request() == 4 => {}
-            other => panic!("interp: own write must be exactly Wrote 4 (effective request 4), got {other:?}"),
+            ken_runtime::CanonicalOutcomeV1::Success(
+                ken_runtime::CanonicalReplyV1::WriteProgress(ken_runtime::WriteProgressV1::Wrote(
+                    count,
+                )),
+            ) if count.get() == 4 && count.effective_request() == 4 => {}
+            other => panic!(
+                "interp: own write must be exactly Wrote 4 (effective request 4), got {other:?}"
+            ),
         }
         assert_eq!(
             files[0], b"BBBB",
@@ -611,7 +625,6 @@ fn sp_a_own_span_write_succeeds_with_bytes_interp() {
         );
     });
 }
-
 
 // SP-C non-revival, full row — interpreter e2e. Buffer A mints span_old (AAAA
 // [2,6)) and escapes (A, span_old) out of its bracket; A is released on exit.
@@ -799,26 +812,48 @@ fn sp_c_released_span_not_revived_by_slot_reuse_interp() {
         let ib = ken_runtime::CanonicalOutcomeV1::Error(ken_runtime::SemanticErrorV1::Resource(
             ken_runtime::ResourceErrorV1::InvalidBounds,
         ));
-        let closed = ken_runtime::CanonicalOutcomeV1::Error(ken_runtime::SemanticErrorV1::Resource(
-            ken_runtime::ResourceErrorV1::Closed,
-        ));
+        let closed = ken_runtime::CanonicalOutcomeV1::Error(
+            ken_runtime::SemanticErrorV1::Resource(ken_runtime::ResourceErrorV1::Closed),
+        );
         let freezes = buffer_freeze_outcomes(&obs);
-        assert_eq!(freezes.len(), 3, "expected three BufferFreeze events, got {freezes:?}");
-        assert_eq!(freezes[0], closed, "pre-reuse: freeze on released A must be Closed");
-        assert_eq!(freezes[1], ib, "reuse: old-acquisition freeze must be InvalidBounds");
+        assert_eq!(
+            freezes.len(),
+            3,
+            "expected three BufferFreeze events, got {freezes:?}"
+        );
+        assert_eq!(
+            freezes[0], closed,
+            "pre-reuse: freeze on released A must be Closed"
+        );
+        assert_eq!(
+            freezes[1], ib,
+            "reuse: old-acquisition freeze must be InvalidBounds"
+        );
         match &freezes[2] {
             ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::Bytes(b))
                 if b.as_slice() == b"BBBB" => {}
             other => panic!("fresh-span freeze must be BBBB, got {other:?}"),
         }
         let writes = write_outcomes(&obs);
-        assert_eq!(writes.len(), 3, "expected three FsWriteAt events, got {writes:?}");
-        assert_eq!(writes[0], closed, "pre-reuse: write on released A must be Closed");
-        assert_eq!(writes[1], ib, "reuse: old-acquisition write must be InvalidBounds");
+        assert_eq!(
+            writes.len(),
+            3,
+            "expected three FsWriteAt events, got {writes:?}"
+        );
+        assert_eq!(
+            writes[0], closed,
+            "pre-reuse: write on released A must be Closed"
+        );
+        assert_eq!(
+            writes[1], ib,
+            "reuse: old-acquisition write must be InvalidBounds"
+        );
         match &writes[2] {
-            ken_runtime::CanonicalOutcomeV1::Success(ken_runtime::CanonicalReplyV1::WriteProgress(
-                ken_runtime::WriteProgressV1::Wrote(count),
-            )) if count.get() == 4 && count.effective_request() == 4 => {}
+            ken_runtime::CanonicalOutcomeV1::Success(
+                ken_runtime::CanonicalReplyV1::WriteProgress(ken_runtime::WriteProgressV1::Wrote(
+                    count,
+                )),
+            ) if count.get() == 4 && count.effective_request() == 4 => {}
             other => panic!("fresh-span write must be exactly Wrote 4, got {other:?}"),
         }
         // The rejected Closed/InvalidBounds writes target offset 0; the fresh
@@ -1013,7 +1048,6 @@ fn sp_b_foreign_and_stale_window_reject_with_no_effect_interp() {
         );
     });
 }
-
 
 // SP-B precedence — interpreter e2e. Host-width admission precedes provenance: a
 // foreign span_a on B with a valid file offset returns InvalidBounds; changing

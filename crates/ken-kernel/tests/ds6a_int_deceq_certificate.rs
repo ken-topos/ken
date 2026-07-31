@@ -50,7 +50,14 @@ fn mk_env() -> (GlobalEnv, Env0) {
     )
     .expect("PrimT");
 
-    (env, Env0 { prim_t, bool_, true_ })
+    (
+        env,
+        Env0 {
+            prim_t,
+            bool_,
+            true_,
+        },
+    )
 }
 
 fn eq_op_of_type(env: &mut GlobalEnv, ty: Term) -> GlobalId {

@@ -20,9 +20,15 @@ use crate::prover::{attempt_obligation, ProverResult, Verdict};
 pub struct ConfLabel(pub u8);
 
 impl ConfLabel {
-    fn join(self, other: Self) -> Self { Self(self.0.min(other.0)) }
-    fn meet(self, other: Self) -> Self { Self(self.0.max(other.0)) }
-    fn flows_to(self, clearance: Self) -> bool { self.0 >= clearance.0 }
+    fn join(self, other: Self) -> Self {
+        Self(self.0.min(other.0))
+    }
+    fn meet(self, other: Self) -> Self {
+        Self(self.0.max(other.0))
+    }
+    fn flows_to(self, clearance: Self) -> bool {
+        self.0 >= clearance.0
+    }
 }
 
 /// Integrity carrier: influencer count, ordered ordinarily.
@@ -30,9 +36,15 @@ impl ConfLabel {
 pub struct IntegLabel(pub u8);
 
 impl IntegLabel {
-    fn join(self, other: Self) -> Self { Self(self.0.max(other.0)) }
-    fn meet(self, other: Self) -> Self { Self(self.0.min(other.0)) }
-    fn flows_to(self, clearance: Self) -> bool { self.0 <= clearance.0 }
+    fn join(self, other: Self) -> Self {
+        Self(self.0.max(other.0))
+    }
+    fn meet(self, other: Self) -> Self {
+        Self(self.0.min(other.0))
+    }
+    fn flows_to(self, clearance: Self) -> bool {
+        self.0 <= clearance.0
+    }
 }
 
 /// A security label — a product of three independent factors (§2.2, §5a.1).
@@ -47,44 +59,76 @@ impl IntegLabel {
 /// Labels are **erased** before the kernel (§3); no kernel primitive introduced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Label {
-    pub conf:  ConfLabel,
+    pub conf: ConfLabel,
     pub integ: IntegLabel,
-    pub ct:    bool,
+    pub ct: bool,
 }
 
 // DLM standard lattice — named constants (§2.1).
-pub const PUBLIC:   Label = Label { conf: ConfLabel(2), integ: IntegLabel(0), ct: false };
-pub const INTERNAL: Label = Label { conf: ConfLabel(1), integ: IntegLabel(0), ct: false };
-pub const SECRET:   Label = Label { conf: ConfLabel(0), integ: IntegLabel(0), ct: false };
+pub const PUBLIC: Label = Label {
+    conf: ConfLabel(2),
+    integ: IntegLabel(0),
+    ct: false,
+};
+pub const INTERNAL: Label = Label {
+    conf: ConfLabel(1),
+    integ: IntegLabel(0),
+    ct: false,
+};
+pub const SECRET: Label = Label {
+    conf: ConfLabel(0),
+    integ: IntegLabel(0),
+    ct: false,
+};
 
-pub const TRUSTED:   Label = Label { conf: ConfLabel(2), integ: IntegLabel(0), ct: false };
-pub const UNTRUSTED: Label = Label { conf: ConfLabel(2), integ: IntegLabel(2), ct: false };
+pub const TRUSTED: Label = Label {
+    conf: ConfLabel(2),
+    integ: IntegLabel(0),
+    ct: false,
+};
+pub const UNTRUSTED: Label = Label {
+    conf: ConfLabel(2),
+    integ: IntegLabel(2),
+    ct: false,
+};
 
-pub const BOTTOM: Label = Label { conf: ConfLabel(2), integ: IntegLabel(0), ct: false };
-pub const TOP:    Label = Label { conf: ConfLabel(0), integ: IntegLabel(2), ct: true  };
+pub const BOTTOM: Label = Label {
+    conf: ConfLabel(2),
+    integ: IntegLabel(0),
+    ct: false,
+};
+pub const TOP: Label = Label {
+    conf: ConfLabel(0),
+    integ: IntegLabel(2),
+    ct: true,
+};
 
 /// `ct⊥` — the safe CT level; what a leakage sink demands as its clearance.
 pub const CT_BOT: Label = BOTTOM;
 /// `ct⊤` — the `@ct` taint; a timing-sensitive value that must not steer a `LeakSink`.
-pub const CT_TOP: Label = Label { conf: ConfLabel(2), integ: IntegLabel(0), ct: true };
+pub const CT_TOP: Label = Label {
+    conf: ConfLabel(2),
+    integ: IntegLabel(0),
+    ct: true,
+};
 
 /// `ℓ ⊔ κ` — componentwise join (§2.2 product lattice + §5a.1 CT axis).
 /// - conf: minimum reader count; integ: maximum influencer count.
 /// - ct: logical-OR (any `@ct` input ⇒ `@ct` result; cannot compute `@ct` away).
 pub fn join(a: Label, b: Label) -> Label {
     Label {
-        conf:  a.conf.join(b.conf),
+        conf: a.conf.join(b.conf),
         integ: a.integ.join(b.integ),
-        ct:    a.ct || b.ct,
+        ct: a.ct || b.ct,
     }
 }
 
 /// `ℓ ⊓ κ` — componentwise meet (§2.2).
 pub fn meet(a: Label, b: Label) -> Label {
     Label {
-        conf:  a.conf.meet(b.conf),
+        conf: a.conf.meet(b.conf),
         integ: a.integ.meet(b.integ),
-        ct:    a.ct && b.ct,
+        ct: a.ct && b.ct,
     }
 }
 
@@ -96,7 +140,7 @@ pub fn meet(a: Label, b: Label) -> Label {
 pub fn flows_to(label: Label, clearance: Label) -> bool {
     label.conf.flows_to(clearance.conf)
         && label.integ.flows_to(clearance.integ)
-        && (!label.ct   || clearance.ct)
+        && (!label.ct || clearance.ct)
 }
 
 // ─── §5a @ct label — separate opt-in axis ─────────────────────────────────
@@ -136,10 +180,10 @@ pub enum VisOpClass {
 pub fn classify_vis_op(op: VisOpClass) -> Option<LeakageSink> {
     match op {
         VisOpClass::ControlFlowBranch => Some(LeakageSink::BranchGuard),
-        VisOpClass::ArrayIndex        => Some(LeakageSink::MemoryIndex),
-        VisOpClass::VarTimePrimitive  => Some(LeakageSink::VarTimePrimitive),
-        VisOpClass::PureOp            => None,
-        VisOpClass::CtByteEq          => None,
+        VisOpClass::ArrayIndex => Some(LeakageSink::MemoryIndex),
+        VisOpClass::VarTimePrimitive => Some(LeakageSink::VarTimePrimitive),
+        VisOpClass::PureOp => None,
+        VisOpClass::CtByteEq => None,
     }
 }
 
@@ -205,10 +249,17 @@ pub enum FlowResult {
 }
 
 impl FlowResult {
-    pub fn is_accept(&self) -> bool { matches!(self, Self::Accept) }
-    pub fn is_reject(&self) -> bool { matches!(self, Self::Reject(_)) }
+    pub fn is_accept(&self) -> bool {
+        matches!(self, Self::Accept)
+    }
+    pub fn is_reject(&self) -> bool {
+        matches!(self, Self::Reject(_))
+    }
     pub fn error(&self) -> Option<&FlowError> {
-        match self { Self::Reject(e) => Some(e), _ => None }
+        match self {
+            Self::Reject(e) => Some(e),
+            _ => None,
+        }
     }
 }
 
@@ -225,9 +276,13 @@ pub struct FlowCtx {
 
 impl FlowCtx {
     /// Start with `pc = ⊥` — no taint in the initial context.
-    pub fn new() -> Self { FlowCtx { pc: BOTTOM } }
+    pub fn new() -> Self {
+        FlowCtx { pc: BOTTOM }
+    }
 
-    pub fn with_pc(pc: Label) -> Self { FlowCtx { pc } }
+    pub fn with_pc(pc: Label) -> Self {
+        FlowCtx { pc }
+    }
 
     /// **L-PURE**: a pure value at any label — no flow constraint, always accepts.
     pub fn l_pure(&self) -> FlowResult {
@@ -250,7 +305,9 @@ impl FlowCtx {
     /// A bug that drops the `pc.ct`-raise lets a `@ct`-guarded inner op through
     /// (CT-A4 target — the implicit-flow discriminator).
     pub fn l_observe(&self, value_label: Label) -> FlowCtx {
-        FlowCtx { pc: join(self.pc, value_label) }
+        FlowCtx {
+            pc: join(self.pc, value_label),
+        }
     }
 
     /// **L-SINK** (`61 §3.1`): write data `@ ℓ` to a sink with clearance `κ`.
@@ -260,7 +317,13 @@ impl FlowCtx {
         if flows_to(combined, clearance) {
             FlowResult::Accept
         } else {
-            FlowResult::Reject(FlowError::new("L-SINK", value_label, self.pc, clearance, site))
+            FlowResult::Reject(FlowError::new(
+                "L-SINK",
+                value_label,
+                self.pc,
+                clearance,
+                site,
+            ))
         }
     }
 
@@ -276,15 +339,14 @@ impl FlowCtx {
     ///
     /// The observable is elaboration accept/reject — **never** a V3 verdict (§5a.3).
     /// Ken proves only the source-level precondition `Q`; timing is `[Ward]`'s (§5a.6).
-    pub fn l_ct_sink(
-        &self,
-        value_label: &Label,
-        _sink: &LeakageSink,
-        site: &str,
-    ) -> FlowResult {
+    pub fn l_ct_sink(&self, value_label: &Label, _sink: &LeakageSink, site: &str) -> FlowResult {
         if value_label.ct || self.pc.ct {
             FlowResult::Reject(FlowError::new(
-                "L-CT-SINK", *value_label, self.pc, CT_BOT, site,
+                "L-CT-SINK",
+                *value_label,
+                self.pc,
+                CT_BOT,
+                site,
             ))
         } else {
             FlowResult::Accept
@@ -293,7 +355,9 @@ impl FlowCtx {
 }
 
 impl Default for FlowCtx {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 // ─── §3.2 No-laundering through effect routing ───────────────────────────────
@@ -323,7 +387,9 @@ pub struct DeclassifyCap {
 }
 
 impl DeclassifyCap {
-    pub fn new(from: Label, to: Label) -> Self { DeclassifyCap { from, to } }
+    pub fn new(from: Label, to: Label) -> Self {
+        DeclassifyCap { from, to }
+    }
     /// `to ⊑ from` and strictly lower (a genuine downgrade).
     pub fn is_valid(&self) -> bool {
         flows_to(self.to, self.from) && self.to != self.from
@@ -346,17 +412,21 @@ pub fn check_declassify(
     target_to: Label,
 ) -> DeclassifyResult {
     match cap {
-        None => DeclassifyResult::Reject { reason: "missing Cap_declassify" },
-        Some(c) if c.from != target_from || c.to != target_to => {
-            DeclassifyResult::Reject { reason: "capability edge mismatch" }
-        }
-        Some(c) if !c.is_valid() => {
-            DeclassifyResult::Reject { reason: "invalid capability: to ⊋ from" }
-        }
-        Some(c) if value_label != c.from => {
-            DeclassifyResult::Reject { reason: "value label does not match capability from-level" }
-        }
-        Some(c) => DeclassifyResult::Accept { downgraded_label: c.to },
+        None => DeclassifyResult::Reject {
+            reason: "missing Cap_declassify",
+        },
+        Some(c) if c.from != target_from || c.to != target_to => DeclassifyResult::Reject {
+            reason: "capability edge mismatch",
+        },
+        Some(c) if !c.is_valid() => DeclassifyResult::Reject {
+            reason: "invalid capability: to ⊋ from",
+        },
+        Some(c) if value_label != c.from => DeclassifyResult::Reject {
+            reason: "value label does not match capability from-level",
+        },
+        Some(c) => DeclassifyResult::Accept {
+            downgraded_label: c.to,
+        },
     }
 }
 
@@ -392,7 +462,7 @@ pub const TRIGGER_SEC1_REDUCE: &str = "[Sec1-reduce]";
 /// spelling is B1/`71`-deferred (defer-spelling-not-concept).
 #[derive(Debug, Clone)]
 pub struct CtPromise {
-    pub param_name:   String,
+    pub param_name: String,
     /// Always `true` — this is a source-level precondition, NOT a timing guarantee.
     pub source_level: bool,
 }
@@ -403,7 +473,7 @@ pub struct CtPromise {
 #[derive(Debug, Clone)]
 pub struct CtGuaranteeQ {
     /// The named parameter the promise covers.
-    pub param_name:   String,
+    pub param_name: String,
     /// Always `true` — source-level precondition, NOT a timing guarantee.
     pub source_level: bool,
 }
@@ -420,7 +490,7 @@ pub fn check_ct_promise(
 ) -> Result<CtGuaranteeQ, FlowError> {
     match body_result {
         FlowResult::Accept => Ok(CtGuaranteeQ {
-            param_name:   promise.param_name.clone(),
+            param_name: promise.param_name.clone(),
             source_level: true,
         }),
         FlowResult::Reject(e) => Err(e),

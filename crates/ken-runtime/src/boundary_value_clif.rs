@@ -1161,9 +1161,7 @@ fn define_host_payload<M: Module>(
             .load(types::I64, MemFlags::trusted(), node, NODE_FIELD_COUNT);
         let selected_only = b.ins().icmp_imm(IntCC::Equal, count, 1);
         let legacy_index = b.ins().select(took_ok, ok_index, err_index);
-        let index = b
-            .ins()
-            .select(selected_only, selected_index, legacy_index);
+        let index = b.ins().select(selected_only, selected_index, legacy_index);
         let within = b.ins().icmp(IntCC::UnsignedLessThan, index, count);
         let ok = b.create_block();
         let oob = b.create_block();
@@ -3249,10 +3247,7 @@ pub(crate) mod tests {
         );
 
         let unissued_field = RuntimeGroundValue::Record {
-            fields: vec![(
-                "unissued_field".to_string(),
-                RuntimeGroundValue::Bool(true),
-            )],
+            fields: vec![("unissued_field".to_string(), RuntimeGroundValue::Bool(true))],
         };
         assert!(
             materialize_ground(&mut store, &unissued_field).is_none(),
@@ -3276,8 +3271,14 @@ pub(crate) mod tests {
         // ⭐ And the issued word is what the carrier actually carries -- chosen
         // far above anything `intern_symbol` numbers to, so a re-mint could not
         // land on it by coincidence.
-        assert_eq!(store.carrier_identity("ctor:fixture::Unissued::Ctor"), Some(0x7700_1234));
-        assert_eq!(store.carrier_symbol(0x7700_1234), Some("ctor:fixture::Unissued::Ctor"));
+        assert_eq!(
+            store.carrier_identity("ctor:fixture::Unissued::Ctor"),
+            Some(0x7700_1234)
+        );
+        assert_eq!(
+            store.carrier_symbol(0x7700_1234),
+            Some("ctor:fixture::Unissued::Ctor")
+        );
 
         // ⛔ Two authorities for one symbol is a caller bug, refused rather than
         // silently overwritten -- an overwrite would let a later issuer win and
@@ -4319,11 +4320,12 @@ pub(crate) mod tests {
     ) -> (BoundaryTag, BoundaryClass) {
         use crate::boundary_resource_profile::BoundaryResourceScope;
         match scope {
-            BoundaryResourceScope::Persistent => (BoundaryTag::PersistentGround, BoundaryClass::Int),
-            BoundaryResourceScope::Invocation => (
-                BoundaryTag::InvocationHostResult,
-                BoundaryClass::HostResult,
-            ),
+            BoundaryResourceScope::Persistent => {
+                (BoundaryTag::PersistentGround, BoundaryClass::Int)
+            }
+            BoundaryResourceScope::Invocation => {
+                (BoundaryTag::InvocationHostResult, BoundaryClass::HostResult)
+            }
         }
     }
 
@@ -4376,9 +4378,10 @@ pub(crate) mod tests {
         b.ins().return_(&[status]);
         b.switch_to_block(ok);
         let word = b.ins().load(types::I64, MemFlags::trusted(), out, 0);
-        let marker = b
-            .ins()
-            .iconst(types::I64, crate::boundary_value::BOUNDARY_INT_REGION_LIMBS as i64);
+        let marker = b.ins().iconst(
+            types::I64,
+            crate::boundary_value::BOUNDARY_INT_REGION_LIMBS as i64,
+        );
         let call = b.ins().call(refs.store_int_tag, &[base, word, marker]);
         let status = b.inst_results(call)[0];
         let good = b.ins().icmp_imm(IntCC::Equal, status, BOUNDARY_OK);
@@ -7346,7 +7349,10 @@ pub(crate) mod tests {
         store.seal_persistent();
 
         let slots_before = store.store_resident_slots();
-        assert!(store.adopt(child).is_ok(), "the compound child adopts alone");
+        assert!(
+            store.adopt(child).is_ok(),
+            "the compound child adopts alone"
+        );
         assert!(
             store.store_resident_slots() > slots_before,
             "and minting it moves the store's slot count — so 'unchanged' in the \
@@ -7358,9 +7364,6 @@ pub(crate) mod tests {
             "and it acquires a NODE_SLOT, so NULL_SLOT above is discriminating"
         );
     }
-
-
-
 
     /// **`AC-6` — `HostResult` and `BorrowedOpaque` are never placed in the
     /// permanent store.**
@@ -8535,7 +8538,10 @@ pub(crate) mod tests {
         let cells = [
             (BoundaryResourceScope::Persistent, BoundaryResource::Nodes),
             (BoundaryResourceScope::Persistent, BoundaryResource::Words),
-            (BoundaryResourceScope::Persistent, BoundaryResource::DataBytes),
+            (
+                BoundaryResourceScope::Persistent,
+                BoundaryResource::DataBytes,
+            ),
             (
                 BoundaryResourceScope::Persistent,
                 BoundaryResource::NativeIntLimbs,
@@ -8742,5 +8748,4 @@ pub(crate) mod tests {
              is reachable after all and owes a real at-limit-plus-one fixture"
         );
     }
-
 }

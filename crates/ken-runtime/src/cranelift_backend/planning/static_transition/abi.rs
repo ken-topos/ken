@@ -22,7 +22,8 @@ use super::semantic_ir::{
     SemanticOperandElement, SemanticOwner,
 };
 use super::{
-    planner_capacity_error, planner_error, unsupported, CraneliftBackendError, EdgeKind,
+    planner_capacity_error, planner_error, unsupported, ContinuationSpecializationId,
+    CraneliftBackendError, EdgeKind, PlannedContinuationSpecialization,
     PlannedStaticCallableSpecialization, SemanticPlane, SemanticSourceKind, SemanticSourceSeed,
     StaticCallableSpecializationId, StaticEdge, StaticEdgeId, StaticNode, StaticNodeId,
     StaticOriginId, TransitionKind,
@@ -316,6 +317,15 @@ pub(in crate::cranelift_backend) enum AbiUnitDefinition {
         specialization: StaticCallableSpecializationId,
         base_origin: StaticOriginId,
     },
+    /// A planner-derived, out-of-line recursor continuation specialization.
+    ///
+    /// The opaque id resolves only to the exact causal producer/consumer/worker
+    /// relation retained by the static plan. No code or continuation identity
+    /// is present in the runtime frame.
+    ContinuationSpecialization {
+        specialization: ContinuationSpecializationId,
+        continuation_origin: StaticOriginId,
+    },
 }
 
 /// Static compilation mode for the explicitly recorded root scheduling entry.
@@ -462,6 +472,7 @@ impl AbiPlane {
             }
             AbiUnitDefinition::ClosureBody { provenance, .. } => (true, Some(provenance)),
             AbiUnitDefinition::StaticCallableSpecialization { .. } => (false, None),
+            AbiUnitDefinition::ContinuationSpecialization { .. } => (false, None),
         };
         Ok(AbiDescriptorShape {
             definition_is_closure_body,
@@ -560,6 +571,7 @@ pub(super) fn build_abi_plane(
         root_entry,
         root_ingress,
         &[],
+        &[],
     )?;
     Ok(abi)
 }
@@ -644,6 +656,324 @@ pub(super) fn extend_static_callable_abi(
     Ok(())
 }
 
+/// Append the closed continuation-specialization population after every base
+/// and static-callable unit has been interned.
+pub(super) fn extend_continuation_specialization_abi(
+    abi: &mut AbiPlane,
+    _plane: &SemanticPlane,
+    specializations: &[PlannedContinuationSpecialization],
+) -> Result<(), CraneliftBackendError> {
+    for specialization in specializations {
+        let function =
+            PredeclaredFunctionId(u32::try_from(abi.descriptors.len()).map_err(|_| {
+                planner_capacity_error("continuation specialization descriptor exhausted")
+            })?);
+        if specialization.function != function {
+            return Err(planner_error(
+                "continuation specialization function identity is not dense",
+            ));
+        }
+        let continuation_planned_node = abi
+            .descriptors
+            .iter()
+            .find(|descriptor| descriptor.function == specialization.key.consumer_owner)
+            .map(|descriptor| descriptor.planned_node)
+            .ok_or_else(|| {
+                planner_error("continuation specialization consumer has no emitted ABI descriptor")
+            })?;
+        let definition = AbiUnitDefinition::ContinuationSpecialization {
+            specialization: specialization.id,
+            continuation_origin: specialization.key.continuation_origin,
+        };
+        let parameters = specialization.key.ordinary_parameters;
+        let captures = specialization.key.continuation_captures;
+        let slot_start = abi.slots.len();
+        push_slots(&mut abi.slots, definition, parameters, captures)?;
+        let slots = DenseRange {
+            start: u32::try_from(slot_start)
+                .map_err(|_| planner_capacity_error("abi slot identity exhausted"))?,
+            len: u32::try_from(abi.slots.len() - slot_start)
+                .map_err(|_| planner_capacity_error("abi slot range exhausted"))?,
+        };
+        let header = frame_header(&abi.slots[slot_start..], parameters, captures)?;
+        abi.descriptors.push(AbiDescriptor {
+            function,
+            planned_node: continuation_planned_node,
+            origin: specialization.key.continuation_origin,
+            definition,
+            header,
+            slots,
+        });
+    }
+    Ok(())
+}
+
+/// Extend each causally selected producer unit with the ordinary caller
+/// environment that its branch-local continuation calls must forward.
+///
+/// This rebuilds the dense slot plane because a descriptor's slots are one
+/// contiguous range. Appending the new fields at the end of the global slot
+/// vector would place them outside their producer's range and silently turn a
+/// continuation environment into unrelated frame storage.
+pub(super) fn extend_continuation_producer_abi(
+    abi: &mut AbiPlane,
+    specializations: &[PlannedContinuationSpecialization],
+) -> Result<(), CraneliftBackendError> {
+    let mut extensions = std::collections::BTreeMap::new();
+    for descriptor in &abi.descriptors {
+        let extension =
+            continuation_producer_capture_extension(specializations, descriptor.function)?;
+        if extension != 0 {
+            extensions.insert(descriptor.function, extension);
+        }
+    }
+    if extensions.is_empty() {
+        return Ok(());
+    }
+
+    let old_slots = std::mem::take(&mut abi.slots);
+    let mut rebuilt = Vec::new();
+    for descriptor in &mut abi.descriptors {
+        let original = slot_slice(&old_slots, descriptor.slots)?;
+        let extra = extensions.get(&descriptor.function).copied().unwrap_or(0);
+        let captures = descriptor
+            .header
+            .captures
+            .checked_add(extra)
+            .ok_or_else(|| {
+                planner_capacity_error("continuation producer capture population exhausted")
+            })?;
+        let start = rebuilt.len();
+        let input_end = usize::try_from(
+            descriptor
+                .header
+                .parameters
+                .checked_add(descriptor.header.captures)
+                .ok_or_else(|| {
+                    planner_capacity_error("continuation producer input population exhausted")
+                })?,
+        )
+        .map_err(|_| planner_capacity_error("continuation producer input population exhausted"))?;
+        let (inputs, convention) = original.split_at(input_end);
+        rebuilt.extend_from_slice(inputs);
+        for ordinal in descriptor.header.captures..captures {
+            rebuilt.push(slot(AbiSlotKind::Capture, AbiCarrier::ValueWord, ordinal));
+        }
+        rebuilt.extend_from_slice(convention);
+        descriptor.slots = DenseRange {
+            start: u32::try_from(start)
+                .map_err(|_| planner_capacity_error("abi slot identity exhausted"))?,
+            len: u32::try_from(rebuilt.len() - start)
+                .map_err(|_| planner_capacity_error("abi slot range exhausted"))?,
+        };
+        descriptor.header =
+            frame_header(&rebuilt[start..], descriptor.header.parameters, captures)?;
+    }
+    abi.slots = rebuilt;
+    Ok(())
+}
+
+pub(super) fn continuation_producer_capture_extension(
+    specializations: &[PlannedContinuationSpecialization],
+    function: PredeclaredFunctionId,
+) -> Result<u32, CraneliftBackendError> {
+    if specializations
+        .iter()
+        .any(|specialization| specialization.function == function)
+    {
+        // A generated unit captures its checked continuation's complete
+        // environment. Any strict outer return hole is therefore already an
+        // ordered slice of those captures; appending it again would duplicate
+        // the suffix and change the unit ABI at each recursive layer.
+        return Ok(0);
+    }
+    let inherent_consumer = specializations
+        .iter()
+        .find(|specialization| specialization.function == function)
+        .map(|specialization| specialization.key.consumer_owner);
+    let mut environments = std::collections::BTreeMap::new();
+    for specialization in specializations.iter().filter(|specialization| {
+        specialization.key.producer_owner == function
+            && specialization.key.consumer_owner != function
+            && Some(specialization.key.consumer_owner) != inherent_consumer
+    }) {
+        let environment = (
+            specialization.key.continuation_origin,
+            specialization.key.checked_frame_id,
+            specialization.key.continuation_environment_is_local,
+        );
+        match environments.entry(environment) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(specialization.key.continuation_captures);
+            }
+            std::collections::btree_map::Entry::Occupied(entry)
+                if *entry.get() == specialization.key.continuation_captures => {}
+            std::collections::btree_map::Entry::Occupied(_) => {
+                return Err(planner_error(
+                    "one continuation consumer has incompatible environments",
+                ));
+            }
+        }
+    }
+    environments.values().try_fold(0u32, |total, count| {
+        total.checked_add(*count).ok_or_else(|| {
+            planner_capacity_error("continuation producer capture population exhausted")
+        })
+    })
+}
+
+pub(super) fn continuation_producer_input_start(
+    specializations: &[PlannedContinuationSpecialization],
+    specialization: &PlannedContinuationSpecialization,
+    producer_owner: PredeclaredFunctionId,
+) -> Result<u32, CraneliftBackendError> {
+    if specialization.key.consumer_owner == producer_owner {
+        return Ok(0);
+    }
+    if let Some(producer_specialization) = specializations
+        .iter()
+        .find(|candidate| candidate.function == producer_owner)
+    {
+        if specialization.key.producer_owner == producer_owner
+            && specialization
+                .key
+                .continuation_environment_is_extension
+        {
+            let preceding = producer_specialization
+                .key
+                .continuation_captures
+                .checked_sub(specialization.key.continuation_captures)
+                .ok_or_else(|| {
+                    planner_error(
+                        "continuation extension exceeds its producer environment",
+                    )
+                })?;
+            return producer_specialization
+                .key
+                .ordinary_parameters
+                .checked_add(preceding)
+                .ok_or_else(|| {
+                    planner_capacity_error(
+                        "continuation extension input offset exhausted",
+                    )
+                });
+        }
+        if producer_specialization.key.consumer_owner == specialization.key.consumer_owner {
+            if producer_specialization.key.continuation_captures
+                < specialization.key.continuation_captures
+            {
+                return Err(planner_error(format!(
+                    "nested continuation specialization reuses an incompatible environment: \
+                     producer={producer_owner:?}, producer_consumer={:?}, \
+                     producer_captures={}, target={:?}, target_consumer={:?}, \
+                     target_captures={}",
+                    producer_specialization.key.consumer_owner,
+                    producer_specialization.key.continuation_captures,
+                    specialization.function,
+                    specialization.key.consumer_owner,
+                    specialization.key.continuation_captures,
+                )));
+            }
+            // A structurally inner checked continuation can close over an
+            // additional local while still carrying the complete ordered
+            // environment of its outer return hole as a prefix. The outer
+            // direct edge consumes only its own planner-declared prefix.
+            return Ok(producer_specialization.key.ordinary_parameters);
+        }
+        if producer_specialization.key.consumer_owner == producer_owner {
+            return Err(planner_error(
+                "continuation specialization is its own consumer environment",
+            ));
+        }
+        // A generated continuation unit carries the complete ordinary input
+        // environment of its checked consumer after its one producer-result
+        // parameter.  An outer return hole reached from that unit therefore
+        // reuses the exact slice already captured from the consumer; it does
+        // not append a second copy after the generated unit's ABI.  Project
+        // the target slice through that carried environment recursively.
+        return producer_specialization
+            .key
+            .ordinary_parameters
+            .checked_add(continuation_producer_input_start(
+                specializations,
+                specialization,
+                producer_specialization.key.consumer_owner,
+            )?)
+            .ok_or_else(|| {
+                planner_capacity_error("nested continuation producer input offset exhausted")
+            });
+    }
+    let inherent_consumer = specializations
+        .iter()
+        .find(|candidate| candidate.function == producer_owner)
+        .map(|candidate| candidate.key.consumer_owner);
+    let mut environments = std::collections::BTreeMap::new();
+    for candidate in specializations.iter().filter(|candidate| {
+        candidate.key.producer_owner == producer_owner
+            && candidate.key.consumer_owner != producer_owner
+            && Some(candidate.key.consumer_owner) != inherent_consumer
+    }) {
+        let environment = (
+            candidate.key.continuation_origin,
+            candidate.key.checked_frame_id,
+            candidate.key.continuation_environment_is_local,
+        );
+        match environments.entry(environment) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(candidate.key.continuation_captures);
+            }
+            std::collections::btree_map::Entry::Occupied(entry)
+                if *entry.get() == candidate.key.continuation_captures => {}
+            std::collections::btree_map::Entry::Occupied(_) => {
+                return Err(planner_error(
+                    "one continuation consumer has incompatible environments",
+                ));
+            }
+        }
+    }
+    let selected_environment = (
+        specialization.key.continuation_origin,
+        specialization.key.checked_frame_id,
+        specialization.key.continuation_environment_is_local,
+    );
+    let preceding = environments
+        .range(..selected_environment)
+        .try_fold(0u32, |total, (_, count)| {
+            total.checked_add(*count).ok_or_else(|| {
+                planner_capacity_error("continuation producer input offset exhausted")
+            })
+        })?;
+    let base_inputs = if producer_owner == specialization.key.producer_owner {
+        specialization.key.producer_base_inputs
+    } else if let Some(binding) = specializations.iter().find(|candidate| {
+        candidate.key.producer_owner == producer_owner
+            && candidate.key.consumer_owner == specialization.key.consumer_owner
+    }) {
+        binding.key.producer_base_inputs
+    } else {
+        let producer = specializations
+            .iter()
+            .find(|candidate| candidate.function == producer_owner)
+            .ok_or_else(|| {
+                planner_error(format!(
+                    "recursive continuation producer has no specialization descriptor: \
+                     producer={producer_owner:?}, target={:?}, target_key={:?}",
+                    specialization.function, specialization.key,
+                ))
+            })?;
+        producer
+            .key
+            .ordinary_parameters
+            .checked_add(producer.key.continuation_captures)
+            .ok_or_else(|| {
+                planner_capacity_error("recursive continuation producer input population exhausted")
+            })?
+    };
+    base_inputs
+        .checked_add(preceding)
+        .ok_or_else(|| planner_capacity_error("continuation producer input offset exhausted"))
+}
+
 /// **`C4`/`AC-5` — cross-module linking is a CHECKED exclusion.**
 ///
 /// An imported declaration receives **no callable descriptor** and fails here,
@@ -686,7 +1016,8 @@ fn reject_imported_capture_edges(
                 provenance,
             } => (defining_origin, provenance),
             AbiUnitDefinition::SchedulingEntry { .. }
-            | AbiUnitDefinition::StaticCallableSpecialization { .. } => continue,
+            | AbiUnitDefinition::StaticCallableSpecialization { .. }
+            | AbiUnitDefinition::ContinuationSpecialization { .. } => continue,
         };
         if provenance != AbiCaptureProvenance::Lexical {
             continue;
@@ -951,6 +1282,11 @@ fn declared_arity(
                 "static callable specialization arity requires its interned plan",
             ));
         }
+        AbiUnitDefinition::ContinuationSpecialization { .. } => {
+            return Err(planner_error(
+                "continuation specialization arity requires its interned plan",
+            ));
+        }
     };
 
     let seed = source_for(sources, defining_origin)?;
@@ -1034,7 +1370,8 @@ fn push_slots(
         }
         AbiUnitDefinition::TransparentDeclarationClosure { provenance, .. }
         | AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
-        AbiUnitDefinition::StaticCallableSpecialization { .. } => Some(AbiCarrier::ValueWord),
+        AbiUnitDefinition::StaticCallableSpecialization { .. }
+        | AbiUnitDefinition::ContinuationSpecialization { .. } => Some(AbiCarrier::ValueWord),
     };
     if let Some(carrier) = capture_carrier {
         for ordinal in 0..captures {
@@ -1396,6 +1733,7 @@ impl AbiPlane {
         root_entry: StaticNodeId,
         root_ingress: AbiRootIngress,
         specializations: &[PlannedStaticCallableSpecialization],
+        continuation_specializations: &[PlannedContinuationSpecialization],
     ) -> Result<(), CraneliftBackendError> {
         let sources = positioned_sources(nodes, sources)?;
         let sources = sources.as_slice();
@@ -1405,6 +1743,7 @@ impl AbiPlane {
             .functions
             .len()
             .checked_add(specializations.len())
+            .and_then(|count| count.checked_add(continuation_specializations.len()))
             .ok_or_else(|| planner_capacity_error("abi descriptor population exhausted"))?;
         if self.descriptors.len() != expected_descriptors {
             return Err(planner_error(
@@ -1417,6 +1756,73 @@ impl AbiPlane {
             unit_definitions(plane, sources, edges, entries, root_entry, root_ingress)?;
 
         for (ordinal, descriptor) in self.descriptors.iter().enumerate() {
+            if ordinal >= plane.functions.len() + specializations.len() {
+                let specialization = continuation_specializations
+                    .get(ordinal - plane.functions.len() - specializations.len())
+                    .ok_or_else(|| {
+                        planner_error("abi descriptor names an unknown continuation specialization")
+                    })?;
+                let id =
+                    PredeclaredFunctionId(u32::try_from(ordinal).map_err(|_| {
+                        planner_capacity_error("abi descriptor identity exhausted")
+                    })?);
+                let continuation = self
+                    .descriptors
+                    .get(specialization.key.consumer_owner.0 as usize)
+                    .ok_or_else(|| {
+                        planner_error("continuation specialization consumer is absent")
+                    })?;
+                let expected_definition = AbiUnitDefinition::ContinuationSpecialization {
+                    specialization: specialization.id,
+                    continuation_origin: specialization.key.continuation_origin,
+                };
+                if descriptor.function != id
+                    || descriptor.function != specialization.function
+                    || descriptor.planned_node != continuation.planned_node
+                    || descriptor.origin != specialization.key.continuation_origin
+                    || descriptor.definition != expected_definition
+                {
+                    return Err(planner_error(
+                        "continuation specialization ABI descriptor disagrees with its interned \
+                         state",
+                    ));
+                }
+                let producer_extension = continuation_producer_capture_extension(
+                    continuation_specializations,
+                    specialization.function,
+                )?;
+                let input_captures = specialization
+                    .key
+                    .continuation_captures
+                    .checked_add(producer_extension)
+                    .ok_or_else(|| {
+                        planner_capacity_error(
+                            "continuation specialization input capture population exhausted",
+                        )
+                    })?;
+                if descriptor.header.parameters != specialization.key.ordinary_parameters
+                    || descriptor.header.captures != input_captures
+                {
+                    return Err(planner_error(
+                        "continuation specialization ABI does not contain exactly its ordinary \
+                         operands",
+                    ));
+                }
+                let slots = slot_slice(&self.slots, descriptor.slots)?;
+                let mut expected = Vec::new();
+                push_slots(
+                    &mut expected,
+                    expected_definition,
+                    specialization.key.ordinary_parameters,
+                    input_captures,
+                )?;
+                if slots != expected.as_slice() {
+                    return Err(planner_error(
+                        "continuation specialization ABI slot run is not exact",
+                    ));
+                }
+                continue;
+            }
             if ordinal >= plane.functions.len() {
                 let specialization = specializations
                     .get(ordinal - plane.functions.len())
@@ -1513,18 +1919,25 @@ impl AbiPlane {
             }
 
             let (parameters, captures) = declared_arity(plane, sources, definitions[ordinal])?;
+            let continuation_captures = continuation_producer_capture_extension(
+                continuation_specializations,
+                descriptor.function,
+            )?;
+            let total_captures = captures.checked_add(continuation_captures).ok_or_else(|| {
+                planner_capacity_error("continuation producer capture population exhausted")
+            })?;
             if descriptor.header.parameters != parameters {
                 return Err(planner_error(
                     "abi descriptor parameter count is not its origin's declared arity",
                 ));
             }
             // `D5` — missing capture slots, and extra capture slots, each named.
-            if descriptor.header.captures < captures {
+            if descriptor.header.captures < total_captures {
                 return Err(planner_error(
                     "abi descriptor is missing a declared capture slot",
                 ));
             }
-            if descriptor.header.captures > captures {
+            if descriptor.header.captures > total_captures {
                 return Err(planner_error(
                     "abi descriptor declares a capture slot its origin does not have",
                 ));
@@ -1538,7 +1951,7 @@ impl AbiPlane {
             // something the origin did not declare, which is the dependence on
             // caller depth this node exists to remove.
             let expected = (parameters as usize)
-                .checked_add(captures as usize)
+                .checked_add(total_captures as usize)
                 .and_then(|total| total.checked_add(CONVENTION_SLOTS.len()))
                 .ok_or_else(|| planner_capacity_error("abi frame slot count exhausted"))?;
             if slots.len() > expected {
@@ -1552,10 +1965,36 @@ impl AbiPlane {
                 ));
             }
 
-            validate_slot_run(slots, parameters, captures, definitions[ordinal])?;
+            let mut expected_slots = Vec::new();
+            push_slots(
+                &mut expected_slots,
+                definitions[ordinal],
+                parameters,
+                captures,
+            )?;
+            let convention_start = expected_slots
+                .len()
+                .checked_sub(CONVENTION_SLOTS.len())
+                .ok_or_else(|| planner_error("abi convention slot run underflowed"))?;
+            for ordinal in captures..total_captures {
+                expected_slots.insert(
+                    convention_start
+                        + usize::try_from(ordinal - captures).map_err(|_| {
+                            planner_capacity_error(
+                                "continuation producer capture ordinal exhausted",
+                            )
+                        })?,
+                    slot(AbiSlotKind::Capture, AbiCarrier::ValueWord, ordinal),
+                );
+            }
+            if slots != expected_slots.as_slice() {
+                return Err(planner_error(
+                    "continuation producer ABI slot run is not exact",
+                ));
+            }
 
             // The header is derived from the slots, so it must agree with them.
-            let derived = frame_header(slots, parameters, captures)?;
+            let derived = frame_header(slots, parameters, total_captures)?;
             if descriptor.header != derived {
                 return Err(planner_error(
                     "abi frame header is not derived from its own slot run",
@@ -1564,7 +2003,7 @@ impl AbiPlane {
         }
 
         reject_imported_capture_edges(plane, sources, &definitions)?;
-        self.validate_boundary_layouts(plane, sources, edges)?;
+        self.validate_boundary_layouts(plane, sources, edges, continuation_specializations)?;
         self.validate_declaration_call_layouts(plane, sources, edges)?;
         Ok(())
     }
@@ -1639,7 +2078,8 @@ impl AbiPlane {
                     false,
                     AbiUnitDefinition::TransparentDeclarationClosure { .. }
                     | AbiUnitDefinition::ClosureBody { .. }
-                    | AbiUnitDefinition::StaticCallableSpecialization { .. },
+                    | AbiUnitDefinition::StaticCallableSpecialization { .. }
+                    | AbiUnitDefinition::ContinuationSpecialization { .. },
                 ) => {
                     return Err(planner_error(
                         "non-closure declaration call target has a closure callable definition",
@@ -1664,6 +2104,7 @@ impl AbiPlane {
         plane: &SemanticPlane,
         sources: &[SemanticSourceSeed],
         edges: &[StaticEdge],
+        continuation_specializations: &[PlannedContinuationSpecialization],
     ) -> Result<(), CraneliftBackendError> {
         for signature in boundary_signatures(plane, sources, edges)? {
             let descriptor = self
@@ -1699,7 +2140,17 @@ impl AbiPlane {
 
             // ⭐ The independent axis: the caller-side capture count against the
             // callee's declared capture slots.
-            if descriptor.header.captures != signature.captures {
+            let continuation_captures = continuation_producer_capture_extension(
+                continuation_specializations,
+                signature.callee,
+            )?;
+            let total_captures = signature
+                .captures
+                .checked_add(continuation_captures)
+                .ok_or_else(|| {
+                    planner_capacity_error("continuation producer boundary captures exhausted")
+                })?;
+            if descriptor.header.captures != total_captures {
                 return Err(planner_error(
                     "boundary signature and callee descriptor disagree on the transferred capture \
                      count",
@@ -1720,6 +2171,21 @@ impl AbiPlane {
                 signature.parameters,
                 signature.captures,
             )?;
+            let convention_start = expected
+                .len()
+                .checked_sub(CONVENTION_SLOTS.len())
+                .ok_or_else(|| planner_error("abi convention slot run underflowed"))?;
+            for ordinal in signature.captures..total_captures {
+                expected.insert(
+                    convention_start
+                        + usize::try_from(ordinal - signature.captures).map_err(|_| {
+                            planner_capacity_error(
+                                "continuation producer capture ordinal exhausted",
+                            )
+                        })?,
+                    slot(AbiSlotKind::Capture, AbiCarrier::ValueWord, ordinal),
+                );
+            }
             let actual = slot_slice(&self.slots, descriptor.slots)?;
             if actual != expected.as_slice() {
                 return Err(planner_error(
@@ -1849,7 +2315,8 @@ fn validate_slot_run(
         AbiUnitDefinition::SchedulingEntry { .. } => None,
         AbiUnitDefinition::TransparentDeclarationClosure { provenance, .. }
         | AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
-        AbiUnitDefinition::StaticCallableSpecialization { .. } => Some(AbiCarrier::ValueWord),
+        AbiUnitDefinition::StaticCallableSpecialization { .. }
+        | AbiUnitDefinition::ContinuationSpecialization { .. } => Some(AbiCarrier::ValueWord),
     };
 
     for (position, slot) in slots.iter().enumerate() {
