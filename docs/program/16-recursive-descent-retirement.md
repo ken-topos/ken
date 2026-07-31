@@ -158,7 +158,7 @@ to all of them.
 2026-07-22. But it catches it *after* a QA cycle and a full CI run, on a
 candidate already cut. `D0` costs one suite run before any code is written.
 
-### Trap 3 — ⭐⭐ a proof over a recorded population is vacuous for anything never recorded
+### Trap 3 — a proof over an incomplete population is vacuous
 
 **Measured 2026-07-29, and it rejected a candidate that was otherwise sound.**
 `RT-JOIN-DISPOSITION`'s `27f9dca2` built a completed-CFG *materialized-but-dead*
@@ -319,6 +319,7 @@ graph LR
   DCP === RXT[RT-RECURSOR-TRANSPORT]
   RXT --> RET[RT-DESCENT-RETIRE]
   PMP --> RET
+  RET --> SPLIT[RT-BACKEND-MODULE-SPLIT]
   DCP --> ALLOC[PX8-ERRID-ALLOC]
   DCP --> NHC2[NATIVE-HANDLE-CARRIER resume]
   ALLOC --> SCOPE[PX8-ERRID-SCOPE]
@@ -334,6 +335,7 @@ graph LR
 | 5 | `RT-PRODUCER-MATCH-PORT` | M | its **syntactic** `ProducerMatchCall` retirement only — ⛔ **not** the carried-`Match` transport, which is #3's `D7` |
 | **3-atomic** | `RT-RECURSOR-TRANSPORT` | L | ⭐⭐ **MOVED 2026-07-29 from #6 — it is `D7`'s reached successor and assembles ATOMICALLY with #3.** `D1` is answered: outcome **(b)** |
 | 7 | `RT-DESCENT-RETIRE` | M | delete the selector, enum, authority and lane; bank the win |
+| 8 | `RT-BACKEND-MODULE-SPLIT` | M | ⭐ **operator, 2026-07-31** — split the oversized `ken-runtime` backend files. ⛔ **After #7, never before** — see below |
 
 > ### ⭐⭐ REORDERED 2026-07-29 — THE HARDEST NODE MOVED FROM #6 TO #3-ATOMIC
 >
@@ -498,6 +500,64 @@ time"* was true, but *"informative at any time"* was not. Second, the answer cam
 back **stronger** than the deliverable was scoped for — the node was framed to
 *build a transport*, and the ruling instead **eliminates the crossing**. ⛔ A frame
 that had only asked "build the transport" would have had no slot for that answer.
+
+### ⭐ #8 — the module split goes AFTER the capstone (operator, 2026-07-31)
+
+The `ken-runtime` backend files are oversized again. A previous interlude of this
+exact shape produced the `cranelift_backend/` directory, and the operator asked
+whether to repeat it **now**, as a pause in this campaign, or after it.
+
+**Ruling: after.** ⛔ The split is `RT-BACKEND-MODULE-SPLIT`, node #8, gated on
+`RT-DESCENT-RETIRE`. Measured sizes on `main = 1e6eb5c6` (crate: 97,881 lines
+across 49 files):
+
+| file | lines |
+|---|---|
+| `cranelift_backend/lowering/mod.rs` | 11,197 |
+| `cranelift_backend/lowering/core/tests/control.rs` | 9,847 (test) |
+| `cranelift_backend/lowering/core.rs` | 9,788 |
+| `cranelift_backend/planning/static_transition.rs` | 9,034 → **>20,858** in #3-atomic's delta |
+| `boundary_value_clif.rs` | 8,691 |
+
+**Three grounds, in order of weight.**
+
+1. ⭐⭐ **#7 SUBTRACTS FROM EXACTLY THESE FILES.** `RT-DESCENT-RETIRE` deletes
+   the classifiers, the enum, the authority and the whole lane across
+   `lowering/core.rs` (22 occurrences), `core/tests/control.rs` (16),
+   `lowering/mod.rs` (4), `planning/static_transition.rs` (3) and
+   `object_linker_packaging.rs` (1), and its `D6` retires or re-homes the lane's
+   tests. ⇒ Splitting first means **re-homing a lane into new modules and then
+   deleting it out of those new homes one node later** — paid twice, and the
+   second payment discards the first.
+2. **#4 and #5 are CONSUMERS of the transport, not authors of it.** The growth in
+   `static_transition.rs` came from *building* the continuation-specialization
+   mechanism at #3-atomic. Both remaining ports **ban a second transport** in
+   their frames and make needing one a hard stop and a re-cut. ⇒ The peak is
+   roughly **now**, not later.
+3. ⛔ **They contend on the same files** and cannot run concurrently, so this is
+   purely an ordering question — and campaign-first is the order without rework.
+
+⚠ **The counter-hypothesis, stated so it can be revisited:** that large files are
+themselves making this work harder. No evidence was found for it here — #3's
+three hard stops were **semantic** (a false scalar-recursor premise; the dynamic
+same-tag continuation fork; census fidelity), and none gets easier in a smaller
+file. ⛔ But that is inferred from reports; the implementer and Architect are
+better placed to judge it than the Steward.
+
+⭐ **The one place the counter-hypothesis could still win, and the cheap test.**
+#5 is the only remaining node that must do real work inside a 20k-line
+`static_transition.rs`. **At #3-atomic's merge, ask the Architect whether a
+narrow split of that one file should ride ahead of #5.** One exchange — far
+cheaper than an interlude, and it does not disturb this ordering if the answer
+is no.
+
+⭐ **And #8 is cheaper than the precedent it is modelled on.**
+`static_transition.rs` **already has** a `static_transition/` subdirectory
+(`semantic_ir.rs` 2,729, `abi.rs` 1,601). The seam exists, so #8 **extends an
+established split** rather than inventing an architecture the way the original
+`cranelift_backend` extraction did. ⛔ #8 is deliberately left unframed until #7
+merges — the deletion changes where the natural module seams are, so a frame
+written now would be sized against a tree that is about to disappear.
 
 ## 5. What "done" means
 
