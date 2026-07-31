@@ -2347,7 +2347,21 @@ self-compaction that re-instantiates the client — and posting can stay up whil
 they're gone, so you get no signal). So **re-arm on session start, after every
 compaction, AND after any convo-MCP reconnect**, and **`schedule_list` at the top
 of every tick** — an empty list while work is open means your backstop fell over;
-re-arm immediately. `schedule_delete` any stale job when the fleet quiesces. (On
+re-arm immediately. `schedule_delete` any stale job when the fleet quiesces.
+
+> ⛔⛔ **RE-ARM FROM THE STORED FILE, NEVER FROM MEMORY:**
+> **`agent/playbooks/federation/steward-watchdog-tick-prompt.txt`** is the
+> canonical tick prompt. The live interval is the *only* other copy, and it dies
+> on exactly the events above — so a re-arm typed from memory silently drops
+> whatever the prompt has accumulated. ⭐ **The first casualty would be §5a-iii's
+> `STEP 0` audit clock**, which is the one item in the prompt with a *deadline*:
+> lose it and the tick still looks complete, still reports "all clear," and no
+> longer fires the audit at all. ⇒ Re-arm by pasting that file verbatim
+> (`set_interval`, `seconds: 900`), and when you change the prompt, **edit the
+> file and publish it in the same act as the `set_interval` call** — the two
+> copies drift the moment you do only one.
+
+(On
 this Claude-Code seat the host-level `CronCreate` remains available and *does*
 survive an MCP reconnect — a valid durable fallback if the reconnect-fragility
 ever bites — but default to `schedule_create` for fleet uniformity.) (COORDINATION
