@@ -214,6 +214,21 @@ direction and priority; you turn that into WPs and sequence them across teams.
 - **Create & decompose.** Split new work into WPs, size them, record deps and
   acceptance criteria. Scope comes from the operator; technical decomposition
   input from the Architect. Keep WPs small.
+
+  > ⭐⭐ **HOW SMALL — the one-hour turn (operator, 2026-07-31).** *"Ideally,
+  > each implementer turn should complete in under an hour, or hit a hard stop
+  > while trying."* ⇒ Size deliverables so an implementer reaches **either a
+  > releasable increment or a genuine hard stop within ~an hour.** Both are good
+  > outcomes; the bad outcome is neither.
+  >
+  > ⚠ **This is a sizing target, not an acceptance criterion.** ⛔ Do not write
+  > it into a frame as an AC, and ⛔ do not derive a deliverable from it — it
+  > shapes how you *cut* the work, and the ring is never accountable to a clock.
+  >
+  > ⭐ **Its diagnostic twin is §5a-iii:** an uninterrupted run past 60 minutes
+  > is an *indication* the WP is too large. Not conclusive — but if you are
+  > repeatedly firing WIP audits on one node, the sizing was the defect and the
+  > next cut is yours.
 - **Sequence & assign.** You own cross-team sequencing: release a WP to its
   owning team only when it is *ready* (deps merged, open questions resolved, its
   gate not blocked). Team leaders pull ready WPs; they don't start work that
@@ -1870,6 +1885,35 @@ is still right for a nudge. **An audit request is not a nudge** — it is
 operator-mandated periodic guidance, and the seat it protects is *by
 construction* one that is building. ⛔ Do not let the tick prompt's line talk you
 out of firing this.
+
+#### ⭐⭐ ASK FOR THREE OUTCOMES — the third one will not be reached by default
+
+**Operator, 2026-07-31:** *"one of the options should be to reconsider the
+integrity of the WP and evaluate whether it would be better approached as a
+restructured set of smaller WPs… an uninterrupted run longer than 60 minutes is
+an indication (though not necessarily conclusive) that the WP is too large."*
+
+**Name all three in the request.** An audit asked only to *"review the WIP"*
+answers the question the Architect naturally holds — *is this implementation
+correct under the contract?* — and (c) never gets considered.
+
+| outcome | meaning | who acts |
+|---|---|---|
+| **(a) on track** | the work implements the ruled mechanism; continue | nobody — reset the clock |
+| **(b) course correction** | wrong implementation, right contract | Architect → leader → implementer |
+| **(c) ⭐ the WP is mis-sized** | the contract itself is too large a single bite | **you** — the recut is the Steward's |
+
+⛔ **(c) is a diagnosis the Architect makes and a recut YOU author.** The
+Architect does not create or resize tracked work (§2). Treat *"this should be
+several WPs"* exactly as §5a-ii treats a named predicate: **RETAIN** everything
+already proved, **REPLACE** only what the finding names, **FREEZE** the old
+node's clock and open fresh ones. ⛔ And run it through the node gate in §2
+first — a sizing finding is grounded; an aesthetically tidier graph is not.
+
+⚠ **The 60-minute mark is an INDICATION, not a verdict.** A single long run can
+be one honestly hard problem. ⭐ **The signal that is nearly conclusive is
+repetition:** firing audit after audit on one node means the sizing was the
+defect and you have been treating it as a guidance problem.
 
 #### Route — and the edge you must not create
 
