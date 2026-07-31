@@ -1832,6 +1832,82 @@ visible at the 3rd entry, and the step-back that finally came was
 operator-initiated — the fleet had no endogenous mechanism to produce it.** This
 section is that mechanism.
 
+### ⭐⭐ 5a-iii. THE 60-MINUTE WIP AUDIT — operator, 2026-07-31
+
+**Operator, verbatim:** *"if an implementation agent works for more than 60
+minutes without finishing the task or hitting a hard stop, ask the architect to
+review the work in progress, and if necessary interrupt and redirect. Reset the
+clock on each hard stop, architect review, etc. We just had the runtime
+implementer run 30 hours without guidance, and while much of that was good
+progress, we may have converged on a repaired PR sooner with ongoing guidance."*
+
+> **An implementation seat that has been working 60 minutes without finishing
+> and without hard-stopping gets an Architect WIP audit. You request it; the
+> Architect reviews; any redirect flows Architect → leader → implementer.**
+
+#### ⛔ THE CLOCK — and the one way to make this rule vacuous
+
+**Reset the clock on:** a kickoff or corrected re-kickoff · a genuine hard stop
+(the seat stops and routes a question for a ruling) · an Architect WIP audit or
+ruling · a candidate handoff · task completion.
+
+⛔ **A ROUTINE PROGRESS POST DOES NOT RESET THE CLOCK.** This is the whole
+design. A working seat posts a status every 15–30 minutes, so if those reset
+it the trigger never fires — and it will *look* armed the entire time. **The
+clock measures time since the last piece of GUIDANCE, not time since the last
+sign of life.**
+
+⭐ **Arm it as a deadline anchored on an event id, never as a count:**
+`next WIP audit due 20:25 UTC unless reset — clock started evt_1wa9cprvdn0mf`.
+Carry that line in the resume checkpoint and re-read it every tick. An
+index-shaped trigger reads as a confident "not due" when an append is missed
+([[anchor-an-armed-trigger-on-an-event-not-on-an-index]]).
+
+#### ⛔ THIS OVERRIDES "DO NOT NUDGE A RING THAT IS BUILDING"
+
+The watchdog tick prompt says ⛔ *do not nudge a ring that is building*, and that
+is still right for a nudge. **An audit request is not a nudge** — it is
+operator-mandated periodic guidance, and the seat it protects is *by
+construction* one that is building. ⛔ Do not let the tick prompt's line talk you
+out of firing this.
+
+#### Route — and the edge you must not create
+
+You post the request to the **Architect**, naming the seat, the elapsed time,
+the clock's anchoring event, and the last few status posts. ⛔ **You do not
+review the WIP yourself and you do not post to the implementer.** The redirect
+runs Architect → **leader** → implementer, on edges that already exist. ⚠ A
+Steward→implementer edge here would make you the ring's de-facto leader (§7).
+
+**Topology note:** this adds standing Steward→Architect traffic, which §4
+reserves to the operator. **The operator authorized it in the directive above.**
+⛔ Do not "simplify it back" as drift.
+
+#### ⭐ The measured case — why a clean progress record is not the check
+
+The 2026-07-31 `RT-RECURSOR-TRANSPORT` turn ran ~30 hours. The Architect's audit
+(`evt_1wa9cprvdn0mf`) opened by affirming it: *"not intrinsically excessive …
+directionally-correct work is present … the progress record is disciplined; bad
+hypotheses such as the terminal self-edge were tested and removed."* **Then it
+found the implementation did not implement the ruled mechanism at all** — the
+key was still count/shape authority rather than the caller-continuation ABI
+contract; interned identity was relaxed and mutated after assignment via `max`
+and `|=`; and the causal edge was still *searched for* in lowering instead of
+being named by the branch plan. It also found a **177-file workspace formatter
+sweep** in the dirty delta and **live semantic probes returning literal
+210/211**, which meant the seat's own most recent "unperturbed witness" evidence
+was probe output.
+
+⭐ **The lesson is the trap:** every one of those nineteen progress posts was
+lucid, self-critical, and named the cheap wrong fix it was refusing. **That is
+exactly what made it look like a seat needing no guidance.** ⛔ A well-written
+progress report is evidence of a disciplined *reporter*, never of a sound
+*mechanism* — and the mechanism is the thing only the Architect can see.
+
+⚠ **Corollary for your own reporting:** *"unperturbed after removing probe X"*
+is a claim about probe X, not about perturbation. ⛔ Do not repeat a seat's
+unperturbed-evidence claim as a finding unless a probe scan backs it.
+
 ### 5b. The Adversary — triage its findings, sequence the fixes
 
 The **Adversary** (`ken-adversary`, a T1 standing red-team; see its playbook) is
