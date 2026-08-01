@@ -1,7 +1,7 @@
 ---
 id: DOC-ASBUILT-SOLUTIONS
 title: "As-built slice 3 — reconcile the exercise/solution PAIR against its 11 drifted cited sources; a stale claim here is a broken answer under a retired question"
-status: ready
+status: merged
 owner: doc
 size: L
 gate: none
@@ -12,6 +12,30 @@ origin: "Steward 2026-08-01, phase A slice 3 of DOC-ASBUILT-AUDIT, measured at o
 ---
 
 > # ▶ SLICE 3 OF PHASE A — THE ONE WHERE A STALE CLAIM IS A BROKEN ANSWER
+>
+> # ✅ MERGED 2026-08-01 — `origin/main = 90ecf7f2` (PR #1292)
+>
+> Candidate `e163af4c328536ffbec69053cf87d43e61bd2cc3`, three paths, `+18/−15`.
+> Verified by **content**, ⛔ not ancestry. Four post-conditions asserted
+> **before** publishing, all four exact: merged tree `abf7f6a3`,
+> `exercises.md` `2195b9f0`, `solutions.md` `3d4543fb`, `manifest.toml`
+> `0d6fd7e1`. Base was current `main`, so no staleness question arose.
+>
+> Librarian QA approve; Decision `dec_40p3kcmmaday2` resolved.
+>
+> ⭐⭐ **THE `D5` GRANT HELD IN FACT, NOT ONLY IN ARGUMENT.** I re-ran all three
+> `AC-6` controls myself in a detached worktree at the candidate rather than
+> accepting the report: the manifest diff is **exactly** the two authorized
+> entries on the one record; `SOURCE-ATTESTATIONS` and `STATUS.md` are untouched
+> (zero files); and `gen-doc-status.sh --check` is **byte-identical** at 28 rows,
+> SHA-256 `349d5452…` — ⭐ **the value pinned in the frame BEFORE the work
+> began.**
+>
+> ⚠ **The first candidate `6a140197` was rejected on a real grounding defect**
+> (`evt_3wej9paqbwf23`): 04.2's answer leaned on `Authority.ken.md` and
+> `cat_capex_authority.rs` while the manifest record named neither. ⭐ The paired
+> 04.1 repair in it was already correct — the rejection bought the **structural**
+> half.
 >
 > ⭐⭐ **AMENDED 2026-08-01 — TWO pages, not one:**
 > `library/learn/exercises/solutions.md` **and**
