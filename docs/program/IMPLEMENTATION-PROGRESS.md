@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-01 14:19:35Z — from 132 issue file(s) in `docs/program/issues/`.
+2026-08-01 14:41:30Z — from 132 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -107,7 +107,7 @@ the committed file matches the generator's output.
 | `Q-RESIDUE` | the Track Q rework residue — 10 tests, folded from Q3-Q7 | closed | runtime | S | none | 818 |
 | `RT-AGG-COMPOSE` | escaping two Resources into one aggregate (Prod (Resource _) (Resource _)) fails at erasure — checked endpoints do not compose | draft | runtime | TBD | none | — |
 | `RT-BACKEND-MODULE-SPLIT` | Split the oversized ken-runtime backend files into modules — the follow-on to the recursive-descent retirement, not an interlude in it | draft | runtime | M | none | — |
-| `RT-CONTSPEC-ABI` | ContinuationSpecialization slice 2 — land the explicit unit/descriptor projection and the ABI, owner/lifetime/affinity and zero-allocation negative gates, still DORMANT | draft | runtime | M | none | — |
+| `RT-CONTSPEC-ABI` | ContinuationSpecialization slice 2 — land the explicit unit/descriptor projection and the ABI, owner/lifetime/affinity and zero-allocation negative gates, still DORMANT | ready | runtime | M | none | — |
 | `RT-CONTSPEC-LOWER` | ContinuationSpecialization slice 3 — attach the token at each producer alternative, emit the direct call before the identity-erasing join, close nested recursion and the ledgers, then ACTIVATE | draft | runtime | L | none | — |
 | `RT-CONTSPEC-PLANNER` | ContinuationSpecialization slice 1 — land the planner closure DORMANT: exact ordered projection, full-key interning before discovery, exact causal edge tokens, finite recursion | ready | runtime | M | none | — |
 | `RT-CONTSPEC-SUBSTRATE` | ContinuationSpecialization slice 0 — re-derive and independently gate the DORMANT D7 substrate: closed case-emission reachability, exact occurrence/owner/lifetime authority, pre-allocation closure | ready | runtime | M | none | — |
@@ -220,7 +220,7 @@ is itself not yet `merged`/`closed`:
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
 - `RT-BACKEND-MODULE-SPLIT` blocked by `RT-DESCENT-RETIRE` (status: ready)
 - `RT-CONTSPEC-ABI` blocked by `RT-CONTSPEC-PLANNER` (status: ready)
-- `RT-CONTSPEC-LOWER` blocked by `RT-CONTSPEC-ABI` (status: draft)
+- `RT-CONTSPEC-LOWER` blocked by `RT-CONTSPEC-ABI` (status: ready)
 - `RT-CONTSPEC-PLANNER` blocked by `RT-CONTSPEC-SUBSTRATE` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
 - `RT-DESCENT-RETIRE` blocked by `RT-SEED-CALL-PORT` (status: ready)
