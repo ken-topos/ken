@@ -1,6 +1,6 @@
 ---
 id: DOC-ASBUILT-SOLUTIONS
-title: "As-built slice 3 — reconcile exercises/solutions.md against its 11 drifted cited sources; every claim here is a worked answer a reader will run"
+title: "As-built slice 3 — reconcile the exercise/solution PAIR against its 11 drifted cited sources; a stale claim here is a broken answer under a retired question"
 status: ready
 owner: doc
 size: L
@@ -13,8 +13,22 @@ origin: "Steward 2026-08-01, phase A slice 3 of DOC-ASBUILT-AUDIT, measured at o
 
 > # ▶ SLICE 3 OF PHASE A — THE ONE WHERE A STALE CLAIM IS A BROKEN ANSWER
 >
-> `library/learn/exercises/solutions.md` carries **11 distinct drifted sources
-> across 12 citations** — second only to slice 2's 16.
+> ⭐⭐ **AMENDED 2026-08-01 — TWO pages, not one:**
+> `library/learn/exercises/solutions.md` **and**
+> `library/learn/exercises/exercises.md`, carrying **11 distinct drifted sources
+> across 15 citations** — second only to slice 2's 16.
+>
+> ⚠ **`exercises.md` moved here from [[DOC-ASBUILT-READER]]** after doc-author
+> fired hard stop 3 correctly, before any edit (`evt_41th5chexqwv`): 04.1 asks
+> what `AFull` "does not yet confine", a premise the current
+> `Capability/Filesystem/Errors.ken.md` has retired. ⇒ ⭐ **An exercise and its
+> solution are one artifact split across two files** — repairing the solution
+> alone writes a correct answer to a wrong question.
+>
+> ⭐ **The move cost nothing:** `exercises.md`'s three drifted sources were a
+> **strict subset** of `solutions.md`'s 11, so the distinct population is
+> unchanged. ⛔ It is **not** a new node — the only argument for one was this
+> frame's own prose, which the node gate names as ungrounded.
 >
 > ⭐ **What makes it different from every other phase-A page is the genre.** The
 > other pages *describe* Ken. This one hands the reader a **worked answer** and

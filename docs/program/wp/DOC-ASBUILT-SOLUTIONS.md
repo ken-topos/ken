@@ -16,9 +16,45 @@
 | input | value |
 |---|---|
 | **base** | ⭐ **`origin/main` as of when you cut the branch, provided it contains this frame AND [[DOC-ASBUILT-FRAGMENTS]] has landed.** ⛔ Not a SHA copied from this table. |
-| the page | `library/learn/exercises/solutions.md` |
-| its drifted sources | **11 distinct paths / 12 citations** — ⚠ **re-derive at your base** |
+| the pages | ⭐ **BOTH** — `library/learn/exercises/solutions.md` **and** `library/learn/exercises/exercises.md` (amended, see below) |
+| its drifted sources | **11 distinct paths / 15 citations** — ⭐ **the union is still 11**; ⚠ **re-derive at your base** |
 | campaign law | [[DOC-ASBUILT-AUDIT]] |
+
+---
+
+> ## ⭐⭐ AMENDED 2026-08-01 — `exercises.md` IS IN SCOPE; HARD STOP 3 WITHDRAWN
+>
+> ⚠ **The original frame put the exercise page out of scope and made "a solution
+> is wrong because its exercise is wrong" a hard stop. doc-author fired it
+> correctly, before any edit** (`evt_41th5chexqwv`): `exercises.md` **04.1 asks
+> what `AFull` "does not yet confine"**, while
+> `catalog/packages/Capability/Filesystem/Errors.ken.md` now says `Full` retains
+> all seven rights and exercises them **only within its `FsScope`**. ⇒ **The
+> question's premise is retired, not just its answer.**
+>
+> ⭐⭐ **AN EXERCISE AND ITS SOLUTION ARE ONE ARTIFACT SPLIT ACROSS TWO FILES.**
+> Repairing only the solution means **writing a correct answer to a wrong
+> question** — a worse artifact than the stale pair, because it reads as
+> reconciled. ⛔ There is no solution-only repair of 04.1 that is not a fiction.
+>
+> ⭐ **And the union is free.** Measured at `efa8c5e8`: `exercises.md` cites
+> **3** drifted sources — `EmptyDec`, `Combinators`, `Property` — and **all three
+> are already among `solutions.md`'s 11.** ⇒ `exercises \ solutions = ∅`. **The
+> distinct-source population does not move: 11 before, 11 after.** Only the
+> citation count rises, 12 → 15.
+>
+> ⛔ **This is NOT a new node**, and the alternative was rejected on the node
+> gate: the only constraint arguing for one was **this frame's own prose**, which
+> the gate names explicitly as ungrounded — *including prose the Steward wrote.*
+>
+> ⇒ **`exercises.md` is REMOVED from [[DOC-ASBUILT-READER]]**, which drops to
+> four pages and 6 distinct sources. ⭐ After this move **no source is read twice
+> across the two slices** — the three catalog packages belong wholly to this one.
+>
+> ⚠ **04.2 comes with it.** doc-author found the same stale family makes 04.2's
+> *"no capability-typed catalog fragment"* answer false; it is answerable as
+> **False** once the pair is in one scope. ⭐ Sweep for the family, ⛔ do not stop
+> at 04.1 and 04.2 because they are the two that were named.
 
 ---
 
@@ -60,14 +96,19 @@ still true. ⭐ Cite the anchor you actually read.
 ⚠ **`spec/30-surface/30-taxonomy.md` is cited at two anchors — each owes its own
 entry.**
 
-**D2 — repair what is false**, in this page only.
+**D2 — repair what is false**, in these two pages only. ⭐ **Repair an exercise
+and its solution as one unit** — a corrected answer under a retired question is
+not a repair.
 
-**D3 — whole-page sweep per repaired claim class.** ⚠ This is what sank two
-earlier candidates in this campaign: the named lines were fixed while the same
-claim survived elsewhere on the page.
-⭐ **On this page the class is often a *solution shape*, not a phrase** — if one
-worked answer leaned on a stale signature, sweep for **every** answer that leans
-on the same package, not merely for the same words.
+**D3 — sweep per repaired claim class, ACROSS BOTH PAGES.** ⚠ This is what sank
+two earlier candidates in this campaign: the named lines were fixed while the
+same claim survived elsewhere on the page.
+⭐ **Here the class is often a *solution shape*, not a phrase** — if one worked
+answer leaned on a stale signature, sweep for **every** answer that leans on the
+same package, not merely for the same words.
+⭐⭐ **And the sweep is now explicitly cross-page**: a class repaired in a
+solution must be checked against **its exercise's premise**, and vice versa. The
+04.1/04.2 pair is the worked example, ⛔ not the boundary.
 
 **D4 — a closed report:** still-true / repaired / **routed**, per path.
 
@@ -98,26 +139,40 @@ on the same package, not merely for the same words.
 blobs. **Control:** quote what you read. ⛔ Not from this frame, ⛔ not from
 memory.
 
-**AC-2 — every claim this page makes about a drifted source is true at your
+**AC-2 — every claim either page makes about a drifted source is true at your
 base**, including the implicit claim that a worked solution is *a correct
-answer*.
+answer* ⭐ **and that its exercise asks an answerable question.** ⚠ An exercise
+whose premise a source has retired fails this AC even if its solution is
+internally consistent with it.
 
-**AC-3 — whole-page closure per repaired class.** **Control:** name the class
-and show the sweep, ⛔ not only the edited lines.
+**AC-3 — closure per repaired class, ACROSS BOTH PAGES.** **Control:** name the
+class and show the sweep over exercises **and** solutions, ⛔ not only the edited
+lines. ⭐ For every repaired solution, state whether its exercise still holds;
+for every repaired exercise, state whether its solution followed.
 
-**AC-4 — scope is one page, and the drift population is unchanged at 28.**
-**Control:** `git diff --name-only` shows exactly
-`library/learn/exercises/solutions.md`; `scripts/gen-doc-status.sh --check`
+**AC-4 — scope is exactly those two pages, and the drift population is unchanged
+at 28.** **Control:** `git diff --name-only` shows exactly
+`library/learn/exercises/solutions.md` and
+`library/learn/exercises/exercises.md`; `scripts/gen-doc-status.sh --check`
 before and after both exit 1 with **byte-identical** 28-path output.
+⭐ Neither page is attested, so ⛔ **neither edit can move the count** —
+doc-author's pre-edit capture is the anchor: exit 1, 32 lines, 28 rows,
+SHA-256 `349d5452…`.
 ⭐ The ledger's sortedness and exact-set checks run **before** the drift check,
 so any stray manifest or ledger write changes *which error* the script reports —
 an unchanged block is positive evidence you stayed in scope.
 
 **AC-5 — no broken link or anchor**, and every exercise's identity is preserved.
-⛔ **Do not renumber or retitle an exercise** — `exercises.md` and
-`exercises/README.md` refer to them, and a renumber silently breaks a cross-page
-reference that no gate checks. ⚠ If one must change, say so in `D4` and name
-what refers to it.
+⛔ **Do not renumber, retitle, add, or remove an exercise** — `exercises/README.md`
+(⚠ **still out of scope, in [[DOC-ASBUILT-READER]]**) refers to them, and a
+renumber silently breaks a cross-page reference that no gate checks. ⚠ If one
+must change, say so in `D4` and name what refers to it.
+
+⭐⭐ **AC-5 IS THE BOUNDARY THAT SURVIVES THE AMENDMENT.** Editing an exercise's
+**premise** is now in scope; editing the exercise **set** is not. ⇒ Repair what
+04.1 *asks*; ⛔ do not decide that 04.1 should no longer exist, or renumber
+around it. **If the honest repair is deletion, that is a `D4` route, not an
+edit.**
 
 ---
 
@@ -130,9 +185,10 @@ what refers to it.
 - ⛔ **No new CI gate or test asserting facts about source, catalog, or doc
   lines** (operator test policy) — ⭐ including any harness that runs the
   exercises.
-- ⛔ **No other page**, and that explicitly includes `exercises.md`. ⚠ If a
-  solution is wrong because the **exercise** is wrong, `D4`-route it — the
-  exercise page is its own slice.
+- ⛔ **No third page.** ⚠ `exercises.md` is now **IN** scope (amended above);
+  ⛔ `library/learn/exercises/README.md` is **NOT** — it stays in
+  [[DOC-ASBUILT-READER]]. ⭐ If a repair here implies one there, `D4`-route it
+  and name the pair.
 
 ---
 
@@ -156,8 +212,13 @@ shared rows are re-stamped in phase B, after both have landed.
    answer on your own authority.
 2. **An open decision this page relies on has been settled in a way that changes
    what the correct answer *is*** ⇒ route it.
-3. **A solution is wrong because its exercise is wrong** ⇒ route it; the
-   exercise page is out of scope here.
+3. ⛔ ~~**A solution is wrong because its exercise is wrong** ⇒ route it; the
+   exercise page is out of scope here.~~ **WITHDRAWN 2026-08-01 — this stop
+   fired correctly (`evt_41th5chexqwv`) and the frame was wrong, not the
+   author.** ⭐ **Repair the pair.** The exercise page is in scope; the only
+   surviving boundary is `AC-5` (premise yes, exercise **set** no).
+4. **A repair reaches `library/learn/exercises/README.md`** ⇒ ⛔ do not follow it
+   there; `D4`-route it and name the pair. ⚠ That page is [[DOC-ASBUILT-READER]].
 
 ⏱ **Target: complete or hard-stop inside one turn.** ⛔ Not an AC and ⛔ not
 something QA checks; if it overruns, that is my sizing error and the remainder
