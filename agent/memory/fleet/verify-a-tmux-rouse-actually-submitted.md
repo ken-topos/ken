@@ -144,8 +144,44 @@ leader's kickoff without polling."* It would have sat there forever: a
 | what `capture-pane` shows | what happened | the repair |
 |---|---|---|
 | `› [Pasted Content …]`, **no** `Working` | delivered to the buffer, **never submitted** | **send a bare `Enter`** to that pane |
+| `› <channel source="convo" … event_type="mention"…`, **no** `Working` | ⭐ **the same strand, and the COMMONER shape** — see below | **send a bare `Enter`** to that pane |
 | **empty prompt, no paste, no `Working`** | **never delivered at all** | **re-deliver the CONTENT** — `send-keys` a pointer to the original `event_id`/thread and tell the agent to read and execute it |
 | `Working` + `Queued follow-up inputs` | busy, your message **is** queued | **nothing. DO NOT RESEND.** |
+
+> ## ⛔⛔ A STRANDED DELIVERY OFTEN HAS NO VISIBLE `[Pasted Content]` MARKER
+>
+> Measured on `moot-doc-author` 2026-08-01. Every fleet instrument keyed on that
+> marker, and all of them reported the pane healthy while it sat on a Librarian
+> QA reject for three minutes with its ring blocked:
+>
+> ```
+> › <channel source="convo" space_id="spc_…" event_type="mention"
+>   event_id="evt_msg5m1g23w8a" speaker="">@you mentioned by librarian: ⛔
+>   **LIBRARIAN QA REJE[Pasted
+>   Content 1536 chars]…
+> ```
+>
+> ⇒ **Two independent reasons a marker test cannot match:** the composer line
+> opens with the **delivery wrapper**, not the marker; and the terminal **wraps
+> `[Pasted` / `Content` across lines**, so the marker is not on the composer line
+> at all. ⛔ Widening a pattern to `<channel>` does not help either — the real
+> text is `<channel source="convo"…` and never contains the closing bracket.
+>
+> ⭐⭐ **It failed INTERMITTENTLY, which is exactly why it was trusted.** When
+> the wrap fell elsewhere the marker landed on the composer line and the check
+> fired. **Its success was a function of terminal width and message length, not
+> of whether a strand existed.** ⇒ its silence carried no information, and its
+> occasional hit was camouflage.
+>
+> ⛔ **"No disagreement across N live panes" is not the control** — if every pane
+> is clear that is a **negative control only**. Classification now lives in
+> `scripts/classify-pane-composer.py`, pinned by `strand-mention` /
+> `strand-interval` / `near-miss` in `scripts/test-classify-pane-composer.sh`.
+> ⛔ Add a shape there, never by widening a regex at a call site.
+>
+> ⭐ **The detector that does not depend on rendering:** a seat that was
+> **mentioned** (`metadata.mentions` on the event) whose **footer still shows the
+> previous turn**. That keys on the obligation rather than on the pixels.
 
 > **Do not "fix" an empty pane by pressing Enter** — there is nothing in the
 > buffer to submit, and you will learn nothing. **And do not re-author the

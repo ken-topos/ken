@@ -13,6 +13,16 @@
 # is controlled by `test-classify-pane-composer.sh` — add a shape there, not by
 # widening a regex here.
 #
+# ⛔⛔ AND THE MARKER IS OFTEN ABSENT ENTIRELY. Measured on `moot-doc-author`
+# 2026-08-01: a stranded mention rendered as `› <channel source="convo" …
+# event_type="mention"…` with the terminal wrapping `[Pasted` / `Content` across
+# lines, so the marker was not on the composer line at all. The classifier's
+# `startswith("[Pasted Content")` returned `other` and this sweep walked past a
+# seat holding a QA rejection with its ring blocked. ⚠ It had been failing
+# INTERMITTENTLY as a function of terminal width, so its silence carried no
+# information. Fixed in `classify-pane-composer.py` (the DELIVERY pattern), pinned
+# by `strand-mention`/`strand-interval`/`near-miss` in the control file.
+#
 # The failure this repairs: a convo mention is delivered into a seat's composer
 # as `› [Pasted Content NNNN chars] …` and is NEVER SUBMITTED. `post_response`
 # returning an event_id proves the EVENT exists — it does not prove any agent

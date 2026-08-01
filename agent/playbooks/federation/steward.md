@@ -541,10 +541,45 @@ brief** — the implementer should execute mostly mechanically, not design
 >    fleet can be made to run unattended.
 >
 >    ⚠ **Honest residual:** a *short* delivery that lands as raw composer text
->    rather than a `[Pasted Content …]` marker classifies as `other`, so the
->    sweep reports it but does **not** repair it. That is deliberate — it is
->    indistinguishable from half-typed input — and it means **the sweep is not a
->    substitute for step 7's per-seat `Working` check.**
+>    with **no delivery envelope** classifies as `other`, so the sweep reports it
+>    but does **not** repair it. That is deliberate — it is indistinguishable
+>    from half-typed input — and it means **the sweep is not a substitute for
+>    step 7's per-seat `Working` check.**
+>
+>    ⛔⛔ **CORRECTED 2026-08-01 — the residual used to be far wider than that
+>    paragraph admitted, and the sweep was blind to the ORDINARY case.** The
+>    classifier tested `startswith("[Pasted Content")`. A stranded convo mention
+>    on `moot-doc-author` rendered as
+>
+>    ```
+>    › <channel source="convo" space_id="spc_…" event_type="mention"
+>      event_id="evt_msg5m1g23w8a" speaker="">@you mentioned by librarian: ⛔
+>      **LIBRARIAN QA REJE[Pasted
+>      Content 1536 chars]…
+>    ```
+>
+>    ⇒ **Two independent reasons that test could not match:** the composer line
+>    opens with the **delivery wrapper**, not the marker; and the terminal
+>    **wrapped `[Pasted` / `Content` across lines**, so the marker was not on the
+>    composer line at all. Verdict `other` ⇒ the sweep walked past a seat sitting
+>    on a QA rejection with its ring blocked.
+>
+>    ⭐⭐ **It failed INTERMITTENTLY, which is what made it trusted.** Whenever
+>    the wrap fell elsewhere the marker landed on the composer line and the check
+>    fired. **Its success was a function of terminal width and message length,
+>    not of whether a strand existed** — so its `other` carried no information
+>    and its occasional `paste` was camouflage.
+>
+>    ⛔ **Do not accept "no disagreement across N live panes" as the control.**
+>    If every pane is clear, that is a **negative control only**. The fix is
+>    pinned by `strand-mention` and `strand-interval` in
+>    `scripts/test-classify-pane-composer.sh`, plus a `near-miss` row that must
+>    stay `other` — prose that merely mentions a channel is not an envelope.
+>
+>    ⭐ **The real detector is the cross-check, not any one-liner:** a seat that
+>    was **mentioned** (`metadata.mentions` on the event) whose **footer still
+>    shows the previous turn**. Instruments key on rendering; that keys on the
+>    obligation.
 > 5b. **★★ VERIFY EVERY OBJECT YOU ARE ABOUT TO NAME EXISTS AT THE BASE YOU ARE
 >    ABOUT TO NAME. One command per object, before the mention leaves your
 >    hands.**
@@ -592,6 +627,7 @@ brief** — the implementer should execute mostly mechanically, not design
 >    | `Working (Ns…)` | ✅ delivered | none |
 >    | **any spinner + elapsed** — `✻ <verb>… (Nm Ns · ↓ Nk tokens` | ✅ **BUSY**, high-effort turns show **no** `Working` and **no** `esc to interrupt` | **nothing** |
 >    | `› [Pasted Content …]`, no spinner | delivered to the buffer, **never submitted** | send a bare **`Enter`** to that pane |
+>    | `› <channel source="convo" … event_type="mention"…`, no spinner | ⭐⭐ **THE SAME STRAND, AND THE COMMONER SHAPE** — the marker is often absent or split across the wrap | send a bare **`Enter`** to that pane |
 >    | **empty composer, no paste, no spinner** | ⚠ **AMBIGUOUS — not "never delivered"** | ⛔ **re-capture wider FIRST** (see below), and only then re-deliver |
 >    | `Working` + `Queued follow-up inputs` | busy, message queued | **nothing — DO NOT RESEND** |
 >
