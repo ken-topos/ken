@@ -190,19 +190,18 @@ and read the producer that established it.
 ## Stated Limits
 
 The [filesystem errors fragment](../../../catalog/packages/Capability/Filesystem/Errors.ken.md)
-states its
-boundary in its second paragraph, before any code: "the current authority
-check is coarse and is **not** path-confined. An `AFull` capability permits
-writes and deletes anywhere the host process can access." That is the same
-posture the trust model itself insists on at the language level — a
-verified system that over-claims is itself a security risk, so stated
-limits are first-class, not buried
+states its boundary before any code: the runtime `check_fs_capability` gate
+checks the required rights and authority, while downstream filesystem
+resolution enforces confinement. `Full` retains all seven rights, including
+write and delete, but exercises them only within its `FsScope`. That division
+is the same posture the trust model itself insists on at the language level —
+a verified system that over-claims is itself a security risk, so stated limits
+are first-class, not buried
 ([§4](../../../spec/60-security/64-trust-model.md#4-the-honest-limits-what-a-language-cannot-fix-normative)).
-This entry's own capability, `AFull`, and what it does and doesn't confine
-is chapter [04](04-effects-capabilities-and-authority.md)'s subject; here,
-notice only that stating a limitation is a discipline the
-fragments themselves practice, not just a rule stated about them from
-outside.
+This entry's rights, scopes, and division of enforcement are chapter
+[04](04-effects-capabilities-and-authority.md)'s subject; here, notice only
+that stating a boundary is a discipline the fragments themselves practice,
+not just a rule stated about them from outside.
 
 You can now classify a claim by epistemic status and then find the producer
 that supports that classification. An empty `trusted_base()` delta is a
