@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-ABI
 title: "ContinuationSpecialization slice 2 — land the explicit unit/descriptor projection and the ABI, owner/lifetime/affinity and zero-allocation negative gates, still DORMANT"
-status: draft
+status: ready
 owner: runtime
 size: M
 gate: none
@@ -11,13 +11,15 @@ github: null
 origin: "Architect second WIP audit evt_4t09329vdrf (2026-08-01), outcome (c). Slice 2 of the Steward's staged recut of RT-RECURSOR-TRANSPORT + RT-DECL-CLOSURE-PORT D7."
 ---
 
-> # ⏳ SLICE 2 OF 4 — `draft` UNTIL ITS FRAME IS WRITTEN
+> # ▶ SLICE 2 OF 4 — THE FRAME IS WRITTEN; THIS IS NOW `ready`
 >
-> ⛔ **`status: draft` here means the FRAME is owed, not that the work is
-> unclear.** The Steward writes it while [[RT-CONTSPEC-PLANNER]] is in flight,
-> per the standing rule that every immediate successor of an in-flight node is
-> fully framed before that node merges. ⛔ Do not pick this up from the node
-> text; wait for `docs/program/wp/RT-CONTSPEC-ABI.md` and the release post.
+> ⭐ **`docs/program/wp/RT-CONTSPEC-ABI.md`** (written 2026-08-01, while slice 0
+> was in flight). ⛔ **Read the frame, not this node.**
+>
+> ⚠ **`ready` means shovel-ready, NOT startable now.** `depends_on` names
+> [[RT-CONTSPEC-PLANNER]], and the chain is strict: slice 2 branches from
+> `main` **after slice 1 lands**. ⛔ Do not cut a branch before then, and ⛔ do
+> not start on a Steward post alone — wait for the release.
 
 ## Scope, as ruled
 
