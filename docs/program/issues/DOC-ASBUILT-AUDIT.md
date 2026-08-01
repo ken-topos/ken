@@ -5,7 +5,7 @@ status: ready
 owner: doc
 size: L
 gate: none
-depends_on: [DOC-ASBUILT-FRAGMENTS, DOC-ASBUILT-EXECUTION, DOC-ASBUILT-SOLUTIONS, DOC-ASBUILT-CHAPTERS]
+depends_on: [DOC-ASBUILT-FRAGMENTS, DOC-ASBUILT-EXECUTION, DOC-ASBUILT-SOLUTIONS, DOC-ASBUILT-CHAPTERS, DOC-ASBUILT-READER, DOC-ASBUILT-AGENTS]
 blocks: []
 github: null
 origin: "Measured by the Steward 2026-08-01 at origin/main 2e6c4f15 with scripts/gen-doc-status.sh --check. Requested by the Librarian's restart brief (2026-08-01) and framed under the operator's doc-track restart. Steward-filed; agents cannot create tracked work per COORDINATION §2."
@@ -103,7 +103,12 @@ heading change moves the blob just as a prose change does.
 **Slice 2 — [[DOC-ASBUILT-EXECUTION]]** ✅ framed, `ready`, **in flight**.
 **Slice 3 — [[DOC-ASBUILT-SOLUTIONS]]** ✅ framed and `ready`.
 **Slice 4 — [[DOC-ASBUILT-CHAPTERS]]** ✅ framed and `ready`.
-**Slices 5–6 — owed by the Steward.**
+**Slice 5 — [[DOC-ASBUILT-READER]]** ✅ framed and `ready`.
+**Slice 6 — [[DOC-ASBUILT-AGENTS]]** ✅ framed and `ready`.
+
+⭐⭐ **PHASE A IS FULLY FRAMED. All 25 consuming documents are covered by exactly
+six slices**, and ⛔ no further phase-A frame is owed. When slice 6 merges,
+phase B is releasable.
 
 ## ⭐⭐ THE ROSTER BELOW IS RE-MEASURED AT `7a263d28` AND IS NOW STABLE
 
@@ -123,8 +128,14 @@ different at its base is measuring wrong.
 | 2 | [[DOC-ASBUILT-EXECUTION]] — `06-execution.md` | **16** | 25 |
 | 3 | [[DOC-ASBUILT-SOLUTIONS]] — `exercises/solutions.md` | **11** | 12 |
 | 4 | [[DOC-ASBUILT-CHAPTERS]] — `01-anatomy.md` + `02-types-contracts-and-proofs.md` + `03-assurance-and-trust.md` + `05-packages-and-provenance.md` | ⭐ **9** (union) | 30 |
-| 5 | *owed* — `library/agents/core/write-ken.md` (3/4) · `library/quickstart.md` (3/3) · `library/learn/exercises/exercises.md` (3/3) · `library/introduction.md` (2/3) · `library/learn/reading-ken/04-effects-capabilities-and-authority.md` (2/4) | union TBM | 17 |
-| 6 | *owed* — the **thirteen** 1-source pages: `library/README.md`, `library/agents/README.md`, `library/agents/core/{read-ken,proof-and-trust,toolchain}.md`, `library/agents/evaluations/README.md`, `library/agents/tasks/{author-package,diagnose,effects-and-capabilities,prove-or-repair,read-review,write-program}.md`, `library/learn/exercises/README.md` | union TBM | 15 |
+| 5 | [[DOC-ASBUILT-READER]] — the **five** reader-facing entry pages: `quickstart.md` · `introduction.md` · `learn/exercises/exercises.md` · `learn/exercises/README.md` · `reading-ken/04-effects-capabilities-and-authority.md` | ⭐ **9** (union) | 14 |
+| 6 | [[DOC-ASBUILT-AGENTS]] — the **thirteen**-page agents corpus: `library/README.md` + all twelve `library/agents/**` | ⭐ **7** (union) | 18 |
+
+⭐ **Six slices cover all 25 consuming documents.** Cut by audience, then by
+shared source set: 3 duplicate source reads across the 5/6 boundary
+(`07-catalog-style-guide`, `36-effects`, `64-trust-model`) buy two
+genre-coherent, separately-reviewable slices instead of one 18-page candidate
+whose sweep nobody could audit.
 
 > ### ⭐⭐ SLICES ARE CUT BY SHARED SOURCE SET, NOT ONE-PER-PAGE
 >
