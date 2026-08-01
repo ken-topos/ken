@@ -5,7 +5,7 @@ status: ready
 owner: doc
 size: L
 gate: none
-depends_on: [DOC-ASBUILT-FRAGMENTS, DOC-ASBUILT-EXECUTION, DOC-ASBUILT-SOLUTIONS]
+depends_on: [DOC-ASBUILT-FRAGMENTS, DOC-ASBUILT-EXECUTION, DOC-ASBUILT-SOLUTIONS, DOC-ASBUILT-CHAPTERS]
 blocks: []
 github: null
 origin: "Measured by the Steward 2026-08-01 at origin/main 2e6c4f15 with scripts/gen-doc-status.sh --check. Requested by the Librarian's restart brief (2026-08-01) and framed under the operator's doc-track restart. Steward-filed; agents cannot create tracked work per COORDINATION §2."
@@ -102,6 +102,8 @@ heading change moves the blob just as a prose change does.
 **Slice 1 — [[DOC-ASBUILT-FRAGMENTS]]** ✅ **merged** (`d7435f50`, PR #1282).
 **Slice 2 — [[DOC-ASBUILT-EXECUTION]]** ✅ framed, `ready`, **in flight**.
 **Slice 3 — [[DOC-ASBUILT-SOLUTIONS]]** ✅ framed and `ready`.
+**Slice 4 — [[DOC-ASBUILT-CHAPTERS]]** ✅ framed and `ready`.
+**Slices 5–6 — owed by the Steward.**
 
 ## ⭐⭐ THE ROSTER BELOW IS RE-MEASURED AT `7a263d28` AND IS NOW STABLE
 
@@ -115,18 +117,33 @@ row to the drift population** — editing any other consuming page adds nothing.
 ⇒ **These numbers are fixed until phase B**, and a slice measuring something
 different at its base is measuring wrong.
 
-| # | document | distinct drifted sources | citations |
+| # | slice | distinct drifted sources | citations |
 |---|---|---|---|
-| 2 | `library/learn/reading-ken/06-execution.md` | **16** | 25 |
-| 3 | `library/learn/exercises/solutions.md` | **11** | 12 |
-| — | `library/learn/reading-ken/fragments.md` ✅ merged | 9 | 10 |
-| 4 | `library/learn/reading-ken/05-packages-and-provenance.md` | **7** | 10 |
-| 5 | `library/learn/reading-ken/02-types-contracts-and-proofs.md` | **6** | 6 |
-| 6 | `library/learn/reading-ken/03-assurance-and-trust.md` | **5** | 8 |
-| 7 | `library/learn/reading-ken/01-anatomy.md` | **4** | 6 |
-| 8 | `library/agents/core/write-ken.md` · `library/quickstart.md` · `library/learn/exercises/exercises.md` | 3 each | 4/3/3 |
-| 9 | `library/learn/reading-ken/04-effects-capabilities-and-authority.md` · `library/introduction.md` | 2 each | 4/3 |
-| 10 | the **twelve** 1-source pages (`library/README.md`, `library/agents/README.md`, `library/agents/core/{read-ken,proof-and-trust,toolchain}.md`, `library/agents/evaluations/README.md`, `library/agents/tasks/{author-package,diagnose,effects-and-capabilities,prove-or-repair,read-review,write-program}.md`, `library/learn/exercises/README.md`) | 1 each | 1 (3 for `author-package`) |
+| — | `library/learn/reading-ken/fragments.md` ✅ **merged** | 9 | 10 |
+| 2 | [[DOC-ASBUILT-EXECUTION]] — `06-execution.md` | **16** | 25 |
+| 3 | [[DOC-ASBUILT-SOLUTIONS]] — `exercises/solutions.md` | **11** | 12 |
+| 4 | [[DOC-ASBUILT-CHAPTERS]] — `01-anatomy.md` + `02-types-contracts-and-proofs.md` + `03-assurance-and-trust.md` + `05-packages-and-provenance.md` | ⭐ **9** (union) | 30 |
+| 5 | *owed* — `library/agents/core/write-ken.md` (3/4) · `library/quickstart.md` (3/3) · `library/learn/exercises/exercises.md` (3/3) · `library/introduction.md` (2/3) · `library/learn/reading-ken/04-effects-capabilities-and-authority.md` (2/4) | union TBM | 17 |
+| 6 | *owed* — the **thirteen** 1-source pages: `library/README.md`, `library/agents/README.md`, `library/agents/core/{read-ken,proof-and-trust,toolchain}.md`, `library/agents/evaluations/README.md`, `library/agents/tasks/{author-package,diagnose,effects-and-capabilities,prove-or-repair,read-review,write-program}.md`, `library/learn/exercises/README.md` | union TBM | 15 |
+
+> ### ⭐⭐ SLICES ARE CUT BY SHARED SOURCE SET, NOT ONE-PER-PAGE
+>
+> ⚠ **The original roster was one WP per document.** Slice 4 measured that out
+> of it: `01-anatomy`'s sources are a **strict subset** of `05-packages`'s, and
+> all four remaining `reading-ken` chapters share **9** distinct sources — fewer
+> than slice 2 alone.
+>
+> ⭐ **The expensive act is reading a source at its current blob**, not editing a
+> page. Four separate WPs would have read the same six sources four times.
+>
+> ⭐⭐ **And it is a correctness argument.** Pages of one genre **share claim
+> classes**, so a class repaired in one page may survive in a sibling. Grouping
+> them makes `D3`'s sweep cross-page; splitting them reproduces — *across* WPs,
+> where no single QA pass can see it — the defect that sank two candidates
+> *within* a page.
+>
+> ⇒ ⛔ **Do not cut a remaining slice one-page-per-WP by default.** Measure the
+> union first.
 
 **25 consuming documents**, and ⭐ **all 28 drifted sources are cited by at least
 one of them** — none is reachable only through the generated `library/STATUS.md`,

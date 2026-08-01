@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-01 15:44:52Z — from 136 issue file(s) in `docs/program/issues/`.
+2026-08-01 15:49:25Z — from 137 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -63,6 +63,7 @@ the committed file matches the generator's output.
 | `CONF-FMT8-LEVELTOK` | FMT8's fixture is unproducible: the row demands a 'genuine level-token fixture' but the lexer has no Level/Label token kind and never will under endpoint (b) | draft | spec-enclave | S | none | — |
 | `CONF-SEC4-REFL-PAIR` | Sec4's C1/C2 refl pair is stale against ADR-0013: the true arm is unreachable and the false arm is green for the wrong reason | draft | spec-enclave | S | none | — |
 | `DOC-ASBUILT-AUDIT` | As-built reconciliation — 27 cited sources have drifted from their attestations, so the library's currency claim is unbacked corpus-wide | ready | doc | L | none | — |
+| `DOC-ASBUILT-CHAPTERS` | As-built slice 4 — reconcile the four remaining reading-ken chapters together; they share 9 sources and their claim classes cross page boundaries | ready | doc | L | none | — |
 | `DOC-ASBUILT-EXECUTION` | As-built slice 2 — reconcile 06-execution.md against its 16 drifted cited sources, the largest phase-A population | ready | doc | L | none | — |
 | `DOC-ASBUILT-FRAGMENTS` | As-built slice 1 — reconcile fragments.md against its 9 drifted cited sources; it is the keystone because 7 other documents cite it | merged | doc | M | none | — |
 | `DOC-ASBUILT-SOLUTIONS` | As-built slice 3 — reconcile exercises/solutions.md against its 11 drifted cited sources; every claim here is a worked answer a reader will run | ready | doc | L | none | — |
@@ -180,6 +181,7 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
+- `DOC-ASBUILT-CHAPTERS` — As-built slice 4 — reconcile the four remaining reading-ken chapters together; they share 9 sources and their claim classes cross page boundaries
 - `DOC-ASBUILT-EXECUTION` — As-built slice 2 — reconcile 06-execution.md against its 16 drifted cited sources, the largest phase-A population
 - `DOC-ASBUILT-SOLUTIONS` — As-built slice 3 — reconcile exercises/solutions.md against its 11 drifted cited sources; every claim here is a worked answer a reader will run
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
@@ -208,6 +210,7 @@ is itself not yet `merged`/`closed`:
 - `ABI-S6` blocked by `ABI-S1` (status: draft)
 - `DOC-ASBUILT-AUDIT` blocked by `DOC-ASBUILT-EXECUTION` (status: ready)
 - `DOC-ASBUILT-AUDIT` blocked by `DOC-ASBUILT-SOLUTIONS` (status: ready)
+- `DOC-ASBUILT-AUDIT` blocked by `DOC-ASBUILT-CHAPTERS` (status: ready)
 - `DS-9` blocked by `KERNEL-NESTED-IND` (status: active)
 - `F4` blocked by `A3` (status: draft)
 - `NATIVE-HANDLE-CARRIER` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
