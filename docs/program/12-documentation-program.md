@@ -218,20 +218,20 @@ right before Wave 1 produces content at volume.
 > content is framed.** ⛔ Not doc-ring scope, and ⛔ not a reason for the ring to
 > wait on Wave 3 work it has no frame for.
 
-> ### ⛔ Wave 0 met that exit condition only STRUCTURALLY. Wave 1 is gated.
+> ### Wave 0 met that exit condition only STRUCTURALLY — the gap is now CLOSED
 >
 > DOC-W0 merged (`origin/main @ 6be9754b`, 2026-07-22) and **records** a
-> revision, validated as a real ancestor. But **no code path reads a cited
-> source's bytes at `REVISION`** — so the recorded revision certifies nothing
+> revision, validated as a real ancestor. But **no code path read a cited
+> source's bytes at `REVISION`** — so the recorded revision certified nothing
 > about the corpus, which is *"a date with extra steps"*, the exact thing §121
 > forbids. Found by the adversary post-merge, after nine review rounds.
 >
-> **Whoever frames Wave 1: take `depends_on: [DOC-CURRENCY-ANCHOR]` and read
-> `issues/DOC-CURRENCY-ANCHOR.md` first.** Wave 1 is where this bites — its
-> derived-reference pages cite **live spec chapters**, and nothing forces a
-> `REVISION` bump when one moves. The first time a cited chapter's body
-> changes under a stable heading, every derived page claims a currency it does
-> not have, with every gate green.
+> **Discharged by `DOC-CURRENCY-ANCHOR` (closed 2026-07-22).**
+> `scripts/gen-doc-status.sh` now compares each cited source's bytes at
+> `REVISION` against `HEAD` and fails on drift, so Wave 1's derived-reference
+> pages no longer claim a currency nothing checks. Wave 1 was framed with
+> `depends_on: [DOC-CURRENCY-ANCHOR]` and has since landed; the record is kept
+> here because the banner was correct when written.
 
 ### ⛔ Wave 1 RE-SCOPED 2026-07-22 (operator): defer the complete-program work
 
@@ -339,7 +339,7 @@ Each subsection states: what the wave produces, the **property** it exits on,
 what gates it, and the framing traps I have already found. Waves 1 and 2 are
 framed as issues; 3 through 6 are the map.
 
-### Wave 1 — the read-Ken spine (FRAMED · gated on `DOC-CURRENCY-ANCHOR`)
+### Wave 1 — the read-Ken spine (LANDED)
 
 **Produces.** A revision of `library/introduction.md`; `library/quickstart.md`;
 and `library/learn/reading-ken/` chapters **01–06** — anatomy, types/contracts/
@@ -357,11 +357,11 @@ its contract, its assurance class, and the authority it requires.* Note what
 this does **not** claim: nothing about synthesizing a whole program. That is
 Wave 1b's exit and it is deferred.
 
-**Gated on `issues/DOC-CURRENCY-ANCHOR.md`.** Wave 1 is exactly where DOC-W0's
-unmet half bites: its derived-reference pages cite **live spec chapters**, and
-nothing today forces a `REVISION` bump when one moves. The first time a cited
-chapter's body changes under a stable heading, every derived page claims a
-currency it does not have, **with every gate green.**
+**Was gated on `issues/DOC-CURRENCY-ANCHOR.md`, now discharged.** Wave 1 is
+exactly where DOC-W0's unmet half bit: its derived-reference pages cite **live
+spec chapters**, and nothing forced a `REVISION` bump when one moved. That gap
+is closed — the content-currency check reads each cited source's bytes at
+`REVISION` and fails on drift.
 
 **Framing traps, both already paid for once:**
 - `library/introduction.md` **already landed in Wave 0** and is in
@@ -371,7 +371,7 @@ currency it does not have, **with every gate green.**
   checking they still exist and still check.** Every anchor in a frame is
   perishable; a fragment citation is an anchor.
 
-### Wave 2 — agent core and task packs (FRAMED)
+### Wave 2 — agent core and task packs (LANDED)
 
 **Produces.** `library/agents/manifest.toml`; the **four core modules** —
 `read-ken`, `write-ken`, `proof-and-trust`, `toolchain`; and **six task
