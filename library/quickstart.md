@@ -21,21 +21,20 @@ three this page walks through next: `check`, `run`, `fmt`.
 ## 2. Check and run one program
 
 The program is `library/guide/decomposition-abstraction.ken.md` — a real,
-already-checked catalog artifact (not a page written for this exercise). It
-is primarily a design-notes guide; its final fenced block is a genuine,
-executable `proc main` that the catalog's fence-checking gate holds to the
-same standard as every other Ken program, so it doubles honestly as this
-page's runnable example.
+first-class library guide migrated from the catalog, not a page written for
+this exercise. It is primarily a design-notes guide; its final fenced block is
+a genuine, executable `proc main`, so it doubles honestly as this page's
+runnable example. During the guide migration, candidate-local verification
+conserved all 40 `ken example` and `ken reject` fences across the three guides
+and ran `ken check` on every destination. That is evidence about the migration,
+not a claim that a standing catalog or library fence gate exists.
 
-**Scope note:** this page's "check and run one program" step is exempt
-from the `catalog/packages/` constraint that governs the fragments in
-`learn/reading-ken/`. No `catalog/packages/` artifact is itself runnable
-today (nothing there has a `proc main`); this page's population is
-"an executable demo," a different population from the reading curriculum's
-checked fragments. `library/guide/decomposition-abstraction.ken.md` is
-still a real catalog artifact, not an invented toy — it satisfies that
-constraint without forcing a package-fragment substitute that does not
-exist.
+**Scope note:** this page's "check and run one program" step uses a different
+population from the `catalog/packages/` fragments in `learn/reading-ken/`. No
+`catalog/packages/` artifact is itself runnable today (nothing there has a
+`proc main`), while this step needs an executable demo. The cited guide is a
+maintained `library/guide/` artifact rather than an invented toy; its former
+`catalog/guide/` path is now only a compatibility pointer.
 
 `ken check` elaborates every fence in a file (including the checked
 `` ```ken example `` blocks earlier in the file) without driving IO —
