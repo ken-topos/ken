@@ -556,6 +556,26 @@ glossary indexes. Exact syntax, CLI, target, and public-declaration facts are
 **Exit property.** *A reader who knows what they are looking for can find a
 complete, current answer without reading the normative spec front to back.*
 
+> ### Wave 4 has the same generation precondition Wave 5 states explicitly —
+> and, until now, did not state it (Steward, 2026-08-01, at `7fa65b20`)
+>
+> This wave commits that syntax, CLI, target, and public-declaration facts are
+> **generated**. Measured: `scripts/` holds three generators
+> (`gen-doc-status.sh`, `gen-progress.sh`, `gen-source-attestations.sh`) and
+> **none** extracts a declaration, keyword, syntax production, or CLI surface.
+> The CLI emits **no machine-readable output**. Ken has **no diagnostic
+> registry**, so a generated diagnostic index is not producible today.
+>
+> Wave 5 already handles exactly this case: the Librarian reports what the
+> format can express *before* the wave is framed, and **a fact we cannot
+> generate gets authored and labelled as authored, never generated-looking
+> prose.** That rule applies here verbatim.
+>
+> ⇒ **The report is `DOC-W4-TOOLCHAIN`'s D0**, produced with the one Wave 4
+> surface that needs no generator at all — the toolchain reference. Later Wave 4
+> slices rest on its answer, so it is produced once and durably rather than
+> rediscovered per slice.
+
 > **⚠ `reference/platform/` is where D1 will be hardest to hold.** It documents
 > **explicit unavailable lanes**, and cross-platform is indefinitely deferred
 > (operator, L2-1). A page that describes a deferred lane in the present tense
