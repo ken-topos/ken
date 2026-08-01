@@ -360,6 +360,31 @@ validation = [
 owner = "doc"
 
 [[document]]
+path = "library/guide/dependent-data.ken.md"
+kind = "explanatory"
+audience = ["human-reader"]
+authority = "explanatory"
+availability = "current"
+sources = [
+  "spec/50-stdlib/60-length-indexed-vectors.md",
+  "crates/ken-elaborator/tests/explicit_data_elaboration.rs",
+  "docs/program/issues/KERNEL-NESTED-IND.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "checked-examples",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
 path = "library/guide/proof-techniques.ken.md"
 kind = "explanatory"
 audience = ["human-reader"]

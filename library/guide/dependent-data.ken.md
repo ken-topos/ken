@@ -13,17 +13,23 @@ instead of returning an `Option` or checking for emptiness at run time.
 
 In `Vec A n`, `A` is a **parameter**: every constructor keeps the same element
 type. The length `n` is an **index**: each constructor chooses the result index
-that describes the value it constructs. `vnil` constructs length `Zero`, while
-`vcons` constructs length `Suc n`.
+that describes the value it constructs. `VNil` constructs length `Zero`, while
+`VCons` constructs length `Suc n`.
 
 The distinction is checked by the declaration itself:
 
 ```ken
 data Vec (A : Type) : Nat → Type where {
-  vnil : Vec A Zero;
-  vcons : (n : Nat) → A → Vec A n → Vec A (Suc n)
+  VNil : Vec A Zero;
+  VCons : (n : Nat) → A → Vec A n → Vec A (Suc n)
 }
 ```
+
+This is the brace/`where` declaration form the current parser accepts.
+The normative specification displays the canonical constructors as lowercase
+`vnil` and `vcons`; copying that display literally does not parse today, so this
+checked page names the accepted surface form instead of silently presenting it
+as the canonical spelling.
 
 The index is not a comment or a separate proof attached later. It is part of
 the constructor's result type, so every `Vec A n` carries its length in the
@@ -37,8 +43,8 @@ smaller bounded index produces one for a successor bound.
 
 ```ken
 data Fin : Nat → Type where {
-  fzero : (n : Nat) → Fin (Suc n);
-  fsuc : (n : Nat) → Fin n → Fin (Suc n)
+  FZero : (n : Nat) → Fin (Suc n);
+  FSuc : (n : Nat) → Fin n → Fin (Suc n)
 }
 ```
 
@@ -55,11 +61,11 @@ performs no run-time emptiness check.
 ```ken
 fn head (A : Type) (n : Nat) (v : Vec A (Suc n)) : A =
   match v {
-    vcons m x xs ↦ x
+    VCons m x xs ↦ x
   }
 ```
 
-This omitted `vnil` arm is exhaustive because `vnil` constructs
+This omitted `VNil` arm is exhaustive because `VNil` constructs
 `Vec A Zero`, which cannot inhabit the required `Vec A (Suc n)`. The landed
 indexed-match mechanism discharges that impossible branch and still gives the
 kernel a total eliminator. These declarations and `head` are the
