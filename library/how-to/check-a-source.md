@@ -17,8 +17,10 @@ Success exits with status 0 and prints nothing.
 The refusal includes the path that could not be read:
 
 ```console
-$ target/debug/ken check /tmp/does-not-exist.ken
-ken check: cannot read '/tmp/does-not-exist.ken': No such file or directory (os error 2)
+$ mkdir -p target/howto-check
+$ rm -f target/howto-check/does-not-exist.ken
+$ target/debug/ken check target/howto-check/does-not-exist.ken
+ken check: cannot read 'target/howto-check/does-not-exist.ken': No such file or directory (os error 2)
 ```
 
 Correct the path and rerun `check`. The first command on this page is the
