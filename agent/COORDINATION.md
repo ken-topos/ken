@@ -278,9 +278,33 @@ ring guess.
 | WP **rescoped in place** (scope amended, hard stop ruled, deliverable added) | ⭐ **keep the thread.** Nothing was split, so the WP's identity is unchanged |
 | WP **respun** (new candidate SHA after a reject) | ⭐ **keep the thread.** A rejected candidate is not a new WP |
 | work **routed** to another WP (a `D4` route, an inherited obligation) | ⭐ **keep both threads.** The route is a reply in the *origin* thread; the obligation lands in the *target* WP's **frame**, ⛔ not as a cross-post |
+| WP **merged**, retros posted | ⛔ **the thread is CLOSED.** It takes no further posts, ever |
 
 ⚠ **The test is "did the set of WPs change?"** — not "did anything change?" Only
 a split changes it.
+
+> ### ⛔ A MERGED WP'S THREAD IS CLOSED — and this is where the rule actually breaks
+>
+> ⚠ **Measured 2026-08-01, one hour after this section landed.** Runtime QA
+> posted **`QA APPROVED — Slice 2 exact ed527eb7…`** into **slice 1's** thread.
+> Slice 1 was merged, retro'd and closed; slice 2 had its own kick and its own
+> thread, and the leader and implementer were both already posting there
+> correctly.
+>
+> ⭐ **The cost is not untidiness — it is a hole at the point of inspection.**
+> Anyone reconstructing slice 2 from its own thread saw handoff → review request
+> → *nothing* → Architect request. **The approval was invisible exactly where a
+> reader checks whether one exists**, while a closed WP's thread carried a live
+> verdict about a different candidate.
+>
+> ⚠ **Note what did NOT cause it: no compaction, no stale id, no rescope.** The
+> seat had simply been living in that thread all afternoon through four review
+> rounds and a retro, and posted where it had been posting. ⇒ ⭐ **Anchor on the
+> WP you are working on, never on the thread you last posted in.** Before every
+> post, ask *which WP is this about* and reply under **that** WP's kick.
+>
+> ⭐ **The successor's kick is the signal that the old thread is closed** — when
+> the Steward releases the next slice, the previous slice's thread is done.
 
 ### 4d. Top-level is a closed list
 
