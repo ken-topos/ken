@@ -21,7 +21,8 @@ origin: Architect ruling evt_3t7t27e3rv8cx (2026-07-29), outcome 2 on the Stewar
 > mechanism direction was confirmed correct in the same audit. Only the delivery
 > shape changed.
 >
-> ⇒ **`D7` now lands through three staged slices** —
+> ⇒ **`D7` now lands through four staged slices** —
+> [[RT-CONTSPEC-SUBSTRATE]] (dormant `D7` substrate) →
 > [[RT-CONTSPEC-PLANNER]] (planner closure, dormant) →
 > [[RT-CONTSPEC-ABI]] (unit/descriptor + ABI gates, dormant) →
 > [[RT-CONTSPEC-LOWER]] (branch lowering, ledgers, witness, CI — **activates**).

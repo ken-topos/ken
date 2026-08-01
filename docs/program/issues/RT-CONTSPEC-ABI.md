@@ -11,7 +11,7 @@ github: null
 origin: "Architect second WIP audit evt_4t09329vdrf (2026-08-01), outcome (c). Slice 2 of the Steward's staged recut of RT-RECURSOR-TRANSPORT + RT-DECL-CLOSURE-PORT D7."
 ---
 
-> # ⏳ SLICE 2 OF 3 — `draft` UNTIL ITS FRAME IS WRITTEN
+> # ⏳ SLICE 2 OF 4 — `draft` UNTIL ITS FRAME IS WRITTEN
 >
 > ⛔ **`status: draft` here means the FRAME is owed, not that the work is
 > unclear.** The Steward writes it while [[RT-CONTSPEC-PLANNER]] is in flight,

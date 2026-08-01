@@ -1,4 +1,4 @@
-# WP frame — `RT-CONTSPEC-PLANNER` (slice 1 of 3)
+# WP frame — `RT-CONTSPEC-PLANNER` (slice 1 of 4)
 
 **Owner:** team Runtime · **Size:** M · **Node:**
 `docs/program/issues/RT-CONTSPEC-PLANNER.md`
@@ -22,8 +22,8 @@
 
 | input | value |
 |---|---|
-| base | ⏳ **PENDING** — routed to the Architect at `evt_1bh3p4wx76wtv`. ⛔ **This frame is not releasable until it is filled in.** |
-| proved semantic base | `93746adaaef845f6c857b6c007aeac336c6c800c` |
+| base | ⭐ **`origin/main` AFTER [[RT-CONTSPEC-SUBSTRATE]] (slice 0) lands.** Ruled at `evt_6wkw2c7ykjxsy`. ⛔ Not `93746ada` — it is a proved **oracle**, not a lawful base, and not an ancestor of `main`. ⛔ Not a preservation ref, ⛔ not slice 0's branch. |
+| semantic oracle (read-only) | `93746adaaef845f6c857b6c007aeac336c6c800c` — ⛔ **oracle, not a base**; six Runtime paths at +2,467/−526 |
 | prototype reference | `origin/preserved/rt-recursor-freeze-465fab90` = `465fab90767a808edac79e665a1055b81206720b`, tree `aa7571a0828e067852075ce93418c1656e10ad96`, 173 files, +4267/−7885 |
 | binding ruling | `evt_7dhwrk26ks9m0` (mechanism) · `evt_4t09329vdrf` (sizing) |
 | campaign | `docs/program/16-recursive-descent-retirement.md` |

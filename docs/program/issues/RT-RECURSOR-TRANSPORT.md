@@ -23,11 +23,12 @@ origin: Operator directive 2026-07-29 — prioritize replacement of RecursiveDes
 >
 > ⛔ **The semantics are NOT recut.** The ruling at `evt_7dhwrk26ks9m0` stands
 > unchanged, and the mechanism direction was confirmed correct in the same
-> audit. **Only the delivery shape changed.** Work now runs through three
+> audit. **Only the delivery shape changed.** Work now runs through four
 > staged slices, in order:
 >
 > | slice | node | activates? |
 > |---|---|---|
+> | 0 | [[RT-CONTSPEC-SUBSTRATE]] — dormant `D7` substrate | ⛔ no, dormant |
 > | 1 | [[RT-CONTSPEC-PLANNER]] — planner closure | ⛔ no, dormant |
 > | 2 | [[RT-CONTSPEC-ABI]] — unit/descriptor + ABI/lifetime/affinity gates | ⛔ no, dormant |
 > | 3 | [[RT-CONTSPEC-LOWER]] — branch lowering, ledgers, witness, CI | ✅ **yes** |
@@ -55,7 +56,7 @@ origin: Operator directive 2026-07-29 — prioritize replacement of RecursiveDes
 > | fact | value **(corrected 2026-08-01 — the recut changed every row but the last)** |
 > |---|---|
 > | branch | ⛔ **one branch per slice**, not `wp/RT-DECL-CLOSURE-PORT` |
-> | PR | ⛔ **three** PRs — slices 1 and 2 land dormant, slice 3 activates |
+> | PR | ⛔ **four** PRs — slices 0, 1 and 2 land dormant, slice 3 activates |
 > | tracker flip | ⛔ **three** nodes flip `merged` in **one** commit when [[RT-CONTSPEC-LOWER]] merges: this one, [[RT-DECL-CLOSURE-PORT]], and the slice |
 > | CI | `rt_parity_native` is this node's **own** job — ⚠ meaningful only at slice 3 |
 >
@@ -104,7 +105,7 @@ that *could* be pulled forward.** Both are now spent: the node was pulled to
 this section hedged against — learning of infeasibility after five nodes of
 investment — is no longer the risk being run.
 ⚠ **It is no longer "in flight" either** — as of 2026-08-01 it is frozen and
-delivers through the three slices in the top banner. ⛔ Read that banner, not
+delivers through the four slices in the top banner. ⛔ Read that banner, not
 this paragraph, for the current delivery shape.
 
 ⭐ **What actually happened is better than the mitigation.** The transport is
