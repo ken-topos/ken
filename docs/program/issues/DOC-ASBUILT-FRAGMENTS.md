@@ -1,7 +1,7 @@
 ---
 id: DOC-ASBUILT-FRAGMENTS
 title: "As-built slice 1 — reconcile fragments.md against its 9 drifted cited sources; it is the keystone because 7 other documents cite it"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
@@ -10,6 +10,21 @@ blocks: [DOC-ASBUILT-AUDIT]
 github: null
 origin: "Steward 2026-08-01, phase A slice 1 of DOC-ASBUILT-AUDIT, measured at origin/main 2e6c4f15. Ordering ruled by the Steward on the measured fact that fragments.md is cited as a source by 7 documents."
 ---
+
+> # ✅ MERGED 2026-08-01 — `origin/main = d7435f50` (PR #1282)
+>
+> Candidate `2c7807960bfa791997e58caef540e86a48a9a237`, one file, `+6/−7`.
+> Blob-verified: `fragments.md` is `e1392c8a` on both the candidate and `main`.
+> ⭐ The publisher squashes — this is a **content** check, ⛔ not ancestry.
+>
+> Librarian QA approve `evt_4rm0rj7f6w6w0`; Decision `dec_21fefm9aqmv89`
+> resolved. Base staleness (`5619748c` → `433ef1b2`) was answered by an **empty
+> merge-base intersection** plus a positive post-condition on the computed merge
+> tree — predicted `30a509cc` before publishing, and `30a509cc` is what landed.
+>
+> ⭐ **`AC-5` came back 27 → 28 with `fragments.md` as the sole added path — the
+> expected result**, and the drift baseline is **28 for every remaining phase-A
+> slice**. See [[DOC-ASBUILT-EXECUTION]].
 
 > # ⭐ SLICE 1 OF PHASE A — THE KEYSTONE
 >
