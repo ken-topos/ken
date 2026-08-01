@@ -5,11 +5,22 @@ status: ready
 owner: doc
 size: L
 gate: none
-depends_on: [DOC-ASBUILT-FRAGMENTS]
+depends_on: [DOC-ASBUILT-FRAGMENTS, DOC-ASBUILT-EXECUTION, DOC-ASBUILT-SOLUTIONS]
 blocks: []
 github: null
 origin: "Measured by the Steward 2026-08-01 at origin/main 2e6c4f15 with scripts/gen-doc-status.sh --check. Requested by the Librarian's restart brief (2026-08-01) and framed under the operator's doc-track restart. Steward-filed; agents cannot create tracked work per COORDINATION §2."
 ---
+
+> # ⛔⛔ THIS NODE IS **NOT** PICKABLE WORK — IT IS THE CAMPAIGN LAW PLUS PHASE B
+>
+> ⚠ **Its `depends_on` must name every phase-A slice.** It listed only slice 1;
+> when slice 1 merged, this node surfaced on the tracker's **releasable
+> frontier** as if a team could start it. ⛔ It cannot — phase B is gated on
+> **every** phase-A slice merging.
+>
+> ⭐ **Every new phase-A slice frame MUST add itself to the `depends_on` above**,
+> in the same commit that files it. That is the only thing keeping this node off
+> the frontier. (Steward error, corrected 2026-08-01.)
 
 > # ⛔⛔ THE GATE IS ALREADY RED ON `main`, AND THAT IS THE SUBJECT
 >
@@ -24,13 +35,24 @@ origin: "Measured by the Steward 2026-08-01 at origin/main 2e6c4f15 with scripts
 
 ## The measurement
 
+⚠ **Re-measured at `7a263d28`, after slice 1.** The original row was measured at
+`2e6c4f15` and read 27 / 24 / 11 / 16 / 21-of-24.
+
 | quantity | value |
 |---|---|
-| drifted cited sources | **27** |
-| consuming `library/` documents | **24** |
+| drifted cited sources | **28** (27 + `fragments.md`, which slice 1 edited) |
+| consuming `library/` documents | **25** |
 | drifted sources with **exactly one** consuming document | **11** |
-| drifted sources shared by **two or more** documents | ⭐ **16** (one is cited by **9**) |
-| documents in the largest connected component | ⚠ **21 of 24** |
+| drifted sources shared by **two or more** documents | ⭐ **17** (one is cited by **9**) |
+| documents in the largest connected component | ⚠ **22 of 25** (+ 27 of the 28 sources) |
+
+⭐ **The graph has exactly two components, and the small one is genuinely
+separable**: `library/README.md`, `library/agents/README.md`, and
+`library/agents/evaluations/README.md` share
+`docs/program/12-documentation-program.md` and nothing else.
+⛔ **Phase B is still ONE act anyway** — splitting the ledger
+write to bank 1 row of 28 early is exactly what makes a partial re-stamp look
+complete. Recorded because it is measured, ⛔ not as licence to split.
 
 Reproduce it — read-only, no build turn:
 
@@ -77,25 +99,49 @@ heading change moves the blob just as a prose change does.
 
 ## The slice roster
 
-**Slice 1 — [[DOC-ASBUILT-FRAGMENTS]]** ✅ framed and `ready`.
+**Slice 1 — [[DOC-ASBUILT-FRAGMENTS]]** ✅ **merged** (`d7435f50`, PR #1282).
+**Slice 2 — [[DOC-ASBUILT-EXECUTION]]** ✅ framed, `ready`, **in flight**.
+**Slice 3 — [[DOC-ASBUILT-SOLUTIONS]]** ✅ framed and `ready`.
 
-**Phase A remainder — frames owed by the Steward, cut by consuming document**,
-heaviest first (drifted-source count in parentheses):
+## ⭐⭐ THE ROSTER BELOW IS RE-MEASURED AT `7a263d28` AND IS NOW STABLE
 
-| # | document | (n) |
-|---|---|---|
-| 2 | `library/learn/reading-ken/06-execution.md` | 15 |
-| 3 | `library/learn/exercises/solutions.md` | 11 |
-| 4 | `library/learn/reading-ken/05-packages-and-provenance.md` | 6 |
-| 5 | `library/learn/reading-ken/02-types-contracts-and-proofs.md` | 5 |
-| 6 | `library/learn/reading-ken/03-assurance-and-trust.md` | 4 |
-| 7 | `library/learn/reading-ken/01-anatomy.md` · `library/quickstart.md` · `library/agents/core/write-ken.md` · `library/learn/exercises/exercises.md` | 3 each |
-| 8 | `library/introduction.md` (2) + the twelve 1-source pages | 1–2 |
+⚠ **Every count moved when slice 1 landed**, because seven documents declare
+`fragments.md` as a source and its blob changed. The original roster was
+measured before that.
 
-⚠ **The counts are per-document citations of drifted sources, not effort.** A
-page with one drifted source can still owe a whole-page claim sweep — the
-Librarian's rule is that the obligation terminates at *the claim in its
-consuming page*, so the unit of review is the page.
+⭐ **They will not move again for the rest of phase A.** `fragments.md` was the
+**only** attested `library/` page, so ⛔ **no remaining phase-A slice can add a
+row to the drift population** — editing any other consuming page adds nothing.
+⇒ **These numbers are fixed until phase B**, and a slice measuring something
+different at its base is measuring wrong.
+
+| # | document | distinct drifted sources | citations |
+|---|---|---|---|
+| 2 | `library/learn/reading-ken/06-execution.md` | **16** | 25 |
+| 3 | `library/learn/exercises/solutions.md` | **11** | 12 |
+| — | `library/learn/reading-ken/fragments.md` ✅ merged | 9 | 10 |
+| 4 | `library/learn/reading-ken/05-packages-and-provenance.md` | **7** | 10 |
+| 5 | `library/learn/reading-ken/02-types-contracts-and-proofs.md` | **6** | 6 |
+| 6 | `library/learn/reading-ken/03-assurance-and-trust.md` | **5** | 8 |
+| 7 | `library/learn/reading-ken/01-anatomy.md` | **4** | 6 |
+| 8 | `library/agents/core/write-ken.md` · `library/quickstart.md` · `library/learn/exercises/exercises.md` | 3 each | 4/3/3 |
+| 9 | `library/learn/reading-ken/04-effects-capabilities-and-authority.md` · `library/introduction.md` | 2 each | 4/3 |
+| 10 | the **twelve** 1-source pages (`library/README.md`, `library/agents/README.md`, `library/agents/core/{read-ken,proof-and-trust,toolchain}.md`, `library/agents/evaluations/README.md`, `library/agents/tasks/{author-package,diagnose,effects-and-capabilities,prove-or-repair,read-review,write-program}.md`, `library/learn/exercises/README.md`) | 1 each | 1 (3 for `author-package`) |
+
+**25 consuming documents**, and ⭐ **all 28 drifted sources are cited by at least
+one of them** — none is reachable only through the generated `library/STATUS.md`,
+whose own declared sources the gate exempts.
+
+⚠ **The counts are citations of drifted sources, not effort.** A page with one
+drifted source still owes a whole-page claim sweep — the obligation terminates
+at *the claim in its consuming page*, so the unit of review is the page.
+
+⚠⚠ **When measuring a page's population yourself, STRIP THE `#anchor` before
+matching a manifest `sources` entry against the drift list.** ⭐ The gate does
+(`REQUIRED_PATHS` is "every unique manifest-cited path, anchor stripped"), and a
+naive exact-string match silently under-counts every anchored citation — it
+reported 8 for `solutions.md` against the true 11. ⛔ An under-count reads as a
+smaller slice, not as an error.
 
 **Phase B — one terminal slice**, gated on every phase-A slice merging.
 ⛔ Do not frame or start it early.
