@@ -3,48 +3,92 @@
 **Node:** `docs/program/issues/RT-CONTSPEC-LOWER.md` · **Owner:** runtime ·
 **Size:** L (⚠ see *Sizing* — this is a pre-emptive split candidate)
 
-> ## ⛔⛔ READ FIRST — THIS FRAME IS **HALF-WRITTEN ON PURPOSE**
+> ## ✅ READ FIRST — THIS FRAME IS COMPLETE AND THIS NODE IS SHOVEL-READY
 >
-> ⏳ The node stays `status: draft` until the slots in *Fixed inputs* are
-> filled. ⛔ **Do not pick this up yet.**
+> **All four slots were filled on 2026-08-01** from the merged slice 2
+> (PR #1303, `origin/main = 3cc4fa19`), measured in the landed code rather than
+> read off slice 2's frame.
 >
-> **Why it exists now anyway:** operator standing policy (§2a-bis) requires a
-> framed successor while a node is with a team, and [[RT-CONTSPEC-ABI]] is with
-> the team now. ⭐ **Everything slice 2's outcome cannot change is written
-> below and is final.** The parts slice 2 genuinely fixes are marked
-> **`▢ SLOT`** and are the only work owed at its merge — minutes, not an hour.
->
-> ⚠ **The original instruction was "frame this last, or it will be sized
-> against a planner and ABI that do not exist yet."** That reasoning is sound
-> for the *interface* facts and is preserved as the slots. ⛔ It was **not**
-> grounded for the risk posture, the banned scope, the witness gate, or the
-> tracker discipline — none of which slice 2 can move. Those are written.
+> ⛔⛔ **SLOT B CAME BACK NEGATIVE AND IT IS THE MOST IMPORTANT LINE IN THIS
+> FRAME: neither of slice 2's gates reaches a lowered call.** `D3` validates the
+> descriptor *table*; `D4` is scoped to the *install* path in its own words.
+> ⇒ ⭐ **This slice inherits NOTHING at the call site and must build its own
+> gates there.** Read *Fixed inputs* before anything else.
 
 ---
 
 ## Fixed inputs
 
-**Base — a RULE, not a number.** Branch from `origin/main` **after
-[[RT-CONTSPEC-ABI]] has landed on it**. ⛔ Not from slice 2's branch, ⛔ not
-from a preservation ref, ⛔ not from any SHA quoted in this file.
+**Base — a RULE, not a number.** Branch from `origin/main` **containing
+[[RT-CONTSPEC-ABI]]** — that is, containing `abi.rs` blob
+`23b9f5d778bf98fbb2907cf087bf06da30d82e7d`. ⛔ Not from slice 2's branch, ⛔ not
+from a preservation ref, ⛔ not from any SHA quoted in this file: `main` moves,
+and `3cc4fa19` below is a *measurement timestamp*, not your base.
 ⚠ **This exact confusion cost a kickoff in slice 2** — re-derive the base at
 pickup and state the SHA you derived.
 
-**▢ SLOT A — the ABI surface slice 2 landed.** At slice 2's merge the Steward
-measures and writes in: the `AbiUnitDefinition` arm's exact name and
-constructor, the descriptor accessor this slice consumes, and the slot order
-`D2` fixed. ⛔ Do not guess these from slice 2's frame — its frame states
-intent, and the merged code is the authority.
+### ✅ SLOT A — the ABI surface slice 2 landed
 
-**▢ SLOT B — which of slice 2's gates bind at the call site.** `D3` (owner /
-lifetime / affinity) and `D4` (zero-allocation) are descriptor-level in slice 2.
-⚠ **Whether each extends to the lowered path is a real question, not a
-formality** — an owner gate that holds for a descriptor and not for the call
-that consumes it is a hole this slice would ship.
+**Measured by the Steward on `origin/main = 3cc4fa19` (PR #1303), not read off
+slice 2's frame.** All of it lives in
+`crates/ken-runtime/src/cranelift_backend/planning/static_transition/abi.rs`.
 
-**▢ SLOT C — the residual after slice 2's review.** Slice 1 needed four review
-rounds and the accepted surface moved every round. Whatever slice 2's review
-ratifies or defers lands here.
+| what | exact form |
+|---|---|
+| the `D1` arm | `AbiUnitDefinition::ContinuationSpecialization { specialization: ContinuationSpecializationId }` |
+| the descriptor | `AbiContinuationDescriptor { definition, header: AbiFrameHeader, slots: DenseRange, inputs: DenseRange }` |
+| per-input authority | `AbiContinuationInputAuthority { ordinal: u32, source_owner: PredeclaredFunctionId, referent_affinity: DenseRange }` |
+| storage on `AbiPlane` | `continuation_descriptors: Vec<AbiContinuationDescriptor>` · `continuation_slots: Vec<AbiSlot>` · `continuation_inputs: Vec<AbiContinuationInputAuthority>` |
+| install | `install_continuation_specialization_abi(&mut AbiPlane, &[PlannedContinuationSpecialization]) -> Result<(), CraneliftBackendError>` |
+| the `D3` gate | `AbiPlane::validate_continuation_specializations(&self, &[PlannedContinuationSpecialization]) -> Result<(), CraneliftBackendError>` |
+
+⭐ **`ContinuationSpecializationId(u32)` is the index into
+`continuation_descriptors`**, and `install` refuses when the constructed id and
+the positional index disagree. **Slices and ranges, not owned collections** —
+`DenseRange` into the three shared vectors is the addressing model, and this
+slice must keep it.
+
+⚠⚠ **Every one of these is `pub(super)` — visible only inside
+`planning::static_transition`.** This slice's work is in that module already
+(`static_transition.rs` calls both `install_…` and `validate_…` today), so it
+composes. ⛔ **But if a deliverable turns out to need any of them from outside
+that module, that is a HARD STOP to route — ⛔ not a visibility widening.**
+
+### ⛔⛔ SLOT B — ANSWERED, AND THE ANSWER IS "NEITHER"
+
+**Both of slice 2's gates stop at the descriptor table. ⛔ Neither reaches a
+lowered call, so this slice INHERITS NOTHING at the call site and must build its
+own.**
+
+- **`D3` — `validate_continuation_specializations`** checks the descriptor
+  population against the planner population: count equality, `id == index`, and
+  the arm's identity. ⇒ It validates **the table**, ⛔ not any use of it.
+- **`D4` — the zero-allocation gate** is scoped to the **install path** in its
+  own words (`abi.rs:597–603`): the four backing vectors are reserved to their
+  exact closed populations before the first descriptor is constructed, so
+  *capacity growth while appending* is the observable it refuses; the validator
+  is separately noted as allocating nothing on its success path. ⇒ **It says
+  nothing about allocation on a lowered call.**
+
+⚠ **`D4`'s positive control is `SKIP_CONTINUATION_ABI_PREFLIGHT`, a
+`#[cfg(test)]` thread-local** (`abi.rs:589–595`) that skips the preflight so the
+first descriptor grows storage. ⭐ Sound as a control for what it covers; ⛔ **it
+is not evidence about the lowered path and must not be cited as such.**
+
+⇒ ⭐⭐ **This is the concrete hole `AC-1`…`AC-4` exist to close.** An owner,
+lifetime, affinity or allocation property that holds for a descriptor and not
+for the call consuming it is exactly what this slice would otherwise ship.
+
+### ✅ SLOT C — the residual after slice 2's review is EMPTY
+
+**Slice 2 was approved on the FIRST round** — QA `evt_74mmepexexppy`, Architect
+`evt_5396qdh7a7p32`, Decision `dec_77b33m1pbahng` resolved, no rejects and
+nothing deferred into this slice.
+
+⭐ **Against slice 1's four rounds, that is the staging working**, and it is the
+reason to keep this slice's controls to the same standard rather than relaxing
+them: the cheapness of slice 2's review was bought by slices 0–1 having already
+fixed what it could assume.
 
 ---
 
@@ -192,9 +236,13 @@ restructure into smaller WPs — is explicitly on the table.**
 
 ## Contention
 
-`RT-BACKEND-MODULE-SPLIT` touches exactly these files and is sequenced after
-this capstone. ⚠ **▢ SLOT D — re-derive contention at pickup**: any node that
-lands between now and slice 2's merge may touch the lowering path.
+✅ **SLOT D — measured at `3cc4fa19`: no live contention.**
+`RT-BACKEND-MODULE-SPLIT` touches exactly these two files and is sequenced
+**after** this capstone; nothing else is in flight against
+`crates/ken-runtime/src/cranelift_backend/planning/`.
+
+⚠ **Re-derive at pickup anyway** — this is a measurement, and the doc track
+runs concurrently.
 
 ---
 
