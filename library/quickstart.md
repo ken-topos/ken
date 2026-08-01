@@ -2,7 +2,7 @@
 
 This page gets you from a clean checkout to reading one real, checked Ken
 program with a trust-aware eye. It does not teach the language — that is
-`learn/reading-ken/` (in progress) — it teaches the *loop*:
+`learn/reading-ken/` — it teaches the *loop*:
 build the toolchain, check a program, run it, format it, then read what it
 actually claims.
 
