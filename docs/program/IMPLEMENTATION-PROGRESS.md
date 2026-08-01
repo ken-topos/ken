@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-01 19:05:39Z — from 139 issue file(s) in `docs/program/issues/`.
+2026-08-01 20:17:56Z — from 140 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -67,6 +67,7 @@ the committed file matches the generator's output.
 | `DOC-ASBUILT-CHAPTERS` | As-built slice 4 — reconcile the four remaining reading-ken chapters together; they share 9 sources and their claim classes cross page boundaries | merged | doc | L | none | — |
 | `DOC-ASBUILT-EXECUTION` | As-built slice 2 — reconcile 06-execution.md against its 16 drifted cited sources, the largest phase-A population | merged | doc | L | none | — |
 | `DOC-ASBUILT-FRAGMENTS` | As-built slice 1 — reconcile fragments.md against its 9 drifted cited sources; it is the keystone because 7 other documents cite it | merged | doc | M | none | — |
+| `DOC-ASBUILT-LEDGER` | As-built phase B — the terminal re-stamp: install the reviewed attestation ledger for all 28 drifted rows at once and regenerate library/STATUS.md | ready | doc | S | none | — |
 | `DOC-ASBUILT-READER` | As-built slice 5 — reconcile the four reader-facing entry pages against their 6 shared drifted sources | merged | doc | M | none | — |
 | `DOC-ASBUILT-SOLUTIONS` | As-built slice 3 — reconcile the exercise/solution PAIR against its 11 drifted cited sources; a stale claim here is a broken answer under a retired question | merged | doc | L | none | — |
 | `DOC-ATTEST-LIVING` | attesting living tracker files makes every routine WP status flip redden the currency gate | closed | doc | S | none | — |
@@ -184,6 +185,7 @@ Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
 - `DOC-ASBUILT-AUDIT` — As-built reconciliation — 27 cited sources have drifted from their attestations, so the library's currency claim is unbacked corpus-wide
+- `DOC-ASBUILT-LEDGER` — As-built phase B — the terminal re-stamp: install the reviewed attestation ledger for all 28 drifted rows at once and regenerate library/STATUS.md
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-CONTSPEC-LOWER` — ContinuationSpecialization slice 3 — attach the token at each producer alternative, emit the direct call before the identity-erasing join, close nested recursion and the ledgers, then ACTIVATE
