@@ -105,12 +105,12 @@ audience = ["agent-reader"]
 authority = "how-to"
 availability = "current"
 sources = [
-  "catalog/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
+  "library/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
   "docs/program/07-catalog-style-guide.md#3-code-block-roles-the-fence-taxonomy",
   "docs/program/07-catalog-style-guide.md#61-local-bindings-as-exposition",
   "spec/30-surface/33-declarations.md#52-class-declaration--a-record-type",
   "spec/30-surface/33-declarations.md#53-instance-declaration--a-record-value--the-orphan-check",
-  "catalog/guide/surface-reference.ken.md#5-class-and-instance",
+  "library/guide/surface-reference.ken.md#5-class-and-instance",
 ]
 validation = [
   "manifest-coverage",
@@ -249,7 +249,7 @@ audience = ["agent-reader"]
 authority = "how-to"
 availability = "current"
 sources = [
-  "catalog/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
+  "library/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
   "spec/20-verification/21-spec-syntax.md#5-the-verification-status-model",
 ]
 validation = [
@@ -325,6 +325,90 @@ validation = [
   "manifest-coverage",
   "manifest-completeness",
   "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/guide/decomposition-abstraction.ken.md"
+kind = "explanatory"
+audience = ["human-reader"]
+authority = "explanatory"
+availability = "current"
+sources = [
+  "docs/PRINCIPLES.md#7-subsume-dont-proliferate--and-know-what-ken-is-not",
+  "docs/PRINCIPLES.md#12-bound-the-untrusted-at-its-boundary-make-the-trust-level-a-typed-choice",
+  "spec/50-stdlib/51-lawful-classes.md#2-the-three-classes",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "checked-examples",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/guide/proof-techniques.ken.md"
+kind = "explanatory"
+audience = ["human-reader"]
+authority = "explanatory"
+availability = "current"
+sources = [
+  "spec/10-kernel/16-observational.md#2-observational-equality-eq",
+  "spec/10-kernel/17-conversion.md#4-termination-of-conversion--the-sct-gate",
+  "spec/50-stdlib/51-lawful-classes.md#5-laws-proved-not-postulated--the-hard-soundness-gate-ac3",
+  "spec/30-surface/31-lexical.md#1d-canonical-form-and-layout",
+  "spec/30-surface/32-grammar.md#5-specifications",
+  "catalog/packages/Core/Logic/Transport.ken.md",
+  "catalog/packages/Core/Classes/LawfulClasses.ken.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "checked-examples",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/guide/surface-reference.ken.md"
+kind = "explanatory"
+audience = ["human-reader"]
+authority = "explanatory"
+availability = "current"
+sources = [
+  "spec/30-surface/31-lexical.md#1d-canonical-form-and-layout",
+  "spec/30-surface/32-grammar.md#1-compilation-units-and-declarations",
+  "spec/30-surface/33-declarations.md#1-definitions",
+  "spec/30-surface/34-data-match.md#3-pattern-matching--elim_d",
+  "spec/30-surface/36-effects.md#1-effects-as-a-static-row",
+  "spec/50-stdlib/51-lawful-classes.md#2-the-three-classes",
+  "catalog/packages/Data/Collections/Derived.ken.md",
+  "catalog/packages/Core/Classes/LawfulClasses.ken.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "checked-examples",
   "links",
   "source-anchors",
   "availability-label",
@@ -728,7 +812,7 @@ authority = "tutorial"
 availability = "current"
 sources = [
   "README.md#build",
-  "catalog/guide/decomposition-abstraction.ken.md",
+  "library/guide/decomposition-abstraction.ken.md",
   "spec/20-verification/21-spec-syntax.md#52-the-epistemic-status-per-claim-export-facing--oq-spec-decided",
   "spec/20-verification/21-spec-syntax.md#53-how-the-verdict-and-the-status-relate-the-projection",
   "spec/30-surface/33-declarations.md#321-admission-boundary-headers",

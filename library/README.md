@@ -16,7 +16,7 @@ declared in [`manifest.toml`](manifest.toml).
 | If you want to... | Go here | Status |
 |---|---|---|
 | **Read Ken** — understand a program someone else wrote | [`introduction.md`](introduction.md) | current — six-chapter reading curriculum available |
-| **Write Ken** — author a checked program | *not yet available here* | map only — Wave 3 |
+| **Write Ken** — author a checked program | [`guide/surface-reference.ken.md`](guide/surface-reference.ken.md) | current — checked conceptual guides available |
 | **Look something up** — a rule, a diagnostic, a CLI flag | *not yet available here* | map only — Wave 4 |
 | **Find a package** — browse the catalog by task | [`catalog/packages/`](../catalog/packages/README.md) directly, for now | map only — Wave 5 generated portal |
 | **Load agent context** — select product knowledge for a coding agent | [`agents/README.md`](agents/README.md) | current |
@@ -29,20 +29,20 @@ pages land; it does not point at pages that do not exist.
 
 <a id="whats-here-today-wave-0"></a>
 
-## What's here today (Waves 0–2)
+## What's here today
 
-Waves 0–2 have landed the **substrate**, the fragment-based reading
-curriculum and exercises, and the agent product-context packs. The substrate
-includes the manifest every page registers in, the generated status page, and
-the gates that keep both honest — never a hand-typed date, never an
-unregistered page, never a broken link, and never an unnoticed stale source.
+The library contains the **substrate**, the fragment-based reading curriculum
+and exercises, agent product-context packs, and checked conceptual guides.
+The substrate includes the manifest every page registers in, the generated
+status page, and the gates that keep both honest — never a hand-typed date,
+never an unregistered page, never a broken link, and never an unnoticed stale
+source.
 
-`catalog/guide/`'s checked literate guides have **not moved yet**. Wave 3
-remains map-only and cannot be framed until the Steward reconciles a
-migration-local or release-point verification form, mutation-proven for both
-fence polarities. The plan for what moves, what stays canonical, and what
-becomes a pointer is recorded in
-[`docs/program/13-documentation-migration-ledger.md`](../docs/program/13-documentation-migration-ledger.md).
+The checked literate guides are the
+[surface reference](guide/surface-reference.ken.md),
+[proof techniques](guide/proof-techniques.ken.md), and
+[decomposition and abstraction](guide/decomposition-abstraction.ken.md).
+`catalog/guide/` contains compatibility pointers rather than a second copy.
 
 ## Scope and authority
 

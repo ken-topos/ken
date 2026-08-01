@@ -65,7 +65,7 @@ law separately and record any trusted-base delta.
 
 Language forms come from `spec/30-surface/`; proof status from
 `spec/20-verification/`; execution from `spec/40-runtime/`. Current authoring
-practice is in `catalog/guide/`. Revision: `library/agents/manifest.toml`.
+practice is in `library/guide/`. Revision: `library/agents/manifest.toml`.
 
 ## 10. Known unavailable or partial behavior
 

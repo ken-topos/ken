@@ -76,7 +76,7 @@ Run only the package's targeted acceptance tests.
 
 Package structure and naming come from
 `docs/program/07-catalog-style-guide.md` §2, with `Findings` omitted per §5;
-language rules come from `spec/`; checked practice comes from `catalog/guide/`
+language rules come from `spec/`; checked practice comes from `library/guide/`
 and neighboring entries. Revision: `library/agents/manifest.toml`.
 
 ## 10. Known unavailable or partial behavior

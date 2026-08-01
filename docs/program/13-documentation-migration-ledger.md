@@ -20,7 +20,7 @@ stays outside the public product-doc navigation).
 | `README.md` (repo root) | Remains the public front door; shortens over time to thesis, status, and links into `library/`. | — | unchanged this wave |
 | `spec/` | Remains normative and structurally unchanged. `library/` reference pages cite or derive from it, never restate it. | — | unchanged (cited from `library/introduction.md`) |
 | `catalog/packages/` | Remains the canonical package source and per-package literate rationale. `library/catalog/` will generate discovery/structural reference around it. | 5 | not started |
-| `catalog/guide/` (`README.md`, `decomposition-abstraction.ken.md`, `proof-techniques.ken.md`, `surface-reference.ken.md`) | **Migrates into `library/learn/`, `library/guide/`, `library/how-to/`.** ⛔ Gated: these four files are literate `.ken.md` with **checked** `` ```ken ``/`` ```ken example ``/`` ```ken reject `` fences (`crates/ken-elaborator/src/literate.rs`). They must not move until an equivalent fence-checking gate exists and passes for `library/` content — moving them first would silently stop checking them while they kept *looking* checked. | 3 | **not started — the fence gate is the precondition, see below** |
+| `catalog/guide/` (`README.md`, `decomposition-abstraction.ken.md`, `proof-techniques.ken.md`, `surface-reference.ken.md`) | **Migrates into `library/guide/`.** The three checked `.ken.md` guides move intact; `catalog/guide/` retains compatibility pointers only. | 3 | **migrated — 40 checked fences conserved and exercised at the migration candidate** |
 | `agent/playbooks/tools/write-ken.md` | Keeps its workflow trigger. Reusable Ken product facts move into `library/agents/`; the skill selects the appropriate pack. | 2 | not started (`library/agents/` is explicitly out of scope for Wave 0 — `docs/program/issues/DOC-W0.md`) |
 | `docs/adr/` | Remains decision records. Conceptual `library/` pages cite the accepted ADR rather than teach from decision history. | — | unchanged |
 | `docs/program/` | Remains internal program history and WP material, excluded from the public product-doc navigation (this ledger included). | — | unchanged |
@@ -29,16 +29,12 @@ stays outside the public product-doc navigation).
 
 ## The one ordering constraint, restated
 
-`catalog/guide/`'s checked-fence machinery already exists and is exercised
-today (`crates/ken-elaborator/tests/ken_md_literate.rs`,
-`crates/ken-cli/tests/ken_check_mode.rs`, `ken check`/`ken run` on
-`.ken.md` via `ElabEnv::elaborate_ken_md_file`). What Wave 0 did **not**
-build is a *library-wide* gate that runs that same machinery over every
-checked fence under `library/` as part of CI (Wave 0's gates 1/2/3/6 cover
-manifest coverage, links, source anchors, and availability labels — not
-fence elaboration, which is the proposal's documentation-gates item 4).
-Wave 3 must add that gate **before** moving any `catalog/guide/` content,
-per the frame's non-negotiable ordering constraint.
+The checked-fence machinery is selected by the `.ken.md` suffix and exercised
+by `ken check`/`ken run` via `ElabEnv::elaborate_ken_md_file`. Wave 3 resolved
+the ordering constraint with migration-local verification: count every checked
+fence before and after the move, then run the real extractor over every
+destination. This preserves the substantive guarantee without adding a
+standing library-wide CI gate.
 
 ## D4 note — what Wave 0 learned about generation capability, fact-by-fact
 

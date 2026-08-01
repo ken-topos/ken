@@ -158,7 +158,7 @@ its tooling exercise, not a gap in what the language can do.
 small lemmas it needs, and names exactly what it is doing right where it
 does it: "`sym`/`trans` are inlined from
 `catalog/packages/Core/Logic/Transport.ken` (self-containment, the same
-idiom `catalog/guide/proof-techniques.ken.md` uses for `cong`)." That
+idiom `library/guide/proof-techniques.ken.md` uses for `cong`)." That
 sentence is Markdown prose, not checked code. The two small `ken`-fenced lemma
 re-declarations beneath it are the checked code, in the same `ken
 check`-passing file in which chapter

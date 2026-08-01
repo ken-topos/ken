@@ -101,8 +101,8 @@ Local-binding guidance comes from
 `docs/program/07-catalog-style-guide.md` §6.1. The class-record and
 instance-value distinction comes from `spec/30-surface/33-declarations.md`
 §5.2–5.3 and the checked example in
-`catalog/guide/surface-reference.ken.md` lines 243–253. Proof-terminal guidance
-comes from `catalog/guide/proof-techniques.ken.md` §1. The verified revision is
+`library/guide/surface-reference.ken.md` lines 243–253. Proof-terminal guidance
+comes from `library/guide/proof-techniques.ken.md` §1. The verified revision is
 recorded in `library/agents/manifest.toml`.
 
 ## 10. Known unavailable or partial behavior

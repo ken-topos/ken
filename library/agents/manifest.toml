@@ -34,8 +34,8 @@ sources = [
   "docs/program/07-catalog-style-guide.md#61-local-bindings-as-exposition",
   "spec/30-surface/33-declarations.md#52-class-declaration--a-record-type",
   "spec/30-surface/33-declarations.md#53-instance-declaration--a-record-value--the-orphan-check",
-  "catalog/guide/surface-reference.ken.md#5-class-and-instance",
-  "catalog/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
+  "library/guide/surface-reference.ken.md#5-class-and-instance",
+  "library/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
@@ -50,7 +50,7 @@ prerequisites = ["core/read-ken"]
 sources = [
   "spec/20-verification/21-spec-syntax.md",
   "spec/60-security/64-trust-model.md",
-  "catalog/guide/proof-techniques.ken.md",
+  "library/guide/proof-techniques.ken.md",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
@@ -95,7 +95,7 @@ prerequisites = ["core/write-ken", "core/toolchain"]
 sources = [
   "spec/30-surface/",
   "spec/20-verification/",
-  "catalog/guide/",
+  "library/guide/",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
@@ -125,7 +125,7 @@ prerequisites = ["core/write-ken", "core/proof-and-trust"]
 sources = [
   "spec/10-kernel/",
   "spec/20-verification/21-spec-syntax.md",
-  "catalog/guide/proof-techniques.ken.md",
+  "library/guide/proof-techniques.ken.md",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
@@ -200,7 +200,7 @@ includes = [
 dependencies = []
 sources = [
   "spec/30-surface/33-declarations.md#1-definitions",
-  "catalog/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
+  "library/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
   "docs/program/07-catalog-style-guide.md#61-local-bindings-as-exposition",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
@@ -248,7 +248,7 @@ exclusions = ["change the proposition", "add an assumption", "replace proof with
 includes = ["tasks/prove-or-repair"]
 dependencies = ["write-pure"]
 sources = [
-  "catalog/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
+  "library/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
   "spec/20-verification/21-spec-syntax.md#5-the-verification-status-model",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
