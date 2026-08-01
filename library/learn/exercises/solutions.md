@@ -57,18 +57,22 @@ the answer yourself rather than take it on this page's authority.
 
 ## 04 — Effects, capabilities, and authority
 
-1. Per the fragment's own second paragraph: "the current authority check is
-   coarse and is **not** path-confined." `AFull` permits writes and deletes
-   anywhere the host process can access — it does not yet narrow to
-   particular paths, the kind of scoping `attenuate` is built to express
+1. `Full` retains all seven named filesystem rights, including write and
+   delete, but may exercise them only within its `FsScope`. The runtime
+   capability check enforces rights and authority; downstream filesystem
+   resolution enforces confinement
    (`catalog/packages/Capability/Filesystem/Errors.ken.md`).
-2. True. No file anywhere under `catalog/packages/` carries an explicit
-   capability-typed signature, an `attenuate` call, or an authority
-   comparison used as live code — a whole-tree measurement, not limited
-   to this curriculum's seven registered entries
-   (`library/learn/reading-ken/04-effects-capabilities-and-authority.md`
-   §3; grounded in the same whole-catalog measurement this page's
-   manifest record cites directly).
+2. False. The checked filesystem authority fragment now carries explicit
+   `Cap a` and `Cap AFull` parameters beside `[FS]`, and its acceptance
+   controls distinguish `Cap AFull` from `Cap APartial`. It deliberately
+   contains no `attenuate`, `revoke`, or `strengthen` call: those management
+   operations remain host/runner-side and unbound in Ken. Nor does the
+   fragment compare authorities at runtime; the authority index in `Cap a`
+   makes the distinction static
+   (chapter
+   `library/learn/reading-ken/04-effects-capabilities-and-authority.md`,
+   "Capabilities" and "Corpus Boundary"; issue
+   `docs/program/issues/CAT-CAPEX.md`).
 
 ## 05 — Packages and provenance
 

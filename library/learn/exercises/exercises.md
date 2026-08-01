@@ -50,10 +50,9 @@ rather than to a whole file at once.
 behavior, and correctly separate "no fragment shows this" from "the
 language can't do this."
 
-1. `catalog/packages/Capability/Filesystem/Errors.ken.md` names its own
-   `AFull` capability and states a limitation about it in its own words.
-   What, exactly, does `AFull` not yet confine, per the fragment's own
-   text?
+1. `catalog/packages/Capability/Filesystem/Errors.ken.md` describes `Full`
+   authority together with an `FsScope`. Which rights does `Full` retain,
+   where may it exercise them, and which layer enforces confinement?
 2. True or false, and cite your source: no `catalog/packages/` fragment
    today carries an explicit capability-typed signature, an `attenuate`
    call, or an authority comparison in checked surface code.
