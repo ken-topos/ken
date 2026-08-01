@@ -561,6 +561,7 @@ enum ContinuationProductionMutation {
     ResultLifetimeProxy,
     ConstructorFieldCountPrefix,
     DescriptorOrdinalSources,
+    DescriptorInputCountTruncation,
 }
 
 #[cfg(test)]
@@ -2437,6 +2438,172 @@ fn continuation_owner_source_root(
     Ok(*root)
 }
 
+/// The prefix of an enclosing value environment that one expression can
+/// actually observe after accounting for binders introduced inside it.
+///
+/// Closure bodies are separate function owners. Creating a lexical closure
+/// evaluates its capture expressions here, but its body consumes only the
+/// closure's explicit capture/parameter ABI and therefore is not an enclosing
+/// environment use at this continuation edge.
+fn required_surrounding_environment_prefix(
+    expr: &RuntimeExpr,
+    local_binders: usize,
+) -> Result<usize, CraneliftBackendError> {
+    let with_binders = |additional: usize| {
+        local_binders
+            .checked_add(additional)
+            .ok_or_else(|| {
+                planner_capacity_error("continuation environment binder count exhausted")
+            })
+    };
+    let mut maximum = 0usize;
+    let mut include = |required: usize| maximum = maximum.max(required);
+    match expr {
+        RuntimeExpr::CheckedJoinSite { body, .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. } => {
+            include(required_surrounding_environment_prefix(
+                body,
+                local_binders,
+            )?);
+        }
+        RuntimeExpr::Var(index) => {
+            let index = usize::try_from(*index).map_err(|_| {
+                planner_capacity_error("continuation environment variable index exhausted")
+            })?;
+            if let Some(outer_ordinal) = index.checked_sub(local_binders) {
+                include(outer_ordinal.checked_add(1).ok_or_else(|| {
+                    planner_capacity_error("continuation environment prefix exhausted")
+                })?);
+            }
+        }
+        RuntimeExpr::Let { value, body } => {
+            include(required_surrounding_environment_prefix(
+                value,
+                local_binders,
+            )?);
+            include(required_surrounding_environment_prefix(
+                body,
+                with_binders(1)?,
+            )?);
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            for child in [scrutinee.as_ref(), then_expr.as_ref(), else_expr.as_ref()] {
+                include(required_surrounding_environment_prefix(
+                    child,
+                    local_binders,
+                )?);
+            }
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            for argument in args {
+                include(required_surrounding_environment_prefix(
+                    argument,
+                    local_binders,
+                )?);
+            }
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            include(required_surrounding_environment_prefix(
+                scrutinee,
+                local_binders,
+            )?);
+            for case in cases {
+                include(required_surrounding_environment_prefix(
+                    &case.body,
+                    with_binders(case.binders)?,
+                )?);
+            }
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            include(required_surrounding_environment_prefix(
+                scrutinee,
+                local_binders,
+            )?);
+            for case in cases {
+                let binders = case
+                    .argument_binders
+                    .checked_add(case.recursive_positions.len())
+                    .ok_or_else(|| {
+                        planner_capacity_error(
+                            "continuation environment case binder count exhausted",
+                        )
+                    })?;
+                include(required_surrounding_environment_prefix(
+                    &case.body,
+                    with_binders(binders)?,
+                )?);
+            }
+        }
+        RuntimeExpr::Record { fields } => {
+            for (_, field) in fields {
+                include(required_surrounding_environment_prefix(
+                    field,
+                    local_binders,
+                )?);
+            }
+        }
+        RuntimeExpr::Project { record, .. } => {
+            include(required_surrounding_environment_prefix(
+                record,
+                local_binders,
+            )?);
+        }
+        RuntimeExpr::LexicalClosure { captures, .. } => {
+            for capture in captures {
+                include(required_surrounding_environment_prefix(
+                    capture,
+                    local_binders,
+                )?);
+            }
+        }
+        RuntimeExpr::Call { callee, args } => {
+            include(required_surrounding_environment_prefix(
+                callee,
+                local_binders,
+            )?);
+            for argument in args {
+                include(required_surrounding_environment_prefix(
+                    argument,
+                    local_binders,
+                )?);
+            }
+        }
+        RuntimeExpr::Effect {
+            capability, args, ..
+        } => {
+            if let Some(capability) = capability {
+                include(required_surrounding_environment_prefix(
+                    &capability.value,
+                    local_binders,
+                )?);
+            }
+            for argument in args {
+                include(required_surrounding_environment_prefix(
+                    argument,
+                    local_binders,
+                )?);
+            }
+        }
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Closure { .. }
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => {}
+    }
+    Ok(maximum)
+}
+
 fn exact_continuation_source_environment(
     plan: &StaticTransitionPlan<'_>,
     producer_owner: PredeclaredFunctionId,
@@ -2453,18 +2620,13 @@ fn exact_continuation_source_environment(
             "continuation producer environment is not bound to its exact result edge",
         ));
     }
-    let descriptor = plan
-        .abi
-        .descriptors
-        .iter()
-        .find(|descriptor| descriptor.function == consumer_owner)
-        .ok_or_else(|| planner_error("continuation consumer has no ABI descriptor"))?;
-    if occurrence_authority(plan, continuation_origin)?.owner != consumer_owner
-        || !matches!(
-            plan.planned_occurrence_expr(continuation_origin)?,
-            RuntimeExpr::ComputationalMatch { .. }
-        )
-    {
+    let continuation = plan.planned_occurrence_expr(continuation_origin)?;
+    let RuntimeExpr::ComputationalMatch { cases, .. } = continuation else {
+        return Err(planner_error(
+            "continuation source environment names no exact computational continuation",
+        ));
+    };
+    if occurrence_authority(plan, continuation_origin)?.owner != consumer_owner {
         return Err(planner_error(
             "continuation source environment names no exact computational continuation",
         ));
@@ -2485,20 +2647,37 @@ fn exact_continuation_source_environment(
     let reached = reached.ok_or_else(|| {
         planner_error("computational continuation is outside its source owner subtree")
     })?;
-    let input_count = descriptor
-        .header
-        .parameters
-        .checked_add(descriptor.header.captures)
-        .ok_or_else(|| planner_capacity_error("continuation input population exhausted"))?;
-    let input_count = usize::try_from(input_count)
-        .map_err(|_| planner_capacity_error("continuation input population exhausted"))?;
-    if reached.len() < input_count {
+    // The exact entry authority is the intrinsic consumer-environment floor;
+    // case bodies may require a longer prefix after local rebinding.
+    let intrinsic_environment_floor = entry_sources.len();
+    let mut required_input_count = intrinsic_environment_floor;
+    for case in cases {
+        let binders = case
+            .argument_binders
+            .checked_add(case.recursive_positions.len())
+            .ok_or_else(|| {
+                planner_capacity_error("continuation environment case binder count exhausted")
+            })?;
+        required_input_count = required_input_count.max(required_surrounding_environment_prefix(
+            &case.body,
+            binders,
+        )?);
+    }
+    #[cfg(test)]
+    let required_input_count = if CONTINUATION_PRODUCTION_MUTATION.with(Cell::get)
+        == ContinuationProductionMutation::DescriptorInputCountTruncation
+    {
+        intrinsic_environment_floor
+    } else {
+        required_input_count
+    };
+    if reached.len() < required_input_count {
         return Err(planner_error(
             "computational continuation lacks its complete semantic value environment",
         ));
     }
-    let mut exact_inputs = Vec::with_capacity(input_count);
-    for value in reached.into_iter().take(input_count) {
+    let mut exact_inputs = Vec::with_capacity(required_input_count);
+    for value in reached.into_iter().take(required_input_count) {
         let ContinuationValueSourceAuthority::Closed(mut sources) = value else {
             // An open value refuses this dormant specialization candidate; it
             // is not authority to reject the enclosing source program.
@@ -2519,6 +2698,12 @@ fn exact_continuation_source_environment(
         let mut inputs = exact_inputs;
         match CONTINUATION_PRODUCTION_MUTATION.with(Cell::get) {
             ContinuationProductionMutation::ResultLifetimeProxy => {
+                let descriptor = plan
+                    .abi
+                    .descriptors
+                    .iter()
+                    .find(|descriptor| descriptor.function == consumer_owner)
+                    .ok_or_else(|| planner_error("continuation consumer has no ABI descriptor"))?;
                 let affinity = lifetime_referent_affinity(
                     occurrence_authority(plan, descriptor.origin)?.lifetime,
                 );
@@ -2527,10 +2712,14 @@ fn exact_continuation_source_environment(
                 }
             }
             ContinuationProductionMutation::DescriptorOrdinalSources => {
-                inputs = entry_sources.into_iter().take(input_count).collect();
+                inputs = entry_sources
+                    .into_iter()
+                    .take(required_input_count)
+                    .collect();
             }
             ContinuationProductionMutation::Exact
-            | ContinuationProductionMutation::ConstructorFieldCountPrefix => {}
+            | ContinuationProductionMutation::ConstructorFieldCountPrefix
+            | ContinuationProductionMutation::DescriptorInputCountTruncation => {}
         }
         inputs
     };
@@ -11464,7 +11653,7 @@ mod tests {
         plan_static_transition_graph(expr, &BTreeMap::new()).expect("contspec fixture plans")
     }
 
-    fn contspec_persistent_result_with_parameter_fixture() -> RuntimeExpr {
+    fn contspec_parameter_match(case_body: RuntimeExpr) -> RuntimeExpr {
         let worker = RuntimeExpr::LexicalClosure {
             captures: Vec::new(),
             params: vec!["worker".to_string()],
@@ -11473,23 +11662,58 @@ mod tests {
                 args: Vec::new(),
             }),
         };
-        RuntimeExpr::Let {
-            // Rebind process parameter 1 at de Bruijn ordinal 0. The
-            // continuation environment is `[source 1, source 0, ...]`, not the
-            // consumer descriptor's declared `[source 0, source 1]`.
-            value: Box::new(RuntimeExpr::Var(1)),
-            body: Box::new(RuntimeExpr::ComputationalMatch {
-                scrutinee: Box::new(RuntimeExpr::Construct {
-                    constructor: "ctor:fixture::Contspec::Node".to_string(),
-                    args: vec![worker],
-                }),
-                cases: vec![RuntimeComputationalMatchCase {
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Contspec::Node".to_string(),
+                args: vec![worker],
+            }),
+            cases: vec![
+                RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::Contspec::Leaf".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: unit(),
+                },
+                RuntimeComputationalMatchCase {
                     constructor: "ctor:fixture::Contspec::Node".to_string(),
                     argument_binders: 1,
                     recursive_positions: vec![0],
-                    body: unit(),
-                }],
-                default: trap("persistent continuation result"),
+                    body: case_body,
+                },
+            ],
+            default: trap("persistent continuation result"),
+        }
+    }
+
+    fn contspec_persistent_result_with_parameter_fixture() -> RuntimeExpr {
+        RuntimeExpr::Let {
+            // Rebind process parameter 1 at de Bruijn ordinal 0. The
+            // consumer result remains persistent while its inputs retain
+            // invocation-arena affinity.
+            value: Box::new(RuntimeExpr::Var(1)),
+            body: Box::new(contspec_parameter_match(unit())),
+        }
+    }
+
+    fn contspec_complete_environment_fixture() -> RuntimeExpr {
+        RuntimeExpr::Let {
+            // Rebind process parameter 1 at de Bruijn ordinal 0. The
+            // continuation environment is `[source 1, source 0, source 1]`,
+            // not the consumer descriptor's declared `[source 0, source 1]`.
+            value: Box::new(RuntimeExpr::Var(1)),
+            body: Box::new(contspec_parameter_match(RuntimeExpr::Var(4))),
+        }
+    }
+
+    fn contspec_required_tail_fixture(tail: RuntimeExpr) -> RuntimeExpr {
+        RuntimeExpr::Let {
+            value: Box::new(tail),
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::Var(1)),
+                body: Box::new(RuntimeExpr::Let {
+                    value: Box::new(RuntimeExpr::Var(2)),
+                    body: Box::new(contspec_parameter_match(RuntimeExpr::Var(4))),
+                }),
             }),
         }
     }
@@ -11662,8 +11886,11 @@ mod tests {
     }
 
     /// MEASURED: `Let` forwards process parameter 1 into semantic environment
-    /// ordinal 0. Exact production retains source ABI positions `[1, 0]`; the
-    /// compile-valid descriptor-ordinal mutation restates `[0, 1]`.
+    /// ordinal 0. The first case uses no surrounding value, while the second
+    /// case consumes outer ordinal 2, so the case maximum requires three
+    /// inputs. Exact production retains source ABI positions `[1, 0, 1]`; the
+    /// descriptor-count mutation truncates that population to `[1, 0]`, while
+    /// descriptor restatement produces `[0, 1]`.
     ///
     /// CLAIMED: D1 obtains owner/position/provenance from the value that reaches
     /// each continuation-environment ordinal, not from that ordinal itself.
@@ -11673,7 +11900,7 @@ mod tests {
     #[test]
     fn contspec_locally_forwarded_parameter_retains_exact_source_position() {
         let expr = Box::leak(Box::new(
-            contspec_persistent_result_with_parameter_fixture(),
+            contspec_complete_environment_fixture(),
         ));
         let symbols = crate::NativeProcessSymbols::legacy_prelude();
         let plan = plan_static_transition_graph_with_symbols(
@@ -11691,7 +11918,31 @@ mod tests {
                 .iter()
                 .map(|input| input.source_abi_position)
                 .collect::<Vec<_>>(),
+            vec![1, 0, 1],
+        );
+
+        CONTINUATION_PRODUCTION_MUTATION.with(|mutation| {
+            mutation.set(ContinuationProductionMutation::DescriptorInputCountTruncation)
+        });
+        let truncated = plan_static_transition_graph_with_symbols(
+            expr,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+            false,
+        )
+        .expect("compile-valid descriptor-count truncation plans");
+        CONTINUATION_PRODUCTION_MUTATION
+            .with(|mutation| mutation.set(ContinuationProductionMutation::Exact));
+        assert_eq!(
+            truncated.continuation_specializations[0]
+                .key
+                .continuation_inputs
+                .iter()
+                .map(|input| input.source_abi_position)
+                .collect::<Vec<_>>(),
             vec![1, 0],
+            "the production mutation must discard the required tail",
         );
 
         CONTINUATION_PRODUCTION_MUTATION.with(|mutation| {
@@ -11719,9 +11970,10 @@ mod tests {
         );
     }
 
-    /// MEASURED: replacing the forwarded parameter with an opaque value, or
-    /// joining two distinct parameter sources, leaves the enclosing source
-    /// program valid while producing no dormant continuation specialization.
+    /// MEASURED: placing an opaque value, or a join of two distinct parameter
+    /// sources, at required surrounding-environment ordinal 2 leaves the
+    /// enclosing source program valid while producing no dormant continuation
+    /// specialization. Ordinals 0 and 1 remain closed in both fixtures.
     ///
     /// CLAIMED: D1 refuses open and ambiguous source provenance at the
     /// candidate boundary; it neither invents a descriptor slot nor rejects
@@ -11731,14 +11983,9 @@ mod tests {
     #[test]
     fn contspec_open_and_ambiguous_sources_refuse_only_the_candidate() {
         let symbols = crate::NativeProcessSymbols::legacy_prelude();
-        let mut open = contspec_persistent_result_with_parameter_fixture();
-        let RuntimeExpr::Let { value, .. } = &mut open else {
-            panic!("fixture must bind the continuation environment");
-        };
-        **value = unit();
-        let open = Box::leak(Box::new(open));
+        let open = Box::leak(Box::new(contspec_required_tail_fixture(unit())));
         let open_plan = plan_static_transition_graph_with_symbols(
-            open,
+            &*open,
             &BTreeMap::new(),
             &symbols,
             AbiRootIngress::Process,
@@ -11748,16 +11995,37 @@ mod tests {
         assert!(open_plan.continuation_specializations.is_empty());
         assert!(open_plan.continuation_specialization_calls.is_empty());
 
-        let mut ambiguous = contspec_persistent_result_with_parameter_fixture();
-        let RuntimeExpr::Let { value, .. } = &mut ambiguous else {
-            panic!("fixture must bind the continuation environment");
-        };
-        **value = RuntimeExpr::If {
+        CONTINUATION_PRODUCTION_MUTATION.with(|mutation| {
+            mutation.set(ContinuationProductionMutation::DescriptorInputCountTruncation)
+        });
+        let truncated_open = plan_static_transition_graph_with_symbols(
+            &*open,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+            false,
+        )
+        .expect("descriptor-count truncation discards the open required tail");
+        CONTINUATION_PRODUCTION_MUTATION
+            .with(|mutation| mutation.set(ContinuationProductionMutation::Exact));
+        assert_eq!(truncated_open.continuation_specializations.len(), 1);
+        assert_eq!(
+            truncated_open.continuation_specializations[0]
+                .key
+                .continuation_inputs
+                .len(),
+            2,
+            "the mutation must admit the candidate by discarding ordinal 2",
+        );
+
+        let ambiguous_tail = RuntimeExpr::If {
             scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
             then_expr: Box::new(RuntimeExpr::Var(0)),
             else_expr: Box::new(RuntimeExpr::Var(1)),
         };
-        let ambiguous = Box::leak(Box::new(ambiguous));
+        let ambiguous = Box::leak(Box::new(contspec_required_tail_fixture(
+            ambiguous_tail,
+        )));
         let ambiguous_plan = plan_static_transition_graph_with_symbols(
             ambiguous,
             &BTreeMap::new(),
