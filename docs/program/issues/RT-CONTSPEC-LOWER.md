@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-LOWER
 title: "ContinuationSpecialization slice 3 — attach the token at each producer alternative, emit the direct call before the identity-erasing join, close nested recursion and the ledgers, then ACTIVATE"
-status: draft
+status: ready
 owner: runtime
 size: L
 gate: none
@@ -11,30 +11,34 @@ github: null
 origin: "Architect second WIP audit evt_4t09329vdrf (2026-08-01), outcome (c). Slice 3 of the Steward's staged recut of RT-RECURSOR-TRANSPORT + RT-DECL-CLOSURE-PORT D7. This is the slice that activates."
 ---
 
-> # ⚠ SLICE 3 OF 4 — THE ONLY SLICE THAT ACTIVATES
+> # ✅ READY 2026-08-01 — SLICE 3 OF 4, THE ONLY SLICE THAT ACTIVATES
 >
-> ⏳ **`draft` until the frame's four `▢ SLOT`s are filled**, which happens at
-> [[RT-CONTSPEC-ABI]]'s merge.
+> ⭐ **THE FRAME IS COMPLETE**: `docs/program/wp/RT-CONTSPEC-LOWER.md`. All four
+> `▢ SLOT`s were filled from the merged slice 2 (PR #1303,
+> `origin/main = 3cc4fa19`), measured **in the landed code**, not read off slice
+> 2's frame. ⛔ **Read the frame, not this node.**
 >
-> ⛔ **Do not pick this up from the node text** — and do not pick it up from the
-> frame yet either.
+> ## ⛔⛔ SLOT B CAME BACK NEGATIVE — READ THIS BEFORE ANYTHING ELSE
 >
-> ⭐ **THE FRAME IS WRITTEN**: `docs/program/wp/RT-CONTSPEC-LOWER.md`, filed
-> 2026-08-01 under operator standing policy §2a-bis (a node with a team must
-> have a framed successor). Everything slice 2 **cannot** change is final in it
-> — the risk posture, the six-item ruled scope, eight ACs, the banned scope, the
-> 761 witness gate, the three-node tracker discipline, and the sizing analysis.
+> **Neither of slice 2's gates reaches a lowered call.** `D3`
+> (`validate_continuation_specializations`) validates the descriptor **table** —
+> count, `id == index`, arm identity. `D4` is scoped to the **install** path in
+> its own words (`abi.rs:597–603`): it refuses *capacity growth while appending*,
+> and says nothing about allocation on a lowered call.
 >
-> ⚠ **What genuinely had to wait is marked `▢ SLOT` and is the only work owed at
-> slice 2's merge:** the ABI surface slice 2 actually landed (A), which of its
-> gates bind at the call site (B), the residual after its review (C), and a
-> contention re-derivation (D). ⭐ Minutes of Steward work, not an hour.
+> ⇒ ⭐ **This slice inherits NOTHING at the call site and must build its own
+> owner / lifetime / affinity / allocation gates there.** An owner gate that
+> holds for a descriptor and not for the call consuming it is exactly the hole
+> this slice would otherwise ship.
 >
-> ⛔ The earlier instruction — *"frame this last or it will be sized against a
-> planner and ABI that do not exist yet"* — was **sound for the interface facts
-> and is preserved as those slots.** It was not grounded for anything else, and
-> leaving the whole frame unwritten would have left the runtime ring with no
-> framed successor the moment slice 2 merged.
+> ⚠ `D4`'s positive control is `SKIP_CONTINUATION_ABI_PREFLIGHT`, a
+> `#[cfg(test)]` thread-local. Sound for what it covers; ⛔ **not evidence about
+> the lowered path.**
+>
+> ⭐ **Slice 2 was approved on the FIRST round** (QA `evt_74mmepexexppy`,
+> Architect `evt_5396qdh7a7p32`, `dec_77b33m1pbahng`) against slice 1's four —
+> nothing was deferred into this slice. That is the staging working, and it is
+> the reason to hold this slice's controls to the same standard, not relax them.
 
 ## Scope, as ruled
 

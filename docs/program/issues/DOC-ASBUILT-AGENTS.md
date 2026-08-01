@@ -1,7 +1,7 @@
 ---
 id: DOC-ASBUILT-AGENTS
 title: "As-built slice 6 — reconcile the thirteen-page agents corpus against its 7 shared drifted sources; it is instructions machines follow, not prose people skim"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
@@ -10,6 +10,47 @@ blocks: [DOC-ASBUILT-AUDIT]
 github: null
 origin: "Steward 2026-08-01, phase A slice 6 of DOC-ASBUILT-AUDIT, measured at origin/main 4ab1c23e. Cut by audience, per the campaign's shared-source-set rule. Final phase-A slice."
 ---
+
+> # ✅ MERGED 2026-08-01 — PR #1304, `origin/main = 3cc4fa19`
+>
+> ## ⭐⭐⭐ PHASE A IS COMPLETE.
+>
+> Exact candidate `239c5e117afae4d7249be933a31ad1799f741fa5`, tree
+> `da17d2b16ca8968d2cb818b08dbb65346eccea80`, base `ac187ada`. Librarian QA
+> `evt_4g9ghc5kt4rws`; Decision `dec_2dtksy0ebwk4n` resolved. All post-conditions
+> exact — `library/README.md` blob `9e2f597bcd6e3a1ced6e0a95b500adda778786a5`,
+> the only path changed, and the anti-revert check confirmed slice 2's two
+> runtime blobs survived the merge.
+>
+> **Repaired:** `library/README.md` only (+22/−19) — the inherited
+> stale-curriculum-progress table row from [[DOC-ASBUILT-READER]], and a portal
+> paragraph. The other twelve pages were reconciled and found still true.
+>
+> ## ⚠⚠ THE LIBRARIAN REJECTED THE FIRST CANDIDATE FOR AN INVENTED CLAIM
+>
+> `236b39df` was rejected (`evt_76va5srcc7yw`): the repaired portal paragraph at
+> `library/README.md:40–42` promised a **future live-corpus gate that does not
+> exist**. ⇒ ⭐⭐ **An as-built repair can introduce a NEW false claim while
+> removing an old one** — the failure mode is not only "missed a survivor", and a
+> QA pass that only re-checks the routed class would not have caught it.
+>
+> ## ⛔ TWO SOURCE DEFECTS FOUND AND ROUTED, NOT REPAIRED
+>
+> Both are `docs/program/` files this slice may not touch, and both were found by
+> the **corpus-wide `D3` class sweep** that [[DOC-ASBUILT-READER]]'s retro added:
+>
+> 1. `07-catalog-style-guide.md` — §5 retires the Findings section while line 31
+>    and §2 item 6 still require it. Steward ruling `evt_1q488s8hnah1s`: **§5
+>    governs**, the other two sites are void.
+> 2. `12-documentation-program.md:342`/`:374` — Wave 1 and Wave 2 headings say
+>    `(FRAMED)` while line 184 says `✅ LANDED`. Steward ruling
+>    `evt_34revdy2cdyc4`. ⛔⛔ **`library/manifest.toml:322` cites the Wave 2
+>    heading BY ANCHOR** (`…-framed`), so repairing the word renames the anchor
+>    and breaks a live citation — the fix is **coupled to a manifest write**.
+>    ⚠ Wave 1's heading is cited by nothing; the two are **not** symmetric.
+>
+> ⇒ Both sequenced **after** this merge, because editing either moves a source
+> OID that phase A's pinned drift control depends on.
 
 > # ▶ SLICE 6 OF PHASE A — THE AGENTS CORPUS, AND THE LAST PHASE-A SLICE
 >
