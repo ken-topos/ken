@@ -419,6 +419,132 @@ validation = [
 owner = "doc"
 
 [[document]]
+path = "library/how-to/build-a-native-artifact.md"
+kind = "how-to"
+audience = ["human-reader"]
+authority = "how-to"
+availability = "current"
+sources = [
+  "crates/ken-cli/src/main.rs",
+  "library/quickstart.md#1-install-and-use-the-current-toolchain",
+  "library/quickstart.md#2-check-and-run-one-program",
+  "library/guide/decomposition-abstraction.ken.md",
+  "catalog/packages/Core/Logic/Transport.ken.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/how-to/check-a-source.md"
+kind = "how-to"
+audience = ["human-reader"]
+authority = "how-to"
+availability = "current"
+sources = [
+  "crates/ken-cli/src/main.rs",
+  "library/quickstart.md#1-install-and-use-the-current-toolchain",
+  "library/quickstart.md#2-check-and-run-one-program",
+  "library/guide/decomposition-abstraction.ken.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/how-to/format-source.md"
+kind = "how-to"
+audience = ["human-reader"]
+authority = "how-to"
+availability = "current"
+sources = [
+  "crates/ken-cli/src/main.rs",
+  "conformance/challenge/C1-deceq-noncanonical/unsound-deceq-decimal.ken",
+  "library/quickstart.md#1-install-and-use-the-current-toolchain",
+  "library/quickstart.md#3-format-it",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/how-to/run-a-program.md"
+kind = "how-to"
+audience = ["human-reader"]
+authority = "how-to"
+availability = "current"
+sources = [
+  "crates/ken-cli/src/main.rs",
+  "library/quickstart.md#1-install-and-use-the-current-toolchain",
+  "library/quickstart.md#2-check-and-run-one-program",
+  "library/guide/decomposition-abstraction.ken.md",
+  "catalog/packages/Core/Logic/Transport.ken.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/how-to/use-the-repl.md"
+kind = "how-to"
+audience = ["human-reader"]
+authority = "how-to"
+availability = "current"
+sources = [
+  "crates/ken-cli/src/main.rs",
+  "library/quickstart.md#1-install-and-use-the-current-toolchain",
+  "library/guide/surface-reference.ken.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
 path = "library/introduction.md"
 kind = "explanatory"
 audience = ["human-reader"]
