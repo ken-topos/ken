@@ -11,7 +11,7 @@ github: null
 origin: "Architect second WIP audit evt_4t09329vdrf (2026-08-01), outcome (c). Slice 3 of the Steward's staged recut of RT-RECURSOR-TRANSPORT + RT-DECL-CLOSURE-PORT D7. This is the slice that activates."
 ---
 
-> # ⚠ SLICE 3 OF 3 — THE ONLY SLICE THAT ACTIVATES
+> # ⚠ SLICE 3 OF 4 — THE ONLY SLICE THAT ACTIVATES
 >
 > ⏳ `draft` until its frame is written.
 >
