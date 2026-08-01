@@ -26,6 +26,42 @@
 
 ---
 
+> ## ⭐⭐ INHERITED OBLIGATION FROM SLICE 5 — ONE ROUTED CLAIM, ALREADY MEASURED
+>
+> **Routed 2026-08-01 by Steward disposition on [[DOC-ASBUILT-READER]] hard stop
+> 3** (Librarian `evt_27hg7sk8q4pjd`). ⛔ This is **not** a new deliverable and
+> ⛔ not a new source — it is one line, in a page already yours.
+>
+> **`library/README.md:18`**, a table row, currently reads:
+>
+> ```
+> | **Read Ken** — understand a program someone else wrote | [`introduction.md`](introduction.md) | current (the full reading curriculum is Wave 1, planned) |
+> ```
+>
+> ⭐ **`(the full reading curriculum is Wave 1, planned)` is false** — the
+> six-chapter `reading-ken` curriculum has landed. Slice 5 repaired this exact
+> **stale-curriculum-progress class** in `quickstart.md` and `introduction.md`
+> and was forbidden by its own hard stop 3 from following it here.
+>
+> ⚠ **I measured the survivor set myself before routing it:** a corpus-wide grep
+> across `library/`, `agent/` and `docs/` returns **exactly this one line**. ⇒ ⛔
+> Do not open a hunt for more; ⭐ but if your own reading finds another, that is a
+> `D4` route, not a silent extra repair.
+>
+> ⚠ **Repair it in the same pass as your own `library/README.md` work**, not as a
+> separate commit. ⛔ It is a **table row**, so the 80-column rule does not apply
+> to it.
+>
+> ⭐⭐ **Why this arrived as a route and not a slice-5 edit:** slice 5's scope
+> boundary is real and was honoured. ⛔ The lesson is **not** that the cut was
+> wrong — it is that **claim classes cross slice boundaries even when source sets
+> do not.** Slice 5 and slice 6 share **no** drifted source, and still shared this
+> class. ⇒ ⭐ **Your `D3` sweep must be by CLASS, not by source** — a class you
+> repair in one of your thirteen pages very likely appears in another, and the
+> shared-source table below will not predict which.
+
+---
+
 ## ⭐⭐ THIRTEEN PAGES, SEVEN SOURCES — WORK THE SOURCES, NOT THE PAGES
 
 ⛔ **Do not read "thirteen pages" as a large slice.** Twelve of the thirteen cite
