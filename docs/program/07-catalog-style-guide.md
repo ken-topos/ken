@@ -28,8 +28,9 @@ worked examples, references, and reviewer navigation.
   location for is reconciled by the Librarian during migration; the reader sees
   one document.
 - Purpose 1 reads the code + laws; purpose 3 reads to its chosen depth; purpose 2
-  is the literate whole; purpose 4 is the Findings section. One source,
-  mechanically separable (prose vs. fenced code).
+  is the literate whole. Purpose 4's dogfooding signal is **not** carried by a
+  section of the entry — it routes through the live gap-escalation flow (§5).
+  One source, mechanically separable (prose vs. fenced code).
 
 ## 2. The standard entry format
 
@@ -51,10 +52,11 @@ section links to them):
    contract, machine-checked.
 5. **Design notes** — why this shape; alternatives rejected; the place for
    pedagogical negative examples (§3).
-6. **Findings** — what writing this taught us about Ken (§5). First-class.
-7. **References** — external orientation and sources (§4).
-8. **Trust & derivation** — derivation path from built-ins, `trusted_base()`
+6. **References** — external orientation and sources (§4).
+7. **Trust & derivation** — derivation path from built-ins, `trusted_base()`
    delta with every honest exception, proof-family map, consumers (§7).
+
+There is no Findings section: it is **retired** from the entry format (§5).
 
 An entry is exemplary when a reviewer can answer, from the entry alone without
 reverse-engineering build history: what abstraction this provides and which spec
@@ -381,7 +383,7 @@ Definition of done:
 - `trusted_base()` delta unchanged or narrowed.
 - The entry's Trust/derivation and source map reflect the new organization.
 - The diff improves at least one concrete axis: entry structure, contents,
-  examples, references, naming, comments, proof-family grouping, or Findings.
+  examples, references, naming, comments, or proof-family grouping.
 - The retro records which guide rules were useful and which were ambiguous.
 
 Review roles: **owning build team** (Foundation) — behavior preservation,
@@ -397,7 +399,7 @@ abstraction boundaries are unchanged does not require the Architect.
 
 The **first reframed `.ken.md` entry doubles as the format pilot** — it exercises
 the full standard end to end (front matter, contents, the fence roles,
-References, Findings, Trust/derivation) before the format is applied to large
+References, Trust/derivation) before the format is applied to large
 proof-heavy bodies. Prefer a small, proof-strategy-rich, low-delta component for
 the pilot; do not begin with a CAT-4-scale body. Pilot evidence shows readability
 improved without behavior drift: before/after source map, public names checked,
@@ -417,7 +419,7 @@ proof requirements weakened · public API/proof names preserved or mapped · fro
 matter has contents · required sections present and in order ·
 canonical code in `` ```ken ``, negatives in `` ```ken reject ``/`` ```ken
 ignore `` · References section present (Wikipedia/papers/books as they exist) ·
-Findings section present (empty allowed) · Trust/derivation and source map
+no Findings section (§5) · Trust/derivation and source map
 current · repeated non-atomic terms are named once where the name carries
 meaning · multi-step proof chains name important endpoints or evidence · local
 bindings preserve branch and effect order by staying at the narrowest scope ·
@@ -429,8 +431,8 @@ respected unless a prior pilot landed · tests and trust-drift greps recorded.
 tests cover behavior preservation · no new `Axiom`/postulate/primitive/trusted
 entry · any file split preserves imports and consumers · the entry connects
 source order to spec chapters and acceptance criteria · a reviewer can find
-operations, laws, helpers, proofs, trust posture, references, and findings
-without reading the WP thread · repeated non-atomic terms carry meaningful local
+operations, laws, helpers, proofs, trust posture, and references without
+reading the WP thread · repeated non-atomic terms carry meaningful local
 names · proof-chain endpoints and evidence are reconstructable without expanding
 every nested term · bindings stay narrow enough to preserve branch and effect
 order · names add vocabulary rather than hiding syntax · long binding chains

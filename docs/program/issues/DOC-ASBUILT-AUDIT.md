@@ -108,13 +108,32 @@ heading change moves the blob just as a prose change does.
 ⭐ one page edited of four; the other three reconciled and found still true.
 **Slice 5 — [[DOC-ASBUILT-READER]]** ✅ **merged** (`ac187ada`, PR #1297) —
 ⭐ two pages repaired; hard stop 3 fired and routed one survivor to slice 6.
-**Slice 6 — [[DOC-ASBUILT-AGENTS]]** ✅ framed and `ready`, **in flight** —
-⭐ **the last phase-A slice**, and it carries slice 5's routed one-line
+**Slice 6 — [[DOC-ASBUILT-AGENTS]]** ✅ **merged** (`3cc4fa19`, PR #1304) —
+⭐ **the last phase-A slice**, and it carried slice 5's routed one-line
 obligation in `library/README.md`.
 
-⭐⭐ **PHASE A IS FULLY FRAMED. All 25 consuming documents are covered by exactly
-six slices**, and ⛔ no further phase-A frame is owed. When slice 6 merges,
-phase B is releasable.
+**PHASE A IS COMPLETE — all six slices merged, 2026-08-01.** All 25 consuming
+documents were reconciled and no phase-A frame is owed.
+
+**Phase B is filed and `ready`: [[DOC-ASBUILT-LEDGER]]**, framed at
+`docs/program/wp/DOC-ASBUILT-LEDGER.md`. It installs the reviewed ledger for all
+28 drifted rows at once, bumps `library/REVISION`, and regenerates
+`library/STATUS.md`.
+
+**Two facts measured while framing phase B, both of which change how a reader
+should use the numbers below.**
+
+- **Slice 6's `D3` class sweep routed two `docs/program` sources that
+  contradicted themselves**, and both were repaired after slice 6 merged (see
+  `07-catalog-style-guide.md` and `12-documentation-program.md`). That repair
+  moved two `actual` OIDs in the drift block. **The population did not change:
+  both files were already drifted, so it stayed 28 rows / 32 lines / exit 1.**
+  Only the check's output hash moved, to
+  `ae5ab2e9522d227ee59c9805853fc09240ebc28f6c0a46153df707e1aa9b72a6`.
+- **`scripts/gen-doc-status.sh --check` reads committed `HEAD`, not the working
+  tree.** A run with the repair sitting uncommitted reproduced the old hash
+  byte-for-byte. Measure a baseline only after committing, or it is a
+  measurement of the previous state.
 
 ## ⭐⭐ THE ROSTER BELOW IS RE-MEASURED AT `7a263d28` AND IS NOW STABLE
 
@@ -218,7 +237,11 @@ reported 8 for `solutions.md` against the true 11. ⛔ An under-count reads as a
 smaller slice, not as an error.
 
 **Phase B — one terminal slice**, gated on every phase-A slice merging.
-⛔ Do not frame or start it early.
+**That gate is now met and phase B is framed as [[DOC-ASBUILT-LEDGER]].** The
+bans in this section applied to phase A and expire with it: the ledger write,
+the `STATUS.md` regeneration, and `gen-source-attestations.sh` are phase B's
+deliverables, not violations. Read them as scoping phase A, not as standing
+prohibitions.
 
 ## ⛔ What this node does NOT authorize
 

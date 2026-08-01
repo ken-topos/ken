@@ -319,7 +319,7 @@ authority = "how-to"
 availability = "current"
 sources = [
   "docs/program/issues/DOC-W2.md#5-exit-property-and-the-evaluation-suite",
-  "docs/program/12-documentation-program.md#wave-2--agent-core-and-task-packs-framed",
+  "docs/program/12-documentation-program.md#wave-2--agent-core-and-task-packs-landed",
 ]
 validation = [
   "manifest-coverage",

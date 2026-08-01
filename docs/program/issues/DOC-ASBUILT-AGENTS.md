@@ -6,7 +6,7 @@ owner: doc
 size: M
 gate: none
 depends_on: [DOC-ASBUILT-FRAGMENTS]
-blocks: [DOC-ASBUILT-AUDIT]
+blocks: [DOC-ASBUILT-AUDIT, DOC-ASBUILT-LEDGER]
 github: null
 origin: "Steward 2026-08-01, phase A slice 6 of DOC-ASBUILT-AUDIT, measured at origin/main 4ab1c23e. Cut by audience, per the campaign's shared-source-set rule. Final phase-A slice."
 ---
