@@ -98,9 +98,8 @@ between what the kernel checked and what only a driven run could show.
 
 ## Marked Partiality
 
-Ken's checked core is **total** — the kernel admits only structurally
-recursive or SCT-certified definitions, so an admitted, hole-free program does
-not diverge
+Ken's transparent checked core is **total** — definitions admitted there are
+structurally recursive or SCT-certified and terminate on all inputs
 ([§1](../../../spec/40-runtime/43-termination.md#1-the-total-core)). But
 partiality still enters, always
 at a **marked** point, never silently. Five such points, each with its own
