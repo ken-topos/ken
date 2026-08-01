@@ -18,7 +18,7 @@ A pure-library catalog entry (no `proc main`) is validated with
 checking `ken run` does, then stops before the IO-drive step
 (`docs/program/07-catalog-style-guide.md` §3). **Every row below reports
 that mechanism's actual exit code, not an assertion that the file "should"
-still check.** Run at `origin/main @ cf91ec5a4ee2b557540f6a894cb9d8825638a634`,
+still check.** Run at `origin/main @ 5619748c53e069ac4220ec5e005ac5187f9a471c`,
 from the repository root, against the `target/debug/ken` binary built from
 that same revision:
 
@@ -52,12 +52,11 @@ $ ./target/debug/ken check <path>
 4. **`Capability/Console/Text.ken.md`** — four small `IO`-effectful helpers
    over the Console capability, `visits [Console]` on every signature.
    Effects, capabilities, authority.
-5. **`Capability/Filesystem/Errors.ken.md`** — capability-authority
-   (`AFull`) plus an explicit, honest security-boundary limitation stated
-   in its own prose ("the current authority check is coarse and is *not*
-   path-confined"). Useful for authority reading and for an `unknown`/
-   `delegated` reading, since the entry states its own boundary rather than
-   overclaiming.
+5. **`Capability/Filesystem/Errors.ken.md`** — per-operation authority through
+   seven named rights. `Full` retains every right, including write and delete,
+   but only within its `FsScope`; downstream filesystem resolution enforces
+   confinement. Useful for reading rights separately from scope and for seeing
+   the boundary between the runtime authority check and path resolution.
 6. **`Capability/System/IO.ken.md`** — proof terms over buffer I/O whose own
    text states plainly that "exactly-once settlement and liveness remain
    runtime-enforced, delegated boundary properties." A real entry that
