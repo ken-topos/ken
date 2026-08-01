@@ -67,9 +67,9 @@ vocabulary above.
 
 The fuller reading curriculum this introduction anchors — program anatomy,
 contracts and proofs, assurance and trust, effects and capabilities,
-packages and provenance, and execution — is in progress under
+packages and provenance, and execution — is available under
 [`learn/reading-ken/`](learn/reading-ken/fragments.md). See
-[`STATUS.md`](STATUS.md) for what is landed versus planned.
+[`STATUS.md`](STATUS.md) for the corpus status.
 
 ---
 
