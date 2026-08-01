@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-SUBSTRATE
 title: "ContinuationSpecialization slice 0 — re-derive and independently gate the DORMANT D7 substrate: closed case-emission reachability, exact occurrence/owner/lifetime authority, pre-allocation closure"
-status: ready
+status: merged
 owner: runtime
 size: M
 gate: none
@@ -10,6 +10,22 @@ blocks: [RT-CONTSPEC-PLANNER]
 github: null
 origin: "Architect evt_6wkw2c7ykjxsy (2026-08-01), answering the Steward's base fork at evt_1bh3p4wx76wtv with outcome (C). Slice 0 of the staged recut ruled at evt_4t09329vdrf. Steward-authored; agents cannot create tracked work per COORDINATION §2."
 ---
+
+> # ✅ MERGED 2026-08-01 — `origin/main = cda052b7` (PR #1280), blob-verified
+>
+> Candidate `f71149fa`, one path
+> (`crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs`,
+> **+1001/−0**), landed with full CI green. The substrate is on `main` and
+> **dormant** — the two populations are private, have no lowering accessor or
+> consumer, and close before `build_abi_plane`.
+>
+> ⭐ **Three compile-valid WRONG-ANSWER mutations** were applied, measured and
+> reverted, not compile breaks: a discarded `Right` recorded as `Eliminated`, a
+> `Record` lifetime returning `Persistent` instead of `ActivationOwned`, and a
+> disabled closure admitting an absent constructor as `Ok`.
+>
+> ⇒ **[[RT-CONTSPEC-PLANNER]] (slice 1) is now unblocked** and branches from
+> `main` at or after this landing.
 
 > # ⭐ SLICE 0 OF 4 — IT EXISTS BECAUSE NEITHER AVAILABLE BASE WAS LAWFUL
 >
