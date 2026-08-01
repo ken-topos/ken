@@ -515,7 +515,9 @@ sources = [
   "spec/60-security/62-authority.md#7-worked-examples",
   "docs/program/issues/DOC-W1.md",
   "catalog/packages/Capability/Console/Text.ken.md",
+  "catalog/packages/Capability/Filesystem/Authority.ken.md",
   "catalog/packages/Capability/Filesystem/Errors.ken.md",
+  "crates/ken-elaborator/tests/cat_capex_authority.rs",
   "library/learn/reading-ken/fragments.md",
 ]
 validation = [

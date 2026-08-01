@@ -142,14 +142,12 @@ does not define a constructor, producer, wrapper, or management binding for
 
 A neighboring
 [filesystem fragment](../../../catalog/packages/Capability/Filesystem/Errors.ken.md)
-names a complementary limitation in prose: "the current authority check is
-coarse and is **not** path-confined. An `AFull` capability permits writes and
-deletes anywhere the host process can access." Chapter
-[03](03-assurance-and-trust.md) already showed you this sentence as an example
-of a fragment naming its own limit. Read it against the capability authority
-discipline: the catalog now checks authority as a visible type-level input,
-while this entry says that the exercised authority is not yet narrowed to
-particular paths.
+names the complementary confinement boundary in prose: "`Full` retains all
+rights, including write and delete, but exercises them only within its
+`FsScope`." It also says downstream filesystem resolution enforces confinement.
+Read that against the capability authority discipline: the catalog checks
+authority as a visible type-level input and pairs it with a per-scope bound
+rather than ambient or unconfined filesystem authority.
 
 You can now read an effect row as a checked upper bound and a capability as
 the authority needed to exercise an effect. The catalog demonstrates both

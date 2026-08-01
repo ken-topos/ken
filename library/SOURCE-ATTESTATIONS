@@ -6,6 +6,7 @@ ba72396b7fac154fdb333017840100d26e25f961	catalog/examples/CommandLine/Forge.ken.
 e5ddb3aaecdce01733ad8a90b588b49c3268167c	catalog/guide/proof-techniques.ken.md
 9a1e8273ce56b6108e99f6ee1d72c9dc4ed25fe7	catalog/guide/surface-reference.ken.md
 0266a7a7ffb3e9464e783daf6565d50f2f73e2d7	catalog/packages/Capability/Console/Text.ken.md
+3ada325be9479b96993f0e13d4df60901c95fae1	catalog/packages/Capability/Filesystem/Authority.ken.md
 a997783121fdc55d0021e5e907e1bd7cd20b1a06	catalog/packages/Capability/Filesystem/Errors.ken.md
 d0b8ff6eba911c032e9acd29421988a85c9b8ea9	catalog/packages/Capability/System/IO.ken.md
 1d650cf0fbb93b5769e0575b74faa4b489bff6b5	catalog/packages/Core/Classes/EffectfulClasses.ken.md
@@ -22,6 +23,7 @@ e31985f35e82efdafdbab559b207b076e2679640	catalog/packages/Data/Numeric/Nat/Order
 65b1ec769d7957263e1a66689edc6f9cd9b68979	crates/ken-cli/src/main.rs
 1d0a639ebcf5683af5d0e761e44b18c327cc1a5a	crates/ken-cli/tests/px4b_native_production.rs
 b2df2bbd00644b907cae5d05efa76edd9df1b3f2	crates/ken-cli/tests/rt_parity_native.rs
+23e8a161a8f803b805c832e5df3522b3cb45672e	crates/ken-elaborator/tests/cat_capex_authority.rs
 edd50ecd5efb52c84d616709b8758505ccde231a	crates/ken-elaborator/tests/ds1_empty_dec_acceptance.rs
 26ee3725e946ab674568be266fe606f4611ceb7b	crates/ken-elaborator/tests/ds3_sum_combinators_acceptance.rs
 cf7276e174a07138f771208aa8a6cb2d6e72ca10	crates/ken-elaborator/tests/es3_modules_acceptance.rs
