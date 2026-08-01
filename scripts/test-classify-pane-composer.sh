@@ -66,6 +66,38 @@ check slash-claude slash:/compact "${E}[1m❯${E}[0m /compact"
 check dim-off      slash:/compact "${E}[0;1m›${E}[0m ${E}[22m/compact${E}[0m"
 check paste        paste "${E}[0;1m›${E}[0m [Pasted Content 2841 chars]"
 
+# ⛔⛔ THE REAL STRANDED SHAPE, CAPTURED VERBATIM from `moot-doc-author`
+#    2026-08-01 15:56Z. The seat had been sitting on a Librarian QA REJECT for
+#    three minutes with its ring blocked, and `startswith("[Pasted Content")`
+#    returned `other` -- which the sweep is required to walk past.
+#
+#    ⭐ TWO independent reasons the old test could not match, and the fix needs
+#    BOTH: the composer line opens with the DELIVERY WRAPPER rather than the
+#    marker, AND the terminal wrapped `[Pasted` / `Content` across lines so the
+#    marker is not on the composer line at all.
+#
+#    ⚠ It failed INTERMITTENTLY -- whenever the wrap fell elsewhere the marker
+#    landed on the composer line and the old test fired. ⛔ Its success was a
+#    function of terminal width and message length, not of whether a strand
+#    existed, so its `other` carried no information and its occasional `paste`
+#    was camouflage. `paste`/`clear` on nine simultaneously-clear panes is a
+#    NEGATIVE control only and never evidence this row would pass.
+check strand-mention paste "${E}[0;1m›${E}[0m <channel source=\"convo\" space_id=\"spc_4q7g0se87rgje\" event_type=\"mention\"
+  event_id=\"evt_msg5m1g23w8a\" speaker=\"\">@you mentioned by librarian: LIBRARIAN QA REJE[Pasted
+  Content 1536 chars]"
+
+# ⭐ The SAME shape with the wrapper attribute order the watchdog tick uses, and
+#    with no paste marker anywhere -- a short delivery does not paginate. This is
+#    the row proving the fix does not merely re-find the marker somewhere else.
+check strand-interval paste "${E}[0;1m›${E}[0m <channel source=\"convo-channel\" event_type=\"agent_interval\" agent_id=\"agt_37reqbryf7m00\">"
+
+# ⛔ NEGATIVE control for the widening. `other` exists to stop the sweep
+#    submitting text it cannot attribute to a completed delivery, and prose that
+#    merely MENTIONS a channel is not a delivery envelope. ⛔ If this row ever
+#    returns `paste`, the pattern has been widened to "looks like a message" and
+#    the sweep will start submitting composer text nobody sent.
+check near-miss    other "${E}[0;1m›${E}[0m please check the channel source for event_type drift"
+
 # A queued paste is HEALTHY: the seat is mid-turn and will consume it. Resending
 # double-delivers, so `queued` must win over `paste` on the same pane.
 check queued-wins  queued "${E}[0;1m›${E}[0m [Pasted Content 91 chars]

@@ -32,7 +32,23 @@ SCROLLBACK="${SCROLLBACK:--400}"
 SPINNER='\([0-9]+m? ?[0-9]*s · [^)]*\)'
 INTERRUPT='esc to interrupt'
 QUEUED='Queued follow-up|up to edit queued|Messages to be submitted'
-STRANDED='\[Pasted Content'
+
+# ⛔⛔ STRANDING IS CLASSIFIED BY `classify-pane-composer.py`, NOT BY A GREP HERE.
+# This file used to carry `STRANDED='\[Pasted Content'` and grep the WHOLE
+# capture for it. Measured on `moot-doc-author` 2026-08-01: a stranded convo
+# mention rendered as `› <channel source="convo" … event_type="mention"…` with
+# the terminal wrapping `[Pasted` / `Content` across two lines. ⇒ The marker was
+# not on the composer line at all and the pattern could not match it. The seat
+# sat on a Librarian QA REJECT for three minutes with its ring blocked.
+#
+# ⚠ ⛔ THE OBVIOUS REPAIR — widening this grep to `<channel` — IS WRONG AND
+# WOULD BE WORSE. This greps the whole capture, and every pane's transcript
+# holds the wrapper text of every watchdog tick and mention it has ALREADY
+# CONSUMED. That reports a healthy seat as stranded, and the documented repair
+# for stranded is to press Enter, which submits whatever is really on its
+# composer. ⭐ The signal is only sound when it is COMPOSER-ANCHORED, which is
+# exactly what the classifier is and this grep is not.
+CLASSIFY="$(dirname "$0")/classify-pane-composer.py"
 
 seats=("$@")
 if [ ${#seats[@]} -eq 0 ]; then
@@ -58,8 +74,15 @@ for s in "${seats[@]}"; do
   state=IDLE
   if grep -qE "$SPINNER" <<<"$cap" || grep -qF "$INTERRUPT" <<<"$cap"; then
     state=WORKING
-  elif grep -qE "$STRANDED" <<<"$cap"; then
-    state='STRANDED (composer never submitted — send a bare Enter)'
+  else
+    # ⛔ `-e` IS REQUIRED and this is a SECOND capture on purpose. The classifier
+    # needs the escape stream to tell a real delivery from the UI's own dim
+    # suggestion text ("Explain this codebase"); `$cap` above is deliberately
+    # plain because the spinner greps do not want colour. ⛔ Do not merge the two.
+    ecap=$(tmux capture-pane -e -p -S -50 -t "moot-$s" 2>/dev/null)
+    if [ "$(printf '%s' "$ecap" | python3 "$CLASSIFY" 2>/dev/null)" = paste ]; then
+      state='STRANDED (composer never submitted — send a bare Enter)'
+    fi
   fi
 
   if grep -qE "$QUEUED" <<<"$cap"; then

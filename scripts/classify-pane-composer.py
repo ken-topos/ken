@@ -75,6 +75,37 @@ BUSY = re.compile(r"^\s*[^\w\s]\s+\S+.*\((?:\d+h\s+)?(?:\d+m\s+)?\d+s\b")
 # manufacture a false BUSY that silently blinds the sweep.
 BUSY_TAIL_LINES = 10
 
+# ⛔⛔ A STRANDED DELIVERY DOES NOT NECESSARILY BEGIN WITH `[Pasted Content`.
+# Measured on `moot-doc-author` 2026-08-01: a stranded convo mention rendered as
+#
+#     › <channel source="convo" space_id="spc_…" event_type="mention"
+#       event_id="evt_msg5m1g23w8a" speaker="">@you mentioned by librarian: ⛔
+#       **LIBRARIAN QA REJE[Pasted
+#       Content 1536 chars]…
+#
+# ⇒ TWO independent reasons a `startswith("[Pasted Content")` test cannot see it:
+# the composer line opens with the DELIVERY WRAPPER, not the marker; and the
+# marker itself is **wrapped across lines**, so it is not on the composer line at
+# all. The classifier read the right pane and returned `other`, which the sweep
+# is required to walk past -- so the seat sat on a QA rejection with its ring
+# blocked and every instrument reporting healthy.
+#
+# ⚠ The insidious part is that it works INTERMITTENTLY: whenever the wrap falls
+# elsewhere, the marker lands on the composer line and the old test fires. Its
+# success was a function of TERMINAL WIDTH AND MESSAGE LENGTH, not of whether a
+# strand existed -- so its `other` carried no information while its occasional
+# `paste` looked like proof the detector worked.
+#
+# ⭐ The wrapper is what makes this SAFE to action. `other` exists to stop the
+# sweep submitting text it cannot attribute to a completed delivery; a
+# `<channel …>`/`event_type=` prefix is the delivery envelope itself, so it is
+# attributable by construction. ⛔ Do NOT widen this to "looks like a message".
+DELIVERY = re.compile(
+    r'^\[Pasted Content'
+    r'|^<channel[\s>]'
+    r'|\bevent_type="(?:mention|agent_interval)"'
+)
+
 
 def is_dim_sgr(seq):
     """True if this SGR sequence turns dim ON.
@@ -191,8 +222,8 @@ def classify(pane):
     text, is_dim = last
     if not text:
         return "clear"
-    if text.startswith("[Pasted Content"):
-        return "paste"          # a paste is never a suggestion
+    if DELIVERY.search(text):
+        return "paste"          # a delivery envelope is never a suggestion
     if is_dim:
         return "ghost"
     if text in SAFE_SLASH:
