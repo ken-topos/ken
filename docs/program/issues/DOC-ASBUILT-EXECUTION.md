@@ -1,6 +1,6 @@
 ---
 id: DOC-ASBUILT-EXECUTION
-title: "As-built slice 2 — reconcile 06-execution.md against its 15 drifted cited sources, the largest phase-A population"
+title: "As-built slice 2 — reconcile 06-execution.md against its 16 drifted cited sources, the largest phase-A population"
 status: ready
 owner: doc
 size: L
@@ -13,9 +13,14 @@ origin: "Steward 2026-08-01, phase A slice 2 of DOC-ASBUILT-AUDIT, measured at o
 
 > # ▶ SLICE 2 OF PHASE A — THE HEAVIEST PAGE
 >
-> `library/learn/reading-ken/06-execution.md` carries **15 distinct drifted
-> sources across 24 citations** — the largest phase-A population, against slice
+> `library/learn/reading-ken/06-execution.md` carries ⭐ **16 distinct drifted
+> sources across 25 citations** — the largest phase-A population, against slice
 > 1's 9.
+>
+> ⚠ **AMENDED 2026-08-01 — 16, not 15.** This page **declares `fragments.md` as
+> a source**, so slice 1's edit moved its blob and made it the **16th**. ⭐ That
+> is the keystone effect arriving on schedule, ⛔ not new drift and ⛔ not a
+> hard stop. Correction issued to the ring in-flight as `evt_3j54h1jaa6zh5`.
 >
 > ⚠ **`depends_on` names [[DOC-ASBUILT-FRAGMENTS]]** because slice 1 changes the
 > expected drift count (below), ⛔ not because the pages overlap.
@@ -56,6 +61,7 @@ A, because ⛔ **no other consuming page is attested** — editing them adds no 
 | `crates/ken-runtime/src/cranelift_backend.rs` | 2 | — |
 | `crates/ken-cli/tests/px4b_native_production.rs` | 2 | — |
 | `.github/workflows/ci.yml` | 1 | — |
+| ⭐ `library/learn/reading-ken/fragments.md` | 7 | — | ← **added by slice 1** |
 
 ⛔ **No row is re-stamped here** — phase A writes no ledger. The `consumers`
 column is why: most of these are shared, and a shared row cannot be re-stamped

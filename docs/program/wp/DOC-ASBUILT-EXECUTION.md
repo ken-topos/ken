@@ -17,8 +17,28 @@
 |---|---|
 | **base** | ⭐ **`origin/main` as of when you cut the branch, provided it contains this frame AND [[DOC-ASBUILT-FRAGMENTS]] has landed.** ⛔ Not a SHA copied from this table. |
 | the page | `library/learn/reading-ken/06-execution.md` |
-| its drifted sources | **15 distinct paths / 24 citations** — ⚠ **re-derive at your base** |
+| its drifted sources | ⭐ **16 distinct paths / 25 citations** (amended — see below) — ⚠ **re-derive at your base** |
 | campaign law | [[DOC-ASBUILT-AUDIT]] |
+
+> ## ⚠⚠ AMENDED 2026-08-01 — THE POPULATION IS **16**, NOT 15
+>
+> Slice 1 landed, and **`06-execution.md` declares `fragments.md` as a source** —
+> it is one of the seven documents that cite it. Editing it moved its blob, so
+> **`library/learn/reading-ken/fragments.md` is now the 16th drifted source on
+> this page**, at blob `e1392c8a`.
+>
+> ⭐ **Finding 16 is CORRECT. ⛔ It is not drift you introduced, and ⛔ not a
+> reason to hard-stop.** Measured at `7a263d28`: **16 distinct paths / 25
+> citations**. The table below was measured at `5619748c` and lists 15.
+>
+> ⚠ **Read `fragments.md` at its CURRENT blob** — that is slice 1's freshly
+> repaired content. ⭐ Slice 1 repaired claims on that page, so a claim
+> `06-execution.md` inherited from the **old** `fragments.md` is exactly the kind
+> that is now false while reading as perfectly current.
+>
+> ⛔ **This does not change `AC-4`.** The gate's drift block is **28 before and
+> 28 after, byte-identical** — that is a corpus-wide row count, ⛔ a different
+> quantity from the 16 sources on this page.
 
 ---
 
