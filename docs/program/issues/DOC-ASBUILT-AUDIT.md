@@ -100,8 +100,8 @@ heading change moves the blob just as a prose change does.
 ## The slice roster
 
 **Slice 1 — [[DOC-ASBUILT-FRAGMENTS]]** ✅ **merged** (`d7435f50`, PR #1282).
-**Slice 2 — [[DOC-ASBUILT-EXECUTION]]** ✅ framed, `ready`, **in flight**.
-**Slice 3 — [[DOC-ASBUILT-SOLUTIONS]]** ✅ framed and `ready`.
+**Slice 2 — [[DOC-ASBUILT-EXECUTION]]** ✅ **merged** (`f8ede8a3`, PR #1287).
+**Slice 3 — [[DOC-ASBUILT-SOLUTIONS]]** ✅ framed, `ready`, **in flight**.
 **Slice 4 — [[DOC-ASBUILT-CHAPTERS]]** ✅ framed and `ready`.
 **Slice 5 — [[DOC-ASBUILT-READER]]** ✅ framed and `ready`.
 **Slice 6 — [[DOC-ASBUILT-AGENTS]]** ✅ framed and `ready`.
