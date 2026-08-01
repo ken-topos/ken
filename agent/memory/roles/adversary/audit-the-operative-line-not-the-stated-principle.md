@@ -17,14 +17,14 @@ And then the line a QA actually *executes* says:
 :18  "Your independent gate RE-RUNS the affected tests"
 ```
 
-★ **Re-running is not re-deriving.** A QA that re-runs the implementer's
+**Re-running is not re-deriving.** A QA that re-runs the implementer's
 mutation inherits the implementer's vantage — including the forms they never
 imagined, which for a text-matching mechanism **is the entire failure surface.**
 Nothing in the document reconciled the two, and the new section — four
 sub-blocks on how to build a *good* mutation — never said the QA must build its
 **own**.
 
-## ⛔ CORRECTION — my evidence was wrong; the finding was right for a different reason
+## CORRECTION — my evidence was wrong; the finding was right for a different reason
 
 **Checked after it landed.** `:18`'s "re-runs" sits inside the **targeted-testing**
 rule — *"never run `cargo test --workspace`… re-runs the **affected** tests
@@ -81,7 +81,7 @@ the output records which happened.
   not a defect; an inherited mutation **reported as independent** is. That
   converts an invisible degradation into a visible one, which is the same move
   as preferring a post-condition to a mechanism story.
-## ⛔ Two ways this move fails — do not hand it over without these
+## Two ways this move fails — do not hand it over without these
 
 Written the same day, after the Steward put the verb query across the whole
 `agent/playbooks/` corpus. **The move above is one cell of a two-cell test**, and
@@ -97,7 +97,7 @@ handing it over alone reproduces exactly the defect it finds.
    line?** No verdict field, no commit message, no logged value, no CI check ⇒
    decorative, whatever its verb.
 
-2. ⛔ **The tempting fix is a verb rewrite, and a verb rewrite changes nothing.**
+2. **The tempting fix is a verb rewrite, and a verb rewrite changes nothing.**
    Turning `re-runs` into `independently derives` across forty files produces a
    large satisfying diff, ships nothing, and — the part that makes it worse than
    inaction — **immunizes the corpus against the next audit**: nouns and verbs
@@ -106,7 +106,7 @@ handing it over alone reproduces exactly the defect it finds.
    same appeal, same zero yield, and the same tell, that it feels like progress
    *because* it touches everything.
 
-   ★ Check what actually fixed the instance: **the verb in `qa.md` is still
+   Check what actually fixed the instance: **the verb in `qa.md` is still
    `construct`.** What changed an artifact was the **disclosure clause** — *"if
    you can only re-run theirs, say so in the verdict."* The fix was never the
    sentence; it was making compliance **observable somewhere**.

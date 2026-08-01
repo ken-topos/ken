@@ -28,7 +28,7 @@ red workspace to `main`). The retro carry generalized it: exported-name
 migrations require an attributed, whole-harness consumer inventory
 alongside producer fidelity checks.
 
-⚠ **Currency note (verified against the tree):** `nat_arithmetic_laws_
+**Currency note (verified against the tree):** `nat_arithmetic_laws_
 acceptance.rs` still exists (`crates/ken-elaborator/tests/`), but its law
 names have since moved to a `::`-namespaced convention (e.g. `add::assoc`
 rather than the flat `add_comm`/`add_assoc` quoted above) — the *literal*

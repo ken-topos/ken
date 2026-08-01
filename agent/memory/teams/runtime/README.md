@@ -4,7 +4,7 @@ Loaded by the Runtime ring — `runtime-leader`, `runtime-implementer`,
 `runtime-qa` — in addition to `fleet`, `build/`, and the function scope
 (`build/leaders` · `build/implementers` · `build/qa`).
 
-⚠ **Runtime seating is the standing exception to the tier table**
+**Runtime seating is the standing exception to the tier table**
 (`agent/MODELS.md`): **`runtime-implementer` is T1**, `runtime-leader` is T2 —
 the implementation is the hard part on this team, not the coordination. **Never
 infer a seat's tier from its role here**, and remember that a Runtime WP

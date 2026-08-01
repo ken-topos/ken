@@ -19,16 +19,16 @@ what you think.**
 
 - The **remote** branch is auto-deleted on merge. `git ls-remote --heads origin B`
   → **empty**.
-- ⛔ **But `refs/remotes/origin/B` SURVIVES, and a plain `git fetch origin` does
+- **But `refs/remotes/origin/B` SURVIVES, and a plain `git fetch origin` does
   NOT prune it.** So the local cache keeps asserting the branch exists **in the
   remote's own namespace** — and `git for-each-ref --contains <sha>`,
   `git branch -r`, and `git rev-parse origin/B` all read that cache and report the
-  branch as an origin ref. ⇒ ★ **Only `git ls-remote` asks the remote.** Measured
+  branch as an origin ref. ⇒ **Only `git ls-remote` asks the remote.** Measured
   2026-07-26 (`RT-FNSPLIT-B2V`): the Steward asked `for-each-ref --contains`, got
   `refs/remotes/origin/wp/RT-FNSPLIT-B2V-executable-value-abi`, and wrote *"branch
   kept on origin"* into a durable issue file — corrected minutes later when
   `ls-remote` returned **empty** against a positive control that returned a row.
-  ⛔ **A probe that reads a cache invalidated by the very operation you are asking
+  **A probe that reads a cache invalidated by the very operation you are asking
   about cannot answer the question**, and it fails in the *reassuring* direction.
 - The **local** ref survives, dangling **ahead** of `origin/main`, while **its
   content is already in `main`** under a *different* SHA.
@@ -40,7 +40,7 @@ what you think.**
 **A team told to "continue" that branch is being handed a dangling ref whose diff
 against `main` is meaningless.**
 
-## ★ And the part that actually blocks the ring: one branch, one worktree
+## And the part that actually blocks the ring: one branch, one worktree
 
 **Git will not check out the same branch in two worktrees.** So if you are *still
 sitting on* the branch you just published, the receiving team **physically cannot

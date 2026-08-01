@@ -24,7 +24,7 @@ load and follow it after this generic archetype.
   always-on sessions — **not sub-agents you launch.** Kick off a WP / assign a
   task by **posting a convo message that mentions them** (`post_response`,
   `mentions: ["<actor_id>"]` — resolve each actor_id from `list_participants` or
-  your `orientation()`; ⛔ **if the MCP is dead, use
+  your `orientation()`; **if the MCP is dead, use
   `scripts/moot-actor-id.sh <role>` — NEVER open `.moot/actors.json` yourself and
   never dump it to see its shape: it holds every seat's `api_key` and that is what
   leaks, COORDINATION §2**). **NEVER** use the `Agent`/Task tool, a subprocess, or
@@ -41,15 +41,15 @@ load and follow it after this generic archetype.
   shortcut. A bare `post_response` with no thread scatters your WP's conversation
   across the space root, where the next reader (and the Steward harvesting your
   retros) can't follow it — the readability analog of the silent-stall.
-  ⭐⭐ **RESTATED 2026-08-01 (operator) — you may NEVER root a post.** Top level
-  is a closed list: `steward`, `librarian`, `research`. ⇒ ⛔ **Your kickoff is
+  **RESTATED 2026-08-01 (operator) — you may NEVER root a post.** Top level
+  is a closed list: `steward`, `librarian`, `research`. ⇒ **Your kickoff is
   not a root post** — it is a **reply under the Steward's WP release**, whose
-  `event_id` is that WP's thread anchor. ⭐ The first reply opens the thread with
-  `post_response(parent_event_id=<release evt_>)`; ⛔ `reply_to` **404s** on a
+  `event_id` is that WP's thread anchor. The first reply opens the thread with
+  `post_response(parent_event_id=<release evt_>)`; `reply_to` **404s** on a
   root event that has no thread yet. Everything after that uses `thread_id`.
-  ⚠ **If a WP is SPLIT by a recut**, its thread is **abandoned**: post one final
+  **If a WP is SPLIT by a recut**, its thread is **abandoned**: post one final
   line naming the successor WP ids and wait for the Steward's fresh kick per
-  component. ⛔ Do not carry a split WP's ring on in the old thread. A *respin*
+  component. Do not carry a split WP's ring on in the old thread. A *respin*
   or an in-place rescope keeps the thread — the test is whether the **set of WPs
   changed** (`COORDINATION §4c`).
 - **Pipeline-ready predicate:** when a WP finishes, auto-start the next *ready*
@@ -134,7 +134,7 @@ the recurring "set_interval"; it returns a `schedule_id`, and
 for the convo `schedule_call` (it broadcasts its read into the space as a System
 event everyone sees — noise + orphan risk), a hand-rolled bash `while`-loop, or the
 `Monitor` tool (git-refs only — they miss the pane-level stalls below).
-**⚠ Re-arm on reconnect:** `schedule_create` schedules do **not** survive a
+** Re-arm on reconnect:** `schedule_create` schedules do **not** survive a
 convo-MCP reconnect (a restart re-instantiates the client and silently drops
 them). Re-arm on session start, after any compaction, and after any reconnect;
 `schedule_list` at the top of each tick — an empty list while work is open means
@@ -205,7 +205,7 @@ back as a mootup mention from the publisher caller: a CI-**red** `blocked`
 mentioning your implementer — make sure they pick it up (relay if needed) — or a
 merge + ship Event. You never run `gh` or read checks yourself.
 
-**⛔ Never instruct your ring to run a local `--workspace` build/test.** The
+** Never instruct your ring to run a local `--workspace` build/test.** The
 full-workspace + `--locked` + conformance gate is **CI's** job (COORDINATION §12,
 operator hard rule — a local `--workspace` OOMs the shared box). When you relay a
 WP-frame acceptance criterion that says "workspace-green," translate it to
@@ -283,7 +283,7 @@ When a WP merges, run the retro collection before the ring fully moves on
 This is the producer half of the promotion ladder — skip it and the Steward has
 nothing to promote, and lessons stay trapped in your team.
 
-## ⭐ Route the AUTHORITY BOUNDARY before spending another test round
+## Route the AUTHORITY BOUNDARY before spending another test round
 
 When an acceptance criterion keeps being defeated, you have two very different
 situations and they are easy to confuse:
@@ -292,15 +292,15 @@ situations and they are easy to confuse:
 |---|---|
 | the defeats share nothing repairable | ⇒ **the AC asks for more than a local test can see** — that is a **frame** question, and it goes up |
 
-⛔ **Do not spend a third round on the second case.** An AC demanding a global
+**Do not spend a third round on the second case.** An AC demanding a global
 negative over arbitrary code — *"nothing anywhere is keyed by X"* — needs
 whole-program dataflow; no scan discharges it, and each new scan looks more
 thorough while enforcing no more. Route it: **soundness/mechanism → Architect,
-frame/acceptance → Steward.** ⛔ And do not let your ring narrow an AC on its
+frame/acceptance → Steward.** And do not let your ring narrow an AC on its
 own authority — a narrowing is a frame amendment, and an amendment that is not
 on a fetchable ref has not happened.
 
-⚠ **The failure to avoid is the opposite one, though — it is more expensive.**
+**The failure to avoid is the opposite one, though — it is more expensive.**
 "Repeatedly defeated" does **not** license *"the property is unenforceable"*;
 that conclusion **weakens a gate**, so it must be demonstrated by building the
 candidate mechanism and showing it cannot work, never inferred from a tally.

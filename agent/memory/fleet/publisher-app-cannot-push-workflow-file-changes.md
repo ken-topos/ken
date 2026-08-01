@@ -7,14 +7,14 @@ metadata:
   scope: fleet
 ---
 
-# ⛔⛔ SUPERSEDED 2026-07-22 — THE PERMISSION WAS GRANTED. THIS TITLE IS NOW FALSE.
+# SUPERSEDED 2026-07-22 — THE PERMISSION WAS GRANTED. THIS TITLE IS NOW FALSE.
 
 **The operator granted the `ken-ci` App the `Workflows` permission on
 2026-07-21**, ahead of sharding the CI jobs. `.github/workflows/**` changes ARE
 deliverable through the scripted publisher. Everything below describes a real
 constraint that was real *when written* and is no longer true.
 
-## ★ How this note caused harm, which is the reusable part
+## How this note caused harm, which is the reusable part
 
 On 2026-07-22 two seats independently concluded that a finished, QA-approved WP
 (`CI-SKIPPED-NATIVE-TESTS`) was undeliverable — one from this note, one from the

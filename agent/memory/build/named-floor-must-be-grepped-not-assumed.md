@@ -93,7 +93,7 @@ fix to strike 2 and folded pre-vote — when a correction targets an over-claim 
 authored, the same region likely holds its siblings (grep-the-region-fold-all on
 my own prose).
 
-★ **What to DO once grounding catches a stale premise mid-review** — resolve it
+**What to DO once grounding catches a stale premise mid-review** — resolve it
 yourself only if the fix is structurally determined, escalate to the lane owner
 if it would contradict a locked input, and mind the fold-vs-track timing
 against the Decision's SHA anchor — is a separate discipline with its own
@@ -103,7 +103,7 @@ evidence; see [[mid-review-fix-inline-escalate-or-track]].
 this WP") is a claim about what the ELABORATOR can construct TODAY; grep the
 proof-construction capability, and don't transfer a concrete-scrutinee proof
 idiom to an abstract-scrutinee setting (52-map §5 erratum, 2026-07-03).**
-⚠ **Status check before reuse:** the two capability gaps below (no
+**Status check before reuse:** the two capability gaps below (no
 `Term::J`/`Cast` construction in `elab.rs`; the induction-mechanism nullary
 gate) are the 2026-07-03 ground truth — both have since moved (`elab.rs` now
 constructs `Term::J`/`Term::Cast` at several sites). Re-grep the current

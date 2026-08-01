@@ -14,7 +14,7 @@ the code, and that independence is the point. Read `../../COORDINATION.md` and
 A team overlay may add source-language authoring rules for that team's scope;
 load and follow it after this generic archetype.
 
-> **⛔ Verify TARGETED — never run `cargo test --workspace` (operator hard rule,
+> ** Verify TARGETED — never run `cargo test --workspace` (operator hard rule,
 > COORDINATION §12).** Your independent gate re-runs the **affected** tests
 > through `scripts/ken-cargo -p <crate>` / `--test <name>`, not the whole
 > workspace — a local `--workspace` run OOMs the shared box and stalls the fleet.
@@ -271,20 +271,20 @@ classify it, it is not ready (Block):**
   event that retires it, sits beside the authoritative owner, and enumerates its
   blast-radius consumers.
 
-### ⛔⛔ PROHIBITED SUBJECT — never assert facts about repository TEXT
+### PROHIBITED SUBJECT — never assert facts about repository TEXT
 
 **Operator rule, 2026-07-26:** *"Test oracles that assert facts about source
 code, catalog, or documentation lines are an invitation for failure and delay.
 Tests should focus on behavior."*
 
-⛔ **BLOCK any test whose subject is the text of the repository** rather than the
+**BLOCK any test whose subject is the text of the repository** rather than the
 behaviour of a program: line numbers, line contents, occurrence positions or
 counts in prose, heading inventories, section presence, or a hardcoded census of
 where words appear in `catalog/`, `docs/`, `library/`, `spec/`, or `agent/`.
-⛔ This is **not** weighed against usefulness — a corpus-text assertion is
+This is **not** weighed against usefulness — a corpus-text assertion is
 inadmissible even when it is accurate, even when it once caught something.
 
-⭐⭐ **WHY THIS IS A SUBJECT RULE AND NOT A FOURTH PROMISE CLASS — read this
+**WHY THIS IS A SUBJECT RULE AND NOT A FOURTH PROMISE CLASS — read this
 before you argue an exception.** The three classes above govern *what kind of
 promise* a test makes; **none of them asks what the test is ABOUT.** So a
 corpus-text oracle self-classifies straight into **"normative compatibility
@@ -293,7 +293,7 @@ passes this gate cleanly. **That is exactly what happened.**
 `crates/ken-elaborator/tests/kw_theorem_source_oracle.rs` pinned 64
 `(path, line, count)` rows across 18 files in six top-level trees, froze their
 line numbers repo-wide, and blocked an unrelated doc WP while reading, on its
-face, as a compliant compatibility vector. ⚠ And the failure recorded as this
+face, as a compliant compatibility vector. And the failure recorded as this
 section's *own* motivating example — *"a milestone census frozen as a permanent
 invariant"* — **is the same shape**. The gate described the disease and still
 admitted the patient.
@@ -302,14 +302,14 @@ admitted the patient.
 point: you cannot re-classify your way past it.** Ask *"what is this test
 about?"* before *"what does it promise?"*.
 
-**The tell, in one question:** ⭐ *"Does an edit that changes nothing about how
+**The tell, in one question:** *"Does an edit that changes nothing about how
 any program behaves make this test fail?"* If yes — inserting a paragraph,
 renaming a heading, reflowing prose — **the test is measuring the repository,
 not the software.** It will red for people who did nothing wrong, in files they
 have never read, and the cost lands on whoever is unlucky rather than whoever
 erred.
 
-**✅ What to do instead — the property is usually still testable, as behaviour:**
+** What to do instead — the property is usually still testable, as behaviour:**
 - a *policy* about identifiers → assert the **compiler/elaborator rejects** the
   construct, on a fixture you author. That is behaviour, it is local, and prose
   cannot break it.
@@ -318,12 +318,12 @@ erred.
 - a *structural* document invariant (a manifest covers every file) → assert the
   **relation** between two artifacts, keyed on identity, never on position.
 
-⚠ **Boundary, stated so it is not over-applied:** a test that parses a
+**Boundary, stated so it is not over-applied:** a test that parses a
 structured data file (a manifest, a lockfile) and checks a **relation** is
 behaviour-adjacent and permitted — line-by-line *parsing* is an implementation
 detail, not the subject. `crates/ken-cli/tests/library_documentation_gates.rs`
 sits on the permitted side: it validates manifest↔library consistency with real
-detector controls and hardcodes no coordinates. ⛔ The prohibition is on
+detector controls and hardcodes no coordinates. The prohibition is on
 **assertions keyed to textual position or corpus-wide word census**, not on
 reading a file.
 
@@ -387,7 +387,7 @@ reference):**
      an equivalent array spelling, a shell command line admitting different
      quoting, a JSON payload with reordered or aliased fields. Enumerate the
      spellings the **substrate** admits and mutate to the **worst legal one**.
-     ★ Then prefer **asking the substrate's own parser over running a matcher
+     Then prefer **asking the substrate's own parser over running a matcher
      against its text** — the compiler is the Rust instance of that rule, not
      the rule itself. A text matcher's blind spots are exactly the forms you did
      not imagine, which is why they cannot be enumerated from the armchair.
@@ -400,19 +400,19 @@ reference):**
      the text pin matched visibility against the *same line's* prefix, which is
      empty on the `fn` line. Same denotation, different representation, and the
      difference sat precisely in the part the check read.
-   - ⛔ **A mutation that breaks the BUILD proves nothing** — the checks then
+   - **A mutation that breaks the BUILD proves nothing** — the checks then
      "pass" against rubble. Confirm the crate still compiles under the mutation;
      use a compile-preserving stand-in (e.g. a `#[cfg(not(test))]` sibling) when
      the direct edit would collide with a gated declaration.
-   - ⛔ **When a mutation passes where it should FAIL, suspect a STALE INPUT
+   - **When a mutation passes where it should FAIL, suspect a STALE INPUT
      before you doubt the mutation.** Freshness is a **third axis**, independent
      of correctness and of the positive control: a control proves the harness
      *works*, never that it read **current** code. A probe selecting among 15
      accumulated rlibs by filename hash reported on hours-old source **with every
      signal healthy, the positive control included**. Check *which artifact the
      probe actually compiled against* before concluding the property holds.
-   - ★ **Construct your OWN mutation before you run theirs — and if you can only
-     re-run theirs, SAY SO IN THE VERDICT.** ⚠ *Correction (2026-07-22): this
+   - **Construct your OWN mutation before you run theirs — and if you can only
+     re-run theirs, SAY SO IN THE VERDICT.** *Correction (2026-07-22): this
      block first cited `:18` as instructing QA to "re-run" rather than re-derive.
      **That citation was wrong** — `:18` is the targeted-testing rule, and its
      "re-runs the affected tests" fixes the **scope** of a run (targeted, never
@@ -443,7 +443,7 @@ reference):**
     nonzero test count, inspect the message; **never the workspace locally** —
     full-workspace consumer surprises stay CI's job.
 
-## ⭐ Verifying a mechanical pin — load the `pin-a-property` skill
+## Verifying a mechanical pin — load the `pin-a-property` skill
 
 Running a pin proves it passes. It does **not** prove it guards its claim. Load
 the **`pin-a-property`** skill (`agent/playbooks/tools/pin-a-property.md`) and
@@ -467,7 +467,7 @@ Your verdict is **binary: Approved or Blocked** — never "looks good." A Blocke
 verdict names the exact failing criterion and points at the evidence (failing
 test, spec §, diff). Post it as a structured `review_request` result, not prose.
 
-### ⛔ An APPROVED verdict carries evidence too — the symmetric obligation
+### An APPROVED verdict carries evidence too — the symmetric obligation
 
 **This corpus used to record failures and not successes**, and this line was the
 worst instance: **Blocked** had an evidence obligation and **Approved** was
@@ -478,7 +478,7 @@ was unenforceable by construction, however forcefully worded.
 So an **Approved** verdict must name, **per gate it turned on, the evidence it
 turned on**.
 
-> ### ★★ The evidence must be something you COULD NOT PRODUCE without having
+> ### The evidence must be something you COULD NOT PRODUCE without having
 > ### done the work.
 >
 > This is the whole constraint, and it is easy to lose. *"I ran all ten gates
@@ -491,14 +491,14 @@ turned on**.
 > **and its real output**; the non-zero test count; the `git diff --name-only`
 > that scoped the review.
 
-⇒ ★ **This resolves gate 8's tension rather than patching it.** *"Don't keep the
+⇒ **This resolves gate 8's tension rather than patching it.** *"Don't keep the
 mutation"* is precisely what makes gate 8's evidence unproducible — so **paste
 its red output into the verdict** (the artifact survives, the mutation still
 doesn't), or, better where the mechanism allows, land the violation as a
 **permanent negative fixture** and cite its SHA. Then the gate's bite is
 re-proved on every CI run instead of once, invisibly, in a worktree nobody kept.
 
-⚠ **Where a gate genuinely has no producible artifact, say so plainly in the
+**Where a gate genuinely has no producible artifact, say so plainly in the
 verdict** rather than asserting compliance — the same disclosure move as the
 inherited-mutation clause above. **A named gap is auditable; a confident
 sentence is not.**
@@ -560,7 +560,7 @@ hand back to the implementer, or raise the behavioral question to Spec.
   unmerged — the leader was never notified). On a clean gate, hand off by
   **`post_response` that actually mentions the leader** — the leader's actor_id
   in the `mentions: ["<actor_id>"]` array (resolve it from `list_participants` /
-  `orientation()`; ⛔ **if the MCP is dead, use `scripts/moot-actor-id.sh <role>` —
+  `orientation()`; **if the MCP is dead, use `scripts/moot-actor-id.sh <role>` —
   NEVER open `.moot/actors.json` yourself and never dump it to see its shape: it
   holds every seat's `api_key`, COORDINATION §2**), type `review_request` — to
   request the merge Decision; on a Blocked verdict, mention the **implementer**

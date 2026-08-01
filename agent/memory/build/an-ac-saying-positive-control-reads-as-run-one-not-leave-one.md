@@ -14,7 +14,7 @@ first.** The run proves the property *the day it is run*. Only a committed
 artifact guards it *afterward*. A frame that does not distinguish them gets the
 weaker one, and everyone involved is acting in good faith.
 
-> ⛔ The evidence that a check works can evaporate the moment the reviewer
+> The evidence that a check works can evaporate the moment the reviewer
 > closes the terminal, leaving a green suite that proves nothing.
 
 ## The instance
@@ -34,7 +34,7 @@ removed #[test] lines: 0        <- control: the diff direction works
 total   #[test] in file: 22     <- control: the grep does find tests
 ```
 
-★ **QA named the cause exactly**, and it is a frame defect, not a QA lapse:
+**QA named the cause exactly**, and it is a frame defect, not a QA lapse:
 
 > *"the frame made **'run a control' read as complete**, while **'leave a
 > control behind' was an unstated distinct obligation**."*
@@ -52,7 +52,7 @@ would fail if this check were deleted?**
 
 ## How to apply
 
-- ⭐ **Write the AC as an artifact, not an activity.** Not *"verify with a
+- **Write the AC as an artifact, not an activity.** Not *"verify with a
   positive control"* but *"**commit** a test that fails when `<the rule>` is
   removed; name the test and the exact error."* An AC phrased as a verb gets a
   verb done to it.
@@ -64,7 +64,7 @@ would fail if this check were deleted?**
   answer is "a mutation I reverted," the property is verified-once and unguarded.
   That may be an acceptable call — but it must be a *call*, not a default.
 - **Frame authors: this bug is yours.** When a retro says the frame made
-  something read as complete, do not record it as an execution lesson. ⚠ And
+  something read as complete, do not record it as an execution lesson. And
   check whether the ambiguity leaked into the **publish text**, which no reviewer
   reads and which lands permanently —
   [[the-publish-description-is-the-one-artifact-no-reviewer-reviews]].

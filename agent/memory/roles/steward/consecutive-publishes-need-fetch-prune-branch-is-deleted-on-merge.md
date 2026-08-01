@@ -17,7 +17,7 @@ then fails:
 error: failed to push some refs
 ```
 
-⛔ **"stale info" is NOT a divergence and NOT a force-push situation.** Nothing
+**"stale info" is NOT a divergence and NOT a force-push situation.** Nothing
 is wrong with your commits; the remote-tracking ref describes a branch that no
 longer exists. Reaching for `--force` here would be treating a bookkeeping
 artifact as a content conflict.
@@ -31,7 +31,7 @@ git ls-remote origin refs/heads/steward/work   # empty ⇒ deleted on merge, as 
 
 Then re-run the publisher unchanged.
 
-## ⚠ The second half — the squash-merge trap on your own branch
+## The second half — the squash-merge trap on your own branch
 
 Because the merge is a **squash**, your local `steward/work` still carries the
 individual commits whose content is already on `main`. Its merge-base with the
@@ -40,7 +40,7 @@ re-include everything you already landed.
 
 ⇒ **Re-anchor exactly the way you tell build teams to:** commit any pending work
 first, then `git reset --hard origin/main` and **cherry-pick only the new
-commits**. ⛔ Never `git rebase`; ⛔ never `git stash` (the stash stack is shared
+commits**. Never `git rebase`; never `git stash` (the stash stack is shared
 across ~70 worktrees).
 
 **Assert a predicted post-condition before you look:** `git diff --stat

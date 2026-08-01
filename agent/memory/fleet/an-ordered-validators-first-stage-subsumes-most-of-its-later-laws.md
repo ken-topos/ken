@@ -19,7 +19,7 @@ to reject:
 | *"names an unknown function unit"* | an out-of-range unit id | *"owner is not the node's derived function unit"* |
 | *"static body edge targets a shared exit"* | aim one at the terminal | *"planned node has no function unit owner"* |
 
-⛔ **The first row is not merely shadowed — it is unreachable.** The
+**The first row is not merely shadowed — it is unreachable.** The
 recomputation on the function's own first line rejects the *identical*
 condition with a different message. It can never fire, and it was also the
 only quadratic check in the file (`Vec::contains` inside a loop over every
@@ -28,13 +28,13 @@ edge).
 ## Why the count is the trap
 
 Each law reads as an independent guarantee. Each has its own error string, its
-own comment, often its own ⚠ explaining a subtlety a reader would otherwise
+own comment, often its own explaining a subtlety a reader would otherwise
 miss. **Nothing in the source distinguishes a law with a witness from one
 without** — that difference lives in the *ordering*, which is invisible at any
 single arm. So the file honestly advertises twelve detectors and a downstream
 consumer plans against twelve.
 
-★ **The general shape: strengthening an early check silently weakens the
+**The general shape: strengthening an early check silently weakens the
 evidence for every later one, and no artifact records the transfer.** The
 recomputation was added precisely to make a corrupted record loud — a good
 change — and it converted seven independently-motivated laws into dead prose
@@ -50,7 +50,7 @@ increase in coverage.
 - **Auditing:** enumerate the arms (they are grep-able — one per error
   message), then build a witness per arm and record **which error came back**.
   Do not accept `is_err`; see below.
-- ⭐ **`assert_eq!` on the exact error, never `expect_err`.** Every row of the
+- **`assert_eq!` on the exact error, never `expect_err`.** Every row of the
   table above is legible *only* because the surrounding suite asserted exact
   errors. Under `expect_err` all seven probes are green and teach nothing —
   and the same choice had already caught the authors' own control selecting

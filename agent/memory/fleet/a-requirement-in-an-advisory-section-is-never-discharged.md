@@ -17,7 +17,7 @@ only after the Steward said the same thing in a **message**, and they
 immediately found a real overclaim. **Two of the WP's three review folds were
 then in exactly the family that paragraph named.**
 
-⛔ **The paragraph was not wrong, not unread, and not unclear. It was in a
+**The paragraph was not wrong, not unread, and not unclear. It was in a
 section whose grammatical mood is *advice*.** ACs get discharged because
 something checks them; hazards get *noted*.
 
@@ -32,7 +32,7 @@ Four instances in one session, all the same:
 | a frame said "attempt an evasion per pin" | a hazards paragraph; no AC, so nothing discharged it |
 | a publish-verification grepped one phrase | the phrase spanned a line break; the check answered "are these bytes adjacent?" |
 
-★ **In every case a check existed and answered a NARROWER QUESTION than the one
+**In every case a check existed and answered a NARROWER QUESTION than the one
 that mattered.** That is why none of them felt like a gap: something was
 verifying something. Ask of any guard — **what question does this actually
 answer, and is it the question I need answered?**

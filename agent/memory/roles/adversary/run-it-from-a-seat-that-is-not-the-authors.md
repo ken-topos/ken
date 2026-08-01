@@ -34,7 +34,7 @@ principled identity was free the whole time: `tmux display-message -p '#S'`.
 
 ## The shape
 
-★ **A construct that is correct from the authoring vantage and wrong from every
+**A construct that is correct from the authoring vantage and wrong from every
 other cannot be caught by any amount of self-testing by the author.** Rigor does
 not help; the author's rigor is *applied through the vantage that hides it*. The
 Steward's own summary: *"I tested the oracle only from the one seat where the

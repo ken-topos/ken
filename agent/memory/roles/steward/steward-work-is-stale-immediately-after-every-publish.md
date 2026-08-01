@@ -38,7 +38,7 @@ then `git checkout <tip> -- <those files>` and re-commit. Verify with `git
 diff --quiet <tip>` that content is unchanged. ⚠ Never `git stash` here
 (the stash stack is shared across every worktree in this repo).
 
-⚠ The re-root is safe **only** because the publish already landed the
+The re-root is safe **only** because the publish already landed the
 identical content — confirm with `git diff --quiet <published-tip>
 origin/main` first, and check sibling survival (`git diff --quiet
 <approved-sha> origin/main -- crates/`) whenever the batch was cut from a

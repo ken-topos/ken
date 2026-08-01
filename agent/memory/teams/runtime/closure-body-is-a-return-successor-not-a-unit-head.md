@@ -2,7 +2,7 @@
 scope: teams/runtime
 audience: runtime-leader, runtime-implementer, runtime-qa
 source: Architect ruling evt_842spc7t6js1 on RT-FNSPLIT-B2F hard-stop #9
-  (2026-07-25); the standing ⛔ correction carried on
+  (2026-07-25); the standing correction carried on
   docs/program/issues/RT-FNSPLIT-B2O.md, restated because successive drafts of
   that same file had it backwards
 related: a-structural-pin-that-enumerates-spellings-is-not-a-proof-of-the-property
@@ -15,7 +15,7 @@ the ruled answer is:
 
 > **`plan.entries` ∪ every `EdgeKind::StaticBody` *target*.**
 
-⛔ **`TransitionKind::ClosureBody` is NOT a head.** It is the transition a body
+**`TransitionKind::ClosureBody` is NOT a head.** It is the transition a body
 takes on the way **back out** — a return successor. Any prose describing the unit
 heads as *"the root plus the `ClosureBody` heads"* is **wrong**, and that
 specific error has appeared in successive drafts of the very issue file that

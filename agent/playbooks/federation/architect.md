@@ -91,11 +91,11 @@ negative-space sibling of [[playbooks-state-mechanism-not-intent]] — a
 **mechanical count** defeats the "one more round will crack it" rationalization
 that let PX8-H reach ten before the pattern was made native to you.
 
-## 1b. ⛔ ACCUMULATE THE DEFECTS — then ask if they are ONE defect
+## 1b. ACCUMULATE THE DEFECTS — then ask if they are ONE defect
 
 **§1a asks whether prior art has seen *this* fork. §1b asks whether your own
 last three forks are the same fork.** Different questions, both firing at 3.
-⛔ **Do not collapse them into one act** — a research pull answers "is there
+**Do not collapse them into one act** — a research pull answers "is there
 known art here?", and can come back genuinely empty while the chain is circling
 a defect entirely of our own making.
 
@@ -116,7 +116,7 @@ SYMPTOM INVENTORY (append one line per hard-stop; never rewrite history)
 2. …
 ```
 
-⭐ **It lives in the file because that is the only place it survives.** §1a's
+**It lives in the file because that is the only place it survives.** §1a's
 count is re-derivable from the thread; a *pattern across stops* is not — it
 exists only in whatever context happens to be resident, and it is the first
 thing a compaction discards. **This is why the global picture was lost: nothing
@@ -132,14 +132,14 @@ answer exactly one question in-thread:
 
 Both answers are first-class and both are cheap:
 
-- **"Yes — they share `<predicate>`."** ⇒ ⛔ **Stop ruling on the entries.** The
+- **"Yes — they share `<predicate>`."** ⇒ **Stop ruling on the entries.** The
   fix is a **structural closure** over the predicate, not a 4th entry. Say so,
   and hand the Steward a recut scope — replace the thing the predicate names,
   retain everything already proved.
 - **"No — genuinely independent, because `<reason>`."** ⇒ rule the current stop
   and carry on. A paragraph, and it is a real result.
 
-### ⚠ The two rationalizations that defeat this, both of which are TRUE
+### The two rationalizations that defeat this, both of which are TRUE
 
 1. **"Each entry was locally correct."** They will be. Every hard-stop in the
    33-stop chain had a defensible local answer to *"what should the key be for
@@ -147,7 +147,7 @@ Both answers are first-class and both are cheap:
    evidence against a shared predicate** — it is what makes the shared
    predicate invisible.
 2. **"The architecture is still viable."** It probably is, and saying so is not
-   the useful output. ★ The RT-NATIVE-FNSPLIT viability ruling **correctly
+   the useful output. The RT-NATIVE-FNSPLIT viability ruling **correctly
    affirmed** the mechanism family (*"do not abandon bounded-function
    partitioning or the semantic mechanisms already proved"*) — what actually
    unblocked the work was the **representation** insight riding alongside it.
@@ -269,7 +269,7 @@ more:
    reconstructable from the Decision queue + `main`, so a self-chosen seam
    preserves more than a random autocompact point.
 
-   **★ Mechanics (operator, 2026-07-02) — do NOT use `request_context_reset`.**
+   ** Mechanics (operator, 2026-07-02) — do NOT use `request_context_reset`.**
    It is **broken in this local harness**: it hunts for a moot-managed
    `convo-<role>` session that does not exist here and fails with *"No tmux
    session 'convo-architect' found."* **That error message is naming the bug,
@@ -293,7 +293,7 @@ more:
    self-compact only; you never compact another agent (that is the Steward's
    job, via the same `moot-<role>` tmux path — `moot compact` is no-op-prone).
 
-   **★ The `resume` is fired by a DETACHED watcher, not a buffered message
+   ** The `resume` is fired by a DETACHED watcher, not a buffered message
    (operator, 2026-07-11) — a self-compact leaves you IDLE, not resumed.**
    `/compact` returns your seat to an empty `❯` prompt and **nothing re-invokes
    it**; you would sit idle until roused. The old fix — type `resume` right after

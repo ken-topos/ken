@@ -12,7 +12,7 @@ A distinct failure from claiming something you never checked, and **easier to
 commit**: the narrow, correct sentence already exists in the artifact, and you
 broaden it while restating it in a thread, a status update, or a merge ack.
 
-> ⛔ The PR description said *"removing each detector's **rule** makes its named
+> The PR description said *"removing each detector's **rule** makes its named
 > committed test fail."* **True, measured, exactly what landed.**
 > The merge summary said *"the remedy for the orphaning defect is **no longer
 > itself orphanable**"* and *"deleting **either rule** now reddens instead of
@@ -39,7 +39,7 @@ was never bound to the gate.
 
 ## How to apply
 
-- ⭐ **When restating your own claim, quote the artifact's sentence rather than
+- **When restating your own claim, quote the artifact's sentence rather than
   paraphrasing it.** If the narrow version is already written down and correct,
   reuse the words. Paraphrase is where the scope creep lives.
 - **Name the operand the claim is about.** "Deleting the *rule*" and "deleting
@@ -48,7 +48,7 @@ was never bound to the gate.
   silently quantified over a set you did not measure.
 - **Ask: which mutations did I actually run?** State the claim over exactly
   those. Anything broader is a prediction, and should be labelled as one.
-- ⚠ **Attribute fairly in the same breath.** Here the residual is shared by
+- **Attribute fairly in the same breath.** Here the residual is shared by
   *every* gate in the file, and the WP converted one of two silent modes to
   loud — a strict improvement. **A correction that reads as "the fix failed" is
   its own inaccuracy**, in the opposite direction.

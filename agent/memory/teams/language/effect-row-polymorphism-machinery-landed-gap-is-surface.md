@@ -6,7 +6,7 @@ source: private memory `effect-row-polymorphism-machinery-landed-gap-is-surface`
 
 # Effect-row polymorphism machinery is landed; the D1 gap is the surface binder
 
-**SURF-1 D1 ★ (`purity-keywords-effect-polymorphism.md @ cb90bcf`), my
+**SURF-1 D1 (`purity-keywords-effect-polymorphism.md @ cb90bcf`), my
 Architect-owned mechanism lane (2026-07-04).** spec-leader routed the row
 *variable* to me, same shape as CAT-1. Ruling cast `evt_53ybqtzjfv7yx` in
 `thr_2czcdnr43ahy4`. I re-touch this at the SURF-1 Language build gate and at

@@ -27,7 +27,7 @@ rows: base=10   branch1=12 (+2)   branch2=13 (+3)
 
 Git **conflicts loudly** on these two. It never had the opportunity to union.
 
-★ **The tell was the count.** The reported result was 13 — *exactly branch2's
+**The tell was the count.** The reported result was 13 — *exactly branch2's
 own row count*. Not 15 (a union), not a conflicted file. **A merge outcome equal
 to one side's own count means no merge occurred**: that side's blob was taken
 wholesale. `git checkout <ref> -- <path>` does precisely that, silently

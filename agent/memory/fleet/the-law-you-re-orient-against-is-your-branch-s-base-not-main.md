@@ -36,7 +36,7 @@ The header listing is the cheap version and it is usually enough: **a section
 you have never seen is the signal.** Read those sections from `origin/main`
 before acting; only then decide whether a full rebase is worth it.
 
-★ **The generalization, which is why this sits at fleet scope: an artifact that
+**The generalization, which is why this sits at fleet scope: an artifact that
 governs you is the one artifact you cannot safely read from your own tree.**
 Code you are editing *should* be read locally — that is the point of the
 worktree. Law, playbooks, and memory are the inverse: they are authored by

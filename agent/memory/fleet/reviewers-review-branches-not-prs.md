@@ -16,7 +16,7 @@ as a **PR number** (`look at PR #110`) is a **no-op** for it: it should not need
 **Why:** observed T1-build (2026-06-30). The operator compacted the Architect
 and asked it to "look at PR #110"; the Architect can't reach GitHub, so it sat
 wedged at its prompt. The operator pulled the branch from GitHub and handed it
-over directly → the Architect reviewed the local code and ✅'d in minutes
+over directly → the Architect reviewed the local code and 'd in minutes
 (catching the §14 stale-base trap, so it was healthy — just pointed at an
 unreachable resource). Compaction + an unreachable-resource framing is what
 wedged it.

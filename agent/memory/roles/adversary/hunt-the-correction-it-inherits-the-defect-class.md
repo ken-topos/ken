@@ -21,7 +21,7 @@ line 10, main edits line 90, non-empty intersection by the prescribed
 detector — `git merge-tree` **merges cleanly and silently**, taking the union.
 Loud failure requires **overlapping hunks**, not a non-empty intersection.
 
-★ **And it failed in the same direction as the original**: *"you cannot lose a
+**And it failed in the same direction as the original**: *"you cannot lose a
 sibling by accident here, you can only be told to reconcile"* is a clause whose
 function is to tell the reader they need not look — the exact generalization the
 Steward had promoted to `fleet/` scope ninety minutes earlier, violated in the

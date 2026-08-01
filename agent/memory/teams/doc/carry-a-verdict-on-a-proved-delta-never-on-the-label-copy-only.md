@@ -25,11 +25,11 @@ delta**, and by nothing else.
 - **only then** carry the prior `gen-doc-status.sh --check` and
   `library_documentation_gates` 31/31 results forward.
 
-★ **The condition is what makes the carry legitimate rather than assumed.** State
+**The condition is what makes the carry legitimate rather than assumed.** State
 it explicitly ("the prior closures carry *only if* every other byte is
 unchanged") — an unstated condition is indistinguishable from not having checked.
 
-⚠ **The mirror-image discipline, from the same WP:** when told not to repeat a
+**The mirror-image discipline, from the same WP:** when told not to repeat a
 heavy gate, **don't — and say that you didn't.** A seat that quietly re-runs
 everything looks diligent and **hides which evidence is load-bearing.** Both
 halves serve the same end: a reader can tell exactly which measurement supports

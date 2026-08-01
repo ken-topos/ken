@@ -24,7 +24,7 @@ with `error: unknown argument: --body` **after usage-parse — and the wrapping
 task still reports exit code 0.** So the task-completion notification says
 "completed," the PR was never created, and **nothing landed.**
 
-## ★ A second, independent way exit-0 lies: `nohup … &`
+## A second, independent way exit-0 lies: `nohup … &`
 
 ```sh
 nohup scripts/scripted-pr-automerge.sh … > log 2>&1 &   # ← the & returns IMMEDIATELY
@@ -58,7 +58,7 @@ whether the publisher is still working rather than dead, **`ps` for it** and
 **`tail` its log** — the log's last line (`PR #N created`, `Waiting Ns before
 polling`) is the real state.
 
-## ★ Pick a discriminator the WP actually ADDS, not touches
+## Pick a discriminator the WP actually ADDS, not touches
 
 When you content-verify, grep for something the WP **introduces**, not
 something it **touches**. I nearly mis-verified I-6 with

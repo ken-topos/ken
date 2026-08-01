@@ -39,7 +39,7 @@ decoration that then had to be corrected, twice publicly.
 
 When a measurement genuinely is load-bearing:
 
-- ⛔ **Do not hand-roll a parser for a language you do not own.** Ad-hoc
+- **Do not hand-roll a parser for a language you do not own.** Ad-hoc
   regex line-classification of Rust is wrong in ways that look plausible.
 - **Self-test the instrument against a case you believe positive** — the
   classifier's 92% was instantly implausible, and a single check would
@@ -49,7 +49,7 @@ When a measurement genuinely is load-bearing:
   pattern, `wc -l` on a whole file) over derived splits requiring
   interpretation.
 
-## ⚠⚠ The narrower form — the defect is the GLOSS, not the whole-file count
+## The narrower form — the defect is the GLOSS, not the whole-file count
 
 The first pass of this lesson over-corrected to "stop publishing numbers
 about it," which is wrong. The headline `22,081 → 492` was whole-file
@@ -60,7 +60,7 @@ smuggled in. It never had the defect.
 unstated convention:** "of which ~127 production", "~74% fixtures", "the
 real surface is smaller still".
 
-★ **The distinction that was actually load-bearing:**
+**The distinction that was actually load-bearing:**
 
 - *"How many lines is this file"* — perfectly well-defined. Publish it.
 - *"How much of it is production"* — not well-defined; a large fraction of
@@ -77,7 +77,7 @@ resolved by `git merge-base --is-ancestor` in both directions, not
 inferred, which is the general discipline this corrects toward: verify a
 span claim against the actual ancestry, don't eyeball it.
 
-★ **The Steward-specific version:** authority here is over *practice and
+**The Steward-specific version:** authority here is over *practice and
 sequencing*, not over facts about code someone else writes. **A number
 published about someone else's file becomes load-bearing in their brief** —
 multiple seats read the wrong 127 and one had to spend a turn correcting

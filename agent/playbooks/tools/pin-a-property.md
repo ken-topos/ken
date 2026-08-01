@@ -10,7 +10,7 @@ A **pin** is any mechanical check standing in for a claim: a test, a source
 scan, a structural assertion, a control that must redden. Pins are how this
 project converts a design property into something CI can defend.
 
-⛔ **The recurring failure of this corpus is not a missing pin. It is a pin that
+**The recurring failure of this corpus is not a missing pin. It is a pin that
 is real, committed, green — and green for the wrong reason.** Every rule below
 was paid for by a blocked candidate. Apply them **per pin**, not once per
 candidate: reminders written per-candidate get satisfied by the most salient
@@ -23,7 +23,7 @@ mechanism. Then ask, in this order:
 
 1. **Can the language make the violation unrepresentable?** A property the
    type system or module privacy refuses needs **no detector at all**, and no
-   detector can be evaded. ⭐ **The compiler is a legitimate mechanism and
+   detector can be evaded. **The compiler is a legitimate mechanism and
    usually the strongest one available.**
 
    > **Measured, `RT-FNSPLIT-B2O` (2026-07-25):** of eight attempted evasions,
@@ -37,13 +37,13 @@ mechanism. Then ask, in this order:
    answer beats any scan for the shape that causes it.
 3. **Only then** reach for a source scan — and read §4 before you do.
 
-⚠ **A pin phrased in terms of the artifact you most recently looked at is the
+**A pin phrased in terms of the artifact you most recently looked at is the
 signature defect.** Stating a *population* requirement as a struct change, an
 *authority* requirement as a call count, or a *module-boundary* requirement as a
 spelling class are all the same error. **Name the property first; the artifact
 is downstream of it.**
 
-## 2. ⭐ MEASURED / CLAIMED / THE GAP — write it as its own sentence
+## 2. MEASURED / CLAIMED / THE GAP — write it as its own sentence
 
 For every pin, state three things explicitly and adjacently:
 
@@ -51,7 +51,7 @@ For every pin, state three things explicitly and adjacently:
 > **CLAIMED:** ⟨the property the AC asserts⟩
 > **THE GAP:** ⟨what must *also* hold for the first to entail the second⟩
 
-⛔ **An implication left implicit is never checked**, because prose slides from
+**An implication left implicit is never checked**, because prose slides from
 the true half to the wanted half with no seam to inspect. A measured property
 can be **fully rigorous, entirely true, and about something else** — rigour does
 not supply relevance.
@@ -64,7 +64,7 @@ Worked examples that cost this project hard-stops:
 | two concrete types are module-private (**not nameable**) | no outside consumer can key on them | **naming ≠ capability**: derived `Ord`, an `impl Trait` return, or a derived ordinal leaks usable structure without leaking the name |
 | the budget balances | the encoding is complete | a balanced total says nothing about which rows exist |
 
-### 2a. ⭐ A predicted POPULATION must include registration-driven fan-out
+### 2a. A predicted POPULATION must include registration-driven fan-out
 
 **Promoted from `RT-FNSPLIT-B2R` — named independently by the leader, QA, and the
 implementer, which is as strong a signal as this corpus produces.**
@@ -75,7 +75,7 @@ WP added one production file and **registered** it in
 a new input. **One registration changed the population of every consumer of the
 list.**
 
-> ⛔ **When you predict what a change touches, enumerate its DERIVED consumers,
+> **When you predict what a change touches, enumerate its DERIVED consumers,
 > not the files the diff edits.** Registering a name in a list that pins iterate
 > is not an edit to those pins — it is an edit to **their input**, and a diff
 > viewer will never show it.
@@ -89,7 +89,7 @@ rg -n '<THE_REGISTRY_CONST>' crates/*/src crates/*/tests   # who ITERATES it
 Each hit is a consumer whose population your registration just changed. The
 prediction is over *that* set ∪ the directly edited files.
 
-★★ **The part that makes this a routing lesson, not a knowledge one.** The
+**The part that makes this a routing lesson, not a knowledge one.** The
 implementer's own retro identified the governing rule and where it already lives
 — the fleet lesson
 [[adding-a-file-to-a-globbed-corpus-trips-oracles-you-did-not-enumerate]] — and
@@ -121,19 +121,19 @@ scan.
 
 If a scan is genuinely the right mechanism:
 
-- ⛔ **Match TOKENS, not lines or substrings.** A needle like
+- **Match TOKENS, not lines or substrings.** A needle like
   `line.contains(".foo(")` is a claim about **formatting**: split the call
   across lines and it matches nothing. Strip comments, split on every
   non-identifier character, compare **whole tokens**. This also stops `foos`
   from being read as `foo`.
-- ⛔ **Make "cannot determine" a third outcome that FAILS.** If unknown input
+- **Make "cannot determine" a third outcome that FAILS.** If unknown input
   falls through to pass, every gap in your parsing is a silent green and no
   amount of coverage converges. *"I could not tell"* and *"it is fine"* are
   different answers and only one is evidence.
-- ⚠ **Beware needles that collide with unrelated language surface.** A scan for
+- **Beware needles that collide with unrelated language surface.** A scan for
   `.entry(` cannot distinguish a domain type's field from `BTreeMap::entry`.
   When the needle is ambiguous, tightening it buys false positives, not closure.
-- ⚠ **The assertion's needle must not be caller-supplied, and the message must
+- **The assertion's needle must not be caller-supplied, and the message must
   not match the oracle.** Count declarations, not substring hits, when the
   failure message itself names the forbidden spelling.
 
@@ -144,11 +144,11 @@ Invert it: assert the **exact permitted set** — the items in a visible surface
 the fields of a variant, the exports of a module, the trait impls of a type —
 so that **any addition reddens**, including one nobody imagined.
 
-⚠ **Pin the inventory at the granularity the property needs.** A name list
+**Pin the inventory at the granularity the property needs.** A name list
 misses an existing item whose *return type* changes; a `#[derive]` list misses a
 hand-written `impl`. An item enumerator that omits `impl` blocks misclassifies.
 
-⛔ **And enumerate items by their HEADS, never by their punctuation.** The same
+**And enumerate items by their HEADS, never by their punctuation.** The same
 enumerator lost `impl` and then, separately, `mod x { … }` — **two holes, one
 cause**: it filtered candidate declarations on `trimmed.ends_with(';')`, so its
 real population is *lines ending in a semicolon*, while a Rust item is
@@ -171,13 +171,13 @@ mis-set path, or a fixture that never exercised the mechanism. So:
 - **Prove non-vacuity**: on the fixture, the wrong key and the right key must
   actually **differ**. A control that would pass on a fixture with no split
   proves nothing about the split.
-- ⚠ **Positive controls can themselves be spelling-scoped.** Having one is
+- **Positive controls can themselves be spelling-scoped.** Having one is
   necessary, not sufficient.
 
-### ⛔ AND READ THE TEST COUNT — a run that executed NOTHING reports GREEN
+### AND READ THE TEST COUNT — a run that executed NOTHING reports GREEN
 
-★ **Measured 2026-07-26, `RT-SCALE-A` QA.** An incomplete exact-test path
-**silently ran 0 tests** and the invocation came back green. ⛔ *A green run that
+**Measured 2026-07-26, `RT-SCALE-A` QA.** An incomplete exact-test path
+**silently ran 0 tests** and the invocation came back green. *A green run that
 executed nothing is indistinguishable from a green run that passed* — the exit
 code cannot tell you which, and a filter typo, a renamed target, or a
 `--test <name>` that matches no file all land here.
@@ -189,12 +189,12 @@ not a pass. Same family as the negative-check rule above: *silence is scoped to
 the question the tool actually asked*, and a filter that matched nothing asked
 nothing.
 
-⚠ **Corollary — bind each measurement to its PRODUCER, with an independently
+**Corollary — bind each measurement to its PRODUCER, with an independently
 derived mutation.** A table of numbers that agree with each other **corroborates**;
 it never proves a live sensor was attached. Change the thing the number measures
 and require the number to move.
 
-## 6a. ⭐ A checker's ADVERTISED law count is a claim, not a guarantee
+## 6a. A checker's ADVERTISED law count is a claim, not a guarantee
 
 §6 asks whether the detector was **reached**. This asks **which arm fired** — a
 different question with a different failure mode, and §6's control does not cover
@@ -210,7 +210,7 @@ rejects the identical condition with a different message. Six further arms had n
 witness — every attempt to reach them landed on an earlier detector — and one
 conjunct compared two values that are equal by construction.
 
-⚠ **The dead arm was also the only quadratic check in the validator** —
+**The dead arm was also the only quadratic check in the validator** —
 `Vec::contains` inside a loop over all edges, both operands scaling with program
 size, paid on every call for a law that never runs. **An unreachable law is not
 free.**
@@ -218,7 +218,7 @@ free.**
 **So, for any multi-arm checker you author or review:**
 
 - **Per advertised law, produce a witness that reaches THAT arm** — and assert the
-  **exact** error, never `is_err`/`expect_err`. ⭐ Asserting the exact message
+  **exact** error, never `is_err`/`expect_err`. Asserting the exact message
   rather than mere failure is the single choice that makes an arm's reachability
   observable at all; with `expect_err`, all twelve above read green.
 - **An arm with no witness is reported as such** — *"no witness: shadowed by
@@ -226,13 +226,13 @@ free.**
 - **Resolve a genuinely subsumed arm by DELETING it** (and its cost) or by
   re-ordering deliberately. Twelve stated laws over five live ones is a
   maintenance trap, not defence in depth.
-- ⛔ **Do not weaken a live detector on the strength of the count.** If a reader
+- **Do not weaken a live detector on the strength of the count.** If a reader
   believes an arm covers something, they may relax the check that is *actually*
   load-bearing. This validator already carried a comment correcting exactly that
   mistake about one of its laws; the identical hazard applied to every arm below
   that comment.
 
-### ⛔⛔ THE WITNESS NEEDS ITS OWN AXIS DISCIPLINE
+### THE WITNESS NEEDS ITS OWN AXIS DISCIPLINE
 
 *— or this rule reproduces the very bug it exists to catch.*
 
@@ -253,23 +253,23 @@ enforced; see [[a-fix-can-reproduce-its-own-bug-one-layer-up]].
 
 **So the exact-error assertion is necessary and NOT sufficient. Add two rules:**
 
-- ⭐ **Vary the axis you claim, hold the neighbouring axes FIXED.** A witness for
+- **Vary the axis you claim, hold the neighbouring axes FIXED.** A witness for
   a *layout* law must perturb layout while keeping identity intact. Perturb the
   wrong axis and an earlier detector fires first — you observe a rejection, you
   assert its exact message, and you have measured a different law. **Two witnesses
   that mutate the same field are one witness.**
-- ⛔ **"No witness found" is evidence about the witnesses you could think of,
+- **"No witness found" is evidence about the witnesses you could think of,
   never about the property.** Record it as *"no witness via ⟨the routes tried⟩"*,
   naming them, so the next reader can see the search was narrow. **A deletion
   needs a positive account of what subsumes the arm — on the arm's own axis —
   not a failure to construct an input.**
 
-⚠ **The tell that you are about to make this mistake:** your witnesses agree, and
+**The tell that you are about to make this mistake:** your witnesses agree, and
 you read the agreement as coverage. Agreement between two probes down the same
 route is not corroboration — it is one probe run twice.
 [[agreement-is-not-corroboration-when-a-premise-was-inherited]].
 
-★ **Why this is a pin-authoring lesson and not a code-review nicety: the gap is
+**Why this is a pin-authoring lesson and not a code-review nicety: the gap is
 INHERITED SILENTLY.** A downstream consumer reads the validator as its guarantee
 and gets five laws while counting twelve. Nothing reddens, because every law is
 *stated*, the checker *is* fail-closed on the paths that do fire, and no test
@@ -287,7 +287,7 @@ Two defeats mean stop patching forms and look at the mechanism's structure.
 - shared **default** direction (unknown ⇒ pass) ⇒ make undetermined fail;
 - shared **scope** error (scanned the wrong surface) ⇒ re-derive the surface.
 
-⭐ **The FIX RATE is the tell, and it is available before you have a theory:
+**The FIX RATE is the tell, and it is available before you have a theory:
 when each correct fix exposes the next surface, your instrument is a
 hand-enumerated list standing in for a population.** Three review rounds found
 claim-bearing prose that the author's own sweeps had missed — one of them **four
@@ -299,13 +299,13 @@ next one was spelled `cannot drift`, `one route`, `what is closed is`.
 ⇒ **When the population is "every sentence that makes a claim," the instrument is
 READING them and classifying each — not grepping for phrasings.** A
 prose-honesty AC cannot be discharged by a phrase sweep, and a frame must not ask
-a build seat to discharge one that way. ⚠ This is the *same* defect as a
+a build seat to discharge one that way. This is the *same* defect as a
 spelling-keyed source scan, in a second substrate — there the grammar was Rust's,
 here it is English's. **If you have written "the closure is reading them, not
 grepping them" and then reached for the grep, that is a habit, and a habit is
 what a promoted rule is for.**
 
-⛔ **A defeat count NEVER licenses the conclusion "this property cannot be
+**A defeat count NEVER licenses the conclusion "this property cannot be
 mechanically enforced."** That is a strong claim which *weakens a gate*, so it
 must be **demonstrated** — by building the candidate mechanism and showing it
 cannot work — never inferred from failure tallies. "My detector's granularity is
@@ -321,11 +321,11 @@ discharge them** without whole-program dataflow. When that is genuinely shown:
    mechanically guarded — **in the source, next to the enforced statements**, so
    the next reader inherits the limit instead of the overclaim.
 3. **Name every residual arm**, not the first one you thought of.
-4. ⛔ **Do not claim the residual is detected.** A narrowing that admits its
+4. **Do not claim the residual is detected.** A narrowing that admits its
    boundary is a truthful gate; one that quietly keeps the old wording is a
    waiver wearing a pin's clothing.
 
-⚠ **A taxonomy with no cell for the honest answer reads as complete.** If your
+**A taxonomy with no cell for the honest answer reads as complete.** If your
 AC list has nowhere to record *"guarded by review, not by CI,"* it will be
 recorded as *"guarded."*
 
@@ -338,7 +338,7 @@ name.
 
 ## 10. Mutation hygiene
 
-⛔ **A verdict from a mutation that did not apply is not evidence — and it looks
+**A verdict from a mutation that did not apply is not evidence — and it looks
 exactly like evidence.** The run compiles, the test executes, the output is
 well-formed. **"The mutation ran" and "the mutation changed the subject, and only
 the subject" are different claims, and only the second licenses a verdict.**
@@ -351,7 +351,7 @@ report each, never discard it:**
 | **never applied** (bad anchor) | the test ran against pristine source |
 | **broke the build** | nothing was measured |
 | **inserted a comment** | the pin had nothing to catch, so GREEN is vacuous |
-| ⛔ **edited the DETECTOR along with its subject** | the oracle was rewritten to match its rewritten subject and reported success **on a sound pin** |
+| **edited the DETECTOR along with its subject** | the oracle was rewritten to match its rewritten subject and reported success **on a sound pin** |
 
 That last one is the dangerous shape: it **would have filed a spurious finding
 against a correct detector.** The mutation respaced *every* occurrence of its
@@ -365,7 +365,7 @@ the edit). **Reporting the invalid rows is what makes the valid ones
 trustworthy** — a campaign that silently drops them is indistinguishable from one
 that had no failures.
 
-### ⛔ And the provenance check itself fails in BOTH directions
+### And the provenance check itself fails in BOTH directions
 
 **Measured 2026-07-25, on the very next candidate after the rows above.** A
 provenance check reported `applied=False` for two mutations that **had** landed:
@@ -373,7 +373,7 @@ it re-counted the anchor **after** the replacement, and **the replacement string
 contained the anchor.** The campaign would have discarded **two sound results as
 unproven.**
 
-⚠ **An instrument that certifies evidence can fail toward throwing good evidence
+**An instrument that certifies evidence can fail toward throwing good evidence
 away, and that is exactly as corrupting as passing bad evidence through** — it is
 merely quieter, because a discarded row leaves no trace to audit. The rule above,
 read only in the false-positive direction (*"did it change the subject, and only
@@ -385,9 +385,9 @@ provenance check is itself a pin, so §6's positive control and §6a's
 which-arm-fired question apply to it: **feed it a mutation you know landed and a
 mutation you know did not, and confirm it distinguishes them.**
 
-### ⛔⛔ DETECTOR-SIDE AND POPULATION-SIDE MUTATIONS ARE NOT INTERCHANGEABLE
+### DETECTOR-SIDE AND POPULATION-SIDE MUTATIONS ARE NOT INTERCHANGEABLE
 
-⚠ **This is NOT the "edited the DETECTOR along with its subject" row above.**
+**This is NOT the "edited the DETECTOR along with its subject" row above.**
 That row is about mutating **both**. This is about mutating **the detector
 instead of the population** — and it passes every check on this page, including
 the provenance check, because the mutation genuinely applied and the intended
@@ -401,27 +401,27 @@ detector is claimed to reach**. They answer different questions:
 | the **detector** (narrow its predicate, neuter an arm) | the detector is wired to **something** | that it reaches the population the AC names |
 | the **population** (add a real instance to a real input) | the detector **reaches that population** | which arm of the detector fired (§6a) |
 
-⛔ **An AC whose property is REACH can only be discharged population-side.** A
+**An AC whose property is REACH can only be discharged population-side.** A
 detector-side mutation on such an AC can redden for the entire life of a
 detector that reaches nothing — which is precisely the defect the AC exists to
 prevent, so the control has been made blind to its own subject.
 
-★ **Measured 2026-07-26, `KW-ORACLE-CLOSURE`, and the report was TRUE.** The AC
+**Measured 2026-07-26, `KW-ORACLE-CLOSURE`, and the report was TRUE.** The AC
 row read *"widen one corpus file's occurrence set beyond a declaration head
 (e.g. add `lemmas` in prose) — must redden."* The build ran a **detector-side**
 mutation (*"head-only occurrence scan"*), it reddened, and the handoff correctly
 said *"each control reddened its intended named test."* QA then ran the
 **population-side** mutation the row actually specified — one line of prose added
 to a real corpus file — and the suite came back **exit 0, 1 passed, 0 failed**.
-⚠ **The occurrence predicate was still not reaching the corpus**, the exact
+**The occurrence predicate was still not reaching the corpus**, the exact
 defect the WP existed to fix, with a green control sitting on top of it.
 
 ⇒ **Three obligations, all mechanical:**
 
 1. **When you author the row, name the operand.** "Must redden" is
    under-specified; *"adding an instance to `<real input file>` must redden"* is
-   not. ⚠ **Necessary, and measured NOT sufficient — see the next block.**
-2. **When you discharge it, quote the row and diff it against what you ran.** ⛔
+   not. **Necessary, and measured NOT sufficient — see the next block.**
+2. **When you discharge it, quote the row and diff it against what you ran.**
    Do not repair a population-side failure by hunting for a detector-side
    mutation that reddens — the post-condition is the row's mutation, verbatim.
    And pair it with §6's **positive control**: without an arm showing a real
@@ -431,24 +431,24 @@ defect the WP existed to fix, with a green control sitting on top of it.
    something a reader can infer from the mutation you describe. See below for
    why this is the load-bearing one.
 
-#### ⛔⛔ NAMING THE OPERAND IN THE ROW IS NOT ENOUGH — THE CODE SEAM NAMES ONE TOO, AND IT WINS
+#### NAMING THE OPERAND IN THE ROW IS NOT ENOUGH — THE CODE SEAM NAMES ONE TOO, AND IT WINS
 
-★ **The three `KW-ORACLE-CLOSURE` retros (2026-07-26) refuted the natural reading
+**The three `KW-ORACLE-CLOSURE` retros (2026-07-26) refuted the natural reading
 of obligation 1.** I wrote that row, so I asked the ring the one question I could
 not answer myself: **was the row ambiguous about which operand moves, or clear
 and skipped?** — because those need **opposite** repairs, and a softened answer
 would have had me fix the wrong one.
 
 **QA answered: clear and skipped.** The row *did* name the corpus-side operand.
-⛔ So "author it more precisely" is **not** the repair, and reaching for it would
+So "author it more precisely" is **not** the repair, and reaching for it would
 have hardened prose that was already correct.
 
-⭐ **The implementer supplied the mechanism, and it is the reusable part:** the
+**The implementer supplied the mechanism, and it is the reusable part:** the
 implementation seam in front of them was a `declaration_lines` helper. Mutating
 *that* was **cheap, isolated, compile-preserving, and it reddened the correctly
 named test** — four properties that each independently read as *"good control."*
 In their words, they *varied the operand named by the code seam rather than the
-operand named by the reach claim.* ⚠ Note what is **not** in that sentence:
+operand named by the reach claim.* Note what is **not** in that sentence:
 carelessness, haste, or a misread row. The seam you are standing in front of
 **supplies a default operand**, that default is **not** the AC's, and it is
 selected by locally sound reasoning.
@@ -462,8 +462,8 @@ where the choice got made.
 visible at their seat that could have distinguished the first candidate from a
 correct discharge, the leader answered **"nothing"** — they bound branch, tree,
 scope and diff hygiene, and confirmed a named test reddened, *and none of those
-facts say which operand the AC requires to move.* ⛔ Do not install a
-leader-review step here; it provably cannot work. ⭐ That plain "nothing" is worth
+facts say which operand the AC requires to move.* Do not install a
+leader-review step here; it provably cannot work. That plain "nothing" is worth
 more than a hedge would have been — it is what rules the wrong repair out.
 
 ⇒ **Which is why obligation 3 is a REPORTED FIELD.** Every AC→control handoff
@@ -475,7 +475,7 @@ obligations that changes what a reviewer can *see*.
 - Apply each mutation at its **natural production site**, not at a convenient
   one; a mutation the real code path never reaches proves nothing.
 - **Restore byte-identically** and verify with `git diff --quiet`.
-  ⚠ `git diff --stat` **always exits 0** and is not an emptiness test.
+  `git diff --stat` **always exits 0** and is not an emptiness test.
 - **Commit the real fix before any mutation-proof reset.**
 - When a resource cliff (stack, RSS, timeout) fires, **measure the base's
   MARGIN**, not just pass/fail — attribution needs the margin. And **fixing a
@@ -487,6 +487,6 @@ obligations that changes what a reviewer can *see*.
 If a pin rests on captured constants, a re-capture after the change would
 produce byte-identical values — **so nothing distinguishes a genuine baseline
 from a re-recording.** Record the base SHA, the probe names, and the exact
-worktree + invocation, and ⛔ **specify the sanctioned invocation verbatim**
+worktree + invocation, and **specify the sanctioned invocation verbatim**
 (`scripts/ken-cargo`, targeted) or the recipe will document a procedure the
 fleet is not allowed to run. **Demonstrate the binding; do not testify to it.**

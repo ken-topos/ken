@@ -17,7 +17,7 @@ This is not the vacuous-negative-arm failure
 are producible and the gate is reached. The defect is that **the thing being
 measured is not the thing being claimed.**
 
-> ⛔ A proxy check is green when the property holds **and** green when it does
+> A proxy check is green when the property holds **and** green when it does
 > not. Its greenness carries no information, and nothing about its source
 > reveals that.
 
@@ -33,7 +33,7 @@ assert_ne!(wrapper.frame, changed);     // asserts the test's OWN setup
 ```
 
 The claim was *"a dynamic activation cannot change static helper identity."*
-Neither line involves an activation flowing into a key derivation. ★ **A second
+Neither line involves an activation flowing into a key derivation. **A second
 defect hid under the first**: the mutation `PersistentNodeId(u32::MAX)` would
 be rejected outright as an unclosed activation, so it could never have reached
 the mechanism even had the assertion been written correctly — see
@@ -62,7 +62,7 @@ evidence that settled it was content, not paths: A's signature tokens appearing
 **exactly once** (`B=1, main=1`) and A's file at `main`'s size plus B's net
 delta rather than doubled.
 
-★ **That fourth instance is the most useful one in this file**: the lesson was
+**That fourth instance is the most useful one in this file**: the lesson was
 already written down and indexed, and it did not fire. Recording a discipline
 does not install it — only a step in a checklist does.
 
@@ -73,13 +73,13 @@ author had in mind** and diverges elsewhere: self-identity for derivation,
 label-membership for edge-membership, cardinality for set equality. In every
 case the honest check was available and barely more expensive.
 
-★ **The tell is grammatical.** Write the claim as a sentence and check that the
+**The tell is grammatical.** Write the claim as a sentence and check that the
 code's operands are its nouns. *"A dynamic activation cannot change static
 helper identity"* has **two** operands — an activation and a derived identity.
 Code containing neither an activation nor a derivation is not testing that
 sentence, whatever it is named.
 
-## ⭐ The one test that catches all of them — build the discriminating pair
+## The one test that catches all of them — build the discriminating pair
 
 The Boundary A ring converged on this independently, from three seats, and it is
 sharper than any advice below:
@@ -94,7 +94,7 @@ out-of-range root leaves the cardinality true (3); an incremental edit to A's
 file leaves the path present (4). **Each pair takes under a minute to imagine
 and none of them were.**
 
-⚠ **Arithmetic corroborates but cannot close.** A census that comes out affine,
+**Arithmetic corroborates but cannot close.** A census that comes out affine,
 a count that balances, a size that matches — these are consistent with the
 property and also consistent with its violation. Do not let a satisfying number
 substitute for the pair.
@@ -121,7 +121,7 @@ frame is what stops a proxy-first test from being authored at all.
 - **Ask what else would make this green.** If you can name any state where the
   check passes and the claim is false, you have a proxy. This is the cheapest
   step and it caught all three.
-- ⭐ **Best outcome: move it into production.** Instance 1's real fix was
+- **Best outcome: move it into production.** Instance 1's real fix was
   `validate()` rejecting *every* node whose activation-derived key differs from
   its fixed key — converting a tested property into a structural one, the same
   move as [[a-claimed-executable-inventory-needs-a-reversible-deletion-proof]].

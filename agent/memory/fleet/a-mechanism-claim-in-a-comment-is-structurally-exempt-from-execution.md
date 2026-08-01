@@ -24,7 +24,7 @@ opposite outcomes:
   audit, and was caught only by the Architect reading the comment against
   the code.
 
-⛔ **Identical defect class — writing what the code was believed to do, not
+**Identical defect class — writing what the code was believed to do, not
 what it does — and the difference in outcome was not care, attention, or
 review quality. It was whether the claim sat somewhere that could be
 EXECUTED.**
@@ -41,7 +41,7 @@ votes defensible**: QA verified everything that runs, and the defect was in
 the region where nothing runs.
 
 **How to apply:**
-- ⭐ **Name the operation that makes the claim true.** The wrong comment
+- **Name the operation that makes the claim true.** The wrong comment
   asserted an adjective and cited nothing. The corrected one says *`Vec::pop`
   takes the most recently pushed, **therefore** depth-first* — falsifiable
   by anyone in one glance, with no test, no tooling, no reviewer expertise.
@@ -52,7 +52,7 @@ the region where nothing runs.
   onto a heap stack") while the code was doing something else. Comment and
   code authored in the same minute is exactly when this happens — the
   intent is louder than the text.
-- ⚠ **The trigger is narrow: an order, a bound, or a complexity class.**
+- **The trigger is narrow: an order, a bound, or a complexity class.**
   Those are what maintainers reason *from*. This is not a licence to pin
   every comment with a test (absurd) — and specifically **not** "review
   comments harder", because a check that cannot be reliably performed at a

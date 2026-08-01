@@ -10,7 +10,7 @@ This is not lying, hedging, or sloppiness. It is a **true sentence** whose
 subject is narrower than the subject the reader has in mind. Both parties read
 it as settled, and it is settled — about different things.
 
-⛔ **It is the hardest handoff defect to catch, because every instinct you have
+**It is the hardest handoff defect to catch, because every instinct you have
 for detecting a false claim is looking for something false.**
 
 ## Three instances in ONE work package — `RT-FNSPLIT-B2R`, 2026-07-25
@@ -23,7 +23,7 @@ The implementer named all three in its own retro, unprompted, as one shape:
 | an `AC-11` witness row named *"edge layout disagreement"* | target **identity** | layout **agreement** | a live law deleted as subsumed; caught only by the Architect |
 | the corrected `D6` route inventory | the **report** | the report **and** the in-source comment beside it | a repaired mechanism still advertising its pre-repair law count |
 
-★ **Note the range.** One is a git claim to a publisher, one is a test's own
+**Note the range.** One is a git claim to a publisher, one is a test's own
 name, one is a doc/code pair. **The shape is independent of the medium**, which
 is why it needs a named rule rather than medium-specific vigilance.
 
@@ -40,7 +40,7 @@ is why it needs a named rule rather than medium-specific vigilance.
 - **Ask what question the reader is actually asking**, then check whether your
   sentence answers *that* question or an adjacent one you happen to have measured.
   The gap between the two is the whole defect.
-- ⚠ **The tell is a claim that is easier to verify than the question deserves.**
+- **The tell is a claim that is easier to verify than the question deserves.**
   If your evidence came cheaply, suspect that you measured the narrow thing.
 - **Name your anchor explicitly** — a SHA, a revision, a field, an axis. A claim
   with no stated anchor inherits whichever anchor the reader brought.

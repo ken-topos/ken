@@ -31,11 +31,11 @@ treating as success.
   success **and** by never having executed, and those two are indistinguishable
   under a negative check.
 
-⛔ **`scripts/ken-cargo` is not broken.** It is a thin `flock` wrapper with
+**`scripts/ken-cargo` is not broken.** It is a thin `flock` wrapper with
 `set -euo pipefail`, and `cargo` itself searches *upward* for `Cargo.toml`, so a
 subdirectory cwd is fine for cargo. The failure is the **relative path to the
 script**, resolved against the wrong cwd, and the shell reports it at exit
-**127**. ★ Do not file this as a tool bug and stop there — the tool behaved
+**127**. Do not file this as a tool bug and stop there — the tool behaved
 correctly and the reading was wrong, which is the transferable half.
 
 ## How to apply
@@ -53,7 +53,7 @@ correctly and the reading was wrong, which is the transferable half.
   [[a-mutation-that-passes-when-it-should-fail-means-a-stale-input]]: doubt the
   input first.
 
-★ **The general form, and why it belongs at fleet scope:** this is
+**The general form, and why it belongs at fleet scope:** this is
 [[an-oracle-that-greps-a-name-fires-on-prose-that-denies-it]] inverted — there,
 a check fired on text that denied it; here, a check **stayed silent because
 nothing spoke.** Both say the same thing: **a check keyed to the presence or

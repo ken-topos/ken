@@ -16,7 +16,7 @@ preserved, and nothing had ever resolved the ref.**
   that *did* exist was two days stale.
 - `NATIVE-HANDLE-CARRIER` carried the **correct** warning — *"a recorded SHA
   is not a copy; the hazard is a hard reset from a handoff gate"* — and the
-  copy had never been made. ⭐ **The warning being right is what stopped
+  copy had never been made. **The warning being right is what stopped
   anyone checking whether it had been acted on.**
 - `RT-DECL-CLOSURE-PORT`'s **live base**, which four recuts were grounded on,
   was on one local ref: the seat's own working branch. A handoff-gate
@@ -25,20 +25,20 @@ preserved, and nothing had ever resolved the ref.**
 **How to apply:**
 
 - **Resolve every ref you write down, at the moment you write it:**
-  `git ls-remote --exists origin <ref>`. ⛔ A `preserved at …` line in a
+  `git ls-remote --exists origin <ref>`. A `preserved at …` line in a
   handoff post is a **claim**, never a resolved ref.
-- ⭐ **The bounding predicate — a cited SHA needs a durable ref ONLY when an
+- **The bounding predicate — a cited SHA needs a durable ref ONLY when an
   artifact tells someone to RESUME from it.** A corpus-wide audit returned
   ~200 undurable cited SHAs; acting on that number would have put ~200 dead
   refs on `origin` and buried the handful that matter. Almost all are
   historical evidence citations from work that landed squashed. **"Cited" is
   not "load-bearing."**
-- ⛔ **Divergent preservation points do NOT nest.** Three
+- **Divergent preservation points do NOT nest.** Three
   `NATIVE-HANDLE-CARRIER` seams were each on a separate lineage — none an
   ancestor of another — so preserving the newest silently dropped the rest.
   Check with `git merge-base --is-ancestor` before treating a newer ref as
   subsuming an older one.
-- ⛔ **Ancestry cannot tell a superseded branch from one holding unlanded
+- **Ancestry cannot tell a superseded branch from one holding unlanded
   work, because the publisher SQUASHES.** Two branches both read "not an
   ancestor of `main`" and needed **opposite** treatment: one was garbage (its
   content had landed under a different SHA) and one held real unlanded work.

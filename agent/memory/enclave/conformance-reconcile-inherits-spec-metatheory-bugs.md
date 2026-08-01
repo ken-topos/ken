@@ -18,7 +18,7 @@ green corpus then licenses the bug fleet-wide.
 for a constructor-producing `k`; decidability is by finiteness — see eliminator
 termination finiteness not stuckness). The landed §7.7/§9.4 said "stuck," I
 content-reconciled against it **faithfully**, and so **encoded the same false
-property**. The load-bearing ★★★ trust-root Architect review caught it;
+property**. The load-bearing trust-root Architect review caught it;
 spec-author reground the spec on finiteness and I replaced the one false case
 with two correctly-scoped ones. The point *for me*: faithful reconcile is
 exactly what let the bug through — matching a wrong spec produces a wrong case.

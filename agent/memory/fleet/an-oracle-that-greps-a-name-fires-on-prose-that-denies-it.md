@@ -51,13 +51,13 @@ assert!(!extracted.contains("Axiom"), "…code must contain zero Axiom literals"
 Still fails on a real `Axiom` in a fence (all it ever meant to catch); **stops
 false-firing on prose that discusses `Axiom`s.**
 
-**⛔ Do NOT "fix" this by deleting the assertion, or by rewording the prose to
+** Do NOT "fix" this by deleting the assertion, or by rewording the prose to
 dodge the grep.** The prose is *correct and valuable* — it documents the
 zero-TCB property. **The oracle is the thing that is wrong.** Rewording the
 document to appease a broken test is how you end up unable to *write down* the
 property you just achieved.
 
-## ★ This class is everywhere, and it bites the author of the rule too
+## This class is everywhere, and it bites the author of the rule too
 
 **The same hour**, the Steward's own honesty gate screamed `!!! TCB GROWTH !!!`
 at I-7 — because the diff contained **the WP frame**, whose §1 is two pages
@@ -71,7 +71,7 @@ string `X` occurs somewhere in it.** Prohibitions, negative assertions, doc
 comments, and frames all *name the thing they forbid* — that is what forbidding
 looks like.
 
-## ★★ THE COUNTERMAND — the reflex this bug provokes is the real danger
+## THE COUNTERMAND — the reflex this bug provokes is the real danger
 
 **The first fix proposed was: *"rephrase the prose so `rg -n Axiom` is empty."***
 The Steward countermanded it in flight. **Never reword a document to appease a
@@ -96,9 +96,9 @@ A sweep of `crates/*/tests/*.rs` for `contains("Axiom")` (2026-07-14):
 
 | Shape | Sites | Verdict |
 |---|---|---|
-| `extract_ken_md(…).source.contains("Axiom")` | CC1–CC7, DS-2/3/7/8, … (most) | ✅ **correct** — asserts on extracted Ken |
-| `RAW_INCLUDE_STR.contains("Axiom")` | `ds4_list_combinators_acceptance.rs:56` | 🔴 **fired** (SUB-1) |
-| `RAW_INCLUDE_STR.contains("Axiom")` | `i2_console_floor.rs:132`, `i3_fs_floor.rs:141` | ⏳ **latent** — pass only because no prose in `Text.ken.md` / `Errors.ken.md` has *yet* used the word |
+| `extract_ken_md(…).source.contains("Axiom")` | CC1–CC7, DS-2/3/7/8, … (most) | **correct** — asserts on extracted Ken |
+| `RAW_INCLUDE_STR.contains("Axiom")` | `ds4_list_combinators_acceptance.rs:56` | **fired** (SUB-1) |
+| `RAW_INCLUDE_STR.contains("Axiom")` | `i2_console_floor.rs:132`, `i3_fs_floor.rs:141` | **latent** — pass only because no prose in `Text.ken.md` / `Errors.ken.md` has *yet* used the word |
 
 **The latent pair is the lesson.** They are the tests **nearest** to the next
 effect WP (I-8's clock) — **the ones an implementer would naturally crib the
@@ -111,7 +111,7 @@ Sibling of [[kernel-backed-claim-grep-the-emission-not-the-name]],
 [[adding-a-file-to-a-globbed-corpus-trips-oracles-you-did-not-enumerate]], and
 [[corpus-property-gate-only-as-strong-as-the-corpus]].
 
-## ★★ The COUNTING variant — and it is the one that reports a false BREACH
+## The COUNTING variant — and it is the one that reports a false BREACH
 
 Everything above is about a **boolean** gate (*does `X` appear?*). The same defect
 in a **numeric** gate is nastier, because the output is a plausible number rather

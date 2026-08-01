@@ -32,7 +32,7 @@ what you need; polling burns tokens for zero value. A missing notification is a
 *stall* — catching stalls is the team leader's watchdog job, not yours. Only
 team leaders and the Steward run schedulers.
 
-### 1a. ⛔ "Event-driven" REQUIRES A NAMED EVENT. A hold you cannot name is a stall.
+### 1a. "Event-driven" REQUIRES A NAMED EVENT. A hold you cannot name is a stall.
 
 **Measured, 2026-07-22 — a three-way circular wait that no participant could
 see, and that no watchdog would ever have broken:**
@@ -59,11 +59,11 @@ opened, and the ring would have held indefinitely: nothing was going to arrive.
 3. **A leader holding for a member must confirm the member is actually working**
    — pane, status, or post. §13's *delivery ≠ engagement* rule applies to your
    own ring, not only to kickoffs you receive.
-4. ⛔ **A ring silent with no member able to name its blocking event is the
+4. **A ring silent with no member able to name its blocking event is the
    single cheapest stall to detect and the most expensive to miss.** Detect it
    at the ring, before the Steward's backstop is the only thing left.
 
-★ **Why the backstop cannot be the answer:** the Steward's liveness sweep read
+**Why the backstop cannot be the answer:** the Steward's liveness sweep read
 all three of those seats as BUSY for hours — a completed turn holding an
 orphaned shell reads identical to a running one unless the detector is
 specifically built to tell them apart. **A liveness instrument you did not
@@ -96,11 +96,11 @@ has bitten DeepSeek leaders mis-reading "hand the WP to your implementer" as a
 launch instead of a mention. Assignment, query, handoff — all are mentions; local
 git only.
 
-- ⛔ **RESOLVING AN `actor_id`: USE `scripts/moot-actor-id.sh <role>`. NEVER OPEN
+- **RESOLVING AN `actor_id`: USE `scripts/moot-actor-id.sh <role>`. NEVER OPEN
   `.moot/actors.json` YOURSELF, AND NEVER DUMP IT TO LEARN ITS SHAPE.** That file
   holds every seat's `api_key` beside its `actor_id`. **Another seat's `api_key`
   is never yours to read** — only your own role's, and only for the HTTP fallback.
-  ⭐ **Both leaks so far happened during SCHEMA DISCOVERY, not during the
+  **Both leaks so far happened during SCHEMA DISCOVERY, not during the
   lookup**: once by `sed`/`grep` over the raw file, once when a field-projecting
   one-liner returned nothing (the author had guessed the key names) and the author
   dumped the file *"just to see the structure"*, printing three records verbatim.
@@ -144,8 +144,16 @@ git only.
   vote/handoff to a participant you didn't just hear from, confirm it's live
   (`list_participants`). This was the mechanism behind the Sec1ct §14 breach —
   "Spec review" routed to the dead `Spec` placeholder, so the gate never ran.
+- **Post in plain text. No decorative icons** (operator, 2026-08-01). Do not
+  open a post, heading, bullet, or emphasis with star, warning sign, no-entry,
+  check mark, or any emoji. **The operator reads this channel and finds them
+  distracting rather than helpful.** Emphasis comes from **bold**, from
+  structure, and from leading with the point. Symbols that carry information
+  stay — arrows in a derivation, math and Ken notation, and terminal glyphs
+  quoted as data. If deleting it would lose information, it is not decoration.
+  Full statement: `AGENTS.md` Conventions.
 - **Thread your reply — don't scatter to the space root** (operator 2026-06-29;
-  hardened 2026-07-03; ⭐ **restated 2026-08-01 — top level is a closed list:
+  hardened 2026-07-03; **restated 2026-08-01 — top level is a closed list:
   `steward`, `librarian`, `research`, and nobody else. Every other role always
   threads. A thread's identity is a WP, and the kick's own `event_id` is its
   anchor — §4**). Every event you receive carries a `thread_id`. When you respond
@@ -219,11 +227,11 @@ rest of the discipline below (mention-free acks, Steward-only roots) stay quiet.
 
 ## 4. Threads are the spine
 
-> ### ⭐⭐ THE WHOLE RULE IN FOUR LINES (operator, 2026-08-01)
+> ### THE WHOLE RULE IN FOUR LINES (operator, 2026-08-01)
 >
 > 1. **A thread's identity is a WP.** One WP = one thread, opened by its **kick**.
 > 2. **The kick's own `event_id` IS the thread anchor.** Everything about that WP
->    replies under it — ⛔ nothing about it is ever posted anywhere else.
+>    replies under it — nothing about it is ever posted anywhere else.
 > 3. **A rescope that SPLITS a WP abandons the original thread.** Each component
 >    WP gets a fresh kick and therefore a fresh thread.
 > 4. **Only `steward`, `librarian`, and `research` may post at top level.**
@@ -233,25 +241,25 @@ rest of the discipline below (mention-free acks, Steward-only roots) stay quiet.
 not a stylistic choice — see the mechanism note below, which is why the corollary
 "every kick carries a thread id" cannot be implemented as stated.
 
-### 4a. ⛔ THE MECHANISM — a thread does not exist until someone replies
+### 4a. THE MECHANISM — a thread does not exist until someone replies
 
-⚠ **Measured 2026-08-01, and it defeats the obvious reading of the rule.** A
+**Measured 2026-08-01, and it defeats the obvious reading of the rule.** A
 kick is by construction a **root post**: `post_response` with no parent returns
 `thread_id: null`, because **the thread is minted by the first reply**, not by
 the root. The root event is then pulled into that thread retroactively.
 
-⇒ ⛔ **A kick therefore CANNOT quote the thread id it is inaugurating — no such
-id exists at the moment it is written.** ⭐ **The exact substitute, which loses
+⇒ **A kick therefore CANNOT quote the thread id it is inaugurating — no such
+id exists at the moment it is written.** **The exact substitute, which loses
 nothing: the kick's own `event_id` is the anchor, and every recipient already has
 it** (it is in the mention notification and in the events feed).
 
 | you are… | you call | why |
 |---|---|---|
-| the **first** reply to a kick | `post_response(parent_event_id=<kick evt_>)` | ⭐ this **opens** the thread. ⛔ `reply_to` **404s** ("Thread not found") on a root event that has no thread yet |
+| the **first** reply to a kick | `post_response(parent_event_id=<kick evt_>)` | this **opens** the thread. `reply_to` **404s** ("Thread not found") on a root event that has no thread yet |
 | any **later** poster | `post_response(thread_id=<thr_>)` or `reply_to(<any evt_ already in the thread>)` | the thread now exists |
 | posting a **new WP kick** (steward/librarian/research only) | bare `post_response`, no parent, no thread | you are creating the anchor |
 
-⭐ **`reply_to` auto-mentions the original speaker.** ⚠ That is load-bearing:
+**`reply_to` auto-mentions the original speaker.** That is load-bearing:
 on 2026-08-01 the Runtime ring deadlocked because an Architect verdict mentioned
 only the implementer and not the leader who opened the Decision. Replying into
 the thread makes the wake path structural instead of a habit someone must
@@ -259,51 +267,51 @@ remember.
 
 ### 4b. What every kick must carry
 
-⭐ **Every WP kick — and every doc-phase kick — must state its own anchor in its
+**Every WP kick — and every doc-phase kick — must state its own anchor in its
 body**, in words a recipient can act on without a lookup:
 
-> ⭐ **This message is the thread anchor for `<WP-ID>`.** Reply with
+> **This message is the thread anchor for `<WP-ID>`.** Reply with
 > `parent_event_id` set to **this event's id**; thereafter use its `thread_id`.
-> ⛔ Do not open a second thread for this WP and ⛔ do not post about it at the
+> Do not open a second thread for this WP and do not post about it at the
 > space root.
 
-⛔ **A kick without that line is defective** — reissue it rather than letting the
+**A kick without that line is defective** — reissue it rather than letting the
 ring guess.
 
 ### 4c. Rescope: when the thread is abandoned
 
 | what happened | thread disposition |
 |---|---|
-| WP **split** into components (a §5a-iii recut, a mis-sizing outcome (c)) | ⛔ **abandon the original thread.** Post one final line in it naming the successor WP ids, then ⭐ **a fresh kick — and so a fresh thread — per component WP** |
-| WP **rescoped in place** (scope amended, hard stop ruled, deliverable added) | ⭐ **keep the thread.** Nothing was split, so the WP's identity is unchanged |
-| WP **respun** (new candidate SHA after a reject) | ⭐ **keep the thread.** A rejected candidate is not a new WP |
-| work **routed** to another WP (a `D4` route, an inherited obligation) | ⭐ **keep both threads.** The route is a reply in the *origin* thread; the obligation lands in the *target* WP's **frame**, ⛔ not as a cross-post |
-| WP **merged**, retros posted | ⛔ **the thread is CLOSED.** It takes no further posts, ever |
+| WP **split** into components (a §5a-iii recut, a mis-sizing outcome (c)) | **abandon the original thread.** Post one final line in it naming the successor WP ids, then **a fresh kick — and so a fresh thread — per component WP** |
+| WP **rescoped in place** (scope amended, hard stop ruled, deliverable added) | **keep the thread.** Nothing was split, so the WP's identity is unchanged |
+| WP **respun** (new candidate SHA after a reject) | **keep the thread.** A rejected candidate is not a new WP |
+| work **routed** to another WP (a `D4` route, an inherited obligation) | **keep both threads.** The route is a reply in the *origin* thread; the obligation lands in the *target* WP's **frame**, not as a cross-post |
+| WP **merged**, retros posted | **the thread is CLOSED.** It takes no further posts, ever |
 
-⚠ **The test is "did the set of WPs change?"** — not "did anything change?" Only
+**The test is "did the set of WPs change?"** — not "did anything change?" Only
 a split changes it.
 
-> ### ⛔ A MERGED WP'S THREAD IS CLOSED — and this is where the rule actually breaks
+> ### A MERGED WP'S THREAD IS CLOSED — and this is where the rule actually breaks
 >
-> ⚠ **Measured 2026-08-01, one hour after this section landed.** Runtime QA
+> **Measured 2026-08-01, one hour after this section landed.** Runtime QA
 > posted **`QA APPROVED — Slice 2 exact ed527eb7…`** into **slice 1's** thread.
 > Slice 1 was merged, retro'd and closed; slice 2 had its own kick and its own
 > thread, and the leader and implementer were both already posting there
 > correctly.
 >
-> ⭐ **The cost is not untidiness — it is a hole at the point of inspection.**
+> **The cost is not untidiness — it is a hole at the point of inspection.**
 > Anyone reconstructing slice 2 from its own thread saw handoff → review request
 > → *nothing* → Architect request. **The approval was invisible exactly where a
 > reader checks whether one exists**, while a closed WP's thread carried a live
 > verdict about a different candidate.
 >
-> ⚠ **Note what did NOT cause it: no compaction, no stale id, no rescope.** The
+> **Note what did NOT cause it: no compaction, no stale id, no rescope.** The
 > seat had simply been living in that thread all afternoon through four review
-> rounds and a retro, and posted where it had been posting. ⇒ ⭐ **Anchor on the
+> rounds and a retro, and posted where it had been posting. ⇒ **Anchor on the
 > WP you are working on, never on the thread you last posted in.** Before every
 > post, ask *which WP is this about* and reply under **that** WP's kick.
 >
-> ⭐ **The successor's kick is the signal that the old thread is closed** — when
+> **The successor's kick is the signal that the old thread is closed** — when
 > the Steward releases the next slice, the previous slice's thread is done.
 
 ### 4d. Top-level is a closed list
@@ -312,17 +320,17 @@ a split changes it.
 2026-08-01; supersedes the Steward-only rule of 2026-07-03). A post from any
 other role *always* carries a `thread_id` or `parent_event_id`.
 
-⭐ The three are exactly the roles whose output is **not scoped to one WP**: the
+The three are exactly the roles whose output is **not scoped to one WP**: the
 Steward coordinates across all of them, the Librarian holds a standing as-built
 mandate over the whole corpus, and research reports are corpus-wide by nature.
 
-⛔ **Everyone else, including the Architect and every team leader, threads.** An
-Architect ruling about a WP belongs in that WP's thread. ⚠ **A general design
+**Everyone else, including the Architect and every team leader, threads.** An
+Architect ruling about a WP belongs in that WP's thread. **A general design
 ruling that belongs to no WP is the one real gap** — route it to the Steward,
-who opens a thread for it; ⛔ do not root it yourself.
+who opens a thread for it; do not root it yourself.
 
 After any context reset/compaction, **resolve the live thread from fresh
-context**; ⛔ do not reuse a thread/event id from a summarized memory — the
+context**; do not reuse a thread/event id from a summarized memory — the
 single commonest cause of a days-old thread being revived is a stale id carried
 through a compaction.
 
@@ -461,7 +469,7 @@ reality: "X exists" → grep for it; "matches pattern Y" → read Y end-to-end. 
 a *verified* language a spec claim about the kernel must be checked against the
 kernel, not assumed.
 
-### 7a. ⛔ MUTABLE EXTERNAL STATE IS TESTED AT POINT OF USE, NEVER CITED
+### 7a. MUTABLE EXTERNAL STATE IS TESTED AT POINT OF USE, NEVER CITED
 
 Grounding a premise in a **document** works for facts that are true by
 construction — what a function does, what a spec says. It **fails** for
@@ -481,9 +489,9 @@ under `.github/workflows/` authored by that very App.
 **Two rules, and the second is the one that was actually missing:**
 
 1. **Test it.** A capability question — *"can this credential push that path?"*
-   — is answered by attempting it, usually in one command. ⛔ **Never escalate a
+   — is answered by attempting it, usually in one command. **Never escalate a
    capability claim you have not tried.**
-2. ★ **When an observation contradicts a record, the RECORD is what you
+2. **When an observation contradicts a record, the RECORD is what you
    re-verify — not the observation you explain away.** `verify-leader` found the
    three commits, held both facts side by side, and wrote *"I can't tell which;
    flagging that I don't know rather than guessing."* **That is the correct
@@ -497,7 +505,7 @@ close a question. And when you find such a note false, **fix it in place and say
 when it became false** — a silently corrected doc teaches the next reader
 nothing.
 
-### 7b. ⛔ NEVER DEFAULT A VALUE YOUR WHOLE CONCLUSION RESTS ON
+### 7b. NEVER DEFAULT A VALUE YOUR WHOLE CONCLUSION RESTS ON
 
 Related failure, same day, three instances: an operand chosen without checking
 which point in the graph it sat at (`dd715950^` — a point on `main`'s history —
@@ -566,7 +574,7 @@ particular, a local `wp/<ID>` branch ready for publisher-path merge handling is
 merge-Decision request is `review_request`. When unsure, `question` is always
 accepted.
 
-## 8a. ⛔ ARCHITECT AND LIBRARIAN ARE PARALLEL, OVER DISJOINT DOMAINS
+## 8a. ARCHITECT AND LIBRARIAN ARE PARALLEL, OVER DISJOINT DOMAINS
 
 **Operator directive, 2026-07-22.** They review **at the same time**, each in
 their own domain, and **they should not need to interact.**
@@ -576,17 +584,17 @@ their own domain, and **they should not need to interact.**
 | **Architect** | `catalog/`, `crates/` |
 | **Librarian** | `library/` |
 
-⛔ **Neither is a gate on the other, and neither's approval is a precondition for
+**Neither is a gate on the other, and neither's approval is a precondition for
 the other starting.** A candidate touching both domains goes to **both at once**.
 
 ### The rule that actually saves the time
 
-⛔ **A fold in one domain does NOT invalidate the other domain's approval.**
+**A fold in one domain does NOT invalidate the other domain's approval.**
 An approval binds the exact SHA **for its own domain**. When a fold touches only
 `crates/`, the Librarian's `library/` approval **carries forward** — re-run the
 Librarian only if the fold touched `library/`.
 
-★ **This is why it matters, measured on SRC-ATTEST 2026-07-22:** the WP was gated
+**This is why it matters, measured on SRC-ATTEST 2026-07-22:** the WP was gated
 *Librarian QA → Architect*, in series. Three Architect rejections, each landing
 in `scripts/`, each sending the candidate **back through a full Librarian
 re-review of `library/` that no fold had touched.** Every review found something
@@ -604,11 +612,11 @@ finding, they must not be sequenced.
   domain they bound.
 - The **owning leader** assembles: the candidate is ready when **every touched
   domain has a live approval on the current SHA**.
-- ⛔ On a fold, the leader re-requests **only the domains the fold touched** —
+- On a fold, the leader re-requests **only the domains the fold touched** —
   and must state which approvals it is carrying forward, so a stale carry-forward
   is visible rather than assumed.
 
-⚠ **`scripts/` and `agent/` are not in the operator's split.** Until the operator
+**`scripts/` and `agent/` are not in the operator's split.** Until the operator
 rules, treat publisher/tooling changes under `scripts/` as the **Architect's**
 review surface (machinery, not library content) and `agent/` as the **Steward's**
 own. **This paragraph is the Steward's inference, not an operator ruling** —
@@ -696,7 +704,7 @@ correction extends it.
 This is a fixed *assignment* rule, not a new edge — it **removes** edges (the
 whole negotiation cluster) rather than adding one.
 
-## 10⁻. ⛔ PROCESS WORK IS SUBORDINATE TO PRODUCT FLOW — the Steward's hard ceiling
+## 10⁻. PROCESS WORK IS SUBORDINATE TO PRODUCT FLOW — the Steward's hard ceiling
 
 **Measured, 2026-07-22.** Between 17:10 and 19:45 — **two and a half hours** —
 every one of eleven merges to `main` was process: five memory files, three
@@ -706,7 +714,7 @@ merges reddened it. **Zero touched `crates/`, `spec/`, or `conformance/`.**
 Meanwhile a QA-approved verify WP sat undelivered and a QA-clean runtime WP sat
 held. The operator noticed from outside and asked what was going on.
 
-★ **Nothing external was pulling that work. The chain was self-sustaining:** a
+**Nothing external was pulling that work. The chain was self-sustaining:** a
 publisher bug produced a playbook lesson, which produced a memory promotion,
 which produced an adversary finding, which produced a frame, which produced an
 Architect escalation. **Every link was individually correct and defensible.**
@@ -717,7 +725,7 @@ loop had no external brake.
 ⇒ **The corpus exists to make the build better. When it competes with the build,
 it has inverted its purpose.** Three binding rules:
 
-1. ⛔ **NO process merge while a ring holds finished, unmerged work.** If any WP
+1. **NO process merge while a ring holds finished, unmerged work.** If any WP
    is QA-approved-and-unpublished, or held on the Steward, **that is the queue** —
    playbook edits, memory promotions, and corpus refactors wait. A finished WP
    that cannot land is the most expensive object in the federation: it has
@@ -727,20 +735,20 @@ it has inverted its purpose.** Three binding rules:
    them in one publish at a genuine seam. **Publishing them individually converts
    reflection into throughput and makes a stalled fleet look busy** — from the
    outside, an active merge stream is indistinguishable from progress.
-3. ★ **A process change must name the product WP it unblocks, or wait.** If you
-   cannot name one, it is not urgent by definition. ⚠ Watch for the inverted
+3. **A process change must name the product WP it unblocks, or wait.** If you
+   cannot name one, it is not urgent by definition. Watch for the inverted
    form specifically: *"I must harden this mechanism before I can safely use
    it."* That reasoning is how the loop above sustained itself, and it is
    **almost always** an invitation to do the process work first — check whether
    the mechanism has actually failed on the work in front of you, or whether you
    are hardening it against an imagined future call.
 
-★ **The tell, and it is available in one command:** `git log --since=<3h ago>
+**The tell, and it is available in one command:** `git log --since=<3h ago>
 origin/main` with paths. **If nothing in the window touched product, stop and
 find out why** — the answer is never "the corpus needed attention." It is
 usually that a ring is stalled and something is reporting it as fine.
 
-## 10⁻a. ⛔ THE ADVERSARY CHANNEL IS REPORT-ONLY AND SCOPED TO PRODUCT
+## 10⁻a. THE ADVERSARY CHANNEL IS REPORT-ONLY AND SCOPED TO PRODUCT
 
 **Operator directive, 2026-07-22.** §10⁻ named the failure — a high-quality
 finding stream plus a Steward who services it immediately is a mechanism for
@@ -757,7 +765,7 @@ version, and it binds the edge rather than the intention.**
 | | process, workflow, coordination mechanics |
 | | anything else |
 
-⛔ **A report outside that scope is out of scope even if it is correct, cheap,
+**A report outside that scope is out of scope even if it is correct, cheap,
 and load-bearing.** The value of the finding is not the test — the *scope* is
 the test. Tooling and process defects are found by the ring that trips over
 them, in the course of product work, or they wait.
@@ -770,18 +778,18 @@ The edge is **report-only and one-directional**. In full:
 2. The Steward **may receive** reports.
 3. **Nothing else.**
 
-⛔ **No acknowledgement.** No "taken", no "committed as `<sha>`", no thanks, no
+**No acknowledgement.** No "taken", no "committed as `<sha>`", no thanks, no
 routing note, no explanation of why something was queued, no correction of the
 adversary's framing, and **no reply of any kind** — including a reply whose
 content is that no reply is owed. **Do not answer a report.** Act on it inside
 product work, or do not.
 
-⛔ **No conversation, no thread.** Do not ask the adversary to hunt something,
+**No conversation, no thread.** Do not ask the adversary to hunt something,
 do not confirm a finding, do not agree or disagree with it in the channel, and
 do not invite follow-up. **A request for an attack is a conversation** — the
 Steward does not make one.
 
-★ **Why the ack is banned specifically, since it is the part that will feel
+**Why the ack is banned specifically, since it is the part that will feel
 wrong to withhold:** the acknowledgement is where the servicing loop restarts.
 It costs a message, invites a reply, converts a report into a thread, and every
 step is individually courteous. **The prohibition is the mechanism; a Steward
@@ -856,7 +864,7 @@ configuration: `../docs/ops/compute-budget.md`.
   `cargo test`. It holds a machine-wide lock (`KEN_BUILD_SLOTS`, default 1) so
   only one build runs at a time across all agents. Bypassing it is the fastest
   way to swap-death the box.
-- **⛔ Scope to the touched crate** (`-p <crate>`, or `--test <name>` for one
+- ** Scope to the touched crate** (`-p <crate>`, or `--test <name>` for one
   suite), **NEVER `--workspace` (operator hard rule).** Full-workspace builds,
   the `--locked` gate, the conformance suite, and any `--release`/LTO build run
   **in CI on GitHub**, not on the laptop — a local `--workspace` run is what OOMs
@@ -877,7 +885,7 @@ configuration: `../docs/ops/compute-budget.md`.
   hardware grows (the Steward/operator raises the caps; do not raise them
   unilaterally).
 
-### 12a. ⛔ NEVER `git stash` — the stash stack is SHARED across every worktree
+### 12a. NEVER `git stash` — the stash stack is SHARED across every worktree
 
 **Binding on every seat, no exceptions** (Steward, 2026-07-22, after a live
 near-miss).
@@ -905,7 +913,7 @@ seat can detect**, which is why it is fleet law and not a team retro item.
   thereafter **only `git stash apply stash@{n}`** on an entry whose message you
   wrote yourself. **Never `pop`. Never a bare index.** Prefer committing.
 
-**⚠ Do not reap the existing stack.** Those entries belong to other seats.
+** Do not reap the existing stack.** Those entries belong to other seats.
 
 > Same shared-substrate family as the **single object store** (a commit that
 > verifies locally may never have been pushed — §14) and the **shared `/tmp`**
@@ -1007,7 +1015,7 @@ one GitHub identity; it does not give teams GitHub access, does not make the
 Steward a code author, and does not replace the mootup review/Decision record
 (`../docs/program/04-git-and-integration.md`).
 
-### 14a. ⛔ THE ARCHITECT DOES NOT VOTE ON DOC-ONLY WPs
+### 14a. THE ARCHITECT DOES NOT VOTE ON DOC-ONLY WPs
 
 **Operator ruling, 2026-07-22:** *"architect does not need to rule on docs."*
 
@@ -1020,7 +1028,7 @@ and publishes.
 `library/` is explanatory/derived), **or when its diff reaches outside
 `library/` at all** — with only the named exceptions below.
 
-> ### ⛔ THE ESCALATION PREDICATE FAILS CLOSED. Do not restate it as a list of
+> ### THE ESCALATION PREDICATE FAILS CLOSED. Do not restate it as a list of
 > ### directories, because a list has no cell for the path nobody enumerated.
 >
 > This rule used to read *"…or reaches outside `library/` into `crates/`,
@@ -1041,16 +1049,16 @@ and publishes.
 > | exception | route | condition |
 > |---|---|---|
 > | **`docs/program/`** — Steward-owned program docs (trackers, issue files, WP frames, program guides) | Steward resolves, no Architect | the change is **currency or editorial**, and the Steward **authorized the expansion when routing the WP**. A change that alters *program law* or a WP's **acceptance criteria** is not editorial — it is a frame amendment, and it is the Steward's to author, not a ring's to fold in. |
-> | **the Steward's own §6a corpus route** — `agent/**`, `docs/program/IMPLEMENTATION-PROGRESS.md` | Steward publishes directly (`ken-steward` §6a) | Not a doc-ring WP at all, so §14a never governed it. Process law is the Steward's lane (§4); routing it through the Architect would **add a review cycle to the workflow graph**, which §4 forbids without operator consent. ⚠ The Architect's vote **is** still required where an `agent/` edit changes a **soundness or design gate** rather than process. |
+> | **the Steward's own §6a corpus route** — `agent/**`, `docs/program/IMPLEMENTATION-PROGRESS.md` | Steward publishes directly (`ken-steward` §6a) | Not a doc-ring WP at all, so §14a never governed it. Process law is the Steward's lane (§4); routing it through the Architect would **add a review cycle to the workflow graph**, which §4 forbids without operator consent. The Architect's vote **is** still required where an `agent/` edit changes a **soundness or design gate** rather than process. |
 >
-> ⚠ **LEDGER RIDER — the exception that bites, and it is not about voting.**
+> **LEDGER RIDER — the exception that bites, and it is not about voting.**
 > Some `docs/program/` files are **attested `library/` sources**: as of
 > 2026-07-25, `07-catalog-style-guide.md`, `12-documentation-program.md`, and
 > the issue files `CAT-CAPEX.md`, `DOC-W1.md`, `DOC-W2.md`. **Editing one moves
 > its blob OID and reddens the currency gate — a locator-only edit does it
 > too.** So a `docs/program/` change that skips the Architect **still owes the
 > `library/SOURCE-ATTESTATIONS` fold in the same candidate**, and it contends
-> on the ledger axis with any WP holding it (§7b). ⛔ Never bump the row
+> on the ledger axis with any WP holding it (§7b). Never bump the row
 > without diffing the **cited anchors** — the recurring case is benign, which
 > is exactly what trains the rubber stamp (`DOC-ATTEST-LIVING`).
 
@@ -1091,7 +1099,7 @@ satisfy the gate.
   them. After you hand a WP off, you **stop** and learn a red result from a
   mention.
 - **Landing integrity: a merge isn't trusted until *verified on `main`* — and a
-  multi-piece WP isn't landed until *every* piece is (promoted V1, ★★★
+  multi-piece WP isn't landed until *every* piece is (promoted V1,
   near-miss).** A **squash-merge can silently drop pieces** of an assembly built
   from multiple cherry-picks: the K2c-s2 seam-3 erratum shipped its **kernel**
   fix in `ecbb279` but **dropped the spec (`da344a6`) + conformance (`f3ece75`)**
@@ -1142,7 +1150,7 @@ satisfy the gate.
   simply absent from the candidate — the WP builds on something it does not
   contain).
 
-  > ⛔ **CORRECTION (2026-07-22, Steward). The former parenthetical here —
+  > **CORRECTION (2026-07-22, Steward). The former parenthetical here —
   > *"a stale base silently reverts unrelated landed siblings"* — was FALSE, and
   > it was mine.** This repo squash-merges, and a squash applies
   > **merge-base → branch**, never **main → branch**. A candidate that merely
@@ -1164,7 +1172,7 @@ satisfy the gate.
   > **Empty ⇒ immaterial; do NOT require a rebase.** Non-empty ⇒ inspect and
   > take the union deliberately.
   >
-  > ★ **A non-empty intersection fails loudly ONLY where the hunks overlap.**
+  > **A non-empty intersection fails loudly ONLY where the hunks overlap.**
   > Overlapping hunks produce a merge conflict that blocks the merge (confirmed
   > 2026-07-22: a Steward tracker branch with a four-file intersection was
   > refused — `Pull Request has merge conflicts` — and reconciled by taking the
@@ -1178,7 +1186,7 @@ satisfy the gate.
   > two halves of one file merged while each assumes a different state (a status
   > table reading `active` in one row and `merged` in another).
   >
-  > ⛔ **This is exactly why the rule is *inspect*, not *rebase*.** Inspection
+  > **This is exactly why the rule is *inspect*, not *rebase*.** Inspection
   > presupposes a reader, and it only makes sense *because git will not do it
   > for you*. Do not reduce this to "the failure is loud" — that removes the
   > reason the rule exists.
@@ -1186,7 +1194,7 @@ satisfy the gate.
   > **The empty case is untouched by any of this: empty ⇒ immaterial, do not
   > rebase.** That is every case that has cost this fleet time.
   >
-  > ⚠ **Run it PRE-merge only.** Once the candidate is merged, `main` contains
+  > **Run it PRE-merge only.** Once the candidate is merged, `main` contains
   > its squash, so the candidate's file set is necessarily a subset of what
   > `main` gained and the test **self-fires on every candidate**. Post-landing,
   > verify **content-emptiness on the candidate's own paths** plus **sibling

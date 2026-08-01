@@ -32,7 +32,7 @@ value, so the whole application goes **`Unknown`**.
 **Reaching for the runtime field directly (`eq`) never forces the proof fields at
 all** — so it computes. **Same meaning to the kernel; different fate under CBV.**
 
-## ★ The tell, and why it is nasty
+## The tell, and why it is nasty
 
 **Your evaluation test returns `Unknown` on a term that TYPE-CHECKS PERFECTLY.**
 Nothing is unsound; nothing is even wrong. The kernel is content. **You will look

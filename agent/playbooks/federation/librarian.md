@@ -59,7 +59,7 @@ conversion as a defect until shown otherwise.
 class in `library/manifest.toml`; a page whose class cannot be named is not
 ready. A **date** is not evidence of currency; a **source revision** is.
 
-> ### ⚠ You review a corpus you also edit
+> ### You review a corpus you also edit
 >
 > The seat that reviews `library/` also edits it, so your own approval is not
 > an independent check the way a build QA's is. **The gates are the

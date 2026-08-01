@@ -23,7 +23,7 @@ DecEq Bytes  needs  DecEq (List UInt8)        ✓ landed (a generic instance)
 
 **SUB-1 moved the wall from `Bytes` to `UInt8`. It did not remove it.**
 
-## ★ Why nobody saw it: the bridge delivered the SPINE, and the consumer needed an ELEMENT
+## Why nobody saw it: the bridge delivered the SPINE, and the consumer needed an ELEMENT
 
 **SUB-1's own consumer was `bytes_nat_length = length ∘ bytes_to_list`.** A fold
 computes over the **spine** of the list — **it never looks at an element.** It

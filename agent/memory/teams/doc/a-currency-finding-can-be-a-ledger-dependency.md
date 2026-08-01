@@ -16,7 +16,7 @@ through `library/SOURCE-ATTESTATIONS`.**
 **Measured on `DOC-LIBRARY-STYLE-01-ANATOMY`:** four live derived pages quoted a
 diagnostic that no longer existed. One of them,
 `docs/program/07-catalog-style-guide.md`, is an **attested source** — so editing
-it moved its blob OID, and the ledger row had to move with it. ⚠ **A
+it moved its blob OID, and the ledger row had to move with it. **A
 locator-only edit has the same effect.** The row was **regenerated and
 reviewed**, not patched: the committed ledger was proved byte-identical to a
 freshly proposed one, and the ledger's SHA-256 checked against
@@ -31,7 +31,7 @@ that lands a correct sentence and breaks the doc gate.
 - **Route the regenerated ledger row as a first-class review target**, with the
   same weight as the prose. A chapter-focused read skims exactly the parts that
   carry a gate.
-- **⛔ Distinguish a LIVE derived claim from a FROZEN historical quotation.** A
+- ** Distinguish a LIVE derived claim from a FROZEN historical quotation.** A
   dated findings record quoting what was observed *when it was observed* must
   **keep** the retired string — rewriting it to match the present destroys the
   evidence that the finding was ever true. On this WP,
@@ -40,6 +40,6 @@ that lands a correct sentence and breaks the doc gate.
   one that went four-for-five.** State the retention as a judgement made, so it
   does not read as an omission.
 
-★ The general shape: a currency finding tells you a claim went stale, **not how
+The general shape: a currency finding tells you a claim went stale, **not how
 far the staleness reaches.** Ask what *attests* the file before you ask what the
 sentence should say.

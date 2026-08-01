@@ -18,10 +18,10 @@ preflight; sweeping the doc found a second the QA had missed:
 
 | § | Stale text | Reality at kickoff |
 |---|---|---|
-| **§6 Guardrails** | *"⛔ Do NOT settle `Bytes → Nat`. **No `DecEq Bytes`**… key matching goes through `ArgBytes` + `bytes_at` + `uint8_to_int` + `eq_int`."* | Pat **ruled** it; SUB-1b **landed** `DecEq Bytes`; SUB-2 **deleted** `ArgBytes`. **Every clause false.** |
+| **§6 Guardrails** | *" Do NOT settle `Bytes → Nat`. **No `DecEq Bytes`**… key matching goes through `ArgBytes` + `bytes_at` + `uint8_to_int` + `eq_int`."* | Pat **ruled** it; SUB-1b **landed** `DecEq Bytes`; SUB-2 **deleted** `ArgBytes`. **Every clause false.** |
 | **§3.2 item 2** | *"Where CC3's `Cursor` ABI already demands `ArgBytes`, pass it — consume it as-is."* | **`ArgBytes` does not exist.** SUB-2 deleted the class, its cached fields, and its proof obligation outright. **There is nothing to pass.** |
 
-## ★ Why the guardrails section is the dangerous one
+## Why the guardrails section is the dangerous one
 
 **A frame's §"what to build" gets re-read and re-reasoned. Its §"do not do X" gets
 OBEYED.** A guardrail is phrased as a prohibition — imperative, absolute, no

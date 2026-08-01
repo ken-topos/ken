@@ -45,7 +45,7 @@ via `env.lookup(id)` — *which is precisely what the landed §18 contract alrea
 says*. Any convenience projection must be **additive under a distinct name**, never
 an implicit replacement of a frozen method.
 
-## ★ Why a green suite is structurally blind to this
+## Why a green suite is structurally blind to this
 
 **Because the same diff migrates every in-repo caller.** After the change, nothing
 in the workspace still asks for a `Vec<GlobalId>` — so nothing can fail. The
@@ -74,7 +74,7 @@ this break is in the shape.)*
 **For reviewers:** when a diff touches a normatively-pinned symbol, **the green
 suite is not evidence.** Go read the spec line and compare the type.
 
-## ★ And the frame's wording invited it — the Steward's error
+## And the frame's wording invited it — the Steward's error
 
 My AX-1 frame said the trust base must become readable *"**without churning existing
 `trusted_base_delta` assertions**."* That is an **assertion-level** requirement, and

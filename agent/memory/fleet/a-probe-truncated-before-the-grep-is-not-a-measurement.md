@@ -6,7 +6,7 @@ scope: fleet
 
 # A truncated probe is not a measurement of what the search looked for
 
-⛔ **`| tail -N` upstream of a grep converts *"absent from the last N lines"* into
+**`| tail -N` upstream of a grep converts *"absent from the last N lines"* into
 *"absent"*.** Those are different claims and only one of them was checked. The
 grep is honest about the bytes it receives; **the pipeline is what lies.**
 
@@ -24,7 +24,7 @@ The mandated pre-edit gate ran as
   whatsoever**. Re-run whole: **28 lib + 7 lib-test warnings.** The zero meant
   *could not see*, not *none*.
 
-⚠ The test counts in the same report were real and unaffected — which is what
+The test counts in the same report were real and unaffected — which is what
 makes this shape survive review. A report can be accurate in every line but one,
 and the one is the line whose evidence was filtered away before anybody looked.
 
@@ -40,12 +40,12 @@ and the one is the line whose evidence was filtered away before anybody looked.
   it needs a companion case that is known to fire. Run the same pipeline against
   input you know contains the token; if it still reports zero, the pipeline is
   the defect.
-- ⛔ **"Use a bigger N" is not the fix.** A larger window only moves the cliff.
+- **"Use a bigger N" is not the fix.** A larger window only moves the cliff.
   The property is positional: **if the evidence renders outside the region your
   window covers, that window structurally cannot answer the question — and it
   does not return "unknown", it returns a confident wrong answer.**
 
-## ★ Where this bites hardest: pane and log inspection
+## Where this bites hardest: pane and log inspection
 
 The Steward reads seat state through `capture-pane … | tail -N` and publisher
 progress through `tail -25 <log>`. Both are this defect waiting to happen, and
@@ -58,15 +58,15 @@ both have already fired:
   narrow tail shows a stale `❯` + the pre-compaction ctx and reads as a false
   *"did not land."*
 
-⇒ ⛔ **Draw no negative conclusion from a truncated buffer.** Mechanised in
+⇒ **Draw no negative conclusion from a truncated buffer.** Mechanised in
 `scripts/classify-pane-composer.py`, which anchors on the **last** prompt-glyph
 line and emits `unreadable` rather than `clear` for an empty capture — because
 `clear` asserts the composer was seen and held nothing, while an empty buffer
 asserts only that the probe saw nothing at all.
 
-## ★★ SECOND INSTANCE, SAME DAY — filed by the seat WRITING THIS FILE
+## SECOND INSTANCE, SAME DAY — filed by the seat WRITING THIS FILE
 
-⛔ **Measured 2026-07-26, ~40 minutes after the above was promoted.** The Steward
+**Measured 2026-07-26, ~40 minutes after the above was promoted.** The Steward
 audited an `ABI-R1` candidate and ran:
 
 ```console
@@ -79,39 +79,39 @@ off the bottom. On that basis the Steward reported to a live ring that **no
 production consumer branches on the policy**. Four branch sites exist
 (`eval.rs:2608`, `:2631`, `:3356`, `:3371`).
 
-⇒ ⛔ **The author of this lesson committed it, in the same session, at the other
+⇒ **The author of this lesson committed it, in the same session, at the other
 end of the pipe.** `tail` in the morning, `head` in the afternoon. **That is the
 argument for it being positional and not about care** — the person with the
 defect at maximum salience still shipped it, because the filter is a reflex you
 apply while thinking about something else.
 
-⚠ **And the cost was not confined to the wrong sentence.** The Steward's routing
+**And the cost was not confined to the wrong sentence.** The Steward's routing
 message stated the falsehood as a universal; the implementer adopted it and wrote
 the *inverse* universal into the next candidate, which QA blocked.
 ⇒ **An overclaim in a routing message becomes the next candidate's premise.** A
 truncated probe in a *report* is worse than one in your own notes, because
 downstream seats cannot see the pipe you used.
 
-### ⛔ AND THE UNTRUNCATED GREP STILL COULD NOT ANSWER IT
+### AND THE UNTRUNCATED GREP STILL COULD NOT ANSWER IT
 
 The same audit also ran a **complete** grep for `FollowWithinScope` across
 `crates/`. It found no consumer — and **could not have**, because the consuming
 code tests `== NoFollow` and treats the follow case as the **fall-through**, so
 the variant never appears textually.
 
-⇒ ★ **A grep for a SPELLING is not a measurement of a PROPERTY.** Fixing the
+⇒ **A grep for a SPELLING is not a measurement of a PROPERTY.** Fixing the
 truncation would not have fixed this one. Enumerating occurrences of a name
 cannot decide whether behaviour is closed over a value — for that you must read
 the branch, or delete the value and see what fails to compile or reddens.
 
-## ★ Why this is a POSITION lesson, not a diligence one
+## Why this is a POSITION lesson, not a diligence one
 
 It was produced by the seat **cataloguing this very defect class**, inside the WP
 whose subject is authorities that cannot observe what they govern. ⇒ Diligence was
 not the missing ingredient; the probe's **position** in the pipeline was. Do not
 respond to this lesson with "be more careful" — respond by moving the filter.
 
-⭐ **And the defective probe was LOAD-BEARING in the discovery**: the warnings it
+**And the defective probe was LOAD-BEARING in the discovery**: the warnings it
 could not see are how the implementer found that the layer under review had zero
 production consumers. **A bad measurement can be the thing that surfaces the real
 finding** — so treat a retraction as the most valuable line in a report, never as

@@ -33,7 +33,7 @@ And `O_NOFOLLOW` is not decoration — **it is the enforcement mechanism for
 `SymlinkPolicy::NoFollow`**, an ADR-0017 capability-confinement property. **A
 security guarantee resting on a number someone remembered.**
 
-## ★ Why the report's own author missed it
+## Why the report's own author missed it
 
 **Because "risk" is written in the future tense, and future tense doesn't get
 grepped.** The author was in *forecasting* mode — "here is what could go wrong
@@ -46,7 +46,7 @@ against the tree they were standing in. The finding was three greps away.
 > written by someone who understood the failure mode well enough to name it;
 > that is exactly the person whose list is worth executing.
 
-## ★★ The second half: a `cfg` gate broader than the fact it guards
+## The second half: a `cfg` gate broader than the fact it guards
 
 `#[cfg(unix)]` compiles on Linux, macOS, and every BSD. **The values are
 Linux's.** The gate and the fact **do not have the same extension** — so the

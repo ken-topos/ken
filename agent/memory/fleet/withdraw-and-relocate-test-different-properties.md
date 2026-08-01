@@ -21,12 +21,12 @@ Steward on first reading. They are not alternatives:
 | **REMAP** a cell | the authority decides **where** cells are | — |
 | **remove a whole ROW** | the fold's **seed** is reachable | both of the above leave the row present, so no fold ever reads its default |
 
-★ **The mechanism: acceptance must MOVE to the recipient row, not merely
+**The mechanism: acceptance must MOVE to the recipient row, not merely
 shrink.** A consumer that intersects the authority with its own hardcoded table
 is *correct-looking and defective* — it honours every removal and ignores every
 relocation. Drop cannot see that. Only remap can.
 
-## ★★ And a third property nobody had named: the SEED
+## And a third property nobody had named: the SEED
 
 Dropping **cells** leaves the row present, so the fold still finds a row and
 never evaluates its initial value. ⇒ **A fail-closed default that no perturbation
@@ -46,7 +46,7 @@ says nothing about the others:
 2. **relocate** — does the authority decide where cells are?
 3. **remove the container** — is the fail-closed default reachable at all?
 
-⛔ **And when a ruling says "X and Y", do not collapse it into "X or Y" because
+**And when a ruling says "X and Y", do not collapse it into "X or Y" because
 they look like two ways of saying one thing.** Ask what a defective consumer
 would do under each. If the answers differ, the ruling meant the conjunction.
 Here three seats collapsed it independently, which makes it a **property of how
