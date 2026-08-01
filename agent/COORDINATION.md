@@ -145,8 +145,10 @@ git only.
   (`list_participants`). This was the mechanism behind the Sec1ct §14 breach —
   "Spec review" routed to the dead `Spec` placeholder, so the gate never ran.
 - **Thread your reply — don't scatter to the space root** (operator 2026-06-29;
-  hardened 2026-07-03: **only the Steward posts top-level, every other role always
-  threads — §4**). Every event you receive carries a `thread_id`. When you respond
+  hardened 2026-07-03; ⭐ **restated 2026-08-01 — top level is a closed list:
+  `steward`, `librarian`, `research`, and nobody else. Every other role always
+  threads. A thread's identity is a WP, and the kick's own `event_id` is its
+  anchor — §4**). Every event you receive carries a `thread_id`. When you respond
   to a message that belongs to a thread — a kickoff, assignment, query, handoff,
   review request, or retro call — **reply *into that thread*** (`post_response` with
   `thread_id` set to that message's thread; or `parent_event_id` on the first
@@ -217,22 +219,94 @@ rest of the discipline below (mention-free acks, Steward-only roots) stay quiet.
 
 ## 4. Threads are the spine
 
-One mootup thread per work item; the kickoff message *is* the spine. All
-handoffs, questions, status, and retros for that item are **replies in that
-thread** — a top-level post fragments the work. After any context
-reset/compaction, resolve the live thread from fresh context; do **not** reuse a
-thread/event ID from a summarized memory (it may be stale).
+> ### ⭐⭐ THE WHOLE RULE IN FOUR LINES (operator, 2026-08-01)
+>
+> 1. **A thread's identity is a WP.** One WP = one thread, opened by its **kick**.
+> 2. **The kick's own `event_id` IS the thread anchor.** Everything about that WP
+>    replies under it — ⛔ nothing about it is ever posted anywhere else.
+> 3. **A rescope that SPLITS a WP abandons the original thread.** Each component
+>    WP gets a fresh kick and therefore a fresh thread.
+> 4. **Only `steward`, `librarian`, and `research` may post at top level.**
+>    Every other role always replies into a thread.
 
-**Top-level (root) posts are the Steward's alone — every other agent always
-threads (operator, 2026-07-03).** A non-Steward post *always* carries a
-`thread_id` or `parent_event_id` and lands **inside an existing thread**; no other
-role ever creates a root-level message. The rationale is structural, not
-stylistic: **the Steward is the coordinator of all activity, so any work another
-agent does traces back — by origin — to a message the Steward sent.** That message
-is therefore the natural root your reply threads under. Enforcing it makes the
-whole space a clean tree rooted at the Steward's coordination posts and ends the
-fragmentation where parallel root posts scatter one WP's exchange (the exact
-threading-discipline failure this fixes). Consequences:
+**Read the anchor rule literally: the anchor is an `evt_`, not a `thr_`.** That is
+not a stylistic choice — see the mechanism note below, which is why the corollary
+"every kick carries a thread id" cannot be implemented as stated.
+
+### 4a. ⛔ THE MECHANISM — a thread does not exist until someone replies
+
+⚠ **Measured 2026-08-01, and it defeats the obvious reading of the rule.** A
+kick is by construction a **root post**: `post_response` with no parent returns
+`thread_id: null`, because **the thread is minted by the first reply**, not by
+the root. The root event is then pulled into that thread retroactively.
+
+⇒ ⛔ **A kick therefore CANNOT quote the thread id it is inaugurating — no such
+id exists at the moment it is written.** ⭐ **The exact substitute, which loses
+nothing: the kick's own `event_id` is the anchor, and every recipient already has
+it** (it is in the mention notification and in the events feed).
+
+| you are… | you call | why |
+|---|---|---|
+| the **first** reply to a kick | `post_response(parent_event_id=<kick evt_>)` | ⭐ this **opens** the thread. ⛔ `reply_to` **404s** ("Thread not found") on a root event that has no thread yet |
+| any **later** poster | `post_response(thread_id=<thr_>)` or `reply_to(<any evt_ already in the thread>)` | the thread now exists |
+| posting a **new WP kick** (steward/librarian/research only) | bare `post_response`, no parent, no thread | you are creating the anchor |
+
+⭐ **`reply_to` auto-mentions the original speaker.** ⚠ That is load-bearing:
+on 2026-08-01 the Runtime ring deadlocked because an Architect verdict mentioned
+only the implementer and not the leader who opened the Decision. Replying into
+the thread makes the wake path structural instead of a habit someone must
+remember.
+
+### 4b. What every kick must carry
+
+⭐ **Every WP kick — and every doc-phase kick — must state its own anchor in its
+body**, in words a recipient can act on without a lookup:
+
+> ⭐ **This message is the thread anchor for `<WP-ID>`.** Reply with
+> `parent_event_id` set to **this event's id**; thereafter use its `thread_id`.
+> ⛔ Do not open a second thread for this WP and ⛔ do not post about it at the
+> space root.
+
+⛔ **A kick without that line is defective** — reissue it rather than letting the
+ring guess.
+
+### 4c. Rescope: when the thread is abandoned
+
+| what happened | thread disposition |
+|---|---|
+| WP **split** into components (a §5a-iii recut, a mis-sizing outcome (c)) | ⛔ **abandon the original thread.** Post one final line in it naming the successor WP ids, then ⭐ **a fresh kick — and so a fresh thread — per component WP** |
+| WP **rescoped in place** (scope amended, hard stop ruled, deliverable added) | ⭐ **keep the thread.** Nothing was split, so the WP's identity is unchanged |
+| WP **respun** (new candidate SHA after a reject) | ⭐ **keep the thread.** A rejected candidate is not a new WP |
+| work **routed** to another WP (a `D4` route, an inherited obligation) | ⭐ **keep both threads.** The route is a reply in the *origin* thread; the obligation lands in the *target* WP's **frame**, ⛔ not as a cross-post |
+
+⚠ **The test is "did the set of WPs change?"** — not "did anything change?" Only
+a split changes it.
+
+### 4d. Top-level is a closed list
+
+**`steward`, `librarian`, `research` — nobody else, ever** (operator,
+2026-08-01; supersedes the Steward-only rule of 2026-07-03). A post from any
+other role *always* carries a `thread_id` or `parent_event_id`.
+
+⭐ The three are exactly the roles whose output is **not scoped to one WP**: the
+Steward coordinates across all of them, the Librarian holds a standing as-built
+mandate over the whole corpus, and research reports are corpus-wide by nature.
+
+⛔ **Everyone else, including the Architect and every team leader, threads.** An
+Architect ruling about a WP belongs in that WP's thread. ⚠ **A general design
+ruling that belongs to no WP is the one real gap** — route it to the Steward,
+who opens a thread for it; ⛔ do not root it yourself.
+
+After any context reset/compaction, **resolve the live thread from fresh
+context**; ⛔ do not reuse a thread/event id from a summarized memory — the
+single commonest cause of a days-old thread being revived is a stale id carried
+through a compaction.
+
+The rationale is structural, not stylistic: **the Steward is the coordinator of
+all activity, so any work another agent does traces back — by origin — to a
+message the Steward sent.** Enforcing it makes the whole space a clean tree
+rooted at coordination posts and ends the fragmentation where parallel root posts
+scatter one WP's exchange. Consequences:
 - **Reply, never root.** Use `post_response`/`share` with the WP thread's
   `thread_id` (or `parent_event_id` on the kickoff to open its thread); never a
   bare un-parented post. The mechanics are unchanged (§2's `reply_to`-vs-
