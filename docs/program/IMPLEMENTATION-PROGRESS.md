@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-01 21:03:01Z — from 141 issue file(s) in `docs/program/issues/`.
+2026-08-01 22:18:06Z — from 142 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -82,7 +82,8 @@ the committed file matches the generator's output.
 | `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
 | `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | closed | doc | L | none | — |
 | `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | merged | doc | L | none | 936 |
-| `DOC-W3-GUIDE` | Wave 3 slice 1 — migrate catalog/guide/ into library/guide/ under migration-local fence verification, conserving all 40 checked fences through the move | ready | doc | M | none | — |
+| `DOC-W3-GUIDE` | Wave 3 slice 1 — migrate catalog/guide/ into library/guide/ under migration-local fence verification, conserving all 40 checked fences through the move | merged | doc | M | none | — |
+| `DOC-W3-HOWTO` | Wave 3 slice 2 — library/how-to/ recipes scoped by the CLI's seven-subcommand task surface, each grounded in a real diagnostic or checked artifact | ready | doc | M | none | — |
 | `DS-9` | lawful JSON codec — the data-structures tier's acceptance test: a Json value type, encode/decode, and the proved round-trip law, assembled entirely from the landed Core/Data sections | draft | foundation | L | none | — |
 | `EFF-SPACE-ENSURES-PRESTATE` | `old` is transparent, so a space operation's `ensures` cannot express the pre/post distinction `36 §4.3` is built on | closed | language | M | none | — |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
@@ -185,7 +186,7 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
-- `DOC-W3-GUIDE` — Wave 3 slice 1 — migrate catalog/guide/ into library/guide/ under migration-local fence verification, conserving all 40 checked fences through the move
+- `DOC-W3-HOWTO` — Wave 3 slice 2 — library/how-to/ recipes scoped by the CLI's seven-subcommand task surface, each grounded in a real diagnostic or checked artifact
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-CONTSPEC-LOWER` — ContinuationSpecialization slice 3 — attach the token at each producer alternative, emit the direct call before the identity-erasing join, close nested recursion and the ledgers, then ACTIVATE

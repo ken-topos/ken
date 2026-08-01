@@ -1,7 +1,7 @@
 ---
 id: DOC-W3-GUIDE
 title: "Wave 3 slice 1 — migrate catalog/guide/ into library/guide/ under migration-local fence verification, conserving all 40 checked fences through the move"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
