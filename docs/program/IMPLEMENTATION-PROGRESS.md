@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-01 15:06:24Z — from 134 issue file(s) in `docs/program/issues/`.
+2026-08-01 15:22:23Z — from 135 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -63,6 +63,7 @@ the committed file matches the generator's output.
 | `CONF-FMT8-LEVELTOK` | FMT8's fixture is unproducible: the row demands a 'genuine level-token fixture' but the lexer has no Level/Label token kind and never will under endpoint (b) | draft | spec-enclave | S | none | — |
 | `CONF-SEC4-REFL-PAIR` | Sec4's C1/C2 refl pair is stale against ADR-0013: the true arm is unreachable and the false arm is green for the wrong reason | draft | spec-enclave | S | none | — |
 | `DOC-ASBUILT-AUDIT` | As-built reconciliation — 27 cited sources have drifted from their attestations, so the library's currency claim is unbacked corpus-wide | ready | doc | L | none | — |
+| `DOC-ASBUILT-EXECUTION` | As-built slice 2 — reconcile 06-execution.md against its 15 drifted cited sources, the largest phase-A population | ready | doc | L | none | — |
 | `DOC-ASBUILT-FRAGMENTS` | As-built slice 1 — reconcile fragments.md against its 9 drifted cited sources; it is the keystone because 7 other documents cite it | ready | doc | M | none | — |
 | `DOC-ATTEST-LIVING` | attesting living tracker files makes every routine WP status flip redden the currency gate | closed | doc | S | none | — |
 | `DOC-CAP-ASBUILT` | The capability chapter tells readers the catalog has no checked authority exemplar; CAT-CAPEX adds one, falsifying that claim in two places | merged | doc | S | none | — |
@@ -204,6 +205,7 @@ is itself not yet `merged`/`closed`:
 - `ABI-S5` blocked by `PX9` (status: draft)
 - `ABI-S6` blocked by `ABI-S1` (status: draft)
 - `DOC-ASBUILT-AUDIT` blocked by `DOC-ASBUILT-FRAGMENTS` (status: ready)
+- `DOC-ASBUILT-EXECUTION` blocked by `DOC-ASBUILT-FRAGMENTS` (status: ready)
 - `DS-9` blocked by `KERNEL-NESTED-IND` (status: active)
 - `F4` blocked by `A3` (status: draft)
 - `NATIVE-HANDLE-CARRIER` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
