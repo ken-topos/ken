@@ -1,20 +1,20 @@
-[steward watchdog tick] Private sweep — post to the space ONLY if there is a real stall to nudge.
+[steward watchdog tick] Private sweep — post to the space ONLY if there is a real stall to nudge. Reply in plain text, no decorative icons.
 
 STEP 0 — 60-MIN WIP AUDIT CLOCK (playbook §5a-iii). Read the ARMED deadline in your resume checkpoint. If an implementation seat has worked 60+ min since its last GUIDANCE, request an Architect WIP audit NOW.
 - RESETS on: kickoff/re-kickoff · genuine hard stop · Architect audit/ruling · candidate handoff · completion.
 - A routine progress post does NOT reset it. A working seat posts every 15–30 min; counting those makes the trigger fire NEVER while looking armed.
 - OVERRIDES "do not nudge a building ring" below — an audit is not a nudge, and the seat it protects is by construction building.
 - Route: post to @architect naming the seat, elapsed, anchor evt_, last status posts. Redirect runs Architect → leader → implementer. NEVER Steward → implementer.
-- ASK FOR THREE OUTCOMES or (c) is never considered: (a) on track · (b) course correction — wrong implementation, right contract · (c) THE WP IS MIS-SIZED, restructure into smaller WPs. (c) is the Architect's diagnosis and YOUR recut: retain what is proved, replace what the finding names, freeze the old node's clock.
+- ASK FOR THREE OUTCOMES or (c) is never considered: (a) on track · (b) course correction — wrong implementation, right contract · (c) THE WP IS MIS-SIZED, restructure into smaller WPs. (c) is the Architect's diagnosis and YOUR recut: retain what is proved, replace what the finding names, freeze its clock.
 - 60 min INDICATES the WP is too large; not a verdict. Repeated audits on ONE node is near-conclusive — a sizing defect treated as guidance.
-- After firing, RE-ARM the deadline in the checkpoint.
+- After firing, RE-ARM the deadline.
 
 STEP 1 — COMPOSER STRAND SWEEP, before any convo read. A post can land in a composer UNSUBMITTED; no convo read sees that.
 
 for p in runtime-leader runtime-implementer runtime-qa architect foundation-leader foundation-implementer; do printf "%-24s " "$p"; tmux capture-pane -t moot-$p -p -S -200 2>/dev/null | awk '/^[[:space:]]*• (Working|Waiting)/{st=$0} /^─ Worked for/{st=$0} /Retry with a faster model/{m=1} /^›/{c=$0} END{ s = st ? substr(st,1,42) : (m ? "[SAFETY-MODAL]" : "(no-footer)"); printf "%-44s | %s\n", s, (c ~ /Pasted Content|<channel>/ ? "STRAND" : "ok") }'; done
 
 -S -200 (short capture = FALSE IDLE). Anchor on the `›` composer line ONLY. Busy by VERB FORM: "• Working (Nm Ns…)" = LIVE · "─ Worked for Nm Ns ─" = FINISHED.
-A counter DROP is a real turn boundary; a lockstep rise proves ONE continuous turn, NOT the absence of a compaction (only the tool log shows that).
+A counter DROP is a real turn boundary; a lockstep rise proves ONE continuous turn, not the absence of a compaction.
 - STRAND + idle = worst case, will NEVER fire: tmux send-keys -t moot-<seat> Enter, then confirm "• Working". STRAND + busy = clear it anyway.
 - Composer placeholders ("Write tests for @filename") = NOT strands. Do NOT press Enter.
 - "Additional safety checks" modal = NEVER press Enter (option 1 downgrades the model); it needs no answer.
