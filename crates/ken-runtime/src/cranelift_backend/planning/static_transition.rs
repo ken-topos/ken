@@ -18,7 +18,7 @@ use super::{
 };
 use crate::boundary_value::BoundaryReferentOwner;
 use crate::{RuntimeExpr, RuntimePartiality, RuntimeTrap, RuntimeTrapCode};
-use abi::{build_abi_plane, AbiPlane};
+use abi::{build_abi_plane, install_continuation_specialization_abi, AbiPlane};
 use semantic_ir::{
     build_semantic_plane, build_synthesized_constructor_inventory, SemanticMaterialArena,
     SemanticPlane, SemanticSourceKind, SemanticSourceSeed,
@@ -403,7 +403,7 @@ struct PlannedOccurrenceAuthority {
 /// capture values and runtime selectors never participate.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(transparent)]
-struct ContinuationSpecializationId(u32);
+pub(in crate::cranelift_backend) struct ContinuationSpecializationId(u32);
 
 /// The source ABI provenance class of one continuation input.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -2182,6 +2182,11 @@ fn continuation_owner_entry_sources(
                     AbiUnitDefinition::SchedulingEntry { .. } => {
                         return Err(planner_error(
                             "scheduling entry declares a continuation capture",
+                        ));
+                    }
+                    AbiUnitDefinition::ContinuationSpecialization { .. } => {
+                        return Err(planner_error(
+                            "a dormant continuation specialization cannot source another planner environment",
                         ));
                     }
                 }
@@ -3974,6 +3979,10 @@ impl<'src> Planner<'src> {
         self.plan.continuation_specializations = continuation_specializations;
         self.plan.continuation_specialization_calls = continuation_specialization_calls;
         validate_continuation_specialization_plan(&self.plan)?;
+        install_continuation_specialization_abi(
+            &mut self.plan.abi,
+            &self.plan.continuation_specializations,
+        )?;
         self.plan.join_results = build_join_result_plan(&self.plan, functionized_units)?;
         self.plan.validate()?;
         Ok(self.plan)
@@ -5053,6 +5062,8 @@ impl<'src> StaticTransitionPlan<'src> {
             &self.occurrence_authorities,
         )?;
         validate_continuation_specialization_plan(self)?;
+        self.abi
+            .validate_continuation_specializations(&self.continuation_specializations)?;
         self.validate_join_result_plan()?;
         Ok(())
     }
@@ -10798,7 +10809,8 @@ mod tests {
                 AbiUnitDefinition::SchedulingEntry { ingress } => {
                     Some((ingress, unit.header().parameters))
                 }
-                AbiUnitDefinition::ClosureBody { .. } => None,
+                AbiUnitDefinition::ClosureBody { .. }
+                | AbiUnitDefinition::ContinuationSpecialization { .. } => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(
@@ -10854,7 +10866,8 @@ mod tests {
             .into_iter()
             .filter_map(|unit| match unit.definition() {
                 AbiUnitDefinition::ClosureBody { .. } => Some(unit.header().captures),
-                AbiUnitDefinition::SchedulingEntry { .. } => None,
+                AbiUnitDefinition::SchedulingEntry { .. }
+                | AbiUnitDefinition::ContinuationSpecialization { .. } => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(capture_counts, vec![2]);
@@ -10874,7 +10887,8 @@ mod tests {
             .into_iter()
             .filter_map(|unit| match unit.definition() {
                 AbiUnitDefinition::ClosureBody { .. } => Some(unit.header().captures),
-                AbiUnitDefinition::SchedulingEntry { .. } => None,
+                AbiUnitDefinition::SchedulingEntry { .. }
+                | AbiUnitDefinition::ContinuationSpecialization { .. } => None,
             })
             .collect::<Vec<_>>();
         assert_eq!(
@@ -11796,6 +11810,23 @@ mod tests {
             .collect::<BTreeSet<_>>();
         assert_eq!(targets.len(), 2, "D5: one target was orphaned or conflated");
         validate_continuation_specialization_plan(&plan).expect("exact closure");
+        plan.abi
+            .validate_continuation_specializations(&plan.continuation_specializations)
+            .expect("exact dormant ABI");
+        assert_eq!(
+            plan.abi.continuation_descriptors.len(),
+            plan.continuation_specializations.len(),
+            "D1: every interned specialization needs one explicit descriptor"
+        );
+        for (index, descriptor) in plan.abi.continuation_descriptors.iter().enumerate() {
+            assert_eq!(
+                descriptor.definition,
+                AbiUnitDefinition::ContinuationSpecialization {
+                    specialization: ContinuationSpecializationId(index as u32),
+                },
+                "D1: a continuation descriptor masqueraded as an existing unit arm"
+            );
+        }
 
         // Dormancy is a capability property: the existing emission population
         // is still exactly the pre-existing ABI descriptors. No accessor above
@@ -11803,6 +11834,160 @@ mod tests {
         assert_eq!(
             plan.emittable_units().expect("existing units").len(),
             plan.abi.descriptors.len()
+        );
+    }
+
+    /// MEASURED: one extra exact continuation input adds one capture slot and
+    /// no other slot. A count-only or provenance-wide projection would leave
+    /// the slot count unchanged or add a caller-environment tail.
+    ///
+    /// CLAIMED: AC-2's frame length is exactly ordinary parameters plus exact
+    /// continuation captures plus the fixed convention.
+    ///
+    /// GAP: this is the dormant descriptor projection; Slice 3 still owns
+    /// transferring the values at a call site.
+    ///
+    /// Promise class: durable invariant.
+    #[test]
+    fn contspec_abi_added_capture_moves_slot_count_by_exactly_one() {
+        let plan = contspec_plan();
+        let mut base_units = vec![plan.continuation_specializations[0].clone()];
+        base_units[0].id = ContinuationSpecializationId(0);
+        let mut base = AbiPlane::default();
+        install_continuation_specialization_abi(&mut base, &base_units)
+            .expect("base descriptor plans");
+
+        let mut added_units = base_units.clone();
+        let added_unit = &mut added_units[0];
+        let mut added = added_unit
+            .key
+            .continuation_inputs
+            .last()
+            .expect("fixture has a continuation input")
+            .clone();
+        added.ordinal = u32::try_from(added_unit.key.continuation_inputs.len())
+            .expect("fixture input count fits");
+        added.ordinary_abi_position = added_unit
+            .key
+            .ordinary_parameters
+            .checked_add(added.ordinal)
+            .expect("fixture ABI position fits");
+        added_unit.key.continuation_inputs.push(added);
+        let mut extended = AbiPlane::default();
+        install_continuation_specialization_abi(&mut extended, &added_units)
+            .expect("extended descriptor plans");
+
+        let base_descriptor = base.continuation_descriptors[0];
+        let extended_descriptor = extended.continuation_descriptors[0];
+        assert_eq!(
+            extended_descriptor.header.captures,
+            base_descriptor.header.captures + 1,
+            "AC-2: added capture did not add exactly one capture slot"
+        );
+        assert_eq!(
+            extended_descriptor.slots.len,
+            base_descriptor.slots.len + 1,
+            "AC-2: broken projection produced the wrong unchanged/tail slot count"
+        );
+        assert_eq!(
+            extended_descriptor.header.parameters, base_descriptor.header.parameters,
+            "AC-2: adding a capture changed the ordinary parameter prefix"
+        );
+    }
+
+    /// MEASURED: three independent compile-valid corruptions change the exact
+    /// source owner, the ownership/storage lifetime pair, or the closed
+    /// referent-affinity set of a runtime-reaching continuation input. Each is
+    /// refused by its named D3 comparison.
+    ///
+    /// CLAIMED: the descriptor cannot launder a planner-projected input into a
+    /// plausible slot with different owner, lifetime, or affinity.
+    ///
+    /// GAP: this checks descriptor authority before activation; Slice 3 must
+    /// still prove that lowering consumes this descriptor.
+    ///
+    /// Promise class: durable mutation proof.
+    #[test]
+    fn contspec_abi_refuses_owner_lifetime_and_affinity_disagreement() {
+        let plan = contspec_plan();
+
+        let mut wrong_owner = plan.abi.clone();
+        wrong_owner.continuation_inputs[0].source_owner = PredeclaredFunctionId(u32::MAX);
+        assert_eq!(
+            wrong_owner
+                .validate_continuation_specializations(&plan.continuation_specializations)
+                .unwrap_err(),
+            planner_error(
+                "continuation ABI input source owner disagrees with the planner projection"
+            )
+        );
+
+        let mut wrong_lifetime = plan.abi.clone();
+        let descriptor = wrong_lifetime.continuation_descriptors[0];
+        let capture = descriptor.slots.start as usize + descriptor.header.parameters as usize;
+        wrong_lifetime.continuation_slots[capture].ownership = AbiOwnership::BorrowedForActivation;
+        wrong_lifetime.continuation_slots[capture].storage_owner = AbiStorageOwner::ArtifactStatic;
+        assert_eq!(
+            wrong_lifetime
+                .validate_continuation_specializations(&plan.continuation_specializations)
+                .unwrap_err(),
+            planner_error("continuation ABI input lifetime disagrees with the planner projection"),
+            "D3: a runtime-reaching input was accepted with a contradictory durable borrow"
+        );
+
+        let mut wrong_affinity = plan.abi.clone();
+        let affinity = wrong_affinity.continuation_inputs[0]
+            .referent_affinity
+            .start as usize;
+        let original = wrong_affinity.continuation_affinities[affinity];
+        wrong_affinity.continuation_affinities[affinity] = match original {
+            BoundaryReferentOwner::NoReferent => BoundaryReferentOwner::InvocationArena,
+            BoundaryReferentOwner::PersistentStore | BoundaryReferentOwner::InvocationArena => {
+                BoundaryReferentOwner::NoReferent
+            }
+        };
+        assert_eq!(
+            wrong_affinity
+                .validate_continuation_specializations(&plan.continuation_specializations)
+                .unwrap_err(),
+            planner_error(
+                "continuation ABI input referent affinity disagrees with the planner projection"
+            )
+        );
+    }
+
+    /// MEASURED: exact preflight leaves every continuation-ABI backing vector's
+    /// capacity unchanged while each descriptor is appended. Skipping preflight
+    /// makes the first append grow storage and reaches the exact D4 refusal.
+    ///
+    /// CLAIMED: construction and validation add no allocation on the individual
+    /// boundary path; all compiler-side backing storage is reserved before that
+    /// path starts.
+    ///
+    /// GAP: capacity growth observes allocations owned by this representation,
+    /// not unrelated allocator traffic elsewhere in planning.
+    ///
+    /// Promise class: durable mutation proof.
+    #[test]
+    fn contspec_abi_preflight_makes_boundary_construction_allocation_free() {
+        let exact = contspec_plan();
+        exact
+            .abi
+            .validate_continuation_specializations(&exact.continuation_specializations)
+            .expect("preflighted construction and allocation-free validation pass");
+
+        let expr = Box::leak(Box::new(contspec_nested_fixture()));
+        abi::SKIP_CONTINUATION_ABI_PREFLIGHT.with(|mutation| mutation.set(true));
+        let allocating = plan_static_transition_graph(expr, &BTreeMap::new());
+        abi::SKIP_CONTINUATION_ABI_PREFLIGHT.with(|mutation| mutation.set(false));
+        let error = match allocating {
+            Ok(_) => panic!("D4: allocating continuation ABI unexpectedly planned"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error,
+            planner_error("continuation ABI descriptor construction allocated after preflight"),
+            "D4: the compile-valid allocating choice did not make the gate red"
         );
     }
 
