@@ -69,10 +69,8 @@ the answer yourself rather than take it on this page's authority.
    operations remain host/runner-side and unbound in Ken. Nor does the
    fragment compare authorities at runtime; the authority index in `Cap a`
    makes the distinction static
-   (chapter
-   `library/learn/reading-ken/04-effects-capabilities-and-authority.md`,
-   "Capabilities" and "Corpus Boundary"; issue
-   `docs/program/issues/CAT-CAPEX.md`).
+   (`catalog/packages/Capability/Filesystem/Authority.ken.md`;
+   `crates/ken-elaborator/tests/cat_capex_authority.rs`).
 
 ## 05 — Packages and provenance
 
