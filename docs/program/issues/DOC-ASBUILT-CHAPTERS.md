@@ -1,7 +1,7 @@
 ---
 id: DOC-ASBUILT-CHAPTERS
 title: "As-built slice 4 — reconcile the four remaining reading-ken chapters together; they share 9 sources and their claim classes cross page boundaries"
-status: ready
+status: merged
 owner: doc
 size: L
 gate: none
@@ -10,6 +10,33 @@ blocks: [DOC-ASBUILT-AUDIT]
 github: null
 origin: "Steward 2026-08-01, phase A slice 4 of DOC-ASBUILT-AUDIT, measured at origin/main 181f1e58. Cut as one WP on the measured fact that 01-anatomy's sources are a strict subset of 05-packages's and the four chapters share 9 distinct sources total."
 ---
+
+> # ✅ MERGED 2026-08-01 — PR #1294, `origin/main = 62a8250d`
+>
+> Exact candidate `e0b8196de105172b3c5e22cfde577ae129d31e61`, tree
+> `270e96e845c0d0777da7d588ed1be83bfe3fa905`. Librarian QA approved
+> (`evt_5r0mwpm2rx31n`); Decision `dec_668pazj4248vv` resolved.
+>
+> **All four post-conditions predicted before the merge came back exact:**
+> post-merge `origin/main^{tree}` = `270e96e8…`; the blob at
+> `library/learn/reading-ken/03-assurance-and-trust.md` = `c8207af4…` (was
+> `2be7aa3b…`); `git diff --name-only c8d978f5 62a8250d` = exactly that one
+> path; and `gen-doc-status.sh --check` still exits 1 at **32 lines / 28 rows**
+> with SHA-256 `349d545262be44c65a87b26a9aec730fdb9f23e7dbb9273fbf16c140ae8f75ce`
+> — byte-identical to the baseline pinned before any work began.
+>
+> ⭐ **One page edited of four, and that is the correct outcome.** A drifted
+> source does not entail a false claim in every citing page: the stale
+> unconfined-authority claim in `03-assurance-and-trust.md` was false and is
+> repaired; the other three chapters were reconciled against their current
+> blobs and found still true. ⚠ The evidence that nothing was *missed* is not
+> the edit count — it is the Librarian's independent rerun of the byte-identical
+> drift control, which is what makes "reconciled, no repair needed" a
+> measurement rather than a claim.
+>
+> ⚠ The first candidate `7e7cf099` was **rejected** by the Librarian for a stale
+> claim in the replacement text; `e0b8196d` is the one-word corrective fold atop
+> it. ⛔ No approval transferred — the Librarian re-reviewed the fresh SHA.
 
 > # ▶ SLICE 4 OF PHASE A — FOUR CHAPTERS, ONE WP, AND THE GROUPING IS THE POINT
 >
