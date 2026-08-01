@@ -40,9 +40,18 @@ load and follow it after this generic archetype.
   — or `parent_event_id` on the first reply to open the thread; `reply_to` is the
   shortcut. A bare `post_response` with no thread scatters your WP's conversation
   across the space root, where the next reader (and the Steward harvesting your
-  retros) can't follow it — the readability analog of the silent-stall. If your
-  own kickoff was unthreaded, open a WP thread on pickup and keep the ring in
-  it.
+  retros) can't follow it — the readability analog of the silent-stall.
+  ⭐⭐ **RESTATED 2026-08-01 (operator) — you may NEVER root a post.** Top level
+  is a closed list: `steward`, `librarian`, `research`. ⇒ ⛔ **Your kickoff is
+  not a root post** — it is a **reply under the Steward's WP release**, whose
+  `event_id` is that WP's thread anchor. ⭐ The first reply opens the thread with
+  `post_response(parent_event_id=<release evt_>)`; ⛔ `reply_to` **404s** on a
+  root event that has no thread yet. Everything after that uses `thread_id`.
+  ⚠ **If a WP is SPLIT by a recut**, its thread is **abandoned**: post one final
+  line naming the successor WP ids and wait for the Steward's fresh kick per
+  component. ⛔ Do not carry a split WP's ring on in the old thread. A *respin*
+  or an in-place rescope keeps the thread — the test is whether the **set of WPs
+  changed** (`COORDINATION §4c`).
 - **Pipeline-ready predicate:** when a WP finishes, auto-start the next *ready*
   WP without waiting on the operator. Ready = scope/spec exists, open questions
   resolved, dependencies merged to `main`, no operator pause.

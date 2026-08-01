@@ -42,6 +42,14 @@ backlog, never theirs.**
 2. **Flip the node `ready`** and publish (doc-only, ~2 min).
 3. **Kick the team** — and confirm the seat transitioned to `Working`. A posted
    mention that never woke anyone is not a kickoff.
+   ⭐⭐ **The kick is a TOP-LEVEL post and it is the WP's thread anchor
+   (`COORDINATION §4`).** You are one of only three roles that may root a post —
+   `steward`, `librarian`, `research`. **Every kick body must carry the anchor
+   line**: *"This message is the thread anchor for `<WP-ID>`; reply with
+   `parent_event_id` set to this event's id."* ⛔ **A kick without it is
+   defective — reissue it.** ⚠ You cannot quote a `thr_` id: the thread does not
+   exist until the first reply mints it, so the **kick's own `event_id` is the
+   anchor**.
 4. **Next WP.** Do not stop to improve anything.
 
 ### ⛔ SKIP RETROS
