@@ -76,9 +76,14 @@ been reconciled.
 
 ## ⭐ Why this page is high-yield
 
-**Five of the eleven are `catalog/**.ken.md` — checked code**, and this page's
-claims about them are *worked solutions*, so the oracle is unusually direct:
-⭐ the exercise either still resolves against the current package or it does not.
+⚠ **CORRECTED 2026-08-01 (Librarian, `evt_4gxaxq79kctr`) — it is FOUR, not
+five.** The eleven split **4 `catalog/**.ken.md` + 2 checked Rust
+(`cranelift_backend.rs`, `px4b_native_production.rs`) + 5 `spec`/`docs`.**
+⭐ Six of the eleven are **checked code** either way, and this page's claims
+about them are *worked solutions*, so the oracle is unusually direct: the
+exercise either still resolves against the current artifact or it does not.
+⛔ The miscount called two Rust files "catalog code" — different trees, different
+oracles.
 
 ⚠ **`spec/90-open-decisions.md` carries the same sharpest-risk shape as slice 2**
 — a decision described as *open* may now be **settled**, and settled-vs-open

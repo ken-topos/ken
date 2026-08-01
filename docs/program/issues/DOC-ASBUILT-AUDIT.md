@@ -199,7 +199,33 @@ smaller slice, not as an error.
 ## ⛔ What this node does NOT authorize
 
 - ⛔ **No ledger write in phase A**, for any reason, including "the row is
-  obviously fine."
+  obviously fine." ⚠ **"Ledger" means `library/SOURCE-ATTESTATIONS` and
+  `library/STATUS.md`** — those stay frozen until phase B, absolutely.
+
+> ### ⭐⭐ CLARIFIED 2026-08-01 — REGISTERING A CITATION ≠ RE-STAMPING AN ATTESTATION
+>
+> ⚠ **The ban was written as "no ledger, manifest, or `STATUS.md` write", and
+> that conflated two operations.** The one it exists to prevent is
+> **re-stamping**: writing a fresh blob OID over a drifted row, which converts an
+> honest red gate into a false green one *without anyone reading the claim*.
+>
+> ⭐ **Adding a `sources` entry to `library/manifest.toml` asserts a citation
+> edge. It asserts nothing about currency, and it cannot make the gate green.**
+>
+> ⚠ **Withholding it is not neutral.** Slice 3 found an answer grounded in two
+> artifacts its manifest record did not name (`evt_3wej9paqbwf23`) ⇒ **a future
+> change to either oracle would not identify that page as a consumer.** ⭐ That is
+> the *precise* currency hole this campaign exists to close — so refusing the
+> registration would have the campaign ship a page that is sentence-correct and
+> structurally still stale.
+>
+> ⛔ **It is granted per-slice, never standing, and only on THREE measured
+> conditions:** the path is **already attested** (⇒ no new row), the path is
+> **not in the drift population** (⇒ the block cannot move), and the page
+> **demonstrably consumes** it. ⭐ The control is a **byte-identical**
+> `gen-doc-status.sh --check`, mutation-probed — ⛔ not the argument above.
+> ⇒ ⚠ **A later slice must route it and have the three conditions re-derived**;
+> ⛔ this paragraph is not precedent to cite.
 - ⛔ **No `library/STATUS.md` regeneration** before phase B — `gen-doc-status.sh`
   cannot even complete while the 27 stand.
 - ⛔ **No new CI gate asserting facts about source lines** (operator test
