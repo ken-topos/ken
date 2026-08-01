@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-01 15:06:24Z — from 134 issue file(s) in `docs/program/issues/`.
+2026-08-01 15:29:26Z — from 135 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -63,6 +63,7 @@ the committed file matches the generator's output.
 | `CONF-FMT8-LEVELTOK` | FMT8's fixture is unproducible: the row demands a 'genuine level-token fixture' but the lexer has no Level/Label token kind and never will under endpoint (b) | draft | spec-enclave | S | none | — |
 | `CONF-SEC4-REFL-PAIR` | Sec4's C1/C2 refl pair is stale against ADR-0013: the true arm is unreachable and the false arm is green for the wrong reason | draft | spec-enclave | S | none | — |
 | `DOC-ASBUILT-AUDIT` | As-built reconciliation — 27 cited sources have drifted from their attestations, so the library's currency claim is unbacked corpus-wide | ready | doc | L | none | — |
+| `DOC-ASBUILT-EXECUTION` | As-built slice 2 — reconcile 06-execution.md against its 15 drifted cited sources, the largest phase-A population | ready | doc | L | none | — |
 | `DOC-ASBUILT-FRAGMENTS` | As-built slice 1 — reconcile fragments.md against its 9 drifted cited sources; it is the keystone because 7 other documents cite it | ready | doc | M | none | — |
 | `DOC-ATTEST-LIVING` | attesting living tracker files makes every routine WP status flip redden the currency gate | closed | doc | S | none | — |
 | `DOC-CAP-ASBUILT` | The capability chapter tells readers the catalog has no checked authority exemplar; CAT-CAPEX adds one, falsifying that claim in two places | merged | doc | S | none | — |
@@ -112,7 +113,7 @@ the committed file matches the generator's output.
 | `RT-CONTSPEC-ABI` | ContinuationSpecialization slice 2 — land the explicit unit/descriptor projection and the ABI, owner/lifetime/affinity and zero-allocation negative gates, still DORMANT | ready | runtime | M | none | — |
 | `RT-CONTSPEC-LOWER` | ContinuationSpecialization slice 3 — attach the token at each producer alternative, emit the direct call before the identity-erasing join, close nested recursion and the ledgers, then ACTIVATE | draft | runtime | L | none | — |
 | `RT-CONTSPEC-PLANNER` | ContinuationSpecialization slice 1 — land the planner closure DORMANT: exact ordered projection, full-key interning before discovery, exact causal edge tokens, finite recursion | ready | runtime | M | none | — |
-| `RT-CONTSPEC-SUBSTRATE` | ContinuationSpecialization slice 0 — re-derive and independently gate the DORMANT D7 substrate: closed case-emission reachability, exact occurrence/owner/lifetime authority, pre-allocation closure | ready | runtime | M | none | — |
+| `RT-CONTSPEC-SUBSTRATE` | ContinuationSpecialization slice 0 — re-derive and independently gate the DORMANT D7 substrate: closed case-emission reachability, exact occurrence/owner/lifetime authority, pre-allocation closure | merged | runtime | M | none | — |
 | `RT-DECL-CLOSURE-PORT` | Transparent-declaration-closure emission port — a retained TransparentDeclarationClosure residual forces the whole object onto the monolithic RecursiveDescent root, which exceeds Cranelift's per-function ceiling | active | runtime | L | none | — |
 | `RT-DESCENT-RETIRE` | Retire RecursiveDescent — delete the migration selector, the residual enum, the authority variant, and the recursive-descent emission lane | ready | runtime | M | none | — |
 | `RT-EFFECT-DIFF` | One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can | ready | runtime | L | none | — |
@@ -181,7 +182,7 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 - `DOC-ASBUILT-FRAGMENTS` — As-built slice 1 — reconcile fragments.md against its 9 drifted cited sources; it is the keystone because 7 other documents cite it
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
-- `RT-CONTSPEC-SUBSTRATE` — ContinuationSpecialization slice 0 — re-derive and independently gate the DORMANT D7 substrate: closed case-emission reachability, exact occurrence/owner/lifetime authority, pre-allocation closure
+- `RT-CONTSPEC-PLANNER` — ContinuationSpecialization slice 1 — land the planner closure DORMANT: exact ordered projection, full-key interning before discovery, exact causal edge tokens, finite recursion
 - `RT-EFFECT-DIFF` — One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can
 - `RT-FNSPLIT-B2O-CHECK` — the B2O checking layer advertises more than it enforces — structural closure for the item enumerator and reachability for the validator arms
 
@@ -204,6 +205,7 @@ is itself not yet `merged`/`closed`:
 - `ABI-S5` blocked by `PX9` (status: draft)
 - `ABI-S6` blocked by `ABI-S1` (status: draft)
 - `DOC-ASBUILT-AUDIT` blocked by `DOC-ASBUILT-FRAGMENTS` (status: ready)
+- `DOC-ASBUILT-EXECUTION` blocked by `DOC-ASBUILT-FRAGMENTS` (status: ready)
 - `DS-9` blocked by `KERNEL-NESTED-IND` (status: active)
 - `F4` blocked by `A3` (status: draft)
 - `NATIVE-HANDLE-CARRIER` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
@@ -224,7 +226,6 @@ is itself not yet `merged`/`closed`:
 - `RT-BACKEND-MODULE-SPLIT` blocked by `RT-DESCENT-RETIRE` (status: ready)
 - `RT-CONTSPEC-ABI` blocked by `RT-CONTSPEC-PLANNER` (status: ready)
 - `RT-CONTSPEC-LOWER` blocked by `RT-CONTSPEC-ABI` (status: ready)
-- `RT-CONTSPEC-PLANNER` blocked by `RT-CONTSPEC-SUBSTRATE` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
 - `RT-DESCENT-RETIRE` blocked by `RT-SEED-CALL-PORT` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-PRODUCER-MATCH-PORT` (status: ready)
