@@ -37,10 +37,11 @@ includes the manifest every page registers in, the generated status page, and
 the gates that keep both honest — never a hand-typed date, never an
 unregistered page, never a broken link, and never an unnoticed stale source.
 
-`catalog/guide/`'s checked literate guides have **not moved yet** — they
-stay exactly where they are until their `ken example`/`ken reject` fence
-gate lands and passes (Wave 3). The plan for what moves, what stays
-canonical, and what becomes a pointer is recorded in
+`catalog/guide/`'s checked literate guides have **not moved yet**. Wave 3
+remains map-only and cannot be framed until the Steward reconciles a
+migration-local or release-point verification form, mutation-proven for both
+fence polarities. The plan for what moves, what stays canonical, and what
+becomes a pointer is recorded in
 [`docs/program/13-documentation-migration-ledger.md`](../docs/program/13-documentation-migration-ledger.md).
 
 ## Scope and authority
