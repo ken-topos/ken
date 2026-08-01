@@ -5,34 +5,68 @@ status: active
 owner: runtime
 size: L
 gate: none
-depends_on: []
+depends_on: [RT-CONTSPEC-LOWER]
 blocks: [RT-DESCENT-RETIRE]
 github: null
 origin: Operator directive 2026-07-29 — prioritize replacement of RecursiveDescent, migrate the remaining residual classes, do not linger half-migrated. Campaign docs/program/16-recursive-descent-retirement.md. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> # ⛔⛔ THIS NODE IS IN FLIGHT **NOW**, ATOMICALLY WITH [[RT-DECL-CLOSURE-PORT]]
+> # ⛔⛔ RECUT 2026-08-01 — THIS NODE NO LONGER DELIVERS DIRECTLY
 >
-> ⚠ **It is not queued, and it is no longer "sixth".** Since 2026-07-29 it is
-> being built as **one candidate** with [[RT-DECL-CLOSURE-PORT]]'s `D7` — the
-> `D7` boundary-use contract and this node's capture transport turned out to be
-> the same mechanism, so they cannot land apart.
+> It closes when [[RT-CONTSPEC-LOWER]] merges.
 >
-> | fact | value |
+> **The Architect's second WIP audit (`evt_4t09329vdrf`) returned outcome (c):
+> this contract is mis-sized as one implementer bite.** Two runs against it —
+> the 30-hour first run and the corrected re-kickoff — produced a cumulative
+> **10 files, +10,193/−2,047** with **no candidate, no QA route, and no proved
+> checkpoint** at any point.
+>
+> ⛔ **The semantics are NOT recut.** The ruling at `evt_7dhwrk26ks9m0` stands
+> unchanged, and the mechanism direction was confirmed correct in the same
+> audit. **Only the delivery shape changed.** Work now runs through three
+> staged slices, in order:
+>
+> | slice | node | activates? |
+> |---|---|---|
+> | 1 | [[RT-CONTSPEC-PLANNER]] — planner closure | ⛔ no, dormant |
+> | 2 | [[RT-CONTSPEC-ABI]] — unit/descriptor + ABI/lifetime/affinity gates | ⛔ no, dormant |
+> | 3 | [[RT-CONTSPEC-LOWER]] — branch lowering, ledgers, witness, CI | ✅ **yes** |
+>
+> ⭐ **The frozen state is durable:** `465fab90767a808edac79e665a1055b81206720b`
+> on `origin/preserved/rt-recursor-freeze-465fab90` (tree `aa7571a0`, parent
+> `fbfa2403`, 173 files, +4267/−7885). It is a **prototype and reference**,
+> ⛔ **not a green checkpoint and not acceptance evidence.**
+>
+> ⚠ **`depends_on` now names [[RT-CONTSPEC-LOWER]].** That edge encodes *this
+> node closes after slice 3*, which is exactly right. ⛔ It does **not** reopen
+> the atomicity note below — see it for why [[RT-DECL-CLOSURE-PORT]] is still
+> not a dependency.
+
+> # ⛔ STILL ATOMIC WITH [[RT-DECL-CLOSURE-PORT]]
+>
+> ⛔ But **no longer one candidate.**
+>
+> ⚠ **It is not queued, and it is not "sixth".** Since 2026-07-29 it has been
+> built together with [[RT-DECL-CLOSURE-PORT]]'s `D7` — the `D7` boundary-use
+> contract and this node's capture transport are the **same mechanism**, so they
+> cannot *land* apart. ⭐ **That is still true.** What changed on 2026-08-01 is
+> that they are no longer *built* in one bite.
+>
+> | fact | value **(corrected 2026-08-01 — the recut changed every row but the last)** |
 > |---|---|
-> | branch | `wp/RT-DECL-CLOSURE-PORT` — ⚠ **one branch for two nodes** |
-> | PR | **one** PR carries both |
-> | tracker flip | ⛔ both nodes flip `merged` in **one** commit |
-> | CI | `rt_parity_native` is this node's **own** job |
+> | branch | ⛔ **one branch per slice**, not `wp/RT-DECL-CLOSURE-PORT` |
+> | PR | ⛔ **three** PRs — slices 1 and 2 land dormant, slice 3 activates |
+> | tracker flip | ⛔ **three** nodes flip `merged` in **one** commit when [[RT-CONTSPEC-LOWER]] merges: this one, [[RT-DECL-CLOSURE-PORT]], and the slice |
+> | CI | `rt_parity_native` is this node's **own** job — ⚠ meaningful only at slice 3 |
 >
-> ⛔ **`depends_on: []` is deliberate — do NOT "fix" it by adding
-> [[RT-DECL-CLOSURE-PORT]].** A dependency edge encodes *after*; these are
-> **siblings in one atomic set**, not a sequence. The edge that keeps this node
-> off the releasable frontier is its `active` status, nothing else.
+> ⛔ **`depends_on` does NOT name [[RT-DECL-CLOSURE-PORT]], and that is
+> deliberate — do not "fix" it.** A dependency edge encodes *after*; these two
+> are **siblings in one atomic set**, not a sequence. The edge it *does* carry
+> names [[RT-CONTSPEC-LOWER]], which is a genuine *after*.
 >
-> ⚠ **For whoever publishes:** the branch name names only one of the two nodes.
-> ⛔ Do not describe this node's recursor code as a `D7` deliverable in a PR body
-> or a merge post.
+> ⚠ **For whoever publishes:** ⛔ do not describe this node's recursor code as a
+> `D7` deliverable in a PR body or a merge post — and at slices 1 and 2, ⛔ do
+> not describe the PR as delivering **either** node. They deliver a slice.
 
 > # ⭐⭐ THIS NODE RETIRES **TWO** RESIDUAL CLASSES, BECAUSE THEY ARE ONE MECHANISM
 >
@@ -66,9 +100,12 @@ across a separately owned unit boundary — or be shown not to need to cross.
 
 ⚠ **This section used to read "and it is sixth", and to offer `D1` as a probe
 that *could* be pulled forward.** Both are now spent: the node was pulled to
-**first** and is in flight atomically with [[RT-DECL-CLOSURE-PORT]] (see the
-banner above), so the risk this section hedged against — learning of
-infeasibility after five nodes of investment — is no longer the risk being run.
+**first** and its mechanism has been built against real refusals, so the risk
+this section hedged against — learning of infeasibility after five nodes of
+investment — is no longer the risk being run.
+⚠ **It is no longer "in flight" either** — as of 2026-08-01 it is frozen and
+delivers through the three slices in the top banner. ⛔ Read that banner, not
+this paragraph, for the current delivery shape.
 
 ⭐ **What actually happened is better than the mitigation.** The transport is
 being built against real refusals on a live branch rather than probed in the
