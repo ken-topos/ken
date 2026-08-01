@@ -33,7 +33,7 @@ b30b91ea4ea30703a12264b70bbe9807107db2dd	crates/ken-elaborator/tests/n2_in_repo_
 d317ad9c2c07dcb8e330a4e6fb2fd08cdf4efd02	crates/ken-runtime/src/cranelift_backend.rs
 d6ca1620ba2af48d1bfdddef07fe32f491d2c724	docs/PRINCIPLES.md
 096765c6a6fd91b48a0d997ea21730ffa39bd50e	docs/program/07-catalog-style-guide.md
-05a295e4212b10318aecd80486971bed897c8716	docs/program/12-documentation-program.md
+0d1e2ad68be22ac56f1cf8fc65d1b3db15b6207a	docs/program/12-documentation-program.md
 836e59274b34ea3a20d956dfd53ce344f1a7e001	docs/program/issues/CAT-CAPEX.md
 286e23e0c7c362227ff555528b759722d9798930	docs/program/issues/DOC-W1.md
 5ffe02bd6938e15a49639dcd76c8276762d32287	docs/program/issues/DOC-W2.md

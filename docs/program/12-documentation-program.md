@@ -143,10 +143,15 @@ retrofit.
 threatens them.** `catalog/guide/`'s files are literate `.ken.md` whose fences
 are checked. Moved into `library/` as prose, they silently stop being checked
 and become the exact drift-prone duplicate D1 exists to prevent — **and they
-will still look authoritative.** So: **the `ken example` / `ken reject` fence
-gate must exist and pass before any `catalog/guide/` content moves.** Gate
-before migration, not after. This is the one ordering constraint in the
-program.
+will still look authoritative.** So: **the `ken example` / `ken reject` fences
+must be verified over each file before it moves.** Gate before migration, not
+after. This is the one ordering constraint in the program.
+
+**The form is migration-local, settled §4** — the migrating WP exercises the
+real extractor over exactly the files it moves and pins the fence count per
+file, rather than a standing CI gate. The detector's both-polarity mutation
+proof already runs live in CI; the registry that once applied it to the corpus
+does not run at all.
 
 **A generated corpus can be confidently wrong.** Generation removes
 transcription error; it does not make the generator right — R1 in
@@ -184,7 +189,7 @@ that inherits its substrate**, and there is no parallel track to catch it.
 | 1 | The read-Ken spine, **fragment-based** — introduction, quickstart, reading curriculum taught from real checked package fragments. **Complete-program work DEFERRED to Wave 1b** | ✅ **LANDED** — `issues/DOC-W1.md`; chapters 01–06, fragments, exercises, solutions, quickstart, introduction all present and registered |
 | **1b** | The whole-program reading pass: curriculum ch. 7, worked end-to-end review with an explicit verdict, on one real catalog **program** | not framed — ⛔ **gated on basic capabilities landing** (operator, 2026-07-22) |
 | 2 | Agent core + task packs; refactor product facts out of `write-ken`; cold-context evals. **`ffi-and-platform` deferred** | ✅ **LANDED** — `issues/DOC-W2.md`; four agent core modules, six task modules/packs, schemas, cold-context fixtures, recorded eval results |
-| 3 | Conceptual guide + how-tos; `catalog/guide/` migration (**gated on the fence gate, §3**) | map only — §4b · ⛔ **its §3 precondition is now UNDERSPECIFIED, see below** |
+| 3 | Conceptual guide + how-tos; `catalog/guide/` migration (**fences verified per file before it moves, §3**) | map only — §4b · its §3 precondition is **RECONCILED**, see below — no longer a blocker |
 | 4 | Complete reader-oriented reference | map only — §4b |
 | 5 | Comprehensive catalog reference (**re-check D4 first**) | map only — §4b |
 | 6 | Release, offline, continuous as-built operation | map only — §4b |
@@ -194,29 +199,92 @@ without declaring what it is, what grounds it, and how its currency is
 checked. Everything after it inherits that substrate, so it is worth getting
 right before Wave 1 produces content at volume.
 
-> ### ⛔ Wave 3's §3 fence-gate precondition needs a Steward reconciliation first
+> ### Wave 3's §3 fence-gate precondition — RECONCILED (Steward, 2026-08-01)
 >
 > §3 gates the `catalog/guide/` migration on the `ken example` / `ken reject`
-> fences *"remaining checked and the checker being mutation-proven"* — invalid
-> positive examples must fail, and stale rejects that now elaborate must fail.
-> ⭐ **The substantive requirement stands: migrating prose whose examples are
-> not actually checked is exactly the corpus lying to readers that this program
-> exists to prevent.**
+> fences *"remaining checked and the checker being mutation-proven"*. **The
+> substantive requirement stands**: migrating prose whose examples are not
+> actually checked is exactly the corpus lying to readers that this program
+> exists to prevent. What needed settling was the *form*, and it is settled
+> here. **Wave 3 is no longer blocked on this.**
 >
-> ⚠ **But the FORM the precondition assumes no longer exists.** Measured
-> 2026-08-01 at `6de2a099`: `check_checked_examples` and its fixture controls
-> are still present in `crates/ken-cli/tests/library_documentation_gates.rs`,
-> but **`LIB-GATE-DECOUPLE` removed the live-corpus invocation** under the
-> operator's no-live-doc-CI-coupling ruling. ⇒ A tested detector exists with **no
-> merge-time corpus gate behind it.**
+> **The precondition has two halves, and they are in different states.**
 >
-> ⛔ **So "the gate exists and passes" is not a condition anyone can currently
-> discharge, and reinstating a global CI gate to discharge it would walk back an
-> operator ruling.** The reconciliation — a migration-local or release-point
-> verification form, mutation-proven on **both** fence polarities, without
-> reinstating global coupling — is **Steward-owned and owed before any Wave 3
-> content is framed.** ⛔ Not doc-ring scope, and ⛔ not a reason for the ring to
-> wait on Wave 3 work it has no frame for.
+> **Half one — the checker is mutation-proven on both polarities. Already
+> discharged, and live.**
+> `checked_examples_detector_rejects_invalid_example_and_stale_reject`
+> (`crates/ken-cli/tests/library_documentation_gates.rs`) is one of the file's
+> 26 ordinary `#[test]`s. It runs on every PR, plants an invalid `ken example`
+> and a stale `ken reject`, and requires the specific diagnostic from each.
+> Both polarities, in CI, today. **Nothing is owed here — do not rebuild it.**
+>
+> **Half two — the fences are actually exercised over the corpus. Not
+> discharged, and it cannot be discharged by the registry.** Measured
+> 2026-08-01 at `f31e8d94`: `VALIDATION_GATES` appears exactly twice in that
+> file — its own declaration and one comment. **No test iterates it.** All
+> eleven gate functions, `check_checked_examples` among them, occur exactly
+> twice each: their definition and their registry row. So this is not a gap
+> peculiar to checked examples — **the entire declared validation vocabulary is
+> unreachable code**, and a document's `validation` list in `manifest.toml`
+> currently names checks that nothing runs.
+>
+> **The settled form: migration-local verification at candidate time, not a
+> standing gate.** The migrating WP runs the real extractor over exactly the
+> files it moves and requires success. It does not reinstate global coupling —
+> and given the registry is inert, "restoring the gate" would mean building new
+> coupling, not restoring old, which is the operator ruling in reverse.
+>
+> **Why local is sufficient rather than a downgrade.** The hazard §3 names is
+> created *by the act of migrating* — a fence that stops being a fence when the
+> file moves — and it is fully observable *at* that act. A standing gate would
+> re-check unchanged files forever to catch something that only arises when a
+> file moves. Paired with the release-point re-stamp that `LIB-GATE-DECOUPLE`
+> established, migration-local plus release-point is the coherent pairing.
+>
+> **The control must pin the fence COUNT, not just the exit status.** Running
+> the checker over the migrated file and getting success is satisfied
+> vacuously by a migration that turned the fences into plain code blocks —
+> which is precisely the failure mode §3 is about. So the binding control is:
+> the post-migration `ken example` + `ken reject` count equals the
+> pre-migration count, per file, and is non-zero. **Fixed input measured at
+> `f31e8d94`: 40 fences across three files** — `surface-reference.ken.md` 17+7,
+> `proof-techniques.ken.md` 8+5, `decomposition-abstraction.ken.md` 3+0;
+> `README.md` carries none.
+>
+> **Unmeasured and deliberately so:** whether those 40 fences pass *today*.
+> Nothing has exercised them since the registry went inert, so a pre-existing
+> failure is possible. Establishing that baseline is the migrating WP's first
+> deliverable, not an assumption it may inherit — and a red baseline is a
+> finding to route, never something the migration quietly repairs.
+>
+> ### The fences must SURVIVE the move — citation is not available here
+>
+> **D2 is ratified and it settles the direction: migration is subsumptive.**
+> `catalog/guide/` **moves** and does not persist alongside, leaving pointers
+> rather than a second maintained guide. So the shape the Wave 1 spine uses —
+> prose in `library/` citing a checked file that stays in `catalog/` — is **not
+> available for this material.** The spine cites `catalog/packages/`, which
+> persists by design; `catalog/guide/` does not.
+>
+> ⇒ The obligation is the harder one §3 actually states: **the 40 fences must
+> still be checked after they land in `library/`.** Not preserved in place —
+> preserved *through* the move.
+>
+> **What that implies, and the one thing genuinely unknown.** `ken check`
+> selects literate extraction **by the `.ken.md` suffix**, so a checked page in
+> `library/guide/` would carry that suffix. Measured at `f31e8d94`, `library/`
+> holds **zero `.ken.md` files** and **7 ken fences across 25 documents** (six
+> plain, one `ken example`) — the corpus has never registered a literate
+> document, and whether a `.ken.md` can be a `manifest.toml` document record
+> with the generated-status machinery working over it is **unverified**. That
+> is the migrating WP's question to answer early and the Librarian's call on
+> corpus convention, not an assumption to inherit.
+>
+> **The control is therefore a conservation law, not a stay-put law:** 40
+> fences before the move, 40 after, each one still exercised by the real
+> extractor at candidate time — per file, 17+7 / 8+5 / 3+0. A migration that
+> lands the prose while the fence total drops has done exactly the thing §3
+> exists to prevent, and it will look complete.
 
 > ### Wave 0 met that exit condition only STRUCTURALLY — the gap is now CLOSED
 >
@@ -432,20 +500,24 @@ selects a pack. **This is a refactor with two live consumers — the fleet's own
 seats and any external agent — so the frame must inventory both before moving
 a fact.**
 
-### Wave 3 — conceptual guide and how-tos (MAP · gated on the fence gate)
+### Wave 3 — conceptual guide and how-tos (MAP · fence precondition RECONCILED)
 
 **Produces.** `library/guide/` filled in demand order — contracts, dependent
 data, proofs, effects, security, packages, execution — plus `library/how-to/`
 recipes driven by **actual diagnostics and recurring fleet failures**, not by
 an imagined task list. And the `catalog/guide/` migration.
 
-**⛔ This wave carries the program's one hard ordering constraint (§3).**
+**This wave carries the program's one hard ordering constraint (§3).**
 `catalog/guide/`'s four files are literate `.ken.md` whose fences are
 **checked**. Moved into `library/` as prose they silently stop being checked
 and become the exact drift-prone duplicate D1 exists to prevent — **and they
-will still look authoritative.** The `ken example` / `ken reject` fence gate
-**must exist and pass before any `catalog/guide/` content moves.** Gate before
-migration, not after.
+will still look authoritative.** The `ken example` / `ken reject` fences **must
+be verified over each file before it moves.** Gate before migration, not after.
+
+The verification form is settled in §4 and is **migration-local**: exercise the
+real extractor over exactly the files being moved, and pin the per-file fence
+count so a migration that quietly demotes fences to plain code blocks cannot
+pass on a green exit status. 40 fences across three files at `f31e8d94`.
 
 **Exit property.** *Tutorials teach, how-tos direct work, and conceptual pages
 explain; no single page is forced to do all three.* Keep explanatory pages free

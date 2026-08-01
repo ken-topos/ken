@@ -1,7 +1,7 @@
 ---
 id: DOC-ASBUILT-AUDIT
-title: "As-built reconciliation — 27 cited sources have drifted from their attestations, so the library's currency claim is unbacked corpus-wide"
-status: ready
+title: "As-built reconciliation — 28 cited sources have drifted from their attestations, so the library's currency claim is unbacked corpus-wide"
+status: merged
 owner: doc
 size: L
 gate: none
