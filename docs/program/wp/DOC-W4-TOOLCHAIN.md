@@ -37,8 +37,9 @@ Measured at `origin/main = 7fa65b20`.
 | generators in `scripts/` | exactly 3 — `gen-doc-status.sh`, `gen-progress.sh`, `gen-source-attestations.sh`. **None** extracts a declaration, keyword, syntax production, or CLI surface |
 | CLI machine-readable output | **none** — no `--format`, no JSON emission anywhere in `crates/ken-cli/src/main.rs` |
 | the task surface | **7 subcommands** — `run`, `check`, `native-build`, `fmt`, `repl`, `version`, `help` (`print_help`) |
-| the flag surface | **two** — `fmt [--check]`, and `native-build`'s positional `<output-dir>`. No other flag appears in `print_help` |
-| exit behaviour | every failure path in `main.rs` is `std::process::exit(1)`; the one exception is `run`, which exits with `outcome.exit_status` |
+| the flag surface | **five spellings across three options** — `fmt --check`; `--version` / `-V`; `--help` / `-h`. `native-build`'s `<output-dir>` is a **positional argument, not a flag** |
+| `print_help` completeness | **`print_help` omits every global flag.** `--version`, `-V`, `--help`, and `-h` are all accepted (`main.rs:30`, `main.rs:38`) and none appears in the help text. Help is *silent* about them, not contradictory |
+| exit statuses | **three classes, not two** — 29 sites `exit(1)`, **2 sites `exit(2)`**, 1 site `exit(outcome.exit_status)`. The `exit(2)` arms are `RunError::EntrypointAbiUnavailable` (`main.rs:319`) and `RunError::ConsoleAbiUnavailable` (`main.rs:334`) |
 | diagnostics | **no registry.** Order 300+ formatted-message sites, no index (measured for `DOC-W3-HOWTO`) |
 | existing task pages | `library/how-to/` holds 5 recipes over this same CLI, merged at `c777d2d4` |
 
@@ -48,8 +49,17 @@ Reproduce, read-only:
 ls scripts/ | grep '^gen-'
 grep -n 'json\|--format\|Json' crates/ken-cli/src/main.rs
 sed -n '/^fn print_help/,/^}/p' crates/ken-cli/src/main.rs
-grep -c 'process::exit(1)' crates/ken-cli/src/main.rs
+grep -oE 'process::exit\([0-9a-z_.]+\)' crates/ken-cli/src/main.rs | sort | uniq -c
+grep -nE '"--version"|"-V"|"--help"|"-h"|"--check"' crates/ken-cli/src/main.rs
 ```
+
+⚠ **The exit probe must enumerate, never count one value.** An earlier version of
+this frame used `grep -c 'process::exit(1)'` and concluded the surface was
+uniform. **A count of one value cannot establish the absence of another** — it
+returns a number whatever else is there, so it would have reported success on
+every possible source. The `sort | uniq -c` form is what found the two `exit(2)`
+arms. This is the same defect class the frame's own judgment 2 warns about, so
+treat it as a worked example rather than as a stale line.
 
 ## Three judgments, settled here so the ring does not stop for them
 
@@ -97,8 +107,19 @@ instead of dressing it up as generated.**
 - **D1 — `library/reference/toolchain/`**, one entry per real subcommand.
   `version` and `help` **do** get reference entries here (unlike the how-tos —
   a reader looking up what `version` prints is asking a lookup question).
-- **D2 — the flag and exit-code facts**, observed per D0's rule, including the
-  `run`-propagates-its-program's-status exception.
+- **D2 — the option and exit-status facts**, observed per D0's rule. The option
+  surface is `fmt --check`, `--version` / `-V`, and `--help` / `-h`;
+  `native-build`'s `<output-dir>` is a positional argument and must not be
+  documented as a flag. **The exit surface has three classes and they are not
+  equally knowable:**
+  1. **non-`run` failures at 1** — observable, so document them from runs.
+  2. **`run` propagating its program's status** — observable, so document it
+     from a run.
+  3. **the two source-declared `exit(2)` ABI-unavailable arms** — document
+     **only if you can reach one with a real CLI command.** If you cannot, record
+     them in D0 as *source-declared, unobserved*, and say nothing about them in
+     the reference. They may be unreachable from the installed prelude.
+  ⇒ **Do not restate a uniform exit rule.** There isn't one.
 - **D3 — manifest registration** for each page: `kind = "reference"`,
   `authority = "derived-reference"`, audience, availability, `sources`,
   `validation`, owner — consistent with the existing `reference` records.
@@ -113,9 +134,18 @@ instead of dressing it up as generated.**
   exit code in D1/D2 traces to a recorded run.
   *Control:* the command log, with actual output. **A fact whose only support is
   a source line fails this AC.**
-- **AC-2 — the reference is complete over its surface.** All 7 subcommands, both
-  flags, and the exit-code rule including the `run` exception.
-  *Control:* `print_help`'s subcommand list against the page set.
+- **AC-2 — the reference is complete over its surface.** All 7 subcommands; the
+  three options in their five accepted spellings; `<output-dir>` classified as
+  positional; and the exit surface as D2's three classes, with class 3 present
+  only if observed.
+  *Control:* `print_help`'s subcommand list against the page set, **plus** the
+  enumerating exit probe and the flag-spelling grep. ⚠ **`print_help` is not a
+  sufficient control on its own** — it omits every global flag, which is how the
+  first version of this frame undercounted the option surface.
+- **AC-2a — `print_help`'s omissions are reported, not silently repaired.** The
+  help text documents no global flag. The reference documents them because they
+  are real; the gap between the two is a finding for whoever owns `ken-cli`.
+  *Control:* the finding exists and names the four omitted spellings.
 - **AC-3 — no reference entry duplicates a how-to** (judgment 1). Procedures are
   linked, not restated.
   *Control:* read each entry against the five `library/how-to/` pages.
@@ -174,8 +204,12 @@ log**, because AC-1 has no meaning without them.
 
 Stop and route to the Steward, do not improvise, if any of these hold:
 
-1. **The subcommand or flag surface is not what the fixed inputs record** at
-   your base. The CLI moved under the frame.
+1. **The subcommand or option surface is not what the fixed inputs record** at
+   your base. The CLI moved under the frame. ⚠ **This stop already fired once,
+   on 2026-08-01, and the fixed inputs above are its repair** — the original
+   table said "two flags" by reading `print_help` instead of running the tool,
+   which is the frame's own judgment 2 violated in its own fixed inputs. Firing
+   it again means something moved; it is not a re-report of that.
 2. **A subcommand's observed behaviour contradicts `print_help`.** That is a
    real defect in the tool, it is worth more than the page, and the page must
    not paper over it by documenting the help text instead.
