@@ -22,9 +22,10 @@ use super::semantic_ir::{
     SemanticOperandElement, SemanticOwner,
 };
 use super::{
-    planner_capacity_error, planner_error, unsupported, CraneliftBackendError, EdgeKind,
-    SemanticPlane, SemanticSourceKind, SemanticSourceSeed, StaticEdge, StaticEdgeId, StaticNode,
-    StaticNodeId, StaticOriginId, TransitionKind,
+    planner_capacity_error, planner_error, unsupported, BoundaryReferentOwner,
+    ContinuationSpecializationId, CraneliftBackendError, EdgeKind,
+    PlannedContinuationSpecialization, SemanticPlane, SemanticSourceKind, SemanticSourceSeed,
+    StaticEdge, StaticEdgeId, StaticNode, StaticNodeId, StaticOriginId, TransitionKind,
 };
 
 /// The exclusive end of a dense range, with its overflow named.
@@ -300,6 +301,15 @@ pub(in crate::cranelift_backend) enum AbiUnitDefinition {
         defining_origin: StaticOriginId,
         provenance: AbiCaptureProvenance,
     },
+    /// A planner-interned continuation specialization.
+    ///
+    /// The identity is compiler-only and resolves to the immutable Slice 1
+    /// planner key. It is deliberately not a `PredeclaredFunctionId`, callable
+    /// word, control word, or runtime selector; Slice 2 gives the unit a checked
+    /// representation and no caller.
+    ContinuationSpecialization {
+        specialization: ContinuationSpecializationId,
+    },
 }
 
 /// Static compilation mode for the explicitly recorded root scheduling entry.
@@ -409,11 +419,44 @@ pub(super) struct AbiDescriptor {
     pub(super) slots: DenseRange,
 }
 
+/// One planner-interned continuation specialization's dormant ABI contract.
+///
+/// Kept outside `AbiPlane::descriptors`: that population is exactly the
+/// emittable `PredeclaredFunction` partition, and admitting this compiler-only
+/// identity there would activate the unit before Slice 3 owns a caller.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(C)]
+pub(super) struct AbiContinuationDescriptor {
+    pub(super) definition: AbiUnitDefinition,
+    pub(super) header: AbiFrameHeader,
+    pub(super) slots: DenseRange,
+    pub(super) inputs: DenseRange,
+}
+
+/// Exact non-layout authority beside one continuation capture slot.
+///
+/// Carrier ownership and storage lifetime remain on the `AbiSlot`. This record
+/// carries the two axes that are not slot-layout vocabulary: exact semantic
+/// owner and the closed set of referent owners admitted by Slice 1.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(C)]
+pub(super) struct AbiContinuationInputAuthority {
+    pub(super) ordinal: u32,
+    pub(super) source_owner: PredeclaredFunctionId,
+    pub(super) referent_affinity: DenseRange,
+}
+
 /// The ABI plane: one descriptor per `PredeclaredFunction`, and their slots.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(super) struct AbiPlane {
     pub(super) descriptors: Vec<AbiDescriptor>,
     pub(super) slots: Vec<AbiSlot>,
+    /// Slice 2's compiler-only descriptor population. No emitter accessor
+    /// projects this vector, so construction and validation remain dormant.
+    pub(super) continuation_descriptors: Vec<AbiContinuationDescriptor>,
+    pub(super) continuation_slots: Vec<AbiSlot>,
+    pub(super) continuation_inputs: Vec<AbiContinuationInputAuthority>,
+    pub(super) continuation_affinities: Vec<BoundaryReferentOwner>,
 }
 
 /// The fixed per-unit convention slots every activation carries, in layout
@@ -442,6 +485,7 @@ impl AbiPlane {
         let (definition_is_closure_body, provenance) = match descriptor.definition {
             AbiUnitDefinition::SchedulingEntry { .. } => (false, None),
             AbiUnitDefinition::ClosureBody { provenance, .. } => (true, Some(provenance)),
+            AbiUnitDefinition::ContinuationSpecialization { .. } => (false, None),
         };
         Ok(AbiDescriptorShape {
             definition_is_closure_body,
@@ -540,6 +584,198 @@ pub(super) fn build_abi_plane(
         root_ingress,
     )?;
     Ok(abi)
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Compile-preserving D4 mutation: construction begins without the exact
+    /// capacity preflight, so the first descriptor grows boundary storage.
+    pub(super) static SKIP_CONTINUATION_ABI_PREFLIGHT: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+/// Installs the complete Slice 1 population as dormant continuation ABI.
+///
+/// The four backing vectors are reserved to their exact closed populations
+/// before the first descriptor is constructed. Capacity growth while appending
+/// any descriptor is therefore an observable allocation on the per-boundary
+/// path and is refused by D4. The descriptor validator below uses only borrowed
+/// slices and the shared offset fold, so its successful path allocates nothing.
+pub(super) fn install_continuation_specialization_abi(
+    abi: &mut AbiPlane,
+    specializations: &[PlannedContinuationSpecialization],
+) -> Result<(), CraneliftBackendError> {
+    if !abi.continuation_descriptors.is_empty()
+        || !abi.continuation_slots.is_empty()
+        || !abi.continuation_inputs.is_empty()
+        || !abi.continuation_affinities.is_empty()
+    {
+        return Err(planner_error(
+            "continuation ABI may be installed exactly once",
+        ));
+    }
+
+    let mut slot_count = 0usize;
+    let mut input_count = 0usize;
+    let mut affinity_count = 0usize;
+    for specialization in specializations {
+        let parameters = usize::try_from(specialization.key.ordinary_parameters)
+            .map_err(|_| planner_capacity_error("continuation ABI parameter count exhausted"))?;
+        slot_count = slot_count
+            .checked_add(parameters)
+            .and_then(|count| count.checked_add(specialization.key.continuation_inputs.len()))
+            .and_then(|count| count.checked_add(CONVENTION_SLOTS.len()))
+            .ok_or_else(|| planner_capacity_error("continuation ABI slot population exhausted"))?;
+        input_count = input_count
+            .checked_add(specialization.key.continuation_inputs.len())
+            .ok_or_else(|| planner_capacity_error("continuation ABI input population exhausted"))?;
+        for projection in &specialization.key.continuation_inputs {
+            affinity_count = affinity_count
+                .checked_add(projection.referent_affinity.len())
+                .ok_or_else(|| {
+                    planner_capacity_error("continuation ABI affinity population exhausted")
+                })?;
+        }
+    }
+
+    #[cfg(test)]
+    let skip_preflight = SKIP_CONTINUATION_ABI_PREFLIGHT.with(std::cell::Cell::get);
+    #[cfg(not(test))]
+    let skip_preflight = false;
+    if !skip_preflight {
+        abi.continuation_descriptors
+            .try_reserve_exact(specializations.len())
+            .map_err(|_| planner_capacity_error("continuation ABI descriptor allocation failed"))?;
+        abi.continuation_slots
+            .try_reserve_exact(slot_count)
+            .map_err(|_| planner_capacity_error("continuation ABI slot allocation failed"))?;
+        abi.continuation_inputs
+            .try_reserve_exact(input_count)
+            .map_err(|_| planner_capacity_error("continuation ABI input allocation failed"))?;
+        abi.continuation_affinities
+            .try_reserve_exact(affinity_count)
+            .map_err(|_| planner_capacity_error("continuation ABI affinity allocation failed"))?;
+    }
+
+    for specialization in specializations {
+        let capacities = (
+            abi.continuation_descriptors.capacity(),
+            abi.continuation_slots.capacity(),
+            abi.continuation_inputs.capacity(),
+            abi.continuation_affinities.capacity(),
+        );
+        append_continuation_descriptor(abi, specialization)?;
+        if capacities
+            != (
+                abi.continuation_descriptors.capacity(),
+                abi.continuation_slots.capacity(),
+                abi.continuation_inputs.capacity(),
+                abi.continuation_affinities.capacity(),
+            )
+        {
+            return Err(planner_error(
+                "continuation ABI descriptor construction allocated after preflight",
+            ));
+        }
+    }
+
+    abi.validate_continuation_specializations(specializations)
+}
+
+fn append_continuation_descriptor(
+    abi: &mut AbiPlane,
+    specialization: &PlannedContinuationSpecialization,
+) -> Result<(), CraneliftBackendError> {
+    let expected_id =
+        ContinuationSpecializationId(u32::try_from(abi.continuation_descriptors.len()).map_err(
+            |_| planner_capacity_error("continuation ABI descriptor identity exhausted"),
+        )?);
+    if specialization.id != expected_id {
+        return Err(planner_error(
+            "continuation ABI descriptor identity is not positional",
+        ));
+    }
+
+    let slot_start = abi.continuation_slots.len();
+    for ordinal in 0..specialization.key.ordinary_parameters {
+        abi.continuation_slots
+            .push(slot(AbiSlotKind::Parameter, AbiCarrier::ValueWord, ordinal));
+    }
+
+    let input_start = abi.continuation_inputs.len();
+    for (position, projection) in specialization.key.continuation_inputs.iter().enumerate() {
+        let ordinal = u32::try_from(position)
+            .map_err(|_| planner_capacity_error("continuation ABI input ordinal exhausted"))?;
+        if projection.ordinal != ordinal
+            || projection.ordinary_abi_position
+                != specialization
+                    .key
+                    .ordinary_parameters
+                    .checked_add(ordinal)
+                    .ok_or_else(|| planner_capacity_error("continuation ABI position exhausted"))?
+        {
+            return Err(planner_error(
+                "continuation ABI input is not positional in the planner projection",
+            ));
+        }
+        let affinity_start = abi.continuation_affinities.len();
+        abi.continuation_affinities
+            .extend_from_slice(&projection.referent_affinity);
+        let referent_affinity = DenseRange {
+            start: u32::try_from(affinity_start).map_err(|_| {
+                planner_capacity_error("continuation ABI affinity identity exhausted")
+            })?,
+            len: u32::try_from(projection.referent_affinity.len())
+                .map_err(|_| planner_capacity_error("continuation ABI affinity range exhausted"))?,
+        };
+        abi.continuation_inputs.push(AbiContinuationInputAuthority {
+            ordinal,
+            source_owner: projection.source_owner,
+            referent_affinity,
+        });
+        abi.continuation_slots.push(AbiSlot {
+            kind: AbiSlotKind::Capture,
+            carrier: projection.carrier,
+            ownership: projection.ownership,
+            storage_owner: projection.storage_owner,
+            width_bytes: projection.carrier.width_bytes(),
+            align_bytes: projection.carrier.align_bytes(),
+            ordinal,
+        });
+    }
+    for (kind, carrier) in CONVENTION_SLOTS {
+        abi.continuation_slots.push(slot(kind, carrier, 0));
+    }
+
+    let slots = DenseRange {
+        start: u32::try_from(slot_start)
+            .map_err(|_| planner_capacity_error("continuation ABI slot identity exhausted"))?,
+        len: u32::try_from(abi.continuation_slots.len() - slot_start)
+            .map_err(|_| planner_capacity_error("continuation ABI slot range exhausted"))?,
+    };
+    let inputs = DenseRange {
+        start: u32::try_from(input_start)
+            .map_err(|_| planner_capacity_error("continuation ABI input identity exhausted"))?,
+        len: u32::try_from(abi.continuation_inputs.len() - input_start)
+            .map_err(|_| planner_capacity_error("continuation ABI input range exhausted"))?,
+    };
+    let captures = u32::try_from(specialization.key.continuation_inputs.len())
+        .map_err(|_| planner_capacity_error("continuation ABI capture count exhausted"))?;
+    let header = frame_header(
+        &abi.continuation_slots[slot_start..],
+        specialization.key.ordinary_parameters,
+        captures,
+    )?;
+    abi.continuation_descriptors
+        .push(AbiContinuationDescriptor {
+            definition: AbiUnitDefinition::ContinuationSpecialization {
+                specialization: specialization.id,
+            },
+            header,
+            slots,
+            inputs,
+        });
+    Ok(())
 }
 
 /// **`C4`/`AC-5` — cross-module linking is a CHECKED exclusion.**
@@ -804,21 +1040,25 @@ fn declared_arity(
     sources: &[SemanticSourceSeed],
     definition: AbiUnitDefinition,
 ) -> Result<(u32, u32), CraneliftBackendError> {
-    let AbiUnitDefinition::ClosureBody {
-        defining_origin, ..
-    } = definition
-    else {
-        let AbiUnitDefinition::SchedulingEntry { ingress } = definition else {
-            unreachable!()
-        };
-        return Ok(match ingress {
-            AbiSchedulingIngress::Empty => (0, 0),
-            AbiSchedulingIngress::ProcessPair => (
-                u32::try_from(AbiProcessParameter::ALL.len())
-                    .map_err(|_| planner_capacity_error("process ingress arity exhausted"))?,
-                0,
-            ),
-        });
+    let defining_origin = match definition {
+        AbiUnitDefinition::ClosureBody {
+            defining_origin, ..
+        } => defining_origin,
+        AbiUnitDefinition::SchedulingEntry { ingress } => {
+            return Ok(match ingress {
+                AbiSchedulingIngress::Empty => (0, 0),
+                AbiSchedulingIngress::ProcessPair => (
+                    u32::try_from(AbiProcessParameter::ALL.len())
+                        .map_err(|_| planner_capacity_error("process ingress arity exhausted"))?,
+                    0,
+                ),
+            });
+        }
+        AbiUnitDefinition::ContinuationSpecialization { .. } => {
+            return Err(planner_error(
+                "continuation specialization arity requires its exact planner projection",
+            ));
+        }
     };
 
     let seed = source_for(sources, defining_origin)?;
@@ -901,6 +1141,11 @@ fn push_slots(
             None
         }
         AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
+        AbiUnitDefinition::ContinuationSpecialization { .. } => {
+            return Err(planner_error(
+                "continuation specialization slots require their exact planner projection",
+            ));
+        }
     };
     if let Some(carrier) = capture_carrier {
         for ordinal in 0..captures {
@@ -948,14 +1193,24 @@ pub(in crate::cranelift_backend) fn slot_offsets(
     slots: &[AbiSlot],
 ) -> Result<(Vec<u32>, u32), CraneliftBackendError> {
     let mut offsets = Vec::with_capacity(slots.len());
+    let frame_bytes = walk_slot_offsets(slots, |offset| offsets.push(offset))?;
+    Ok((offsets, frame_bytes))
+}
+
+/// The single offset/size walk shared by the emitted offset vector and the
+/// allocation-free descriptor header derivation.
+fn walk_slot_offsets(
+    slots: &[AbiSlot],
+    mut observe: impl FnMut(u32),
+) -> Result<u32, CraneliftBackendError> {
     let mut frame_bytes = 0u32;
     for slot in slots {
-        offsets.push(frame_bytes);
+        observe(frame_bytes);
         frame_bytes = frame_bytes
             .checked_add(u32::from(slot.width_bytes))
             .ok_or_else(|| planner_capacity_error("abi frame size exhausted"))?;
     }
-    Ok((offsets, frame_bytes))
+    Ok(frame_bytes)
 }
 
 /// Derives the frame header from the laid slot run.
@@ -964,10 +1219,10 @@ fn frame_header(
     parameters: u32,
     captures: u32,
 ) -> Result<AbiFrameHeader, CraneliftBackendError> {
-    // ⛔ The total comes from `slot_offsets`, not from a second sum here: the
-    // emitter's offsets and this header's size are then the same walk by
-    // construction.
-    let (_, frame_bytes) = slot_offsets(slots)?;
+    // ⛔ The total comes from the same offset walk as `slot_offsets`, not from a
+    // second sum. The continuation descriptor uses the no-observer form so its
+    // validation path allocates no temporary offset vector.
+    let frame_bytes = walk_slot_offsets(slots, |_| {})?;
     let mut align_bytes = 1u16;
     for slot in slots {
         align_bytes = align_bytes.max(slot.align_bytes);
@@ -1230,6 +1485,195 @@ fn slot_slice(slots: &[AbiSlot], range: DenseRange) -> Result<&[AbiSlot], Cranel
     slots
         .get(range.start as usize..range_end(range)?)
         .ok_or_else(|| planner_error("abi slot range is outside the plane"))
+}
+
+fn continuation_input_slice(
+    inputs: &[AbiContinuationInputAuthority],
+    range: DenseRange,
+) -> Result<&[AbiContinuationInputAuthority], CraneliftBackendError> {
+    inputs
+        .get(range.start as usize..range_end(range)?)
+        .ok_or_else(|| planner_error("continuation ABI input range is outside the plane"))
+}
+
+fn continuation_affinity_slice(
+    affinities: &[BoundaryReferentOwner],
+    range: DenseRange,
+) -> Result<&[BoundaryReferentOwner], CraneliftBackendError> {
+    affinities
+        .get(range.start as usize..range_end(range)?)
+        .ok_or_else(|| planner_error("continuation ABI affinity range is outside the plane"))
+}
+
+impl AbiPlane {
+    /// D1-D3: the dormant descriptor population is an exact projection of the
+    /// planner-interned units, and every authority axis is re-compared before a
+    /// later slice may expose a caller.
+    ///
+    /// The successful path allocates no collection: all comparisons are over
+    /// already-preflighted dense slices, and header size uses the shared
+    /// allocation-free offset fold.
+    pub(super) fn validate_continuation_specializations(
+        &self,
+        specializations: &[PlannedContinuationSpecialization],
+    ) -> Result<(), CraneliftBackendError> {
+        if self.continuation_descriptors.len() != specializations.len() {
+            return Err(planner_error(
+                "continuation ABI descriptor population is not exact",
+            ));
+        }
+
+        let mut next_slot = 0usize;
+        let mut next_input = 0usize;
+        let mut next_affinity = 0usize;
+        for (index, (descriptor, specialization)) in self
+            .continuation_descriptors
+            .iter()
+            .zip(specializations)
+            .enumerate()
+        {
+            let expected_id = ContinuationSpecializationId(u32::try_from(index).map_err(|_| {
+                planner_capacity_error("continuation ABI descriptor identity exhausted")
+            })?);
+            if specialization.id != expected_id
+                || descriptor.definition
+                    != (AbiUnitDefinition::ContinuationSpecialization {
+                        specialization: expected_id,
+                    })
+            {
+                return Err(planner_error(
+                    "continuation ABI definition disagrees with its interned identity",
+                ));
+            }
+            if descriptor.slots.start as usize != next_slot
+                || descriptor.inputs.start as usize != next_input
+            {
+                return Err(planner_error(
+                    "continuation ABI descriptor ranges are not dense and positional",
+                ));
+            }
+
+            let slots = slot_slice(&self.continuation_slots, descriptor.slots)?;
+            let inputs = continuation_input_slice(&self.continuation_inputs, descriptor.inputs)?;
+            let captures = u32::try_from(specialization.key.continuation_inputs.len())
+                .map_err(|_| planner_capacity_error("continuation ABI capture count exhausted"))?;
+            let expected_slot_count = usize::try_from(specialization.key.ordinary_parameters)
+                .map_err(|_| planner_capacity_error("continuation ABI parameter count exhausted"))?
+                .checked_add(specialization.key.continuation_inputs.len())
+                .and_then(|count| count.checked_add(CONVENTION_SLOTS.len()))
+                .ok_or_else(|| planner_capacity_error("continuation ABI slot count exhausted"))?;
+            if slots.len() != expected_slot_count || inputs.len() != captures as usize {
+                return Err(planner_error(
+                    "continuation ABI slot population is not parameters plus captures plus convention",
+                ));
+            }
+
+            for ordinal in 0..specialization.key.ordinary_parameters {
+                let actual = slots
+                    .get(ordinal as usize)
+                    .ok_or_else(|| planner_error("continuation ABI lacks an ordinary parameter"))?;
+                if *actual != slot(AbiSlotKind::Parameter, AbiCarrier::ValueWord, ordinal) {
+                    return Err(planner_error(
+                        "continuation ABI ordinary parameter slot is not exact",
+                    ));
+                }
+            }
+
+            let parameter_count =
+                usize::try_from(specialization.key.ordinary_parameters).map_err(|_| {
+                    planner_capacity_error("continuation ABI parameter count exhausted")
+                })?;
+            for (position, (projection, authority)) in specialization
+                .key
+                .continuation_inputs
+                .iter()
+                .zip(inputs)
+                .enumerate()
+            {
+                let ordinal = u32::try_from(position).map_err(|_| {
+                    planner_capacity_error("continuation ABI input ordinal exhausted")
+                })?;
+                if authority.ordinal != ordinal || authority.source_owner != projection.source_owner
+                {
+                    return Err(planner_error(
+                        "continuation ABI input source owner disagrees with the planner projection",
+                    ));
+                }
+                if authority.referent_affinity.start as usize != next_affinity {
+                    return Err(planner_error(
+                        "continuation ABI affinity ranges are not dense and positional",
+                    ));
+                }
+                let affinity = continuation_affinity_slice(
+                    &self.continuation_affinities,
+                    authority.referent_affinity,
+                )?;
+                if affinity != projection.referent_affinity.as_slice() {
+                    return Err(planner_error(
+                        "continuation ABI input referent affinity disagrees with the planner projection",
+                    ));
+                }
+                next_affinity = next_affinity.checked_add(affinity.len()).ok_or_else(|| {
+                    planner_capacity_error("continuation ABI affinity population exhausted")
+                })?;
+
+                let actual = slots.get(parameter_count + position).ok_or_else(|| {
+                    planner_error("continuation ABI lacks a projected capture slot")
+                })?;
+                if actual.kind != AbiSlotKind::Capture
+                    || actual.ordinal != ordinal
+                    || actual.carrier != projection.carrier
+                    || actual.width_bytes != projection.carrier.width_bytes()
+                    || actual.align_bytes != projection.carrier.align_bytes()
+                {
+                    return Err(planner_error(
+                        "continuation ABI input carrier layout disagrees with the planner projection",
+                    ));
+                }
+                if actual.ownership != projection.ownership
+                    || actual.storage_owner != projection.storage_owner
+                {
+                    return Err(planner_error(
+                        "continuation ABI input lifetime disagrees with the planner projection",
+                    ));
+                }
+            }
+
+            let convention_start = parameter_count.checked_add(inputs.len()).ok_or_else(|| {
+                planner_capacity_error("continuation ABI convention offset exhausted")
+            })?;
+            for (position, (kind, carrier)) in CONVENTION_SLOTS.iter().copied().enumerate() {
+                if slots.get(convention_start + position) != Some(&slot(kind, carrier, 0)) {
+                    return Err(planner_error(
+                        "continuation ABI convention slot run is not exact",
+                    ));
+                }
+            }
+
+            let derived = frame_header(slots, specialization.key.ordinary_parameters, captures)?;
+            if descriptor.header != derived {
+                return Err(planner_error(
+                    "continuation ABI frame header is not derived from its slot run",
+                ));
+            }
+            next_slot = next_slot.checked_add(slots.len()).ok_or_else(|| {
+                planner_capacity_error("continuation ABI slot population exhausted")
+            })?;
+            next_input = next_input.checked_add(inputs.len()).ok_or_else(|| {
+                planner_capacity_error("continuation ABI input population exhausted")
+            })?;
+        }
+
+        if next_slot != self.continuation_slots.len()
+            || next_input != self.continuation_inputs.len()
+            || next_affinity != self.continuation_affinities.len()
+        {
+            return Err(planner_error(
+                "continuation ABI contains material outside its descriptor population",
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl AbiPlane {
@@ -1552,6 +1996,11 @@ fn validate_slot_run(
     let capture_carrier = match definition {
         AbiUnitDefinition::SchedulingEntry { .. } => None,
         AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
+        AbiUnitDefinition::ContinuationSpecialization { .. } => {
+            return Err(planner_error(
+                "continuation specialization slots require their exact planner projection",
+            ));
+        }
     };
 
     for (position, slot) in slots.iter().enumerate() {
