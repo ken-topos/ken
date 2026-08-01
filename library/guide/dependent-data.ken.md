@@ -29,7 +29,9 @@ This is the brace/`where` declaration form the current parser accepts.
 The normative specification displays the canonical constructors as lowercase
 `vnil` and `vcons`; copying that display literally does not parse today, so this
 checked page names the accepted surface form instead of silently presenting it
-as the canonical spelling.
+as the canonical spelling. The same constructor-name rule is why the checked
+`Fin` declaration below uses `FZero` and `FSuc` rather than the specification's
+lowercase `fzero` and `fsuc`.
 
 The index is not a comment or a separate proof attached later. It is part of
 the constructor's result type, so every `Vec A n` carries its length in the
