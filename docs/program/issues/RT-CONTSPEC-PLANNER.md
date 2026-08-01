@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-PLANNER
 title: "ContinuationSpecialization slice 1 — land the planner closure DORMANT: exact ordered projection, full-key interning before discovery, exact causal edge tokens, finite recursion"
-status: ready
+status: merged
 owner: runtime
 size: M
 gate: none
@@ -10,6 +10,39 @@ blocks: [RT-CONTSPEC-ABI]
 github: null
 origin: "Architect second WIP audit evt_4t09329vdrf (2026-08-01) returned outcome (c) — RT-RECURSOR-TRANSPORT + RT-DECL-CLOSURE-PORT D7 is mis-sized as one delivery. Steward-authored recut under playbook §5a-iii; the Architect diagnoses sizing, the Steward cuts. No semantic recut: the ruling at evt_7dhwrk26ks9m0 remains binding."
 ---
+
+> # ✅ MERGED 2026-08-01 — PR #1298, `origin/main = 04cd9259`, CI GREEN
+>
+> Exact candidate `28bc225ba0756ff3095da32a1d3e6afd0505fb6e`, tree
+> `2139ffc7c8dd66c775e93e1b4df70cc2c1776bbd`. Runtime QA `evt_ahgj4w4f54q7`;
+> Architect approved `evt_2d5fd5csn19nv`; Decision `dec_124dnas2ffnjn` resolved.
+> All three predicted post-conditions exact — landed tree
+> `0cb30ed3539fc48e52d115f444b2b37ff92f242b`, blob
+> `6af866f454f8fc89993f1dd2378335c80eb2f555` at the one planner path, and that
+> path the only one changed.
+>
+> ## ⭐⭐ IT TOOK FOUR REVIEW ROUNDS, AND THE SHAPE IS THE LESSON FOR SLICE 2
+>
+> Three Architect rejects preceded approval — `dec_3ptbrzxz3cgyh`,
+> `dec_7cy23z13jf0t8`, `dec_1xv1c0yaeabc`. ⛔ **That was NOT a sizing failure and
+> the node was not recut.** The accepted surface grew monotonically: R1 named two
+> D1 blockers; R2 ratified the ordinary-prefix/worker-envelope half; R3 ratified
+> the semantic source-provenance half; R4 closed the input-population half.
+> ⇒ ⭐ **The discriminator for a mis-sized WP is a FLAT accepted surface, not a
+> reject count.**
+>
+> ⚠⚠ **Two of the three rejects turned on a DEGENERATE CONTROL, not on wrong
+> production code** — R1's fixture had one worker and one capture, so both wrong
+> answers equalled `1` (green-vs-green); R3's fixture had a `unit()` case body,
+> so descriptor-count truncation was invisible to it. ⇒ ⭐⭐ **Slice 2 should
+> budget its review effort on whether each control can DISCRIMINATE, not on
+> whether the production code reads correctly.** The final fixture is the model:
+> `Var(4)` makes ordinal 2 load-bearing, so exact production gives `[1,0,1]`
+> while truncation gives `[1,0]` and descriptor restatement gives `[0,1]` —
+> three distinguishable wrong answers, each named.
+>
+> ⚠ The specialization is **dormant**: no lowering, no unit emission, no ABI
+> activation. [[RT-CONTSPEC-ABI]] is slice 2.
 
 > # ✅ THE BASE FORK IS ANSWERED — `ready`, and gated on slice 0
 >

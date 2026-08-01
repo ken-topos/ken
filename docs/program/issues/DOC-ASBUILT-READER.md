@@ -1,7 +1,7 @@
 ---
 id: DOC-ASBUILT-READER
 title: "As-built slice 5 — reconcile the four reader-facing entry pages against their 6 shared drifted sources"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
@@ -10,6 +10,40 @@ blocks: [DOC-ASBUILT-AUDIT]
 github: null
 origin: "Steward 2026-08-01, phase A slice 5 of DOC-ASBUILT-AUDIT, measured at origin/main 4ab1c23e. Cut by audience, per the campaign's shared-source-set rule."
 ---
+
+> # ✅ MERGED 2026-08-01 — PR #1297, `origin/main = ac187ada`
+>
+> Exact candidate `ba6edab3eac11ae2f9280722ff3b7c16d8155544`, tree
+> `1a0e0071946ebbf17153366d39ab86f8c621d2d3`. Librarian QA approved
+> (`evt_4mja28bqz4t95`) after an independent 6-source/11-citation re-derivation;
+> Decision `dec_2xvqe6cxzrj85` resolved.
+>
+> **Repaired:** the stale-curriculum-progress class in `library/quickstart.md`
+> and `library/introduction.md` (+3/−3). `exercises/README.md` and
+> `04-effects-capabilities-and-authority.md` were reconciled and found still
+> true.
+>
+> **All five post-conditions predicted before the merge came back exact**, drift
+> check included: exit 1, 32 lines / 28 rows, SHA-256
+> `349d545262be44c65a87b26a9aec730fdb9f23e7dbb9273fbf16c140ae8f75ce`.
+>
+> ⚠⚠ **The base-staleness read was misleading and is worth remembering.**
+> `git diff origin/main <candidate>` reported **four** files and **−58** lines,
+> because the candidate's merge-base was `2e94d907` while `main` had advanced to
+> `92185f00` with the slice-6 route amendment (PR #1296). ⛔ That is the
+> candidate *predating* those commits, **not reverting them** — the publisher
+> merges, it does not reset. Resolved correctly: candidate-vs-base touched the
+> two `library/` pages, main-vs-base touched the two `docs/program/` files, and
+> the **intersection was empty** ⇒ immaterial. ⭐ I also asserted an explicit
+> **anti-revert post-condition** — that both amendments still be present on
+> `main` after the merge — and they were.
+>
+> ⭐⭐ **Hard stop 3 fired here and was upheld** (`evt_27hg7sk8q4pjd`). The
+> repaired class survives in `library/README.md:18`, outside this slice. It was
+> **routed, not followed**, and the route is durable in
+> [[DOC-ASBUILT-AGENTS]]'s frame. ⛔ The candidate was **not** respun: its bytes
+> were correct, and what was stale was the `D4` *report* — a channel deliverable
+> — which `evt_3ncp204a779cf` corrected.
 
 > # ▶ SLICE 5 OF PHASE A — THE READER-FACING ENTRY PAGES
 >
