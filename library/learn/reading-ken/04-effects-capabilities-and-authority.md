@@ -4,8 +4,8 @@ Chapters [01](01-anatomy.md)–[03](03-assurance-and-trust.md) taught you to
 read a declaration's shape, its contract, and its assurance class. This
 chapter asks a different question of the same signature: not "what does it
 compute?" but "what is it allowed to *do* to the world outside its own
-inputs?" — and where this curriculum's fragment set can and
-cannot yet show you the answer from checked code.
+inputs?" — and which parts the checked catalog can show, versus which belong
+to the trusted host/runner rather than to Ken programs.
 
 ## Effect Rows
 
@@ -62,24 +62,19 @@ body is still valid under this check — only an
 
 The row tells a reader *which* effects a definition may perform. It does
 not, by itself, explain *who is allowed* to have that row perform an
-effect at all — that is the authority discipline, and here this
-curriculum's fragment set runs out of checked code to show you.
+effect at all — that is the authority discipline. The checked
+[filesystem authority fragment](../../../catalog/packages/Capability/Filesystem/Authority.ken.md)
+now exhibits its Ken-visible surface: an explicit `Cap a` parameter beside
+the `[FS]` effect row. Its elaboration controls show missing-capability
+rejection and authority-index separation. This is checked evidence of
+authority-as-signature, not authority for the rule itself.
 
-No checked fragment in `catalog/packages/` — including entries outside this
-curriculum — carries an explicit capability token, attenuation call, or
-authority comparison in `ken check`-passing surface code. The console
-fragment shows the effect row; no catalog entry shows the capability value
-that authorizes performing it. This is not a gap this chapter papers over
-— it is itself something worth knowing: the authority discipline below is a
-committed, normative part of the language (`OQ-8a` DECIDED,
-[authority specification](../../../spec/60-security/62-authority.md)), and
-it is **unavailable** in checked-fragment form in the catalog. This uses the
-same supported/partial/planned/unavailable labelling applied to the
-`tested` status's own missing tagged construct.
-
-So the rest of this section teaches the authority discipline from its
-actual normative source, labelled for exactly what it is: not a fragment
-you could open and run.
+The authority discipline remains a committed, normative part of the
+language (`OQ-8a` DECIDED,
+[authority specification](../../../spec/60-security/62-authority.md)). Read
+the runnable catalog fragment alongside that source: the fragment exhibits
+what Ken code can receive and require, while the specification defines the
+trusted host/runner management complement that Ken code cannot call.
 
 - **No ambient authority.** A computation can act on the world only with an
   authority it was explicitly given, and only via an effect its type
@@ -112,53 +107,65 @@ you could open and run.
   code is rejected as `UnboundName`, the same class of error as
   referencing any other undeclared identifier
   ([§3.2](../../../spec/60-security/62-authority.md#32-no-amplification--assert-the-absence-and-net-the-orientation)).
-  §7's worked examples (unavailable in checked form — spec pseudocode, not
-  a catalog fragment) show both halves together: a `sandbox` function
-  receives an already-narrowed `/tmp`-scoped capability as a plain
-  parameter and passes it on to a helper, while a later line —
-  `attenuate c (full_authority)` — is marked rejected, `UnboundName`, in
-  the same worked example
+  The checked
+  [filesystem authority fragment](../../../catalog/packages/Capability/Filesystem/Authority.ken.md)
+  exhibits the callable half: `capability_read` receives an explicit
+  `(cap : Cap a)` beside its `[FS]` effect row. The named
+  `capability_filesystem_authority_fragment_elaborates` and
+  `filesystem_program_requires_the_declared_capability_and_accepts_its_twin`
+  tests in
+  [`cat_capex_authority.rs`](../../../crates/ken-elaborator/tests/cat_capex_authority.rs)
+  check the fragment and its missing-capability boundary. §7's worked spec
+  example shows the complementary half: a `sandbox` function receives an
+  already-narrowed `/tmp`-scoped capability as a plain parameter and passes
+  it on, while `attenuate c (full_authority)` is rejected as `UnboundName`
   ([§7](../../../spec/60-security/62-authority.md#7-worked-examples)).
 
-The unavailability label is not a substitute for a checked example. The
-authority specification is normative prose that the catalog has not
-instantiated as checked code. The boundary is also not merely "no
-checked fragment exists yet" — it is that `attenuate`/`revoke` are, by
-design, never going to be something a Ken program calls at all. The
-narrowing happens in a trusted runner/host outside Ken; Ken code only ever
-*receives* the narrowed result.
+The catalog now instantiates authority-as-signature as checked code. Its
+exemplar deliberately does not exhibit capability minting, attenuation,
+revocation, admission, settlement, or audit. That boundary is not a missing
+example: `attenuate`, `revoke`, and `strengthen` are, by design, never going
+to be operations a Ken program calls. Narrowing happens in a trusted
+runner/host outside Ken; Ken code only ever *receives* the narrowed result.
 
 ## Corpus Boundary
 
-One checked-corpus artifact does speak to authority directly, although in
-prose rather than a capability-typed declaration. The
+The checked
+[filesystem authority fragment](../../../catalog/packages/Capability/Filesystem/Authority.ken.md)
+speaks to authority through capability-typed declarations. It exhibits an
+explicit `Cap a` parameter beside `[FS]`, distinguishes `Cap AFull` from
+`Cap APartial`, and has paired controls showing that a program without the
+declared filesystem capability is rejected while its otherwise identical
+capability-bearing twin elaborates. It accepts capabilities as inputs; it
+does not define a constructor, producer, wrapper, or management binding for
+`Cap`, and it does not exercise a runtime capability identity.
+
+A neighboring
 [filesystem fragment](../../../catalog/packages/Capability/Filesystem/Errors.ken.md)
-states,
-in its second paragraph, before any code, that "the current authority check
-is coarse and is **not** path-confined. An `AFull` capability permits
-writes and deletes anywhere the host process can access." Chapter
-[03](03-assurance-and-trust.md) already showed you this sentence as an
-example of a fragment naming its own limit. Read this against the capability
-authority discipline: `AFull` is named as a *capability* in this entry's
-own words, and its own words say that the check does not
-yet narrow that capability's authority to particular paths — the
-kind of scoping `attenuate` is built to express is not yet exercised by
-this entry. This is a corpus artifact naming a supported limitation in its
-own voice; it is not checked capability-typed
-code, and this chapter does not present it as such.
+names the complementary confinement boundary in prose: "`Full` retains all
+rights, including write and delete, but exercises them only within its
+`FsScope`." It also says downstream filesystem resolution enforces confinement.
+Read that against the capability authority discipline: the catalog checks
+authority as a visible type-level input and pairs it with a per-scope bound
+rather than ambient or unconfined filesystem authority.
 
 You can now read an effect row as a checked upper bound and a capability as
-the authority needed to exercise an effect. The catalog demonstrates the
-first in checked code but not the second. That unavailable example boundary
-keeps the normative capability model separate from what the teaching corpus
-currently exhibits.
+the authority needed to exercise an effect. The catalog demonstrates both
+that relationship and authority-index separation in checked code. It does
+not demonstrate the host/runner complement: minting, attenuation, revocation,
+admission, settlement, or audit. Keeping that complement explicit prevents
+the checked exemplar from being mistaken for the whole normative capability
+model.
 
 ---
 
 **Sources:**
 [effect rows §§1, 1.4, 1.6.2](../../../spec/30-surface/36-effects.md#1-effects-as-a-static-row);
 [authority §§1–3.2, 7](../../../spec/60-security/62-authority.md#1-no-ambient-authority);
+[checked filesystem authority fragment](../../../catalog/packages/Capability/Filesystem/Authority.ken.md);
+[elaboration controls](../../../crates/ken-elaborator/tests/cat_capex_authority.rs);
 [availability record](../../../docs/program/issues/DOC-W1.md);
 [registered fragments](fragments.md).
-This explanatory chapter distinguishes checked effect-row examples from the
-capability examples that remain unavailable in the catalog.
+This explanatory chapter distinguishes checked effect-row and
+capability-as-signature examples from host-side authority management, which
+remains unavailable to Ken programs.
