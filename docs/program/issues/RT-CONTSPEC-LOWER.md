@@ -13,12 +13,28 @@ origin: "Architect second WIP audit evt_4t09329vdrf (2026-08-01), outcome (c). S
 
 > # ⚠ SLICE 3 OF 4 — THE ONLY SLICE THAT ACTIVATES
 >
-> ⏳ `draft` until its frame is written.
+> ⏳ **`draft` until the frame's four `▢ SLOT`s are filled**, which happens at
+> [[RT-CONTSPEC-ABI]]'s merge.
 >
-> ⛔ **Do not pick this up from the node text.** Its frame is written after
-> [[RT-CONTSPEC-ABI]] is framed, and deliberately last: slices 1 and 2 fix
-> exactly what this slice can assume, and a frame written now would be sized
-> against a planner and ABI that do not exist yet.
+> ⛔ **Do not pick this up from the node text** — and do not pick it up from the
+> frame yet either.
+>
+> ⭐ **THE FRAME IS WRITTEN**: `docs/program/wp/RT-CONTSPEC-LOWER.md`, filed
+> 2026-08-01 under operator standing policy §2a-bis (a node with a team must
+> have a framed successor). Everything slice 2 **cannot** change is final in it
+> — the risk posture, the six-item ruled scope, eight ACs, the banned scope, the
+> 761 witness gate, the three-node tracker discipline, and the sizing analysis.
+>
+> ⚠ **What genuinely had to wait is marked `▢ SLOT` and is the only work owed at
+> slice 2's merge:** the ABI surface slice 2 actually landed (A), which of its
+> gates bind at the call site (B), the residual after its review (C), and a
+> contention re-derivation (D). ⭐ Minutes of Steward work, not an hour.
+>
+> ⛔ The earlier instruction — *"frame this last or it will be sized against a
+> planner and ABI that do not exist yet"* — was **sound for the interface facts
+> and is preserved as those slots.** It was not grounded for anything else, and
+> leaving the whole frame unwritten would have left the runtime ring with no
+> framed successor the moment slice 2 merged.
 
 ## Scope, as ruled
 
