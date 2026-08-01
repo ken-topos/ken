@@ -1,7 +1,7 @@
 ---
 id: DOC-ATTEST-LIVING
 title: "attesting living tracker files makes every routine WP status flip redden the currency gate"
-status: ready
+status: closed
 owner: doc
 size: S
 gate: none
@@ -9,6 +9,33 @@ depends_on: []
 blocks: []
 github: null
 origin: hit in production by the Steward 2026-07-25 on PR #938 (test shard 1/4, registered_record_validation_gates_run). Steward-filed; agents cannot create tracked work (COORDINATION §2). Not a DOC-W2 defect — DOC-W2's citations are correct; the problem is the CLASS of file it cited.
+---
+
+⛔⛔ **RETIRED 2026-08-01 — `closed`, not merged. ⛔ Do NOT execute any part of
+this node. Everything below the next rule is preserved as history and its live
+premise is FALSE.**
+
+**Why it is retired.** This node's premise was measured 2026-07-25: attesting
+living tracker files made a routine WP status flip redden
+`registered_record_validation_gates_run` at merge time. On 2026-07-26
+**`LIB-GATE-DECOUPLE` merged at `f84e4804`** under an operator ruling that
+removed live documentation/content CI coupling outright. The resulting policy
+**explicitly accepts that source attestations drift between release points.**
+
+⇒ The node's own AC — *"a status flip must stop reddening CI"* — **is already
+satisfied**, but by deleting the CI consumer rather than by any of the three
+mechanisms proposed here. ⭐ **Worse than merely redundant: two of those three
+mechanisms would partially recreate the per-merge coupling the operator just
+removed.** Executing this node would walk the ruling back.
+
+⛔ **Do not reuse this node if release-time attestations later need anchor-subset
+support or better diagnostics.** Its per-merge premise is false and would be
+inherited silently by anyone resuming from it. **Frame a fresh release-process
+WP against the release-point policy that actually exists.**
+
+Grounds: Librarian frontier brief `evt_27ny9kzn011hj`, re-measured at
+`origin/main = 6de2a099`; retired by the Steward at the doc-track restart.
+
 ---
 
 > ## The gate is right. The choice of cited source is what needs deciding.

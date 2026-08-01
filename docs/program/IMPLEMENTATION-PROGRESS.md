@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-07-31 01:20:16Z — from 128 issue file(s) in `docs/program/issues/`.
+2026-08-01 14:06:13Z — from 128 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -62,8 +62,8 @@ the committed file matches the generator's output.
 | `CI-TRACKER-GATE` | Wire the issue-tracker schema + regeneration gate into CI | closed | operator | S | none | 804 |
 | `CONF-FMT8-LEVELTOK` | FMT8's fixture is unproducible: the row demands a 'genuine level-token fixture' but the lexer has no Level/Label token kind and never will under endpoint (b) | draft | spec-enclave | S | none | — |
 | `CONF-SEC4-REFL-PAIR` | Sec4's C1/C2 refl pair is stale against ADR-0013: the true arm is unreachable and the false arm is green for the wrong reason | draft | spec-enclave | S | none | — |
-| `DOC-ATTEST-LIVING` | attesting living tracker files makes every routine WP status flip redden the currency gate | ready | doc | S | none | — |
-| `DOC-CAP-ASBUILT` | The capability chapter tells readers the catalog has no checked authority exemplar; CAT-CAPEX adds one, falsifying that claim in two places | draft | doc | S | none | — |
+| `DOC-ATTEST-LIVING` | attesting living tracker files makes every routine WP status flip redden the currency gate | closed | doc | S | none | — |
+| `DOC-CAP-ASBUILT` | The capability chapter tells readers the catalog has no checked authority exemplar; CAT-CAPEX adds one, falsifying that claim in two places | ready | doc | S | none | — |
 | `DOC-CATALOG-CONTENTS` | Catalog entry format: rename the `## Index` heading to `## Contents` in 19 entries and remove the 16 reading-path sections | merged | doc | M | none | — |
 | `DOC-CURRENCY-ANCHOR` | library/REVISION certifies nothing about the corpus — currency is unchecked | closed | doc | S | none | — |
 | `DOC-GATE-CONTROL-BINDING` | validation-gate registry: make the two DOC-GATE-RECORD-AXIS checks orphan-proof by lifting them to pure detectors with committed controls | merged | verify | S | none | https://github.com/swe-toolkit/ken/pull/928 |
@@ -172,7 +172,7 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
-- `DOC-ATTEST-LIVING` — attesting living tracker files makes every routine WP status flip redden the currency gate
+- `DOC-CAP-ASBUILT` — The capability chapter tells readers the catalog has no checked authority exemplar; CAT-CAPEX adds one, falsifying that claim in two places
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-EFFECT-DIFF` — One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can

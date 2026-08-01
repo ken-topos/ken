@@ -1,6 +1,9 @@
 # 12 — The documentation program (`library/`)
 
-**Status:** Framed 2026-07-21. **Wave 0 active** — released to the doc team.
+**Status:** Framed 2026-07-21. **Waves 0, 1 and 2 are LANDED** — `library/`
+carries 26 documents (`library/STATUS.md`). Wave 3 and beyond remain map only;
+Wave 1b and the `ffi-and-platform` task module stay deferred. Currency
+re-measured at `origin/main = 6de2a099`, 2026-08-01, at the doc-track restart.
 **Owner:** the **doc team** (§0); Steward (frame, sequencing, gates).
 **Source proposal:** `research/librarian-documentation-program-proposal.md`
 (Research, 2026-07-18).
@@ -11,7 +14,7 @@ primary learning path being **reading Ken** rather than writing it.
 
 The research proposal is the design and I am not restating it. This document
 is the **frame**: it settles the four decisions the proposal routes to the
-Steward, states what binds the Librarian, and releases Wave 0.
+Steward, states what binds the Librarian, and released Wave 0.
 
 ---
 
@@ -178,10 +181,10 @@ that inherits its substrate**, and there is no parallel track to catch it.
 | Wave | Content | State |
 |---|---|---|
 | **0** | Charter + currency substrate: `README.md`, `manifest.toml`, generated `STATUS.md`, first gates, migration ledger | ✅ **RELEASED** — `issues/DOC-W0.md` |
-| 1 | The read-Ken spine, **fragment-based** — introduction, quickstart, reading curriculum taught from real checked package fragments. **Complete-program work DEFERRED to Wave 1b** | ✅ **FRAMED** — `issues/DOC-W1.md` · ⛔ gated on `issues/DOC-CURRENCY-ANCHOR.md` |
+| 1 | The read-Ken spine, **fragment-based** — introduction, quickstart, reading curriculum taught from real checked package fragments. **Complete-program work DEFERRED to Wave 1b** | ✅ **LANDED** — `issues/DOC-W1.md`; chapters 01–06, fragments, exercises, solutions, quickstart, introduction all present and registered |
 | **1b** | The whole-program reading pass: curriculum ch. 7, worked end-to-end review with an explicit verdict, on one real catalog **program** | not framed — ⛔ **gated on basic capabilities landing** (operator, 2026-07-22) |
-| 2 | Agent core + task packs; refactor product facts out of `write-ken`; cold-context evals. **`ffi-and-platform` deferred** | ✅ **FRAMED** — `issues/DOC-W2.md` · ⛔ gated on Wave 1 |
-| 3 | Conceptual guide + how-tos; `catalog/guide/` migration (**gated on the fence gate, §3**) | map only — §4b |
+| 2 | Agent core + task packs; refactor product facts out of `write-ken`; cold-context evals. **`ffi-and-platform` deferred** | ✅ **LANDED** — `issues/DOC-W2.md`; four agent core modules, six task modules/packs, schemas, cold-context fixtures, recorded eval results |
+| 3 | Conceptual guide + how-tos; `catalog/guide/` migration (**gated on the fence gate, §3**) | map only — §4b · ⛔ **its §3 precondition is now UNDERSPECIFIED, see below** |
 | 4 | Complete reader-oriented reference | map only — §4b |
 | 5 | Comprehensive catalog reference (**re-check D4 first**) | map only — §4b |
 | 6 | Release, offline, continuous as-built operation | map only — §4b |
@@ -190,6 +193,30 @@ that inherits its substrate**, and there is no parallel track to catch it.
 without declaring what it is, what grounds it, and how its currency is
 checked. Everything after it inherits that substrate, so it is worth getting
 right before Wave 1 produces content at volume.
+
+> ### ⛔ Wave 3's §3 fence-gate precondition needs a Steward reconciliation first
+>
+> §3 gates the `catalog/guide/` migration on the `ken example` / `ken reject`
+> fences *"remaining checked and the checker being mutation-proven"* — invalid
+> positive examples must fail, and stale rejects that now elaborate must fail.
+> ⭐ **The substantive requirement stands: migrating prose whose examples are
+> not actually checked is exactly the corpus lying to readers that this program
+> exists to prevent.**
+>
+> ⚠ **But the FORM the precondition assumes no longer exists.** Measured
+> 2026-08-01 at `6de2a099`: `check_checked_examples` and its fixture controls
+> are still present in `crates/ken-cli/tests/library_documentation_gates.rs`,
+> but **`LIB-GATE-DECOUPLE` removed the live-corpus invocation** under the
+> operator's no-live-doc-CI-coupling ruling. ⇒ A tested detector exists with **no
+> merge-time corpus gate behind it.**
+>
+> ⛔ **So "the gate exists and passes" is not a condition anyone can currently
+> discharge, and reinstating a global CI gate to discharge it would walk back an
+> operator ruling.** The reconciliation — a migration-local or release-point
+> verification form, mutation-proven on **both** fence polarities, without
+> reinstating global coupling — is **Steward-owned and owed before any Wave 3
+> content is framed.** ⛔ Not doc-ring scope, and ⛔ not a reason for the ring to
+> wait on Wave 3 work it has no frame for.
 
 > ### ⛔ Wave 0 met that exit condition only STRUCTURALLY. Wave 1 is gated.
 >
