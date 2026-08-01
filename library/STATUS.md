@@ -4,7 +4,7 @@
 is this file's one job: it is anchored to two DISTINCT values, never a
 typed date (docs/program/12-documentation-program.md §2).
 
-**Provenance revision:** `f31e8d947eff224cc79fcbea0e708124427b24d8`
+**Provenance revision:** `e65a66086223a891e8b54568255f0ac3d263a926`
 
 Recorded explicitly in `library/REVISION`, not derived from `git
 rev-parse HEAD` at generation time. A live-HEAD anchor is self-
@@ -16,7 +16,7 @@ proves `library/` already existed at some point on `main`'s history.
 **It does not, by itself, certify any cited source's bytes** (SRC-ATTEST
 Part 1) — that claim is the attested source-set digest below.
 
-**Attested source-set digest:** `3263885342960c45293a1b3825f13abc4c6379b24b00ee6897ab9090cfb88c29`
+**Attested source-set digest:** `f796c3fd61c1a675ab5ab2168215db9ef09820846a0b31b59031db566b043f3b`
 
 The SHA-256 of `library/SOURCE-ATTESTATIONS`, the ledger binding every
 manifest-cited source to its exact blob OID at the commit the Librarian

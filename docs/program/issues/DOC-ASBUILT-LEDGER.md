@@ -1,7 +1,7 @@
 ---
 id: DOC-ASBUILT-LEDGER
 title: "As-built phase B — the terminal re-stamp: install the reviewed attestation ledger for all 28 drifted rows at once and regenerate library/STATUS.md"
-status: ready
+status: merged
 owner: doc
 size: S
 gate: none
