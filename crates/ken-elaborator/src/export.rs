@@ -586,7 +586,9 @@ pub(crate) enum HostOpFamilyV1 {
     Entropy,
 }
 
-pub(crate) const fn host_operation_family_v1(operation: ken_host::HostOpV1) -> HostOpFamilyV1 {
+pub(crate) const fn host_operation_family_v1(
+    operation: ken_host::HostOpV1,
+) -> HostOpFamilyV1 {
     match operation {
         ken_host::HostOpV1::ConsoleRead
         | ken_host::HostOpV1::ConsoleWrite
@@ -624,6 +626,7 @@ fn host_operation_family(operation: ken_host::HostOpV1) -> (&'static str, &'stat
         HostOpFamilyV1::Entropy => ("EntropyOp", "Entropy"),
     }
 }
+
 
 /// Injective canonical wire spelling for one typed perform identity.
 ///

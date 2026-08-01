@@ -58,7 +58,7 @@ pub use check::{
 };
 pub use conv::{convert, convert_type, level_eq, normalize, whnf};
 pub use env::{
-    ConstructorDecl, Context, DecEqCert, Decl, GlobalEnv, InductiveDecl, ParameterPolarity,
+    ConstructorDecl, Context, Decl, DecEqCert, GlobalEnv, InductiveDecl, ParameterPolarity,
     PrimReduction,
 };
 pub use error::{KernelError, KernelResult};

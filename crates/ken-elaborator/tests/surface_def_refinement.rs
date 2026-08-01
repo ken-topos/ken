@@ -78,10 +78,7 @@ fn def_refinement_and_def_alias_elaborate_to_the_same_core_decl_as_type_used_to(
     );
     let decimal_id = *alias_env.globals.get("Decimal").unwrap();
     let decimalpair_id = *alias_env.globals.get("DecimalPair").unwrap();
-    let decl = alias_env
-        .env
-        .lookup(decimal_id)
-        .expect("Decimal registered");
+    let decl = alias_env.env.lookup(decimal_id).expect("Decimal registered");
     match decl {
         Decl::Transparent { body, .. } => {
             let expected = Term::indformer(decimalpair_id, vec![]);

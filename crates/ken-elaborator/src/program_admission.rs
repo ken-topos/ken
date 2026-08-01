@@ -2,7 +2,7 @@
 
 use ken_kernel::{Context, Decl, GlobalId, Term};
 
-use crate::{capabilities, effects::EffectRow, ElabEnv};
+use crate::{ElabEnv, capabilities, effects::EffectRow};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CheckedMainDescriptor {
@@ -84,12 +84,13 @@ pub fn admit_checked_main(env: &ElabEnv) -> Result<CheckedMainDescriptor, Progra
         .unwrap_or_default();
 
     if let Some(row) = env.effect_rows.get("main") {
-        let granted = EffectRow::from_effects([
-            "Console".to_string(),
-            "Clock".to_string(),
-            "Entropy".to_string(),
-            "FS".to_string(),
-        ]);
+        let granted =
+            EffectRow::from_effects([
+                "Console".to_string(),
+                "Clock".to_string(),
+                "Entropy".to_string(),
+                "FS".to_string(),
+            ]);
         if !row.row_vars().is_empty() || !row.concrete_effects().is_subset_of(&granted) {
             return Err(ProgramAdmissionError::UnsupportedEffectRow);
         }

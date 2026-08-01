@@ -16,8 +16,8 @@ use ken_kernel::env::Context;
 use ken_kernel::obs::{bottom_term, eq_reduce, top_term};
 use ken_kernel::term::{Level, Term};
 use ken_kernel::{
-    check, declare_def, declare_inductive, declare_postulate, whnf, CtorSpec, GlobalEnv, GlobalId,
-    InductiveSpec,
+    check, declare_def, declare_inductive, declare_postulate, whnf, CtorSpec, GlobalEnv,
+    GlobalId, InductiveSpec,
 };
 
 // ---------------------------------------------------------------------------
@@ -82,8 +82,7 @@ fn mk_env() -> (GlobalEnv, B) {
     };
     let body = Term::lam(bool_t.clone(), Term::lam(bool_t.clone(), elim));
     let ty = Term::pi(bool_t.clone(), Term::pi(bool_t.clone(), bool_t.clone()));
-    let bool_leq =
-        declare_def(&mut env, vec![], ty, body).expect("bool_leq : Bool -> Bool -> Bool");
+    let bool_leq = declare_def(&mut env, vec![], ty, body).expect("bool_leq : Bool -> Bool -> Bool");
 
     (
         env,
@@ -203,9 +202,8 @@ fn absurd_discharges_operation_wrapped_contradictory_hypothesis() {
         Box::new(bool_leq_app(&b, true_c(&b), false_c(&b))),
         Box::new(true_c(&b)),
     );
-    let p = declare_postulate(&mut env, "test postulate".to_string(), vec![], hyp_ty).expect(
-        "p : Eq Bool (bool_leq true false) true (an impossible, operation-wrapped hypothesis)",
-    );
+    let p = declare_postulate(&mut env, "test postulate".to_string(), vec![], hyp_ty)
+        .expect("p : Eq Bool (bool_leq true false) true (an impossible, operation-wrapped hypothesis)");
     let p_const = Term::Const {
         id: p,
         level_args: vec![],

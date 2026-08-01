@@ -12,23 +12,18 @@
 
 use ken_elaborator::ElabEnv;
 
-const TRANSPORT_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
 const COLLECTIONS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
-const ORD_NAT_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Numeric/Nat/Order.ken.md");
+const ORD_NAT_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Numeric/Nat/Order.ken.md");
 
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("Core/Logic/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
-        .expect("Data/Collections/Derived.ken.md must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
-        .expect("Core/Classes/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Logic/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Derived.ken.md must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/Classes/LawfulClasses.ken must elaborate");
     env
 }
 
@@ -37,10 +32,7 @@ fn entry_elaborates_with_every_checked_fence() {
     let mut env = base_env();
     env.elaborate_ken_md_file(ORD_NAT_KEN_MD)
         .expect("catalog/packages/Data/Numeric/Nat/Order.ken.md must elaborate (Definition + every checked fence)");
-    assert!(
-        env.globals.contains_key("Ord_instance_Nat"),
-        "Ord_instance_Nat must be a real registered global"
-    );
+    assert!(env.globals.contains_key("Ord_instance_Nat"), "Ord_instance_Nat must be a real registered global");
 }
 
 // Zero-Axiom acceptance bar: no `Axiom` literal appears anywhere in the
@@ -54,11 +46,7 @@ fn zero_axiom_in_entry_source() {
         !extracted.source.contains("Axiom"),
         "Order.ken.md's tangled/checked code must contain zero Axiom literals (the frame's acceptance bar)"
     );
-    for range in extracted
-        .example_ranges
-        .iter()
-        .chain(extracted.reject_ranges.iter())
-    {
+    for range in extracted.example_ranges.iter().chain(extracted.reject_ranges.iter()) {
         assert!(
             !ORD_NAT_KEN_MD[range.clone()].contains("Axiom"),
             "Order.ken.md's example/reject fences must contain zero Axiom literals"

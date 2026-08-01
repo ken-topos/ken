@@ -117,11 +117,16 @@ impl CompiledModule<JITModule> {
             })?;
         let services = activation
             .services_ptr()
-            .ok_or_else(|| backend_module("activation did not publish its services".to_string()))?;
+            .ok_or_else(|| {
+                backend_module("activation did not publish its services".to_string())
+            })?;
         let native = unsafe {
             mem::transmute::<
                 _,
-                extern "C" fn(*const std::ffi::c_void, *const std::ffi::c_void) -> i64,
+                extern "C" fn(
+                    *const std::ffi::c_void,
+                    *const std::ffi::c_void,
+                ) -> i64,
             >(code)
         };
         let token = native(process_root, services);
@@ -130,7 +135,8 @@ impl CompiledModule<JITModule> {
             .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?;
         let trap_identity = || {
             let word = token as u64;
-            ((token > 0) && (word & ROOT_TRAP_TOKEN_TAG as u64) == ROOT_TRAP_TOKEN_TAG as u64)
+            ((token > 0)
+                && (word & ROOT_TRAP_TOKEN_TAG as u64) == ROOT_TRAP_TOKEN_TAG as u64)
                 .then_some(word >> ROOT_TRAP_TOKEN_SHIFT)
                 .filter(|identity| *identity != 0)
                 .and_then(|identity| usize::try_from(identity - 1).ok())
@@ -163,37 +169,41 @@ impl CompiledModule<JITModule> {
             ),
             ResultDecoder::ProcessStatus => RuntimeGroundValue::Int(token.into()),
             ResultDecoder::Bool => RuntimeGroundValue::Bool(token != 0),
-            ResultDecoder::Boundary => {
-                match crate::boundary_value::BoundaryWord(token as u64).tag() {
-                    Some(crate::boundary_value::BoundaryTag::ImmediateBool) => {
-                        RuntimeGroundValue::Bool(
-                            crate::boundary_value::BoundaryWord(token as u64).payload() != 0,
-                        )
-                    }
-                    Some(crate::boundary_value::BoundaryTag::ImmediateInt) => {
-                        RuntimeGroundValue::Int(
-                            crate::boundary_value::BoundaryWord(token as u64)
-                                .signed_payload()
-                                .into(),
-                        )
-                    }
-                    Some(crate::boundary_value::BoundaryTag::PersistentGround) => {
-                        let adopted = activation
-                            .finish(
-                                &mut store,
-                                Some(crate::boundary_value::BoundaryWord(token as u64)),
-                            )
-                            .map_err(|_| backend(BackendFailure::NativeResultDecode { token }))?
-                            .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?;
-                        store
-                            .observe_adopted_ground(adopted)
-                            .ok_or_else(|| backend(BackendFailure::NativeResultDecode { token }))?
-                    }
-                    _ => {
-                        return Err(backend(BackendFailure::NativeResultDecode { token }));
-                    }
+            ResultDecoder::Boundary => match crate::boundary_value::BoundaryWord(token as u64)
+                .tag()
+            {
+                Some(crate::boundary_value::BoundaryTag::ImmediateBool) => {
+                    RuntimeGroundValue::Bool(
+                        crate::boundary_value::BoundaryWord(token as u64).payload() != 0,
+                    )
                 }
-            }
+                Some(crate::boundary_value::BoundaryTag::ImmediateInt) => {
+                    RuntimeGroundValue::Int(
+                        crate::boundary_value::BoundaryWord(token as u64)
+                            .signed_payload()
+                        .into(),
+                    )
+                }
+                Some(crate::boundary_value::BoundaryTag::PersistentGround) => {
+                    let adopted = activation
+                        .finish(
+                            &mut store,
+                            Some(crate::boundary_value::BoundaryWord(token as u64)),
+                        )
+                        .map_err(|_| {
+                            backend(BackendFailure::NativeResultDecode { token })
+                        })?
+                        .ok_or_else(|| {
+                            backend(BackendFailure::NativeResultDecode { token })
+                        })?;
+                    store.observe_adopted_ground(adopted).ok_or_else(|| {
+                        backend(BackendFailure::NativeResultDecode { token })
+                    })?
+                }
+                _ => {
+                    return Err(backend(BackendFailure::NativeResultDecode { token }));
+                }
+            },
             ResultDecoder::Table => self
                 .result_table
                 .get(&token)

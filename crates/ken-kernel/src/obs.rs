@@ -111,11 +111,9 @@ fn eq_at_registered_literal(env: &GlobalEnv, ctx: &Context, a: &Term, b: &Term) 
     let a_w = whnf(env, ctx, a);
     let b_w = whnf(env, ctx, b);
     match (&a_w, &b_w) {
-        (Term::IntLit(m), Term::IntLit(n)) => Some(if m == n {
-            top_term(env)
-        } else {
-            bottom_term(env)
-        }),
+        (Term::IntLit(m), Term::IntLit(n)) => {
+            Some(if m == n { top_term(env) } else { bottom_term(env) })
+        }
         _ => None,
     }
 }
@@ -512,13 +510,7 @@ fn cast_at_inductive(
             }
             new_args.push(val.clone());
         }
-        return Some(apply_args(
-            Term::Constructor {
-                id: ctor,
-                level_args,
-            },
-            &new_args,
-        ));
+        return Some(apply_args(Term::Constructor { id: ctor, level_args }, &new_args));
     }
 
     // Index change present. Require params to agree; a mixed param+index
@@ -619,13 +611,7 @@ fn cast_at_inductive(
         new_args.push(new_val);
         target_earlier.push(target_val);
     }
-    Some(apply_args(
-        Term::Constructor {
-            id: ctor,
-            level_args,
-        },
-        &new_args,
-    ))
+    Some(apply_args(Term::Constructor { id: ctor, level_args }, &new_args))
 }
 
 /// `cast (A1/R) (A2/S) e [a] ⇝ [cast A1 A2 e0 a]` where `e0 = e.1` is the

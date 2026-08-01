@@ -115,9 +115,9 @@ pub fn whnf(env: &GlobalEnv, ctx: &Context, t: &Term) -> Term {
                 if let Term::Constructor { id, .. } = head {
                     if let Some((ind, k)) = env.constructor(id) {
                         if ind.id == *fam {
-                            if let Ok(reduct) = iota_reduct(
-                                env, ind, k, level_args, params, motive, methods, &all_args,
-                            ) {
+                            if let Ok(reduct) =
+                                iota_reduct(env, ind, k, level_args, params, motive, methods, &all_args)
+                            {
                                 cur = reduct;
                                 continue;
                             }
@@ -416,22 +416,8 @@ fn conv_struct(env: &GlobalEnv, ctx: &Context, a: &Term, b: &Term) -> bool {
     // any argument fails to convert (fallback preserves completeness: a
     // constant that ignores an argument, or two constants that only agree
     // after unfolding, still get the full treatment below).
-    if let (
-        Term::Const {
-            id: id1,
-            level_args: la1,
-        },
-        args1,
-    ) = peel_app(a)
-    {
-        if let (
-            Term::Const {
-                id: id2,
-                level_args: la2,
-            },
-            args2,
-        ) = peel_app(b)
-        {
+    if let (Term::Const { id: id1, level_args: la1 }, args1) = peel_app(a) {
+        if let (Term::Const { id: id2, level_args: la2 }, args2) = peel_app(b) {
             if id1 == id2
                 && level_args_eq(&la1, &la2)
                 && args1.len() == args2.len()

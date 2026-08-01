@@ -218,10 +218,7 @@ impl Canonical for Value {
                 out.push(tag::SMALL_INT);
                 out.extend_from_slice(&v.to_le_bytes());
             }
-            Value::SmallDecimal {
-                coefficient,
-                exponent,
-            } => {
+            Value::SmallDecimal { coefficient, exponent } => {
                 out.push(tag::SMALL_DECIMAL);
                 out.extend_from_slice(&coefficient.to_le_bytes());
                 out.extend_from_slice(&exponent.to_le_bytes());
@@ -307,16 +304,8 @@ mod tests {
         set_b.insert(elem_c.clone());
         set_b.insert(elem_a.clone());
 
-        assert_eq!(
-            encode(&Value::Set {
-                elem_type_id: 1,
-                elements: set_a
-            }),
-            encode(&Value::Set {
-                elem_type_id: 1,
-                elements: set_b
-            })
-        );
+        assert_eq!(encode(&Value::Set { elem_type_id: 1, elements: set_a }),
+                   encode(&Value::Set { elem_type_id: 1, elements: set_b }));
     }
 
     #[test]

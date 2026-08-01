@@ -7,8 +7,8 @@
 //!
 //! Cases that depend on future WPs (V3+, L-classes, char literals) are marked `#[ignore]`.
 
-use ken_elaborator::extract::{v2_extract, ProvKind};
 use ken_elaborator::{ElabEnv, NumericLitVal, ObligationKind};
+use ken_elaborator::extract::{v2_extract, ProvKind};
 use ken_interp::eval::{eval, EvalStore, EvalVal};
 use ken_kernel::{Decl, GlobalId, Term};
 
@@ -18,9 +18,7 @@ fn make_store(env: &ElabEnv) -> EvalStore {
     let mut store = EvalStore::new();
     let mkdecimalpair_id = env.prelude_env.mkdecimalpair_id;
     for (id, v) in &env.num_values {
-        store
-            .num_values
-            .insert(*id, lit_to_eval(v, mkdecimalpair_id));
+        store.num_values.insert(*id, lit_to_eval(v, mkdecimalpair_id));
     }
     store
 }
@@ -61,28 +59,20 @@ fn ac1_int_exact_above_2_53() {
     // Elaborate addition of two large Int literals via the + op.
     // 10^20 in Int: 100000000000000000000
     // 10^20 + 1:    100000000000000000001
-    let result = env
-        .elaborate_decl_v1("const big_sum = (100000000000000000000 : Int) + (1 : Int)")
-        .unwrap();
+    let result = env.elaborate_decl_v1(
+        "const big_sum = (100000000000000000000 : Int) + (1 : Int)"
+    ).unwrap();
     let mut store = make_store(&env);
     let val = eval_def(&env, &mut store, result.def_id);
 
     // The f64-rounded value is 10^20 (10^20 is exactly representable in f64).
     // The exact Int value is 10^20+1.
     let f64_rounded: i128 = 100000000000000000000_i128; // 10^20
-    let exact: i128 = 100000000000000000001_i128; // 10^20 + 1
+    let exact: i128 = 100000000000000000001_i128;       // 10^20 + 1
 
     // Structural value assertion: value must be exact, NOT f64-rounded.
-    assert_ne!(
-        val,
-        EvalVal::from(f64_rounded),
-        "value must not be f64-rounded"
-    );
-    assert_eq!(
-        val,
-        EvalVal::from(exact),
-        "value must be exact (AC1 off-grid witness)"
-    );
+    assert_ne!(val, EvalVal::from(f64_rounded), "value must not be f64-rounded");
+    assert_eq!(val, EvalVal::from(exact), "value must be exact (AC1 off-grid witness)");
 }
 
 // ── AC2: literal types are distinct ─────────────────────────────────────────
@@ -120,9 +110,9 @@ fn ac2_literal_types_distinct() {
 fn ac2_expected_type_overrides_default() {
     let mut env = ElabEnv::new().unwrap();
     // The literal `1` should elaborate at Int64 because that's the expected type.
-    let result = env
-        .elaborate_decl_v1("fn f (x : Int64) : Int64 = x + 1")
-        .unwrap();
+    let result = env.elaborate_decl_v1(
+        "fn f (x : Int64) : Int64 = x + 1"
+    ).unwrap();
     // If this compiles, `1` was correctly elaborated at `Int64`.
     // Type of `f` should be `Int64 → Int64`.
     let _ = result.def_id; // elaboration succeeded
@@ -135,14 +125,13 @@ fn ac2_expected_type_overrides_default() {
 #[test]
 fn ac3_overflow_obligation_emitted_int32() {
     let mut env = ElabEnv::new().unwrap();
-    let result = env
-        .elaborate_decl_v1("fn f (a : Int32) (b : Int32) : Int32 = a + b")
-        .unwrap();
+    let result = env.elaborate_decl_v1(
+        "fn f (a : Int32) (b : Int32) : Int32 = a + b"
+    ).unwrap();
 
     // Structural obligation observation (AC3 requirement: NOT "it compiles").
     assert_eq!(
-        result.obligations.len(),
-        1,
+        result.obligations.len(), 1,
         "bare + on Int32 must emit exactly 1 no-overflow obligation"
     );
     assert!(
@@ -154,10 +143,7 @@ fn ac3_overflow_obligation_emitted_int32() {
     let extracted = v2_extract(&result);
     assert_eq!(extracted.obligations.len(), 1);
     assert!(
-        matches!(
-            extracted.obligations[0].provenance.kind,
-            ProvKind::PartialPrim
-        ),
+        matches!(extracted.obligations[0].provenance.kind, ProvKind::PartialPrim),
         "V2 triple must carry PartialPrim provenance"
     );
 }
@@ -168,9 +154,9 @@ fn ac3_overflow_obligation_emitted_int32() {
 #[test]
 fn ac3_overflow_obligation_dischargeable_structure() {
     let mut env = ElabEnv::new().unwrap();
-    let result = env
-        .elaborate_decl_v1("fn g (a : Int32) (b : Int32) : Int32 = a + b")
-        .unwrap();
+    let result = env.elaborate_decl_v1(
+        "fn g (a : Int32) (b : Int32) : Int32 = a + b"
+    ).unwrap();
 
     // The obligation is emitted — the V3 prover would discharge it for in-range operands.
     assert_eq!(result.obligations.len(), 1);
@@ -181,10 +167,7 @@ fn ac3_overflow_obligation_dischargeable_structure() {
         "goal_closed must be Pi-abstracted over the context"
     );
     // The hole is open (in trusted_base — undischarged)
-    assert!(
-        env.is_open_hole(obl.hole_id),
-        "obligation hole must be open"
-    );
+    assert!(env.is_open_hole(obl.hole_id), "obligation hole must be open");
 }
 
 // ── AC4: no silent wrap ──────────────────────────────────────────────────────
@@ -195,21 +178,17 @@ fn ac3_overflow_obligation_dischargeable_structure() {
 #[test]
 fn ac4_bare_overflow_never_wraps_silently() {
     let mut env = ElabEnv::new().unwrap();
-    let result = env
-        .elaborate_decl_v1("const ovf = (100 : Int8) + (100 : Int8)")
-        .unwrap();
+    let result = env.elaborate_decl_v1(
+        "const ovf = (100 : Int8) + (100 : Int8)"
+    ).unwrap();
 
     // Must emit an obligation (the overflowing obligation is unsatisfiable here,
     // but it must be EMITTED — not silently wrapped).
     assert_eq!(
-        result.obligations.len(),
-        1,
+        result.obligations.len(), 1,
         "bare + on Int8 must emit the no-overflow obligation, never silent-wrap"
     );
-    assert!(matches!(
-        result.obligations[0].kind,
-        ObligationKind::PartialPrim
-    ));
+    assert!(matches!(result.obligations[0].kind, ObligationKind::PartialPrim));
 
     // The obligation hole is open (not discharged — 200 ∉ [-128,127]).
     assert!(env.is_open_hole(result.obligations[0].hole_id));
@@ -224,25 +203,20 @@ fn ac4_bare_overflow_never_wraps_silently() {
 #[test]
 fn ac4_explicit_wrapping_is_modular() {
     let mut env = ElabEnv::new().unwrap();
-    let result = env
-        .elaborate_decl_v1("const wrap_ovf = (100 : Int8) +% (100 : Int8)")
-        .unwrap();
+    let result = env.elaborate_decl_v1(
+        "const wrap_ovf = (100 : Int8) +% (100 : Int8)"
+    ).unwrap();
 
     // No obligation for explicit wrapping.
     assert_eq!(
-        result.obligations.len(),
-        0,
+        result.obligations.len(), 0,
         "+% (wrapping add) must NOT emit a no-overflow obligation"
     );
 
     // Evaluates to the modular result: 100 + 100 = 200; 200 - 256 = -56 as i8.
     let mut store = make_store(&env);
     let val = eval_def(&env, &mut store, result.def_id);
-    assert_eq!(
-        val,
-        EvalVal::Int(-56),
-        "+% (Int8) 100 100 must give -56 (modular)"
-    );
+    assert_eq!(val, EvalVal::Int(-56), "+% (Int8) 100 100 must give -56 (modular)");
 }
 
 // ── AC5: no implicit coercion ────────────────────────────────────────────────
@@ -252,7 +226,9 @@ fn ac4_explicit_wrapping_is_modular() {
 #[test]
 fn ac5_no_implicit_cross_type_coercion() {
     let mut env = ElabEnv::new().unwrap();
-    let result = env.elaborate_decl_v1("fn f (x : Int) (y : Int64) = x + y");
+    let result = env.elaborate_decl_v1(
+        "fn f (x : Int) (y : Int64) = x + y"
+    );
     assert!(
         result.is_err(),
         "implicit Int + Int64 must be a type error (no widening coercion)"
@@ -267,9 +243,9 @@ fn ac5_no_implicit_cross_type_coercion() {
 fn ac5_explicit_conversion_is_partial_option() {
     let mut env = ElabEnv::new().unwrap();
     // Int.toInt64 : Int → Option Int64  (total, may fail if out of range)
-    let _result = env
-        .elaborate_decl_v1("fn f (x : Int) = Int.toInt64 x")
-        .unwrap();
+    let _result = env.elaborate_decl_v1(
+        "fn f (x : Int) = Int.toInt64 x"
+    ).unwrap();
 }
 
 // ── AC6: Decimal exact / Float honest ────────────────────────────────────────
@@ -279,24 +255,20 @@ fn ac5_explicit_conversion_is_partial_option() {
 #[test]
 fn ac6_decimal_exact() {
     let mut env = ElabEnv::new().unwrap();
-    let dec_eq = env
-        .elaborate_decl_v1("const decimal_ok = (0.1d + 0.2d) == 0.3d")
-        .unwrap();
+    let dec_eq = env.elaborate_decl_v1(
+        "const decimal_ok = (0.1d + 0.2d) == 0.3d"
+    ).unwrap();
     let mut store = make_store(&env);
     let val = eval_def(&env, &mut store, dec_eq.def_id);
-    assert_eq!(
-        val,
-        EvalVal::Bool(true),
-        "0.1d + 0.2d == 0.3d must be true (exact)"
-    );
+    assert_eq!(val, EvalVal::Bool(true), "0.1d + 0.2d == 0.3d must be true (exact)");
 }
 
 #[test]
 fn ac6_float_not_exact() {
     let mut env = ElabEnv::new().unwrap();
-    let float_eq = env
-        .elaborate_decl_v1("const float_not_ok = (0.1 + 0.2) == 0.3")
-        .unwrap();
+    let float_eq = env.elaborate_decl_v1(
+        "const float_not_ok = (0.1 + 0.2) == 0.3"
+    ).unwrap();
     let mut store = make_store(&env);
     let val = eval_def(&env, &mut store, float_eq.def_id);
     assert_eq!(
@@ -312,9 +284,9 @@ fn ac6_float_not_exact() {
 #[ignore = "integer division not yet in scope for L1; requires div op registration"]
 fn sec31_int_div_zero_emits_obligation() {
     let mut env = ElabEnv::new().unwrap();
-    let _result = env
-        .elaborate_decl_v1("fn f (a : Int) (b : Int) = a / b")
-        .unwrap();
+    let _result = env.elaborate_decl_v1(
+        "fn f (a : Int) (b : Int) = a / b"
+    ).unwrap();
 }
 
 // ── §6.1: literal reduces in kernel ──────────────────────────────────────────
@@ -324,16 +296,12 @@ fn sec31_int_div_zero_emits_obligation() {
 #[test]
 fn sec61_literal_reduces_in_kernel() {
     let mut env = ElabEnv::new().unwrap();
-    let result = env
-        .elaborate_decl_v1("const five = (2 : Int) + (3 : Int)")
-        .unwrap();
+    let result = env.elaborate_decl_v1(
+        "const five = (2 : Int) + (3 : Int)"
+    ).unwrap();
     let mut store = make_store(&env);
     let val = eval_def(&env, &mut store, result.def_id);
-    assert_eq!(
-        val,
-        EvalVal::Int(5),
-        "2 + 3 : Int must reduce to 5 in the kernel evaluator"
-    );
+    assert_eq!(val, EvalVal::Int(5), "2 + 3 : Int must reduce to 5 in the kernel evaluator");
 }
 
 // ── §6.2: algebraic law is a proposition, not a kernel rule ─────────────────
@@ -350,17 +318,14 @@ fn sec62_abstract_add_is_neutral() {
     // We can't easily drive this without the kernel conversion API, but we can
     // verify that a concrete non-commutative-looking case doesn't silently commute.
     // For now: verify the elaborator accepts the terms without kernel-inserting commutativity.
-    let result_ab = env
-        .elaborate_decl_v1("fn add_ab (a : Int) (b : Int) : Int = a + b")
-        .unwrap();
-    let result_ba = env
-        .elaborate_decl_v1("fn add_ba (a : Int) (b : Int) : Int = b + a")
-        .unwrap();
+    let result_ab = env.elaborate_decl_v1(
+        "fn add_ab (a : Int) (b : Int) : Int = a + b"
+    ).unwrap();
+    let result_ba = env.elaborate_decl_v1(
+        "fn add_ba (a : Int) (b : Int) : Int = b + a"
+    ).unwrap();
     // Both elaborate without error; they are NOT the same term by construction.
-    assert_ne!(
-        result_ab.def_id, result_ba.def_id,
-        "a+b and b+a are distinct definitions"
-    );
+    assert_ne!(result_ab.def_id, result_ba.def_id, "a+b and b+a are distinct definitions");
 }
 
 // ── §2.4: Char excludes surrogates ──────────────────────────────────────────
@@ -378,26 +343,22 @@ fn sec24_char_excludes_surrogates() {
 #[test]
 fn sweep_int8_overflow_emits_obligation() {
     let mut env = ElabEnv::new().unwrap();
-    let result = env
-        .elaborate_decl_v1("fn h (a : Int8) (b : Int8) : Int8 = a + b")
-        .unwrap();
+    let result = env.elaborate_decl_v1(
+        "fn h (a : Int8) (b : Int8) : Int8 = a + b"
+    ).unwrap();
     assert_eq!(result.obligations.len(), 1);
-    assert!(matches!(
-        result.obligations[0].kind,
-        ObligationKind::PartialPrim
-    ));
+    assert!(matches!(result.obligations[0].kind, ObligationKind::PartialPrim));
 }
 
 /// Int (arbitrary-precision) `+` is TOTAL — no obligation emitted.
 #[test]
 fn sweep_int_total_no_obligation() {
     let mut env = ElabEnv::new().unwrap();
-    let result = env
-        .elaborate_decl_v1("fn total_add (a : Int) (b : Int) : Int = a + b")
-        .unwrap();
+    let result = env.elaborate_decl_v1(
+        "fn total_add (a : Int) (b : Int) : Int = a + b"
+    ).unwrap();
     assert_eq!(
-        result.obligations.len(),
-        0,
+        result.obligations.len(), 0,
         "Int + is total (arbitrary-precision); must not emit overflow obligation"
     );
 }

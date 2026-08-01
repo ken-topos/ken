@@ -3366,12 +3366,13 @@ fn lower_runtime_selected_host_operation(
                     "host operation arity does not fit runtime IR",
                 )
             })?;
-            let expected_family = match crate::export::host_operation_family_v1(host_operation) {
-                crate::export::HostOpFamilyV1::Clock => &spine.clock_family,
-                crate::export::HostOpFamilyV1::Console => &spine.console_family,
-                crate::export::HostOpFamilyV1::Fs => &spine.fs_family,
-                crate::export::HostOpFamilyV1::Entropy => &spine.entropy_family,
-            };
+            let expected_family =
+                match crate::export::host_operation_family_v1(host_operation) {
+                    crate::export::HostOpFamilyV1::Clock => &spine.clock_family,
+                    crate::export::HostOpFamilyV1::Console => &spine.console_family,
+                    crate::export::HostOpFamilyV1::Fs => &spine.fs_family,
+                    crate::export::HostOpFamilyV1::Entropy => &spine.entropy_family,
+                };
             if family != expected_family {
                 return Err(expression_lowering_error(
                     root,

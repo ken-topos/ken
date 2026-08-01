@@ -776,14 +776,8 @@ fn structured_former_lift_type(
             .take(parameter_count)
             .collect::<Vec<_>>()
     };
-    let motive_sort = infer_motive_level(
-        env,
-        &Context::new(),
-        guest_decl,
-        guest_level_args,
-        &guest_params,
-        motive,
-    )?;
+    let motive_sort =
+        infer_motive_level(env, &Context::new(), guest_decl, guest_level_args, &guest_params, motive)?;
     let host_level = subst_levels(
         &Term::Type(former_decl.level.clone()),
         &former_decl.level_params,
@@ -1001,16 +995,12 @@ fn structured_lift_type(
             arguments,
         } => {
             let (actual_head, actual_arguments) = peel_app(&field_type);
-            let Term::IndFormer {
-                id: actual_former,
-                level_args: actual_former_level_args,
-            } = actual_head
-            else {
-                return Err(unsupported_recursive_shape(
-                    "declared-former lift head is not an IndFormer",
-                ));
+            let Term::IndFormer { id: actual_former, level_args: actual_former_level_args } = actual_head else {
+                return Err(unsupported_recursive_shape("declared-former lift head is not an IndFormer"));
             };
-            if actual_former != *former || actual_arguments.len() != arguments.len() {
+            if actual_former != *former
+                || actual_arguments.len() != arguments.len()
+            {
                 return Err(unsupported_recursive_shape(
                     "declared-former lift skeleton and normalized field disagree",
                 ));
@@ -1163,16 +1153,12 @@ fn structured_lift_term(
             arguments,
         } => {
             let (actual_head, actual_arguments) = peel_app(&field_type);
-            let Term::IndFormer {
-                id: actual_former,
-                level_args: actual_former_level_args,
-            } = actual_head
-            else {
-                return Err(unsupported_recursive_shape(
-                    "declared-former lifted term head is not an IndFormer",
-                ));
+            let Term::IndFormer { id: actual_former, level_args: actual_former_level_args } = actual_head else {
+                return Err(unsupported_recursive_shape("declared-former lifted term head is not an IndFormer"));
             };
-            if actual_former != *former || actual_arguments.len() != arguments.len() {
+            if actual_former != *former
+                || actual_arguments.len() != arguments.len()
+            {
                 return Err(unsupported_recursive_shape(
                     "declared-former lifted term skeleton and normalized field disagree",
                 ));

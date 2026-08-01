@@ -686,9 +686,45 @@ pub(super) fn extend_continuation_specialization_abi(
             continuation_origin: specialization.key.continuation_origin,
         };
         let parameters = specialization.key.ordinary_parameters;
-        let captures = specialization.key.continuation_captures;
+        let captures = specialization.key.continuation_capture_count();
         let slot_start = abi.slots.len();
         push_slots(&mut abi.slots, definition, parameters, captures)?;
+        for projection in &specialization.key.continuation_inputs {
+            let position = parameters
+                .checked_add(projection.ordinal)
+                .ok_or_else(|| {
+                    planner_capacity_error(
+                        "continuation projection ABI position exhausted",
+                    )
+                })?;
+            if position != projection.ordinary_abi_position {
+                return Err(planner_error(
+                    "continuation projection moved within its emitted ABI",
+                ));
+            }
+            let slot_index = slot_start
+                .checked_add(usize::try_from(position).map_err(|_| {
+                    planner_capacity_error(
+                        "continuation projection ABI position exhausted",
+                    )
+                })?)
+                .ok_or_else(|| {
+                    planner_capacity_error("continuation projection slot exhausted")
+                })?;
+            let slot = abi.slots.get_mut(slot_index).ok_or_else(|| {
+                planner_error("continuation projection slot is outside its unit ABI")
+            })?;
+            if slot.kind != AbiSlotKind::Capture || slot.ordinal != projection.ordinal {
+                return Err(planner_error(
+                    "continuation projection does not name its ordered capture slot",
+                ));
+            }
+            slot.carrier = projection.carrier;
+            slot.ownership = projection.ownership;
+            slot.storage_owner = projection.storage_owner;
+            slot.width_bytes = projection.carrier.width_bytes();
+            slot.align_bytes = projection.carrier.align_bytes();
+        }
         let slots = DenseRange {
             start: u32::try_from(slot_start)
                 .map_err(|_| planner_capacity_error("abi slot identity exhausted"))?,
@@ -804,10 +840,10 @@ pub(super) fn continuation_producer_capture_extension(
         );
         match environments.entry(environment) {
             std::collections::btree_map::Entry::Vacant(entry) => {
-                entry.insert(specialization.key.continuation_captures);
+                entry.insert(specialization.key.continuation_capture_count());
             }
             std::collections::btree_map::Entry::Occupied(entry)
-                if *entry.get() == specialization.key.continuation_captures => {}
+                if *entry.get() == specialization.key.continuation_capture_count() => {}
             std::collections::btree_map::Entry::Occupied(_) => {
                 return Err(planner_error(
                     "one continuation consumer has incompatible environments",
@@ -841,8 +877,8 @@ pub(super) fn continuation_producer_input_start(
         {
             let preceding = producer_specialization
                 .key
-                .continuation_captures
-                .checked_sub(specialization.key.continuation_captures)
+                .continuation_capture_count()
+                .checked_sub(specialization.key.continuation_capture_count())
                 .ok_or_else(|| {
                     planner_error(
                         "continuation extension exceeds its producer environment",
@@ -859,8 +895,8 @@ pub(super) fn continuation_producer_input_start(
                 });
         }
         if producer_specialization.key.consumer_owner == specialization.key.consumer_owner {
-            if producer_specialization.key.continuation_captures
-                < specialization.key.continuation_captures
+            if producer_specialization.key.continuation_capture_count()
+                < specialization.key.continuation_capture_count()
             {
                 return Err(planner_error(format!(
                     "nested continuation specialization reuses an incompatible environment: \
@@ -868,10 +904,10 @@ pub(super) fn continuation_producer_input_start(
                      producer_captures={}, target={:?}, target_consumer={:?}, \
                      target_captures={}",
                     producer_specialization.key.consumer_owner,
-                    producer_specialization.key.continuation_captures,
+                    producer_specialization.key.continuation_capture_count(),
                     specialization.function,
                     specialization.key.consumer_owner,
-                    specialization.key.continuation_captures,
+                    specialization.key.continuation_capture_count(),
                 )));
             }
             // A structurally inner checked continuation can close over an
@@ -920,10 +956,10 @@ pub(super) fn continuation_producer_input_start(
         );
         match environments.entry(environment) {
             std::collections::btree_map::Entry::Vacant(entry) => {
-                entry.insert(candidate.key.continuation_captures);
+                entry.insert(candidate.key.continuation_capture_count());
             }
             std::collections::btree_map::Entry::Occupied(entry)
-                if *entry.get() == candidate.key.continuation_captures => {}
+                if *entry.get() == candidate.key.continuation_capture_count() => {}
             std::collections::btree_map::Entry::Occupied(_) => {
                 return Err(planner_error(
                     "one continuation consumer has incompatible environments",
@@ -964,7 +1000,7 @@ pub(super) fn continuation_producer_input_start(
         producer
             .key
             .ordinary_parameters
-            .checked_add(producer.key.continuation_captures)
+            .checked_add(producer.key.continuation_capture_count())
             .ok_or_else(|| {
                 planner_capacity_error("recursive continuation producer input population exhausted")
             })?
@@ -1793,7 +1829,7 @@ impl AbiPlane {
                 )?;
                 let input_captures = specialization
                     .key
-                    .continuation_captures
+                    .continuation_capture_count()
                     .checked_add(producer_extension)
                     .ok_or_else(|| {
                         planner_capacity_error(

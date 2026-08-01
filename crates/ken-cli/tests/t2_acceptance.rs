@@ -47,10 +47,7 @@ fn ac1_well_typed_def_registers() {
         "well-typed definition should elaborate; got: {:?}",
         result
     );
-    assert!(
-        !env.globals.is_empty(),
-        "definition should register a global"
-    );
+    assert!(!env.globals.is_empty(), "definition should register a global");
 }
 
 /// AC1b — An ill-typed definition returns an error and does NOT register.
@@ -81,13 +78,8 @@ fn ac1_ill_typed_def_rejected_not_registered() {
 #[test]
 fn ac2_provable_goal_yields_proved() {
     let mut env = fresh();
-    let x_id = declare_postulate(
-        &mut env.env,
-        "test postulate".to_string(),
-        vec![],
-        Term::ty(Level::zero()),
-    )
-    .expect("X : Type 0");
+    let x_id = declare_postulate(&mut env.env, "test postulate".to_string(), vec![], Term::ty(Level::zero()))
+        .expect("X : Type 0");
     let x = Term::const_(x_id, vec![]);
     let phi = Term::pi(x.clone(), x);
     let triple = closed_triple(&mut env.env, "ac2_provable", phi);
@@ -115,10 +107,7 @@ fn ac2_open_goal_yields_unknown() {
         .elaborate_decl_v1("prove OpenP : P")
         .expect("prove OpenP should elaborate");
     let ext = v2_extract(&er);
-    assert!(
-        !ext.obligations.is_empty(),
-        "prove should generate obligations"
-    );
+    assert!(!ext.obligations.is_empty(), "prove should generate obligations");
 
     let result = attempt_obligation(&mut env.env, &ext.obligations[0]);
     assert!(
@@ -135,13 +124,8 @@ fn ac2_open_goal_yields_unknown() {
 fn ac2_verdict_flip_provable_vs_open() {
     // Provable branch: Pi(X, X)
     let mut env_p = fresh();
-    let x_id = declare_postulate(
-        &mut env_p.env,
-        "test postulate".to_string(),
-        vec![],
-        Term::ty(Level::zero()),
-    )
-    .expect("X");
+    let x_id = declare_postulate(&mut env_p.env, "test postulate".to_string(), vec![], Term::ty(Level::zero()))
+        .expect("X");
     let x = Term::const_(x_id, vec![]);
     let phi_p = Term::pi(x.clone(), x);
     let triple_p = closed_triple(&mut env_p.env, "flip_provable", phi_p);
@@ -292,13 +276,8 @@ fn ac5_definition_usable_in_check() {
 #[test]
 fn ac6_verify_path_is_real_prover() {
     let mut env = fresh();
-    let x_id = declare_postulate(
-        &mut env.env,
-        "test postulate".to_string(),
-        vec![],
-        Term::ty(Level::zero()),
-    )
-    .expect("X : Type 0");
+    let x_id = declare_postulate(&mut env.env, "test postulate".to_string(), vec![], Term::ty(Level::zero()))
+        .expect("X : Type 0");
     let x = Term::const_(x_id, vec![]);
     let phi = Term::pi(x.clone(), x);
     let triple = closed_triple(&mut env.env, "ac6_prover", phi);

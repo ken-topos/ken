@@ -59,10 +59,7 @@
 
 use ken_kernel::env::{Context, Decl};
 use ken_kernel::term::{Level, Term};
-use ken_kernel::{
-    check, declare_def, declare_inductive, declare_postulate, CtorSpec, GlobalEnv, GlobalId,
-    InductiveSpec,
-};
+use ken_kernel::{check, declare_def, declare_inductive, declare_postulate, CtorSpec, GlobalEnv, GlobalId, InductiveSpec};
 
 struct B {
     bool_: GlobalId,
@@ -100,14 +97,8 @@ fn mk_env() -> (GlobalEnv, B) {
         indices: vec![],
         level: Level::zero(),
         constructors: vec![
-            CtorSpec {
-                args: vec![],
-                target_indices: vec![],
-            }, // True
-            CtorSpec {
-                args: vec![],
-                target_indices: vec![],
-            }, // False
+            CtorSpec { args: vec![], target_indices: vec![] }, // True
+            CtorSpec { args: vec![], target_indices: vec![] }, // False
         ],
     })
     .expect("Bool");
@@ -123,16 +114,9 @@ fn mk_env() -> (GlobalEnv, B) {
         indices: vec![],
         level: Level::zero(),
         constructors: vec![
+            CtorSpec { args: vec![], target_indices: vec![] }, // Leaf
             CtorSpec {
-                args: vec![],
-                target_indices: vec![],
-            }, // Leaf
-            CtorSpec {
-                args: vec![
-                    Term::indformer(d_id, vec![]),
-                    bool_t.clone(),
-                    Term::indformer(d_id, vec![]),
-                ],
+                args: vec![Term::indformer(d_id, vec![]), bool_t.clone(), Term::indformer(d_id, vec![])],
                 target_indices: vec![],
             }, // Node Tree Bool Tree
         ],
@@ -142,13 +126,8 @@ fn mk_env() -> (GlobalEnv, B) {
 
     // leq : Bool -> Bool -> Bool  (abstract, opaque -- mirrors the real
     // `leq` being a universally-quantified parameter, never δ-unfoldable).
-    let leq = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::pi(bool_t.clone(), Term::pi(bool_t.clone(), bool_t.clone())),
-    )
-    .expect("leq : Bool -> Bool -> Bool");
+    let leq = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::pi(bool_t.clone(), Term::pi(bool_t.clone(), bool_t.clone())))
+        .expect("leq : Bool -> Bool -> Bool");
 
     // allKeys(p : Bool -> Prop)(m : Tree) : Prop :=
     //   match m { Leaf => Top ; Node l key r => And (p key) (And (allKeys p l) (allKeys p r)) }
@@ -161,25 +140,21 @@ fn mk_env() -> (GlobalEnv, B) {
     let all_keys_ty = Term::pi(p_dom.clone(), Term::pi(tree_t.clone(), omega0()));
     let all_keys = env.fresh_id();
 
-    let top_c = Term::Const {
-        id: env.top_id(),
-        level_args: vec![],
-    };
+    let top_c = Term::Const { id: env.top_id(), level_args: vec![] };
     let leaf_method = top_c; // 0 fields, 0 IH -> bare term.
-                             // Node method: field binders [l, key, r] then IH binders [IH_l, IH_r]
-                             // (fields-first-then-IHs, the K7/sct_completeness_nested_split
-                             // convention). Context inside the body: [p, m, l, key, r, IH_l, IH_r]
-                             // (7 entries) -- 0=IH_r, 1=IH_l, 2=r, 3=key, 4=l, 5=m(unused), 6=p.
+    // Node method: field binders [l, key, r] then IH binders [IH_l, IH_r]
+    // (fields-first-then-IHs, the K7/sct_completeness_nested_split
+    // convention). Context inside the body: [p, m, l, key, r, IH_l, IH_r]
+    // (7 entries) -- 0=IH_r, 1=IH_l, 2=r, 3=key, 4=l, 5=m(unused), 6=p.
     let p_var = Term::var(6);
     let key_var = Term::var(3);
     let l_var = Term::var(4);
     let r_var = Term::var(2);
-    let and_app = |a: Term, b: Term| Term::app(Term::app(Term::const_(and_, vec![]), a), b);
+    let and_app = |a: Term, b: Term| {
+        Term::app(Term::app(Term::const_(and_, vec![]), a), b)
+    };
     let all_keys_call = |arg: Term| {
-        Term::app(
-            Term::app(Term::const_(all_keys, vec![]), p_var.clone()),
-            arg,
-        )
+        Term::app(Term::app(Term::const_(all_keys, vec![]), p_var.clone()), arg)
     };
     let node_body = and_app(
         Term::app(p_var.clone(), key_var),
@@ -187,13 +162,7 @@ fn mk_env() -> (GlobalEnv, B) {
     );
     let node_method = Term::lam(
         tree_t.clone(),
-        Term::lam(
-            bool_t.clone(),
-            Term::lam(
-                tree_t.clone(),
-                Term::lam(top_dom(), Term::lam(top_dom(), node_body)),
-            ),
-        ),
+        Term::lam(bool_t.clone(), Term::lam(tree_t.clone(), Term::lam(top_dom(), Term::lam(top_dom(), node_body)))),
     );
     let all_keys_body = Term::lam(
         p_dom,
@@ -226,27 +195,14 @@ fn mk_env() -> (GlobalEnv, B) {
             bool_t.clone(),
             Term::Eq(
                 Box::new(bool_t.clone()),
-                Box::new(Term::app(
-                    Term::app(Term::const_(leq, vec![]), Term::var(0)),
-                    Term::var(1),
-                )),
+                Box::new(Term::app(Term::app(Term::const_(leq, vec![]), Term::var(0)), Term::var(1))),
                 Box::new(Term::constructor(true_, vec![])),
             ),
         ),
     );
     let le_below = declare_def(&mut env, vec![], le_below_ty, le_below_body).expect("leBelow");
 
-    (
-        env,
-        B {
-            bool_,
-            true_,
-            tree,
-            all_keys,
-            leq,
-            le_below,
-        },
-    )
+    (env, B { bool_, true_, tree, all_keys, leq, le_below })
 }
 
 /// Placeholder domain for the (dead, K7/dependent-match-convention)
@@ -268,10 +224,7 @@ fn true_c(b: &B) -> Term {
     Term::constructor(b.true_, vec![])
 }
 fn const_(id: GlobalId) -> Term {
-    Term::Const {
-        id,
-        level_args: vec![],
-    }
+    Term::Const { id, level_args: vec![] }
 }
 fn all_keys_app(b: &B, p: Term, m: Term) -> Term {
     Term::app(Term::app(const_(b.all_keys), p), m)

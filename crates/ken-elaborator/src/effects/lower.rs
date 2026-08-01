@@ -103,13 +103,19 @@ pub fn lower_bind(
     // Body   (in C+[_]): App(ITree, weaken(s_type, 1)).
     let motive = Term::lam(
         Term::app(Term::indformer(itree_id, vec![]), r_type.clone()),
-        Term::app(Term::indformer(itree_id, vec![]), weaken(&s_type, 1)),
+        Term::app(
+            Term::indformer(itree_id, vec![]),
+            weaken(&s_type, 1),
+        ),
     );
 
     // method_ret: λ(r:R). f r
     // Domain (in C): r_type.
     // Body   (in C+[r]): App(weaken(f_term, 1), Var(0)).
-    let method_ret = Term::lam(r_type.clone(), Term::app(weaken(&f_term, 1), Term::var(0)));
+    let method_ret = Term::lam(
+        r_type.clone(),
+        Term::app(weaken(&f_term, 1), Term::var(0)),
+    );
 
     // method_vis: λ(k:Nat→ITree R). λ(ih:Nat→ITree S). Vis_S ih
     //

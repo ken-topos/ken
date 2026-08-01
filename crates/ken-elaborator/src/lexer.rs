@@ -58,10 +58,10 @@ pub enum Token {
     /// "capabilities" — program effect-family authority declarations
     KwCapabilities,
     // SURF-named-proof-claims keywords (`33 §8`)
-    KwProp,    // "prop"   — proposition-family claim shape
+    KwProp,  // "prop"   — proposition-family claim shape
     KwTheorem, // "theorem"  — standalone checked theorem
-    KwAxiom,   // "axiom"  — named postulate declaration sugar
-    KwProof,   // "proof"  — attached checked theorem / selector
+    KwAxiom, // "axiom"  — named postulate declaration sugar
+    KwProof, // "proof"  — attached checked theorem / selector
     // V0 punctuation
     LParen,
     RParen,

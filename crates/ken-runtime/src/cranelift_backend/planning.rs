@@ -49,7 +49,8 @@ pub(super) use static_transition::{
 // construct the plane nor reach the pre-emission validator to bypass it.
 pub(super) use static_transition::{
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
-    AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition, EmittableCallKind,
+    AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
+    ContinuationSpecializationCallToken, EmittableCallKind,
     EmittableContinuationSpecialization, EmittableStaticCallableArgumentKind,
     EmittableStaticCallableBinding, EmittableStaticCallableCall, EmittableStaticCallableCapture,
     EmittableStaticCallableUnit, EmittableUnit, PredeclaredFunctionId,

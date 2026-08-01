@@ -80,6 +80,7 @@ pub use literate::{
     KenMdFenceRole,
 };
 pub use numbers::{NumericEnv, NumericLitVal};
+pub use strings::NfcString;
 pub use prelude::PreludeEnv;
 pub use protocol::{
     deserialize_atom_id, deserialize_formula_path, hole_id_string, obligation_id_string,
@@ -94,7 +95,6 @@ pub use prover::{
     ProverResult, Route, StructuralRefutation, Verdict,
 };
 pub use resolve::{RDecl, RDeclKind, RExpr, RType};
-pub use strings::NfcString;
 pub use temporal::{
     closed, elaborate_temporal_expr, temporal_hoas_inductive_spec, temporal_inductive_spec, Pred,
     Temporal, TemporalExpr, TemporalObligation, Var,

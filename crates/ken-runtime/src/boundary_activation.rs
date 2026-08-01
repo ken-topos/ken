@@ -61,7 +61,8 @@ use std::ffi::c_void;
 
 use crate::activation_services::GeneratedActivationServicesV1;
 use crate::boundary_resource_profile::{
-    BoundaryCapacityExhaustedV1, BoundaryResource, BoundaryResourceProfileV1, BoundaryResourceScope,
+    BoundaryCapacityExhaustedV1, BoundaryResource, BoundaryResourceProfileV1,
+    BoundaryResourceScope,
 };
 use crate::boundary_value::{
     BoundaryArenaBuilder, BoundaryArenaV1, BoundaryValueStore, BoundaryWord, ARENA_DATA_CAPACITY,
@@ -499,7 +500,8 @@ impl RootIngressField {
 }
 
 pub const ROOT_INGRESS_PROCESS_INPUT: i32 = RootIngressField::ProcessInput.offset();
-pub const ROOT_INGRESS_HOST_DISPATCH_CONTEXT: i32 = RootIngressField::HostDispatchContext.offset();
+pub const ROOT_INGRESS_HOST_DISPATCH_CONTEXT: i32 =
+    RootIngressField::HostDispatchContext.offset();
 pub const ROOT_INGRESS_CAPABILITY: i32 = RootIngressField::Capability.offset();
 pub const ROOT_INGRESS_BYTES: i32 = (RootIngressField::ALL.len() * 8) as i32;
 

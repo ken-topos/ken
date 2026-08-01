@@ -74,11 +74,7 @@ fn ac1_wtree_wstyle_match_elaborates_with_pi_shaped_ih_domain() {
          hits the Gap-B Internal error",
     );
 
-    let body = env
-        .env
-        .transparent_body(id)
-        .expect("goalK is transparent")
-        .1;
+    let body = env.env.transparent_body(id).expect("goalK is transparent").1;
     let mut inner = &body;
     while let Term::Lam(_, b) = inner {
         inner = b;
@@ -87,15 +83,8 @@ fn ac1_wtree_wstyle_match_elaborates_with_pi_shaped_ih_domain() {
         Term::Elim { fam, methods, .. } => (*fam, methods),
         other => panic!("goalK's match must lower to a real Term::Elim, got {other:?}"),
     };
-    assert_eq!(
-        fam, env.globals["WTree"],
-        "must eliminate over the real WTree family"
-    );
-    assert_eq!(
-        methods.len(),
-        2,
-        "WTree has exactly 2 constructors (Leaf, Node)"
-    );
+    assert_eq!(fam, env.globals["WTree"], "must eliminate over the real WTree family");
+    assert_eq!(methods.len(), 2, "WTree has exactly 2 constructors (Leaf, Node)");
 
     // Node method: λ(b:Bool).λ(k:Bool->WTree).λ(ih:(b':Bool)->allK (k b')).λ(h:…). body
     // Peel the 2 field lambdas (b, k) to reach the IH lambda directly.
@@ -121,10 +110,7 @@ fn ac1_wtree_wstyle_match_elaborates_with_pi_shaped_ih_domain() {
                 let allk_id = env.globals["allK"];
                 let prop_id = env.globals["Prop"];
                 let expected_ih_body = Term::pi(
-                    Term::app(
-                        Term::const_(allk_id, vec![]),
-                        Term::app(Term::var(1), Term::var(0)),
-                    ),
+                    Term::app(Term::const_(allk_id, vec![]), Term::app(Term::var(1), Term::var(0))),
                     Term::const_(prop_id, vec![]),
                 );
                 assert_eq!(
@@ -161,8 +147,7 @@ fn ac2_ill_typed_wstyle_arm_stays_kernel_rejected() {
                    Node b k |-> Equal Bool True True }",
     )
     .expect("allK elaborates");
-    env.elaborate_decl(WTREE_GOAL_SRC)
-        .expect("goalK elaborates (setup)");
+    env.elaborate_decl(WTREE_GOAL_SRC).expect("goalK elaborates (setup)");
 
     // `badGoal`'s Node arm hands back `h` — `h : allK t` narrowed to
     // `allK (Node b k)` at that point — where the (correctly narrowed) goal
@@ -176,10 +161,7 @@ fn ac2_ill_typed_wstyle_arm_stays_kernel_rejected() {
                    Node b k |-> \\h. b }",
     );
     assert!(
-        matches!(
-            err,
-            Err(ken_elaborator::ElabError::KernelRejected { .. }) | Err(_)
-        ),
+        matches!(err, Err(ken_elaborator::ElabError::KernelRejected { .. }) | Err(_)),
         "a Node arm returning `b : Bool` where the narrowed goal demands \
          `allK (Node b k) : Prop` must be kernel-rejected, not laundered \
          through the now-permissive W-style path"

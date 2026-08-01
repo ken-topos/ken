@@ -84,29 +84,21 @@ fn ac2_tree_size_uses_both_ihs_and_computes_right_value() {
     fn nat_count(env: &ken_elaborator::ElabEnv, v: &ken_interp::eval::EvalVal) -> u64 {
         use ken_interp::eval::EvalVal;
         match v {
-            EvalVal::Ctor { id, args, .. } if *id == env.prelude_env.zero_id && args.is_empty() => {
-                0
-            }
+            EvalVal::Ctor { id, args, .. } if *id == env.prelude_env.zero_id && args.is_empty() => 0,
             EvalVal::Ctor { id, args, .. } if *id == env.prelude_env.suc_id && args.len() == 1 => {
                 1 + nat_count(env, &args[0])
             }
             other => panic!("expected a Nat Ctor chain, got {other:?}"),
         }
     }
-    assert_eq!(
-        nat_count(&env, &v),
-        3,
-        "size of the 3-node tree must be 3, not a wrong-but-flat value"
-    );
+    assert_eq!(nat_count(&env, &v), 3, "size of the 3-node tree must be 3, not a wrong-but-flat value");
 }
 
 #[test]
 fn ac3_discriminating_pair_accepts_valid_rejects_ill_typed_sibling() {
     // Valid: both arms consistently typed Nat.
     let mut env_ok = fresh_env();
-    env_ok
-        .elaborate_decl(TREE_DECL)
-        .expect("Tree should declare");
+    env_ok.elaborate_decl(TREE_DECL).expect("Tree should declare");
     env_ok
         .elaborate_decl(
             "fn depth (t : Tree) : Nat = \
@@ -117,9 +109,7 @@ fn ac3_discriminating_pair_accepts_valid_rejects_ill_typed_sibling() {
     // Ill-typed sibling: one arm returns Nat, the other returns Char --
     // inconsistent motive across arms must still be rejected.
     let mut env_bad = fresh_env();
-    env_bad
-        .elaborate_decl(TREE_DECL)
-        .expect("Tree should declare");
+    env_bad.elaborate_decl(TREE_DECL).expect("Tree should declare");
     let res = env_bad.elaborate_decl(
         "fn badDepth (t : Tree) : Nat = \
          match t { Leaf |-> Zero ; Node l c r |-> 99 }",

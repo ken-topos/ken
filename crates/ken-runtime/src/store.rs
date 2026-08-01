@@ -501,7 +501,11 @@ mod tests {
         };
         let subject = Value::Constructor {
             constructor_id: 13,
-            args: vec![inner_record, inner_array, Value::Bytes(vec![0x01])],
+            args: vec![
+                inner_record,
+                inner_array,
+                Value::Bytes(vec![0x01]),
+            ],
         };
 
         // Non-vacuity: the subject really does contain multiple compound

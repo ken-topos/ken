@@ -8,8 +8,7 @@
 use ken_elaborator::{foreign::trusted_base_delta, ElabEnv};
 use ken_kernel::Decl;
 
-const TRANSPORT_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 

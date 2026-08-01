@@ -79,7 +79,8 @@ pub(in crate::cranelift_backend) use super::planning::{
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
     AggregateRepresentationToken, BoundaryUseIdentity, CheckedOrientedMarkerSets,
     ConstructorIdentity, EffectSemanticSeat, EmittableCallKind,
-    EmittableContinuationSpecialization, EmittableStaticCallableArgumentKind,
+    ContinuationSpecializationCallToken, EmittableContinuationSpecialization,
+    EmittableStaticCallableArgumentKind,
     EmittableStaticCallableBinding, EmittableStaticCallableCall, EmittableStaticCallableCapture,
     EmittableStaticCallableUnit, EmittableUnit, JoinPlanToken, JoinResultRepresentation,
     LoweringOnlyOperandEdge, OperandEdgeDisposition, OperandEdgeToken, PredeclaredFunctionId,
@@ -781,7 +782,7 @@ struct FunctionLocalRefs {
     declaration_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     static_callable_calls: BTreeMap<StaticOriginId, units::DeclaredStaticCallableCall>,
     continuation_specialization_calls:
-        BTreeMap<StaticOriginId, Vec<units::DeclaredContinuationSpecializationCall>>,
+        BTreeMap<StaticOriginId, units::DeclaredContinuationSpecializationCall>,
     consumed_unit_calls: BTreeSet<(StaticOriginId, u32)>,
     /// The exact ordinary ABI operands loaded at this emitted unit's entry.
     ///
@@ -1081,7 +1082,7 @@ struct Lowering<'a> {
     live_source_continuations: usize,
     /// Exact producer-result occurrence returned by the most recent owned
     /// source-machine terminal. Compiler-only metadata; never an ABI operand.
-    returned_source_continuation_result_origin: Option<StaticOriginId>,
+    returned_source_continuation_result_origin: Option<ContinuationSpecializationCallToken>,
     source_control_root: Option<ContinuationCursorId>,
     active_oriented_semantic_regions: usize,
     /// ⛔⛔ **`AC-C4`'s TERMINATION GUARD — the carried computational
@@ -1965,6 +1966,90 @@ impl<'a> Lowering<'a> {
             )
     }
 
+    fn disposition_unobserved_operand(
+        &self,
+        operand: &LoweringOperand,
+    ) -> Result<(), CraneliftBackendError> {
+        match operand {
+            LoweringOperand::Carried(_) => Ok(()),
+            LoweringOperand::Specialized(value) => {
+                self.disposition_unobserved_lowered_value(value)
+            }
+        }
+    }
+
+    fn disposition_unobserved_lowered_value(
+        &self,
+        value: &Lowered,
+    ) -> Result<(), CraneliftBackendError> {
+        match value {
+            Lowered::HostResult { error, ok, .. } => {
+                self.disposition_unobserved_lowered_value(error)?;
+                self.disposition_unobserved_lowered_value(ok)
+            }
+            Lowered::DynamicConstructor(dynamic) => {
+                for alternative in &dynamic.alternatives {
+                    if let Some(occurrence) = alternative.aggregate {
+                        self.static_transition_plan
+                            .disposition_synthesized_aggregate_occurrence(occurrence)?;
+                    }
+                    for field in &alternative.fields {
+                        self.disposition_unobserved_lowered_value(field)?;
+                    }
+                }
+                Ok(())
+            }
+            Lowered::Constructor {
+                synthesized_identity,
+                args,
+                ..
+            } => {
+                if let Some(ConstructorIdentityV1::Synthesized {
+                    aggregate: Some(occurrence),
+                    ..
+                }) = synthesized_identity
+                {
+                    self.static_transition_plan
+                        .disposition_synthesized_aggregate_occurrence(*occurrence)?;
+                }
+                for argument in args {
+                    self.disposition_unobserved_lowered_value(argument)?;
+                }
+                Ok(())
+            }
+            Lowered::Record { fields, .. } => {
+                for (_, field) in fields {
+                    self.disposition_unobserved_lowered_value(field)?;
+                }
+                Ok(())
+            }
+            Lowered::Closure { captures, .. }
+            | Lowered::DeclarationClosure { captures, .. } => {
+                for capture in captures {
+                    self.disposition_unobserved_operand(capture)?;
+                }
+                Ok(())
+            }
+            Lowered::ComputationalRecursorClosure { residual, .. } => {
+                self.disposition_unobserved_operand(residual)
+            }
+            Lowered::Int { .. }
+            | Lowered::Bool { .. }
+            | Lowered::ProcessExitStatus { .. }
+            | Lowered::CapabilityToken { .. }
+            | Lowered::ResourceToken { .. }
+            | Lowered::BoundedNat(_)
+            | Lowered::StructuralNat(_)
+            | Lowered::ResponseBytes { .. }
+            | Lowered::Bytes(_)
+            | Lowered::BorrowedNativeValue { .. }
+            | Lowered::BorrowedOption { .. }
+            | Lowered::String(_)
+            | Lowered::RecursiveBackedge
+            | Lowered::Trap(_) => Ok(()),
+        }
+    }
+
     /// Transfer a compile-time [`Lowered`] into the operational carrier.
     ///
     /// ⚠⚠ **The admissibility walk runs HERE and exactly once, before the first
@@ -2212,20 +2297,12 @@ impl<'a> Lowering<'a> {
             .function_local
             .continuation_specialization_calls
             .iter()
-            .flat_map(|(origin, calls)| {
-                calls
-                    .iter()
-                    .map(move |call| (*origin, call.target.call_site_sequence))
-            })
+            .map(|(origin, call)| (*origin, call.target.call_site_sequence))
             .collect::<Vec<_>>();
         for identity @ (origin, _) in identities {
             let contained = self
                 .static_transition_plan
                 .source_origin_is_in_subtree(root, origin)?;
-            eprintln!(
-                "CONTSPEC_DEAD_SUBTREE owner={:?} root={root:?} identity={identity:?} contained={contained}",
-                self.active_emission_owner,
-            );
             if !contained
                 || self
                     .function_local
@@ -2768,15 +2845,6 @@ impl<'a> Lowering<'a> {
         inputs: &[LoweringOperand],
         #[cfg(test)] launch_ingress: Option<cranelift_codegen::ir::Value>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        if matches!(
-            format!("{body_origin:?}").as_str(),
-            "StaticOriginId(442)" | "StaticOriginId(761)"
-        ) {
-            eprintln!(
-                "TRACE resource-body call site rust={}",
-                std::panic::Location::caller()
-            );
-        }
         let repeated_worker_phase = self
             .active_emission_owner
             .and_then(|owner| {
@@ -3221,24 +3289,7 @@ impl<'a> Lowering<'a> {
             .ins()
             .brif(failed, failure_block, &[], trap_check_block, &[]);
         builder.switch_to_block(failure_block);
-        let diagnostic = match format!("{:?}", target.unit).as_str() {
-            "PredeclaredFunctionId(8)" => Some(-2),
-            "PredeclaredFunctionId(10)" => Some(-3),
-            "PredeclaredFunctionId(16)" => Some(-4),
-            _ => None,
-        };
-        if let Some(diagnostic) = diagnostic {
-            let unclassified = builder.ins().icmp_imm(
-                cranelift_codegen::ir::condcodes::IntCC::Equal,
-                unit_status,
-                -1,
-            );
-            let diagnostic = builder.ins().iconst(types::I64, diagnostic);
-            let status = builder.ins().select(unclassified, diagnostic, unit_status);
-            builder.ins().return_(&[status]);
-        } else {
-            builder.ins().return_(&[unit_status]);
-        }
+        builder.ins().return_(&[unit_status]);
         builder.seal_block(failure_block);
         builder.switch_to_block(trap_check_block);
         builder.seal_block(trap_check_block);
@@ -3379,14 +3430,6 @@ impl<'a> Lowering<'a> {
                 synthesized_identity,
                 args,
             } => {
-                if constructor.contains("ResourceBodyResult") {
-                    eprintln!(
-                        "TRACE transfer resource-body constructor={constructor} origin={origin:?} \
-                         aggregate_origin={aggregate_origin:?} owner={:?} args={}",
-                        self.active_emission_owner,
-                        args.len()
-                    );
-                }
                 let representation_origin = aggregate_origin.unwrap_or(origin);
                 let representation = match (aggregate_origin, synthesized_identity) {
                     (Some(source_origin), None | Some(ConstructorIdentityV1::Source(_))) => {
@@ -4321,19 +4364,6 @@ impl<'a> Lowering<'a> {
         origin: StaticOriginId,
         dynamic: &DynamicConstructorV1,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
-        if dynamic.alternatives.len() == 10 {
-            eprintln!(
-                "TRACE resource synthesized identities={:?}",
-                dynamic
-                    .alternatives
-                    .iter()
-                    .map(|alternative| (
-                        alternative.constructor.as_str(),
-                        alternative.identity.tag_abi_word()
-                    ))
-                    .collect::<Vec<_>>()
-            );
-        }
         validate_dynamic_constructor_alternatives(
             dynamic
                 .alternatives
@@ -4648,11 +4678,6 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         target: CarriedBoundaryWord,
     ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
-        eprintln!(
-            "CONTSPEC_FIELD_COUNT_SITE owner={:?} caller={}",
-            self.active_emission_owner,
-            std::panic::Location::caller(),
-        );
         let refs = self.carrier_refs()?;
         let arena = self.carrier_arena()?;
         let pointer_type = builder.func.dfg.value_type(arena);
@@ -7585,7 +7610,7 @@ enum SourceContinuation<'a> {
         static_origin: StaticOriginId,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<LoweringOperand>,
-        continuation_result_origin: Option<StaticOriginId>,
+        continuation_result_origin: Option<ContinuationSpecializationCallToken>,
         env: Vec<LoweringOperand>,
         next: Box<SourceContinuation<'a>>,
     },
@@ -7718,7 +7743,7 @@ enum SourcePrefixTemplate {
         static_origin: StaticOriginId,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<LoweringOperand>,
-        continuation_result_origin: Option<StaticOriginId>,
+        continuation_result_origin: Option<ContinuationSpecializationCallToken>,
         env: Vec<LoweringOperand>,
         next: Box<SourcePrefixTemplate>,
     },
@@ -7865,7 +7890,7 @@ enum SourceMachineState<'a> {
         /// consumers clear it, transparent checked wrappers preserve it, and
         /// aggregate construction carries at most one proved alternative into
         /// the completed aggregate.
-        continuation_result_origin: Option<StaticOriginId>,
+        continuation_result_origin: Option<ContinuationSpecializationCallToken>,
         control: SourceControl<'a>,
     },
 }
@@ -10603,12 +10628,6 @@ impl<'a> Lowering<'a> {
         trap: &RuntimeTrap,
     ) -> Result<cranelift_codegen::ir::Value, CraneliftBackendError> {
         let identity = self.static_transition_plan.trap_identity(trap)?;
-        eprintln!(
-            "TRACE trap identity={} code={:?} message={}",
-            identity.abi_word(),
-            trap.code,
-            trap.message
-        );
         match self.function_local.trap_exit {
             Some(TrapExitAuthority::UnitFrame { slots, trap_offset }) => {
                 #[cfg(test)]

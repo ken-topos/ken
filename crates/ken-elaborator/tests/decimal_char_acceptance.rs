@@ -42,10 +42,7 @@ fn eval_view(src: &str) -> EvalVal {
     }
     match env.env.lookup(r.def_id) {
         Some(Decl::Transparent { body, .. }) => eval(&[], body, &env.env, &mut store),
-        other => panic!(
-            "expected a checked Transparent def, got {:?}",
-            other.map(|_| ())
-        ),
+        other => panic!("expected a checked Transparent def, got {:?}", other.map(|_| ())),
     }
 }
 
@@ -84,11 +81,7 @@ fn decimal_mul_exact_flips_vs_saturating() {
         EvalVal::Ctor { args, .. } => {
             match &args[0] {
                 EvalVal::BigInt(n) => {
-                    assert_eq!(
-                        n.to_string(),
-                        "100000000000000000000",
-                        "exact 10^20, no saturation"
-                    );
+                    assert_eq!(n.to_string(), "100000000000000000000", "exact 10^20, no saturation");
                 }
                 EvalVal::Int(n) => panic!("10^20 must widen to BigInt, got Int({})", n),
                 other => panic!("expected Int/BigInt coeff, got {:?}", other),
@@ -186,19 +179,15 @@ fn int_to_char_rejects_surrogate_and_oor() {
     let valid = eval_view("const t = intToChar 65"); // 'A'
 
     let (surrogate_id, oor_id, valid_id) = match (&surrogate, &oor, &valid) {
-        (EvalVal::Ctor { id: s, .. }, EvalVal::Ctor { id: o, .. }, EvalVal::Ctor { id: v, .. }) => {
-            (*s, *o, *v)
-        }
+        (
+            EvalVal::Ctor { id: s, .. },
+            EvalVal::Ctor { id: o, .. },
+            EvalVal::Ctor { id: v, .. },
+        ) => (*s, *o, *v),
         other => panic!("expected Ctor (Option) results, got {:?}", other),
     };
-    assert_eq!(
-        surrogate_id, oor_id,
-        "surrogate and OOR must both reduce to the same ctor (None)"
-    );
-    assert_ne!(
-        valid_id, surrogate_id,
-        "a valid scalar must reduce to a DIFFERENT ctor (Some)"
-    );
+    assert_eq!(surrogate_id, oor_id, "surrogate and OOR must both reduce to the same ctor (None)");
+    assert_ne!(valid_id, surrogate_id, "a valid scalar must reduce to a DIFFERENT ctor (Some)");
 }
 
 // ── Char pin 1 — the Ω-encoding is structural, not a naive disjunction ─────

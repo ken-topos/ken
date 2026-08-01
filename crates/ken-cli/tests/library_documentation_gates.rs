@@ -301,17 +301,12 @@ fn walk_library() -> LibraryWalk {
     let mut stack = vec![repo_root().join("library")];
     let root = repo_root();
     while let Some(dir) = stack.pop() {
-        for entry in
-            std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
+        for entry in std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
         {
             let entry = entry.expect("dir entry");
             let file_type = entry.file_type().expect("dir entry file type");
             let path = entry.path();
-            let rel = path
-                .strip_prefix(&root)
-                .unwrap()
-                .to_string_lossy()
-                .replace('\\', "/");
+            let rel = path.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/");
             if file_type.is_symlink() {
                 symlinks.push(rel);
                 continue;
@@ -325,10 +320,7 @@ fn walk_library() -> LibraryWalk {
     }
     markdown_files.sort();
     symlinks.sort();
-    LibraryWalk {
-        markdown_files,
-        symlinks,
-    }
+    LibraryWalk { markdown_files, symlinks }
 }
 
 /// Every `.md` file under `library/`, repo-relative with forward slashes.
@@ -1127,16 +1119,9 @@ fn build_synthetic_origin(base: &Path) -> (PathBuf, String, String) {
     let revision_target = run_git(&["rev-parse", "HEAD"], &origin);
 
     for i in 0..20 {
-        std::fs::write(
-            origin.join(format!("filler-{i}.txt")),
-            format!("filler {i}\n"),
-        )
-        .unwrap();
+        std::fs::write(origin.join(format!("filler-{i}.txt")), format!("filler {i}\n")).unwrap();
         run_git(&["add", "-A"], &origin);
-        run_git(
-            &["commit", "--quiet", "-m", &format!("filler {i}")],
-            &origin,
-        );
+        run_git(&["commit", "--quiet", "-m", &format!("filler {i}")], &origin);
     }
     std::fs::write(
         origin.join("library/REVISION"),
@@ -1145,12 +1130,7 @@ fn build_synthetic_origin(base: &Path) -> (PathBuf, String, String) {
     .unwrap();
     run_git(&["add", "-A"], &origin);
     run_git(
-        &[
-            "commit",
-            "--quiet",
-            "-m",
-            "anchor REVISION at the distant ancestor",
-        ],
+        &["commit", "--quiet", "-m", "anchor REVISION at the distant ancestor"],
         &origin,
     );
     let tip = run_git(&["rev-parse", "HEAD"], &origin);
@@ -1398,12 +1378,7 @@ fn build_currency_fixture(base: &Path) -> (PathBuf, String) {
     write_ledger(&repo, &[(&example_oid, "docs/example.md")]);
     run_git(&["add", "-A"], &repo);
     run_git(
-        &[
-            "commit",
-            "--quiet",
-            "-m",
-            "initial: manifest + cited source",
-        ],
+        &["commit", "--quiet", "-m", "initial: manifest + cited source"],
         &repo,
     );
     let revision = run_git(&["rev-parse", "HEAD"], &repo);
@@ -1564,12 +1539,7 @@ fn content_currency_gate_rejects_revision_predating_librarys_own_introduction() 
     write_empty_ledger(&repo);
     run_git(&["add", "-A"], &repo);
     run_git(
-        &[
-            "commit",
-            "--quiet",
-            "-m",
-            "introduce library/, REVISION mis-anchored",
-        ],
+        &["commit", "--quiet", "-m", "introduce library/, REVISION mis-anchored"],
         &repo,
     );
     set_origin_main_to_head(&repo);
@@ -1597,15 +1567,7 @@ fn content_currency_gate_rejects_revision_predating_librarys_own_introduction() 
     )
     .unwrap();
     run_git(&["add", "-A"], &repo);
-    run_git(
-        &[
-            "commit",
-            "--quiet",
-            "-m",
-            "re-anchor REVISION at library/'s introduction",
-        ],
-        &repo,
-    );
+    run_git(&["commit", "--quiet", "-m", "re-anchor REVISION at library/'s introduction"], &repo);
 
     let recovered = run_gen_doc_status(&repo);
     assert!(
@@ -1673,12 +1635,7 @@ fn content_currency_gate_rejects_a_symlink_source_even_when_its_target_is_unchan
     std::fs::write(repo.join("library/REVISION"), "0".repeat(40)).unwrap();
     run_git(&["add", "-A"], &repo);
     run_git(
-        &[
-            "commit",
-            "--quiet",
-            "-m",
-            "initial: manifest + symlink source",
-        ],
+        &["commit", "--quiet", "-m", "initial: manifest + symlink source"],
         &repo,
     );
     // The ledger must list a row for the symlink path to reach the
@@ -1693,10 +1650,7 @@ fn content_currency_gate_rejects_a_symlink_source_even_when_its_target_is_unchan
     let revision = run_git(&["rev-parse", "HEAD"], &repo);
     std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
     run_git(&["add", "-A"], &repo);
-    run_git(
-        &["commit", "--quiet", "-m", "anchor REVISION + ledger"],
-        &repo,
-    );
+    run_git(&["commit", "--quiet", "-m", "anchor REVISION + ledger"], &repo);
     set_origin_main_to_head(&repo);
 
     // Target is UNCHANGED since the ledger was written — the only variable
@@ -1774,12 +1728,7 @@ fn content_currency_gate_rejects_drift_hidden_behind_a_duplicate_out_of_order_ki
     write_ledger(&repo, &[(&example_oid, "docs/example.md")]);
     run_git(&["add", "-A"], &repo);
     run_git(
-        &[
-            "commit",
-            "--quiet",
-            "-m",
-            "initial: manifest + duplicate kind",
-        ],
+        &["commit", "--quiet", "-m", "initial: manifest + duplicate kind"],
         &repo,
     );
     let revision = run_git(&["rev-parse", "HEAD"], &repo);
@@ -1797,10 +1746,7 @@ fn content_currency_gate_rejects_drift_hidden_behind_a_duplicate_out_of_order_ki
     )
     .unwrap();
     run_git(&["add", "-A"], &repo);
-    run_git(
-        &["commit", "--quiet", "-m", "drift the cited source"],
-        &repo,
-    );
+    run_git(&["commit", "--quiet", "-m", "drift the cited source"], &repo);
 
     let out = run_gen_doc_status(&repo);
     assert!(
@@ -2344,12 +2290,7 @@ fn revision_must_survive_a_simulated_squash_merge_not_just_the_branch() {
     write_empty_ledger(&repo);
     run_git(&["add", "-A"], &repo);
     run_git(
-        &[
-            "commit",
-            "--quiet",
-            "-m",
-            "B: merge base (simulated main tip)",
-        ],
+        &["commit", "--quiet", "-m", "B: merge base (simulated main tip)"],
         &repo,
     );
     let b = run_git(&["rev-parse", "HEAD"], &repo);
@@ -2357,7 +2298,10 @@ fn revision_must_survive_a_simulated_squash_merge_not_just_the_branch() {
     // A synthetic `origin/main` ref pointing at B -- no real remote needed,
     // git only needs the ref to exist for `merge-base --is-ancestor` to
     // read it. This is what lets the ON-BRANCH check below run at all.
-    run_git(&["update-ref", "refs/remotes/origin/main", &b], &repo);
+    run_git(
+        &["update-ref", "refs/remotes/origin/main", &b],
+        &repo,
+    );
 
     // C1: first branch commit (filler) -- the shape that used to be
     // (incorrectly) treated as "the immediate parent, so it's fine."
@@ -2416,14 +2360,7 @@ fn revision_must_survive_a_simulated_squash_merge_not_just_the_branch() {
     // carrying the content, parented on `main`, never on the branch.
     let tree = run_git(&["rev-parse", "HEAD^{tree}"], &repo);
     let s = run_git(
-        &[
-            "commit-tree",
-            &tree,
-            "-p",
-            &b,
-            "-m",
-            "S: simulated squash merge",
-        ],
+        &["commit-tree", &tree, "-p", &b, "-m", "S: simulated squash merge"],
         &repo,
     );
     run_git(&["checkout", "--quiet", &s], &repo);
@@ -2513,10 +2450,7 @@ fn missing_origin_main_anchor_is_rejected_not_silently_skipped() {
     let revision = run_git(&["rev-parse", "HEAD"], &repo);
     std::fs::write(repo.join("library/REVISION"), format!("{revision}\n")).unwrap();
     run_git(&["add", "-A"], &repo);
-    run_git(
-        &["commit", "--quiet", "-m", "anchor REVISION at own parent"],
-        &repo,
-    );
+    run_git(&["commit", "--quiet", "-m", "anchor REVISION at own parent"], &repo);
 
     // Deliberately: no `refs/remotes/origin/main`, no `origin` remote
     // configured at all -- `git fetch origin` has nothing to fetch from.
@@ -2858,12 +2792,16 @@ fn matches_shipped_pattern(value: &str, pattern: &str) -> Result<bool, String> {
         "^(core|tasks)/[a-z0-9-]+$" => value
             .split_once('/')
             .is_some_and(|(prefix, rest)| matches!(prefix, "core" | "tasks") && is_kebab(rest)),
-        "^library/agents/(core|tasks)/.*\\.md$" => value
-            .strip_prefix("library/agents/")
-            .and_then(|rest| rest.split_once('/'))
-            .is_some_and(|(area, file)| {
-                matches!(area, "core" | "tasks") && !file.is_empty() && file.ends_with(".md")
-            }),
+        "^library/agents/(core|tasks)/.*\\.md$" => {
+            value
+                .strip_prefix("library/agents/")
+                .and_then(|rest| rest.split_once('/'))
+                .is_some_and(|(area, file)| {
+                    matches!(area, "core" | "tasks")
+                        && !file.is_empty()
+                        && file.ends_with(".md")
+                })
+        }
         "^library/agents/packs/.*\\.toml$" => value
             .strip_prefix("library/agents/packs/")
             .is_some_and(|file| !file.is_empty() && file.ends_with(".toml")),
@@ -2930,9 +2868,7 @@ fn resolve_local_schema_reference<'a>(
         ));
     }
     let Some(pointer) = reference.strip_prefix('#') else {
-        return Err(format!(
-            "external schema reference {reference:?} is unsupported"
-        ));
+        return Err(format!("external schema reference {reference:?} is unsupported"));
     };
     let mut target = schema_root;
     if pointer.is_empty() {
@@ -2981,20 +2917,22 @@ fn schema_violations_with_refs(
                     "{location}: schema reference cycle through {reference:?}"
                 ));
             }
-            Some(reference) => match resolve_local_schema_reference(reference, schema_root) {
-                Ok(target) => {
-                    active_refs.push(reference.to_string());
-                    bad.extend(schema_violations_with_refs(
-                        target,
-                        instance,
-                        schema_root,
-                        location,
-                        active_refs,
-                    ));
-                    active_refs.pop();
+            Some(reference) => {
+                match resolve_local_schema_reference(reference, schema_root) {
+                    Ok(target) => {
+                        active_refs.push(reference.to_string());
+                        bad.extend(schema_violations_with_refs(
+                            target,
+                            instance,
+                            schema_root,
+                            location,
+                            active_refs,
+                        ));
+                        active_refs.pop();
+                    }
+                    Err(message) => bad.push(format!("{location}: {message}")),
                 }
-                Err(message) => bad.push(format!("{location}: {message}")),
-            },
+            }
             None => bad.push(format!("{location}: $ref must be a string")),
         }
     }
@@ -3028,9 +2966,7 @@ fn schema_violations_with_refs(
 
     if let Some(minimum) = schema.get("minimum").and_then(serde_json::Value::as_i64) {
         if instance.as_i64().is_some_and(|value| value < minimum) {
-            bad.push(format!(
-                "{location}: minimum violation: expected at least {minimum}"
-            ));
+            bad.push(format!("{location}: minimum violation: expected at least {minimum}"));
         }
     }
     if let Some(minimum) = schema.get("minLength").and_then(serde_json::Value::as_u64) {
@@ -3038,9 +2974,7 @@ fn schema_violations_with_refs(
             .as_str()
             .is_some_and(|value| value.chars().count() < minimum as usize)
         {
-            bad.push(format!(
-                "{location}: minLength violation: expected at least {minimum}"
-            ));
+            bad.push(format!("{location}: minLength violation: expected at least {minimum}"));
         }
     }
     if let Some(pattern) = schema.get("pattern").and_then(serde_json::Value::as_str) {
@@ -3059,9 +2993,7 @@ fn schema_violations_with_refs(
             .as_array()
             .is_some_and(|values| values.len() < minimum as usize)
         {
-            bad.push(format!(
-                "{location}: minItems violation: expected at least {minimum}"
-            ));
+            bad.push(format!("{location}: minItems violation: expected at least {minimum}"));
         }
     }
     if let (Some(items_schema), Some(items)) = (schema.get("items"), instance.as_array()) {
@@ -3172,7 +3104,11 @@ fn unsupported_schema_keywords(schema: &serde_json::Value, location: &str) -> Ve
 }
 
 fn record_scalar<'a>(record: &'a ControlledRecord, field: &str) -> &'a str {
-    record.scalars.get(field).map(String::as_str).unwrap_or("")
+    record
+        .scalars
+        .get(field)
+        .map(String::as_str)
+        .unwrap_or("")
 }
 
 fn duplicate_record_ids(records: &[ControlledRecord]) -> BTreeSet<String> {
@@ -3277,7 +3213,12 @@ fn graph_violations(
             return;
         }
         if let Some(pack) = packs.get(id) {
-            for dependency in pack.arrays.get("dependencies").into_iter().flatten() {
+            for dependency in pack
+                .arrays
+                .get("dependencies")
+                .into_iter()
+                .flatten()
+            {
                 visit(dependency, packs, visiting, visited, bad);
             }
         }
@@ -3292,7 +3233,12 @@ fn graph_violations(
                 bad.push(format!("{id}: included module {module:?} is missing"));
             }
         }
-        for dependency in pack.arrays.get("dependencies").into_iter().flatten() {
+        for dependency in pack
+            .arrays
+            .get("dependencies")
+            .into_iter()
+            .flatten()
+        {
             if !packs.contains_key(dependency) {
                 bad.push(format!("{id}: dependency pack {dependency:?} is missing"));
             }
@@ -3300,7 +3246,13 @@ fn graph_violations(
     }
     let mut visited = BTreeSet::new();
     for id in packs.keys() {
-        visit(id, packs, &mut BTreeSet::new(), &mut visited, &mut bad);
+        visit(
+            id,
+            packs,
+            &mut BTreeSet::new(),
+            &mut visited,
+            &mut bad,
+        );
     }
     bad.sort();
     bad.dedup();
@@ -3313,17 +3265,29 @@ fn transitive_modules(
     out: &mut BTreeSet<String>,
 ) {
     let pack = &packs[id];
-    for dependency in pack.arrays.get("dependencies").into_iter().flatten() {
+    for dependency in pack
+        .arrays
+        .get("dependencies")
+        .into_iter()
+        .flatten()
+    {
         transitive_modules(dependency, packs, out);
     }
-    out.extend(pack.arrays.get("includes").into_iter().flatten().cloned());
+    out.extend(
+        pack.arrays
+            .get("includes")
+            .into_iter()
+            .flatten()
+            .cloned(),
+    );
 }
 
 #[test]
 fn agent_pack_integrity_rejects_missing_modules_and_cycles() {
     let module_ids = BTreeSet::from(["core/read-ken".to_string()]);
-    let clean =
-        parse_pack_file("id = \"clean\"\nincludes = [\"core/read-ken\"]\ndependencies = []\n");
+    let clean = parse_pack_file(
+        "id = \"clean\"\nincludes = [\"core/read-ken\"]\ndependencies = []\n",
+    );
     let mut packs = BTreeMap::from([("clean".to_string(), clean.clone())]);
     assert!(graph_violations(&module_ids, &packs).is_empty());
 
@@ -3385,7 +3349,8 @@ fn agent_schema_contract_rejects_each_declared_constraint_class() {
     let root = repo_root();
     let schema_dir = root.join("library/agents/schemas");
     let pack_schema: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(schema_dir.join("pack.schema.json")).expect("read pack schema"),
+        &std::fs::read_to_string(schema_dir.join("pack.schema.json"))
+            .expect("read pack schema"),
     )
     .expect("parse pack schema");
     let clean = "schema_version = 1\n\
@@ -3415,18 +3380,9 @@ fn agent_schema_contract_rejects_each_declared_constraint_class() {
             "type",
             clean.replace("purpose = \"Write Ken\"", "purpose = 1"),
         ),
-        (
-            "pattern",
-            clean.replace("id = \"write-pure\"", "id = \"WritePure\""),
-        ),
-        (
-            "minItems",
-            clean.replace("triggers = [\"write\"]", "triggers = []"),
-        ),
-        (
-            "minLength",
-            clean.replace("purpose = \"Write Ken\"", "purpose = \"\""),
-        ),
+        ("pattern", clean.replace("id = \"write-pure\"", "id = \"WritePure\"")),
+        ("minItems", clean.replace("triggers = [\"write\"]", "triggers = []")),
+        ("minLength", clean.replace("purpose = \"Write Ken\"", "purpose = \"\"")),
         (
             "additionalProperties",
             format!("{clean}unknown_field = \"must reject\"\n"),
@@ -3511,7 +3467,12 @@ fn agent_schema_contract_rejects_each_declared_constraint_class() {
     let mut items_schema = pack_schema.clone();
     items_schema["properties"]["triggers"]["items"]["const"] =
         serde_json::json!("different trigger");
-    let items = schema_violations(&items_schema, &clean_pack, &items_schema, "items traversal");
+    let items = schema_violations(
+        &items_schema,
+        &clean_pack,
+        &items_schema,
+        "items traversal",
+    );
     assert!(
         items.iter().any(|message| {
             message.contains("items traversal.triggers[0]") && message.contains("const")
@@ -3520,7 +3481,8 @@ fn agent_schema_contract_rejects_each_declared_constraint_class() {
     );
 
     let mut properties_schema = pack_schema.clone();
-    properties_schema["properties"]["purpose"]["const"] = serde_json::json!("different purpose");
+    properties_schema["properties"]["purpose"]["const"] =
+        serde_json::json!("different purpose");
     let properties = schema_violations(
         &properties_schema,
         &clean_pack,
@@ -3608,10 +3570,7 @@ fn agent_schema_contract_rejects_each_declared_constraint_class() {
     );
 
     for (reference, expected) in [
-        (
-            "https://example.invalid/schema",
-            "external schema reference",
-        ),
+        ("https://example.invalid/schema", "external schema reference"),
         ("#/$defs/non-schema", "non-object schema"),
     ] {
         let bad_reference_schema = serde_json::json!({
@@ -3659,15 +3618,19 @@ fn agent_controlled_paths_fail_loudly_on_escape() {
 }
 
 fn has_checked_examples(src: &str) -> bool {
-    src.lines()
-        .any(|line| matches!(line.trim(), "```ken example" | "```ken reject"))
+    src.lines().any(|line| {
+        matches!(
+            line.trim(),
+            "```ken example" | "```ken reject"
+        )
+    })
 }
 
 fn applies_to_checked_example_records(entry: &DocEntry) -> bool {
     let root = repo_root();
     let path = resolve_controlled_path(&root, &entry.path, "checked-example applicability");
-    let src =
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let src = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     has_checked_examples(&src)
 }
 
@@ -3698,7 +3661,8 @@ fn check_checked_examples() {
         .filter(|entry| applies_to_checked_example_records(entry))
         .enumerate()
     {
-        let path = resolve_controlled_path(&root, &entry.path, "checked-example execution");
+        let path =
+            resolve_controlled_path(&root, &entry.path, "checked-example execution");
         let src = std::fs::read_to_string(&path)
             .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
         let output = run_checked_markdown(&path, &src, index);

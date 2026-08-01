@@ -85,19 +85,15 @@ use ken_kernel::Term;
 
 const LAWFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
-const TRANSPORT_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const COLLECTIONS_KEN_MD: &str =
     include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
 
 fn mk_env_with_package() -> ElabEnv {
     let mut env = ElabEnv::new().expect("base env construction failed");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("catalog/packages/Core/Logic/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
-        .expect("catalog/packages/Data/Collections/Derived.ken must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
-        .expect("catalog/packages/Core/Classes/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("catalog/packages/Core/Logic/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("catalog/packages/Data/Collections/Derived.ken must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("catalog/packages/Core/Classes/LawfulClasses.ken must elaborate");
     env
 }
 
@@ -165,9 +161,7 @@ fn mentions_const(t: &Term, id: ken_kernel::GlobalId) -> bool {
     match t {
         Term::Const { id: i, .. } => *i == id,
         Term::App(f, a) => mentions_const(f, id) || mentions_const(a, id),
-        Term::Pi(a, b) | Term::Lam(a, b) | Term::Sigma(a, b) => {
-            mentions_const(a, id) || mentions_const(b, id)
-        }
+        Term::Pi(a, b) | Term::Lam(a, b) | Term::Sigma(a, b) => mentions_const(a, id) || mentions_const(b, id),
         _ => false,
     }
 }
@@ -179,12 +173,8 @@ fn mentions_const(t: &Term, id: ken_kernel::GlobalId) -> bool {
 #[test]
 fn classes_are_transparent_structure_records_zero_delta() {
     let env = mk_env_with_package();
-    let base_tb: std::collections::HashSet<_> = ElabEnv::new()
-        .unwrap()
-        .env
-        .trusted_base()
-        .into_iter()
-        .collect();
+    let base_tb: std::collections::HashSet<_> =
+        ElabEnv::new().unwrap().env.trusted_base().into_iter().collect();
 
     for name in ["Eq", "DecEq", "Ord"] {
         let id = env.globals[name];
@@ -223,11 +213,7 @@ fn ord_total_law_is_the_bool_or_equation() {
     let env = mk_env_with_package();
     let bool_or_id = env.globals["bool_or"];
     let ord_ci = &env.class_env.classes["Ord"];
-    let total_idx = ord_ci
-        .field_names
-        .iter()
-        .position(|n| n == "total")
-        .expect("Ord has a `total` field");
+    let total_idx = ord_ci.field_names.iter().position(|n| n == "total").expect("Ord has a `total` field");
     let total_ty = &ord_ci.field_types[total_idx];
     assert!(
         mentions_const(total_ty, bool_or_id),
@@ -257,14 +243,8 @@ fn ord_total_law_is_the_bool_or_equation() {
 fn ord_bool_provable_laws_are_real_proofs_not_postulates() {
     let env = mk_env_with_package();
     let id = env.globals["Ord_instance_Bool"];
-    assert!(matches!(
-        env.env.lookup(id),
-        Some(KernelDecl::Transparent { .. })
-    ));
-    let (_, body) = env
-        .env
-        .transparent_body(id)
-        .expect("Ord Bool instance is transparent");
+    assert!(matches!(env.env.lookup(id), Some(KernelDecl::Transparent { .. })));
+    let (_, body) = env.env.transparent_body(id).expect("Ord Bool instance is transparent");
     // Field order: leq, refl, antisym, trans, total.
     let leq_val = field_value(&env.env, &body, 0);
     let refl_val = field_value(&env.env, &body, 1);
@@ -272,26 +252,17 @@ fn ord_bool_provable_laws_are_real_proofs_not_postulates() {
     let trans_val = field_value(&env.env, &body, 3);
     let total_val = field_value(&env.env, &body, 4);
 
-    assert!(
-        !is_opaque_const(&env.env, &leq_val),
-        "leq must not be a postulate"
-    );
+    assert!(!is_opaque_const(&env.env, &leq_val), "leq must not be a postulate");
     // K7 (`eq_at_inductive` operand-whnf, landed) + K5 (`Proved`/`absurd`)
     // together close every law field, including `antisym` — the discriminating
     // `law-fields-real-proofs-not-postulates` flip: every field here is a
     // REAL kernel-checked proof (empty delta), not a postulate.
-    for (name, v) in [
-        ("refl", &refl_val),
-        ("antisym", &antisym_val),
-        ("trans", &trans_val),
-        ("total", &total_val),
-    ] {
+    for (name, v) in [("refl", &refl_val), ("antisym", &antisym_val), ("trans", &trans_val), ("total", &total_val)] {
         assert!(
             !is_opaque_const(&env.env, v),
             "Ord Bool's '{}' must be a REAL kernel-checked proof (K4+K5+K7-enabled, zero-delta) — \
              not a postulate. Got {:?}",
-            name,
-            v
+            name, v
         );
     }
 
@@ -318,18 +289,12 @@ fn ord_bool_provable_laws_are_real_proofs_not_postulates() {
 fn eq_bool_is_a_complete_zero_delta_instance() {
     let env = mk_env_with_package();
     let id = env.globals["Eq_instance_Bool"];
-    let (_, body) = env
-        .env
-        .transparent_body(id)
-        .expect("Eq Bool instance is transparent");
+    let (_, body) = env.env.transparent_body(id).expect("Eq Bool instance is transparent");
     let eq_val = field_value(&env.env, &body, 0);
     let refl_val = field_value(&env.env, &body, 1);
     let sym_val = field_value(&env.env, &body, 2);
     let trans_val = field_value(&env.env, &body, 3);
-    assert!(
-        !is_opaque_const(&env.env, &eq_val),
-        "eq must not be a postulate"
-    );
+    assert!(!is_opaque_const(&env.env, &eq_val), "eq must not be a postulate");
     // `sym`/`trans`: the full case-split (`antisym`-style) closes both with
     // `Proved`/`absurd` alone — a swap-congruence K6 fix was never actually
     // exercisable here (Architect-ruled `evt_78ntsfnyjdtq6`: positional
@@ -337,17 +302,12 @@ fn eq_bool_is_a_complete_zero_delta_instance() {
     // either — only the unsound cross-wise arm could, which stays a hard
     // NO). K6 is independent, parked, customerless. See the `.ken` source's
     // own comment for the full mechanism grounding.
-    for (name, v) in [
-        ("refl", &refl_val),
-        ("sym", &sym_val),
-        ("trans", &trans_val),
-    ] {
+    for (name, v) in [("refl", &refl_val), ("sym", &sym_val), ("trans", &trans_val)] {
         assert!(
             !is_opaque_const(&env.env, v),
             "Eq Bool's '{}' must be a REAL kernel-checked proof (K4+K5+K7-enabled, \
              zero-delta) — not a postulate. Got {:?}",
-            name,
-            v
+            name, v
         );
     }
     let mut delta = ken_elaborator::trusted_base_delta(&env.env, id);
@@ -364,17 +324,11 @@ fn eq_bool_is_a_complete_zero_delta_instance() {
 fn dec_eq_bool_sound_complete_are_real_proofs_not_postulates() {
     let env = mk_env_with_package();
     let id = env.globals["DecEq_instance_Bool"];
-    let (_, body) = env
-        .env
-        .transparent_body(id)
-        .expect("DecEq Bool instance is transparent");
+    let (_, body) = env.env.transparent_body(id).expect("DecEq Bool instance is transparent");
     let eq_val = field_value(&env.env, &body, 0);
     let sound_val = field_value(&env.env, &body, 1);
     let complete_val = field_value(&env.env, &body, 2);
-    assert!(
-        !is_opaque_const(&env.env, &eq_val),
-        "eq must not be a postulate"
-    );
+    assert!(!is_opaque_const(&env.env, &eq_val), "eq must not be a postulate");
     // K7 (`eq_at_inductive` operand-whnf, landed) + K5 (`Proved`/`absurd`)
     // together close both fields — the discriminating
     // `law-fields-real-proofs-not-postulates` flip.
@@ -383,8 +337,7 @@ fn dec_eq_bool_sound_complete_are_real_proofs_not_postulates() {
             !is_opaque_const(&env.env, v),
             "DecEq Bool's '{}' must be a REAL kernel-checked proof (K4+K5+K7-enabled, \
              zero-delta) — not a postulate. Got {:?}",
-            name,
-            v
+            name, v
         );
     }
     let mut delta = ken_elaborator::trusted_base_delta(&env.env, id);
@@ -410,15 +363,9 @@ fn int_ord_instance_is_audited_delta_not_zero_delta() {
 
     // The instance record itself is Transparent (a real declare_def re-check
     // of the Σ-chain value) — never Opaque/Primitive itself.
-    assert!(matches!(
-        env.env.lookup(ord_int_id),
-        Some(KernelDecl::Transparent { .. })
-    ));
+    assert!(matches!(env.env.lookup(ord_int_id), Some(KernelDecl::Transparent { .. })));
 
-    let (_, body) = env
-        .env
-        .transparent_body(ord_int_id)
-        .expect("Ord Int instance is transparent");
+    let (_, body) = env.env.transparent_body(ord_int_id).expect("Ord Int instance is transparent");
     // Field order (class declaration order): leq, refl, antisym, trans, total.
     let leq_val = field_value(&env.env, &body, 0);
     let refl_val = field_value(&env.env, &body, 1);
@@ -436,36 +383,21 @@ fn int_ord_instance_is_audited_delta_not_zero_delta() {
     // Producer-grep gate: EVERY law field genuinely IS a fresh Decl::Opaque
     // (an honest, visible postulate) — never a hand-waved/hidden trust hole,
     // and never (by accident) something that LOOKS proved but isn't.
-    for (name, v) in [
-        ("refl", &refl_val),
-        ("antisym", &antisym_val),
-        ("trans", &trans_val),
-        ("total", &total_val),
-    ] {
+    for (name, v) in [("refl", &refl_val), ("antisym", &antisym_val), ("trans", &trans_val), ("total", &total_val)] {
         assert!(
             is_opaque_const(&env.env, v),
             "AC (audited-delta): Ord Int's law field '{}' must be a real, grep-able Decl::Opaque \
              postulate (honest non-zero delta) — got {:?}",
-            name,
-            v
+            name, v
         );
     }
 
     // The discriminating observable itself: trusted_base_delta is NON-EMPTY
     // (the 4 law postulates), confirming this is NOT (and never silently
     // becomes) a zero-delta/AC3-lawful instance.
-    let base_tb: std::collections::HashSet<_> = ElabEnv::new()
-        .unwrap()
-        .env
-        .trusted_base()
-        .into_iter()
-        .collect();
-    let delta: Vec<_> = env
-        .env
-        .trusted_base()
-        .into_iter()
-        .filter(|id| !base_tb.contains(id))
-        .collect();
+    let base_tb: std::collections::HashSet<_> =
+        ElabEnv::new().unwrap().env.trusted_base().into_iter().collect();
+    let delta: Vec<_> = env.env.trusted_base().into_iter().filter(|id| !base_tb.contains(id)).collect();
     assert!(
         delta.len() >= 4,
         "AC (audited-delta): Ord Int must contribute a non-empty trusted_base delta \
@@ -497,10 +429,7 @@ fn eq_and_deceq_int_instances_are_the_ds6a_certificate_posture() {
     let eq_val = field_value(&env.env, &dec_eq_body, 0);
     let sound_val = field_value(&env.env, &dec_eq_body, 1);
     let complete_val = field_value(&env.env, &dec_eq_body, 2);
-    assert!(
-        !is_opaque_const(&env.env, &eq_val),
-        "DecEq Int: eq must not be a postulate"
-    );
+    assert!(!is_opaque_const(&env.env, &eq_val), "DecEq Int: eq must not be a postulate");
     assert!(
         is_opaque_const(&env.env, &sound_val),
         "DecEq Int: sound must reference a real Decl::Opaque (the shared certificate)"
@@ -530,18 +459,14 @@ fn eq_and_deceq_int_instances_are_the_ds6a_certificate_posture() {
         .transparent_body(eq_int_id)
         .expect("Eq_instance_Int must be transparent");
     let op_val = field_value(&env.env, &eq_int_body, 0);
-    assert!(
-        !is_opaque_const(&env.env, &op_val),
-        "Eq Int: eq must not be a postulate"
-    );
+    assert!(!is_opaque_const(&env.env, &op_val), "Eq Int: eq must not be a postulate");
     for (i, law_name) in ["refl", "sym", "trans"].iter().enumerate() {
         let v = field_value(&env.env, &eq_int_body, i + 1);
         assert!(
             !is_opaque_const(&env.env, &v),
             "Eq Int: law field '{}' must be a REAL kernel-checked proof (DS-6a J-derivation), \
              not a postulate. Got {:?}",
-            law_name,
-            v
+            law_name, v
         );
     }
 
@@ -553,20 +478,15 @@ fn eq_and_deceq_int_instances_are_the_ds6a_certificate_posture() {
     // `{eq_int, int_eq_sound, int_eq_complete}` — the audited primitive plus
     // the 2 certificate postulates the laws are honestly built from, nothing
     // beyond that (in particular, no fresh per-instance postulate).
-    let base_tb: std::collections::HashSet<_> = ElabEnv::new()
-        .unwrap()
-        .env
-        .trusted_base()
-        .into_iter()
-        .collect();
+    let base_tb: std::collections::HashSet<_> =
+        ElabEnv::new().unwrap().env.trusted_base().into_iter().collect();
     assert!(
         base_tb.contains(&sound_id) && base_tb.contains(&complete_id),
         "the certificate must already be in trusted_base() before this file is elaborated"
     );
     let eq_int_prim_id = env.globals["eq_int"];
-    let base_expected: std::collections::HashSet<_> = [eq_int_prim_id, sound_id, complete_id]
-        .into_iter()
-        .collect();
+    let base_expected: std::collections::HashSet<_> =
+        [eq_int_prim_id, sound_id, complete_id].into_iter().collect();
     // `DecEq Int`'s fields are bare Const references (`eq_int`/`sound`/
     // `complete`), so its cone is exactly those three. `Eq Int`'s `J`-built
     // proofs additionally spell `Int` itself as the literal type argument in
@@ -612,14 +532,8 @@ fn char_ord_laws_carried_not_stubbed_transport_accepts() {
     let env = mk_env_with_package();
     let id = env.globals["Ord_instance_Char"];
     let ord_int_id = env.globals["Ord_instance_Int"];
-    assert!(matches!(
-        env.env.lookup(id),
-        Some(KernelDecl::Transparent { .. })
-    ));
-    let (_, body) = env
-        .env
-        .transparent_body(id)
-        .expect("Ord Char instance is transparent");
+    assert!(matches!(env.env.lookup(id), Some(KernelDecl::Transparent { .. })));
+    let (_, body) = env.env.transparent_body(id).expect("Ord Char instance is transparent");
 
     // Every field is PRESENT and its own SOURCE shape is a direct
     // `.`-projection off `Ord_instance_Int` — an honest transport, never a
@@ -628,13 +542,7 @@ fn char_ord_laws_carried_not_stubbed_transport_accepts() {
     // bottoms out at — honestly reaching its `Axiom` for the law fields —
     // which is the transport working as intended, not what this assertion
     // is checking; see `field_raw`'s doc comment.)
-    for (name, idx) in [
-        ("leq", 0),
-        ("refl", 1),
-        ("antisym", 2),
-        ("trans", 3),
-        ("total", 4),
-    ] {
+    for (name, idx) in [("leq", 0), ("refl", 1), ("antisym", 2), ("trans", 3), ("total", 4)] {
         let raw = field_raw(&body, idx);
         let expected = expected_field_proj(ord_int_id, idx);
         assert!(
@@ -642,20 +550,14 @@ fn char_ord_laws_carried_not_stubbed_transport_accepts() {
             "Ord Char's '{}' must be a direct `.`-projection off Ord_instance_Int's \
              own field {} (honest transport) — not a fresh construction of its own. \
              Got {:?}, expected {:?}",
-            name,
-            idx,
-            raw,
-            expected
+            name, idx, raw, expected
         );
     }
 
     // `leq` itself, once reduced, must NOT be opaque — it bottoms out at
     // the real `int_leq`/`leq_int` reduction path, not a postulate.
     let leq_val = field_value(&env.env, &body, 0);
-    assert!(
-        !is_opaque_const(&env.env, &leq_val),
-        "Ord Char's 'leq' must reduce to a real op, not a postulate"
-    );
+    assert!(!is_opaque_const(&env.env, &leq_val), "Ord Char's 'leq' must reduce to a real op, not a postulate");
 
     // Zero-NEW-delta by transport (NOT a claim of zero-delta outright — Ord
     // Int's own Axioms are still honestly there, reachable one projection
@@ -686,8 +588,7 @@ fn char_ord_laws_reject_missing_law_field() {
         .expect("`instance Ord Char` marker must be present in the real package source");
     let prefix = &tangled[..prefix_end];
     let mut env = ElabEnv::new().expect("base env construction failed");
-    env.elaborate_file(prefix)
-        .expect("package prefix (classes + Int/Bool instances) must elaborate");
+    env.elaborate_file(prefix).expect("package prefix (classes + Int/Bool instances) must elaborate");
 
     let r = env.elaborate_decl(
         "instance Ord Char { leq = (Ord_instance_Int).leq ; refl = (Ord_instance_Int).refl ; \
@@ -754,12 +655,6 @@ fn where_ord_supplies_same_comparator_as_explicit_form() {
         // structure).
         matches!(t, Term::App(f, _) if matches!(f.as_ref(), Term::App(_, _)))
     }
-    assert!(
-        is_and_is_sorted_perm_shape(&explicit_inner),
-        "explicit form must have the And(is_sorted,Perm) shape"
-    );
-    assert!(
-        is_and_is_sorted_perm_shape(&dict_inner),
-        "where Ord Int form must have the SAME And(is_sorted,Perm) shape"
-    );
+    assert!(is_and_is_sorted_perm_shape(&explicit_inner), "explicit form must have the And(is_sorted,Perm) shape");
+    assert!(is_and_is_sorted_perm_shape(&dict_inner), "where Ord Int form must have the SAME And(is_sorted,Perm) shape");
 }

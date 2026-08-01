@@ -111,14 +111,14 @@ pub fn enumerate_producer_types(env: &ElabEnv) -> Vec<Producer> {
         // types are therefore already reached through `globals` below) or an
         // alias/value table carrying no `Term`. Named explicitly, with a reason,
         // so the build breaks the instant one of these stops being true.
-        num_values,        // literal VALUES keyed by GlobalId — no type of their own
-        numeric_env,       // GlobalId op / dispatch tables — types live in global_env
-        bytes_env,         // GlobalId type / op ids — types live in global_env
-        foreign_env,       // FFI postulate GlobalIds — types live in global_env
-        effect_rows,       // effect-row algebra — carries no Term
+        num_values,   // literal VALUES keyed by GlobalId — no type of their own
+        numeric_env,  // GlobalId op / dispatch tables — types live in global_env
+        bytes_env,    // GlobalId type / op ids — types live in global_env
+        foreign_env,  // FFI postulate GlobalIds — types live in global_env
+        effect_rows,  // effect-row algebra — carries no Term
         space_metadata: _, // private GlobalId index — types live in global_env
-        prelude_env,       // GlobalIds for prelude decls — types live in global_env
-        module_state,      // surface-name -> canonical-name aliases into global_env
+        prelude_env,  // GlobalIds for prelude decls — types live in global_env
+        module_state, // surface-name -> canonical-name aliases into global_env
     } = env;
     let _ = (
         num_values,
@@ -165,9 +165,9 @@ pub fn enumerate_producer_types(env: &ElabEnv) -> Vec<Producer> {
 pub fn type_of_global(env: &GlobalEnv, name: &str, id: GlobalId) -> Term {
     match env.lookup(id) {
         Some(decl) => match decl {
-            Decl::Transparent { ty, .. } | Decl::Opaque { ty, .. } | Decl::Primitive { ty, .. } => {
-                ty.clone()
-            }
+            Decl::Transparent { ty, .. }
+            | Decl::Opaque { ty, .. }
+            | Decl::Primitive { ty, .. } => ty.clone(),
             Decl::Inductive(inductive) => inductive.former_type.clone(),
         },
         None => match env.constructor(id) {
@@ -393,9 +393,7 @@ pub fn conservative_mentions(t: &Term, target: GlobalId) -> bool {
         | Term::Pair(a, b)
         | Term::Ascript(a, b)
         | Term::Quot(a, b)
-        | Term::Absurd(a, b) => {
-            conservative_mentions(a, target) || conservative_mentions(b, target)
-        }
+        | Term::Absurd(a, b) => conservative_mentions(a, target) || conservative_mentions(b, target),
         Term::Eq(a, b, c) | Term::J(a, b, c) => {
             conservative_mentions(a, target)
                 || conservative_mentions(b, target)
@@ -931,7 +929,9 @@ fn walk_decl(decl: &SurfaceDecl, facts: &mut RootFacts) {
                 let mut fr = BTreeSet::new();
                 type_names_in_type(&f.ty, &mut fr);
                 field_refs.extend(fr.iter().cloned());
-                facts.decl_refs.push((format!("{name}.{}", f.name), fr));
+                facts
+                    .decl_refs
+                    .push((format!("{name}.{}", f.name), fr));
             }
             // projecting a field yields the field type: using the class reaches
             // the closure when any field does.

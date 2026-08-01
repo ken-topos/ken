@@ -122,7 +122,9 @@ where
                 // ⛔ THE REFUSAL, and it is the first arm on purpose: reached at
                 // any depth, it aborts the whole projection. Nothing partial has
                 // been emitted, because `done` is discarded with the `Err`.
-                Rv::ClosureRef { .. } => return Err(CanonicalProjectionRefusal::OrdinaryClosure),
+                Rv::ClosureRef { .. } => {
+                    return Err(CanonicalProjectionRefusal::OrdinaryClosure)
+                }
 
                 // Child-bearing: push a frame, then the children in reverse so
                 // LIFO pops restore declaration order.

@@ -15,8 +15,8 @@
 //! state incremented).
 
 use ken_elaborator::ElabEnv;
-use ken_kernel::env::GlobalEnv;
 use ken_kernel::{declare_inductive, GlobalId, InductiveSpec, Level, Term};
+use ken_kernel::env::GlobalEnv;
 
 fn apply_all(head: Term, args: &[Term]) -> Term {
     args.iter().fold(head, |f, a| Term::app(f, a.clone()))
@@ -35,8 +35,7 @@ fn declare_empty(env: &mut GlobalEnv) -> GlobalId {
 
 #[test]
 fn ac2_runstate_next_post_increment_through_real_interp() {
-    let mut env =
-        ElabEnv::new().expect("prelude should elaborate (Team Language + Team Runtime integrated)");
+    let mut env = ElabEnv::new().expect("prelude should elaborate (Team Language + Team Runtime integrated)");
     let empty_id = declare_empty(&mut env.env);
 
     let p = env.prelude_env.clone();
@@ -48,10 +47,7 @@ fn ac2_runstate_next_post_increment_through_real_interp() {
     // Op = Coproduct (StateOp Nat) Empty ; Resp = resp_coproduct Nat Empty RespEmpty.
     let coproduct_ty = apply_all(
         Term::indformer(p.coproduct_id, vec![]),
-        &[
-            Term::app(Term::indformer(p.state_op_id, vec![]), nat_ty.clone()),
-            empty_ty.clone(),
-        ],
+        &[Term::app(Term::indformer(p.state_op_id, vec![]), nat_ty.clone()), empty_ty.clone()],
     );
     let resp_ty = apply_all(
         Term::const_(p.resp_coproduct_id, vec![]),
@@ -61,12 +57,7 @@ fn ac2_runstate_next_post_increment_through_real_interp() {
     // get () : ITree Op Resp Nat
     let get_call = apply_all(
         Term::const_(p.get_fn_id, vec![]),
-        &[
-            nat_ty.clone(),
-            empty_ty.clone(),
-            resp_empty.clone(),
-            Term::constructor(p.mkunit_id, vec![]),
-        ],
+        &[nat_ty.clone(), empty_ty.clone(), resp_empty.clone(), Term::constructor(p.mkunit_id, vec![])],
     );
     // \n. bind Op Resp Nat Nat (put (Suc n)) (\_. Ret Op Resp Nat n)   -- ctx [n] (len=1): n=Var(0).
     let put_call_ctx1 = apply_all(
@@ -84,15 +75,9 @@ fn ac2_runstate_next_post_increment_through_real_interp() {
         &[
             apply_all(
                 Term::indformer(p.coproduct_id, vec![]),
-                &[
-                    Term::app(Term::indformer(p.state_op_id, vec![]), nat_ty.clone()),
-                    empty_ty.clone(),
-                ],
+                &[Term::app(Term::indformer(p.state_op_id, vec![]), nat_ty.clone()), empty_ty.clone()],
             ),
-            apply_all(
-                Term::const_(p.resp_coproduct_id, vec![]),
-                &[nat_ty.clone(), empty_ty.clone(), resp_empty.clone()],
-            ),
+            apply_all(Term::const_(p.resp_coproduct_id, vec![]), &[nat_ty.clone(), empty_ty.clone(), resp_empty.clone()]),
             nat_ty.clone(),
             Term::var(1),
         ],
@@ -101,27 +86,13 @@ fn ac2_runstate_next_post_increment_through_real_interp() {
     // inner bind : ITree Op Resp Unit -> (Unit -> ITree Op Resp Nat) -> ITree Op Resp Nat
     let inner_bind = apply_all(
         Term::const_(p.bind_id, vec![]),
-        &[
-            coproduct_ty.clone(),
-            resp_ty.clone(),
-            Term::indformer(p.unit_id, vec![]),
-            nat_ty.clone(),
-            put_call_ctx1,
-            inner_cont,
-        ],
+        &[coproduct_ty.clone(), resp_ty.clone(), Term::indformer(p.unit_id, vec![]), nat_ty.clone(), put_call_ctx1, inner_cont],
     );
     // outer: \n. inner_bind, wrapped as the continuation for the OUTER bind over `get`.
     let outer_cont = Term::lam(nat_ty.clone(), inner_bind);
     let next_body = apply_all(
         Term::const_(p.bind_id, vec![]),
-        &[
-            coproduct_ty.clone(),
-            resp_ty.clone(),
-            nat_ty.clone(),
-            nat_ty.clone(),
-            get_call,
-            outer_cont,
-        ],
+        &[coproduct_ty.clone(), resp_ty.clone(), nat_ty.clone(), nat_ty.clone(), get_call, outer_cont],
     );
 
     let mut store = ken_interp::eval::EvalStore::new();
@@ -143,19 +114,12 @@ fn ac2_runstate_next_post_increment_through_real_interp() {
     let full_term = Term::app(run_state_app, next_body.clone());
     let result = ken_interp::eval::eval(&[], &full_term, &env.env, &mut store);
 
-    fn nat_count(
-        env: &GlobalEnv,
-        v: &ken_interp::eval::EvalVal,
-        zero_id: GlobalId,
-        suc_id: GlobalId,
-    ) -> u64 {
+    fn nat_count(env: &GlobalEnv, v: &ken_interp::eval::EvalVal, zero_id: GlobalId, suc_id: GlobalId) -> u64 {
         use ken_interp::eval::EvalVal;
         let _ = env;
         match v {
             EvalVal::Ctor { id, args, .. } if *id == zero_id && args.is_empty() => 0,
-            EvalVal::Ctor { id, args, .. } if *id == suc_id && args.len() == 1 => {
-                1 + nat_count(env, &args[0], zero_id, suc_id)
-            }
+            EvalVal::Ctor { id, args, .. } if *id == suc_id && args.len() == 1 => 1 + nat_count(env, &args[0], zero_id, suc_id),
             other => panic!("expected a Nat Ctor chain, got {other:?}"),
         }
     }
@@ -174,10 +138,7 @@ fn ac2_runstate_next_post_increment_through_real_interp() {
         ken_interp::eval::EvalVal::Pair { fst, snd, .. } => {
             let result_val = nat_count(&env.env, &fst, p.zero_id, p.suc_id);
             let final_state = nat_count(&env.env, &snd, p.zero_id, p.suc_id);
-            assert_eq!(
-                result_val, 0,
-                "AC2: result must be the OLD (pre-increment) value"
-            );
+            assert_eq!(result_val, 0, "AC2: result must be the OLD (pre-increment) value");
             assert_eq!(final_state, 1, "AC2: final state must be incremented");
         }
         other => panic!("Ret's value must be a Sigma pair (result, final-state), got {other:?}"),

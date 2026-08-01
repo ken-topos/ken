@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use ken_elaborator::lexer::{Lexer, Token};
 use ken_elaborator::{
-    parser, BoundaryHeader, BoundaryKind, CapabilityDecl, Decl, ElabEnv, ElabError,
+    BoundaryHeader, BoundaryKind, CapabilityDecl, Decl, ElabEnv, ElabError, parser,
 };
 
 static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
@@ -45,13 +45,15 @@ impl Drop for FixtureRoot {
 fn parsed_header(source: &str) -> BoundaryHeader {
     let decls = parser::parse_decls(source).expect("boundary source parses");
     match decls.as_slice() {
-        [Decl::BoundaryDecl {
-            kind,
-            admits,
-            capabilities,
-            allow_root_execution,
-            ..
-        }] => BoundaryHeader {
+        [
+            Decl::BoundaryDecl {
+                kind,
+                admits,
+                capabilities,
+                allow_root_execution,
+                ..
+            },
+        ] => BoundaryHeader {
             kind: *kind,
             admits: admits.clone(),
             capabilities: capabilities.clone(),

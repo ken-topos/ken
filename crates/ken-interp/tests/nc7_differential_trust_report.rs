@@ -83,9 +83,7 @@ fn oracle_observation(artifact: NativeArtifactIdentity) -> InterpreterOracleObse
     } = interpreter_add_2_3_fixture();
     let value = eval(&[], &term, &globals, &mut store);
     let observation = match value {
-        EvalVal::Int(value) => {
-            RuntimeObservation::Returned(RuntimeGroundValue::Int((value).into()))
-        }
+        EvalVal::Int(value) => RuntimeObservation::Returned(RuntimeGroundValue::Int((value).into())),
         other => panic!("NC7 oracle fixture must return Int, got {other:?}"),
     };
     InterpreterOracleObservation {

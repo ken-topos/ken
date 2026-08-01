@@ -9,13 +9,13 @@
 //!
 //! Spec: `spec/10-kernel/14-inductive.md` §2.1, §3.1, §7.7, §8.4, §9.4.
 
-use ken_kernel::env::Context;
 use ken_kernel::inductive::peel_app;
 use ken_kernel::term::{Level, LevelVar, Term};
 use ken_kernel::{
-    declare_inductive, infer, normalize, whnf, CtorSpec, GlobalEnv, GlobalId, InductiveSpec,
-    KernelError,
+    declare_inductive, infer, normalize, whnf, CtorSpec, GlobalEnv, GlobalId,
+    InductiveSpec, KernelError,
 };
+use ken_kernel::env::Context;
 
 const L: LevelVar = LevelVar(0);
 fn lvar() -> Level {
@@ -37,14 +37,8 @@ fn mk_bool(env: &mut GlobalEnv) -> (GlobalId, GlobalId, GlobalId) {
         indices: vec![],
         level: lv0(),
         constructors: vec![
-            CtorSpec {
-                args: vec![],
-                target_indices: vec![],
-            },
-            CtorSpec {
-                args: vec![],
-                target_indices: vec![],
-            },
+            CtorSpec { args: vec![], target_indices: vec![] },
+            CtorSpec { args: vec![], target_indices: vec![] },
         ],
     })
     .unwrap();
@@ -62,10 +56,7 @@ fn mk_nat(env: &mut GlobalEnv) -> (GlobalId, GlobalId, GlobalId) {
         indices: vec![],
         level: lv0(),
         constructors: vec![
-            CtorSpec {
-                args: vec![],
-                target_indices: vec![],
-            },
+            CtorSpec { args: vec![], target_indices: vec![] },
             CtorSpec {
                 args: vec![Term::indformer(nat, vec![])],
                 target_indices: vec![],
@@ -90,10 +81,7 @@ fn mk_tree(env: &mut GlobalEnv, bool_id: GlobalId) -> (GlobalId, GlobalId, Globa
         level: lv0(),
         constructors: vec![
             // leaf : Tree
-            CtorSpec {
-                args: vec![],
-                target_indices: vec![],
-            },
+            CtorSpec { args: vec![], target_indices: vec![] },
             // node : (Bool → Tree) → Tree
             // arg type in context []: Pi(Bool, Tree) — Bool is D-free, Tree is target
             CtorSpec {
@@ -152,10 +140,7 @@ fn mk_itree(env: &mut GlobalEnv, nat_id: GlobalId) -> (GlobalId, GlobalId, Globa
 
 // Term helpers.
 fn ctor(id: GlobalId) -> Term {
-    Term::Constructor {
-        id,
-        level_args: vec![],
-    }
+    Term::Constructor { id, level_args: vec![] }
 }
 fn fmr(id: GlobalId) -> Term {
     Term::indformer(id, vec![])
@@ -184,10 +169,7 @@ fn ac1_tree_w_style_admitted() {
         indices: vec![],
         level: lv0(),
         constructors: vec![
-            CtorSpec {
-                args: vec![],
-                target_indices: vec![],
-            },
+            CtorSpec { args: vec![], target_indices: vec![] },
             CtorSpec {
                 args: vec![Term::pi(
                     Term::indformer(bool_id, vec![]),
@@ -197,11 +179,7 @@ fn ac1_tree_w_style_admitted() {
             },
         ],
     });
-    assert!(
-        r.is_ok(),
-        "W-style Tree must be admitted in K1.5: {:?}",
-        r.err()
-    );
+    assert!(r.is_ok(), "W-style Tree must be admitted in K1.5: {:?}", r.err());
 }
 
 /// AC1: `data W (A : Type ℓ) (B : Type ℓ) : Type ℓ where sup : (a:A) → (B → W A B) → W A B`
@@ -270,21 +248,12 @@ fn ac1_negative_bad_rejected() {
         indices: vec![],
         level: lv0(),
         constructors: vec![CtorSpec {
-            args: vec![Term::pi(
-                Term::indformer(bad, vec![]),
-                Term::indformer(bool_id, vec![]),
-            )],
+            args: vec![Term::pi(Term::indformer(bad, vec![]), Term::indformer(bool_id, vec![]))],
             target_indices: vec![],
         }],
     });
-    assert!(
-        r.is_err(),
-        "negative occurrence (Bad → Bool) → Bad must be rejected"
-    );
-    assert!(matches!(
-        r.unwrap_err(),
-        KernelError::PositivityViolation(_)
-    ));
+    assert!(r.is_err(), "negative occurrence (Bad → Bool) → Bad must be rejected");
+    assert!(matches!(r.unwrap_err(), KernelError::PositivityViolation(_)));
 }
 
 /// AC1 (soundness): branching domain not D-free `(Bad5 → Bad5) → Bad5` rejected
@@ -307,14 +276,8 @@ fn ac1_branching_domain_not_d_free_rejected() {
             target_indices: vec![],
         }],
     });
-    assert!(
-        r.is_err(),
-        "(Bad5 → Bad5) → Bad5 must be rejected: D in branching domain"
-    );
-    assert!(matches!(
-        r.unwrap_err(),
-        KernelError::PositivityViolation(_)
-    ));
+    assert!(r.is_err(), "(Bad5 → Bad5) → Bad5 must be rejected: D in branching domain");
+    assert!(matches!(r.unwrap_err(), KernelError::PositivityViolation(_)));
 }
 
 // ===========================================================================
@@ -394,11 +357,8 @@ fn ac2_tree_iota_node_fires() {
     // Since mn = λk. λih. zero, the final value is zero regardless.
     let (_head, _) = peel_app(&reduct);
     // whnf of mn k ih with mn=λk.λih.zero → zero immediately after two betas.
-    assert_eq!(
-        reduct,
-        whnf(&env, &ctx, &zero_t(zero_id)),
-        "mn = λk.λih.zero so elim(node k) → zero after W-ι + β"
-    );
+    assert_eq!(reduct, whnf(&env, &ctx, &zero_t(zero_id)),
+        "mn = λk.λih.zero so elim(node k) → zero after W-ι + β");
 }
 
 /// AC2: `wstyle-elim-uses-ih-flips` — a method that USES the Π-abstracted IH
@@ -419,9 +379,9 @@ fn ac2_elim_uses_ih_flips() {
     //   In context [k, ih]: ih=Var(0), k=Var(1).
     //   `ih true` = App(Var(0), Constructor(true_id))
     let mn_correct = Term::lam(
-        Term::pi(fmr(bool_id), fmr(tree_id)), // k : Bool → Tree
+        Term::pi(fmr(bool_id), fmr(tree_id)),           // k : Bool → Tree
         Term::lam(
-            Term::pi(fmr(bool_id), fmr(nat_id)), // ih : Bool → Nat
+            Term::pi(fmr(bool_id), fmr(nat_id)),         // ih : Bool → Nat
             suc_t(suc_id, Term::app(Term::var(0), ctor(true_id))), // suc (ih true)
         ),
     );
@@ -455,20 +415,12 @@ fn ac2_elim_uses_ih_flips() {
     // Buggy: zero (ih discarded).
     let correct_val = normalize(&env, &ctx, &elim_correct);
     let buggy_val = normalize(&env, &ctx, &elim_buggy);
-    assert_eq!(
-        correct_val,
-        whnf(&env, &ctx, &suc_t(suc_id, zero_t(zero_id))),
-        "correct method using ih should give suc zero"
-    );
-    assert_eq!(
-        buggy_val,
-        whnf(&env, &ctx, &zero_t(zero_id)),
-        "buggy method discarding ih should give zero"
-    );
-    assert_ne!(
-        correct_val, buggy_val,
-        "verdict must flip: IH-using vs IH-discarding give different results (§3.1)"
-    );
+    assert_eq!(correct_val, whnf(&env, &ctx, &suc_t(suc_id, zero_t(zero_id))),
+        "correct method using ih should give suc zero");
+    assert_eq!(buggy_val, whnf(&env, &ctx, &zero_t(zero_id)),
+        "buggy method discarding ih should give zero");
+    assert_ne!(correct_val, buggy_val,
+        "verdict must flip: IH-using vs IH-discarding give different results (§3.1)");
 }
 
 /// AC2: Two distinct motive levels both accepted — elim polymorphic in ℓ'.
@@ -572,11 +524,8 @@ fn ac3_wstyle_iota_in_conversion() {
     // W-ι fires: elim_ITree M mr mv (Vis k) ⇝ mv k (λx. elim_ITree M mr mv (k x)).
     // Since mv = λk.λih.zero, this reduces to zero.
     let lhs_nf = normalize(&env, &ctx, &elim_vis);
-    assert_eq!(
-        lhs_nf,
-        whnf(&env, &ctx, &zero_t(zero_id)),
-        "elim_ITree on Vis must reduce (W-ι fires during conversion)"
-    );
+    assert_eq!(lhs_nf, whnf(&env, &ctx, &zero_t(zero_id)),
+        "elim_ITree on Vis must reduce (W-ι fires during conversion)");
 }
 
 /// AC3: Inner elim fires through a constructor-producing branching function.
@@ -618,11 +567,8 @@ fn ac3_inner_elim_fires_through_ctor_producing_k() {
     };
     // k x ⇝ Ret zero (ctor head, even for abstract x), so elim fires → zero.
     let val = normalize(&env, &ctx2, &elim_inner);
-    assert_eq!(
-        val,
-        whnf(&env, &ctx2, &zero_t(zero_id)),
-        "inner elim fires through constructor-producing k even for abstract branch var"
-    );
+    assert_eq!(val, whnf(&env, &ctx2, &zero_t(zero_id)),
+        "inner elim fires through constructor-producing k even for abstract branch var");
 }
 
 // ===========================================================================
@@ -636,56 +582,33 @@ fn ac4_k1_suite_regression() {
     let mut env = GlobalEnv::new();
     // Empty, Unit, Bool, Nat — all still admitted.
     declare_inductive(&mut env, |_| InductiveSpec {
-        level_params: vec![],
-        params: vec![],
-        indices: vec![],
-        level: lv0(),
+        level_params: vec![], params: vec![], indices: vec![], level: lv0(),
         constructors: vec![],
-    })
-    .unwrap();
+    }).unwrap();
     let (bool_id, _, _) = mk_bool(&mut env);
     let (nat_id, zero_id, suc_id) = mk_nat(&mut env);
     // Nat elim still works.
     let ctx = Context::new();
     let motive = Term::lam(fmr(nat_id), fmr(nat_id));
     let z = zero_t(zero_id);
-    let s = Term::lam(
-        fmr(nat_id),
-        Term::lam(fmr(nat_id), suc_t(suc_id, Term::var(1))),
-    );
+    let s = Term::lam(fmr(nat_id), Term::lam(fmr(nat_id), suc_t(suc_id, Term::var(1))));
     let elim_zero = Term::Elim {
-        fam: nat_id,
-        level_args: vec![],
-        params: vec![],
+        fam: nat_id, level_args: vec![], params: vec![],
         motive: Box::new(motive.clone()),
         methods: vec![z.clone(), s.clone()],
-        indices: vec![],
-        scrut: Box::new(zero_t(zero_id)),
+        indices: vec![], scrut: Box::new(zero_t(zero_id)),
     };
-    assert_eq!(
-        whnf(&env, &ctx, &elim_zero),
-        z,
-        "elim_Nat M z s zero ⇝ z (regression)"
-    );
+    assert_eq!(whnf(&env, &ctx, &elim_zero), z, "elim_Nat M z s zero ⇝ z (regression)");
 
     // Negative still rejected.
     let r = declare_inductive(&mut env, |bad| InductiveSpec {
-        level_params: vec![],
-        params: vec![],
-        indices: vec![],
-        level: lv0(),
+        level_params: vec![], params: vec![], indices: vec![], level: lv0(),
         constructors: vec![CtorSpec {
-            args: vec![Term::pi(
-                Term::indformer(bad, vec![]),
-                Term::indformer(bool_id, vec![]),
-            )],
+            args: vec![Term::pi(Term::indformer(bad, vec![]), Term::indformer(bool_id, vec![]))],
             target_indices: vec![],
         }],
     });
-    assert!(
-        r.is_err(),
-        "negative occurrence must still be rejected in K1.5"
-    );
+    assert!(r.is_err(), "negative occurrence must still be rejected in K1.5");
 }
 
 // ===========================================================================
@@ -734,10 +657,7 @@ fn ac5_elim_itree_ret_and_vis_compute() {
     // --- Vis case: elim_ITree M mr mv (Vis k) ⇝ mv k (λx. elim_ITree M mr mv (k x)) ---
     // Vis has 1 ctor arg: k : Nat → ITree R.
     // Vis k: Constructor(vis) R k (m=1 param + 1 ctor arg).
-    let k = Term::lam(
-        fmr(nat_id),
-        Term::app(Term::app(ctor(ret_id), r_val.clone()), zero_t(zero_id)),
-    );
+    let k = Term::lam(fmr(nat_id), Term::app(Term::app(ctor(ret_id), r_val.clone()), zero_t(zero_id)));
     let vis_k = Term::app(Term::app(ctor(vis_id), r_val.clone()), k);
     let elim_vis = Term::Elim {
         fam: itree_id,
@@ -863,10 +783,7 @@ fn qa_mixed_direct_and_wstyle_recursive_args() {
         indices: vec![],
         level: lv0(),
         constructors: vec![
-            CtorSpec {
-                args: vec![],
-                target_indices: vec![],
-            }, // base
+            CtorSpec { args: vec![], target_indices: vec![] }, // base
             CtorSpec {
                 args: vec![
                     Term::indformer(mixed2, vec![]),
@@ -965,10 +882,7 @@ fn mk_w2_indexed(
         level: lv0(),
         constructors: vec![
             // w2_leaf : W2 false
-            CtorSpec {
-                args: vec![],
-                target_indices: vec![ctor(false_id)],
-            },
+            CtorSpec { args: vec![], target_indices: vec![ctor(false_id)] },
             // w2_node : ((b:Bool) → W2 b) → W2 true
             // arg type in context [] (no params):
             //   Pi(Bool, App(IndFormer(W2), Var(0)))
@@ -1103,7 +1017,7 @@ fn ac2_indexed_wstyle_method_type_agreement() {
         Term::pi(fmr(bool_id), Term::app(fmr(w2), Term::var(0))), // k ann
         Term::lam(
             Term::pi(fmr(bool_id), Term::app(fmr(w2), Term::var(0))), // ih ann: (b:Bool)→W2 b
-            Term::app(ctor(w2_node_id), Term::var(0)),                // w2_node ih
+            Term::app(ctor(w2_node_id), Term::var(0)),                 // w2_node ih
         ),
     );
 
@@ -1132,10 +1046,7 @@ fn ac2_indexed_wstyle_method_type_agreement() {
         Term::pi(fmr(bool_id), Term::app(fmr(w2), Term::var(0))),
     )
     .unwrap();
-    let f = Term::Const {
-        id: f_id,
-        level_args: vec![],
-    };
+    let f = Term::Const { id: f_id, level_args: vec![] };
     let scrut = Term::app(ctor(w2_node_id), f);
 
     let elim = Term::Elim {
@@ -1198,7 +1109,10 @@ fn qa_wstyle_double_pi_branching_telescope() {
             Term::pi(fmr(nat_id), Term::pi(fmr(nat_id), fmr(nat_id))), // ih : Nat → Nat → Nat
             suc_t(
                 suc_id,
-                Term::app(Term::app(Term::var(0), zero_t(zero_id)), zero_t(zero_id)),
+                Term::app(
+                    Term::app(Term::var(0), zero_t(zero_id)),
+                    zero_t(zero_id),
+                ),
             ),
         ),
     );
@@ -1251,10 +1165,7 @@ fn qa_wstyle_double_pi_branching_telescope() {
         &[method.clone()],
         &ctor_all_args,
     );
-    assert!(
-        reduct.is_ok(),
-        "iota_reduct for double-Pi W-style must succeed"
-    );
+    assert!(reduct.is_ok(), "iota_reduct for double-Pi W-style must succeed");
     // The reduct is: method applied to [f, λx.λy. elim_Dbl ... (f x y)]
     // After β: suc (ih zero zero) where ih = λx.λy. elim_Dbl ... (f x y)
     // Since elim_Dbl ... (f x y) = elim_Dbl ... (mk f) which loops,
@@ -1278,9 +1189,6 @@ fn qa_wstyle_double_pi_branching_telescope() {
                 panic!("IH body should have second λ-binder, got: {:?}", body);
             }
         }
-        _ => panic!(
-            "IH should be a λ-term (W-style nested IH), got: {:?}",
-            args[1]
-        ),
+        _ => panic!("IH should be a λ-term (W-style nested IH), got: {:?}", args[1]),
     }
 }

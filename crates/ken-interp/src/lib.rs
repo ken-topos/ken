@@ -1530,12 +1530,7 @@ mod tests {
         let mut store = mk_store();
 
         // (a) DIRECTLY — a bare closure.
-        let direct = eval(
-            &[],
-            &empty_capture_closure(nat_ty.clone()),
-            &env,
-            &mut store,
-        );
+        let direct = eval(&[], &empty_capture_closure(nat_ty.clone()), &env, &mut store);
         assert_eq!(
             slot_of(&direct),
             Some(ken_runtime::store::NULL_SLOT),
@@ -1654,12 +1649,7 @@ mod tests {
         };
         let mut store = mk_store();
 
-        let empty = eval(
-            &[],
-            &empty_capture_closure(nat_ty.clone()),
-            &env,
-            &mut store,
-        );
+        let empty = eval(&[], &empty_capture_closure(nat_ty.clone()), &env, &mut store);
         assert_eq!(
             slot_of(&empty),
             Some(ken_runtime::store::NULL_SLOT),

@@ -89,7 +89,9 @@ pub fn synthetic_value(idx: usize, rng: &mut WyHashRng) -> Value {
             let n = 2 + (rng.next() as usize % 5);
             Value::Array {
                 elem_type_id: 200,
-                elements: (0..n).map(|_| Value::SmallInt(rng.next() as i64)).collect(),
+                elements: (0..n)
+                    .map(|_| Value::SmallInt(rng.next() as i64))
+                    .collect(),
             }
         }
         4 => {

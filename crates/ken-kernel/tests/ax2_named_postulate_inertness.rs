@@ -68,8 +68,13 @@ fn trusted_base_stays_id_shaped_and_resolves_shared_labels() {
         ty.clone(),
     )
     .expect("first postulate admits");
-    let second = declare_postulate(&mut env, "shared semantic owner".to_string(), vec![], ty)
-        .expect("second postulate admits");
+    let second = declare_postulate(
+        &mut env,
+        "shared semantic owner".to_string(),
+        vec![],
+        ty,
+    )
+    .expect("second postulate admits");
 
     let ids = trusted_ids(&env);
     assert_eq!(ids.len(), before + 2, "count semantics stay unchanged");

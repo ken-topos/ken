@@ -33,22 +33,15 @@ fn is_even_is_odd_mutual_group_elaborates_as_one_group() {
     let ids = env
         .elaborate_file(IS_EVEN_ODD)
         .expect("mutual isEven/isOdd must elaborate and pass SCT as one group");
-    assert_eq!(
-        ids.len(),
-        2,
-        "both members of the cycle must produce a definition"
-    );
+    assert_eq!(ids.len(), 2, "both members of the cycle must produce a definition");
 }
 
 #[test]
 fn is_even_is_odd_compute_correct_values() {
     let mut env = fresh_env();
-    env.elaborate_file(IS_EVEN_ODD)
-        .expect("mutual group elaborates");
-    env.elaborate_decl("const three : Nat = Suc (Suc (Suc Zero))")
-        .expect("three declares");
-    env.elaborate_decl("const four : Nat = Suc three")
-        .expect("four declares");
+    env.elaborate_file(IS_EVEN_ODD).expect("mutual group elaborates");
+    env.elaborate_decl("const three : Nat = Suc (Suc (Suc Zero))").expect("three declares");
+    env.elaborate_decl("const four : Nat = Suc three").expect("four declares");
 
     // `Equal Bool (op ...) True/False`, once the operand reduces to a
     // concrete `Bool` constructor, observationally COLLAPSES to `Top`

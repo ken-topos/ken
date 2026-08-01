@@ -77,12 +77,7 @@ fn wrap_lams(n: usize, dom: &Term, body: Term) -> Term {
 /// Every leaf recurses only on `r`, the OUTERMOST `Node`'s flat sibling
 /// field — `r`'s true `Down` provenance must survive threading through
 /// TWO nested-Elim boundaries for `sct_check` to accept this.
-fn build_2level_body(
-    t_id: GlobalId,
-    leaf_id: GlobalId,
-    _node_id: GlobalId,
-    countr_id: GlobalId,
-) -> Term {
+fn build_2level_body(t_id: GlobalId, leaf_id: GlobalId, _node_id: GlobalId, countr_id: GlobalId) -> Term {
     let dom = Term::indformer(t_id, vec![]);
     let motive = dom.clone(); // sct.rs only scans the motive for calls; content is irrelevant
     let leaf_c = Term::constructor(leaf_id, vec![]);

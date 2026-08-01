@@ -15,29 +15,19 @@ use serde_json::{json, Value};
 use ken_elaborator::{
     attempt_obligation,
     diagnostics::{
-        AtomId, DiagnosticTag, FailureWitness, FormRef, KripkeCountermodel, SuggestedAction,
-        WorldId,
+        AtomId, DiagnosticTag, FailureWitness, FormRef, KripkeCountermodel,
+        SuggestedAction, WorldId,
     },
-    error::Span,
     extract::{ObligationId, ObligationTriple, ProvKind, Provenance},
-    // T1 protocol exports
-    hole_id_string,
-    obligation_id_string,
-    project_diagnostic,
-    project_obligation_status,
-    project_wire_verdict,
+    error::Span,
     prover::{Countermodel, ProverResult, Verdict},
-    rollup_doc_status,
-    round_trip,
-    serialize_countermodel,
-    serialize_decomposition,
-    serialize_diagnostic,
-    serialize_document,
-    serialize_slice,
-    validate_document,
-    DocStatus,
-    ObligationStatus,
-    WireVerdict,
+    project_diagnostic,
+    // T1 protocol exports
+    hole_id_string, obligation_id_string, project_obligation_status, project_wire_verdict,
+    rollup_doc_status, round_trip, serialize_countermodel,
+    serialize_decomposition, serialize_diagnostic, serialize_document,
+    serialize_slice, validate_document, DocStatus,
+    ObligationStatus, WireVerdict,
 };
 use ken_kernel::{declare_postulate, GlobalEnv, Level, Term};
 
@@ -51,20 +41,10 @@ struct ProofEnv {
 
 fn make_proof_env() -> ProofEnv {
     let mut env = GlobalEnv::new();
-    let p_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::omega(Level::zero()),
-    )
-    .expect("P postulate");
-    let q_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::omega(Level::zero()),
-    )
-    .expect("Q postulate");
+    let p_id =
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero())).expect("P postulate");
+    let q_id =
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero())).expect("Q postulate");
     ProofEnv {
         p: Term::const_(p_id, vec![]),
         q: Term::const_(q_id, vec![]),
@@ -80,10 +60,7 @@ fn closed_triple(env: &mut GlobalEnv, id: &str, phi: Term) -> ObligationTriple {
         context: vec![],
         phi: phi.clone(),
         goal_closed: phi,
-        provenance: Provenance {
-            kind: ProvKind::Prove,
-            span: Span::zero(),
-        },
+        provenance: Provenance { kind: ProvKind::Prove, span: Span::zero() },
     }
 }
 
@@ -101,10 +78,7 @@ fn synthetic_disproved(
         context: vec![],
         phi: phi.clone(),
         goal_closed: phi,
-        provenance: Provenance {
-            kind: ProvKind::Prove,
-            span: Span::zero(),
-        },
+        provenance: Provenance { kind: ProvKind::Prove, span: Span::zero() },
     };
     let result = ProverResult {
         obligation_id: ObligationId(id.to_owned()),
@@ -144,9 +118,7 @@ fn ob_status(doc: &Value, ob_idx: usize) -> &str {
 
 /// Read the `trusted_base_delta` array.
 fn delta(doc: &Value) -> &Vec<Value> {
-    doc["trusted_base_delta"]
-        .as_array()
-        .expect("trusted_base_delta present")
+    doc["trusted_base_delta"].as_array().expect("trusted_base_delta present")
 }
 
 /// Count diagnostics in the document.
@@ -177,12 +149,7 @@ fn proved_result_empty_diagnostics_and_delta() {
     let diag = project_diagnostic(&result, &triple);
     assert!(diag.is_none(), "proved → no diagnostic");
 
-    let data = vec![(
-        result.verdict,
-        diag,
-        ObligationId("ob:divide#post.0".into()),
-        triple,
-    )];
+    let data = vec![(result.verdict, diag, ObligationId("ob:divide#post.0".into()), triple)];
     let doc = serialize_document("divide", &data);
 
     // Check top-level status
@@ -192,10 +159,7 @@ fn proved_result_empty_diagnostics_and_delta() {
     let obs = doc["obligations"].as_array().expect("obligations");
     assert_eq!(obs.len(), 1);
     assert_eq!(obs[0]["status"].as_str().unwrap(), "discharged");
-    assert!(
-        obs[0]["diagnostic"].is_null(),
-        "discharged → diagnostic:null"
-    );
+    assert!(obs[0]["diagnostic"].is_null(), "discharged → diagnostic:null");
 
     // trusted_base_delta empty
     assert_eq!(delta(&doc).len(), 0, "proved → empty trusted_base_delta");
@@ -206,14 +170,8 @@ fn proved_result_empty_diagnostics_and_delta() {
     // Round-trip lossless
     let rt = round_trip(&doc);
     assert_eq!(rt["status"], doc["status"], "round-trip preserves status");
-    assert_eq!(
-        rt["obligations"], doc["obligations"],
-        "round-trip preserves obligations"
-    );
-    assert_eq!(
-        rt["trusted_base_delta"], doc["trusted_base_delta"],
-        "round-trip preserves delta"
-    );
+    assert_eq!(rt["obligations"], doc["obligations"], "round-trip preserves obligations");
+    assert_eq!(rt["trusted_base_delta"], doc["trusted_base_delta"], "round-trip preserves delta");
 
     // Valid by the reference validator
     validate_document(&doc).expect("proved document must be schema-valid");
@@ -226,13 +184,8 @@ fn proved_result_empty_diagnostics_and_delta() {
 #[test]
 fn countermodel_kind_round_trips_lossless() {
     let mut env = GlobalEnv::new();
-    let p_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::omega(Level::zero()),
-    )
-    .unwrap();
+    let p_id =
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero())).unwrap();
     let p = Term::const_(p_id, vec![]);
 
     let cm = concrete_countermodel_false();
@@ -243,19 +196,9 @@ fn countermodel_kind_round_trips_lossless() {
 
     // Verify all fields present
     assert_eq!(diag_val["kind"].as_str().unwrap(), "countermodel");
-    assert_eq!(
-        diag_val["verdict"].as_str().unwrap(),
-        "false",
-        "verdict:false"
-    );
-    assert!(
-        !diag_val["worlds"].as_array().unwrap().is_empty(),
-        "worlds present"
-    );
-    assert!(
-        !diag_val["order"].as_array().unwrap().is_empty(),
-        "order present"
-    );
+    assert_eq!(diag_val["verdict"].as_str().unwrap(), "false", "verdict:false");
+    assert!(!diag_val["worlds"].as_array().unwrap().is_empty(), "worlds present");
+    assert!(!diag_val["order"].as_array().unwrap().is_empty(), "order present");
     assert!(diag_val["forcing"].is_object(), "forcing present");
     assert!(!diag_val["failure"].is_null(), "failure present");
     assert_eq!(diag_val["failure"]["world"].as_str().unwrap(), "w0");
@@ -266,44 +209,24 @@ fn countermodel_kind_round_trips_lossless() {
 
     // Round-trip: deserialize∘serialize is identity
     let rt = round_trip(&diag_val);
-    assert_eq!(
-        rt["verdict"], diag_val["verdict"],
-        "verdict survives round-trip"
-    );
-    assert_eq!(
-        rt["worlds"], diag_val["worlds"],
-        "worlds survive round-trip"
-    );
-    assert_eq!(
-        rt["order"], diag_val["order"],
-        "order (≤ preorder) survives round-trip"
-    );
-    assert_eq!(
-        rt["forcing"], diag_val["forcing"],
-        "forcing survives round-trip"
-    );
+    assert_eq!(rt["verdict"], diag_val["verdict"], "verdict survives round-trip");
+    assert_eq!(rt["worlds"], diag_val["worlds"], "worlds survive round-trip");
+    assert_eq!(rt["order"], diag_val["order"], "order (≤ preorder) survives round-trip");
+    assert_eq!(rt["forcing"], diag_val["forcing"], "forcing survives round-trip");
     assert_eq!(rt["failure"]["world"], diag_val["failure"]["world"]);
-    assert_eq!(
-        rt["failure"]["subformula"],
-        diag_val["failure"]["subformula"]
-    );
+    assert_eq!(rt["failure"]["subformula"], diag_val["failure"]["subformula"]);
     assert_eq!(rt, diag_val, "full diagnostic round-trip is identity");
 
     // In a document: schema-valid
     let _triple = closed_triple(&mut env, "ob:test#post.0", p.clone());
-    let (synth_result, synth_triple) =
-        synthetic_disproved(&mut env, "ob:test#post.0", p, "refuted");
+    let (synth_result, synth_triple) = synthetic_disproved(&mut env, "ob:test#post.0", p, "refuted");
     let project = project_diagnostic(&synth_result, &synth_triple).unwrap();
-    validate_document(&serialize_document(
-        "test",
-        &[(
-            synth_result.verdict,
-            Some(project),
-            synth_triple.id.clone(),
-            synth_triple,
-        )],
-    ))
-    .expect("countermodel document must be schema-valid");
+    validate_document(&serialize_document("test", &[(
+        synth_result.verdict,
+        Some(project),
+        synth_triple.id.clone(),
+        synth_triple,
+    )])).expect("countermodel document must be schema-valid");
 }
 
 /// A3 (soundness): hole-kind-round-trips-and-lists-in-delta
@@ -324,16 +247,8 @@ fn hole_kind_round_trips_and_lists_in_delta() {
     let doc = serialize_document("sort", &data);
 
     // Status checks
-    assert_eq!(
-        doc_status(&doc),
-        "incomplete",
-        "unknown → status:incomplete"
-    );
-    assert_eq!(
-        ob_status(&doc, 0),
-        "open",
-        "unknown obligation → status:open"
-    );
+    assert_eq!(doc_status(&doc), "incomplete", "unknown → status:incomplete");
+    assert_eq!(ob_status(&doc, 0), "open", "unknown obligation → status:open");
 
     // Diagnostic kind = hole
     let diag_val = &doc["obligations"][0]["diagnostic"];
@@ -355,10 +270,7 @@ fn hole_kind_round_trips_and_lists_in_delta() {
     // Round-trip lossless
     let rt = round_trip(&doc);
     assert_eq!(rt["trusted_base_delta"], doc["trusted_base_delta"]);
-    assert_eq!(
-        rt["obligations"][0]["diagnostic"],
-        doc["obligations"][0]["diagnostic"]
-    );
+    assert_eq!(rt["obligations"][0]["diagnostic"], doc["obligations"][0]["diagnostic"]);
 
     validate_document(&doc).expect("hole document must be schema-valid");
 }
@@ -415,11 +327,7 @@ fn decomposition_and_slice_kinds_round_trip() {
         "trusted_base_delta": [{"id": "?h:ob:t2", "goal": "is_sorted xs"}]
     });
     validate_document(&slice_doc).expect("slice document must be schema-valid");
-    assert_eq!(
-        round_trip(&slice_doc),
-        slice_doc,
-        "slice document round-trip identity"
-    );
+    assert_eq!(round_trip(&slice_doc), slice_doc, "slice document round-trip identity");
 }
 
 // ─── B. The false-vs-unknown discriminator on the wire ───────────────────────
@@ -430,13 +338,7 @@ fn decomposition_and_slice_kinds_round_trip() {
 #[test]
 fn refuted_goal_false_tag_forcing_world() {
     let mut env = GlobalEnv::new();
-    let _p_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::omega(Level::zero()),
-    )
-    .unwrap();
+    let _p_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero())).unwrap();
 
     let cm = concrete_countermodel_false();
     let actions = vec![SuggestedAction::FixCounterexample {
@@ -445,11 +347,8 @@ fn refuted_goal_false_tag_forcing_world() {
     let diag_val = serialize_countermodel(&cm, &actions);
 
     // FIDELITY: verdict must be "false"
-    assert_eq!(
-        diag_val["verdict"].as_str().unwrap(),
-        "false",
-        "B1: disproved → verdict:false (the false-side discriminator)"
-    );
+    assert_eq!(diag_val["verdict"].as_str().unwrap(), "false",
+               "B1: disproved → verdict:false (the false-side discriminator)");
 
     // failure world present (forces ¬φ)
     assert!(!diag_val["failure"].is_null(), "B1: failure world present");
@@ -457,9 +356,7 @@ fn refuted_goal_false_tag_forcing_world() {
     // suggested_actions = [fix_counterexample only]
     let actions_arr = diag_val["suggested_actions"].as_array().unwrap();
     assert!(
-        actions_arr
-            .iter()
-            .all(|a| a["kind"].as_str().unwrap() == "fix_counterexample"),
+        actions_arr.iter().all(|a| a["kind"].as_str().unwrap() == "fix_counterexample"),
         "B1: only fix_counterexample actions (region:false)"
     );
     assert!(
@@ -470,9 +367,7 @@ fn refuted_goal_false_tag_forcing_world() {
     );
     // No add_precondition (unknown-only)
     assert!(
-        !actions_arr
-            .iter()
-            .any(|a| a["kind"].as_str().unwrap() == "add_precondition"),
+        !actions_arr.iter().any(|a| a["kind"].as_str().unwrap() == "add_precondition"),
         "B1: no add_precondition on a false goal (region-tag discipline)"
     );
 }
@@ -486,40 +381,27 @@ fn unknown_goal_unknown_tag_no_forcing_world() {
 
     let triple = closed_triple(&mut env, "ob:lem#post.0", p.clone());
     let result = attempt_obligation(&mut env, &triple);
-    assert!(
-        matches!(result.verdict, Verdict::Unknown { .. }),
-        "abstract P must be V3 unknown"
-    );
+    assert!(matches!(result.verdict, Verdict::Unknown { .. }),
+            "abstract P must be V3 unknown");
 
     let diag = project_diagnostic(&result, &triple).unwrap();
     let diag_val = serialize_diagnostic(&diag, &triple.id);
 
     // FIDELITY: verdict must be "unknown", never "false"
-    assert_eq!(
-        diag_val["kind"].as_str().unwrap(),
-        "hole",
-        "unknown → kind:hole"
-    );
+    assert_eq!(diag_val["kind"].as_str().unwrap(), "hole",
+               "unknown → kind:hole");
 
     // For the wire cross-walk: project_wire_verdict says Unknown
     let wire = project_wire_verdict(&result.verdict);
-    assert_eq!(
-        wire,
-        Some(WireVerdict::Unknown),
-        "B2: abstract P (p∨¬p analog) → wire verdict Unknown, not False (Glivenko)"
-    );
-    assert_ne!(
-        wire,
-        Some(WireVerdict::False),
-        "B2: FIDELITY — never WireVerdict::False for an abstract atom"
-    );
+    assert_eq!(wire, Some(WireVerdict::Unknown),
+               "B2: abstract P (p∨¬p analog) → wire verdict Unknown, not False (Glivenko)");
+    assert_ne!(wire, Some(WireVerdict::False),
+               "B2: FIDELITY — never WireVerdict::False for an abstract atom");
 
     // No fix_counterexample action
     if let Some(actions_arr) = diag_val["suggested_actions"].as_array() {
         assert!(
-            !actions_arr
-                .iter()
-                .any(|a| a["kind"].as_str().unwrap() == "fix_counterexample"),
+            !actions_arr.iter().any(|a| a["kind"].as_str().unwrap() == "fix_counterexample"),
             "B2: unknown goal must NOT carry fix_counterexample (region-tag discipline)"
         );
     }
@@ -531,13 +413,7 @@ fn unknown_goal_unknown_tag_no_forcing_world() {
 #[test]
 fn false_unknown_non_confusable_roundtrip() {
     let mut env = GlobalEnv::new();
-    let p_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::omega(Level::zero()),
-    )
-    .unwrap();
+    let p_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::omega(Level::zero())).unwrap();
     let p = Term::const_(p_id, vec![]);
 
     // "false" side: synthetic disproved (p ∧ ¬p)
@@ -569,28 +445,20 @@ fn false_unknown_non_confusable_roundtrip() {
         project_wire_verdict(&Verdict::Disproved {
             countermodel: Countermodel::root(""),
         }),
-        project_wire_verdict(&Verdict::Unknown {
-            hole_id: ken_kernel::GlobalId(0)
-        }),
+        project_wire_verdict(&Verdict::Unknown { hole_id: ken_kernel::GlobalId(0) }),
         "B3: wire verdict projections are distinct"
     );
 
     let false_ob_status = ObligationStatus::Refuted;
     let unknown_ob_status = ObligationStatus::Open;
     assert_ne!(false_ob_status, unknown_ob_status);
-    assert_ne!(
-        false_ob_status.as_str(),
-        unknown_ob_status.as_str(),
-        "B3: obligation status strings differ (refuted vs open)"
-    );
+    assert_ne!(false_ob_status.as_str(), unknown_ob_status.as_str(),
+               "B3: obligation status strings differ (refuted vs open)");
 
     let false_doc_status = rollup_doc_status(&[ObligationStatus::Refuted]);
     let unknown_doc_status = rollup_doc_status(&[ObligationStatus::Open]);
-    assert_ne!(
-        false_doc_status.as_str(),
-        unknown_doc_status.as_str(),
-        "B3: document status strings differ (disproved vs incomplete)"
-    );
+    assert_ne!(false_doc_status.as_str(), unknown_doc_status.as_str(),
+               "B3: document status strings differ (disproved vs incomplete)");
 
     // The two serializations are non-confusable
     assert_ne!(
@@ -639,11 +507,8 @@ fn glivenko_wire_sweep_classically_valid_never_false() {
     let false_verdict = project_wire_verdict(&Verdict::Disproved {
         countermodel: Countermodel::root("¬(p∧¬p) is provable"),
     });
-    assert_eq!(
-        false_verdict,
-        Some(WireVerdict::False),
-        "B4: genuinely-refutable goal → WireVerdict::False"
-    );
+    assert_eq!(false_verdict, Some(WireVerdict::False),
+               "B4: genuinely-refutable goal → WireVerdict::False");
 
     // Cross-case: False and Unknown are distinct classes (the discriminator)
     assert_ne!(
@@ -669,17 +534,9 @@ fn three_renderings_agree_one_source() {
         let wire_v = project_wire_verdict(&v);
         let doc_s = rollup_doc_status(&[ob_s.clone()]);
 
-        assert_eq!(
-            ob_s,
-            ObligationStatus::Refuted,
-            "C1: Disproved → obligation refuted"
-        );
+        assert_eq!(ob_s, ObligationStatus::Refuted, "C1: Disproved → obligation refuted");
         assert_eq!(doc_s, DocStatus::Disproved, "C1: Disproved → doc disproved");
-        assert_eq!(
-            wire_v,
-            Some(WireVerdict::False),
-            "C1: Disproved → verdict:false"
-        );
+        assert_eq!(wire_v, Some(WireVerdict::False), "C1: Disproved → verdict:false");
 
         // The three renderings agree per the cross-walk:
         // verdict:"false" ⟺ obligation refuted ⟺ doc disproved
@@ -696,17 +553,9 @@ fn three_renderings_agree_one_source() {
         let wire_v = project_wire_verdict(&v);
         let doc_s = rollup_doc_status(&[ob_s.clone()]);
 
-        assert_eq!(
-            ob_s,
-            ObligationStatus::Open,
-            "C1: Unknown → obligation open"
-        );
+        assert_eq!(ob_s, ObligationStatus::Open, "C1: Unknown → obligation open");
         assert_eq!(doc_s, DocStatus::Incomplete, "C1: Unknown → doc incomplete");
-        assert_eq!(
-            wire_v,
-            Some(WireVerdict::Unknown),
-            "C1: Unknown → verdict:unknown"
-        );
+        assert_eq!(wire_v, Some(WireVerdict::Unknown), "C1: Unknown → verdict:unknown");
 
         // verdict:"unknown" ⟺ open ⟺ incomplete
         assert_eq!(ob_s.as_str(), "open");
@@ -716,19 +565,14 @@ fn three_renderings_agree_one_source() {
 
     // proved case: Proved → discharged / proved / no countermodel
     {
-        let v = Verdict::Proved {
-            cert: Term::omega(Level::zero()),
-        };
+        let v = Verdict::Proved { cert: Term::omega(Level::zero()) };
         let ob_s = project_obligation_status(&v);
         let wire_v = project_wire_verdict(&v);
         let doc_s = rollup_doc_status(&[ob_s.clone()]);
 
         assert_eq!(ob_s, ObligationStatus::Discharged);
         assert_eq!(doc_s, DocStatus::Proved);
-        assert_eq!(
-            wire_v, None,
-            "C1: Proved → no wire verdict (no countermodel)"
-        );
+        assert_eq!(wire_v, None, "C1: Proved → no wire verdict (no countermodel)");
     }
 }
 
@@ -911,7 +755,7 @@ fn additive_unknown_field_accepted() {
 
     validate_document(&additive).expect(
         "D2: additive unknown fields and unknown action kinds must be ACCEPTED \
-         (forward-compatibility, 25 §6)",
+         (forward-compatibility, 25 §6)"
     );
 }
 
@@ -1009,53 +853,29 @@ fn agent_pivots_on_status_no_text_scraping() {
 
     // Agent algorithm (§7): pivot on status alone, no text parsing
     let pivot_false = agent_pivot(&false_doc);
-    assert_eq!(
-        pivot_false,
-        AgentPivot::FixSpec,
-        "E1: status:disproved → fix-spec path (from machine fields only)"
-    );
+    assert_eq!(pivot_false, AgentPivot::FixSpec,
+               "E1: status:disproved → fix-spec path (from machine fields only)");
 
     let pivot_unknown = agent_pivot(&unknown_doc);
-    assert_eq!(
-        pivot_unknown,
-        AgentPivot::SupplyFacts,
-        "E1: status:incomplete → supply-facts path (from machine fields only)"
-    );
+    assert_eq!(pivot_unknown, AgentPivot::SupplyFacts,
+               "E1: status:incomplete → supply-facts path (from machine fields only)");
 
     // Agent reads provenance.span for fix-spec location (machine field)
-    let span = false_doc["obligations"][0]["provenance"]["span"]
-        .as_str()
-        .unwrap();
-    assert_eq!(
-        span, "pay.ken:14:11",
-        "E1: provenance.span is a machine field (not human text)"
-    );
+    let span = false_doc["obligations"][0]["provenance"]["span"].as_str().unwrap();
+    assert_eq!(span, "pay.ken:14:11", "E1: provenance.span is a machine field (not human text)");
 
     // Agent reads suggested_actions[].kind for action (machine field)
     let action_kind = false_doc["obligations"][0]["diagnostic"]["suggested_actions"][0]["kind"]
-        .as_str()
-        .unwrap();
-    assert_eq!(
-        action_kind, "fix_counterexample",
-        "E1: action kind is a machine field"
-    );
+        .as_str().unwrap();
+    assert_eq!(action_kind, "fix_counterexample", "E1: action kind is a machine field");
 
     // Agent reads hole_id for supply-path target (machine field)
-    let hole_id = unknown_doc["obligations"][0]["diagnostic"]["hole_id"]
-        .as_str()
-        .unwrap();
-    assert_eq!(
-        hole_id, "?h:ob:sort#post.0",
-        "E1: hole_id is a machine field"
-    );
+    let hole_id = unknown_doc["obligations"][0]["diagnostic"]["hole_id"].as_str().unwrap();
+    assert_eq!(hole_id, "?h:ob:sort#post.0", "E1: hole_id is a machine field");
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum AgentPivot {
-    FixSpec,
-    SupplyFacts,
-    NoAction,
-}
+enum AgentPivot { FixSpec, SupplyFacts, NoAction }
 
 /// Minimal agent pivot function — from machine fields only, no text parsing.
 fn agent_pivot(doc: &Value) -> AgentPivot {
@@ -1087,13 +907,10 @@ fn deterministic_modulo_stats_and_display() {
         let result_b = attempt_obligation(&mut env, &triple_b);
         let diag_b = project_diagnostic(&result_b, &triple_b);
 
-        let mut doc = serialize_document(
-            "target",
-            &[
-                (result_a.verdict, diag_a, triple_a.id.clone(), triple_a),
-                (result_b.verdict, diag_b, triple_b.id.clone(), triple_b),
-            ],
-        );
+        let mut doc = serialize_document("target", &[
+            (result_a.verdict, diag_a, triple_a.id.clone(), triple_a),
+            (result_b.verdict, diag_b, triple_b.id.clone(), triple_b),
+        ]);
 
         // Inject a non-deterministic stats.ms to simulate two runs
         if let Some(stats) = doc["stats"].as_object_mut() {
@@ -1138,8 +955,6 @@ fn deterministic_modulo_stats_and_display() {
     // DISTINCT FROM ROUND-TRIP: determinism is across runs, not a single doc's surface
     // Round-trip preserves everything including stats.ms; determinism excludes it.
     let rt = round_trip(&run1);
-    assert_eq!(
-        rt["stats"]["ms"], run1["stats"]["ms"],
-        "E2: round-trip preserves stats.ms (distinct from cross-run determinism)"
-    );
+    assert_eq!(rt["stats"]["ms"], run1["stats"]["ms"],
+               "E2: round-trip preserves stats.ms (distinct from cross-run determinism)");
 }

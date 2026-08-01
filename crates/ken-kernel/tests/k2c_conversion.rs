@@ -508,10 +508,7 @@ fn sct_reject_self_loop() {
         vec![Term::lam(nat_t, Term::app(cref(loop_id), Term::var(0)))]
     });
     assert!(result.is_err(), "loop must be rejected");
-    assert!(matches!(
-        result.unwrap_err(),
-        KernelError::NotTerminating(_)
-    ));
+    assert!(matches!(result.unwrap_err(), KernelError::NotTerminating(_)));
 }
 
 // ---------------------------------------------------------------------------
@@ -693,10 +690,7 @@ fn sct_reject_union_masking() {
         result.is_err(),
         "f with a stationary self-call must be rejected"
     );
-    assert!(matches!(
-        result.unwrap_err(),
-        KernelError::NotTerminating(_)
-    ));
+    assert!(matches!(result.unwrap_err(), KernelError::NotTerminating(_)));
 }
 
 // ---------------------------------------------------------------------------
@@ -816,10 +810,7 @@ fn sct_reject_bare_self_reference() {
         result.is_err(),
         "bare nullary self-reference must be rejected"
     );
-    assert!(matches!(
-        result.unwrap_err(),
-        KernelError::NotTerminating(_)
-    ));
+    assert!(matches!(result.unwrap_err(), KernelError::NotTerminating(_)));
 }
 
 // ---------------------------------------------------------------------------
@@ -859,8 +850,5 @@ fn sct_reject_combinator_laundered() {
         result.is_err(),
         "loop laundered through id must be rejected"
     );
-    assert!(matches!(
-        result.unwrap_err(),
-        KernelError::NotTerminating(_)
-    ));
+    assert!(matches!(result.unwrap_err(), KernelError::NotTerminating(_)));
 }

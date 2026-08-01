@@ -54,9 +54,7 @@
 //! generalization, no new elaborator machinery.
 
 use ken_kernel::subst::weaken;
-use ken_kernel::{
-    declare_def, declare_inductive, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, Level, Term,
-};
+use ken_kernel::{declare_def, declare_inductive, CtorSpec, GlobalEnv, GlobalId, InductiveSpec, Level, Term};
 
 /// All `GlobalId`s the lifted `[State s]` surface registers.
 #[derive(Clone, Copy)]
@@ -126,17 +124,11 @@ fn apply_all(head: Term, args: &[Term]) -> Term {
 }
 
 fn pi_chain(domains: &[Term], body: Term) -> Term {
-    domains
-        .iter()
-        .rev()
-        .fold(body, |acc, d| Term::pi(d.clone(), acc))
+    domains.iter().rev().fold(body, |acc, d| Term::pi(d.clone(), acc))
 }
 
 fn lam_chain(domains: &[Term], body: Term) -> Term {
-    domains
-        .iter()
-        .rev()
-        .fold(body, |acc, d| Term::lam(d.clone(), acc))
+    domains.iter().rev().fold(body, |acc, d| Term::lam(d.clone(), acc))
 }
 
 /// An `Elim` motive `λ(_:domain). Type0` (or any other Type0-classified
@@ -161,18 +153,15 @@ pub fn declare_itree(env: &mut GlobalEnv) -> Result<(GlobalId, GlobalId, GlobalI
     let itree = declare_inductive(env, |itree| InductiveSpec {
         level_params: vec![],
         params: vec![
-            ty0(),                         // E : Type 0
-            Term::pi(Term::var(0), ty0()), // Resp : E -> Type 0, ctx [E]
-            ty0(),                         // R : Type 0, ctx [E,Resp]
+            ty0(),                          // E : Type 0
+            Term::pi(Term::var(0), ty0()),  // Resp : E -> Type 0, ctx [E]
+            ty0(),                          // R : Type 0, ctx [E,Resp]
         ],
         indices: vec![],
         level: lv0(),
         constructors: vec![
             // Ret : R -> ITree E Resp R. ctx [E,Resp,R]: R=v(3,2).
-            CtorSpec {
-                args: vec![v(3, 2)],
-                target_indices: vec![],
-            },
+            CtorSpec { args: vec![v(3, 2)], target_indices: vec![] },
             // Vis : (op:E) -> (Resp op -> ITree E Resp R) -> ITree E Resp R.
             CtorSpec {
                 args: vec![
@@ -192,9 +181,7 @@ pub fn declare_itree(env: &mut GlobalEnv) -> Result<(GlobalId, GlobalId, GlobalI
         ],
     })
     .map_err(|e| format!("lifted ITree declaration failed: {e:?}"))?;
-    let decl = env
-        .inductive(itree)
-        .ok_or("ITree not found after declare")?;
+    let decl = env.inductive(itree).ok_or("ITree not found after declare")?;
     Ok((itree, decl.constructors[0].id, decl.constructors[1].id))
 }
 
@@ -206,20 +193,12 @@ pub fn declare_state_op(env: &mut GlobalEnv) -> Result<(GlobalId, GlobalId, Glob
         indices: vec![],
         level: lv0(),
         constructors: vec![
-            CtorSpec {
-                args: vec![],
-                target_indices: vec![],
-            }, // Get
-            CtorSpec {
-                args: vec![v(1, 0)],
-                target_indices: vec![],
-            }, // Put : s -> StateOp s
+            CtorSpec { args: vec![], target_indices: vec![] },       // Get
+            CtorSpec { args: vec![v(1, 0)], target_indices: vec![] }, // Put : s -> StateOp s
         ],
     })
     .map_err(|e| format!("StateOp declaration failed: {e:?}"))?;
-    let decl = env
-        .inductive(state_op)
-        .ok_or("StateOp not found after declare")?;
+    let decl = env.inductive(state_op).ok_or("StateOp not found after declare")?;
     Ok((state_op, decl.constructors[0].id, decl.constructors[1].id))
 }
 
@@ -239,37 +218,22 @@ pub fn declare_coproduct(env: &mut GlobalEnv) -> Result<(GlobalId, GlobalId, Glo
         indices: vec![],
         level: lv0(),
         constructors: vec![
-            CtorSpec {
-                args: vec![v(2, 0)],
-                target_indices: vec![],
-            }, // InL : a -> Coproduct a b
-            CtorSpec {
-                args: vec![v(2, 1)],
-                target_indices: vec![],
-            }, // InR : b -> Coproduct a b
+            CtorSpec { args: vec![v(2, 0)], target_indices: vec![] }, // InL : a -> Coproduct a b
+            CtorSpec { args: vec![v(2, 1)], target_indices: vec![] }, // InR : b -> Coproduct a b
         ],
     })
     .map_err(|e| format!("Coproduct declaration failed: {e:?}"))?;
-    let decl = env
-        .inductive(coproduct)
-        .ok_or("Coproduct not found after declare")?;
+    let decl = env.inductive(coproduct).ok_or("Coproduct not found after declare")?;
     Ok((coproduct, decl.constructors[0].id, decl.constructors[1].id))
 }
 
 /// `resp_state : (s:Type) -> StateOp s -> Type = \s op. match op { Get => s ; Put _ => Unit }`.
-pub fn declare_resp_state(
-    env: &mut GlobalEnv,
-    state_op_id: GlobalId,
-    unit_id: GlobalId,
-) -> Result<GlobalId, String> {
+pub fn declare_resp_state(env: &mut GlobalEnv, state_op_id: GlobalId, unit_id: GlobalId) -> Result<GlobalId, String> {
     // Elim node ctx [s, op] (len=2): s=v(2,0), op=v(2,1).
     let method_get = v(2, 0); // s
     let method_put = Term::lam(v(2, 0), Term::indformer(unit_id, vec![])); // \x:s. Unit
     let motive_dom = Term::app(Term::indformer(state_op_id, vec![]), v(2, 0));
-    let motive = ascribed(
-        Term::lam(motive_dom.clone(), ty0()),
-        Term::pi(motive_dom, ty1()),
-    );
+    let motive = ascribed(Term::lam(motive_dom.clone(), ty0()), Term::pi(motive_dom, ty1()));
     let elim = Term::Elim {
         fam: state_op_id,
         level_args: vec![],
@@ -279,20 +243,8 @@ pub fn declare_resp_state(
         indices: vec![],
         scrut: Box::new(v(2, 1)), // op
     };
-    let body = lam_chain(
-        &[
-            ty0(),
-            Term::app(Term::indformer(state_op_id, vec![]), Term::var(0)),
-        ],
-        elim,
-    );
-    let ty = pi_chain(
-        &[
-            ty0(),
-            Term::app(Term::indformer(state_op_id, vec![]), Term::var(0)),
-        ],
-        ty0(),
-    );
+    let body = lam_chain(&[ty0(), Term::app(Term::indformer(state_op_id, vec![]), Term::var(0))], elim);
+    let ty = pi_chain(&[ty0(), Term::app(Term::indformer(state_op_id, vec![]), Term::var(0))], ty0());
     declare_def(env, vec![], ty, body).map_err(|e| format!("resp_state declaration failed: {e:?}"))
 }
 
@@ -310,16 +262,10 @@ pub fn declare_resp_state(
 /// trivially total, no SCT). State becomes the literal instance `resp_coproduct
 /// (StateOp s) f (resp_state s) RespF` (§D1.3) — `get`/`put`/`run_state` below
 /// apply the 4-arg form.
-pub fn declare_resp_coproduct(
-    env: &mut GlobalEnv,
-    coproduct_id: GlobalId,
-) -> Result<GlobalId, String> {
+pub fn declare_resp_coproduct(env: &mut GlobalEnv, coproduct_id: GlobalId) -> Result<GlobalId, String> {
     // Elim node ctx [g,h,rg,rh,op] (len=5): g=v(5,0), h=v(5,1), rg=v(5,2), rh=v(5,3), op=v(5,4).
     let coproduct_ty = apply_all(Term::indformer(coproduct_id, vec![]), &[v(5, 0), v(5, 1)]);
-    let motive = ascribed(
-        Term::lam(coproduct_ty.clone(), ty0()),
-        Term::pi(coproduct_ty, ty1()),
-    );
+    let motive = ascribed(Term::lam(coproduct_ty.clone(), ty0()), Term::pi(coproduct_ty, ty1()));
     // method_inl = \(x:g). rg x.
     //   Domain, ctx len5: g=v(5,0). Body, ctx len6 [g,h,rg,rh,op,x]: rg=v(6,2), x=v(6,5).
     let method_inl = Term::lam(v(5, 0), Term::app(v(6, 2), v(6, 5)));
@@ -336,19 +282,15 @@ pub fn declare_resp_coproduct(
         scrut: Box::new(v(5, 4)), // op
     };
     let domains = [
-        ty0(),                         // g, ctx []
-        ty0(),                         // h, ctx [g]
-        Term::pi(Term::var(1), ty0()), // rg : g -> Type, ctx [g,h] (len2): g=Var(1)
-        Term::pi(Term::var(1), ty0()), // rh : h -> Type, ctx [g,h,rg] (len3): h=Var(1)
-        apply_all(
-            Term::indformer(coproduct_id, vec![]),
-            &[Term::var(3), Term::var(2)],
-        ), // op:Coproduct g h, ctx [g,h,rg,rh] (len4): g=Var(3),h=Var(2)
+        ty0(),                          // g, ctx []
+        ty0(),                          // h, ctx [g]
+        Term::pi(Term::var(1), ty0()),  // rg : g -> Type, ctx [g,h] (len2): g=Var(1)
+        Term::pi(Term::var(1), ty0()),  // rh : h -> Type, ctx [g,h,rg] (len3): h=Var(1)
+        apply_all(Term::indformer(coproduct_id, vec![]), &[Term::var(3), Term::var(2)]), // op:Coproduct g h, ctx [g,h,rg,rh] (len4): g=Var(3),h=Var(2)
     ];
     let body = lam_chain(&domains, elim);
     let ty = pi_chain(&domains, ty0());
-    declare_def(env, vec![], ty, body)
-        .map_err(|e| format!("resp_coproduct declaration failed: {e:?}"))
+    declare_def(env, vec![], ty, body).map_err(|e| format!("resp_coproduct declaration failed: {e:?}"))
 }
 
 /// `inject_l : (g h:Type) -> (rg:g->Type) -> (rh:h->Type) -> (a:Type) ->
@@ -377,30 +319,16 @@ pub fn declare_inject_l(
     inl_id: GlobalId,
 ) -> Result<GlobalId, String> {
     let itree_app = |len: usize, e_i: usize, resp_i: usize, r: Term| {
-        apply_all(
-            Term::indformer(itree_id, vec![]),
-            &[v(len, e_i), v(len, resp_i), r],
-        )
+        apply_all(Term::indformer(itree_id, vec![]), &[v(len, e_i), v(len, resp_i), r])
     };
-    let coproduct_gh = |len: usize| {
-        apply_all(
-            Term::indformer(coproduct_id, vec![]),
-            &[v(len, 0), v(len, 1)],
-        )
-    };
+    let coproduct_gh = |len: usize| apply_all(Term::indformer(coproduct_id, vec![]), &[v(len, 0), v(len, 1)]);
     let resp_coproduct_ghrgrh = |len: usize| {
-        apply_all(
-            Term::const_(resp_coproduct_id, vec![]),
-            &[v(len, 0), v(len, 1), v(len, 2), v(len, 3)],
-        )
+        apply_all(Term::const_(resp_coproduct_id, vec![]), &[v(len, 0), v(len, 1), v(len, 2), v(len, 3)])
     };
 
     // Outer ctx (declaration order): g, h, rg, rh, a, t (len=6). t : ITree g rg a.
     let motive_dom = itree_app(6, 0, 2, v(6, 4));
-    let target_at6 = apply_all(
-        Term::indformer(itree_id, vec![]),
-        &[coproduct_gh(6), resp_coproduct_ghrgrh(6), v(6, 4)],
-    );
+    let target_at6 = apply_all(Term::indformer(itree_id, vec![]), &[coproduct_gh(6), resp_coproduct_ghrgrh(6), v(6, 4)]);
     let motive = ascribed(
         Term::lam(motive_dom.clone(), weaken(&target_at6, 1)),
         Term::pi(motive_dom, ty0()),
@@ -410,10 +338,7 @@ pub fn declare_inject_l(
     let method_ret = {
         let x_dom = v(6, 4);
         // Body, ctx len7 (x bound): local order g,h,rg,rh,a,t,x -> x=idx6=v(7,6).
-        let ret_applied = apply_all(
-            Term::constructor(ret_id, vec![]),
-            &[coproduct_gh(7), resp_coproduct_ghrgrh(7), v(7, 4)],
-        );
+        let ret_applied = apply_all(Term::constructor(ret_id, vec![]), &[coproduct_gh(7), resp_coproduct_ghrgrh(7), v(7, 4)]);
         Term::lam(x_dom, Term::app(ret_applied, v(7, 6)))
     };
 
@@ -421,30 +346,18 @@ pub fn declare_inject_l(
     //   \(ih: rg op -> ITree (Coproduct g h)(resp_coproduct…) a). Vis … (InL g h op) ih.
     let method_vis = {
         let op_dom = v(6, 0); // g
-                              // cont domain, ctx len7 (op bound): rg=v(7,2), op=v(7,6).
+        // cont domain, ctx len7 (op bound): rg=v(7,2), op=v(7,6).
         let cont_dom = Term::pi(Term::app(v(7, 2), v(7, 6)), itree_app(8, 0, 2, v(8, 4)));
         // ih domain, ctx len8 (op,cont bound): rg=v(8,2), op=v(8,6).
         let ih_dom = Term::pi(
             Term::app(v(8, 2), v(8, 6)),
-            apply_all(
-                Term::indformer(itree_id, vec![]),
-                &[coproduct_gh(9), resp_coproduct_ghrgrh(9), v(9, 4)],
-            ),
+            apply_all(Term::indformer(itree_id, vec![]), &[coproduct_gh(9), resp_coproduct_ghrgrh(9), v(9, 4)]),
         );
         // body, ctx len9 (op,cont,ih bound): op=v(9,6), ih=v(9,8).
-        let inl_applied = apply_all(
-            Term::constructor(inl_id, vec![]),
-            &[v(9, 0), v(9, 1), v(9, 6)],
-        );
+        let inl_applied = apply_all(Term::constructor(inl_id, vec![]), &[v(9, 0), v(9, 1), v(9, 6)]);
         let vis_body = apply_all(
             Term::constructor(vis_id, vec![]),
-            &[
-                coproduct_gh(9),
-                resp_coproduct_ghrgrh(9),
-                v(9, 4),
-                inl_applied,
-                v(9, 8),
-            ],
+            &[coproduct_gh(9), resp_coproduct_ghrgrh(9), v(9, 4), inl_applied, v(9, 8)],
         );
         Term::lam(op_dom, Term::lam(cont_dom, Term::lam(ih_dom, vis_body)))
     };
@@ -465,25 +378,16 @@ pub fn declare_inject_l(
     let d_rh = Term::pi(Term::var(1), ty0()); // ctx [g,h,rg] (len3): h=Var(1)
     let d_a = ty0();
     // d_t: ITree g rg a, ctx [g,h,rg,rh,a] (len5): g=Var(4), rg=Var(2), a=Var(0).
-    let d_t = apply_all(
-        Term::indformer(itree_id, vec![]),
-        &[Term::var(4), Term::var(2), Term::var(0)],
-    );
+    let d_t = apply_all(Term::indformer(itree_id, vec![]), &[Term::var(4), Term::var(2), Term::var(0)]);
     let final_domains = [d_g, d_h, d_rg, d_rh, d_a, d_t];
     let body = lam_chain(&final_domains, elim);
     // ret_ty: ITree (Coproduct g h) (resp_coproduct g h rg rh) a, ctx len6: g=Var(5),h=Var(4),rg=Var(3),rh=Var(2),a=Var(1).
-    let ret_coproduct = apply_all(
-        Term::indformer(coproduct_id, vec![]),
-        &[Term::var(5), Term::var(4)],
-    );
+    let ret_coproduct = apply_all(Term::indformer(coproduct_id, vec![]), &[Term::var(5), Term::var(4)]);
     let ret_resp = apply_all(
         Term::const_(resp_coproduct_id, vec![]),
         &[Term::var(5), Term::var(4), Term::var(3), Term::var(2)],
     );
-    let ret_ty = apply_all(
-        Term::indformer(itree_id, vec![]),
-        &[ret_coproduct, ret_resp, Term::var(1)],
-    );
+    let ret_ty = apply_all(Term::indformer(itree_id, vec![]), &[ret_coproduct, ret_resp, Term::var(1)]);
     let ty = pi_chain(&final_domains, ret_ty);
     declare_def(env, vec![], ty, body).map_err(|e| format!("inject_l declaration failed: {e:?}"))
 }
@@ -505,30 +409,16 @@ pub fn declare_inject_r(
     inr_id: GlobalId,
 ) -> Result<GlobalId, String> {
     let itree_app = |len: usize, e_i: usize, resp_i: usize, r: Term| {
-        apply_all(
-            Term::indformer(itree_id, vec![]),
-            &[v(len, e_i), v(len, resp_i), r],
-        )
+        apply_all(Term::indformer(itree_id, vec![]), &[v(len, e_i), v(len, resp_i), r])
     };
-    let coproduct_gh = |len: usize| {
-        apply_all(
-            Term::indformer(coproduct_id, vec![]),
-            &[v(len, 0), v(len, 1)],
-        )
-    };
+    let coproduct_gh = |len: usize| apply_all(Term::indformer(coproduct_id, vec![]), &[v(len, 0), v(len, 1)]);
     let resp_coproduct_ghrgrh = |len: usize| {
-        apply_all(
-            Term::const_(resp_coproduct_id, vec![]),
-            &[v(len, 0), v(len, 1), v(len, 2), v(len, 3)],
-        )
+        apply_all(Term::const_(resp_coproduct_id, vec![]), &[v(len, 0), v(len, 1), v(len, 2), v(len, 3)])
     };
 
     // Outer ctx (declaration order): g, h, rg, rh, a, t (len=6). t : ITree h rh a.
     let motive_dom = itree_app(6, 1, 3, v(6, 4));
-    let target_at6 = apply_all(
-        Term::indformer(itree_id, vec![]),
-        &[coproduct_gh(6), resp_coproduct_ghrgrh(6), v(6, 4)],
-    );
+    let target_at6 = apply_all(Term::indformer(itree_id, vec![]), &[coproduct_gh(6), resp_coproduct_ghrgrh(6), v(6, 4)]);
     let motive = ascribed(
         Term::lam(motive_dom.clone(), weaken(&target_at6, 1)),
         Term::pi(motive_dom, ty0()),
@@ -536,39 +426,24 @@ pub fn declare_inject_r(
 
     let method_ret = {
         let x_dom = v(6, 4);
-        let ret_applied = apply_all(
-            Term::constructor(ret_id, vec![]),
-            &[coproduct_gh(7), resp_coproduct_ghrgrh(7), v(7, 4)],
-        );
+        let ret_applied = apply_all(Term::constructor(ret_id, vec![]), &[coproduct_gh(7), resp_coproduct_ghrgrh(7), v(7, 4)]);
         Term::lam(x_dom, Term::app(ret_applied, v(7, 6)))
     };
 
     let method_vis = {
         let op_dom = v(6, 1); // h
-                              // cont domain, ctx len7 (op bound): rh=v(7,3), op=v(7,6).
+        // cont domain, ctx len7 (op bound): rh=v(7,3), op=v(7,6).
         let cont_dom = Term::pi(Term::app(v(7, 3), v(7, 6)), itree_app(8, 1, 3, v(8, 4)));
         // ih domain, ctx len8 (op,cont bound): rh=v(8,3), op=v(8,6).
         let ih_dom = Term::pi(
             Term::app(v(8, 3), v(8, 6)),
-            apply_all(
-                Term::indformer(itree_id, vec![]),
-                &[coproduct_gh(9), resp_coproduct_ghrgrh(9), v(9, 4)],
-            ),
+            apply_all(Term::indformer(itree_id, vec![]), &[coproduct_gh(9), resp_coproduct_ghrgrh(9), v(9, 4)]),
         );
         // body, ctx len9 (op,cont,ih bound): op=v(9,6), ih=v(9,8).
-        let inr_applied = apply_all(
-            Term::constructor(inr_id, vec![]),
-            &[v(9, 0), v(9, 1), v(9, 6)],
-        );
+        let inr_applied = apply_all(Term::constructor(inr_id, vec![]), &[v(9, 0), v(9, 1), v(9, 6)]);
         let vis_body = apply_all(
             Term::constructor(vis_id, vec![]),
-            &[
-                coproduct_gh(9),
-                resp_coproduct_ghrgrh(9),
-                v(9, 4),
-                inr_applied,
-                v(9, 8),
-            ],
+            &[coproduct_gh(9), resp_coproduct_ghrgrh(9), v(9, 4), inr_applied, v(9, 8)],
         );
         Term::lam(op_dom, Term::lam(cont_dom, Term::lam(ih_dom, vis_body)))
     };
@@ -589,24 +464,15 @@ pub fn declare_inject_r(
     let d_rh = Term::pi(Term::var(1), ty0());
     let d_a = ty0();
     // d_t: ITree h rh a, ctx [g,h,rg,rh,a] (len5): h=Var(3), rh=Var(1), a=Var(0).
-    let d_t = apply_all(
-        Term::indformer(itree_id, vec![]),
-        &[Term::var(3), Term::var(1), Term::var(0)],
-    );
+    let d_t = apply_all(Term::indformer(itree_id, vec![]), &[Term::var(3), Term::var(1), Term::var(0)]);
     let final_domains = [d_g, d_h, d_rg, d_rh, d_a, d_t];
     let body = lam_chain(&final_domains, elim);
-    let ret_coproduct = apply_all(
-        Term::indformer(coproduct_id, vec![]),
-        &[Term::var(5), Term::var(4)],
-    );
+    let ret_coproduct = apply_all(Term::indformer(coproduct_id, vec![]), &[Term::var(5), Term::var(4)]);
     let ret_resp = apply_all(
         Term::const_(resp_coproduct_id, vec![]),
         &[Term::var(5), Term::var(4), Term::var(3), Term::var(2)],
     );
-    let ret_ty = apply_all(
-        Term::indformer(itree_id, vec![]),
-        &[ret_coproduct, ret_resp, Term::var(1)],
-    );
+    let ret_ty = apply_all(Term::indformer(itree_id, vec![]), &[ret_coproduct, ret_resp, Term::var(1)]);
     let ty = pi_chain(&final_domains, ret_ty);
     declare_def(env, vec![], ty, body).map_err(|e| format!("inject_r declaration failed: {e:?}"))
 }
@@ -616,18 +482,11 @@ pub fn declare_inject_r(
 /// `bind (Ret x) f = f x` ; `bind (Vis op k) f = Vis op ih` (`ih` — the
 /// kernel-supplied W-style IH — already computes `\r. bind (k r) f`; no
 /// self-reference is built or needed).
-pub fn declare_bind(
-    env: &mut GlobalEnv,
-    itree_id: GlobalId,
-    vis_id: GlobalId,
-) -> Result<GlobalId, String> {
+pub fn declare_bind(env: &mut GlobalEnv, itree_id: GlobalId, vis_id: GlobalId) -> Result<GlobalId, String> {
     // Outer domains, declaration order: e, resp, a, b, t, f.
     // Full outer ctx (len=6): e=v(6,0), resp=v(6,1), a=v(6,2), b=v(6,3), t=v(6,4), f=v(6,5).
     let itree_app = |len: usize, e_i: usize, resp_i: usize, r: Term| {
-        apply_all(
-            Term::indformer(itree_id, vec![]),
-            &[v(len, e_i), v(len, resp_i), r],
-        )
+        apply_all(Term::indformer(itree_id, vec![]), &[v(len, e_i), v(len, resp_i), r])
     };
 
     // motive, ctx [e,resp,a,b,t,f] (len=6): \_:ITree e resp a. ITree e resp b.
@@ -693,27 +552,18 @@ pub fn declare_bind(
     let d_resp = Term::pi(Term::var(0), ty0()); // ctx [e]: e=Var(0)
     let d_a = ty0(); // ctx [e,resp]
     let d_b = ty0(); // ctx [e,resp,a]
-                     // d_t: ITree e resp a, ctx [e,resp,a,b] (len=4): e=Var(3),resp=Var(2),a=Var(1).
-    let d_t = apply_all(
-        Term::indformer(itree_id, vec![]),
-        &[Term::var(3), Term::var(2), Term::var(1)],
-    );
+    // d_t: ITree e resp a, ctx [e,resp,a,b] (len=4): e=Var(3),resp=Var(2),a=Var(1).
+    let d_t = apply_all(Term::indformer(itree_id, vec![]), &[Term::var(3), Term::var(2), Term::var(1)]);
     // d_f: a -> ITree e resp b, ctx [e,resp,a,b,t] (len=5): a=Var(2),
     //   domain=a=Var(2); codomain ctx [e,resp,a,b,t,_] (len=6): e=Var(5),resp=Var(4),b=Var(2).
     let d_f = Term::pi(
         Term::var(2),
-        apply_all(
-            Term::indformer(itree_id, vec![]),
-            &[Term::var(5), Term::var(4), Term::var(2)],
-        ),
+        apply_all(Term::indformer(itree_id, vec![]), &[Term::var(5), Term::var(4), Term::var(2)]),
     );
     let final_domains = [d_e, d_resp, d_a, d_b, d_t, d_f];
     let body = lam_chain(&final_domains, elim);
     // Return type: ITree e resp b, ctx [e,resp,a,b,t,f] (len=6): e=Var(5),resp=Var(4),b=Var(2).
-    let ret_ty = apply_all(
-        Term::indformer(itree_id, vec![]),
-        &[Term::var(5), Term::var(4), Term::var(2)],
-    );
+    let ret_ty = apply_all(Term::indformer(itree_id, vec![]), &[Term::var(5), Term::var(4), Term::var(2)]);
     let ty = pi_chain(&final_domains, ret_ty);
     declare_def(env, vec![], ty, body).map_err(|e| format!("bind declaration failed: {e:?}"))
 }
@@ -748,8 +598,7 @@ pub fn declare_run_state(
     unit_id: GlobalId,
     mkunit_id: GlobalId,
 ) -> Result<GlobalId, String> {
-    let itree3 =
-        |e: Term, resp: Term, r: Term| apply_all(Term::indformer(itree_id, vec![]), &[e, resp, r]);
+    let itree3 = |e: Term, resp: Term, r: Term| apply_all(Term::indformer(itree_id, vec![]), &[e, resp, r]);
 
     // `ITree f RespF (Sigma a s)`, evaluated so that `f`,`RespF`,`a` sit at
     // logical positions 1,2,3 of a `(6+extra)`-length context and `s` (the
@@ -757,11 +606,7 @@ pub fn declare_run_state(
     let final_result_ty = |extra: usize| -> Term {
         let len = 6 + extra;
         let sigma_len = len + 1;
-        itree3(
-            v(len, 1),
-            v(len, 2),
-            Term::sigma(v(len, 3), v(sigma_len, 0)),
-        )
+        itree3(v(len, 1), v(len, 2), Term::sigma(v(len, 3), v(sigma_len, 0)))
     };
     // `s -> ITree f RespF (Sigma a s)`, the whole state-passing function type,
     // placed so its OWN Pi sits at a `(6+extra)`-length context (i.e. `s`
@@ -773,13 +618,7 @@ pub fn declare_run_state(
     // `Coproduct (StateOp s) f`, at a `(6+extra)`-length context.
     let coproduct_ty = |extra: usize| -> Term {
         let len = 6 + extra;
-        apply_all(
-            Term::indformer(coproduct_id, vec![]),
-            &[
-                Term::app(Term::indformer(state_op_id, vec![]), v(len, 0)),
-                v(len, 1),
-            ],
-        )
+        apply_all(Term::indformer(coproduct_id, vec![]), &[Term::app(Term::indformer(state_op_id, vec![]), v(len, 0)), v(len, 1)])
     };
     // `resp_coproduct (StateOp s) f (resp_state s) RespF`, at a `(6+extra)`-length
     // context — the general `resp_coproduct`'s 4-arg form (`effect-composition`
@@ -790,19 +629,13 @@ pub fn declare_run_state(
         let len = 6 + extra;
         let state_op_s = Term::app(Term::indformer(state_op_id, vec![]), v(len, 0));
         let resp_state_s = Term::app(Term::const_(resp_state_id, vec![]), v(len, 0));
-        apply_all(
-            Term::const_(resp_coproduct_id, vec![]),
-            &[state_op_s, v(len, 1), resp_state_s, v(len, 2)],
-        )
+        apply_all(Term::const_(resp_coproduct_id, vec![]), &[state_op_s, v(len, 1), resp_state_s, v(len, 2)])
     };
 
     // ---- elim_ITree (outermost fold) --------------------------------------
     // ctx [s,f,RespF,a,s0,t] (len=6, extra=0).
     let motive_dom = itree3(coproduct_ty(0), resp_coproduct_app(0), v(6, 3)); // ITree Op Resp a
-    let motive = ascribed(
-        Term::lam(motive_dom.clone(), state_result_ty(1)),
-        Term::pi(motive_dom, ty0()),
-    );
+    let motive = ascribed(Term::lam(motive_dom.clone(), state_result_ty(1)), Term::pi(motive_dom, ty0()));
 
     // method_ret = \(x:a). \(sv:s). Ret[f,RespF,Sigma(a,s)] (Pair x sv).
     //   x domain, ctx len=6: a=v(6,3). Body ctx len=7 (x bound, extra=1).
@@ -813,10 +646,7 @@ pub fn declare_run_state(
         // Body, ctx len=8 (x,sv bound): f=v(8,1),RespF=v(8,2),a=v(8,3),s=v(8,0).
         // Sigma(a,s) 2nd-slot ctx len=9: s=v(9,0).
         let sigma_ty = Term::sigma(v(8, 3), v(9, 0));
-        let ret_applied = apply_all(
-            Term::constructor(ret_id, vec![]),
-            &[v(8, 1), v(8, 2), sigma_ty],
-        );
+        let ret_applied = apply_all(Term::constructor(ret_id, vec![]), &[v(8, 1), v(8, 2), sigma_ty]);
         // x=v(8,6)? -- local order to ctx8: s,f,RespF,a,s0,t,x,sv (8 total): x=idx6,sv=idx7.
         let x_var = v(8, 6);
         let sv_var = v(8, 7);
@@ -832,10 +662,7 @@ pub fn declare_run_state(
         // cont domain, ctx len=7 (op bound, extra=1): Resp op -> ITree Op Resp a.
         //   Resp = resp_coproduct_app(1); op = v(7,6) [local order s,f,RespF,a,s0,t,op].
         let resp_op_1 = Term::app(resp_coproduct_app(1), v(7, 6));
-        let cont_dom = Term::pi(
-            resp_op_1,
-            itree3(coproduct_ty(2), resp_coproduct_app(2), v(8, 3)),
-        );
+        let cont_dom = Term::pi(resp_op_1, itree3(coproduct_ty(2), resp_coproduct_app(2), v(8, 3)));
         // ih domain, ctx len=8 (op,cont bound, extra=2): Resp op -> state_result_ty(3).
         //   Resp = resp_coproduct_app(2); op = v(8,6) [local order +cont].
         let resp_op_2 = Term::app(resp_coproduct_app(2), v(8, 6));
@@ -850,8 +677,8 @@ pub fn declare_run_state(
         // Placed at ctx9 (extra=3). Its own motive's binder `o` pushes to ctx10 (extra=4).
         let m_coproduct = {
             let dom = coproduct_ty(3); // Coproduct (StateOp s) f, ctx9
-                                       // body, ctx10 (extra=4): (resp_coproduct(o) -> state_result_ty(5)) -> state_result_ty(5).
-                                       // local order to ctx10: ...,op,cont,ih,o -> o is newest = v(10,9).
+            // body, ctx10 (extra=4): (resp_coproduct(o) -> state_result_ty(5)) -> state_result_ty(5).
+            // local order to ctx10: ...,op,cont,ih,o -> o is newest = v(10,9).
             let resp_coproduct_o = Term::app(resp_coproduct_app(4), v(10, 9));
             let domain_y = Term::pi(resp_coproduct_o, state_result_ty(5));
             Term::lam(dom, Term::pi(domain_y, state_result_ty(5)))
@@ -862,10 +689,9 @@ pub fn declare_run_state(
         //     (elim_StateOp M_state method_get method_put a') ih2.
         let method_inl = {
             let aprime_dom = Term::app(Term::indformer(state_op_id, vec![]), v(9, 0)); // StateOp s, ctx9
-                                                                                       // ih2 domain, ctx10 (a' bound, extra=4): resp_state(s,a') -> state_result_ty(5).
-                                                                                       //   local order to ctx10: ...,op,cont,ih,a' -> a' newest = v(10,9).
-            let resp_state_s_aprime_10 =
-                apply_all(Term::const_(resp_state_id, vec![]), &[v(10, 0), v(10, 9)]);
+            // ih2 domain, ctx10 (a' bound, extra=4): resp_state(s,a') -> state_result_ty(5).
+            //   local order to ctx10: ...,op,cont,ih,a' -> a' newest = v(10,9).
+            let resp_state_s_aprime_10 = apply_all(Term::const_(resp_state_id, vec![]), &[v(10, 0), v(10, 9)]);
             let ih2_dom = Term::pi(resp_state_s_aprime_10, state_result_ty(5));
 
             // BODY2, ctx11 (a',ih2 bound, extra=5).
@@ -876,17 +702,13 @@ pub fn declare_run_state(
             // ---- elim_StateOp (peel Get/Put out of StateOp) --------------
             let inner_motive = {
                 let dom2 = Term::app(Term::indformer(state_op_id, vec![]), v(11, 0)); // StateOp s, ctx11
-                                                                                      // body, ctx12 (extra=6): (resp_state(s,a'')->state_result_ty(7)) -> state_result_ty(7).
-                                                                                      // local order to ctx12: ...,a',ih2,a'' -> a'' newest = v(12,11).
-                let resp_state_s_aprimeprime =
-                    apply_all(Term::const_(resp_state_id, vec![]), &[v(12, 0), v(12, 11)]);
+                // body, ctx12 (extra=6): (resp_state(s,a'')->state_result_ty(7)) -> state_result_ty(7).
+                // local order to ctx12: ...,a',ih2,a'' -> a'' newest = v(12,11).
+                let resp_state_s_aprimeprime = apply_all(Term::const_(resp_state_id, vec![]), &[v(12, 0), v(12, 11)]);
                 let domain_w = Term::pi(resp_state_s_aprimeprime, state_result_ty(7));
                 Term::lam(dom2, Term::pi(domain_w, state_result_ty(7)))
             };
-            let inner_motive_ty = Term::pi(
-                Term::app(Term::indformer(state_op_id, vec![]), v(11, 0)),
-                ty0(),
-            );
+            let inner_motive_ty = Term::pi(Term::app(Term::indformer(state_op_id, vec![]), v(11, 0)), ty0());
 
             // method_get = \(ih3: s -> state_result_ty(6)). \(sv:s). ih3 sv sv.
             //   -- Resp_state(s,Get) reduces to `s` itself (the response IS
@@ -894,8 +716,8 @@ pub fn declare_run_state(
             let method_get = {
                 let ih3_dom = Term::pi(v(11, 0), state_result_ty(6)); // ctx11: s=v(11,0); codomain ctx12=extra6.
                 let sv_dom = v(12, 0); // s, ctx12 (ih3 bound, extra6).
-                                       // body, ctx13 (ih3,sv bound, extra7). local order to ctx13:
-                                       // ...,a',ih2,ih3,sv -> ih3=idx11,sv=idx12.
+                // body, ctx13 (ih3,sv bound, extra7). local order to ctx13:
+                // ...,a',ih2,ih3,sv -> ih3=idx11,sv=idx12.
                 let ih3_var = v(13, 11);
                 let sv_var = v(13, 12);
                 let body = apply_all(ih3_var, &[sv_var.clone(), sv_var]);
@@ -908,14 +730,11 @@ pub fn declare_run_state(
                 let sprime_dom = v(11, 0); // s, ctx11.
                 let ih3p_dom = Term::pi(Term::indformer(unit_id, vec![]), state_result_ty(7)); // ctx12 (s'' bound, extra6); codomain ctx13=extra7.
                 let sv_dom = v(13, 0); // s, ctx13 (s'',ih3' bound, extra7).
-                                       // body, ctx14 (s'',ih3',sv bound, extra8). local order to
-                                       // ctx14: ...,a',ih2,s'',ih3',sv -> s''=idx11,ih3'=idx12,sv=idx13.
+                // body, ctx14 (s'',ih3',sv bound, extra8). local order to
+                // ctx14: ...,a',ih2,s'',ih3',sv -> s''=idx11,ih3'=idx12,sv=idx13.
                 let sprime_var = v(14, 11);
                 let ih3p_var = v(14, 12);
-                let body = apply_all(
-                    ih3p_var,
-                    &[Term::constructor(mkunit_id, vec![]), sprime_var],
-                );
+                let body = apply_all(ih3p_var, &[Term::constructor(mkunit_id, vec![]), sprime_var]);
                 Term::lam(sprime_dom, Term::lam(ih3p_dom, Term::lam(sv_dom, body)))
             };
 
@@ -928,10 +747,7 @@ pub fn declare_run_state(
                 indices: vec![],
                 scrut: Box::new(aprime_var_11),
             };
-            Term::lam(
-                aprime_dom,
-                Term::lam(ih2_dom, Term::app(elim_state_op, ih2_var_11)),
-            )
+            Term::lam(aprime_dom, Term::lam(ih2_dom, Term::app(elim_state_op, ih2_var_11)))
         };
 
         // method_inr = \(o':f). \(ih2'':RespF(o')->state_result_ty(5)). \(sv:s).
@@ -939,8 +755,8 @@ pub fn declare_run_state(
         //     through untouched, threading the SAME state `sv` across it.
         let method_inr = {
             let oprime_dom = v(9, 1); // f, ctx9.
-                                      // ih2'' domain, ctx10 (o' bound, extra=4): RespF o' -> state_result_ty(5).
-                                      // local order to ctx10: ...,op,cont,ih,o' -> RespF=v(10,2), o'=v(10,9).
+            // ih2'' domain, ctx10 (o' bound, extra=4): RespF o' -> state_result_ty(5).
+            // local order to ctx10: ...,op,cont,ih,o' -> RespF=v(10,2), o'=v(10,9).
             let respf_oprime_10 = Term::app(v(10, 2), v(10, 9));
             let ih2pp_dom = Term::pi(respf_oprime_10, state_result_ty(5));
 
@@ -952,10 +768,7 @@ pub fn declare_run_state(
             let f_12 = v(12, 1);
             let respf_12 = v(12, 2);
             let sigma_a_s_12 = Term::sigma(v(12, 3), v(13, 0));
-            let vis_params = apply_all(
-                Term::constructor(vis_id, vec![]),
-                &[f_12, respf_12, sigma_a_s_12],
-            );
+            let vis_params = apply_all(Term::constructor(vis_id, vec![]), &[f_12, respf_12, sigma_a_s_12]);
             let oprime_var_12 = v(12, 9);
             // cont_lambda = \(r: RespF o'). ih2'' r sv.
             let respf_oprime_12 = Term::app(v(12, 2), oprime_var_12.clone());
@@ -968,19 +781,13 @@ pub fn declare_run_state(
             let cont_lambda = Term::lam(respf_oprime_12, cont_body);
             let vis_applied = apply_all(vis_params, &[oprime_var_12, cont_lambda]);
 
-            Term::lam(
-                oprime_dom,
-                Term::lam(ih2pp_dom, Term::lam(sv_dom, vis_applied)),
-            )
+            Term::lam(oprime_dom, Term::lam(ih2pp_dom, Term::lam(sv_dom, vis_applied)))
         };
 
         let elim_coproduct = Term::Elim {
             fam: coproduct_id,
             level_args: vec![],
-            params: vec![
-                Term::app(Term::indformer(state_op_id, vec![]), v(9, 0)),
-                v(9, 1),
-            ], // [StateOp s, f]
+            params: vec![Term::app(Term::indformer(state_op_id, vec![]), v(9, 0)), v(9, 1)], // [StateOp s, f]
             motive: Box::new(ascribed(m_coproduct, m_coproduct_ty)),
             methods: vec![method_inl, method_inr],
             indices: vec![],
@@ -1008,16 +815,13 @@ pub fn declare_run_state(
     let d_respf = Term::pi(Term::var(0), ty0()); // ctx [s,f]: f=Var(0)
     let d_a = ty0(); // ctx [s,f,RespF]
     let d_s0 = Term::var(3); // s, ctx [s,f,RespF,a] (len=4): s=Var(3)
-                             // d_t: ITree Op Resp a, ctx [s,f,RespF,a,s0] (len=5): s=Var(4),f=Var(3),RespF=Var(2),a=Var(1).
-                             // `Resp = resp_coproduct (StateOp s) f (resp_state s) RespF` — the general
-                             // `resp_coproduct`'s 4-arg form (State as the literal instance, §D1.3).
+    // d_t: ITree Op Resp a, ctx [s,f,RespF,a,s0] (len=5): s=Var(4),f=Var(3),RespF=Var(2),a=Var(1).
+    // `Resp = resp_coproduct (StateOp s) f (resp_state s) RespF` — the general
+    // `resp_coproduct`'s 4-arg form (State as the literal instance, §D1.3).
     let d_t = itree3(
         apply_all(
             Term::indformer(coproduct_id, vec![]),
-            &[
-                Term::app(Term::indformer(state_op_id, vec![]), Term::var(4)),
-                Term::var(3),
-            ],
+            &[Term::app(Term::indformer(state_op_id, vec![]), Term::var(4)), Term::var(3)],
         ),
         apply_all(
             Term::const_(resp_coproduct_id, vec![]),
@@ -1034,11 +838,7 @@ pub fn declare_run_state(
     let body = lam_chain(&final_domains, elim_result);
     // Return type: ITree f RespF (Sigma a s), ctx [s,f,RespF,a,s0,t] (len=6):
     // f=Var(4),RespF=Var(3),a=Var(2),s=Var(5). Sigma 2nd-slot ctx (len=7): s=Var(6).
-    let ret_ty = itree3(
-        Term::var(4),
-        Term::var(3),
-        Term::sigma(Term::var(2), Term::var(6)),
-    );
+    let ret_ty = itree3(Term::var(4), Term::var(3), Term::sigma(Term::var(2), Term::var(6)));
     let ty = pi_chain(&final_domains, ret_ty);
 
     let _ = (get_id, put_id, inl_id, inr_id);
@@ -1065,53 +865,26 @@ pub fn declare_get(
     unit_id: GlobalId,
 ) -> Result<GlobalId, String> {
     // Base ctx (declaration order): s, f, RespF, _:Unit (len=4).
-    let op_ty = |len: usize| {
-        apply_all(
-            Term::indformer(coproduct_id, vec![]),
-            &[
-                Term::app(Term::indformer(state_op_id, vec![]), v(len, 0)),
-                v(len, 1),
-            ],
-        )
-    };
+    let op_ty = |len: usize| apply_all(Term::indformer(coproduct_id, vec![]), &[Term::app(Term::indformer(state_op_id, vec![]), v(len, 0)), v(len, 1)]);
     // `resp_coproduct (StateOp s) f (resp_state s) RespF` — the general `resp_coproduct`'s
     // 4-arg form (State as the literal instance, §D1.3), still curried
     // awaiting `op`.
     let resp_ty = |len: usize| {
         let state_op_s = Term::app(Term::indformer(state_op_id, vec![]), v(len, 0));
         let resp_state_s = Term::app(Term::const_(resp_state_id, vec![]), v(len, 0));
-        apply_all(
-            Term::const_(resp_coproduct_id, vec![]),
-            &[state_op_s, v(len, 1), resp_state_s, v(len, 2)],
-        )
+        apply_all(Term::const_(resp_coproduct_id, vec![]), &[state_op_s, v(len, 1), resp_state_s, v(len, 2)])
     };
 
     // ctx4 (s,f,RespF,_ all bound): Op=op_ty(4), Resp=resp_ty(4), R=s=v(4,0).
     let get_at_s = apply_all(Term::constructor(get_id, vec![]), &[v(4, 0)]);
     let inl_applied = apply_all(
         Term::constructor(inl_id, vec![]),
-        &[
-            Term::app(Term::indformer(state_op_id, vec![]), v(4, 0)),
-            v(4, 1),
-            get_at_s,
-        ],
+        &[Term::app(Term::indformer(state_op_id, vec![]), v(4, 0)), v(4, 1), get_at_s],
     );
     // cont = \(r:s). Ret[Op,Resp,s] r. Domain ctx4: s=v(4,0). Body ctx5: r=v(5,4)...
     // local order to ctx5: s,f,RespF,_,r -> r newest = v(5,4).
-    let cont = Term::lam(
-        v(4, 0),
-        Term::app(
-            apply_all(
-                Term::constructor(ret_id, vec![]),
-                &[op_ty(5), resp_ty(5), v(5, 0)],
-            ),
-            v(5, 4),
-        ),
-    );
-    let vis_applied = apply_all(
-        Term::constructor(vis_id, vec![]),
-        &[op_ty(4), resp_ty(4), v(4, 0), inl_applied, cont],
-    );
+    let cont = Term::lam(v(4, 0), Term::app(apply_all(Term::constructor(ret_id, vec![]), &[op_ty(5), resp_ty(5), v(5, 0)]), v(5, 4)));
+    let vis_applied = apply_all(Term::constructor(vis_id, vec![]), &[op_ty(4), resp_ty(4), v(4, 0), inl_applied, cont]);
 
     let d_s = ty0();
     let d_f = ty0();
@@ -1144,56 +917,32 @@ pub fn declare_put(
     mkunit_id: GlobalId,
 ) -> Result<GlobalId, String> {
     // Base ctx (declaration order): s, f, RespF, s':s (len=4).
-    let op_ty = |len: usize| {
-        apply_all(
-            Term::indformer(coproduct_id, vec![]),
-            &[
-                Term::app(Term::indformer(state_op_id, vec![]), v(len, 0)),
-                v(len, 1),
-            ],
-        )
-    };
+    let op_ty = |len: usize| apply_all(Term::indformer(coproduct_id, vec![]), &[Term::app(Term::indformer(state_op_id, vec![]), v(len, 0)), v(len, 1)]);
     // `resp_coproduct (StateOp s) f (resp_state s) RespF` — see `declare_get`'s
     // identical closure for the rationale.
     let resp_ty = |len: usize| {
         let state_op_s = Term::app(Term::indformer(state_op_id, vec![]), v(len, 0));
         let resp_state_s = Term::app(Term::const_(resp_state_id, vec![]), v(len, 0));
-        apply_all(
-            Term::const_(resp_coproduct_id, vec![]),
-            &[state_op_s, v(len, 1), resp_state_s, v(len, 2)],
-        )
+        apply_all(Term::const_(resp_coproduct_id, vec![]), &[state_op_s, v(len, 1), resp_state_s, v(len, 2)])
     };
 
     // ctx4 (s,f,RespF,s' all bound): s'=newest=v(4,3).
     let put_applied = apply_all(Term::constructor(put_id, vec![]), &[v(4, 0), v(4, 3)]);
     let inl_applied = apply_all(
         Term::constructor(inl_id, vec![]),
-        &[
-            Term::app(Term::indformer(state_op_id, vec![]), v(4, 0)),
-            v(4, 1),
-            put_applied,
-        ],
+        &[Term::app(Term::indformer(state_op_id, vec![]), v(4, 0)), v(4, 1), put_applied],
     );
     // cont = \(_:Unit). Ret[Op,Resp,Unit] MkUnit. Domain ctx4: Unit (closed).
     let cont = Term::lam(
         Term::indformer(unit_id, vec![]),
         Term::app(
-            apply_all(
-                Term::constructor(ret_id, vec![]),
-                &[op_ty(5), resp_ty(5), Term::indformer(unit_id, vec![])],
-            ),
+            apply_all(Term::constructor(ret_id, vec![]), &[op_ty(5), resp_ty(5), Term::indformer(unit_id, vec![])]),
             Term::constructor(mkunit_id, vec![]),
         ),
     );
     let vis_applied = apply_all(
         Term::constructor(vis_id, vec![]),
-        &[
-            op_ty(4),
-            resp_ty(4),
-            Term::indformer(unit_id, vec![]),
-            inl_applied,
-            cont,
-        ],
+        &[op_ty(4), resp_ty(4), Term::indformer(unit_id, vec![]), inl_applied, cont],
     );
 
     let d_s = ty0();
@@ -1202,12 +951,7 @@ pub fn declare_put(
     let d_sprime = Term::var(2); // s, ctx [s,f,RespF] (len=3): s=Var(2)
     let domains = [d_s, d_f, d_respf, d_sprime];
     let body = lam_chain(&domains, vis_applied);
-    let ret_ty = itree3_standalone(
-        itree_id,
-        op_ty(4),
-        resp_ty(4),
-        Term::indformer(unit_id, vec![]),
-    );
+    let ret_ty = itree3_standalone(itree_id, op_ty(4), resp_ty(4), Term::indformer(unit_id, vec![]));
     let ty = pi_chain(&domains, ret_ty);
     declare_def(env, vec![], ty, body).map_err(|e| format!("put declaration failed: {e:?}"))
 }

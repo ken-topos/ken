@@ -24,10 +24,7 @@ fn elab_ok(env: &mut ElabEnv, src: &str) -> GlobalId {
 }
 
 fn body_of(env: &ElabEnv, id: GlobalId) -> Term {
-    env.env
-        .transparent_body(id)
-        .expect("not a transparent def")
-        .1
+    env.env.transparent_body(id).expect("not a transparent def").1
 }
 
 fn term_mentions_const(t: &Term, target: GlobalId) -> bool {
@@ -64,27 +61,15 @@ fn ac1_data_decl_registers_former_and_ctors() {
     let mut env = mk_env();
     elab_ok(&mut env, "data MaybeInt = NoInt | SomeInt Int");
 
-    assert!(
-        env.globals.contains_key("MaybeInt"),
-        "type former registered"
-    );
+    assert!(env.globals.contains_key("MaybeInt"), "type former registered");
     assert!(env.globals.contains_key("NoInt"), "NoInt ctor registered");
-    assert!(
-        env.globals.contains_key("SomeInt"),
-        "SomeInt ctor registered"
-    );
+    assert!(env.globals.contains_key("SomeInt"), "SomeInt ctor registered");
 
     let d_id = env.globals["MaybeInt"];
-    assert!(
-        env.env.inductive(d_id).is_some(),
-        "MaybeInt is an inductive family"
-    );
+    assert!(env.env.inductive(d_id).is_some(), "MaybeInt is an inductive family");
 
     let c_id = env.globals["SomeInt"];
-    assert!(
-        env.env.constructor(c_id).is_some(),
-        "SomeInt is a constructor"
-    );
+    assert!(env.env.constructor(c_id).is_some(), "SomeInt is a constructor");
 }
 
 #[test]
@@ -235,10 +220,7 @@ fn ac3_missing_arm_names_blue() {
             );
         }
         Ok(_) => panic!("AC3: non-exhaustive match accepted (should have been rejected)"),
-        Err(other) => panic!(
-            "AC3: expected ExhaustivenessError naming 'Blue', got: {}",
-            other
-        ),
+        Err(other) => panic!("AC3: expected ExhaustivenessError naming 'Blue', got: {}", other),
     }
 }
 
@@ -252,10 +234,7 @@ fn ac3_exhaustive_match_accepts() {
         "let result : Int = match Blue { Red |-> 0 ; Green |-> 1 ; Blue |-> 2 }",
     );
     let body = body_of(&env, id);
-    assert!(
-        matches!(body, Term::Elim { .. }),
-        "AC3: accepted match should produce Elim"
-    );
+    assert!(matches!(body, Term::Elim { .. }), "AC3: accepted match should produce Elim");
 }
 
 #[test]
@@ -315,10 +294,7 @@ fn ac4_all_distinct_arms_accept() {
         "let result : Int = match Green { Red |-> 0 ; Green |-> 1 ; Blue |-> 2 }",
     );
     let body = body_of(&env, id);
-    assert!(
-        matches!(body, Term::Elim { .. }),
-        "AC4: all-distinct match should produce Elim"
-    );
+    assert!(matches!(body, Term::Elim { .. }), "AC4: all-distinct match should produce Elim");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -347,10 +323,7 @@ fn nested_ctor_pattern_accepted_and_reduces() {
          Zero |-> 0 ; Succ Zero |-> 1 ; Succ (Succ m) |-> 2 }",
     );
     let body = body_of(&env, id);
-    assert!(
-        matches!(body, Term::Elim { .. }),
-        "nested match should produce Elim"
-    );
+    assert!(matches!(body, Term::Elim { .. }), "nested match should produce Elim");
 
     let ctx = Context::new();
     let reduced = whnf(&env.env, &ctx, &body);
@@ -472,7 +445,8 @@ fn ac7_refinement_intro_emits_obligation() {
     // introduction site.
     let result = env.elaborate_decl_v1("const nonneg_val : { n : Int | P n } = 3");
 
-    let elab_result = result.unwrap_or_else(|e| panic!("AC7a: expected success, got: {}", e));
+    let elab_result =
+        result.unwrap_or_else(|e| panic!("AC7a: expected success, got: {}", e));
 
     // AC7 (soundness, TR7): at least one obligation is emitted.
     assert!(
@@ -492,8 +466,9 @@ fn ac7_plain_carrier_no_obligation() {
     //   AC7a: `{ n : Int | P n }` annotation → obligation emitted
     //   AC7b: `Int`               annotation → no obligation
     let result = env.elaborate_decl_v1("const plain_val : Int = 5");
-    let elab_result =
-        result.unwrap_or_else(|e| panic!("AC7b: plain-Int const should accept, got: {}", e));
+    let elab_result = result.unwrap_or_else(|e| {
+        panic!("AC7b: plain-Int const should accept, got: {}", e)
+    });
 
     assert!(
         elab_result.obligations.is_empty(),
@@ -530,13 +505,13 @@ fn ac8_proof_returning_match_through_transparent_scrutinee_elaborates() {
     }
 
     let (motive, scrut) = match inner {
-        Term::Elim {
-            fam, motive, scrut, ..
-        } => {
+        Term::Elim { fam, motive, scrut, .. } => {
             assert_eq!(*fam, env.globals["Bool"], "AC8 must eliminate over Bool");
             (motive.as_ref(), scrut.as_ref())
         }
-        other => panic!("AC8 proof-returning match must lower to Term::Elim, got {other:?}"),
+        other => panic!(
+            "AC8 proof-returning match must lower to Term::Elim, got {other:?}"
+        ),
     };
     assert!(
         term_mentions_const(scrut, scrutinee_id),
@@ -545,9 +520,9 @@ fn ac8_proof_returning_match_through_transparent_scrutinee_elaborates() {
 
     let (motive_body, motive_ty) = match motive {
         Term::Ascript(body, ty) => (body.as_ref(), ty.as_ref()),
-        other => {
-            panic!("AC8 motive must be ascribed so the kernel sees its Ω codomain, got {other:?}")
-        }
+        other => panic!(
+            "AC8 motive must be ascribed so the kernel sees its Ω codomain, got {other:?}"
+        ),
     };
     match motive_ty {
         Term::Pi(_, codomain) => {
@@ -703,20 +678,21 @@ fn ac8_option_table_wrong_constructor_argument_still_rejects() {
 
     match err {
         ElabError::KernelRejected {
-            error: ken_kernel::KernelError::TypeMismatch { expected, found },
+            error:
+                ken_kernel::KernelError::TypeMismatch {
+                    expected,
+                    found,
+                },
             ..
         } => {
             assert!(
-                !matches!(
-                    (&*expected, &*found),
-                    (Term::Type(Level::Zero), Term::Omega(Level::Zero))
-                ),
+                !matches!((&*expected, &*found), (Term::Type(Level::Zero), Term::Omega(Level::Zero))),
                 "wrong-argument rejection must not be the pre-D1 proof-motive sort failure"
             );
         }
-        other => {
-            panic!("wrong-argument sibling must reject through kernel TypeMismatch, got {other:?}")
-        }
+        other => panic!(
+            "wrong-argument sibling must reject through kernel TypeMismatch, got {other:?}"
+        ),
     }
 }
 
@@ -815,10 +791,7 @@ fn unknown_ctor_in_pattern_is_error() {
         &mut env,
         "let bad : Int = match Red { Red |-> 0 ; Green |-> 1 ; Purple |-> 2 }",
     );
-    assert!(
-        result.is_err(),
-        "unknown ctor 'Purple' should produce an error"
-    );
+    assert!(result.is_err(), "unknown ctor 'Purple' should produce an error");
 }
 
 #[test]
@@ -826,7 +799,10 @@ fn data_two_arg_ctor_match_accepted() {
     let mut env = mk_env();
     elab_ok(&mut env, "data Pair = P Int Int");
 
-    let id = elab_ok(&mut env, "let fst : Int = match P 1 2 { P x y |-> x }");
+    let id = elab_ok(
+        &mut env,
+        "let fst : Int = match P 1 2 { P x y |-> x }",
+    );
     let body = body_of(&env, id);
     assert!(matches!(body, Term::Elim { .. }));
 

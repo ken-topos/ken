@@ -1,7 +1,7 @@
 //! Constrained instance dictionaries bind in instance fields and are applied
 //! recursively when a concrete use-site resolves the instance.
 
-use ken_elaborator::{error::ElabError, ElabEnv, RType};
+use ken_elaborator::{error::ElabError, RType, ElabEnv};
 use ken_kernel::{Decl, Term};
 
 fn elab(env: &mut ElabEnv, source: &str) -> Result<ken_kernel::GlobalId, ElabError> {
@@ -36,16 +36,8 @@ fn constrained_pair_instance_binds_two_dicts_and_resolves_at_use_site() {
         Decl::Transparent { ty, body, .. } => (ty, body),
         other => panic!("instance must be a transparent kernel-checked definition: {other:?}"),
     };
-    assert_eq!(
-        pi_count(instance_ty),
-        4,
-        "type parameters precede two dictionary Pis"
-    );
-    assert_eq!(
-        lam_count(instance_body),
-        4,
-        "value closes over the same four binders"
-    );
+    assert_eq!(pi_count(instance_ty), 4, "type parameters precede two dictionary Pis");
+    assert_eq!(lam_count(instance_body), 4, "value closes over the same four binders");
 
     let use_site = elab(
         &mut env,
@@ -150,7 +142,11 @@ fn compound_named_and_bare_d_boundaries_are_discriminating() {
         compound.is_ok(),
         "a compound constraint with an explicit name must bind and project: {compound:?}"
     );
-    elab(&mut env, "instance Wrap (List Bool) { select = Nil Bool }").unwrap();
+    elab(
+        &mut env,
+        "instance Wrap (List Bool) { select = Nil Bool }",
+    )
+    .unwrap();
     let compound_use = elab(
         &mut env,
         "const held : List Bool where Holder (List Bool) = d.select",

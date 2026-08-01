@@ -1545,9 +1545,7 @@ fn expand_scope(
                         for rdecl in &members {
                             let simple_kind = matches!(
                                 &rdecl.kind,
-                                RDeclKind::Let
-                                    | RDeclKind::Theorem
-                                    | RDeclKind::AttachedProof { .. }
+                                RDeclKind::Let | RDeclKind::Theorem | RDeclKind::AttachedProof { .. }
                             ) || matches!(
                                 &rdecl.kind,
                                 RDeclKind::View { constraints, is_space_op, .. }

@@ -867,10 +867,7 @@ fn run_scenario(scenario: &str) {
                  the closed-form bytes"
             );
             forget_deep(chain);
-            println!(
-                "OK projection_succeeds_at_depth D={D} bytes={}",
-                bytes.len()
-            );
+            println!("OK projection_succeeds_at_depth D={D} bytes={}", bytes.len());
         }
 
         // Negative arm: a closure at depth D-1 is refused, transitively.
@@ -927,10 +924,7 @@ fn run_scenario(scenario: &str) {
                 "chains differing in their leaf must NOT have equal witnesses — \
                  without this arm, a witness that ignored its input passes"
             );
-            println!(
-                "OK witness_eq_at_depth D={D} bytes={}",
-                same.0.bytes().len()
-            );
+            println!("OK witness_eq_at_depth D={D} bytes={}", same.0.bytes().len());
         }
 
         "witness_ord_at_depth" => {
@@ -939,20 +933,11 @@ fn run_scenario(scenario: &str) {
             // The two encodings are the same length and differ only in the
             // final 8 leaf bytes (`CHAIN_LEAF` vs `CHAIN_LEAF + 1`, LE), so
             // lexicographic order is decided there and the direction is known.
-            assert!(
-                same.0 < other,
-                "leaf {CHAIN_LEAF} must order before its successor"
-            );
+            assert!(same.0 < other, "leaf {CHAIN_LEAF} must order before its successor");
             assert!(!(other < same.0), "and the order must be antisymmetric");
-            assert!(
-                !(same.0 < same.1),
-                "equal witnesses must not order strictly"
-            );
+            assert!(!(same.0 < same.1), "equal witnesses must not order strictly");
             assert_eq!(same.0.cmp(&same.1), std::cmp::Ordering::Equal);
-            println!(
-                "OK witness_ord_at_depth D={D} bytes={}",
-                same.0.bytes().len()
-            );
+            println!("OK witness_ord_at_depth D={D} bytes={}", same.0.bytes().len());
         }
 
         "witness_hash_at_depth" => {
@@ -972,10 +957,7 @@ fn run_scenario(scenario: &str) {
                 hash_of(&other),
                 "witnesses of different chains must not hash alike"
             );
-            println!(
-                "OK witness_hash_at_depth D={D} bytes={}",
-                same.0.bytes().len()
-            );
+            println!("OK witness_hash_at_depth D={D} bytes={}", same.0.bytes().len());
         }
 
         // --- AC-P3b/AC-P3c: the NEW Debug returns at D, and actually rendered ---
@@ -1007,10 +989,7 @@ fn run_scenario(scenario: &str) {
             let chain = mixed_chain_with_leaf(D, DEBUG_PROBE_LEAF);
             let mut out = String::new();
             recursive_debug_mixed(&chain, &mut out);
-            println!(
-                "UNEXPECTED recursive_debug_mixed survived len={}",
-                out.len()
-            );
+            println!("UNEXPECTED recursive_debug_mixed survived len={}", out.len());
         }
 
         // --- harness positive control: the parent CAN observe a survivor ---

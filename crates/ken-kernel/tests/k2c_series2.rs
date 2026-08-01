@@ -42,10 +42,7 @@ fn std_env() -> (GlobalEnv, Std) {
         indices: vec![],
         level: Level::zero(),
         constructors: vec![
-            CtorSpec {
-                args: vec![],
-                target_indices: vec![],
-            },
+            CtorSpec { args: vec![], target_indices: vec![] },
             CtorSpec {
                 args: vec![Term::indformer(nat, vec![])],
                 target_indices: vec![],
@@ -63,10 +60,7 @@ fn std_env() -> (GlobalEnv, Std) {
         params: vec![],
         indices: vec![],
         level: Level::zero(),
-        constructors: vec![CtorSpec {
-            args: vec![],
-            target_indices: vec![],
-        }],
+        constructors: vec![CtorSpec { args: vec![], target_indices: vec![] }],
     })
     .expect("Unit");
     let tt = env.inductive(unit).unwrap().constructors[0].id;
@@ -105,19 +99,7 @@ fn std_env() -> (GlobalEnv, Std) {
         (cs[0].id, cs[1].id)
     };
 
-    (
-        env,
-        Std {
-            nat,
-            zero,
-            suc,
-            unit,
-            tt,
-            vec_,
-            vnil,
-            vcons,
-        },
-    )
+    (env, Std { nat, zero, suc, unit, tt, vec_, vnil, vcons })
 }
 
 // --- helpers -----------------------------------------------------------------
@@ -132,10 +114,7 @@ fn suc_t(s: &Std, n: Term) -> Term {
     Term::app(Term::constructor(s.suc, vec![]), n)
 }
 fn vec_t(s: &Std, a: Term, n: Term) -> Term {
-    Term::app(
-        Term::app(Term::indformer(s.vec_, vec![Level::zero()]), a),
-        n,
-    )
+    Term::app(Term::app(Term::indformer(s.vec_, vec![Level::zero()]), a), n)
 }
 fn vcons_t(s: &Std, a: Term, n: Term, elem: Term, xs: Term) -> Term {
     Term::app(
@@ -165,56 +144,21 @@ fn cast_inductive_index_rewrite() {
     let ctx = Context::new();
 
     // n, m : Nat (neutral postulates)
-    let n_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
-    let n = Term::Const {
-        id: n_id,
-        level_args: vec![],
-    };
-    let m_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
-    let m = Term::Const {
-        id: m_id,
-        level_args: vec![],
-    };
+    let n_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
+    let n = Term::Const { id: n_id, level_args: vec![] };
+    let m_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
+    let m = Term::Const { id: m_id, level_args: vec![] };
 
     // A : Type 0; a : A (postulates)
-    let big_a_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::Type(Level::zero()),
-    )
-    .unwrap();
-    let big_a = Term::Const {
-        id: big_a_id,
-        level_args: vec![],
-    };
-    let a_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        big_a.clone(),
-    )
-    .unwrap();
-    let small_a = Term::Const {
-        id: a_id,
-        level_args: vec![],
-    };
+    let big_a_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::Type(Level::zero())).unwrap();
+    let big_a = Term::Const { id: big_a_id, level_args: vec![] };
+    let a_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], big_a.clone()).unwrap();
+    let small_a = Term::Const { id: a_id, level_args: vec![] };
 
     // xs : Vec A n (postulate)
     let xs_ty = vec_t(&s, big_a.clone(), n.clone());
-    let xs_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        xs_ty.clone(),
-    )
-    .unwrap();
-    let xs = Term::Const {
-        id: xs_id,
-        level_args: vec![],
-    };
+    let xs_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], xs_ty.clone()).unwrap();
+    let xs = Term::Const { id: xs_id, level_args: vec![] };
 
     // e : Eq Type (Vec A (suc n)) (Vec A (suc m)) (postulate — cast ignores it)
     let suc_n = suc_t(&s, n.clone());
@@ -227,10 +171,7 @@ fn cast_inductive_index_rewrite() {
         Box::new(vec_a_suc_m.clone()),
     );
     let e_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], e_ty).unwrap();
-    let e = Term::Const {
-        id: e_id,
-        level_args: vec![],
-    };
+    let e = Term::Const { id: e_id, level_args: vec![] };
 
     // scrutinee: vcons A n a xs : Vec A (suc n)
     let scrut = vcons_t(&s, big_a.clone(), n.clone(), small_a.clone(), xs.clone());
@@ -273,10 +214,7 @@ fn cast_inductive_index_rewrite() {
                 "sub-cast target should be Vec A m"
             );
         }
-        other => panic!(
-            "expected Cast in xs position (discriminant), got {:?}",
-            other
-        ),
+        other => panic!("expected Cast in xs position (discriminant), got {:?}", other),
     }
 }
 
@@ -287,53 +225,18 @@ fn cast_inductive_open_index_stuck() {
     let (mut env, s) = std_env();
     let ctx = Context::new();
 
-    let n_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
-    let n = Term::Const {
-        id: n_id,
-        level_args: vec![],
-    };
-    let k_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
-    let k = Term::Const {
-        id: k_id,
-        level_args: vec![],
-    };
+    let n_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
+    let n = Term::Const { id: n_id, level_args: vec![] };
+    let k_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
+    let k = Term::Const { id: k_id, level_args: vec![] };
 
-    let big_a_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::Type(Level::zero()),
-    )
-    .unwrap();
-    let big_a = Term::Const {
-        id: big_a_id,
-        level_args: vec![],
-    };
-    let a_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        big_a.clone(),
-    )
-    .unwrap();
-    let small_a = Term::Const {
-        id: a_id,
-        level_args: vec![],
-    };
+    let big_a_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::Type(Level::zero())).unwrap();
+    let big_a = Term::Const { id: big_a_id, level_args: vec![] };
+    let a_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], big_a.clone()).unwrap();
+    let small_a = Term::Const { id: a_id, level_args: vec![] };
 
-    let xs_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        vec_t(&s, big_a.clone(), n.clone()),
-    )
-    .unwrap();
-    let xs = Term::Const {
-        id: xs_id,
-        level_args: vec![],
-    };
+    let xs_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], vec_t(&s, big_a.clone(), n.clone())).unwrap();
+    let xs = Term::Const { id: xs_id, level_args: vec![] };
 
     // cast (Vec A (suc n)) (Vec A k) e (vcons A n a xs) — k is neutral
     let suc_n = suc_t(&s, n.clone());
@@ -345,10 +248,7 @@ fn cast_inductive_open_index_stuck() {
         Box::new(vec_a_k.clone()),
     );
     let e_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], e_ty).unwrap();
-    let e = Term::Const {
-        id: e_id,
-        level_args: vec![],
-    };
+    let e = Term::Const { id: e_id, level_args: vec![] };
 
     let scrut = vcons_t(&s, big_a, n, small_a, xs);
     let cast_term = Term::Cast(
@@ -385,76 +285,25 @@ fn eq_inductive_dependent_telescope() {
     let (mut env, s) = std_env();
     let ctx = Context::new();
 
-    let big_a_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::Type(Level::zero()),
-    )
-    .unwrap();
-    let big_a = Term::Const {
-        id: big_a_id,
-        level_args: vec![],
-    };
+    let big_a_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::Type(Level::zero())).unwrap();
+    let big_a = Term::Const { id: big_a_id, level_args: vec![] };
 
-    let n_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
-    let n = Term::Const {
-        id: n_id,
-        level_args: vec![],
-    };
-    let np_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
-    let np = Term::Const {
-        id: np_id,
-        level_args: vec![],
-    };
+    let n_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
+    let n = Term::Const { id: n_id, level_args: vec![] };
+    let np_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
+    let np = Term::Const { id: np_id, level_args: vec![] };
 
-    let a_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        big_a.clone(),
-    )
-    .unwrap();
-    let small_a = Term::Const {
-        id: a_id,
-        level_args: vec![],
-    };
-    let ap_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        big_a.clone(),
-    )
-    .unwrap();
-    let small_ap = Term::Const {
-        id: ap_id,
-        level_args: vec![],
-    };
+    let a_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], big_a.clone()).unwrap();
+    let small_a = Term::Const { id: a_id, level_args: vec![] };
+    let ap_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], big_a.clone()).unwrap();
+    let small_ap = Term::Const { id: ap_id, level_args: vec![] };
 
-    let xs_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        vec_t(&s, big_a.clone(), n.clone()),
-    )
-    .unwrap();
-    let xs = Term::Const {
-        id: xs_id,
-        level_args: vec![],
-    };
-    let xsp_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        vec_t(&s, big_a.clone(), np.clone()),
-    )
-    .unwrap();
-    let xsp = Term::Const {
-        id: xsp_id,
-        level_args: vec![],
-    };
+    let xs_id =
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], vec_t(&s, big_a.clone(), n.clone())).unwrap();
+    let xs = Term::Const { id: xs_id, level_args: vec![] };
+    let xsp_id =
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], vec_t(&s, big_a.clone(), np.clone())).unwrap();
+    let xsp = Term::Const { id: xsp_id, level_args: vec![] };
 
     let suc_n = suc_t(&s, n.clone());
     let vec_a_suc_n = vec_t(&s, big_a.clone(), suc_n);
@@ -528,42 +377,16 @@ fn j_dependent_motive_fires() {
     let (mut env, s) = std_env();
     let ctx = Context::new();
 
-    let big_a_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::Type(Level::zero()),
-    )
-    .unwrap();
-    let big_a = Term::Const {
-        id: big_a_id,
-        level_args: vec![],
-    };
-    let small_a_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        big_a.clone(),
-    )
-    .unwrap();
-    let small_a = Term::Const {
-        id: small_a_id,
-        level_args: vec![],
-    };
+    let big_a_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::Type(Level::zero())).unwrap();
+    let big_a = Term::Const { id: big_a_id, level_args: vec![] };
+    let small_a_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], big_a.clone()).unwrap();
+    let small_a = Term::Const { id: small_a_id, level_args: vec![] };
 
     // n, m : Nat — neutral postulates so Eq Nat n m stays neutral (not ⇝ Bottom)
-    let n_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
-    let n = Term::Const {
-        id: n_id,
-        level_args: vec![],
-    };
-    let m_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
-    let m = Term::Const {
-        id: m_id,
-        level_args: vec![],
-    };
+    let n_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
+    let n = Term::Const { id: n_id, level_args: vec![] };
+    let m_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
+    let m = Term::Const { id: m_id, level_args: vec![] };
 
     // motive: λ(b:Nat). λ(_:Type). Vec A (suc b)
     // Under 2 binders: b=Var(1), _=Var(0). suc b = App(suc, Var(1)).
@@ -589,12 +412,8 @@ fn j_dependent_motive_fires() {
         Box::new(n.clone()),
         Box::new(m.clone()),
     );
-    let e_j_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], eq_j_ty).unwrap();
-    let e_j = Term::Const {
-        id: e_j_id,
-        level_args: vec![],
-    };
+    let e_j_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], eq_j_ty).unwrap();
+    let e_j = Term::Const { id: e_j_id, level_args: vec![] };
 
     let j_term = Term::J(Box::new(motive), Box::new(base), Box::new(e_j));
     let result = whnf(&env, &ctx, &j_term);
@@ -644,26 +463,14 @@ fn quotient_respect_type_target() {
         Term::pi(unit_t.clone(), Term::Omega(Level::zero())),
     );
     let rel_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], rel_ty).unwrap();
-    let rel = Term::Const {
-        id: rel_id,
-        level_args: vec![],
-    };
+    let rel = Term::Const { id: rel_id, level_args: vec![] };
 
     // quot_ty = Unit/R
     let quot_ty = Term::Quot(Box::new(unit_t.clone()), Box::new(rel.clone()));
 
     // q : Unit/R
-    let q_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        quot_ty.clone(),
-    )
-    .unwrap();
-    let q = Term::Const {
-        id: q_id,
-        level_args: vec![],
-    };
+    let q_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], quot_ty.clone()).unwrap();
+    let q = Term::Const { id: q_id, level_args: vec![] };
 
     // M : Unit/R → Type 0  **transparent** (= λ_. Nat) so App(M, [x]) ⇝ Nat.
     // Transparency is critical: with opaque M, m_x=App(M,[x]) and m_y=App(M,[y])
@@ -671,19 +478,13 @@ fn quotient_respect_type_target() {
     let motive_fn_ty = Term::pi(quot_ty.clone(), Term::Type(Level::zero()));
     let motive_fn_body = Term::Lam(Box::new(quot_ty.clone()), Box::new(nat_ty.clone()));
     let motive_id = declare_def(&mut env, vec![], motive_fn_ty, motive_fn_body).unwrap();
-    let motive = Term::Const {
-        id: motive_id,
-        level_args: vec![],
-    };
+    let motive = Term::Const { id: motive_id, level_args: vec![] };
 
     // f : Unit → Nat  **transparent** (= λ_. zero) so App(f, x) ⇝ zero.
     let method_fn_ty = Term::pi(unit_t.clone(), nat_ty.clone());
     let method_fn_body = Term::Lam(Box::new(unit_t.clone()), Box::new(zero_c.clone()));
     let method_id = declare_def(&mut env, vec![], method_fn_ty, method_fn_body).unwrap();
-    let method = Term::Const {
-        id: method_id,
-        level_args: vec![],
-    };
+    let method = Term::Const { id: method_id, level_args: vec![] };
 
     // h_ty = R x y at depth 2 (x=Var(1), y=Var(0)).
     let h_ty = Term::app(Term::app(rel.clone(), Term::var(1)), Term::var(0));
@@ -717,18 +518,17 @@ fn quotient_respect_type_target() {
         scrut: Box::new(q.clone()),
     };
     let ok = infer(&env, &ctx, &valid_elim);
-    assert!(
-        ok.is_ok(),
-        "valid respect proof must be accepted; err = {:?}",
-        ok
-    );
+    assert!(ok.is_ok(), "valid respect proof must be accepted; err = {:?}", ok);
 
     // r_bad = λx. λy. λh. zero  (returns Nat, not an Eq — wrong type)
     let r_bad = Term::Lam(
         Box::new(unit_t.clone()),
         Box::new(Term::Lam(
             Box::new(unit_t.clone()),
-            Box::new(Term::Lam(Box::new(h_ty), Box::new(zero_c.clone()))),
+            Box::new(Term::Lam(
+                Box::new(h_ty),
+                Box::new(zero_c.clone()),
+            )),
         )),
     );
     let bad_elim = Term::QuotElim {
@@ -765,53 +565,19 @@ fn quotient_respect_direction_cast() {
     let ctx = Context::new();
 
     // A, a, n, m : neutral postulates.
-    let big_a_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::Type(Level::zero()),
-    )
-    .unwrap();
-    let big_a = Term::Const {
-        id: big_a_id,
-        level_args: vec![],
-    };
-    let a_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        big_a.clone(),
-    )
-    .unwrap();
-    let small_a = Term::Const {
-        id: a_id,
-        level_args: vec![],
-    };
-    let n_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
-    let n = Term::Const {
-        id: n_id,
-        level_args: vec![],
-    };
-    let m_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
-    let m = Term::Const {
-        id: m_id,
-        level_args: vec![],
-    };
+    let big_a_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::Type(Level::zero())).unwrap();
+    let big_a = Term::Const { id: big_a_id, level_args: vec![] };
+    let a_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], big_a.clone()).unwrap();
+    let small_a = Term::Const { id: a_id, level_args: vec![] };
+    let n_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
+    let n = Term::Const { id: n_id, level_args: vec![] };
+    let m_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], nat_t(&s)).unwrap();
+    let m = Term::Const { id: m_id, level_args: vec![] };
 
     // xs : Vec A n (tail of f_y).
-    let xs_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        vec_t(&s, big_a.clone(), n.clone()),
-    )
-    .unwrap();
-    let xs = Term::Const {
-        id: xs_id,
-        level_args: vec![],
-    };
+    let xs_id =
+        declare_postulate(&mut env, "test postulate".to_string(), vec![], vec_t(&s, big_a.clone(), n.clone())).unwrap();
+    let xs = Term::Const { id: xs_id, level_args: vec![] };
 
     // f_y = vcons A n a xs : Vec A (suc n)  (method-at-y; its type is m_y).
     let suc_n = suc_t(&s, n.clone());
@@ -827,8 +593,7 @@ fn quotient_respect_direction_cast() {
         Box::new(m_x.clone()),
     );
     let e_correct = Term::Const {
-        id: declare_postulate(&mut env, "test postulate".to_string(), vec![], e_correct_ty)
-            .unwrap(),
+        id: declare_postulate(&mut env, "test postulate".to_string(), vec![], e_correct_ty).unwrap(),
         level_args: vec![],
     };
     let e_wrong_ty = Term::Eq(
@@ -919,39 +684,12 @@ fn j_constant_motive_still_reduces() {
     let (mut env, _s) = std_env();
     let ctx = Context::new();
 
-    let big_a_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        Term::Type(Level::zero()),
-    )
-    .unwrap();
-    let big_a = Term::Const {
-        id: big_a_id,
-        level_args: vec![],
-    };
-    let a_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        big_a.clone(),
-    )
-    .unwrap();
-    let small_a = Term::Const {
-        id: a_id,
-        level_args: vec![],
-    };
-    let b_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        big_a.clone(),
-    )
-    .unwrap();
-    let b_val = Term::Const {
-        id: b_id,
-        level_args: vec![],
-    };
+    let big_a_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], Term::Type(Level::zero())).unwrap();
+    let big_a = Term::Const { id: big_a_id, level_args: vec![] };
+    let a_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], big_a.clone()).unwrap();
+    let small_a = Term::Const { id: a_id, level_args: vec![] };
+    let b_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], big_a.clone()).unwrap();
+    let b_val = Term::Const { id: b_id, level_args: vec![] };
 
     // e : Eq A a b (non-refl postulate)
     let e_ty = Term::Eq(
@@ -960,18 +698,12 @@ fn j_constant_motive_still_reduces() {
         Box::new(b_val.clone()),
     );
     let e_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], e_ty).unwrap();
-    let e = Term::Const {
-        id: e_id,
-        level_args: vec![],
-    };
+    let e = Term::Const { id: e_id, level_args: vec![] };
 
     // constant motive: λ_. λ_. A  (ignores both args)
     let motive = Term::Lam(
         Box::new(big_a.clone()),
-        Box::new(Term::Lam(
-            Box::new(Term::Type(Level::zero())),
-            Box::new(big_a.clone()),
-        )),
+        Box::new(Term::Lam(Box::new(Term::Type(Level::zero())), Box::new(big_a.clone()))),
     );
     // base : A
     let j_term = Term::J(Box::new(motive), Box::new(small_a.clone()), Box::new(e));
@@ -1008,45 +740,25 @@ fn quotient_omega_target_respect_free() {
         Term::pi(unit_t.clone(), Term::Omega(Level::zero())),
     );
     let rel_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], rel_ty).unwrap();
-    let rel = Term::Const {
-        id: rel_id,
-        level_args: vec![],
-    };
+    let rel = Term::Const { id: rel_id, level_args: vec![] };
 
     // quot_ty = Unit/R
     let quot_ty = Term::Quot(Box::new(unit_t.clone()), Box::new(rel));
-    let q_id = declare_postulate(
-        &mut env,
-        "test postulate".to_string(),
-        vec![],
-        quot_ty.clone(),
-    )
-    .unwrap();
-    let q = Term::Const {
-        id: q_id,
-        level_args: vec![],
-    };
+    let q_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], quot_ty.clone()).unwrap();
+    let q = Term::Const { id: q_id, level_args: vec![] };
 
     // M : Unit/R → Ω_0  (postulate; Ω-target → type_target = false)
     let motive_ty = Term::pi(quot_ty.clone(), Term::Omega(Level::zero()));
-    let motive_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], motive_ty).unwrap();
-    let motive = Term::Const {
-        id: motive_id,
-        level_args: vec![],
-    };
+    let motive_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], motive_ty).unwrap();
+    let motive = Term::Const { id: motive_id, level_args: vec![] };
 
     // f : (x:Unit) → M [x]  (postulate)
     let method_ty = Term::pi(
         unit_t.clone(),
         Term::app(motive.clone(), Term::QuotClass(Box::new(Term::var(0)))),
     );
-    let method_id =
-        declare_postulate(&mut env, "test postulate".to_string(), vec![], method_ty).unwrap();
-    let method = Term::Const {
-        id: method_id,
-        level_args: vec![],
-    };
+    let method_id = declare_postulate(&mut env, "test postulate".to_string(), vec![], method_ty).unwrap();
+    let method = Term::Const { id: method_id, level_args: vec![] };
 
     // respect is a dummy (Ω-target → raw_well_formed check only): tt
     let respect = Term::constructor(s.tt, vec![]);

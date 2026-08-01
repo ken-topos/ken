@@ -26,7 +26,9 @@
 //!
 //! `[placeholder — reifies in V4]` marks deferred decisions/backends.
 
-use ken_kernel::{check, declare_postulate, subst::subst0, Context, GlobalEnv, GlobalId, Term};
+use ken_kernel::{
+    check, declare_postulate, subst::subst0, Context, GlobalEnv, GlobalId, Term,
+};
 
 use crate::extract::{ObligationId, ObligationTriple};
 
@@ -172,7 +174,9 @@ fn is_literal_equality(phi: &Term) -> bool {
 /// or inductive eliminators.
 fn is_first_order_intuit(phi: &Term) -> bool {
     match phi {
-        Term::Pi(a, b) | Term::Sigma(a, b) => is_first_order_intuit(a) && is_first_order_intuit(b),
+        Term::Pi(a, b) | Term::Sigma(a, b) => {
+            is_first_order_intuit(a) && is_first_order_intuit(b)
+        }
         Term::App(f, a) => is_first_order_intuit(f) && is_first_order_intuit(a),
         Term::Omega(_) => true,
         Term::Var(_) => true,
@@ -224,10 +228,7 @@ pub fn attempt_obligation(env: &mut GlobalEnv, triple: &ObligationTriple) -> Pro
         // NO `_ ⇒ skip`: this arm is always present and always attempts.
         Route::HO => attempt_ho(env, &ctx, &triple.phi, &triple.goal_closed),
     };
-    ProverResult {
-        obligation_id: triple.id.clone(),
-        verdict,
-    }
+    ProverResult { obligation_id: triple.id.clone(), verdict }
 }
 
 /// Attempt a candidate certificate against the kernel.
@@ -277,7 +278,12 @@ pub fn attempt_with_refutation(
 /// IPC pre-pass: if the context directly provides the atom (an assumption that
 /// proves `φ` by lookup), the IPC tactic closes the goal before the backend is
 /// consulted — universally applicable regardless of fragment.
-fn attempt_d(env: &mut GlobalEnv, ctx: &Context, phi: &Term, phi_closed: &Term) -> Verdict {
+fn attempt_d(
+    env: &mut GlobalEnv,
+    ctx: &Context,
+    phi: &Term,
+    phi_closed: &Term,
+) -> Verdict {
     // IPC assumption lookup has priority over every backend. A proposition can
     // be intrinsically false yet still prove a sequent when it is an explicit
     // premise; report that checked certificate before attempting refutation.
@@ -293,8 +299,9 @@ fn attempt_d(env: &mut GlobalEnv, ctx: &Context, phi: &Term, phi_closed: &Term) 
         if let (Term::IntLit(left), Term::IntLit(right)) = (lhs.as_ref(), rhs.as_ref()) {
             if left != right {
                 let refutation = Term::lam(phi.clone(), Term::var(0));
-                let countermodel =
-                    Countermodel::root(format!("Int literal equality fails: {left} != {right}"));
+                let countermodel = Countermodel::root(format!(
+                    "Int literal equality fails: {left} != {right}"
+                ));
                 return attempt_with_refutation(
                     env,
                     ctx,
@@ -322,7 +329,12 @@ fn attempt_d(env: &mut GlobalEnv, ctx: &Context, phi: &Term, phi_closed: &Term) 
 /// `classically_valid(φ#) → φ`, `check_cert` soundness) is
 /// `[placeholder — reifies in V4]` pending backend infrastructure.
 /// Falls back to the IPC propositional skeleton for the connective structure.
-fn attempt_fo(env: &mut GlobalEnv, ctx: &Context, phi: &Term, phi_closed: &Term) -> Verdict {
+fn attempt_fo(
+    env: &mut GlobalEnv,
+    ctx: &Context,
+    phi: &Term,
+    phi_closed: &Term,
+) -> Verdict {
     // The FO propositional structure can be handled by the IPC tactic for the
     // connective skeleton. The Kripke embedding for quantified FO goals is
     // [placeholder — reifies in V4].
@@ -337,7 +349,12 @@ fn attempt_fo(env: &mut GlobalEnv, ctx: &Context, phi: &Term, phi_closed: &Term)
 /// context assumption lookup (hyp), Sigma-elim (∧ elim → Proj1/Proj2).
 /// Induction tactics and full higher-order proving are
 /// `[placeholder — reifies in V4]` (`23 §5`).
-fn attempt_ho(env: &mut GlobalEnv, ctx: &Context, phi: &Term, phi_closed: &Term) -> Verdict {
+fn attempt_ho(
+    env: &mut GlobalEnv,
+    ctx: &Context,
+    phi: &Term,
+    phi_closed: &Term,
+) -> Verdict {
     attempt_ipc(env, ctx, phi, phi_closed)
 }
 
@@ -348,7 +365,12 @@ fn attempt_ho(env: &mut GlobalEnv, ctx: &Context, phi: &Term, phi_closed: &Term)
 ///
 /// The returned cert is **always kernel-checked** before `proved` is declared
 /// — the cardinal rule (`23 §1.5`).
-fn attempt_ipc(env: &mut GlobalEnv, ctx: &Context, phi: &Term, phi_closed: &Term) -> Verdict {
+fn attempt_ipc(
+    env: &mut GlobalEnv,
+    ctx: &Context,
+    phi: &Term,
+    phi_closed: &Term,
+) -> Verdict {
     match try_ipc_cert(env, ctx, phi, phi_closed) {
         Some(cert) => Verdict::Proved { cert },
         None => emit_unknown_hole(env, phi_closed),
@@ -360,7 +382,12 @@ fn attempt_ipc(env: &mut GlobalEnv, ctx: &Context, phi: &Term, phi_closed: &Term
 /// Fragment D uses this side-effect-free phase before attempting a backend, so
 /// a later successful refutation cannot inherit a ghost `Unknown` postulate
 /// from a failed IPC pre-pass.
-fn try_ipc_cert(env: &GlobalEnv, ctx: &Context, phi: &Term, phi_closed: &Term) -> Option<Term> {
+fn try_ipc_cert(
+    env: &GlobalEnv,
+    ctx: &Context,
+    phi: &Term,
+    phi_closed: &Term,
+) -> Option<Term> {
     match ipc_search(ctx, phi, 0) {
         Some(open_cert) => {
             // Close the open cert: wrap with Lam for each context entry so the
@@ -470,7 +497,7 @@ fn emit_unknown_hole(env: &mut GlobalEnv, phi_closed: &Term) -> Verdict {
         vec![],
         phi_closed.clone(),
     )
-    .expect("declare_postulate for unknown hole must succeed");
+        .expect("declare_postulate for unknown hole must succeed");
     Verdict::Unknown { hole_id }
 }
 

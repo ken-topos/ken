@@ -53,62 +53,14 @@ struct WidthSpec {
 
 fn width_specs() -> [WidthSpec; 8] {
     [
-        WidthSpec {
-            name: "Int8",
-            snake: "int8",
-            min_expr: "(sub_int 0 128)",
-            max_expr: "127",
-            signed: true,
-        },
-        WidthSpec {
-            name: "Int16",
-            snake: "int16",
-            min_expr: "(sub_int 0 32768)",
-            max_expr: "32767",
-            signed: true,
-        },
-        WidthSpec {
-            name: "Int32",
-            snake: "int32",
-            min_expr: "(sub_int 0 2147483648)",
-            max_expr: "2147483647",
-            signed: true,
-        },
-        WidthSpec {
-            name: "Int64",
-            snake: "int64",
-            min_expr: "(sub_int 0 9223372036854775808)",
-            max_expr: "9223372036854775807",
-            signed: true,
-        },
-        WidthSpec {
-            name: "UInt8",
-            snake: "uint8",
-            min_expr: "0",
-            max_expr: "255",
-            signed: false,
-        },
-        WidthSpec {
-            name: "UInt16",
-            snake: "uint16",
-            min_expr: "0",
-            max_expr: "65535",
-            signed: false,
-        },
-        WidthSpec {
-            name: "UInt32",
-            snake: "uint32",
-            min_expr: "0",
-            max_expr: "4294967295",
-            signed: false,
-        },
-        WidthSpec {
-            name: "UInt64",
-            snake: "uint64",
-            min_expr: "0",
-            max_expr: "18446744073709551615",
-            signed: false,
-        },
+        WidthSpec { name: "Int8",   snake: "int8",   min_expr: "(sub_int 0 128)",                  max_expr: "127",                  signed: true },
+        WidthSpec { name: "Int16",  snake: "int16",  min_expr: "(sub_int 0 32768)",                 max_expr: "32767",                signed: true },
+        WidthSpec { name: "Int32",  snake: "int32",  min_expr: "(sub_int 0 2147483648)",            max_expr: "2147483647",           signed: true },
+        WidthSpec { name: "Int64",  snake: "int64",  min_expr: "(sub_int 0 9223372036854775808)",   max_expr: "9223372036854775807",  signed: true },
+        WidthSpec { name: "UInt8",  snake: "uint8",  min_expr: "0",                                 max_expr: "255",                  signed: false },
+        WidthSpec { name: "UInt16", snake: "uint16", min_expr: "0",                                 max_expr: "65535",                signed: false },
+        WidthSpec { name: "UInt32", snake: "uint32", min_expr: "0",                                 max_expr: "4294967295",           signed: false },
+        WidthSpec { name: "UInt64", snake: "uint64", min_expr: "0",                                 max_expr: "18446744073709551615", signed: false },
     ]
 }
 
@@ -162,12 +114,7 @@ fn abi_scalar_specs() -> Result<Vec<AbiScalarSpec>, ElabError> {
     .into_iter()
     .map(|(name, snake, width_fact, signed)| {
         let (min_expr, max_expr) = bound_exprs(manifested_width(width_fact)?, signed);
-        Ok(AbiScalarSpec {
-            name,
-            snake,
-            min_expr,
-            max_expr,
-        })
+        Ok(AbiScalarSpec { name, snake, min_expr, max_expr })
     })
     .collect()
 }
@@ -182,15 +129,8 @@ fn reg_unop(
     to_id: GlobalId,
 ) -> Result<GlobalId, ElabError> {
     let op_ty = Term::pi(Term::const_(from_id, vec![]), Term::const_(to_id, vec![]));
-    let id = declare_primitive(
-        env,
-        vec![],
-        op_ty,
-        PrimReduction::Op {
-            symbol: name.to_string().leak(),
-        },
-    )
-    .map_err(|e| ElabError::Internal(format!("prim {} failed: {}", name, e)))?;
+    let id = declare_primitive(env, vec![], op_ty, PrimReduction::Op { symbol: name.to_string().leak() })
+        .map_err(|e| ElabError::Internal(format!("prim {} failed: {}", name, e)))?;
     globals.insert(name.to_string(), id);
     Ok(id)
 }
@@ -201,13 +141,20 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
     let int_id = elab.numeric_env.int_id;
 
     for spec in width_specs() {
-        let ty_id = elab.numeric_env.id_for(spec.name).ok_or_else(|| {
-            ElabError::Internal(format!("conversions: {} not registered", spec.name))
-        })?;
+        let ty_id = elab
+            .numeric_env
+            .id_for(spec.name)
+            .ok_or_else(|| ElabError::Internal(format!("conversions: {} not registered", spec.name)))?;
 
         // ── native floor: widening (total) + narrowing raw cast (unchecked) ──
         let widen_name = format!("{}_to_int", spec.snake);
-        let widen_id = reg_unop(&mut elab.env, &mut elab.globals, &widen_name, ty_id, int_id)?;
+        let widen_id = reg_unop(
+            &mut elab.env,
+            &mut elab.globals,
+            &widen_name,
+            ty_id,
+            int_id,
+        )?;
 
         let narrow_raw_name = format!("int_to_{}_raw", spec.snake);
         let narrow_raw_id = reg_unop(
@@ -223,7 +170,8 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
         // conversion-layer proposition; every lawful equality consumer is
         // derived in ordinary Ken from it.
         if spec.name == "UInt8" {
-            let trusted_before: BTreeSet<_> = elab.env.trusted_base().into_iter().collect();
+            let trusted_before: BTreeSet<_> =
+                elab.env.trusted_base().into_iter().collect();
             let uint8_t = Term::const_(ty_id, vec![]);
             let widen = Term::const_(widen_id, vec![]);
             let narrow = Term::const_(narrow_raw_id, vec![]);
@@ -231,7 +179,10 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
                 uint8_t.clone(),
                 Term::Eq(
                     Box::new(uint8_t),
-                    Box::new(Term::app(narrow, Term::app(widen, Term::var(0)))),
+                    Box::new(Term::app(
+                        narrow,
+                        Term::app(widen, Term::var(0)),
+                    )),
                     Box::new(Term::var(0)),
                 ),
             );
@@ -241,13 +192,18 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
                 vec![],
                 retract_ty,
             )
-            .map_err(|e| ElabError::Internal(format!("uint8_int_retract failed: {e}")))?;
+                .map_err(|e| {
+                    ElabError::Internal(format!("uint8_int_retract failed: {e}"))
+                })?;
             elab.globals
                 .insert("uint8_int_retract".to_string(), retract_id);
 
-            let trusted_after: BTreeSet<_> = elab.env.trusted_base().into_iter().collect();
-            let trusted_delta: Vec<_> =
-                trusted_after.difference(&trusted_before).copied().collect();
+            let trusted_after: BTreeSet<_> =
+                elab.env.trusted_base().into_iter().collect();
+            let trusted_delta: Vec<_> = trusted_after
+                .difference(&trusted_before)
+                .copied()
+                .collect();
             let actual_delta: BTreeSet<_> = trusted_delta.iter().copied().collect();
             let expected_delta = BTreeSet::from([retract_id]);
             if actual_delta != expected_delta {
@@ -294,9 +250,8 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
                 int_op = int_op,
                 snake = spec.snake,
             );
-            elab.elaborate_decl(&src).map_err(|e| {
-                ElabError::Internal(format!("checked{}{} failed: {}", op_label, spec.name, e))
-            })?;
+            elab.elaborate_decl(&src)
+                .map_err(|e| ElabError::Internal(format!("checked{}{} failed: {}", op_label, spec.name, e)))?;
         }
 
         // ── derived: saturating_add/sub/mul (`T → T → T`, clamps) ───────────
@@ -318,11 +273,7 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
         // elaborator finding; not fixed here (out of this WP's scope, no
         // kernel/trust-level impact either way).
         for (op_label, int_op) in [("Add", "add_int"), ("Sub", "sub_int"), ("Mul", "mul_int")] {
-            let sum = format!(
-                "({int_op} ({snake}_to_int a) ({snake}_to_int b))",
-                int_op = int_op,
-                snake = spec.snake
-            );
+            let sum = format!("({int_op} ({snake}_to_int a) ({snake}_to_int b))", int_op = int_op, snake = spec.snake);
             let src = format!(
                 "fn saturating{op}{name} (a : {name}) (b : {name}) : {name} = \
                  match (leq_int {sum} {max}) {{ \
@@ -339,9 +290,8 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
                 min = spec.min_expr,
                 max = spec.max_expr,
             );
-            elab.elaborate_decl(&src).map_err(|e| {
-                ElabError::Internal(format!("saturating{}{} failed: {}", op_label, spec.name, e))
-            })?;
+            elab.elaborate_decl(&src)
+                .map_err(|e| ElabError::Internal(format!("saturating{}{} failed: {}", op_label, spec.name, e)))?;
         }
     }
 
@@ -360,15 +310,13 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
         })?;
 
         let widen_name = format!("{}_to_int", spec.snake);
-        let widen_id = reg_unop(&mut elab.env, &mut elab.globals, &widen_name, ty_id, int_id)?;
+        let widen_id = reg_unop(
+            &mut elab.env, &mut elab.globals, &widen_name, ty_id, int_id,
+        )?;
         conversion_ids.push(widen_id);
         let narrow_raw_name = format!("int_to_{}_raw", spec.snake);
         let narrow_raw_id = reg_unop(
-            &mut elab.env,
-            &mut elab.globals,
-            &narrow_raw_name,
-            int_id,
-            ty_id,
+            &mut elab.env, &mut elab.globals, &narrow_raw_name, int_id, ty_id,
         )?;
         conversion_ids.push(narrow_raw_id);
 
@@ -385,8 +333,10 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
             ),
         );
         let retract_name = format!("{}_int_retract", spec.snake);
-        let retract_id = declare_postulate(&mut elab.env, retract_name.clone(), vec![], retract_ty)
-            .map_err(|e| ElabError::Internal(format!("{retract_name} failed: {e}")))?;
+        let retract_id = declare_postulate(
+            &mut elab.env, retract_name.clone(), vec![], retract_ty,
+        )
+        .map_err(|e| ElabError::Internal(format!("{retract_name} failed: {e}")))?;
         elab.globals.insert(retract_name, retract_id);
         retract_ids.push(retract_id);
         conversion_ids.push(retract_id);
@@ -412,7 +362,10 @@ pub fn register_conversions(elab: &mut ElabEnv) -> Result<(), ElabError> {
     }
 
     let trusted_after: BTreeSet<_> = elab.env.trusted_base().into_iter().collect();
-    let trusted_delta: Vec<_> = trusted_after.difference(&trusted_before).copied().collect();
+    let trusted_delta: Vec<_> = trusted_after
+        .difference(&trusted_before)
+        .copied()
+        .collect();
     let actual_delta: BTreeSet<_> = trusted_delta.iter().copied().collect();
     let expected_delta: BTreeSet<_> = conversion_ids.iter().copied().collect();
     if actual_delta != expected_delta {

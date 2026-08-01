@@ -840,12 +840,15 @@ fn collect_checked_perform_nodes(
                         .cloned()
                         .ok_or(CompilerDriverError::MissingStableSymbol { id: constructor })?;
                     if let Some(operation) = self.operations.get(&constructor).copied() {
-                        let family_symbol = match crate::export::host_operation_family_v1(operation)
-                        {
+                        let family_symbol = match crate::export::host_operation_family_v1(
+                            operation,
+                        ) {
                             crate::export::HostOpFamilyV1::Clock => self.clock_family.clone(),
                             crate::export::HostOpFamilyV1::Console => self.console_family.clone(),
                             crate::export::HostOpFamilyV1::Fs => self.fs_family.clone(),
-                            crate::export::HostOpFamilyV1::Entropy => self.entropy_family.clone(),
+                            crate::export::HostOpFamilyV1::Entropy => {
+                                self.entropy_family.clone()
+                            }
                         };
                         self.nodes.insert(CheckedPerformNodeV1::Host {
                             family_symbol,
@@ -1835,7 +1838,10 @@ impl ComputationalIHTemplateCollector<'_> {
                         level_args,
                     )
                     .map_err(|_| {
-                        Self::runtime_shape_mismatch(owner, "kernel method type generation failed")
+                        Self::runtime_shape_mismatch(
+                            owner,
+                            "kernel method type generation failed",
+                        )
                     })?;
                     prepared_methods.push(self.prepare_method(
                         owner,
@@ -2490,7 +2496,7 @@ pub fn compile_native_program_sources(
             },
         },
         output_dir,
-        // `RT-FNSPLIT-C3-ACTIVATION` `D4` — the deployment caller names its
+            // `RT-FNSPLIT-C3-ACTIVATION` `D4` — the deployment caller names its
         // resource policy; the emitter may not invent one. ⚠ The driver has no
         // CLI surface for it yet, so it names the runtime's own starter policy
         // explicitly rather than letting a default exist.

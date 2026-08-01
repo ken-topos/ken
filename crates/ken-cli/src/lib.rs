@@ -587,10 +587,11 @@ proc main (_input : ProcessInput) (caps : ProgramCaps APartial)
     #[test]
     fn runner_has_no_implicit_fs_authority_default() {
         let env = elaborate_program("program\n");
-        assert!(env
-            .boundary_header()
-            .and_then(|header| header.capabilities.as_ref())
-            .is_none_or(|caps| caps.iter().all(|cap| cap.family != "FS")));
+        assert!(
+            env.boundary_header()
+                .and_then(|header| header.capabilities.as_ref())
+                .is_none_or(|caps| caps.iter().all(|cap| cap.family != "FS"))
+        );
     }
 
     #[test]

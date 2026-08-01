@@ -56,10 +56,7 @@ fn eval_view(src: &str) -> EvalVal {
     }
     match env.env.lookup(r.def_id) {
         Some(Decl::Transparent { body, .. }) => eval(&[], body, &env.env, &mut store),
-        other => panic!(
-            "expected a checked Transparent def, got {:?}",
-            other.map(|_| ())
-        ),
+        other => panic!("expected a checked Transparent def, got {:?}", other.map(|_| ())),
     }
 }
 
@@ -94,11 +91,7 @@ fn assert_some_eq(v: &EvalVal, expected: i128, msg: &str) {
 }
 
 fn assert_none(v: &EvalVal, msg: &str) {
-    assert!(
-        as_option_val(v).is_none(),
-        "{}: got Some, expected None",
-        msg
-    );
+    assert!(as_option_val(v).is_none(), "{}: got Some, expected None", msg);
 }
 
 struct Width {
@@ -110,62 +103,14 @@ struct Width {
 }
 
 const WIDTHS: &[Width] = &[
-    Width {
-        name: "Int8",
-        snake: "int8",
-        min: -128,
-        max: 127,
-        signed: true,
-    },
-    Width {
-        name: "Int16",
-        snake: "int16",
-        min: -32768,
-        max: 32767,
-        signed: true,
-    },
-    Width {
-        name: "Int32",
-        snake: "int32",
-        min: -2147483648,
-        max: 2147483647,
-        signed: true,
-    },
-    Width {
-        name: "Int64",
-        snake: "int64",
-        min: -9223372036854775808,
-        max: 9223372036854775807,
-        signed: true,
-    },
-    Width {
-        name: "UInt8",
-        snake: "uint8",
-        min: 0,
-        max: 255,
-        signed: false,
-    },
-    Width {
-        name: "UInt16",
-        snake: "uint16",
-        min: 0,
-        max: 65535,
-        signed: false,
-    },
-    Width {
-        name: "UInt32",
-        snake: "uint32",
-        min: 0,
-        max: 4294967295,
-        signed: false,
-    },
-    Width {
-        name: "UInt64",
-        snake: "uint64",
-        min: 0,
-        max: 18446744073709551615,
-        signed: false,
-    },
+    Width { name: "Int8",   snake: "int8",   min: -128,                 max: 127,                   signed: true },
+    Width { name: "Int16",  snake: "int16",  min: -32768,                max: 32767,                 signed: true },
+    Width { name: "Int32",  snake: "int32",  min: -2147483648,           max: 2147483647,            signed: true },
+    Width { name: "Int64",  snake: "int64",  min: -9223372036854775808,  max: 9223372036854775807,   signed: true },
+    Width { name: "UInt8",  snake: "uint8",  min: 0, max: 255,                        signed: false },
+    Width { name: "UInt16", snake: "uint16", min: 0, max: 65535,                      signed: false },
+    Width { name: "UInt32", snake: "uint32", min: 0, max: 4294967295,                 signed: false },
+    Width { name: "UInt64", snake: "uint64", min: 0, max: 18446744073709551615,       signed: false },
 ];
 
 /// A Ken-source expression for `w`'s exact `T_MIN`, typed `Int` (not `IntN`
@@ -218,11 +163,7 @@ fn ac1_round_trip_law_at_min_every_signed_width() {
 #[test]
 fn ac2_narrowing_boundary_every_width() {
     for w in WIDTHS {
-        let at_max = eval_view(&format!(
-            "const t : Option {name} = intTo{name} {max}",
-            name = w.name,
-            max = w.max
-        ));
+        let at_max = eval_view(&format!("const t : Option {name} = intTo{name} {max}", name = w.name, max = w.max));
         assert_some_eq(&at_max, w.max, &format!("{}: T_MAX", w.name));
 
         let above_max = eval_view(&format!(
@@ -284,18 +225,10 @@ fn ac4_checked_add_boundary_every_width() {
             name = w.name,
             near_max = w.max - 1,
         ));
-        assert_some_eq(
-            &in_range,
-            w.max,
-            &format!("{}: checkedAdd in-range edge", w.name),
-        );
+        assert_some_eq(&in_range, w.max, &format!("{}: checkedAdd in-range edge", w.name));
 
         // Overflow: T_MAX + 1 -> None, never a wrapped/truncated Some.
-        let overflow = eval_view(&format!(
-            "const t : Option {name} = checkedAdd{name} {max} 1",
-            name = w.name,
-            max = w.max
-        ));
+        let overflow = eval_view(&format!("const t : Option {name} = checkedAdd{name} {max} 1", name = w.name, max = w.max));
         assert_none(&overflow, &format!("{}: checkedAdd T_MAX+1", w.name));
     }
 }
@@ -306,11 +239,7 @@ fn ac4_checked_sub_underflow_every_width() {
         let underflow = eval_view(&format!(
             "const t : Option {name} = checkedSub{name} {min} 1",
             name = w.name,
-            min = if w.signed {
-                min_intn_lit_arg(w)
-            } else {
-                "0".to_string()
-            },
+            min = if w.signed { min_intn_lit_arg(w) } else { "0".to_string() },
         ));
         assert_none(&underflow, &format!("{}: checkedSub T_MIN-1", w.name));
     }
@@ -327,16 +256,8 @@ fn ac4_saturating_add_clamps_at_boundary_every_width() {
     for w in WIDTHS {
         // T_MAX + T_MAX always overflows every width (including UInt64) ->
         // clamps to T_MAX, never wraps.
-        let v = eval_view(&format!(
-            "const t : {name} = saturatingAdd{name} {max} {max}",
-            name = w.name,
-            max = w.max
-        ));
-        assert_eval_eq(
-            &v,
-            w.max,
-            &format!("{}: saturatingAdd(T_MAX,T_MAX) clamp", w.name),
-        );
+        let v = eval_view(&format!("const t : {name} = saturatingAdd{name} {max} {max}", name = w.name, max = w.max));
+        assert_eval_eq(&v, w.max, &format!("{}: saturatingAdd(T_MAX,T_MAX) clamp", w.name));
     }
 }
 
@@ -348,18 +269,10 @@ fn ac4_saturating_sub_clamps_at_lower_boundary_every_width() {
         let v = eval_view(&format!(
             "const t : {name} = saturatingSub{name} {min} {max}",
             name = w.name,
-            min = if w.signed {
-                min_intn_lit_arg(w)
-            } else {
-                "0".to_string()
-            },
+            min = if w.signed { min_intn_lit_arg(w) } else { "0".to_string() },
             max = w.max,
         ));
-        assert_eval_eq(
-            &v,
-            w.min,
-            &format!("{}: saturatingSub(T_MIN,T_MAX) clamp", w.name),
-        );
+        assert_eval_eq(&v, w.min, &format!("{}: saturatingSub(T_MIN,T_MAX) clamp", w.name));
     }
 }
 
@@ -382,23 +295,14 @@ fn ac5_neg_intn_degrades_on_min_every_signed_width() {
             snake = w.snake,
             min_intn = min_intn_expr(w),
         ));
-        assert_eq!(
-            v,
-            EvalVal::Neutral,
-            "{}: neg(MIN) must degrade to Neutral, never wrap",
-            w.name
-        );
+        assert_eq!(v, EvalVal::Neutral, "{}: neg(MIN) must degrade to Neutral, never wrap", w.name);
     }
 }
 
 #[test]
 fn ac5_neg_intn_computes_in_range_every_signed_width() {
     for w in WIDTHS.iter().filter(|w| w.signed) {
-        let v = eval_view(&format!(
-            "const t : {name} = neg_{snake} 5",
-            name = w.name,
-            snake = w.snake
-        ));
+        let v = eval_view(&format!("const t : {name} = neg_{snake} 5", name = w.name, snake = w.snake));
         assert_eq!(v, EvalVal::Int(-5), "{}: neg(5) must be -5", w.name);
     }
 }
@@ -410,11 +314,7 @@ fn ac5_neg_intn_computes_in_range_every_signed_width() {
 fn neg_uintn_out_of_scope_unregistered() {
     for w in WIDTHS.iter().filter(|w| !w.signed) {
         assert!(
-            !elaborates_ok(&format!(
-                "const t : {name} = neg_{snake} 5",
-                name = w.name,
-                snake = w.snake
-            )),
+            !elaborates_ok(&format!("const t : {name} = neg_{snake} 5", name = w.name, snake = w.snake)),
             "{}: neg_{} must not be registered (unsigned negation is out of scope)",
             w.name,
             w.snake,

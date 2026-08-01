@@ -14,27 +14,20 @@
 
 use ken_elaborator::ElabEnv;
 
-const TRANSPORT_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
+const TRANSPORT_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Logic/Transport.ken.md");
 const LAWFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/Classes/LawfulClasses.ken.md");
-const COLLECTIONS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
-const LAWFUL_FUNCTORS_KEN_MD: &str =
-    include_str!("../../../catalog/packages/Core/Classes/LawfulFunctors.ken.md");
+const COLLECTIONS_KEN_MD: &str = include_str!("../../../catalog/packages/Data/Collections/Derived.ken.md");
+const LAWFUL_FUNCTORS_KEN_MD: &str = include_str!("../../../catalog/packages/Core/Classes/LawfulFunctors.ken.md");
 const EFFECTFUL_CLASSES_KEN_MD: &str =
     include_str!("../../../catalog/packages/Core/Classes/EffectfulClasses.ken.md");
 
 fn base_env() -> ElabEnv {
     let mut env = ElabEnv::empty().expect("prelude bootstrap");
-    env.elaborate_ken_md_file(TRANSPORT_KEN_MD)
-        .expect("Core/Logic/Transport.ken must elaborate");
-    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD)
-        .expect("Data/Collections/Derived.ken.md must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD)
-        .expect("Core/Classes/LawfulClasses.ken must elaborate");
-    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD)
-        .expect("Core/Classes/LawfulFunctors.ken.md must elaborate");
+    env.elaborate_ken_md_file(TRANSPORT_KEN_MD).expect("Core/Logic/Transport.ken must elaborate");
+    env.elaborate_ken_md_file(COLLECTIONS_KEN_MD).expect("Data/Collections/Derived.ken.md must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_CLASSES_KEN_MD).expect("Core/Classes/LawfulClasses.ken must elaborate");
+    env.elaborate_ken_md_file(LAWFUL_FUNCTORS_KEN_MD).expect("Core/Classes/LawfulFunctors.ken.md must elaborate");
     env
 }
 
@@ -60,11 +53,7 @@ fn zero_axiom_in_checked_fences() {
         !extracted.source.contains("Axiom"),
         "EffectfulClasses.ken.md's tangled/checked code must contain zero Axiom literals"
     );
-    for range in extracted
-        .example_ranges
-        .iter()
-        .chain(extracted.reject_ranges.iter())
-    {
+    for range in extracted.example_ranges.iter().chain(extracted.reject_ranges.iter()) {
         assert!(
             !EFFECTFUL_CLASSES_KEN_MD[range.clone()].contains("Axiom"),
             "example/reject fences must contain zero Axiom literals"
@@ -148,9 +137,7 @@ fn ac8_noncartesian_applicative_cannot_wire_into_monad() {
         "const badApId : (a:Type) -> (v:List a) -> Equal (List a) (zip_ap a a (list_pure (a -> a) (idf a)) v) v = list_ap_id",
     );
     match r2 {
-        Ok(_) => {
-            panic!("a proof of the CARTESIAN ap_id must not typecheck against the DIFFERENT zip_ap")
-        }
+        Ok(_) => panic!("a proof of the CARTESIAN ap_id must not typecheck against the DIFFERENT zip_ap"),
         Err(e) => {
             let msg = format!("{:?}", e);
             assert!(

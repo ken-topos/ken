@@ -164,12 +164,7 @@ impl BoundaryRegionLimitsV1 {
     /// question *"which number is which"*, and the two would drift silently —
     /// a transposition compiles and runs.
     pub const fn as_reserve_arguments(self) -> (usize, usize, usize, usize) {
-        (
-            self.nodes,
-            self.words,
-            self.data_bytes,
-            self.native_int_limbs,
-        )
+        (self.nodes, self.words, self.data_bytes, self.native_int_limbs)
     }
 }
 
@@ -485,9 +480,7 @@ mod tests {
         // ⭐ The discriminator that matters: a zero limit is an EXPLICIT
         // deployment choice, so exhausting it must not be reported as an
         // absent profile. Conflating the two is how a default sneaks back in.
-        assert!(!exhausted
-            .to_string()
-            .contains("no boundary resource profile"));
+        assert!(!exhausted.to_string().contains("no boundary resource profile"));
     }
 
     /// ⚠ **Zero is a legal, explicit limit** — it means "no room", not "unset".
@@ -508,14 +501,8 @@ mod tests {
             },
         };
         for resource in BoundaryResource::ALL {
-            assert_eq!(
-                profile.limit(BoundaryResourceScope::Invocation, resource),
-                0
-            );
-            assert_eq!(
-                profile.limit(BoundaryResourceScope::Persistent, resource),
-                1
-            );
+            assert_eq!(profile.limit(BoundaryResourceScope::Invocation, resource), 0);
+            assert_eq!(profile.limit(BoundaryResourceScope::Persistent, resource), 1);
         }
         assert_eq!(profile.invocation.as_reserve_arguments(), (0, 0, 0, 0));
     }

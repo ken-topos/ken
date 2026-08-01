@@ -275,7 +275,8 @@ impl GlobalEnv {
         // constants (`16 §1.3`; the unsound general `Up : Type → Ω` coercion is
         // dropped, so these are standalone declarations, not wrappings). They
         // are kernel vocabulary (like `Type`/`Ω`), kept out of `trusted_base`.
-        env.bottom_id = Some(env.declare_prelude_const("Bottom", Term::Omega(Level::zero())));
+        env.bottom_id =
+            Some(env.declare_prelude_const("Bottom", Term::Omega(Level::zero())));
         env.top_id = Some(env.declare_prelude_const("Top", Term::Omega(Level::zero())));
         // K5: `tt : Top` — `Top`'s sole inhabitant, a genuine sub-singleton
         // admissible in Ω (`16 §1.1`). Typed at `Top` itself (not `Ω_0`), so

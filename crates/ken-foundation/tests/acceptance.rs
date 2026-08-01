@@ -61,7 +61,10 @@ fn dedup_rate_matches_expected() {
         "  arena_bytes={}, index_load={:.4}",
         stats.arena_bytes, stats.index_load
     );
-    eprintln!("  mem/distinct_value={:.1} bytes", mem_per_distinct);
+    eprintln!(
+        "  mem/distinct_value={:.1} bytes",
+        mem_per_distinct
+    );
 }
 
 // ---------------------------------------------------------------------------

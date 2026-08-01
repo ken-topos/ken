@@ -1482,31 +1482,35 @@ pub fn dispatch_host_op_v1<B: HostEffectBackendV1>(
         ) | (
             HostOpV1::BufferFreeze,
             ResourceInputsV1::BufferSpanTarget { .. }
-        ) | (HostOpV1::FsReadAt, ResourceInputsV1::FileBuffer { .. })
-            | (HostOpV1::FsWriteAt, ResourceInputsV1::FileBufferSpan { .. })
-            | (
-                HostOpV1::BufferAllocate
-                    | HostOpV1::ConsoleRead
-                    | HostOpV1::ConsoleWrite
-                    | HostOpV1::ConsoleFlush
-                    | HostOpV1::ConsoleIsTerminal
-                    | HostOpV1::ClockWallNow
-                    | HostOpV1::ClockMonotonicNow
-                    | HostOpV1::ClockSleepUntil
-                    | HostOpV1::EntropyRandomBytes
-                    | HostOpV1::FsReadFile
-                    | HostOpV1::FsWriteFile
-                    | HostOpV1::FsAppendFile
-                    | HostOpV1::FsMetadata
-                    | HostOpV1::FsReadDirectory
-                    | HostOpV1::FsCreateDirectory
-                    | HostOpV1::FsRemoveFile
-                    | HostOpV1::FsRemoveDirectory
-                    | HostOpV1::FsRename
-                    | HostOpV1::FsChangeMode
-                    | HostOpV1::FsOpen,
-                ResourceInputsV1::None
-            )
+        ) | (
+            HostOpV1::FsReadAt,
+            ResourceInputsV1::FileBuffer { .. }
+        ) | (
+            HostOpV1::FsWriteAt,
+            ResourceInputsV1::FileBufferSpan { .. }
+        ) | (
+            HostOpV1::BufferAllocate
+                | HostOpV1::ConsoleRead
+                | HostOpV1::ConsoleWrite
+                | HostOpV1::ConsoleFlush
+                | HostOpV1::ConsoleIsTerminal
+                | HostOpV1::ClockWallNow
+                | HostOpV1::ClockMonotonicNow
+                | HostOpV1::ClockSleepUntil
+                | HostOpV1::EntropyRandomBytes
+                | HostOpV1::FsReadFile
+                | HostOpV1::FsWriteFile
+                | HostOpV1::FsAppendFile
+                | HostOpV1::FsMetadata
+                | HostOpV1::FsReadDirectory
+                | HostOpV1::FsCreateDirectory
+                | HostOpV1::FsRemoveFile
+                | HostOpV1::FsRemoveDirectory
+                | HostOpV1::FsRename
+                | HostOpV1::FsChangeMode
+                | HostOpV1::FsOpen,
+            ResourceInputsV1::None
+        )
     );
     if !resource_shape_matches {
         return Ok(resource_denied(
@@ -4215,7 +4219,8 @@ mod tests {
         // field: capacity, start, length, and live window are all equal, so this
         // fails a numeric-only admission and its own-span controls fail an
         // always-reject one (AC-8 discriminator).
-        let root = std::env::temp_dir().join(format!("ken-spanprov-unit-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("ken-spanprov-unit-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("source.bin"), b"AAAABBBB").unwrap();
@@ -4410,7 +4415,8 @@ mod tests {
         // alone aliases the two acquisitions, but the full acquisition token
         // (slot+generation) does not, so release/reallocation is a permanent
         // verdict flip. A fresh span from B (`span_origin = token_b`) succeeds.
-        let root = std::env::temp_dir().join(format!("ken-spanprov-reuse-{}", std::process::id()));
+        let root = std::env::temp_dir()
+            .join(format!("ken-spanprov-reuse-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("source.bin"), b"AAAABBBB").unwrap();

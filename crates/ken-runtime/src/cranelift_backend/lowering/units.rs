@@ -246,7 +246,7 @@ pub(in crate::cranelift_backend) struct DeclaredUnitCalls {
     pub(in crate::cranelift_backend) static_callables:
         BTreeMap<StaticOriginId, DeclaredStaticCallableCall>,
     pub(in crate::cranelift_backend) continuation_specializations:
-        BTreeMap<StaticOriginId, Vec<DeclaredContinuationSpecializationCall>>,
+        BTreeMap<StaticOriginId, DeclaredContinuationSpecializationCall>,
 }
 
 fn rebuild_static_callable_binding(
@@ -350,20 +350,37 @@ impl CallEdgeTargets {
                     continue;
                 }
                 EmittableCallKind::ContinuationSpecialization => {
-                    let plan = target.continuation_specialization.ok_or_else(|| {
+                    let plan = target.continuation_specialization.clone().ok_or_else(|| {
                         backend_module(
                             "continuation specialization edge has no compiler plan".to_string(),
                         )
                     })?;
-                    let calls = continuation_specializations
-                        .entry(target.call_site_origin)
-                        .or_insert_with(Vec::new);
-                    if target.call_site_sequence != calls.len() as u32 {
+                    let token = plan.call_token().ok_or_else(|| {
+                        backend_module(
+                            "declared continuation specialization has no exact call token"
+                                .to_string(),
+                        )
+                    })?;
+                    if token.producer_result_origin() != target.call_site_origin
+                        || token.call_site_sequence() != target.call_site_sequence
+                    {
                         return Err(backend_module(
-                            "continuation specialization call sequence is not dense".to_string(),
+                            "continuation specialization call token changed at declaration"
+                                .to_string(),
                         ));
                     }
-                    calls.push(DeclaredContinuationSpecializationCall { target: call, plan });
+                    if continuation_specializations
+                        .insert(
+                            target.call_site_origin,
+                            DeclaredContinuationSpecializationCall { target: call, plan },
+                        )
+                        .is_some()
+                    {
+                        return Err(backend_module(
+                            "one branch occurrence has two continuation specialization tokens"
+                                .to_string(),
+                        ));
+                    }
                 }
             }
         }
@@ -493,11 +510,27 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
                     match unit.definition() {
                         AbiUnitDefinition::ContinuationSpecialization {
                             specialization, ..
-                        } => Some(plan.emittable_continuation_specialization(
-                            specialization,
-                            edge.caller(),
-                            edge.call_site_origin(),
-                        )?),
+                        } => {
+                            let token = edge.continuation_call().ok_or_else(|| {
+                                backend_module(
+                                    "continuation specialization edge has no exact call token"
+                                        .to_string(),
+                                )
+                            })?;
+                            if token.target() != specialization
+                                || token.producer_owner() != edge.caller()
+                                || token.producer_result_origin() != edge.call_site_origin()
+                                || token.call_site_sequence() != edge.call_site_sequence()
+                            {
+                                return Err(backend_module(
+                                    "continuation specialization edge disagrees with its token"
+                                        .to_string(),
+                                ));
+                            }
+                            Some(
+                                plan.emittable_continuation_specialization_call(token)?,
+                            )
+                        }
                         _ => {
                             return Err(backend_module(
                                 "continuation specialization edge targets another unit class"
@@ -1246,18 +1279,11 @@ fn stage_unit_body<M: Module>(
                 .emittable_static_callable_unit(specialization)?
                 .base_body_origin(),
             AbiUnitDefinition::ContinuationSpecialization { .. } => continuation_specialization
+                .as_ref()
                 .expect("continuation definition resolved above")
                 .continuation_origin(),
         };
         let body = compiler.retained_body_occurrence(body_origin)?;
-        eprintln!(
-            "TRACE unit function={:?} origin={:?} body={body_origin:?} definition={:?} params={} captures={}",
-            unit.function,
-            unit.origin,
-            unit.definition,
-            unit.header.parameters,
-            unit.header.captures
-        );
         let lowered = if let Some(specialization) = continuation_specialization {
             compiler.select_terminal_result_origins(body_origin, body.expr)?;
             compiler.lower_continuation_specialization(&mut builder, specialization, &env)?

@@ -21,8 +21,7 @@ fn decl_nat_pred(env: &mut ElabEnv, name: &str) {
     let nat_id = *env.globals.get("Nat").expect("Nat");
     let nat_ty = Term::indformer(nat_id, vec![]);
     let pred_ty = Term::pi(nat_ty, Term::omega(Level::Zero));
-    env.declare_postulate_raw(name, pred_ty)
-        .expect("decl_nat_pred");
+    env.declare_postulate_raw(name, pred_ty).expect("decl_nat_pred");
 }
 
 // ======================================================================
@@ -81,10 +80,7 @@ fn postcondition_emits_substituted_goal() {
 
     // goal_closed = Pi(context, phi)
     let expected_closed = Term::pi(triple.context[0].clone(), triple.phi.clone());
-    assert_eq!(
-        triple.goal_closed, expected_closed,
-        "goal_closed = Pi(Nat, phi)"
-    );
+    assert_eq!(triple.goal_closed, expected_closed, "goal_closed = Pi(Nat, phi)");
 
     // provenance
     assert!(
@@ -92,10 +88,7 @@ fn postcondition_emits_substituted_goal() {
         "provenance kind = Ensures(0)"
     );
     // stable id
-    assert_eq!(
-        triple.id.0, "f.ensures.0",
-        "stable id keyed on name + kind + index"
-    );
+    assert_eq!(triple.id.0, "f.ensures.0", "stable id keyed on name + kind + index");
 }
 
 // ======================================================================
@@ -158,7 +151,9 @@ fn precondition_at_call_not_in_body_placeholder() {
 
     // Predicate on first param `n` — exercises the fixed de Bruijn shift path.
     let elab_res = env
-        .elaborate_decl_v1("fn safe_f (n : Nat) (d : Nat) : Nat requires Nonzero n = d")
+        .elaborate_decl_v1(
+            "fn safe_f (n : Nat) (d : Nat) : Nat requires Nonzero n = d",
+        )
         .expect("const with requires should elaborate");
 
     let ex = v2_extract(&elab_res);
@@ -233,25 +228,16 @@ fn prove_and_law_emit_one_obligation_per_goal() {
         )
         .expect("law should elaborate");
     let ex_law = v2_extract(&elab_law);
-    assert_eq!(
-        ex_law.obligations.len(),
-        3,
-        "law with 3 fields → 3 obligations"
-    );
+    assert_eq!(ex_law.obligations.len(), 3, "law with 3 fields → 3 obligations");
 
-    let ids: Vec<&str> = ex_law.obligations.iter().map(|o| o.id.0.as_str()).collect();
-    assert!(
-        ids.contains(&"Monoid.law.assoc"),
-        "stable id for assoc field"
-    );
-    assert!(
-        ids.contains(&"Monoid.law.unitL"),
-        "stable id for unitL field"
-    );
-    assert!(
-        ids.contains(&"Monoid.law.unitR"),
-        "stable id for unitR field"
-    );
+    let ids: Vec<&str> = ex_law
+        .obligations
+        .iter()
+        .map(|o| o.id.0.as_str())
+        .collect();
+    assert!(ids.contains(&"Monoid.law.assoc"), "stable id for assoc field");
+    assert!(ids.contains(&"Monoid.law.unitL"), "stable id for unitL field");
+    assert!(ids.contains(&"Monoid.law.unitR"), "stable id for unitR field");
 
     for obl in &ex_law.obligations {
         assert!(
@@ -304,7 +290,9 @@ fn body_requires_assumed_not_reobligated() {
 
     // Predicate on first param `n` — exercises the fixed de Bruijn shift path.
     let elab_res = env
-        .elaborate_decl_v1("fn safe_f (n : Nat) (d : Nat) : Nat requires NonzeroP n = d")
+        .elaborate_decl_v1(
+            "fn safe_f (n : Nat) (d : Nat) : Nat requires NonzeroP n = d",
+        )
         .expect("const with requires should elaborate");
 
     let ex = v2_extract(&elab_res);
@@ -405,32 +393,18 @@ fn trivial_clause_still_emits_obligation() {
         .elaborate_decl_v1("fn f_triv (n : Nat) : Nat ensures TrivProp result = n")
         .expect("elaborates");
     let ex1 = v2_extract(&elab1);
-    assert_eq!(
-        ex1.obligations.len(),
-        1,
-        "trivial clause emits 1 obligation"
-    );
+    assert_eq!(ex1.obligations.len(), 1, "trivial clause emits 1 obligation");
 
     // Real-burden clause: emits an obligation
     let elab2 = env
         .elaborate_decl_v1("fn f_real (n : Nat) : Nat ensures RealProp result = n")
         .expect("elaborates");
     let ex2 = v2_extract(&elab2);
-    assert_eq!(
-        ex2.obligations.len(),
-        1,
-        "real-burden clause emits 1 obligation"
-    );
+    assert_eq!(ex2.obligations.len(), 1, "real-burden clause emits 1 obligation");
 
     // Neither yields no obligation — the counter-rule holds
-    assert!(
-        !ex1.obligations.is_empty(),
-        "trivial clause does NOT yield empty set"
-    );
-    assert!(
-        !ex2.obligations.is_empty(),
-        "real burden does NOT yield empty set"
-    );
+    assert!(!ex1.obligations.is_empty(), "trivial clause does NOT yield empty set");
+    assert!(!ex2.obligations.is_empty(), "real burden does NOT yield empty set");
 }
 
 // ======================================================================
@@ -598,7 +572,9 @@ fn provenance_and_stable_ids() {
 
     // Two ensures clauses → two obligations with consecutive stable ids
     let elab_res = env
-        .elaborate_decl_v1("fn f2 (n : Nat) : Nat ensures PropA result ensures PropB result = n")
+        .elaborate_decl_v1(
+            "fn f2 (n : Nat) : Nat ensures PropA result ensures PropB result = n",
+        )
         .expect("two ensures should elaborate");
 
     let ex = v2_extract(&elab_res);
@@ -620,10 +596,7 @@ fn provenance_and_stable_ids() {
 
     // Stable: re-extraction gives same ids
     let ex2 = v2_extract(&elab_res);
-    assert_eq!(
-        ex2.obligations[0].id, ex.obligations[0].id,
-        "id stable on re-extraction"
-    );
+    assert_eq!(ex2.obligations[0].id, ex.obligations[0].id, "id stable on re-extraction");
     assert_eq!(ex2.obligations[1].id, ex.obligations[1].id);
 }
 
@@ -688,7 +661,8 @@ fn v2_enriches_v1_obligations_with_context() {
     );
     // V2 gives the hole_id back (consistent with V1)
     assert_eq!(
-        triple.hole_id, elab_res.obligations[0].hole_id,
+        triple.hole_id,
+        elab_res.obligations[0].hole_id,
         "hole_id consistent with V1"
     );
     // id uses the def name
