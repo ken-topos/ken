@@ -77,5 +77,5 @@ is the whole bug.
 
 Related:
 [[a-negative-check-passes-for-any-reason-so-it-needs-a-positive-control]].
-⭐ And if one checker is defeated repeatedly, suspect its **default branch**
+And if one checker is defeated repeatedly, suspect its **default branch**
 is the thing that is wrong, rather than patching each defeat.

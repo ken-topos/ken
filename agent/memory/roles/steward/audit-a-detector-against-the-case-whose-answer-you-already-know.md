@@ -8,7 +8,7 @@ source: 2026-07-22, `scripts/pane-busy.sh` watchdog — five consecutive
 
 # Audit a detector against the case whose answer you already know
 
-⚠ **Currency note:** the self-test mechanism this lesson is built around
+**Currency note:** the self-test mechanism this lesson is built around
 (`scripts/pane-busy.sh` testing itself against its own pane, keyed off
 `MOOT_ROLE`) is **no longer present in the current script** — it shipped in
 an early revision and was later simplified away. The general principle below
@@ -27,7 +27,7 @@ The adversary refused the next patch-an-arm remedy: *the misses aren't an
 enumeration problem — there was no oracle, no case with a true answer known
 independently of the detector.*
 
-## ★ The oracle was in the room the whole time
+## The oracle was in the room the whole time
 
 **The watchdog runs inside a pane. That pane is BUSY, by definition,
 whenever the watchdog is running.** If the detector classifies its own pane
@@ -37,7 +37,7 @@ certain ground truth. That converts "have I enumerated every busy state?"
 is no, with no need for the enumeration to be complete. All five historical
 misses would have tripped it immediately.
 
-## ⛔⛔ Two ways the fix broke its own oracle — both found within the hour
+## Two ways the fix broke its own oracle — both found within the hour
 
 **(a) Defaulting the identity the oracle rests on.** The self-check shipped
 as `self="${MOOT_ROLE:-steward}"`. The env var was unset in every
@@ -47,7 +47,7 @@ right by coincidence. For every other caller the oracle silently tested
 the whole oracle rests on** — ask the system for it (e.g. `tmux
 display-message -p '#S'`), and refuse to run if it can't be resolved.
 
-> ### ★★★ Run it from a seat that is not the author's
+> ### Run it from a seat that is not the author's
 >
 > Three quality gates passed this defect — authoring, a both-directions
 > falsification, and review — because all three ran from the one seat where
@@ -85,7 +85,7 @@ positives-only suite.
    maintenance that never gets to be declared finished; the oracle is a
    fixed cost that catches the arms you didn't think of.
 
-## ★ Why the errors were all one direction — the structural tell
+## Why the errors were all one direction — the structural tell
 
 A detector built as a disjunction of positive signals has any
 un-enumerated state default to "idle" — the asymmetry isn't luck, it's the

@@ -24,7 +24,7 @@ handle, or method *in the shape* where it can be written and checked.**
 
 **Same hole every time: the shape cannot state its own contract.**
 
-## ★ Why it is invisible in a green diff — the load-bearing part
+## Why it is invisible in a green diff — the load-bearing part
 
 **Tests exercise VALUES. The gap is in the TYPE / ABI / RELATION surface.**
 
@@ -87,7 +87,7 @@ For the shape being pinned:
 
 **Never pin a shape that cannot state its own contract.**
 
-## ★ And why this is structurally the DESIGN pass's catch
+## And why this is structurally the DESIGN pass's catch
 
 - The **implementer builds values** — they compile.
 - **QA tests values** — they pass.

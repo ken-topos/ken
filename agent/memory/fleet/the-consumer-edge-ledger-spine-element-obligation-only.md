@@ -39,7 +39,7 @@ representation instead of *translating* it.
 workaround.** Miss them and you dutifully port scaffolding whose only purpose was
 holding up scaffolding.
 
-## ★ And it tells you when to STOP
+## And it tells you when to STOP
 
 **If even one behavioral edge cannot close on the structural view — stop at the
 boundary. Do NOT build the bridge.**

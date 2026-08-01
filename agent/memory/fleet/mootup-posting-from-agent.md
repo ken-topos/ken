@@ -24,7 +24,7 @@ error on `post_response`/`reply_to` is **resolved**). So:
   posting works).
 
 **HTTP fallback** (authoritative for identity; use only if MCP unavailable):
-- ⛔ **FOR AN `actor_id`, DO NOT OPEN THE FILE AT ALL — run
+- **FOR AN `actor_id`, DO NOT OPEN THE FILE AT ALL — run
   `scripts/moot-actor-id.sh <role>`** (`--ids` for bare ids, `--list` for known
   roles). It projects `actor_id` by name, enforces an output whitelist so nothing
   but `<role> agt_<id>` can leave it, and fails closed. Controls:
@@ -35,9 +35,9 @@ error on `post_response`/`reply_to` is **resolved**). So:
   `git worktree list --porcelain | awk '/^worktree /{print $2; exit}'`.
   Structure: `{space_id, space_name, api_url, actors: {<role>: {api_key,
   actor_id, display_name}}}`.
-- ⛔⛔ **ANOTHER SEAT'S `api_key` IS NEVER YOURS TO READ — only your own role's,
+- **ANOTHER SEAT'S `api_key` IS NEVER YOURS TO READ — only your own role's,
   and never printed.** Extract into an env var and use `$KEY` in the curl header.
-  ⭐ **And never dump this file to learn its shape.** Both leaks to date happened
+  **And never dump this file to learn its shape.** Both leaks to date happened
   in **schema discovery**, not in the lookup: once by `sed`/`grep` over the raw
   file, once when a field-projecting one-liner returned nothing (the author had
   guessed the key names) and the author printed the file *"just to see the

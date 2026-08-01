@@ -8,10 +8,10 @@ source: 2026-07-22, three episodes in one day (ABI-REVOKE, BUDGET-EFF, a
   mechanism story
 ---
 
-# ⚠ This title overstates it — a stale base does NOT silently revert untouched
+# This title overstates it — a stale base does NOT silently revert untouched
 # files. The real hazard is narrower, and the detector that finds it is different.
 
-**⛔ Read this alongside
+** Read this alongside
 [[an-out-of-band-merge-leaves-your-branch-on-a-reverting-base]], which carries
 the correction forward: this file is kept for the evidence trail of *why* the
 naive diff-based detector is wrong, not as the current recommended check.**
@@ -38,7 +38,7 @@ GitHub's squash-merge applies the PR's diff — `merge-base → branch` — **no
 any value, so they cannot be reverted. **The absence of a file from a stale
 candidate is not a deletion.**
 
-## ★★ The detector was the actual defect
+## The detector was the actual defect
 
 `git diff --name-status origin/main <sha>` renders *everything `main` gained
 since the merge base* as `D`/`M`. It produced the same alarming output for a
@@ -61,7 +61,7 @@ comm -12 <(git diff --name-only $BASE <sha>      | sort) \
 **Empty ⇒ base staleness is immaterial; publish.** Non-empty ⇒ inspect those
 files specifically and take the union deliberately.
 
-## ⚠⚠ A non-empty intersection is USUALLY loud, but not always
+## A non-empty intersection is USUALLY loud, but not always
 
 A non-empty intersection on a real publish (PR #876, same day) produced a
 merge conflict GitHub refused outright — not a silent revert. But a
@@ -75,7 +75,7 @@ side assumed a different state.
 ⇒ **The rule is "non-empty ⇒ inspect", not "⇒ relax" and not "⇒ rebase."**
 *Inspect* presupposes a reader, because git will not do it for you.
 
-## ★★★ The fix that ends the whole family — don't read the diff, build the result
+## The fix that ends the whole family — don't read the diff, build the result
 
 ```sh
 TREE=$(git merge-tree --write-tree origin/main <branch>)   # pure computation,
@@ -92,7 +92,7 @@ result matched the predicted post-condition, and the one file in the genuine
 intersection turned out to have byte-identical content on both sides — a fact
 no amount of reasoning about squash semantics would have produced.
 
-## ★★ 2026-07-25 — when the intersection is wide, don't inspect file-by-file
+## 2026-07-25 — when the intersection is wide, don't inspect file-by-file
 
 A `steward/work` publish had a written prediction of "disjoint, but verify."
 It was not: merge-base was 50 commits back and the intersection was 38 paths.
@@ -109,11 +109,11 @@ git merge-base --is-ancestor origin/main HEAD   # exit 0 ⇒ nothing main
 This is strictly better than the intersection test **for a publish you own**,
 because it makes the hazard structurally impossible rather than
 measured-absent. (The intersection test remains the right tool for someone
-*else's* candidate, where you must not rewrite their branch — and ⛔ never
+*else's* candidate, where you must not rewrite their branch — and never
 for an open PR: a force-push there silently re-points it at a SHA no
 reviewer approved.)
 
-## ★ 2026-07-26 — retire the question at pickup, for free
+## 2026-07-26 — retire the question at pickup, for free
 
 When picking up a branch whose named base is already behind `main`,
 fast-forward it immediately if the FF is clean (nothing to conflict yet, so
@@ -121,7 +121,7 @@ it costs nothing), then **report the base you actually built on**, not the
 one you were handed. Downstream, multiple seats each separately reported
 "path intersection empty" — a different question from "did `main` move any
 file this candidate carries," and one only the first pair of hands can
-answer cheaply. ⚠ Bounded: only when it is genuinely a fast-forward, and
+answer cheaply. Bounded: only when it is genuinely a fast-forward, and
 never once the branch is an open PR.
 
 ## The meta-lesson

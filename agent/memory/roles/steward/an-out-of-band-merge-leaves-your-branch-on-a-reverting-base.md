@@ -10,7 +10,7 @@ source: 2026-07-26. The operator merged PR #1035 by hand, out of band. `steward/
 
 # An out-of-band merge leaves your branch on a base that silently reverts it
 
-⛔ **When `main` moves by a path your workflow does not observe — a hand merge, a
+**When `main` moves by a path your workflow does not observe — a hand merge, a
 teammate's publish, an operator fixing something directly — your branch keeps its
 old base, and nothing tells you. The next candidate you build from it can carry a
 revert of that change inside a PR titled as something else entirely.**
@@ -40,17 +40,17 @@ git merge-base --is-ancestor origin/main HEAD    # exit 1 ⇒ your base is stale
 ```
 
 ⇒ **After any merge you did not perform: `git reset --hard origin/main` before
-building a candidate**, then re-cherry-pick. ⛔ Never rebase or force-move without
+building a candidate**, then re-cherry-pick. Never rebase or force-move without
 checking ancestry first.
 
-## ⛔⛔ THE CONTROL I WROTE FOR THIS WAS AIMED AT THE WRONG OBJECT
+## THE CONTROL I WROTE FOR THIS WAS AIMED AT THE WRONG OBJECT
 
 I added a standing control — *"after every publish, re-probe that recently deleted
 paths are still absent on `main`"* — because verifying my **own** blobs landed
 cannot detect a revert of **someone else's** change. Those are different questions
 and only the first was ever being asked.
 
-⚠ **Then, the same day, the control fired FALSE and I nearly acted on it.**
+**Then, the same day, the control fired FALSE and I nearly acted on it.**
 Reviewing a candidate whose base predated the deletion:
 
 ```sh
@@ -62,7 +62,7 @@ git cat-file -e <candidate>:crates/ken-elaborator/tests/kw_theorem_source_oracle
 base predates the deletion; it is absent from the candidate's **diff**, and this
 repo squash-merges (merge-base → branch), so the merge never touches that path.
 
-⭐ **The probe has to be aimed at the MERGE RESULT, not at your tree:**
+**The probe has to be aimed at the MERGE RESULT, not at your tree:**
 
 ```sh
 MT=$(git merge-tree --write-tree origin/main <candidate>)
@@ -70,7 +70,7 @@ git cat-file -e "$MT:<recently-deleted-path>"   # exit 0 ⇒ REAL revert; exit 1
 git rev-parse "$MT:<the-candidate's-own-file>"  # positive control: the change IS in the result
 ```
 
-⇒ ⛔ **"Is it in my tree?" and "will it be in `main`?" are different questions, and
+⇒ **"Is it in my tree?" and "will it be in `main`?" are different questions, and
 the tree-level probe answers the wrong one with a confident yes.** It returns a
 false alarm on *every* candidate whose base predates *any* deletion — which is
 most of them.
@@ -83,22 +83,22 @@ most of them.
   it. A `--doc-only` merge skips CI, so this is the only gate left.
 - **Before publishing anyone's candidate:** compute the merge result with
   `git merge-tree --write-tree` and probe it for recently deleted paths — with a
-  positive control that the candidate's own change *is* in that result. ⛔ A probe
+  positive control that the candidate's own change *is* in that result. A probe
   with no positive control cannot distinguish "safe" from "I measured nothing".
-- ⚠ **Do not use `git diff origin/main <sha>` as a staleness detector** — it fires
+- **Do not use `git diff origin/main <sha>` as a staleness detector** — it fires
   identically on safe and unsafe candidates. The discriminator is the
   **intersection** of the two change sets against the merge base; empty ⇒
   immaterial, do not rebase.
 
 ## Positioning
 
-- ⭐ **Why the catch was luck, and what that argues for.** The diff-scope step that
+- **Why the catch was luck, and what that argues for.** The diff-scope step that
   caught this was added an hour earlier to keep a `scripts/` change out of a
   doc-only merge. It caught a **worse, unrelated** hazard instead. ⇒ **A check
   placed at a COMMAND catches what its author did not have in mind; a check aimed
   at a known failure does not.** Prefer step-shaped rules at the point of work over
   advisory prose about being careful.
-- [[stale-base-candidate-silently-reverts-everything-landed-since]] — ⛔ that title
+- [[stale-base-candidate-silently-reverts-everything-landed-since]] — that title
   overstates it and `COORDINATION §14` carries the correction: a squash applies
   merge-base → branch, so merely *lacking* what `main` gained deletes nothing. The
   real hazard is the narrow one measured here.

@@ -18,7 +18,7 @@ it *after the last gate has closed*, and the scripted publisher turns it into
 the **squash commit message on `main`** — the most durable prose the project
 produces.
 
-> ⛔ It is written at the exact moment when everyone has stopped looking, by the
+> It is written at the exact moment when everyone has stopped looking, by the
 > person whose job that moment was to end.
 
 ## The instance
@@ -42,7 +42,7 @@ deletable without anything reddening. And the second half of the sentence was
 false too: the mechanism pins **one instance** through one hard-coded path
 literal; it does not bind an axis.
 
-★ **The claim was specifically the property the parent WP existed to enforce.**
+**The claim was specifically the property the parent WP existed to enforce.**
 `DOC-VALIDATION-BINDING` was written to kill *"deleting a gate leaves its token
 orphaned while the suite stays green."* The Steward asserted that cure in the
 sentence describing the change that lacked it. **The remedy for the orphaning
@@ -61,7 +61,7 @@ defect was itself orphanable, and the prose covered the gap.**
 
 ## How to apply
 
-- ⭐ **Before publishing, verify the description against the tree the way a
+- **Before publishing, verify the description against the tree the way a
   reviewer would — every verification-flavored claim in it is a check you are
   asserting exists.** Grep the diff for the artifact each clause names. "With a
   positive control" ⇒ `git diff <base> <sha> | grep -c '^+.*#\[test\]'`. A claim
@@ -75,7 +75,7 @@ defect was itself orphanable, and the prose covered the gap.**
 - **The fix for a landed overclaim is to make the claim TRUE, not to correct the
   prose.** The commit message cannot be amended once squashed onto `main`. File
   the follow-on WP (here: `DOC-GATE-CONTROL-BINDING`).
-- ⚠ **Then re-attack your own correction.** A fix that adds a claim adds a fresh
+- **Then re-attack your own correction.** A fix that adds a claim adds a fresh
   overclaim — see
   [[mutation-proof-injection-point-is-a-reachability-tell]]. Write the new WP's
   publish text under the same rule.

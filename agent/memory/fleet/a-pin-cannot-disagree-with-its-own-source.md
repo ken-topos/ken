@@ -24,30 +24,30 @@ none of them looked wrong.
 
 ## The rule
 
-★ **Before trusting a pin, ask what would have to be WRONG for it to redden —
+**Before trusting a pin, ask what would have to be WRONG for it to redden —
 and then ask whether that thing is the AUTHORITY or a restatement of it.** If
 both operands trace back to the same source, the pin is a **consistency check on
 a single value dressed as a correspondence between two.** It will be green in
 every world, including the ones you wrote it to exclude.
 
-⛔ **"Full product" and "exhaustive" are not defences.** Instance 3 covered the
+**"Full product" and "exhaustive" are not defences.** Instance 3 covered the
 entire finite product in both directions and was still vacuous, because
 coverage measures *how much of the surface you compared*, never *whether the two
 sides could differ*. ⇒ **Exhaustiveness is a property of the sweep; independence
 is a property of the operands. Only the second one makes a pin evidence.**
 
-## ★★ A CONFIRMED axis is where to look, not where to stop
+## A CONFIRMED axis is where to look, not where to stop
 
 Instance 2 is the one worth the entry. The class axis had been **confirmed by the
 Architect**, and the implementer ran the winning mutation against it anyway. It
 won there too.
 
-⭐ **A code review is accurate about the code it reads and structurally cannot
+**A code review is accurate about the code it reads and structurally cannot
 report whether the pin behind it is as strong as both parties assume.** The
 reviewer reads the *consumer* and sees it consult the authority; nothing in that
 reading reveals that the *test* would pass with the consultation removed.
 
-⇒ ⛔ **A confirmation is not a reason to skip the mutation. It is the reason
+⇒ **A confirmation is not a reason to skip the mutation. It is the reason
 nobody else will run it.** Both parties now believe the axis is closed, so the
 one cheap command that would falsify it has no remaining owner. Corollary for
 reviewers: when you confirm an axis, say **what you did not measure**, so the

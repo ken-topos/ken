@@ -35,7 +35,7 @@ git grep -n '<old-basename>'   # e.g. proof_erasure_boundary_checker,
                                # not only the full old path
 ```
 
-## ★ The sweep is only half of it — CLASSIFY every survivor (2026-07-24)
+## The sweep is only half of it — CLASSIFY every survivor (2026-07-24)
 
 **A grep with hits is not a finished sweep.** `DOC-VALIDATION-BINDING` deleted
 two Rust symbols and swept them in the primary files — and still shipped **two
@@ -60,14 +60,14 @@ git grep -n '<old-spelling>' -- ':!docs/program/issues/<ID>.md' ':!<other histor
 sweep whose clean result depends on a reader mentally skipping four known-OK
 hits is not reproducible, and the next person re-litigates all four.
 
-## ⚠ And the same trap catches the VERIFIER, one layer up
+## And the same trap catches the VERIFIER, one layer up
 
 The identical defect hit the **Steward's post-merge verification probe** the same
 day: it grepped all of `main` for the deleted symbol, hit the issue file that
 *correctly* describes the historical defect, and reported the deletion had **not
 landed**. The artifact was fine; the probe's window was wrong.
 
-★ **Both failures are one shape — a scope that does not distinguish "code
+**Both failures are one shape — a scope that does not distinguish "code
 asserting a fact" from "prose recording history."** The author's sweep was too
 narrow (primary files only) and the verifier's was too wide (all paths). ⇒ Scope
 the grep to the **code paths** for a correctness question, and reserve the

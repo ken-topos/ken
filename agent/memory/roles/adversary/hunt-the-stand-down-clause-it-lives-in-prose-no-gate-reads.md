@@ -27,7 +27,7 @@ two rings is wrong — which happened three times in one day.
 
 ## The tell
 
-★ **An instruction that pre-classifies a future observation.** *"If you see X, it
+**An instruction that pre-classifies a future observation.** *"If you see X, it
 isn't real."* That is a prediction about evidence that does not exist yet, issued
 by someone who will not be the one looking at it. The hedge that usually
 accompanies it — *"any other failure is real"* — does not save it, because the

@@ -35,7 +35,7 @@ running the command that produced its output.**
   reaching into history reproduces the same window defect one level up)
   separated 28/28 panes.
 
-## ⛔ Correction — my own pattern carried the same defect I filed
+## Correction — my own pattern carried the same defect I filed
 
 The Steward reproduced the finding and then found two flaws **in my instrument**,
 both measured:
@@ -59,7 +59,7 @@ lesson below is right and I did not apply it to my own instrument in the same
 hour I wrote it. Having the oracle does not make the *rest* of the detector
 principled — the self-test proves it can see the known case, and nothing more.
 
-## ★ The transferable move
+## The transferable move
 
 **The watchdog runs inside a pane, and that pane is BUSY by definition whenever
 the watchdog is running.**
@@ -77,7 +77,7 @@ Four misses accumulated because there was no case where the true answer was know
 unfalsifiable; "does it get the known case right?" fires the moment the answer is
 no.
 
-## ★ The audit move: find the probe that constructs a VIOLATION
+## The audit move: find the probe that constructs a VIOLATION
 
 **Addendum, same day.** The Steward's fix for a gate defect silently did nothing
 — `git merge --squash` *stages* without committing, so `HEAD` never moved and the
@@ -91,7 +91,7 @@ red       want=BLOCK-CURRENCY   got=PERMIT           ⛔  <- the only discrimina
 conflict  want=CANNOT-EVALUATE  got=CANNOT-EVALUATE  ✅
 ```
 
-★ **Two of three passed, and the two that passed were the ones exercising the
+**Two of three passed, and the two that passed were the ones exercising the
 code that had changed.** The happy path and the error path both come for free —
 they follow the diff. The probe that has to **construct a genuine violation** is
 orthogonal to the change, so it is the one nobody writes, and its absence is

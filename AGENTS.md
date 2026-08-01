@@ -29,7 +29,7 @@ again **after every context compaction** — orient yourself:
 | `<team>-implementer` | `ken-build-implementer` |
 | `<team>-qa` | `ken-build-qa` |
 
-**⚠ The `doc` team has no `doc-qa` seat — the `librarian` is its QA.** Its
+** The `doc` team has no `doc-qa` seat — the `librarian` is its QA.** Its
 ring is `doc-leader` + `doc-author` + `librarian`, and the Librarian reviews
 the ring's WPs *and* holds a standing as-built mandate no build QA has. So
 `librarian` routes to `ken-librarian` (above), **not** to `ken-build-qa`, and
@@ -82,23 +82,23 @@ Record a new lesson at the broadest scope where every reader must apply it.
 This corpus is the source of truth — Codex's generated `~/.codex/memories/` (if
 ever enabled) is supplemental only, never canonical.
 
-> ### ⭐ DIRECTORY PLACEMENT IS AUTHORITATIVE. Read your scopes and STOP.
+> ### DIRECTORY PLACEMENT IS AUTHORITATIVE. Read your scopes and STOP.
 >
 > **A lesson's audience is exactly the directory it sits in.** ⇒ Reading your
 > scopes (your path + ancestors) is **complete** — nothing applicable to you is
-> filed anywhere else. ⛔ **Do not scan the rest of the corpus**, and do not read
+> filed anywhere else. **Do not scan the rest of the corpus**, and do not read
 > frontmatter hunting for lessons that opt into your scope.
 >
-> ⚠ **A `scope:` frontmatter key is redundant metadata, not routing.** It sits on
-> most files and every occurrence merely restates its own directory. ⛔ It
+> **A `scope:` frontmatter key is redundant metadata, not routing.** It sits on
+> most files and every occurrence merely restates its own directory. It
 > confers nothing and is not consulted. To reach a wider audience, **move the
 > file to the wider scope** — that is the only mechanism.
 >
-> ⛔ **Why this is stated so flatly:** the previous wording let a cross-cutting
+> **Why this is stated so flatly:** the previous wording let a cross-cutting
 > lesson stay put and carry a `scope:` tag instead. That made directory placement
 > non-authoritative, so the only *sound* way to honour it was to read all 260
 > files' frontmatter at every startup — ~109 KB beyond a role's actual scope,
-> paid again at every compaction. ⭐ **The mechanism was never once used**, so
+> paid again at every compaction. **The mechanism was never once used**, so
 > that cost bought nothing.
 
 ## Reference material is off-limits to code authors
@@ -123,9 +123,9 @@ to write Ken's code.** Per `CLEAN-ROOM.md`:
 When unsure whether you may look at something under `local/refs/`, the answer
 is no — ask the operator or the Spec enclave.
 
-## ⛔ NEVER call `get_transcript` (convo MCP) — it kills your own transport
+## NEVER call `get_transcript` (convo MCP) — it kills your own transport
 
-**Operator prohibition, 2026-07-26. Binds every seat.** ⛔ Do not call
+**Operator prohibition, 2026-07-26. Binds every seat.** Do not call
 `mcp__convo__get_transcript` — not with a small `limit`, not "just once", not as
 a fallback when another read comes back thin.
 
@@ -133,21 +133,21 @@ a fallback when another read comes back thin.
 returned a payload large enough to take the session's convo **stdio connection
 down with it** — every `mcp__convo__*` tool disappeared mid-turn.
 
-⭐ **The cost is not a failed read — it is losing the ability to POST.** You go
+**The cost is not a failed read — it is losing the ability to POST.** You go
 blind and mute together: no `post_response` to unblock a ring waiting on you, no
-`list_decisions`, no `orientation`. ⚠ And it is silent to everyone else — the
+`list_decisions`, no `orientation`. And it is silent to everyone else — the
 fleet keeps posting into a channel you can no longer hear, and your seat looks
 merely quiet.
 
-⭐ **Know why you will be tempted, so you can catch yourself.** It is the only
+**Know why you will be tempted, so you can catch yourself.** It is the only
 read that returns message **bodies**; `get_recent_context` and `get_mentions`
 return headers only (timestamp, speaker, event id). So the moment you need the
 full text of a **truncated notification** — precisely when something is blocked
 and you are in a hurry — `get_transcript` is the obvious reach. **That urgency is
 the trap: it is the worst possible moment to lose transport.**
 
-✅ **Use instead — the HTTP read path**, the same API the MCP adapter wraps,
-with **your own** credential (⛔ never another seat's `api_key`; ⛔ never dump
+**Use instead — the HTTP read path**, the same API the MCP adapter wraps,
+with **your own** credential ( never another seat's `api_key`; never dump
 `.moot/actors.json` to learn its shape):
 
 ```python
@@ -157,9 +157,9 @@ me  = json.load(open('/workspaces/ken/.moot/actors.json'))['actors']['<your-role
 # Authorization: Bearer me['api_key']
 ```
 
-⚠ **Temporary measure** pending a new convo release; the operator is raising the
+**Temporary measure** pending a new convo release; the operator is raising the
 method's utility with the convo team. Until then the prohibition is absolute —
-⛔ a working `get_transcript` in some future version is not a reason to try it
+a working `get_transcript` in some future version is not a reason to try it
 now to find out.
 
 ## Conventions
@@ -168,7 +168,7 @@ now to find out.
   humans-read, decide on intrinsic merits not effort, small auditable TCB,
   reflect-don't-extend, subsume-don't-proliferate, honesty about the boundary).
   When the spec does not settle a choice, reason from it.
-- **⛔ LOCAL BUILDS/TESTS ARE TARGETED ONLY — NEVER `--workspace` (operator, hard
+- ** LOCAL BUILDS/TESTS ARE TARGETED ONLY — NEVER `--workspace` (operator, hard
   rule).** This box has limited CPU/RAM; a full `cargo build`/`cargo test
   --workspace` OOMs or wedges it and stalls the whole fleet. Build and test
   **only through `scripts/ken-cargo`, scoped to the crate you touched** (`-p
@@ -181,6 +181,23 @@ now to find out.
   frame's "no-regression" / "workspace-green" acceptance criterion means
   **green in CI**, never a local `--workspace` run; author and read frame ACs
   that way. Canonical statement + rationale: **`agent/COORDINATION.md §12`**.
+- **Write in plain text. No decorative icons** (operator, 2026-08-01). Do not
+  open lines, headings, table cells, or emphasis with symbols like star, warning
+  sign, no-entry, check mark, or any emoji. **The operator finds them
+  distracting rather than helpful, and they are not a substitute for saying the
+  thing.** Convey emphasis with **bold**, with sentence structure, and with
+  where you put the point — not with a glyph.
+  - Applies to every artifact you author: docs, WP frames, tracker nodes, commit
+    messages, PR bodies, playbooks, memory lessons, and **convo posts**.
+  - This is a rule about *decoration*, not about characters. Symbols that carry
+    information stay: arrows in derivations (`⇒`, `→`), math and Ken notation
+    (`Ω`, `≠`), and literal terminal glyphs quoted as data (a pane's `❯`
+    prompt, a spinner). If removing it would lose information, it is not
+    decoration.
+  - **If you are copying the shape of a nearby artifact, copy the current
+    rule, not the old formatting.** Much of the corpus predates this and was
+    only cleaned in the instruction material; an existing WP or issue that
+    still carries icons is not a licence to add more.
 - **Wrap markdown at 80 columns** — target 80 *display* columns / codepoints (a
   multi-byte `—`, `→`, `Ω` is one column); lines of 81–85 are acceptable slack,
   so only reflow what exceeds **85**. Don't spend your own tokens hand-reflowing

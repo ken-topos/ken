@@ -42,7 +42,7 @@ packages ended up carrying `Axiom`s.
   are not sloppiness — **`Axiom` was the only available route**, because the
   obligation `Equal Int (bytes_length bs) …` has a stuck neutral on the left.
 
-## ⚠ The spec disagrees, and the spec is the thing to distrust here
+## The spec disagrees, and the spec is the thing to distrust here
 
 **`spec/30-surface/37-strings-collections.md §2.4` claims the opposite:** *"A
 primitive op carries a registered reduction (`41`), so e.g. `byteLength "abc" ≡

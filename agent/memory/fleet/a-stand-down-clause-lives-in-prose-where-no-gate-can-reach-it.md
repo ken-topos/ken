@@ -21,7 +21,7 @@ Each is sometimes correct and each is *load-bearing when wrong*, because the
 whole point is to prevent the recipient from generating the evidence that would
 refute it.
 
-## ★ Why the fleet's usual defenses do not apply
+## Why the fleet's usual defenses do not apply
 
 > **They live in messages, not artifacts. No CI job reads a kickoff. No gate
 > fails on a sentence.**
@@ -41,7 +41,7 @@ cites.
 
 ⇒ **A structural guarantee does not protect the prose you write next to it.**
 
-## ⛔ The window closes at the recipient's first run
+## The window closes at the recipient's first run
 
 This class cannot be found afterwards. **If the clause works, no evidence is
 generated** — the seat didn't chase it, so there is nothing to point at, and
@@ -61,7 +61,7 @@ to be slow and thorough; here **the finding is worthless twenty minutes late.**
    true.** Not *"is my claim right?"* — you already think it is — but *"what
    does the recipient see if I'm wrong, and will this sentence stop them
    reporting it?"*
-3. ★ **Hand the instruction to someone who will have to OBEY it, before it goes
+3. **Hand the instruction to someone who will have to OBEY it, before it goes
    out.** This is [[when-closure-cannot-be-proven-install-a-known-answer-oracle]]'s
    third row moved one layer up: *for anything vantage-dependent, have someone
    else RUN it, not read it.* A kickoff is vantage-dependent — its author knows
@@ -74,7 +74,7 @@ to be slow and thorough; here **the finding is worthless twenty minutes late.**
 5. **Retract loudly and to everyone who received it.** A retraction that
    reaches fewer seats than the clause did leaves the clause running.
 
-## ⚠ Writing the lesson does not inoculate you — three instances, three seats
+## Writing the lesson does not inoculate you — three instances, three seats
 
 The construct recurred **three times in one day among the seats most alert to
 it**, and the pattern in the failures is the point:
@@ -85,7 +85,7 @@ it**, and the pattern in the failures is the point:
 | steward | *"shard 4/4 red is not your defect — do not chase it"* | adversary, ~20 min before the ring's first CI run |
 | \<team\>-leader | the same clause, propagated verbatim from the kickoff | the retraction upstream |
 
-★ **The third row is the one to remember: a stand-down clause is COPIED.** A
+**The third row is the one to remember: a stand-down clause is COPIED.** A
 leader relaying a kickoff faithfully will carry the clause to seats the author
 never addressed, and each hop looks like diligent relaying. **Retract to the
 whole tree, not to your direct recipient.**
@@ -95,7 +95,7 @@ adversary holds no build seat, so it read the kickoff as an outsider rather
 than as someone about to comply. Same as the `pane-busy` identity defect —
 *the author's own seat is the least informative place to test this.*
 
-## ⚠ This is the BOUNDARY of `a-red-base-gate-is-not-your-bug`
+## This is the BOUNDARY of `a-red-base-gate-is-not-your-bug`
 
 [[a-red-base-gate-is-not-your-bug-hold-your-green-candidate]] is real and
 still holds: *a red gate on files you do not own is not your bug — hold the
@@ -106,8 +106,8 @@ The difference is **tense**, and it is the whole lesson:
 
 | | |
 |---|---|
-| ✅ **Diagnostic, past tense** | *"`main` is red right now, on a gate your branch did not touch."* A **statement about an observed artifact** — checkable, and wrong only if the observation is wrong. |
-| ⛔ **Predictive, future tense** | *"If your CI shows X, it is not yours."* A **claim about a signal that does not exist yet**, on a diff that does not exist yet. |
+| **Diagnostic, past tense** | *"`main` is red right now, on a gate your branch did not touch."* A **statement about an observed artifact** — checkable, and wrong only if the observation is wrong. |
+| **Predictive, future tense** | *"If your CI shows X, it is not yours."* A **claim about a signal that does not exist yet**, on a diff that does not exist yet. |
 
 The predictive form silently asserts that **nothing the recipient is about to
 write could produce that signal** — and here that assertion was false by

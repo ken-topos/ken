@@ -24,7 +24,7 @@ KTR-1 repairs a missing kernel admission gate, so its AC4 demanded an inventory
 of **every inductive declaration in the repo**. The Steward wrote the AC, and —
 knowing the trap — put a warning in it, in capitals:
 
-> *"⛔ GREPPING `data` IN `.ken` SOURCES WILL MISS THE PRELUDE. The prelude's
+> *" GREPPING `data` IN `.ken` SOURCES WILL MISS THE PRELUDE. The prelude's
 > inductives are EMITTED FROM RUST."*
 
 **And then named the prelude as *the* Rust producer, and stopped.** The real
@@ -32,12 +32,12 @@ production producers were **four**, and the one he named was not the biggest:
 
 | producer | sites | in the AC? |
 |---|---|---|
-| `ken-interp/src/lib.rs` | **8** | ❌ |
-| `ken-elaborator/src/prelude.rs` | 5 | ✅ *(the only one)* |
-| `ken-elaborator/src/effects/state.rs` | **3** | ❌ |
-| `ken-elaborator/src/data.rs` | 2 | ✅ implicitly |
+| `ken-interp/src/lib.rs` | **8** | |
+| `ken-elaborator/src/prelude.rs` | 5 | *(the only one)* |
+| `ken-elaborator/src/effects/state.rs` | **3** | |
+| `ken-elaborator/src/data.rs` | 2 | implicitly |
 
-> **★ He corrected for the wrong LANGUAGE and then inherited the wrong
+> ** He corrected for the wrong LANGUAGE and then inherited the wrong
 > CATEGORY.** He knew the enumeration had to move from `.ken` to Rust — **and let
 > ONE EXAMPLE of a Rust producer stand in for THE EXTENT OF THE KIND.**
 >
@@ -66,7 +66,7 @@ git grep 'add_decl(Decl::Inductive'        -- '*.rs'   →  ONE hit: check.rs:95
 proves that nothing can get in another way.** Without it, `89` is just a bigger
 number than `5` and equally unjustified.
 
-## ★★ THE FOURTH INSTANCE — and it reveals the rule was still too weak
+## THE FOURTH INSTANCE — and it reveals the rule was still too weak
 
 **Same day, same Steward, one hour later, *knowing all of the above*, and having
 just written it down.** Asked "which PRODUCTION code declares inductives?", he:
@@ -96,7 +96,7 @@ population is the defect — and you can never find a member that lacks it.**
 first: *what is the narrowest gate every member of this kind MUST pass
 through, and how do I know nothing bypasses it?***
 
-> **★ AND THE POPULATION MUST BE DEFINED BY THAT GATE — NEVER BY THE PROPERTY
+> ** AND THE POPULATION MUST BE DEFINED BY THAT GATE — NEVER BY THE PROPERTY
 > YOU ARE TESTING FOR.** *Enumerate at `declare_inductive` (the gate), then apply
 > the `Δₖ`-sort predicate (the property) to each. **Never** collect the files that
 > smell of the property and then look for the gate inside them.* **Population from
@@ -121,7 +121,7 @@ through, and how do I know nothing bypasses it?***
 CLOSED — and if you cannot answer, you do not have an inventory, you have a
 sample.** *"I named a place. He found the closure."*
 
-## ★★★ THE SIXTH INSTANCE — the population is defined by a PREDICATE
+## THE SIXTH INSTANCE — the population is defined by a PREDICATE
 
 **…that your subject INHABITS, so its name appears nowhere in the carrier.**
 
@@ -132,11 +132,11 @@ CV `evt_6dyfxxa43xztf`, Architect `evt_2vszbkngvgj4d`, spec-leader
 
 **The task was a property REMOVAL:** Map/Set byte canonicity stops being a
 promise. The first fold repaired every carrier that **said "Map" or "Set"** — six
-of them, correctly. ⛔ **And the retired promise survived intact**, because
+of them, correctly. **And the retired promise survived intact**, because
 `spec/` also states the same property over **generic nouns**: *"closure-free
 value"*, *"admitted value"*, *"any live value"*.
 
-⭐ **The membership fact is the whole lesson: `Map`/`Set` ⊂ closure-free durably
+**The membership fact is the whole lesson: `Map`/`Set` ⊂ closure-free durably
 transportable values.** So every generic byte clause **still applied to them** —
 `36-effects §4.4`, `42-evaluation §3.1/§3.4/§3.7`, `44-capacity §1/§3`,
 `OQ-Space`. CV blocked on those four. The Architect's independent pass then found
@@ -145,20 +145,20 @@ reclamation clause, and a capacity conformance seed whose byte-comparison
 witnesses were not domain-qualified. The author's own final sweep found a ninth
 (`minimality §D`) that neither reviewer had routed.
 
-⇒ ⛔ **A SUBJECT-NAME CENSUS IS NOT A PROPERTY CENSUS.** This is the same defect
+⇒ **A SUBJECT-NAME CENSUS IS NOT A PROPERTY CENSUS.** This is the same defect
 as the sections above with the *direction* reversed: there, the population was
 reached through **producers** you did not name; here, through **quantifiers**
 whose domain silently contains your subject. In both, the grep was honest about
 the bytes it received.
 
-### ⭐⭐ THE TELL, AND IT IS THE MOST ACTIONABLE THING HERE
+### THE TELL, AND IT IS THE MOST ACTIONABLE THING HERE
 
 > **Repeated population growth across review passes is evidence the ENUMERATION
 > METHOD is wrong — not that the list is longer.**
 
 Three passes each found *more* sites. The instinct at pass two is *"one more
 missed path"*, and it is wrong every time: a method that under-counts by
-construction under-counts again. ⛔ **When a second pass expands the population,
+construction under-counts again. **When a second pass expands the population,
 stop adding paths and change how you enumerate.** All four seats named this
 independently, which is the strongest signal in this file.
 
@@ -177,15 +177,15 @@ registers, and deliverables. ⇒ **The closure argument is the membership
 derivation, not the search.** *"Grep selects candidates; it cannot prove the
 population is complete."*
 
-⚠ **And keep positive homonym controls, or you will over-correct.** Record
+**And keep positive homonym controls, or you will over-correct.** Record
 declaration-order encoding and `Cat4 keys-ascending-off-tolistordered` sit
 textually *next to* the removed property, mention ordering and bytes, and are
 **different live properties**. Both were held blob-identical through every fold
-and named as controls in every vote. ⭐ **A removal sweep needs a positive
+and named as controls in every vote. **A removal sweep needs a positive
 control exactly as much as a detector does** — without one, "removed the retired
 mechanism" and "removed the neighbours too" read identically.
 
-## ★★ THE FIFTH INSTANCE — TWO searches, each EXHAUSTIVE, neither complete
+## THE FIFTH INSTANCE — TWO searches, each EXHAUSTIVE, neither complete
 
 **Measured 2026-07-26, `runtime-implementer` on `RT-FNSPLIT-B2V`, reported against
 itself.** The rule above was already in the corpus. This instance matters because
@@ -200,11 +200,11 @@ located list missed **two**:
 | `:1194` | **same defect, but no constant to grep for** — the search keyed on a *name* the defect happened to spell at the other sites |
 | `:715` | not a `NODE_CLASS`, so it fell **outside the fold's private notion of "class"** |
 
-⇒ ⛔ **Two searches, each exhaustive within a boundary neither search wrote down.**
+⇒ **Two searches, each exhaustive within a boundary neither search wrote down.**
 Not carelessness — each was *complete* against the domain its author had in mind.
 The domains were never stated, so they were never checked.
 
-⭐ **The operational rule, and it is one keystroke different from the failing one:**
+**The operational rule, and it is one keystroke different from the failing one:**
 
 ```console
 grep 'BoundaryTag::'      # ✅ uses of the AUTHORITY  -> found the missing site instantly
@@ -218,11 +218,11 @@ name is a property of the sites you already found — so keying on it can only
 re-find them. ⇒ **When you catch yourself grepping the string that appears in the
 bug you just fixed, you are enumerating from the property.**
 
-⚠ **And write the domain down.** The cheap fix for two unstated boundaries is one
+**And write the domain down.** The cheap fix for two unstated boundaries is one
 sentence per search saying what population it claims to cover. An unstated domain
 cannot be wrong, which is exactly why it cannot be checked.
 
-⭐ **A control that fires on its own author is the cheapest evidence it is real:**
+**A control that fires on its own author is the cheapest evidence it is real:**
 the source scan built for this inventory **matched its own needle literal** on the
 first run, and was caught by its own *undetermined-parse ⇒ fail* branch. That is
 the fail-closed branch working, on the person who wrote it, before anyone else saw

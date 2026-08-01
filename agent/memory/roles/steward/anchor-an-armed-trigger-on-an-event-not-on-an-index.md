@@ -36,7 +36,7 @@ a trigger the ring fired.**
 - **Never place two counters over different populations in one line.** If
   both must appear, say what each counts and that they advance at different
   rates.
-- ⭐ **The tell that an anchor is index-shaped: evaluating it requires a
+- **The tell that an anchor is index-shaped: evaluating it requires a
   second lookup.** If you cannot answer "is it due?" from the trigger plus
   the channel, it is not armed.
 - **A trigger that lapsed twice is a DESIGN defect, not a diligence defect.**

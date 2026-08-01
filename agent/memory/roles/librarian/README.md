@@ -12,7 +12,7 @@ which no other seat combines:
    accountable for `library/` remaining true about the system as built, which is
    a *continuous* obligation rather than a per-WP one.
 
-⚠ **Lessons about the attestation ledger, as-built currency, and carrying a
+**Lessons about the attestation ledger, as-built currency, and carrying a
 verdict across a fold live in [`teams/doc`](../../teams/doc/README.md)** — put a
 lesson there when it binds `doc-leader` and `doc-author` too, and here only when
 it is specific to holding *both* hats at once (e.g. reviewing a WP whose subject

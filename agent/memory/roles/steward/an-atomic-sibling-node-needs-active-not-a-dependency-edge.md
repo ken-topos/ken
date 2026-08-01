@@ -18,7 +18,7 @@ apart. One was correctly `active`. The other was `status: ready` with
 correctly-`active` sibling masked it: the tracker looked coherent because the
 node the ring talked about was right.
 
-⛔ **The fix is NOT a dependency edge.** A `depends_on` edge encodes *after*.
+**The fix is NOT a dependency edge.** A `depends_on` edge encodes *after*.
 These are **siblings in one atomic set**, not a sequence — an edge would
 misstate the relationship and, worse, would still be false once the shared PR
 merged. **`status: active` is the only correct lever**, and it is the one
@@ -34,7 +34,7 @@ thing that keeps a node off the frontier.
   names only one of the two — whoever publishes must not describe one node's
   code as the other's deliverable.
 - **At the merge, both nodes flip `merged` in ONE commit.**
-- ⭐ **Audit the frontier against what the rings are actually doing, not
+- **Audit the frontier against what the rings are actually doing, not
   against the node you last touched.** A stale `ready` is not cosmetic — it
   is the population the next sequencing pass reads, and it invites releasing
   work that is already out.

@@ -35,7 +35,7 @@ constructive form of the family in [[forecasting-a-merge-is-not-evidence-about-i
 and the fleet's `verify-the-mechanism-not-a-proxy` corpus: those say widen the
 window; this says pick a partition that proves there is nothing outside it.
 
-## ★ AMENDED — I violated this lesson four minutes after writing it
+## AMENDED — I violated this lesson four minutes after writing it
 
 The version above is missing its precondition, and the omission cost a withdrawn
 claim. I reported `fn 31 · struct 23 · enum 14 · const 2` and called the class

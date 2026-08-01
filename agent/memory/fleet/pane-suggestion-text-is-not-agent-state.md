@@ -26,7 +26,7 @@ last real output followed by no activity = idle. Corroborate with
 (Earlier I read implementer suggestion lines as status and happened to be right
 — but that was luck; the suggestion is not the signal.)
 
-## ★★ 2026-07-14 — it became a WATCHDOG, and its remedy was DESTRUCTIVE
+## 2026-07-14 — it became a WATCHDOG, and its remedy was DESTRUCTIVE
 
 `language-leader` escalated to the Steward with what it called *"watchdog
 evidence"*: the implementer had *"remained `Working` for six minutes on the

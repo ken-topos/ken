@@ -34,7 +34,7 @@ at the end of the *previous* line, so the edit added a second one. The result is
   whitespace (or render) before asserting a sentence is right. For a copy fix,
   confirm with a **word-diff** (`git diff --word-diff`) — it names the exact
   tokens added and removed, so "deleted exactly one word" is provable.
-- **⛔ Never weaken a probe to make it pass — replace the instrument.** The
+- ** Never weaken a probe to make it pass — replace the instrument.** The
   instinct on an empty grep is to shorten the phrase until it matches, but a
   phrase short enough never to wrap is usually short enough to appear in prose
   that **predates your change** — at which point it passes on stale content and
@@ -47,7 +47,7 @@ at the end of the *previous* line, so the edit added a second one. The result is
   file (`tr '\n' ' '` / collapse runs of whitespace) *then* match, or match on a
   short anchor that is unique **and** post-dates your change.
 
-★ **Why this keeps recurring despite being obvious once stated:** the tool is
+**Why this keeps recurring despite being obvious once stated:** the tool is
 line-oriented, the corpus is line-wrapped, and **the two line structures are
 unrelated** — so the mismatch is invisible at the moment you write the command.
 Nothing in the output announces "your phrase crossed a boundary"; you just get
@@ -56,6 +56,6 @@ this corpus as suspect by default**, exactly as
 [[an-enumeration-needs-a-proven-closure-not-a-better-grep]] treats every grep as
 a candidate-selector rather than an answer.
 
-⚠ Sibling, not duplicate, of [[markdown-80col-reflow]]: that one is about
+Sibling, not duplicate, of [[markdown-80col-reflow]]: that one is about
 **producing** correctly wrapped markdown; this is about **reading and editing**
 markdown that is already wrapped.

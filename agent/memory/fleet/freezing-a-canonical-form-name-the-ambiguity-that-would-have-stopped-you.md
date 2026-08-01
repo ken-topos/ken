@@ -31,7 +31,7 @@ FOREVER.**
 **The shape was already IMPLIED by the contract.** The oracle's job was to write it
 down, not to decide it.
 
-## ⭐ The half that actually transfers — the STOP CONDITION
+## The half that actually transfers — the STOP CONDITION
 
 > *"**If two emitted texts had remained equally compatible with those rules, I
 > would not have frozen either one. That would have been a SPEC GAP requiring
@@ -41,7 +41,7 @@ down, not to decide it.
 **They defined, IN ADVANCE, the condition under which they would REFUSE to ship the
 deliverable.**
 
-**★ This is the difference between a derived canonicalization and a laundered
+** This is the difference between a derived canonicalization and a laundered
 preference — and it is INVISIBLE IN THE DIFF.** A frozen oracle that happens to
 encode one implementer's taste is **indistinguishable, forever**, from one that
 encodes the contract:

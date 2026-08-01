@@ -40,7 +40,7 @@ nobody reads the finding as a parity regression. Sibling of
 [[green-vs-green-does-not-confirm-a-fix]] (same blindness, one layer up) and of
 [[differential-verify-which-mechanism-is-the-net]].
 
-★ **Currency note (2026-07-28):** this defect has since been fixed on both
+**Currency note (2026-07-28):** this defect has since been fixed on both
 sides — the interp regression test
 `budget_eff_capped_full_read_reifies_effective_not_raw_remaining` and the
 native lowering path (now under

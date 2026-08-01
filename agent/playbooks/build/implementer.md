@@ -58,7 +58,7 @@ publishes and merges.
    (K3: a `>4 MiB` value underflowed the arena, untested because the max test
    value was 8 KiB; the Architect caught it). Keep the change small.
 
-   **★ Declare a promise class for every conformance-derived test you write —
+   ** Declare a promise class for every conformance-derived test you write —
    if you cannot classify it, it is not ready.** QA applies this as a review
    gate and will Block on it, so classifying at *authoring* time is strictly
    cheaper than discovering it at review:
@@ -178,9 +178,9 @@ merge_ready: <WP-ID> <one-line what>
 ```
 Mention only the next actor; do not wait for an ack.
 
-## ⭐ Rebasing a branch that is UNDER REVIEW — publish the SHA mapping
+## Rebasing a branch that is UNDER REVIEW — publish the SHA mapping
 
-⛔ **A rebase silently invalidates every SHA-anchored finding in the thread.**
+**A rebase silently invalidates every SHA-anchored finding in the thread.**
 Reviewers name exact SHAs — a block, an approval, a QA verdict all cite the tip
 they read. After a rewrite those SHAs still resolve, still look authoritative,
 and describe objects nobody will merge. Nothing goes red.
@@ -193,14 +193,14 @@ and describe objects nobody will merge. Nothing goes red.
    `git diff <old-tip> <rebased-twin>`. State the result in words: *"differs in
    nothing but the two frame docs; zero code delta."*
 
-★ **Why (2) is the load-bearing half:** the mapping tells a reader which object
+**Why (2) is the load-bearing half:** the mapping tells a reader which object
 a finding was about; the diff is what makes a **carried-forward approval
 auditable instead of asserted.** A region-scoped approval can then be
 *re-attached* rather than re-earned — which is the whole reason not to make
 reviewers repeat a pass they already did. **Prove the rebase preserved content;
 do not testify that it did.**
 
-⚠ And say plainly that the branch moved. A reviewer who fetches by branch name
+And say plainly that the branch moved. A reviewer who fetches by branch name
 gets the new tip while quoting the old SHA, and will not notice.
 
 ## Retro (closes the WP — do not skip)
@@ -213,24 +213,24 @@ topology-touching. This is the grain the Steward's promotion ladder runs on
 (COORDINATION §10); skipping it starves the only mechanism that propagates your
 lessons to the other teams.
 
-## ⛔⛔ NEVER TEST THE TEXT OF THE REPOSITORY — test behaviour
+## NEVER TEST THE TEXT OF THE REPOSITORY — test behaviour
 
 **Operator rule, 2026-07-26:** *"Test oracles that assert facts about source
 code, catalog, or documentation lines are an invitation for failure and delay.
 Tests should focus on behavior."*
 
-⛔ **Do not author a test whose subject is repository text**: line numbers, line
+**Do not author a test whose subject is repository text**: line numbers, line
 contents, occurrence positions or counts in prose, heading inventories, section
 presence, or a hardcoded census of where a word appears in `catalog/`, `docs/`,
 `library/`, `spec/`, or `agent/`.
 
-⭐ **The one question that decides it:** *"Does an edit that changes nothing
+**The one question that decides it:** *"Does an edit that changes nothing
 about how any program behaves make this test fail?"* If inserting a paragraph,
 renaming a heading, or reflowing prose can red it, **you are measuring the
 repository, not the software** — and the red lands on whoever is unlucky, in a
 file they have never read, instead of on whoever erred.
 
-⚠ **This is a rule about the test's SUBJECT, and it is why your promise class
+**This is a rule about the test's SUBJECT, and it is why your promise class
 will not save you.** A corpus-text census reads perfectly as a *normative
 compatibility vector* (*"these values are the contract"*) and passes QA's promise
 gate. `crates/ken-elaborator/tests/kw_theorem_source_oracle.rs` did exactly that
@@ -238,14 +238,14 @@ gate. `crates/ken-elaborator/tests/kw_theorem_source_oracle.rs` did exactly that
 repo-wide and blocking an unrelated doc WP. ⇒ **Ask what the test is ABOUT
 before you ask what it promises.**
 
-✅ **Express the property as behaviour instead:** a policy about identifiers →
+**Express the property as behaviour instead:** a policy about identifiers →
 assert the elaborator **rejects** the construct on a fixture you author; a
 generated artifact → assert the **generator round-trips**, never pin its output's
 lines; a document invariant → assert a **relation between artifacts keyed on
 identity**, never on position. Full gate + the permitted boundary case: the
 `Test design` section of `agent/playbooks/build/qa.md`.
 
-## ⭐ Authoring a mechanical pin — load the `pin-a-property` skill
+## Authoring a mechanical pin — load the `pin-a-property` skill
 
 Any acceptance criterion you discharge with a test, a source scan, or a
 structural assertion is a **pin**, and a pin that is real, committed and green

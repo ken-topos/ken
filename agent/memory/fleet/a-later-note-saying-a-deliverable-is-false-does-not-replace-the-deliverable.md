@@ -29,21 +29,21 @@ deliverable is false does not replace the deliverable."* Appending **feels
 like faithful transcription of the reviewer's words** and is in fact leaving
 the defect operative — that is why it repeats.
 
-## ⭐⭐ Confirmed again 2026-07-28 — self-authored, correct, and old
+## Confirmed again 2026-07-28 — self-authored, correct, and old
 
 `RT-FNSPLIT-B2F`'s correction block at the very TOP of the frame recorded
 that `lower_expr` has **61** call sites, not 59. Hours later the
 implementer read `AC-5`'s own heading — *"all **59** calls"* — and reported
-the frame as defective. ⛔ **Both numbers were mine; the banner was right;
+the frame as defective. **Both numbers were mine; the banner was right;
 the reader still got the stale number.**
 
-⇒ ⭐ **Position does not save a correction.** Even a banner *above
+⇒ **Position does not save a correction.** Even a banner *above
 everything* loses to the operative line, because **a reader who goes to an
 AC to learn what the AC requires reads the AC** — not the document's
 preamble. The banner is a supplement, never a substitute, and *"I already
 corrected that at the top"* is not a defence.
 
-⭐ **The fix that generalizes: delete the count from the requirement.** The
+**The fix that generalizes: delete the count from the requirement.** The
 AC now says *every* call **at whatever count the tokenized derivation
 returns on your own base**, and names the derivation as the only pin. ⇒ A
 number in a requirement rots on the next merge and each fix mints a fresh

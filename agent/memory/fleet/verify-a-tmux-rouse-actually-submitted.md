@@ -34,14 +34,14 @@ tmux send-keys -t moot-<a> Enter;      sleep 3
 tmux capture-pane -p -t moot-<a> | grep -v '^$' | tail -20   # WIDE. Not tail -3.
 ```
 
-- ✅ **`• Working (Ns • esc to interrupt)`** → it submitted.
-- ❌ **`› [Pasted Content …]`** still on the input line, **and no `Working`
+- **`• Working (Ns • esc to interrupt)`** → it submitted.
+- **`› [Pasted Content …]`** still on the input line, **and no `Working`
   line** → **it did NOT submit.** Send a bare `Enter` to that pane and re-check.
-- ⚠️ **`• Queued follow-up inputs` / `Messages to be submitted after next tool
+- **`• Queued follow-up inputs` / `Messages to be submitted after next tool
   call`** → the agent **is busy** and your message **is** queued. **This is
   fine.** **DO NOT RESEND — you will double-queue it.**
 
-## ★ `tail -3` WILL LIE TO YOU — the `Working` line renders ABOVE the queue block
+## `tail -3` WILL LIE TO YOU — the `Working` line renders ABOVE the queue block
 
 The two states above are distinguished by a line that a narrow tail **cuts off**.
 A busy seat with a queued message renders:
@@ -82,7 +82,7 @@ not "received," and "quiet" is not "done."**
 
 ---
 
-## ⚠⚠ IT IS NOT JUST YOUR ROUSE — A **CONVO MENTION** FAILS THE SAME WAY
+## IT IS NOT JUST YOUR ROUSE — A **CONVO MENTION** FAILS THE SAME WAY
 
 **Added 2026-07-14, and this is the dangerous half.** Everything above is about
 a rouse *you* sent with `send-keys`, so *you* know to check it. **The identical
@@ -133,7 +133,7 @@ NOT prove an agent ever read it.** A blocking mention needs the same
 `capture-pane` confirmation as a `send-keys` rouse — **treat delivery-to-space
 and delivery-to-turn as two different things, because they are.**
 
-### ⚠ There are TWO failure shapes, and they need DIFFERENT repairs
+### There are TWO failure shapes, and they need DIFFERENT repairs
 
 **Same day, KTR-1 kickoff: `kernel-leader` posted a complete, correct
 implementation kickoff to `kernel-implementer`. It never arrived — and there was
@@ -144,11 +144,11 @@ leader's kickoff without polling."* It would have sat there forever: a
 | what `capture-pane` shows | what happened | the repair |
 |---|---|---|
 | `› [Pasted Content …]`, **no** `Working` | delivered to the buffer, **never submitted** | **send a bare `Enter`** to that pane |
-| `› <channel source="convo" … event_type="mention"…`, **no** `Working` | ⭐ **the same strand, and the COMMONER shape** — see below | **send a bare `Enter`** to that pane |
+| `› <channel source="convo" … event_type="mention"…`, **no** `Working` | **the same strand, and the COMMONER shape** — see below | **send a bare `Enter`** to that pane |
 | **empty prompt, no paste, no `Working`** | **never delivered at all** | **re-deliver the CONTENT** — `send-keys` a pointer to the original `event_id`/thread and tell the agent to read and execute it |
 | `Working` + `Queued follow-up inputs` | busy, your message **is** queued | **nothing. DO NOT RESEND.** |
 
-> ## ⛔⛔ A STRANDED DELIVERY OFTEN HAS NO VISIBLE `[Pasted Content]` MARKER
+> ## A STRANDED DELIVERY OFTEN HAS NO VISIBLE `[Pasted Content]` MARKER
 >
 > Measured on `moot-doc-author` 2026-08-01. Every fleet instrument keyed on that
 > marker, and all of them reported the pane healthy while it sat on a Librarian
@@ -164,22 +164,22 @@ leader's kickoff without polling."* It would have sat there forever: a
 > ⇒ **Two independent reasons a marker test cannot match:** the composer line
 > opens with the **delivery wrapper**, not the marker; and the terminal **wraps
 > `[Pasted` / `Content` across lines**, so the marker is not on the composer line
-> at all. ⛔ Widening a pattern to `<channel>` does not help either — the real
+> at all. Widening a pattern to `<channel>` does not help either — the real
 > text is `<channel source="convo"…` and never contains the closing bracket.
 >
-> ⭐⭐ **It failed INTERMITTENTLY, which is exactly why it was trusted.** When
+> **It failed INTERMITTENTLY, which is exactly why it was trusted.** When
 > the wrap fell elsewhere the marker landed on the composer line and the check
 > fired. **Its success was a function of terminal width and message length, not
 > of whether a strand existed.** ⇒ its silence carried no information, and its
 > occasional hit was camouflage.
 >
-> ⛔ **"No disagreement across N live panes" is not the control** — if every pane
+> **"No disagreement across N live panes" is not the control** — if every pane
 > is clear that is a **negative control only**. Classification now lives in
 > `scripts/classify-pane-composer.py`, pinned by `strand-mention` /
 > `strand-interval` / `near-miss` in `scripts/test-classify-pane-composer.sh`.
-> ⛔ Add a shape there, never by widening a regex at a call site.
+> Add a shape there, never by widening a regex at a call site.
 >
-> ⭐ **The detector that does not depend on rendering:** a seat that was
+> **The detector that does not depend on rendering:** a seat that was
 > **mentioned** (`metadata.mentions` on the event) whose **footer still shows the
 > previous turn**. That keys on the obligation rather than on the pixels.
 
@@ -202,7 +202,7 @@ delivered.**
 
 ---
 
-## ★ IT HAPPENED AGAIN — and the recurrence tells you the rule above is not enough
+## IT HAPPENED AGAIN — and the recurrence tells you the rule above is not enough
 
 **2026-07-14, hours after this memory was written.** `kernel-leader` and
 `language-leader` each posted an **Architect terminal-review request** — the
@@ -234,7 +234,7 @@ otherwise.**
 
 ---
 
-## ★★★ STOP READING THIS MEMORY AND RUN THE SCRIPT — `scripts/sweep-wedged-panes.sh`
+## STOP READING THIS MEMORY AND RUN THE SCRIPT — `scripts/sweep-wedged-panes.sh`
 
 **Look at the revision history of this file.** It has been extended three times,
 and **every extension said the same thing in a louder voice: *verify harder*.**

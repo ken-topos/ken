@@ -15,7 +15,7 @@ sitting beside the real dispatch rather than driving it. It looks identical in a
 diff, and a green suite confirms nothing, because the tests pass whether or not
 the row is what caused the runner to execute.
 
-> ⛔ **A registry proves nothing about binding. Only a *break* does.**
+> **A registry proves nothing about binding. Only a *break* does.**
 
 ## The proof that discriminates
 
@@ -55,10 +55,10 @@ binding instead of arguing for it.
 - **Implementer:** run it before handoff and put the exact error code and
   location in the handoff. It is the cheapest way to make a binding claim
   reviewable.
-- ⚠ **Restore byte-for-byte and re-verify green.** A mutation proof leaves the
+- **Restore byte-for-byte and re-verify green.** A mutation proof leaves the
   tree mutated; commit the real fix *before* any mutation-proof reset, or the
   reset eats it.
-- ⚠ **The mutation must be injected where the thing is really produced.** If a
+- **The mutation must be injected where the thing is really produced.** If a
   break is caught upstream and can never reach the registry, the proof is dead
   and its pass means nothing — see
   [[a-mutation-that-passes-when-it-should-fail-means-a-stale-input]].

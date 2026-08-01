@@ -32,7 +32,7 @@ HONEST answer.** A WP-level "merged" roll-up reports the thesis as done.
    acceptable* cannot be detected by asking "did anything fail?"
 3. **The WP status said `merged`.** Which was **true**.
 
-## ★ The rule
+## The rule
 
 **When a WP merges with a headline deliverable deferred, the deferral must be
 written into the SCOPE, not just into a source comment.** A `[placeholder]` in

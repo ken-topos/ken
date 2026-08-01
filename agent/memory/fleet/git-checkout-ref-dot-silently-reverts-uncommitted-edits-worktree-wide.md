@@ -46,7 +46,7 @@ after the merge and found still `ready`.
    (e.g. `git stash` in a shared multi-worktree clone) carries the same
    shape.
 
-★ **The general shape:** a *success signal* says a thing ran, never that
+**The general shape:** a *success signal* says a thing ran, never that
 it did what you meant — and here the success signal came from a commit
 that was genuinely fine, just missing one hunk. Verifying on `main` after
 publish is the only reason this was caught at all.
@@ -67,7 +67,7 @@ entry** — orphaned, on disk, invisible to the only thing anyone reads.
 
 **Nothing failed.** No conflict, no warning, both commits clean.
 
-★★ **First attributed to git's disjoint-hunks silent union. That was
+**First attributed to git's disjoint-hunks silent union. That was
 WRONG.** Measured: these two branches **conflict loudly** — both append at
 the end of the same table, so the hunks overlap.
 
@@ -82,7 +82,7 @@ produce "branch2's file verbatim". **`git checkout <ref> -- <path>`
 bypasses merging entirely** — it is a checkout, not a merge, and takes the
 blob wholesale.
 
-★ **So the silence was in the choice of command, not in git.** A command
+**So the silence was in the choice of command, not in git.** A command
 with no merge semantics was picked on files where a merge was exactly what
 was needed. The loud failure git offered was never triggered because git
 was never asked to merge.
@@ -117,7 +117,7 @@ git checkout steward/work -- docs/program/wp/RT-FNSPLIT-B2O-body-ownership.md   
 checkout pulled the file's *committed* state from `steward/work`
 (identical to `origin/main`) over the working-tree edit.
 
-★ **Why this one is different from instances 1 and 2: the command was
+**Why this one is different from instances 1 and 2: the command was
 CORRECT BOILERPLATE, copied from a standing playbook step.** The playbook
 step says exactly this, and it is safe **there** — for the tracker, which
 is *always committed* before that routing step. A path-scoped idiom was
@@ -135,7 +135,7 @@ mention.
 1. **Commit before you route.** If you hand-authored an edit this turn,
    `git add && git commit` it on the working branch *before* any
    `switch`/`checkout`.
-2. ⛔ **A `switch` alone would have been safe.** Git carries an
+2. **A `switch` alone would have been safe.** Git carries an
    uncommitted modification across a branch switch when it doesn't
    conflict — the file was already on the new branch correctly. **The
    `checkout -- <path>` was pure downside**: the transport it was meant to
@@ -143,7 +143,7 @@ mention.
 3. **Cheap recovery, worth knowing:** if the destroyed text is still in
    this session's earlier tool-call history, re-applying it costs one
    call. **Check the transcript before re-deriving hand-authored prose.**
-4. ★ **The detector that caught it was an EMPTY `git status`** where a
+4. **The detector that caught it was an EMPTY `git status`** where a
    modification was expected. ⇒ **After any worktree-touching command,
    assert the edit you were carrying is still there** — not that the
    command succeeded. Instance 1's lesson, third confirmation.
@@ -160,7 +160,7 @@ merge.**
 **The real class is: a merge avoided or resolved by taking one side
 wholesale.**
 
-★ **A row-count + bidirectional-orphan check is the right gate precisely
+**A row-count + bidirectional-orphan check is the right gate precisely
 because it is MECHANISM-INDEPENDENT.** It is a *post-condition on the
 merged artifact*, so it catches union errors, wholesale-take errors, and
 bad conflict resolutions alike **without needing to know which occurred.**

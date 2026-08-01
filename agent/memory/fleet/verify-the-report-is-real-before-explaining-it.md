@@ -30,7 +30,7 @@ content. Re-run properly (one file, at the ref, `pwd` and `HEAD` printed at the
 point of invocation): **exit 0.** There was no `ParseError`. There was no
 unterminated declaration.
 
-## ★ The rule
+## The rule
 
 > **When a report and a mechanism disagree, verify the REPORT is real before you
 > build a mechanism that reconciles them.**

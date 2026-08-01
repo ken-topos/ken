@@ -65,14 +65,14 @@ An agent loads **its path + ancestors**. Examples:
 | `steward` | `fleet` + `enclave` + `roles/steward` |
 | `librarian` | `fleet` + `roles/librarian` + **`teams/doc`** (it is the doc team's QA) |
 
-⚠ **Build-team seats have no `roles/<team>-<seat>` scope** — a build seat's
+**Build-team seats have no `roles/<team>-<seat>` scope** — a build seat's
 identity is covered by the function scope (`build/qa`) crossed with the team
 scope (`teams/kernel`), which is the whole point of the two parallel branches.
 `roles/` is for the **singleton** roles that no function scope describes.
 **`CLAUDE.md`'s routing table is the authority** if this document and it ever
 disagree.
 
-★ **An absent or empty scope is a normal state, not a defect or a missing
+**An absent or empty scope is a normal state, not a defect or a missing
 read.** It means that scope has not yet paid for a lesson. Every scope named in
 the tree above exists as a folder with a `README.md` stating its charter, so a
 role that follows its routing never lands on a path that isn't there — but
@@ -84,15 +84,15 @@ so "all leaders" (`build/leaders`) and "all kernel" (`teams/kernel`) coexist
 with no duplication. **A lesson lives at the broadest scope where every reader
 must apply it.**
 
-⭐ **Directory placement is authoritative — it IS the routing.** A lesson's
+**Directory placement is authoritative — it IS the routing.** A lesson's
 audience is exactly the directory it sits in, so a role that reads its path +
-ancestors has read everything applicable to it. ⛔ **No reader scans the rest of
+ancestors has read everything applicable to it. **No reader scans the rest of
 the corpus**, and no reader inspects frontmatter to discover lessons filed
 elsewhere.
 
-⚠ **The `scope:` frontmatter key is redundant metadata, not routing.** It
+**The `scope:` frontmatter key is redundant metadata, not routing.** It
 appears on most files and every occurrence restates that file's own directory.
-⛔ It confers nothing. **To widen a lesson's audience, move the file** — there
+It confers nothing. **To widen a lesson's audience, move the file** — there
 is no tag-based alternative.
 
 ## Wiring (how it gets loaded)

@@ -108,7 +108,7 @@ line.
 ⇒ The attack was identified, written down, handed to someone else — and
 nobody spent the four minutes to run it before handoff.
 
-★ **If you can name the attack in your handoff, run it BEFORE you hand off.**
+**If you can name the attack in your handoff, run it BEFORE you hand off.**
 Listing your own known weakness reads like rigor and is actually deferral.
 The rule is not "flag it for QA" — it is: **a weakness specific enough to
 write down is specific enough to test**, and the writing-down is the moment
@@ -134,7 +134,7 @@ assumption over a better line-structure assumption.**
   property-preserving change and watch it still pass. One direction alone is
   not evidence — a check that only ever passes is indistinguishable from a
   check that cannot fail.
-- ⚠ **When constructing the "make it violate" mutation, confirm the system
+- **When constructing the "make it violate" mutation, confirm the system
   still builds.** A first attempt that ungates a module + `pub fn` can make
   the crate fail to compile outright, so `compile_fail` blocks "pass" for
   the wrong reason. **A mutation that breaks the build proves nothing** — it
@@ -218,7 +218,7 @@ nor absence of coverage. Replaced with a **declared coverage map asserted
 for set equality**: every element is driven by a named probe or excluded
 **with a stated reason**, so an addition forces acknowledgment.
 
-★ **The stable root cause, stated precisely:** enumerating the ways the
+**The stable root cause, stated precisely:** enumerating the ways the
 **PROPERTY** can fail while never enumerating the ways the **PLUMBING** can
 fail — the plumbing gets one pass while the interesting part gets five.
 Four instances in one day. When you harden a mechanism, **audit what holds
@@ -232,7 +232,7 @@ tail at all 11 cross-owner sites produced **444 passed, 0 failed**. A green
 was dead."* It is equally consistent with **"the corpus never reaches those
 sites."**
 
-⭐ **One control cannot separate them, because the two failure modes are
+**One control cannot separate them, because the two failure modes are
 independent.** Both are needed, and each is one run:
 
 | control | mutation | what a GREEN vs RED tells you |
@@ -246,17 +246,17 @@ nothing* — only then does the green mean "unread."
 
 **How to apply:**
 
-- ⭐ Whenever a probe **deletes** something and stays green, ask the two
+- Whenever a probe **deletes** something and stays green, ask the two
   questions separately: *"did the code run?"* and *"was there anything to
   delete?"* Neither is implied by the other, and the green is worthless
   without both.
 - **`panic!` is the cheapest reachability oracle** — one run yields
   per-site coverage from the distinct panic messages, no instrumentation
   harness needed.
-- ⚠ **Report the uncovered sites as uncovered.** The temptation is to fold
+- **Report the uncovered sites as uncovered.** The temptation is to fold
   "never reached" into "removal was safe"; they are opposite epistemic
   states.
-- ⚠ **Check the redden is narrow.** 16 of 444 failing is a targeted result;
+- **Check the redden is narrow.** 16 of 444 failing is a targeted result;
   a near-total redden usually means the build broke and you measured
   rubble.
 
@@ -271,12 +271,12 @@ lowered under any circumstances. The three negatives each hit their own
 detector and returned *before* the plan-validity check ran, so every one of
 them passed on an object that was structurally dead.
 
-★ **This is not "the negative passed for an unrelated reason" — it is worse
+**This is not "the negative passed for an unrelated reason" — it is worse
 and harder to see: the negatives passed for exactly the reason intended, on
 a fixture that could not have produced the positive outcome.** Each control
 was individually correct. The *set* was still vacuous.
 
-⭐ **Early-return ordering makes negatives systematically cheaper than the
+**Early-return ordering makes negatives systematically cheaper than the
 positive.** A rejection control only has to reach *its* guard; the positive
 control has to traverse **every** guard, so it is the only one that
 exercises the fixture's well-formedness. ⇒ **In any set of N rejection
@@ -285,13 +285,13 @@ validates the other N.**
 
 **How to apply:**
 
-- ⛔ **Never ship a rejection-only control set.** If every row of an AC
+- **Never ship a rejection-only control set.** If every row of an AC
   asserts a refusal, at least one row must assert the *acceptance* on the
   same fixture.
-- ⭐ Ask: *"how far into the pipeline does each control get?"* If your
+- Ask: *"how far into the pipeline does each control get?"* If your
   negatives all return at guard 2 of 9, they have said nothing about guards
   3–9 — and nothing about whether the fixture would have survived them.
-- ⚠ Applies to `expect_err` suites, "should reject" corpora, and refusal
+- Applies to `expect_err` suites, "should reject" corpora, and refusal
   matrices generally, not just compile-fail.
 
 Related fleet lessons on the same family:

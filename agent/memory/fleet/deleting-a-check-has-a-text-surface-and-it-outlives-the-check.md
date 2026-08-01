@@ -12,7 +12,7 @@ source: 2026-07-26, two instances in one day. (1) The operator removed the libra
 
 # Deleting a check has a text surface, and the text outlives the check
 
-⛔ **A check is not only code. It is also every sentence that tells a reader what
+**A check is not only code. It is also every sentence that tells a reader what
 assurance they have. Delete the code and leave the sentences, and you have not
 removed a gate — you have converted it into a false claim that no test can fail.**
 
@@ -28,11 +28,11 @@ by operator ruling. Its **success sentence** at `:670` was not:
 > currency checker is green on `origin/main`."*
 
 ⇒ It printed that on **PR #1031 — the merge that broke the ledger — and again on
-#1034.** ⭐ The one reader most likely to trust it is the next Steward deciding
+#1034.** The one reader most likely to trust it is the next Steward deciding
 whether `main` is healthy, and the sentence sits exactly where that decision is
 made.
 
-⛔ **A message is part of a gate's surface.** Remove the claim in the same edit as
+**A message is part of a gate's surface.** Remove the claim in the same edit as
 the check, or the removal ships a lie with a timestamp on it.
 
 ## Instance 2 — the residual was true and underreported
@@ -47,15 +47,15 @@ library corpus, the live agent manifest/schema/module contracts, `measured_token
 manifest↔pack parity, the pack graph, evaluation task/pack/fixture/result closure,
 manifest validation-token agreement, and the real manifest's line layout.
 
-⭐ **The tell: I wrote the residual describing THE BUG I WAS FIXING, not the
+**The tell: I wrote the residual describing THE BUG I WAS FIXING, not the
 CAPABILITY I WAS DELETING.** Citation drift was the symptom that made `main` red,
 so it was what I had in mind. The deletion's actual scope was everything those
 entrypoints reached.
 
-⇒ ⛔ **When you remove a checker, enumerate what it CHECKED — not what you were
+⇒ **When you remove a checker, enumerate what it CHECKED — not what you were
 fixing.** The two coincide only by accident.
 
-### ⭐ And split RETIRED from DEFERRED, because they do not cost the same
+### And split RETIRED from DEFERRED, because they do not cost the same
 
 Re-measuring turned one alarming residual into two honest ones:
 
@@ -64,7 +64,7 @@ Re-measuring turned one alarming residual into two honest ones:
 | source currency, generated currency, cited-source attestations | **DEFERRED** — the generator scripts are kept and unchanged; they run at release points. What changed is *when*, not *whether*. |
 | live agent manifest/schema/module/measurement/pack checks, evaluation-corpus closure, manifest token + layout, 9 of 11 validation routes | **RETIRED** — zero remaining automated consumer, measured |
 
-⛔ **Reporting the union as "retired" overstates the loss; reporting it as
+**Reporting the union as "retired" overstates the loss; reporting it as
 "deferred" understates it.** A reviewer can only weigh the removal if the two are
 separated, and separating them takes one grep per item.
 
@@ -72,18 +72,18 @@ separated, and separating them takes one grep per item.
 
 - **Grep for the claim before you delete the code.** The distinctive phrasing of
   what the check *promised* — in output strings, comments, READMEs, frame ACs,
-  runbooks. ⛔ A removal whose diff touches only the check is almost always
+  runbooks. A removal whose diff touches only the check is almost always
   incomplete.
 - **Write the residual by enumerating the deleted thing's reach**, then for each
   item ask: *is there another consumer?* Zero consumers ⇒ retired. A kept script or
   release process ⇒ deferred; **name it**, so the reader knows where the assurance
   went.
-- ⚠ **Confirm each "no other consumer" hit is the intended SENSE of the word, not
+- **Confirm each "no other consumer" hit is the intended SENSE of the word, not
   just the token.** Measured here: grepping `evaluation` matched the publisher's
   *base-advance evaluation window* and nearly produced two false consumers of
   `library/agents/evaluations/`. **A consumer census keyed on a homonym reports
   coverage that does not exist.**
-- ⭐ **State whether machinery survives the entrypoints.** `LIB-GATE-DECOUPLE`
+- **State whether machinery survives the entrypoints.** `LIB-GATE-DECOUPLE`
   deleted five `#[test]` functions and left `VALIDATION_GATES` and its 11 check
   functions in place as dead code. That is defensible — but it is a **re-arm door**,
   and a reader who is told "the coupling is removed" will not guess the mechanism is
@@ -91,7 +91,7 @@ separated, and separating them takes one grep per item.
 
 ## Positioning
 
-- ⛔ **The removal moved the gate rather than deleting it, and that has its own
+- **The removal moved the gate rather than deleting it, and that has its own
   cost.** The same currency check also ran as a CI test, so removing it from the
   publisher moved the firing from *before* the merge to *after* — where it lands on
   the next, innocent PR and reads as that PR's own failure. **Ask where else the

@@ -15,7 +15,7 @@ whole class of harness bug it is the only detector that exists**, and its
 diagnostic value is highest in the failure nobody expects: *the mutation
 didn't change the result.*
 
-> ⛔ **The instinct is to doubt the mutation. Doubt the INPUT first.**
+> **The instinct is to doubt the mutation. Doubt the INPUT first.**
 
 ## What it caught
 
@@ -32,7 +32,7 @@ control perfectly happily.
 Nothing else in the kit could have found it: design review passed it, the
 positive control passed it, the error-code assertion passed it.
 
-## ★ Freshness is a THIRD axis
+## Freshness is a THIRD axis
 
 Two axes are widely understood — *does the check fail when the property is
 violated?* and *does the harness work at all (positive control)?* This is a
@@ -60,19 +60,19 @@ so in a comment, because the next reader will think it is tidiness.
    never transferred. (QA's own carry from the same WP.)
 4. **When an implementer names "the axis I'd attack hardest" in a handoff, take
    it literally** — run that mutation first. It is a gift, not colour.
-5. ⚠ **Make the selection observable.** If a harness picks one of several
+5. **Make the selection observable.** If a harness picks one of several
    candidates, have it report which, and say so loudly when it is not the
    freshest. A silent fallback re-opens this whole class: a loop that prefers
    *newest* but accepts *the first that satisfies a control* has two invariants,
    and where they conflict the safety-critical one loses **silently**.
 
-## ⚠ Naming a trap does not inoculate you against it
+## Naming a trap does not inoculate you against it
 
 The implementer had **written the "a negative check needs a positive control"
 lesson barely an hour earlier**, then over-trusted that control exactly as the
 lesson warns — in a *new* harness, one layer down.
 
-★ **This is the same session's recurring shape:** the fix for a vacuous-pass
+**This is the same session's recurring shape:** the fix for a vacuous-pass
 defect reproduced that defect *inside itself*. See
 [[a-fix-can-reproduce-its-own-bug-one-layer-up]] and
 [[a-negative-check-passes-for-any-reason-so-it-needs-a-positive-control]] —

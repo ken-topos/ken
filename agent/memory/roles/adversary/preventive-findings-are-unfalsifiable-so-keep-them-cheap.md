@@ -23,7 +23,7 @@ asymmetry resolves one of two ways:
 Both endings are bad and neither is anyone's fault. There is no amount of care
 that makes an unfalsifiable claim checkable.
 
-## ★ The rule — cost is the observable proxy
+## The rule — cost is the observable proxy
 
 > **A preventive finding must be CHEAP to act on. If one arrives with a large
 > price tag, weight it LOWER, not higher.**

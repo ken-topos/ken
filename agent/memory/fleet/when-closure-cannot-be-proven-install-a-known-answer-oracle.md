@@ -31,7 +31,7 @@ a false IDLE; each was "fixed" by **adding an arm** — the minutes form, then
 arms is maintenance you can never declare finished. Worse, the whole exercise was
 **unfalsifiable**: nothing could ever tell you the enumeration was still short.
 
-> ★ **The tell that you are in this case: your instrument has failed repeatedly
+> **The tell that you are in this case: your instrument has failed repeatedly
 > and EVERY failure points the SAME WAY.** That asymmetry is not luck — it is the
 > **default branch** of the rule showing through. A disjunction of positive
 > signals silently defaults to "negative" for everything unlisted.
@@ -58,7 +58,7 @@ immediately.**
    source file. Prefer one the instrument *cannot avoid* producing.
 2. **Assert on it EVERY invocation** — not in a test suite run once, because the
    failure mode is drift in something you do not version.
-3. **★ Make it REFUSE to report.** `scripts/pane-busy.sh` exits 2 and prints **no
+3. ** Make it REFUSE to report.** `scripts/pane-busy.sh` exits 2 and prints **no
    verdicts** when self-falsified. *A detector that warns but still answers will
    be believed.*
 4. **Falsify it in both directions before trusting it** — reintroduce a historical
@@ -71,7 +71,7 @@ immediately.**
    finished). ⇒ **The next reader can falsify you, which is more than a
    conclusion ever offers.**
 
-## ⚠ The trap is recursive — it caught both seats
+## The trap is recursive — it caught both seats
 
 The adversary filed this finding **against enumeration-dependence while shipping
 an enumeration**: its own proposed pattern anchored on a *glyph class*
@@ -85,7 +85,7 @@ glyph list. And note the general form: **a lesson about enumeration-dependence
 does not immunise its own author** — cf.
 [[a-fix-can-reproduce-its-own-bug-one-layer-up]].
 
-## ★ The one-line generalization
+## The one-line generalization
 
 **Prefer an assertion on the RESULT over a search for the MECHANISM.** Fired
 three times in one session at three different layers:
@@ -96,7 +96,7 @@ three times in one session at three different layers:
 | detector | "have I enumerated every busy state?" | self-test against a pane whose state is certain |
 | verification | `grep 'tail -4'` — **hit the comment documenting its absence** | the self-test passing |
 
-## ★★★ THE ACTUAL THROUGH-LINE — stop completing the list; make it FAIL LOUDLY
+## THE ACTUAL THROUGH-LINE — stop completing the list; make it FAIL LOUDLY
 
 **Three times in one session the fix was the same move**, and it is more general
 than the table above:
@@ -112,13 +112,13 @@ than the table above:
 
 **The list was never going to be finished in any of the three cases.**
 
-⚠ **The third row is the one that keeps being re-derived as a checklist, so state
+**The third row is the one that keeps being re-derived as a checklist, so state
 it structurally.** The author's own seat is the least informative place to test
 anything whose behavior depends on vantage — but *"remember to vary caller
 identity, environment, cwd, privileges…"* is **just another unbounded
 enumeration**, the same defect one level up.
 
-★ **The adversary did not catch the `pane-busy.sh` identity defect by thinking to
+**The adversary did not catch the `pane-busy.sh` identity defect by thinking to
 vary the caller. It caught it because it has exactly one seat and it was not the
 author's** — running it from anywhere else was not an option available to it.
 **The catch was POSITIONAL, not insightful.** ⇒ A second seat varies **every**

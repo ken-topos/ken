@@ -20,7 +20,7 @@ the corpus-wide gate   → RED    (two catalog/guide/ strands non-canonical)
 gate enumerates that directory. **CC8's implementer had not touched either
 file.**
 
-## ★ The trap
+## The trap
 
 **The corpus gate is a MANDATED gate for the WP.** So the implementer is staring
 at a red required check, with a green candidate, and the obvious move — **"make
@@ -53,7 +53,7 @@ what creates the pressure to fix what isn't yours.
 
 ---
 
-## ⚠⚠ THE OTHER DIRECTION — and THIS RULE ITSELF is what sets the trap
+## THE OTHER DIRECTION — and THIS RULE ITSELF is what sets the trap
 
 **Added from PX0 (2026-07-14), where the rule above nearly caused the bug.**
 
@@ -78,7 +78,7 @@ saw they were already there, and concluded **"inherited — not mine."**
 **Neither is discharged by looking at the base. Both are discharged by the same
 instrument:**
 
-## ★ The two-ref ownership oracle *(runtime-qa's carry, PX0)*
+## The two-ref ownership oracle *(runtime-qa's carry, PX0)*
 
 **Run the failing check on the CANDIDATE and on its EXACT PARENT. Normalize
 incidental drift — line offsets, paths. Then attribute EVERY hunk, and block on

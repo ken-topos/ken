@@ -17,7 +17,7 @@ it survived *because* it was consistent. Each document cited another document.
 **None of them cited the executable authority.** That is **citation closure**:
 a claim that is locally verifiable everywhere and grounded nowhere.
 
-## ★ The two things that looked like evidence and were the opposite
+## The two things that looked like evidence and were the opposite
 
 1. **Local consistency was anti-evidence.** Fifteen documents agreeing did not
    make the claim fifteen times more likely — they were **one claim, copied**.
@@ -55,7 +55,7 @@ executing both orientations.** Sibling of
 landed without a real `conv::whnf` witness, and the posture would have died at
 its origin instead of spreading to nineteen files.**
 
-## ★ And when the finding outgrows your assignment: STOP AT THE SCOPE LINE
+## And when the finding outgrows your assignment: STOP AT THE SCOPE LINE
 
 The same sweep found the defect **outside the assigned file set**. The right
 move is **not** to keep fixing (silent expansion changes the land-together set,

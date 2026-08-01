@@ -28,7 +28,7 @@ pilot had never produced.** The Steward's frame had then pinned that
 shape as a **fixed input**, walking the build team into unexplored
 ground with a green light behind it.
 
-## ★★ AND THE FIRST COVERAGE MATRIX I DREW WAS ON THE WRONG AXIS
+## AND THE FIRST COVERAGE MATRIX I DREW WAS ON THE WRONG AXIS
 
 **This is the sharpest part of the lesson, and I got it wrong before I
 got it right.** Looking at which sites failed, the obvious axis was
@@ -36,8 +36,8 @@ got it right.** Looking at which sites failed, the obvious axis was
 
 | | Type-0 (`fn`) | **Ω (proof)** |
 |---|---|---|
-| **grouped `let`** | ✅ pilot (`slice`, 4 bindings) | ✅ pilot (injectivity, 4+) |
-| **single `let`** | (pre-existing paths) | ❌ never exercised |
+| **grouped `let`** | pilot (`slice`, 4 bindings) | pilot (injectivity, 4+) |
+| **single `let`** | (pre-existing paths) | never exercised |
 
 **That matrix is WRONG, and it fits the evidence perfectly.** Every
 failing site was a single binding; every passing site was a group. The

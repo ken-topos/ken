@@ -174,7 +174,7 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   **one source line** — an 80-col reflow that joins-then-rewraps a span straddling
   the join injects a space mid-token, silently corrupting a path/identifier.)
 - **Content-reconcile is necessary but NOT sufficient — it inherits the spec's
-  metatheory bugs (promoted K1.5, ★★★ soundness).** Matching the landed §-body
+  metatheory bugs (promoted K1.5, soundness).** Matching the landed §-body
   makes your case *agree with the spec*; it does **not** make it *correct*. A
   structural assertion lifted from the spec — a reduction outcome, a
   `stuck`/`neutral`/`fires` claim, a termination basis — must be **independently
@@ -219,7 +219,7 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   3rd–5th instance of the class that gave K1.5 its false case.
 - **At an untrusted-producer WP (the V-series V2/V3/V4, X1, B-series), split "the
   kernel backstops it" into *supplied* vs *omitted* (promoted V2, topology-
-  touching; Architect made it a review gate).** "★★ — everything it emits is
+  touching; Architect made it a review gate).** " — everything it emits is
   re-checked, so never unsoundness" is true only for what the layer **supplies**
   (a bogus cert is kernel-rejected). It is **false for what the layer silently
   *omits*:** a *never-generated* obligation supplies no cert, so `trusted_base()`
@@ -240,7 +240,7 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   silence you find is raised to the author, not papered over.
 - **Ground before locking (§7):** verify the expected output against the
   `/spec`, permissive references, and first principles; don't assume it.
-- **⛔ OPERAND BINDING — the FIRST question of every independent review, asked
+- ** OPERAND BINDING — the FIRST question of every independent review, asked
   BEFORE any measurement.** This is not a new gate or a new reviewer; it is the
   opening step of the review you already run. Before you count a column, a byte,
   or a line — and before you cite an adjacent green test — answer, **per fixture,
@@ -254,7 +254,7 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   that may counts, byte/display discrimination, or neighbouring test evidence
   support your verdict.
 
-  ⭐ **Why this is first and not later: independent arithmetic is not independent
+  **Why this is first and not later: independent arithmetic is not independent
   grounding.** On `SPEC-31-WIDTH-ERRATUM` (2026-07-27) the author measured 16
   strings and this seat **independently re-measured all 16, correctly, and
   approved** — both binding to the candidate's *extracted group spelling* while
@@ -265,7 +265,7 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   wrong object agree, and agreement reads exactly like corroboration.** §14's
   second reviewer only pays for itself when it re-derives the **operand**, not
   the arithmetic.
-  ⚠ **The cheapest tell, and it is usually in the candidate:** when a
+  **The cheapest tell, and it is usually in the candidate:** when a
   measurement states what it **excludes** (*"the wrapper is excluded from the
   measurement"*), check whether the contract's object **includes** it.
 - **Reachability pass — MANDATORY, mechanical, ends every output-oracle
@@ -289,7 +289,7 @@ implementations across the whole federation. Read `../../COORDINATION.md`,
   a per-fixture mechanical gate. Fixing one mislabel is whack-a-mole; **sweep all
   fixtures, don't patch one.**)
 
-  ⭐ **Second axis, measured 2026-07-27 — a GREEN neighbouring test is evidence
+  **Second axis, measured 2026-07-27 — a GREEN neighbouring test is evidence
   only for the population it actually SELECTS.** On `SPEC-31-WIDTH-ERRATUM` the
   `FMT9` reachability test was green and never read the changed `FMT7` fixtures:
   it starts after the `FMT9` heading and consumes parseable `ken` fences, while
@@ -308,7 +308,7 @@ its correctness is the highest-leverage thing in the project.
 ## The copyleft-leakage recheck (your originality gate)
 
 You also run the **copyleft-leakage recheck** (`../../../CLEAN-ROOM.md`): before
-a spec area that consulted a **copyleft** reference (⚠ GPL/AGPL/CeCILL — e.g.
+a spec area that consulted a **copyleft** reference ( GPL/AGPL/CeCILL — e.g.
 `smtcoq`, `spot`, `jif`) is handed to the build teams, confirm it is **original
 expression** — it describes the *what* (behavior, design) in Ken's own words and
 reproduces none of the source's *how* (structure, identifiers, comments,

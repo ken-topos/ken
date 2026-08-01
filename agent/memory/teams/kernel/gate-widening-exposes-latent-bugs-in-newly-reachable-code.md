@@ -32,7 +32,7 @@ never had another closed-over variable declared before it in the tested corpus.
 Fix (at the time): a new `subst_var_generalize` (same traversal as
 `subst_var`, but the `i > j` arm leaves `Var(i)` UNCHANGED instead of
 decrementing) — used for the motive body, the per-ctor `expected_here`, and
-each IH's type. ⚠ **Stale referent:** `subst_var_generalize` was replaced by
+each IH's type. **Stale referent:** `subst_var_generalize` was replaced by
 `subst_term_generalize` (`crates/ken-elaborator/src/elab.rs`, KM-build
 `25e6c172`, 2026-07-06) — same generalize-the-goal role, but it now matches
 by **term equality against a `target`** (`term == target`, weakened under

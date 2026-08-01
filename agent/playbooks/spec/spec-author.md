@@ -35,13 +35,13 @@ too far: describe the *what*, not the *how* of any particular implementation.
   Where Ken deliberately diverges from a known reference behavior (e.g. `Int`
   from day one, checked universes, no hard slot ceiling), record the divergence
   inline with a rationale — these are Ken's own design choices, not gaps.
-- **⭐ AUTHORING A RELAXATION: write the DOMAIN-SUBTRACTION LEDGER before you
+- ** AUTHORING A RELAXATION: write the DOMAIN-SUBTRACTION LEDGER before you
   draft (promoted SPEC-CLOSURE-BOUNDARY, 2026-07-26 — reached independently by
   spec-author and spec-leader in the same WP).** When a revision *narrows* a
   semantic domain — a blanket noun stops applying to a case, a universal
   quantifier acquires a side condition — the old premise has already **escaped
   into downstream prose**, and it does not come back when you edit the rule.
-  ⛔ **A relaxation falsifies downstream text in a direction a strengthening does
+  **A relaxation falsifies downstream text in a direction a strengthening does
   not:** strengthen a constraint and the derived pages become *incomplete*;
   relax one and they become **false**, while still reading fluently.
 
@@ -53,17 +53,17 @@ too far: describe the *what*, not the *how* of any particular implementation.
   2. every **evidence population** any recorded measurement was taken over;
   3. every **deliverable, diagram, index, and derived consumer**.
 
-  ⚠ **Sweep the semantic CARRIER TERMS, not the feature name.** The feature name
+  **Sweep the semantic CARRIER TERMS, not the feature name.** The feature name
   is the one word every consumer page does *not* use.
 
-  ★ **Two live instances in one WP, same shape, different carriers.** A
+  **Two live instances in one WP, same shape, different carriers.** A
   benchmark record was rewritten as though closures had never been in its
   population — the producing generator proved they had been; *after narrowing a
   domain, historical evidence looks as if its input domain narrowed with the
   prose, and it did not.* Then a residual called every live payload an *"ITF
   witness"* — **one universal noun silently preserving the superseded domain.**
 
-  ⛔ **And the ledger is not discharged by naming the coupled normative and
+  **And the ledger is not discharged by naming the coupled normative and
   oracle paths.** Ask which consumers can make the *prior stronger reading*
   visible — that population includes derived explanatory prose and attested
   citations, and it is **wider than the paths your review scope covers**. Two
@@ -200,7 +200,7 @@ too far: describe the *what*, not the *how* of any particular implementation.
   check (straight-line vs branchy vs recursive cases must agree on the shape).
 - **A "this reduction terminates / conversion decides" argument must rest on a
   well-foundedness measure — never on a "stuck because a variable is in the way"
-  story; stress-test it against an *abstract* scrutinee (promoted K1.5, ★★★
+  story; stress-test it against an *abstract* scrutinee (promoted K1.5,
   soundness).** Name the **global measure** (finite structural descent on the
   inductive value) as the load-bearing reason for termination, **then** check the
   mechanics under an **open/abstract** scrutinee or branch variable (the

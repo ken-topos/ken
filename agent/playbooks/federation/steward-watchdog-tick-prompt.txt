@@ -1,37 +1,37 @@
 [steward watchdog tick] Private sweep — post to the space ONLY if there is a real stall to nudge.
 
-⏰ STEP 0 — 60-MIN WIP AUDIT CLOCK (playbook §5a-iii). Read the ARMED deadline in your resume checkpoint. If an implementation seat has worked 60+ min since its last GUIDANCE, request an Architect WIP audit NOW.
+STEP 0 — 60-MIN WIP AUDIT CLOCK (playbook §5a-iii). Read the ARMED deadline in your resume checkpoint. If an implementation seat has worked 60+ min since its last GUIDANCE, request an Architect WIP audit NOW.
 - RESETS on: kickoff/re-kickoff · genuine hard stop · Architect audit/ruling · candidate handoff · completion.
-- ⛔ A routine progress post does NOT reset it. A working seat posts every 15–30 min; counting those makes the trigger fire NEVER while looking armed.
-- ⛔ OVERRIDES "do not nudge a building ring" below — an audit is not a nudge, and the seat it protects is by construction building.
-- Route: post to @architect naming the seat, elapsed, anchor evt_, last status posts. Redirect runs Architect → leader → implementer. ⛔ NEVER Steward → implementer.
-- ⭐ ASK FOR THREE OUTCOMES or (c) is never considered: (a) on track · (b) course correction — wrong implementation, right contract · (c) THE WP IS MIS-SIZED, restructure into smaller WPs. (c) is the Architect's diagnosis and YOUR recut: retain what is proved, replace what the finding names, freeze the old node's clock.
-- ⚠ 60 min INDICATES the WP is too large; not a verdict. Repeated audits on ONE node is near-conclusive — a sizing defect treated as guidance.
+- A routine progress post does NOT reset it. A working seat posts every 15–30 min; counting those makes the trigger fire NEVER while looking armed.
+- OVERRIDES "do not nudge a building ring" below — an audit is not a nudge, and the seat it protects is by construction building.
+- Route: post to @architect naming the seat, elapsed, anchor evt_, last status posts. Redirect runs Architect → leader → implementer. NEVER Steward → implementer.
+- ASK FOR THREE OUTCOMES or (c) is never considered: (a) on track · (b) course correction — wrong implementation, right contract · (c) THE WP IS MIS-SIZED, restructure into smaller WPs. (c) is the Architect's diagnosis and YOUR recut: retain what is proved, replace what the finding names, freeze the old node's clock.
+- 60 min INDICATES the WP is too large; not a verdict. Repeated audits on ONE node is near-conclusive — a sizing defect treated as guidance.
 - After firing, RE-ARM the deadline in the checkpoint.
 
-⛔⛔ STEP 1 — COMPOSER STRAND SWEEP, before any convo read. A post can land in a composer UNSUBMITTED; no convo read sees that.
+STEP 1 — COMPOSER STRAND SWEEP, before any convo read. A post can land in a composer UNSUBMITTED; no convo read sees that.
 
 for p in runtime-leader runtime-implementer runtime-qa architect foundation-leader foundation-implementer; do printf "%-24s " "$p"; tmux capture-pane -t moot-$p -p -S -200 2>/dev/null | awk '/^[[:space:]]*• (Working|Waiting)/{st=$0} /^─ Worked for/{st=$0} /Retry with a faster model/{m=1} /^›/{c=$0} END{ s = st ? substr(st,1,42) : (m ? "[SAFETY-MODAL]" : "(no-footer)"); printf "%-44s | %s\n", s, (c ~ /Pasted Content|<channel>/ ? "STRAND" : "ok") }'; done
 
-⭐ -S -200 (short capture = FALSE IDLE). ⭐ Anchor on the `›` composer line ONLY. ⭐ Busy by VERB FORM: "• Working (Nm Ns…)" = LIVE · "─ Worked for Nm Ns ─" = FINISHED.
-⭐ A counter DROP is a real turn boundary; a lockstep rise proves ONE continuous turn, NOT the absence of a compaction (only the tool log shows that).
+-S -200 (short capture = FALSE IDLE). Anchor on the `›` composer line ONLY. Busy by VERB FORM: "• Working (Nm Ns…)" = LIVE · "─ Worked for Nm Ns ─" = FINISHED.
+A counter DROP is a real turn boundary; a lockstep rise proves ONE continuous turn, NOT the absence of a compaction (only the tool log shows that).
 - STRAND + idle = worst case, will NEVER fire: tmux send-keys -t moot-<seat> Enter, then confirm "• Working". STRAND + busy = clear it anyway.
-- Composer placeholders ("Write tests for @filename") = NOT strands. ⛔ Do NOT press Enter.
-- "Additional safety checks" modal = ⛔ NEVER press Enter (option 1 downgrades the model); it needs no answer.
-- ⚠ (no-footer) is a RENDERING state — not idle, not a Codex marker. Resolve by reading the pane.
+- Composer placeholders ("Write tests for @filename") = NOT strands. Do NOT press Enter.
+- "Additional safety checks" modal = NEVER press Enter (option 1 downgrades the model); it needs no answer.
+- (no-footer) is a RENDERING state — not idle, not a Codex marker. Resolve by reading the pane.
 
-STEP 2 — TRANSPORT: ⛔ NEVER get_transcript (kills the stdio transport). For bodies use the HTTP read path, YOUR OWN credential: GET {api_url}/api/spaces/spc_4q7g0se87rgje/events?limit=100 — oldest-first, newest LAST; time field is `timestamp` (`created_at` is null).
+STEP 2 — TRANSPORT: NEVER get_transcript (kills the stdio transport). For bodies use the HTTP read path, YOUR OWN credential: GET {api_url}/api/spaces/spc_4q7g0se87rgje/events?limit=100 — oldest-first, newest LAST; time field is `timestamp` (`created_at` is null).
 
 STEP 3 — patterns:
 - MERGE: CI pending too long · CI green + Decision unresolved · approved + CI red · approved+green but UNMERGED.
 - RING: handed-off-but-silent · merge-Decision-open-no-reviewer · blocked-without-a-blocker-mention · idle-with-ready-work.
 - FEDERATION: whole team idle · stalled LEADER · dropped cross-team query · no movement toward the gate.
 - §1a: holding without naming (a) the evt_/dec_ it waits for AND (b) the seat that owes it = STALLED.
-- ⭐ Verify delivery POSITIVELY: did the mentioned seat subsequently post?
-- ⚠ A seat's "unperturbed evidence" claim is not a finding unless a probe scan backs it.
+- Verify delivery POSITIVELY: did the mentioned seat subsequently post?
+- A seat's "unperturbed evidence" claim is not a finding unless a probe scan backs it.
 
-⛔ Do NOT nudge a building ring (except the STEP 0 audit). Do NOT compact/restart a seat mid-turn.
-⛔ §10⁻: a ring holding finished unmerged work IS the queue — no process/corpus merge ahead of it.
-⛔ Do NOT reclaim /tmp while any seat holds the shared build turn (task #160).
+Do NOT nudge a building ring (except the STEP 0 audit). Do NOT compact/restart a seat mid-turn.
+§10⁻: a ring holding finished unmerged work IS the queue — no process/corpus merge ahead of it.
+Do NOT reclaim /tmp while any seat holds the shared build turn (task #160).
 
 Then: is origin/main green? is the frontier moving? If all clear, do nothing and post nothing. Clearing a strand is an ACTION — do it silently, report it in your reply.

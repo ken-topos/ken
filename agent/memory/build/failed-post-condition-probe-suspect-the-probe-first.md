@@ -44,7 +44,7 @@ here the negative check *failed* for the wrong reason, which is the same
 disease. The positive control is grepping `origin/main` and requiring ABSENT —
 if the phrase is absent on both sides, the probe is broken, not the content.
 
-★ **The build-artifact form of the same disease — three instances in one
+**The build-artifact form of the same disease — three instances in one
 session (RT-FNSPLIT-B2A-C, 2026-07-25), each producing a confident WRONG
 answer rather than an obviously broken one:**
 
@@ -70,7 +70,7 @@ Fleet companion:
 (freshness is a third axis, beside "the harness works" and "the property
 holds").
 
-⚠ Two probe traps in the same family, worth knowing by shape: `git diff
+Two probe traps in the same family, worth knowing by shape: `git diff
 --stat` **always exits 0**, so it cannot be used as an emptiness test (use
 `--quiet`); and a test can be green while consuming a tiny fraction of a
 budget nobody stated, so "it passed" is not "it exercised the path."

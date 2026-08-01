@@ -25,10 +25,10 @@ shard-gated, that the aggregator would gate it. All correct.
 is rejected **at push, before a PR exists**. The whole candidate was
 undeliverable, and a full review cycle was spent discovering it by rejection.
 
-> ★ **A green local signal cannot see a credential boundary.** The constraint
+> **A green local signal cannot see a credential boundary.** The constraint
 > lived somewhere no build config, no test, and no lint reaches.
 
-## ★ It is a DIFFERENT AXIS from the review-lane question
+## It is a DIFFERENT AXIS from the review-lane question
 
 This is the part that fooled a careful leader, who ran a scope check and still
 missed it — because the check they had answers a different question:
@@ -36,7 +36,7 @@ missed it — because the check they had answers a different question:
 | the question | what it decides |
 |---|---|
 | *which reviewer lane does this diff need?* | Spec vote? Architect? doc-only §14a? |
-| ★ *can the authorized publisher actually PUSH these paths?* | whether the branch can exist at all |
+| *can the authorized publisher actually PUSH these paths?* | whether the branch can exist at all |
 
 The second is **not a refinement of the first**. `.github/workflows/**` is
 "infra, not spec" — which correctly answers the lane question and says nothing
@@ -59,7 +59,7 @@ the other**, and its greenness reads as reassurance.
    a blocker** — pick a different mechanism, or escalate the credential. Do not
    build first and discover second.
 
-## ⚠ The generalization worth keeping
+## The generalization worth keeping
 
 **Correct** and **deliverable** are separate properties and both are the
 author's to establish. The same shape recurs wherever a constraint lives outside
@@ -74,7 +74,7 @@ structurally incapable of seeing.** That question has a short, real answer; the
 signal's greenness does not contain it. Sibling of
 [[a-tools-silence-is-scoped-to-the-question-it-asks]].
 
-★ **It generalizes past code.** The Steward adopted this as a framing-time check
+**It generalizes past code.** The Steward adopted this as a framing-time check
 the same afternoon and it immediately caught a WP frame that pointed the next
 ring at the very mechanism just rejected — the filing had been written while
 that candidate was live and never re-derived against what merged. **The question

@@ -33,7 +33,7 @@ downstream is already correct.
 | **T2** (build & coordination) | **Sonnet-class** | Build-team Leaders, Implementers, QA; Spec-team Leader; Librarian | High-volume code generation, coordination, mechanical gates, verification runs, doc observation. |
 | **T3** | **Haiku-class** | (none currently) | Lightweight tier; held in reserve. |
 
-> ### ★ The Roles column is a DEFAULT, not the landed seating (operator, 2026-07-21)
+> ### The Roles column is a DEFAULT, not the landed seating (operator, 2026-07-21)
 >
 > **Seating is chosen per team, on task difficulty — not derived from the role.**
 > The table above is the starting assumption; individual teams deviate from it
@@ -171,7 +171,7 @@ model in a build/coordination seat reads none):
   behavioral description in Ken's own words (the spec/conformance artifacts) may
   pass to the build tier; never copyleft source text itself. Ken's own MIT
   source is fine to send anywhere.
-- **Copyleft references (⚠ GPL/AGPL/CeCILL — `smtcoq`, `spot`, `jif`) are
+- **Copyleft references ( GPL/AGPL/CeCILL — `smtcoq`, `spot`, `jif`) are
   enclave-only too.** Only the enclave (Architect / Spec) reads them, for
   *approach and behavior* only, under the leakage recheck (`CLEAN-ROOM.md`); they
   are never sent to a non-enclave seat and never vendored. Permissive refs (Lean,

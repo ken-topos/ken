@@ -33,7 +33,7 @@ class ArgBytes {
 the length **could not be computed** in Ken. That is not a design; **that is a
 scar.**
 
-## ★ The lesson
+## The lesson
 
 **Contorted code in a healthy codebase is EVIDENCE, not noise.** When you find a
 function that computes a constant the long way round, caches a value that ought

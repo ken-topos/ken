@@ -25,15 +25,15 @@ scripts/moot-actor-id.sh <role>        # e.g. runtime-leader -> agt_...
 scripts/moot-actor-id.sh --list        # the known role names
 ```
 
-⛔ **Do NOT hand-roll a one-liner against `.moot/actors.json`, and do NOT dump it
+**Do NOT hand-roll a one-liner against `.moot/actors.json`, and do NOT dump it
 to see its shape.** That file holds every seat's `api_key` beside its `actor_id`,
 two seats have leaked a key from it, and **both leaks happened during schema
 discovery rather than during the lookup**. The script projects `actor_id` by name
 and enforces an output whitelist, so nothing but a role and an `agt_` id can leave
 it (COORDINATION §2).
 
-⚠ **This entry used to list the leader ids inline. That list has been REMOVED, and
-its removal is part of the lesson.** ⭐ **Look the id up AT POST TIME, never from
+**This entry used to list the leader ids inline. That list has been REMOVED, and
+its removal is part of the lesson.** **Look the id up AT POST TIME, never from
 memory** — role suffixes repeat across teams, so a remembered id is a *plausible
 wrong answer*, and the API's `200` cannot detect it. An inline crib sheet in a
 memory entry is exactly the remembered id this entry exists to prevent: it is one

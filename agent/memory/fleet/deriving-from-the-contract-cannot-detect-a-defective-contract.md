@@ -36,7 +36,7 @@ const chars : List Char =
 **Because `spec/30-surface/31-lexical.md:216-227` SAYS SO.** The derivation was
 faithful. **The contract was wrong.**
 
-## ★ The gap in the stop condition
+## The gap in the stop condition
 
 The celebrated stop condition was:
 
@@ -64,7 +64,7 @@ FULL AUTHORITY, then freezes it in an exact-text oracle — which turns the bug
 into EVIDENCE FOR ITSELF and makes it harder to fix.** The next person to
 question the layout is arguing against a green, derived, spec-cited test.
 
-## ★★ The tell was in the WP's own title
+## The tell was in the WP's own title
 
 **LET-1 was called "readable let-chain layout."** Its acceptance criteria
 asserted:

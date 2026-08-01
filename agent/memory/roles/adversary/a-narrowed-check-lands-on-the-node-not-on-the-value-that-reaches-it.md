@@ -31,7 +31,7 @@ An over-broad check has a correct narrowing and an over-narrowing, and they
 are easy to confuse because both are *narrower*:
 
 1. **too broad** — any occurrence anywhere in the plan (what was written first)
-2. ⭐ **correct** — any occurrence whose value can *reach* the excluded position
+2. **correct** — any occurrence whose value can *reach* the excluded position
 3. **too narrow** — the occurrence sitting *at* the position (what was written
    second)
 
@@ -54,14 +54,14 @@ positions of this kind?** A frame has a capture slot *and* a result slot; a
 check that walks children reaches one of them. Enumerating the positions is
 cheap and it is where the wrapper-free hole was.
 
-⚠ **Bound the claim to the layer you measured.** I showed these are buildable
+**Bound the claim to the layer you measured.** I showed these are buildable
 plans that the exclusion says it rejects; I did **not** trace whether a
 front-end can emit them. Say so — an unbounded reachability claim is the part a
 ring can refute, and refuting it discredits the measured half too. Same
 discipline as
 [[an-error-in-the-safe-direction-is-a-claim-about-what-you-did-not-measure]].
 
-★ **Why this is a high-yield target and not a lucky catch:** the corrected
+**Why this is a high-yield target and not a lucky catch:** the corrected
 version is documented far more carefully than the original error was — the
 comment names the first bug, the test that caught it, and the reasoning for the
 narrowing. **That care is what makes it read as settled**, which is exactly the
