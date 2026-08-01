@@ -159,6 +159,25 @@ whose sweep nobody could audit.
 > ⇒ ⛔ **Do not cut a remaining slice one-page-per-WP by default.** Measure the
 > union first.
 >
+> ### ⭐⭐ CLAIM CLASSES CROSS SLICE BOUNDARIES THAT SOURCE SETS DO NOT
+>
+> **Measured twice, 2026-08-01.** Slice 3: an exercise and its solution were one
+> artifact split across two files. Slice 5: the **stale-curriculum-progress**
+> class was repaired in `quickstart.md` + `introduction.md` and survived in
+> `library/README.md` — ⭐ **a slice-6 page sharing not one drifted source with
+> slice 5.**
+>
+> ⇒ ⛔ **A shared-source table cannot predict which pages a repaired class
+> reaches**, because a class is about what a page *asserts*, not about where the
+> assertion came from. ⭐ **So `D3` sweeps must be BY CLASS across the corpus,
+> and the frame's page list bounds the EDIT, not the SEARCH.**
+>
+> ⚠ **This does not make the cuts wrong.** Slice 5 honoured its boundary and
+> routed — which is exactly what hard stop 3 exists to produce, and it is why the
+> survivor was found at all. ⭐ The routing edge is load-bearing: ⛔ a slice that
+> silently repaired the neighbour's page would have left the *next* slice's
+> reconciliation asserting a claim nobody re-derived.
+
 > ### ⭐⭐ AND THE CUT CAN BE WRONG IN THE OTHER DIRECTION — BY **AUDIENCE**
 >
 > ⚠ **Slices 3 and 5 were cut by audience, and that split a PAIR.** `exercises.md`
