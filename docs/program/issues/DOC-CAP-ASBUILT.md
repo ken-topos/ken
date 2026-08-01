@@ -1,7 +1,7 @@
 ---
 id: DOC-CAP-ASBUILT
 title: "The capability chapter tells readers the catalog has no checked authority exemplar; CAT-CAPEX adds one, falsifying that claim in two places"
-status: draft
+status: ready
 owner: doc
 size: S
 gate: none
@@ -11,14 +11,20 @@ github: null
 origin: "Measured by the Steward 2026-07-27 at origin/main d6df571e while scoping the doc ring's next WP. Not routed by any ring."
 ---
 
-⛔ **`status: draft` is deliberate and the gate is real.** The chapter's claim
-is **true today**. It becomes false only when `CAT-CAPEX` lands
-`catalog/packages/Capability/Filesystem/Authority.ken.md` on `main`. ⛔ Editing
-it before then would make the corpus wrong in the other direction.
+✅ **RELEASED 2026-08-01 — the gate is discharged and this is now `ready`.**
+`CAT-CAPEX` is `merged`; both artifacts are present on `origin/main =
+6de2a099`, verified by the Steward at release: the fragment
+`catalog/packages/Capability/Filesystem/Authority.ken.md` and its elaborating
+test `crates/ken-elaborator/tests/cat_capex_authority.rs`.
 
-⚠ **`CAT-CAPEX` is not yet merged** — its first candidate (`d52611f5`) failed
-CI on the catalog formatter fixed-point gate and is being respun. Flip this to
-`ready` only after the fragment is present on `origin/main`.
+⇒ **The chapter's `:115`/`:125` claims are now FALSE and the repair is owed.**
+The former `status: draft` was gating exactly on this and nothing else.
+
+⚠ **Re-ground at pickup anyway.** This node's original measurement was taken
+2026-07-27 at `d6df571e`, and the doc track then sat idle five days while the
+runtime campaign moved `main`. Re-read both claim sites at the head you
+actually work against before editing; ⛔ do not carry the line numbers in the
+table below as current without rechecking them.
 
 ## The measurement
 
