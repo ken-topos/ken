@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-01 17:11:09Z — from 139 issue file(s) in `docs/program/issues/`.
+2026-08-01 17:50:23Z — from 139 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -67,7 +67,7 @@ the committed file matches the generator's output.
 | `DOC-ASBUILT-CHAPTERS` | As-built slice 4 — reconcile the four remaining reading-ken chapters together; they share 9 sources and their claim classes cross page boundaries | merged | doc | L | none | — |
 | `DOC-ASBUILT-EXECUTION` | As-built slice 2 — reconcile 06-execution.md against its 16 drifted cited sources, the largest phase-A population | merged | doc | L | none | — |
 | `DOC-ASBUILT-FRAGMENTS` | As-built slice 1 — reconcile fragments.md against its 9 drifted cited sources; it is the keystone because 7 other documents cite it | merged | doc | M | none | — |
-| `DOC-ASBUILT-READER` | As-built slice 5 — reconcile the four reader-facing entry pages against their 6 shared drifted sources | ready | doc | M | none | — |
+| `DOC-ASBUILT-READER` | As-built slice 5 — reconcile the four reader-facing entry pages against their 6 shared drifted sources | merged | doc | M | none | — |
 | `DOC-ASBUILT-SOLUTIONS` | As-built slice 3 — reconcile the exercise/solution PAIR against its 11 drifted cited sources; a stale claim here is a broken answer under a retired question | merged | doc | L | none | — |
 | `DOC-ATTEST-LIVING` | attesting living tracker files makes every routine WP status flip redden the currency gate | closed | doc | S | none | — |
 | `DOC-CAP-ASBUILT` | The capability chapter tells readers the catalog has no checked authority exemplar; CAT-CAPEX adds one, falsifying that claim in two places | merged | doc | S | none | — |
@@ -184,7 +184,6 @@ Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
 - `DOC-ASBUILT-AGENTS` — As-built slice 6 — reconcile the thirteen-page agents corpus against its 7 shared drifted sources; it is instructions machines follow, not prose people skim
-- `DOC-ASBUILT-READER` — As-built slice 5 — reconcile the four reader-facing entry pages against their 6 shared drifted sources
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-CONTSPEC-PLANNER` — ContinuationSpecialization slice 1 — land the planner closure DORMANT: exact ordered projection, full-key interning before discovery, exact causal edge tokens, finite recursion
@@ -209,7 +208,6 @@ is itself not yet `merged`/`closed`:
 - `ABI-S4` blocked by `ABI-M1` (status: draft)
 - `ABI-S5` blocked by `PX9` (status: draft)
 - `ABI-S6` blocked by `ABI-S1` (status: draft)
-- `DOC-ASBUILT-AUDIT` blocked by `DOC-ASBUILT-READER` (status: ready)
 - `DOC-ASBUILT-AUDIT` blocked by `DOC-ASBUILT-AGENTS` (status: ready)
 - `DS-9` blocked by `KERNEL-NESTED-IND` (status: active)
 - `F4` blocked by `A3` (status: draft)

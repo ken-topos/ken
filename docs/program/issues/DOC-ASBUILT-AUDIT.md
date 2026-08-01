@@ -106,8 +106,11 @@ heading change moves the blob just as a prose change does.
 `manifest.toml` source registration.
 **Slice 4 — [[DOC-ASBUILT-CHAPTERS]]** ✅ **merged** (`62a8250d`, PR #1294) —
 ⭐ one page edited of four; the other three reconciled and found still true.
-**Slice 5 — [[DOC-ASBUILT-READER]]** ✅ framed and `ready`, **in flight**.
-**Slice 6 — [[DOC-ASBUILT-AGENTS]]** ✅ framed and `ready`.
+**Slice 5 — [[DOC-ASBUILT-READER]]** ✅ **merged** (`ac187ada`, PR #1297) —
+⭐ two pages repaired; hard stop 3 fired and routed one survivor to slice 6.
+**Slice 6 — [[DOC-ASBUILT-AGENTS]]** ✅ framed and `ready`, **in flight** —
+⭐ **the last phase-A slice**, and it carries slice 5's routed one-line
+obligation in `library/README.md`.
 
 ⭐⭐ **PHASE A IS FULLY FRAMED. All 25 consuming documents are covered by exactly
 six slices**, and ⛔ no further phase-A frame is owed. When slice 6 merges,
