@@ -26,16 +26,18 @@ b2df2bbd00644b907cae5d05efa76edd9df1b3f2	crates/ken-cli/tests/rt_parity_native.r
 edd50ecd5efb52c84d616709b8758505ccde231a	crates/ken-elaborator/tests/ds1_empty_dec_acceptance.rs
 26ee3725e946ab674568be266fe606f4611ceb7b	crates/ken-elaborator/tests/ds3_sum_combinators_acceptance.rs
 cf7276e174a07138f771208aa8a6cb2d6e72ca10	crates/ken-elaborator/tests/es3_modules_acceptance.rs
+959dd19252868737ab048b2223483b6f26326a7d	crates/ken-elaborator/tests/explicit_data_elaboration.rs
 b30b91ea4ea30703a12264b70bbe9807107db2dd	crates/ken-elaborator/tests/n2_in_repo_loader.rs
 43cd4a9a664f3667ec68605f692b4d7517e5e70c	crates/ken-elaborator/tests/surface_transport_acceptance.rs
 57041e577a18e6c5065c85722b06f97725346e10	crates/ken-interp/src/eval.rs
 d317ad9c2c07dcb8e330a4e6fb2fd08cdf4efd02	crates/ken-runtime/src/cranelift_backend.rs
 d6ca1620ba2af48d1bfdddef07fe32f491d2c724	docs/PRINCIPLES.md
 096765c6a6fd91b48a0d997ea21730ffa39bd50e	docs/program/07-catalog-style-guide.md
-0d1e2ad68be22ac56f1cf8fc65d1b3db15b6207a	docs/program/12-documentation-program.md
+187454c563dde53c4043a472fbaf1f66b8aa3f6f	docs/program/12-documentation-program.md
 836e59274b34ea3a20d956dfd53ce344f1a7e001	docs/program/issues/CAT-CAPEX.md
 286e23e0c7c362227ff555528b759722d9798930	docs/program/issues/DOC-W1.md
 5ffe02bd6938e15a49639dcd76c8276762d32287	docs/program/issues/DOC-W2.md
+bdb2ff7de4eb4f64ab6a65250fef8c4c307e95f8	docs/program/issues/KERNEL-NESTED-IND.md
 1bcbc93dc15d1bac80b40ee77b4bfa283e79067e	library/guide/decomposition-abstraction.ken.md
 7d0928e3429131e4a374932b8d5bd96ffc4ab208	library/guide/proof-techniques.ken.md
 1c75f79be4337c6f5fc002e751ca3ccde64786d8	library/guide/surface-reference.ken.md
@@ -57,6 +59,7 @@ c4389bbd292a5b7104f115aca2c2be382c71fb39	spec/30-surface/34-data-match.md
 0b2ac1b3a0f05a73dfafe8d09d480fd076f06645	spec/40-runtime/45-native-backend.md
 0ad2ce4b0a496bdd54e421ebf6f3d80c1fd8baf6	spec/50-stdlib/51-lawful-classes.md
 8cdaff23476b86530b99e107dd31cd7d10d9cc7f	spec/50-stdlib/55-lawful-functors.md
+1c13858addb1560dc0b273edd073729143942861	spec/50-stdlib/60-length-indexed-vectors.md
 7b6b1b7299ee6438211690562167e5bf37e99316	spec/60-security/62-authority.md
 f3811a6992a5cbb122d67bbd650abb247f4aec37	spec/60-security/64-trust-model.md
 bfed05e9580c7535e82c7cbe770d37f093d8dae7	spec/90-open-decisions.md
