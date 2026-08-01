@@ -524,6 +524,28 @@ explain; no single page is forced to do all three.* Keep explanatory pages free
 of internal campaign and WP history — a reader does not care which WP landed a
 feature.
 
+> ### The seven-subject guide list — MEASURED, and six of seven are delivered
+> (Steward, 2026-08-01, at `origin/main = c777d2d4`)
+>
+> The subject list above reads as seven chapters to write. It is not. Setting
+> the seven against what `library/` holds today: **contracts, proofs, effects,
+> security, packages, and execution all already carry explanatory pages**, and
+> several carry two. The six `library/learn/reading-ken/` chapters and the three
+> migrated `library/guide/` pages are **all classified `kind = "explanatory"`,
+> `authority = "explanatory"`** in the manifest — they are conceptual pages
+> filed under `learn/`, not tutorials that a conceptual page would sit beside.
+> The exit property is met for those six subjects.
+>
+> **The residual is one subject: dependent data.** `Vec` and `Fin` occur zero
+> times under `library/`, while `spec/50-stdlib/60-length-indexed-vectors.md`
+> is normative with a landed family, `head`, `Fin` declaration, and `tail`.
+> That is `DOC-W3-DEPDATA`, and it is an `S`.
+>
+> ⇒ **Do not re-derive the seven-chapter reading from this section's prose.**
+> Releasing the six as fresh work would re-author correctly-classified material,
+> which is the mistake this program has already made on L5 and V3. The per-
+> subject coverage table is in `docs/program/issues/DOC-W3-DEPDATA.md`.
+
 ### Wave 4 — complete reader-oriented reference (MAP)
 
 **Produces.** `library/reference/` across language, verification, toolchain,

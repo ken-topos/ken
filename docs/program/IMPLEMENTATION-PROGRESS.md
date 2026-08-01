@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-01 22:50:50Z — from 142 issue file(s) in `docs/program/issues/`.
+2026-08-01 23:08:15Z — from 143 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -82,6 +82,7 @@ the committed file matches the generator's output.
 | `DOC-W0` | documentation Wave 0 — library/ charter and currency substrate | closed | doc | M | none | 830 |
 | `DOC-W1` | documentation Wave 1 — the read-Ken spine, taught from checked fragments | closed | doc | L | none | — |
 | `DOC-W2` | documentation Wave 2 — agent core modules, task packs, and cold-context evals | merged | doc | L | none | 936 |
+| `DOC-W3-DEPDATA` | Wave 3 slice 3 — the dependent-data guide page, the one guide subject of seven with no explanatory coverage anywhere in library/ | ready | doc | S | none | — |
 | `DOC-W3-GUIDE` | Wave 3 slice 1 — migrate catalog/guide/ into library/guide/ under migration-local fence verification, conserving all 40 checked fences through the move | merged | doc | M | none | — |
 | `DOC-W3-HOWTO` | Wave 3 slice 2 — library/how-to/ recipes scoped by the CLI's seven-subcommand task surface, each grounded in a real diagnostic or checked artifact | merged | doc | M | none | — |
 | `DS-9` | lawful JSON codec — the data-structures tier's acceptance test: a Json value type, encode/decode, and the proved round-trip law, assembled entirely from the landed Core/Data sections | draft | foundation | L | none | — |
@@ -186,6 +187,7 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
+- `DOC-W3-DEPDATA` — Wave 3 slice 3 — the dependent-data guide page, the one guide subject of seven with no explanatory coverage anywhere in library/
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-CONTSPEC-LOWER` — ContinuationSpecialization slice 3 — attach the token at each producer alternative, emit the direct call before the identity-erasing join, close nested recursion and the ledgers, then ACTIVATE
