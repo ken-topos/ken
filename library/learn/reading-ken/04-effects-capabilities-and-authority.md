@@ -4,8 +4,8 @@ Chapters [01](01-anatomy.md)–[03](03-assurance-and-trust.md) taught you to
 read a declaration's shape, its contract, and its assurance class. This
 chapter asks a different question of the same signature: not "what does it
 compute?" but "what is it allowed to *do* to the world outside its own
-inputs?" — and where this curriculum's fragment set can and
-cannot yet show you the answer from checked code.
+inputs?" — and which parts the checked catalog can show, versus which belong
+to the trusted host/runner rather than to Ken programs.
 
 ## Effect Rows
 
@@ -62,24 +62,19 @@ body is still valid under this check — only an
 
 The row tells a reader *which* effects a definition may perform. It does
 not, by itself, explain *who is allowed* to have that row perform an
-effect at all — that is the authority discipline, and here this
-curriculum's fragment set runs out of checked code to show you.
+effect at all — that is the authority discipline. The checked
+[filesystem authority fragment](../../../catalog/packages/Capability/Filesystem/Authority.ken.md)
+now exhibits its Ken-visible surface: an explicit `Cap a` parameter beside
+the `[FS]` effect row. Its elaboration controls show missing-capability
+rejection and authority-index separation. This is checked evidence of
+authority-as-signature, not authority for the rule itself.
 
-No checked fragment in `catalog/packages/` — including entries outside this
-curriculum — carries an explicit capability token, attenuation call, or
-authority comparison in `ken check`-passing surface code. The console
-fragment shows the effect row; no catalog entry shows the capability value
-that authorizes performing it. This is not a gap this chapter papers over
-— it is itself something worth knowing: the authority discipline below is a
-committed, normative part of the language (`OQ-8a` DECIDED,
-[authority specification](../../../spec/60-security/62-authority.md)), and
-it is **unavailable** in checked-fragment form in the catalog. This uses the
-same supported/partial/planned/unavailable labelling applied to the
-`tested` status's own missing tagged construct.
-
-So the rest of this section teaches the authority discipline from its
-actual normative source, labelled for exactly what it is: not a fragment
-you could open and run.
+The authority discipline remains a committed, normative part of the
+language (`OQ-8a` DECIDED,
+[authority specification](../../../spec/60-security/62-authority.md)). Read
+the runnable catalog fragment alongside that source: the fragment exhibits
+what Ken code can receive and require, while the specification defines the
+trusted host/runner management complement that Ken code cannot call.
 
 - **No ambient authority.** A computation can act on the world only with an
   authority it was explicitly given, and only via an effect its type
