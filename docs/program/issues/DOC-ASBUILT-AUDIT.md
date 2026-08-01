@@ -104,8 +104,9 @@ heading change moves the blob just as a prose change does.
 **Slice 3 — [[DOC-ASBUILT-SOLUTIONS]]** ✅ **merged** (`90ecf7f2`, PR #1292) —
 ⭐ two pages (`solutions.md` + `exercises.md`) plus the one authorized
 `manifest.toml` source registration.
-**Slice 4 — [[DOC-ASBUILT-CHAPTERS]]** ✅ framed, `ready`, **in flight**.
-**Slice 5 — [[DOC-ASBUILT-READER]]** ✅ framed and `ready`.
+**Slice 4 — [[DOC-ASBUILT-CHAPTERS]]** ✅ **merged** (`62a8250d`, PR #1294) —
+⭐ one page edited of four; the other three reconciled and found still true.
+**Slice 5 — [[DOC-ASBUILT-READER]]** ✅ framed and `ready`, **in flight**.
 **Slice 6 — [[DOC-ASBUILT-AGENTS]]** ✅ framed and `ready`.
 
 ⭐⭐ **PHASE A IS FULLY FRAMED. All 25 consuming documents are covered by exactly
