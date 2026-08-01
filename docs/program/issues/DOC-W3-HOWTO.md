@@ -1,7 +1,7 @@
 ---
 id: DOC-W3-HOWTO
 title: "Wave 3 slice 2 — library/how-to/ recipes scoped by the CLI's seven-subcommand task surface, each grounded in a real diagnostic or checked artifact"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
