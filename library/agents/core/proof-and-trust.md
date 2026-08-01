@@ -74,7 +74,7 @@ distinction being repaired when practical.
 
 Normative sources are `spec/20-verification/21-spec-syntax.md`,
 `spec/10-kernel/`, and `spec/60-security/64-trust-model.md`. Checked techniques
-come from `catalog/guide/proof-techniques.ken.md`. The verified revision is in
+come from `library/guide/proof-techniques.ken.md`. The verified revision is in
 `library/agents/manifest.toml`.
 
 ## 10. Known unavailable or partial behavior

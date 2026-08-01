@@ -67,7 +67,7 @@ restore byte-identically, re-run green, and record the trusted-base comparison.
 
 Proof rules come from `spec/10-kernel/` and
 `spec/20-verification/21-spec-syntax.md`; checked techniques come from
-`catalog/guide/proof-techniques.ken.md`. Revision:
+`library/guide/proof-techniques.ken.md`. Revision:
 `library/agents/manifest.toml`.
 
 ## 10. Known unavailable or partial behavior
