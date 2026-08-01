@@ -11,6 +11,29 @@ github: null
 origin: Architect ruling evt_3t7t27e3rv8cx (2026-07-29), outcome 2 on the Steward's PX8-ERRID-ALLOC wall discriminator (evt_s2kv0wttb5f7). Measured by the Architect in a detached scratch worktree with diagnostic-only labels against exact ad7298fb. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
+> # ⛔⛔ RECUT 2026-08-01 — ITS `D7` NO LONGER DELIVERS DIRECTLY
+>
+> ⛔ Read this before anything below.
+>
+> **The Architect's second WIP audit (`evt_4t09329vdrf`) returned outcome (c):
+> the `D7` + [[RT-RECURSOR-TRANSPORT]] contract is mis-sized as one implementer
+> bite.** ⛔ **The semantics are NOT recut** — `evt_7dhwrk26ks9m0` stands and the
+> mechanism direction was confirmed correct in the same audit. Only the delivery
+> shape changed.
+>
+> ⇒ **`D7` now lands through three staged slices** —
+> [[RT-CONTSPEC-PLANNER]] (planner closure, dormant) →
+> [[RT-CONTSPEC-ABI]] (unit/descriptor + ABI gates, dormant) →
+> [[RT-CONTSPEC-LOWER]] (branch lowering, ledgers, witness, CI — **activates**).
+> **This node flips `merged` in one commit with the other two when slice 3
+> merges.**
+>
+> ⚠ **Everything below this banner about `AC-1`, the three-candidate wall, and
+> the `depends_on` edges is UNCHANGED and still binding.** ⛔ What is stale is
+> any statement that this node's work is in flight as a single candidate on
+> `wp/RT-DECL-CLOSURE-PORT` — it is not; that branch is free and the frozen
+> prototype is `origin/preserved/rt-recursor-freeze-465fab90`.
+
 > # ▶ ACTIVE 2026-07-29 — REORDERED TO **NEXT**, AND IT NOW HOLDS **THREE** NODES
 >
 > **Steward disposition `evt_5mtkdft1nxmwp`.** [[NATIVE-HANDLE-CARRIER]] was
