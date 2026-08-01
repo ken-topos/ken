@@ -7,9 +7,16 @@
 > ## ⛔⛔ READ [[DOC-ASBUILT-AUDIT]] FIRST — its two-phase law binds this slice
 >
 > ⭐ **Phase A writes NO ledger, and the gate stays red.** ⛔ No
-> `library/manifest.toml`, no `library/SOURCE-ATTESTATIONS`, no
-> `library/STATUS.md`, ⛔ no `gen-source-attestations.sh` — for any reason.
+> `library/SOURCE-ATTESTATIONS`, no `library/STATUS.md`, ⛔ no
+> `gen-source-attestations.sh` — **for any reason.**
 > ⚠ A red `--check` is **not** a rejection of this candidate.
+>
+> ⚠⚠ **ONE NARROW EXCEPTION, AMENDED 2026-08-01 — read `D5`/`AC-6` before you
+> act on it.** This slice, and **only** this slice, may write
+> `library/manifest.toml`: **two `sources` entries on one record**, to register
+> 04.2's actual oracles. ⛔ Nothing else in that file, and ⛔ the two files named
+> above stay frozen regardless. ⭐ **Registering a citation is not re-stamping an
+> attestation** — that distinction is the whole basis of the exception.
 
 ## Fixed inputs
 
@@ -112,13 +119,32 @@ solution must be checked against **its exercise's premise**, and vice versa. The
 
 **D4 — a closed report:** still-true / repaired / **routed**, per path.
 
+**D5 — ⭐ SOURCE REGISTRATION for the 04.2 oracles (AMENDED 2026-08-01, granted
+on `evt_3wej9paqbwf23`).** Add **exactly two** entries to the `sources` list of
+the **`library/learn/exercises/solutions.md`** record in `library/manifest.toml`:
+
+- `catalog/packages/Capability/Filesystem/Authority.ken.md` — the checked
+  `Cap a` / `Cap AFull` declarations
+- `crates/ken-elaborator/tests/cat_capex_authority.rs` — the missing-capability
+  and `AFull`/`APartial` controls
+
+⚠ **This is the ONLY manifest write this campaign authorizes in phase A**, and
+it is authorized because it is a **different operation** from the one the ban
+targets. ⇒ Read the boundary below before touching the file.
+
 > ### ⭐ Where the real oracles are
 >
-> **Five sources are checked catalog code** — `EmptyDec`, `Combinators`,
-> `Transport`, `Property`, and (via slice 2's neighbourhood) the runtime pair
-> `cranelift_backend.rs` / `px4b_native_production.rs`. A claim about what a
-> package *provides* is verifiable against its current blob, ⛔ not a matter of
-> taste.
+> ⚠ **CORRECTED 2026-08-01 (Librarian, `evt_4gxaxq79kctr`).** The prior wording
+> said *"five sources are checked catalog code"* while listing **four catalog
+> files plus a two-file Rust pair** — ⛔ six artifacts under a count of five, and
+> two of them not catalog code at all.
+>
+> ⭐ **FOUR checked catalog-code sources** — `EmptyDec`, `Combinators`,
+> `Transport`, `Property` — ⭐ **plus TWO checked Rust code/test sources**
+> (`crates/ken-runtime/src/cranelift_backend.rs`,
+> `crates/ken-cli/tests/px4b_native_production.rs`, via slice 2's
+> neighbourhood). A claim about what any of the six *provides* is verifiable
+> against its current blob, ⛔ not a matter of taste.
 >
 > **⚠ `spec/90-open-decisions.md` is the highest-yield source here**, exactly as
 > in slice 2. Open decisions **get settled**. ⇒ A passage treating one as *open*
@@ -150,10 +176,11 @@ class and show the sweep over exercises **and** solutions, ⛔ not only the edit
 lines. ⭐ For every repaired solution, state whether its exercise still holds;
 for every repaired exercise, state whether its solution followed.
 
-**AC-4 — scope is exactly those two pages, and the drift population is unchanged
-at 28.** **Control:** `git diff --name-only` shows exactly
-`library/learn/exercises/solutions.md` and
-`library/learn/exercises/exercises.md`; `scripts/gen-doc-status.sh --check`
+**AC-4 — scope is exactly those two pages plus the one authorized manifest
+record, and the drift population is unchanged at 28.** **Control:**
+`git diff --name-only` shows exactly `library/learn/exercises/solutions.md`,
+`library/learn/exercises/exercises.md`, and — ⭐ **only if `D5` applies** —
+`library/manifest.toml`; `scripts/gen-doc-status.sh --check`
 before and after both exit 1 with **byte-identical** 28-path output.
 ⭐ Neither page is attested, so ⛔ **neither edit can move the count** —
 doc-author's pre-edit capture is the anchor: exit 1, 32 lines, 28 rows,
@@ -174,18 +201,84 @@ must change, say so in `D4` and name what refers to it.
 around it. **If the honest repair is deletion, that is a `D4` route, not an
 edit.**
 
+**AC-6 — ⭐ the `D5` registration is EXACTLY two entries on EXACTLY one record,
+and it moves nothing.** **Controls, all four:**
+
+1. `git diff library/manifest.toml` shows **only** the two added `sources`
+   entries, **only** under the `library/learn/exercises/solutions.md` record.
+   ⛔ No other record, no key other than `sources`, no reordering.
+2. `git diff --name-only` does **not** show `library/SOURCE-ATTESTATIONS` or
+   `library/STATUS.md`. ⚠ **Those stay frozen** — `D5` is not a licence to touch
+   them, and the gate checks their sortedness and exact-set membership **before**
+   it reaches the drift block.
+3. `scripts/gen-doc-status.sh --check` is **byte-identical before and after** —
+   exit 1, 32 lines, 28 rows, SHA-256 `349d5452…`. ⭐ **This is the load-bearing
+   control**: a registration that changes the output has violated one of the
+   three conditions, whatever the reasoning said.
+4. `D4` states, per added path, **which 04.2 claim it grounds**. ⛔ A
+   registration with no cited claim behind it is a manifest edit, not a repair.
+
+⚠ **⛔ If any control fails, the honest move is to drop `D5` and route it, ⛔ not
+to widen the scope to make the control pass.** The prose repair to 04.1/04.2
+stands on its own; `D5` is the structural half and it is severable.
+
+---
+
+> ## ⭐⭐ WHY `D5` IS NOT A BREACH OF THE PHASE-A LEDGER BAN
+>
+> ⚠ **The ban targets RE-STAMPING, not citation.** [[DOC-ASBUILT-AUDIT]] bans
+> phase-A ledger writes because *"a row may be re-stamped only once every
+> document that cites it has been reconciled"* — re-stamping an unread claim
+> converts an honest red gate into a false green one. ⭐ **Registering a source a
+> page demonstrably consumes asserts a citation edge; it asserts nothing about
+> currency.** ⛔ Those are different operations, and the campaign already says so
+> for `DOC-CAP-ASBUILT`.
+>
+> ⭐⭐ **AND THE REGISTRATION IS THE POINT OF THE CAMPAIGN, NOT AN EXCEPTION TO
+> IT.** The Librarian's finding is that 04.2's answer leans on two artifacts that
+> `solutions.md`'s manifest record does not name. ⇒ **A future change to either
+> oracle would not identify this answer key as a consumer** — ⚠ *that is exactly
+> the currency hole this campaign exists to close.* Repairing the prose and
+> leaving the mapping absent ships a page that is sentence-correct and
+> structurally still stale.
+>
+> ### ⭐ THE THREE CONDITIONS — all three held, MEASURED, before this was granted
+>
+> | condition | why it matters | measured at `40367c84` |
+> |---|---|---|
+> | both paths **already attested** | ⛔ a new row would be a ledger write | ✅ **1 row each** in `SOURCE-ATTESTATIONS` |
+> | neither path **drifted** | ⛔ a drifted addition changes the 28 and this slice's own population | ✅ **0 of 28** for both |
+> | the page **demonstrably consumes** them | ⛔ otherwise it is a manifest edit dressed as a repair | ✅ they are 04.2's actual oracles |
+>
+> ⇒ ⭐ **Neither `REQUIRED_PATHS` nor the drift block can move**, which is why
+> `AC-6`'s control is byte-identity and not judgement. ⚠ The Librarian
+> mutation-probed the exact registration on the rejected candidate and got the
+> identical status result — ⭐ **that probe is the evidence, ⛔ not the
+> reasoning above.**
+>
+> ⛔ **DO NOT GENERALIZE THIS.** It licenses **one** record, **two** entries,
+> under **all three** conditions. ⛔ It does not license a manifest pass, a
+> second record, an entry whose path is in the 28, or any
+> `SOURCE-ATTESTATIONS` / `STATUS.md` write — those stay frozen until phase B.
+> ⚠ If a later slice finds the same shape, ⭐ **route it and let me re-derive the
+> three conditions**; ⛔ do not cite this paragraph as precedent.
+
 ---
 
 ## ⛔ Banned scope
 
-- ⛔ **Any ledger, manifest, or `STATUS.md` write**, and
-  ⛔ `scripts/gen-source-attestations.sh`.
+- ⛔ **Any `library/SOURCE-ATTESTATIONS` or `library/STATUS.md` write**, and
+  ⛔ `scripts/gen-source-attestations.sh` — ⚠ **these remain absolutely banned.**
+- ⛔ **Any `library/manifest.toml` write EXCEPT the exact `D5` registration**
+  above: two `sources` entries, one record. ⚠ ⛔ Not a second record, ⛔ not a
+  path that is in the 28, ⛔ not a tidy-up of anything you notice while in there.
 - ⛔ **No `spec/`, `catalog/`, or `crates/` edit.** ⚠ If a source is itself
   wrong, that is `D4`-**routed**, not repaired here.
 - ⛔ **No new CI gate or test asserting facts about source, catalog, or doc
   lines** (operator test policy) — ⭐ including any harness that runs the
   exercises.
-- ⛔ **No third page.** ⚠ `exercises.md` is now **IN** scope (amended above);
+- ⛔ **No third *page*.** ⭐ `library/manifest.toml` is not a page and is covered
+  by `D5`/`AC-6` alone. ⚠ `exercises.md` is now **IN** scope (amended above);
   ⛔ `library/learn/exercises/README.md` is **NOT** — it stays in
   [[DOC-ASBUILT-READER]]. ⭐ If a repair here implies one there, `D4`-route it
   and name the pair.
