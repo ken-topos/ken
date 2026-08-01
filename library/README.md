@@ -15,30 +15,33 @@ declared in [`manifest.toml`](manifest.toml).
 
 | If you want to... | Go here | Status |
 |---|---|---|
-| **Read Ken** — understand a program someone else wrote | [`introduction.md`](introduction.md) | current (the full reading curriculum is Wave 1, planned) |
-| **Write Ken** — author a checked program | *not yet available here* | planned — Wave 1/3 |
-| **Look something up** — a rule, a diagnostic, a CLI flag | *not yet available here* | planned — Wave 4 |
-| **Find a package** — browse the catalog by task | [`catalog/packages/`](../catalog/packages/README.md) directly, for now | planned generated portal — Wave 5 |
+| **Read Ken** — understand a program someone else wrote | [`introduction.md`](introduction.md) | current — six-chapter reading curriculum available |
+| **Write Ken** — author a checked program | *not yet available here* | map only — Wave 3 |
+| **Look something up** — a rule, a diagnostic, a CLI flag | *not yet available here* | map only — Wave 4 |
+| **Find a package** — browse the catalog by task | [`catalog/packages/`](../catalog/packages/README.md) directly, for now | map only — Wave 5 generated portal |
 | **Load agent context** — select product knowledge for a coding agent | [`agents/README.md`](agents/README.md) | current |
 
-A route with no library page yet is **planned**, not silently missing — see
-[the Waves table](../docs/program/12-documentation-program.md#4-waves) for
-the wave it lands in (`STATUS.md` lists what is landed, not what is
-planned). This table itself will gain real links as each wave lands; it
-does not point at pages that do not exist.
+A route with no library page yet is **mapped**, not silently missing — see
+[the Waves table](../docs/program/12-documentation-program.md#4-waves).
+Waves 3–6 are a map, not a commitment; each is framed only after its
+predecessor's exit condition is met. This table gains real links only as
+pages land; it does not point at pages that do not exist.
 
-## What's here today (Wave 0)
+<a id="whats-here-today-wave-0"></a>
 
-Wave 0 lands the **substrate**, not the content: the manifest every page
-registers in, the generated status page, and the gates that keep both
-honest — never a hand-typed date, never an unregistered page, never a link
-or a cited source that has gone stale. [`introduction.md`](introduction.md)
-is the first real page built on that substrate.
+## What's here today (Waves 0–2)
 
-`catalog/guide/`'s checked literate guides have **not moved yet** — they
-stay exactly where they are until their `ken example`/`ken reject` fence
-gate lands and passes (Wave 3). The plan for what moves, what stays
-canonical, and what becomes a pointer is recorded in
+Waves 0–2 have landed the **substrate**, the fragment-based reading
+curriculum and exercises, and the agent product-context packs. The substrate
+includes the manifest every page registers in, the generated status page, and
+the gates that keep both honest — never a hand-typed date, never an
+unregistered page, never a broken link, and never an unnoticed stale source.
+
+`catalog/guide/`'s checked literate guides have **not moved yet**. Wave 3
+remains map-only and cannot be framed until the Steward reconciles a
+migration-local or release-point verification form, mutation-proven for both
+fence polarities. The plan for what moves, what stays canonical, and what
+becomes a pointer is recorded in
 [`docs/program/13-documentation-migration-ledger.md`](../docs/program/13-documentation-migration-ledger.md).
 
 ## Scope and authority
