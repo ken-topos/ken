@@ -1,7 +1,7 @@
 ---
 id: DOC-CAP-ASBUILT
 title: "The capability chapter tells readers the catalog has no checked authority exemplar; CAT-CAPEX adds one, falsifying that claim in two places"
-status: ready
+status: merged
 owner: doc
 size: S
 gate: none
@@ -10,6 +10,11 @@ blocks: []
 github: null
 origin: "Measured by the Steward 2026-07-27 at origin/main d6df571e while scoping the doc ring's next WP. Not routed by any ring."
 ---
+
+✅ **MERGED 2026-08-01 — `origin/main = 04504af1` (PR #1278), blob-verified.**
+The chapter is re-grounded; the ledger went 51 → 53 rows (exactly the two
+first-time attestations, `+2/-0`), and `has not instantiated` has zero hits.
+⭐ **The 27-path drift is untouched and is [[DOC-ASBUILT-AUDIT]]'s subject.**
 
 ✅ **RELEASED 2026-08-01 — the gate is discharged and this is now `ready`.**
 `CAT-CAPEX` is `merged`; both artifacts are present on `origin/main =
