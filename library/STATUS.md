@@ -16,7 +16,7 @@ proves `library/` already existed at some point on `main`'s history.
 **It does not, by itself, certify any cited source's bytes** (SRC-ATTEST
 Part 1) — that claim is the attested source-set digest below.
 
-**Attested source-set digest:** `c2897a7b0042479b8a96a81502ffc943212751fa0e234b20f1a63bdf1bffaf81`
+**Attested source-set digest:** `a08d10464c63f6b4dcd1523bf8cbcd95882c582185bcfd102393267e1cca149d`
 
 The SHA-256 of `library/SOURCE-ATTESTATIONS`, the ledger binding every
 manifest-cited source to its exact blob OID at the commit the Librarian
@@ -49,6 +49,11 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/guide/decomposition-abstraction.ken.md` | explanatory | explanatory | current |
 | `library/guide/proof-techniques.ken.md` | explanatory | explanatory | current |
 | `library/guide/surface-reference.ken.md` | explanatory | explanatory | current |
+| `library/how-to/build-a-native-artifact.md` | how-to | how-to | current |
+| `library/how-to/check-a-source.md` | how-to | how-to | current |
+| `library/how-to/format-source.md` | how-to | how-to | current |
+| `library/how-to/run-a-program.md` | how-to | how-to | current |
+| `library/how-to/use-the-repl.md` | how-to | how-to | current |
 | `library/introduction.md` | explanatory | explanatory | current |
 | `library/learn/reading-ken/fragments.md` | reference | derived-reference | current |
 | `library/learn/reading-ken/01-anatomy.md` | explanatory | explanatory | current |
@@ -63,7 +68,7 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/quickstart.md` | tutorial | tutorial | current |
 | `library/STATUS.md` | status | status | current |
 
-**Total:** 29 registered document(s).
+**Total:** 34 registered document(s).
 
 ## Regenerating
 

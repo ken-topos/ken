@@ -17,6 +17,7 @@ aa1c82f94cfcab61b8214039471ed4020dd395bf	catalog/packages/Data/Numeric/Nat/Order
 99a1e0763b691f814b84491c1b3bd584a06e81e6	catalog/packages/Data/Sums/Combinators.ken.md
 5ae8741072357b3feb1c83c9da9e51667f3125ab	catalog/packages/README.md
 13f04cb2fbbaffe54a9a9c1c88975bad4c01cd6d	catalog/packages/Tooling/Testing/Property.ken.md
+5262846895954b8145e9f3647add0ec9455a9ca7	conformance/challenge/C1-deceq-noncanonical/unsound-deceq-decimal.ken
 33f92d708befd8332739582806b48c0e6a597662	crates/ken-cli/src/lib.rs
 65b1ec769d7957263e1a66689edc6f9cd9b68979	crates/ken-cli/src/main.rs
 1d753d0f8b0966210b699822ebfc87957deedb5f	crates/ken-cli/tests/px4b_native_production.rs
@@ -39,6 +40,7 @@ d6ca1620ba2af48d1bfdddef07fe32f491d2c724	docs/PRINCIPLES.md
 7d0928e3429131e4a374932b8d5bd96ffc4ab208	library/guide/proof-techniques.ken.md
 1c75f79be4337c6f5fc002e751ca3ccde64786d8	library/guide/surface-reference.ken.md
 e1392c8af9ed9372ba71a2144e1fb660dd1351cc	library/learn/reading-ken/fragments.md
+628393801d916f09a2f857ca6f98fccd6bc186ba	library/quickstart.md
 a94650af18070f4a969bad395248aca940042a51	spec/00-overview.md
 4ddc2ed6d842a2b7a3d67acc5a9c8403e094f880	spec/10-kernel/16-observational.md
 d1ca911618bd1577db7be786f00df426a631eca8	spec/10-kernel/17-conversion.md
