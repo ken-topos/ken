@@ -191,7 +191,7 @@ and read the producer that established it.
 
 The [filesystem errors fragment](../../../catalog/packages/Capability/Filesystem/Errors.ken.md)
 states its boundary before any code: the runtime `check_fs_capability` gate
-checks the required right and authority, while downstream filesystem
+checks the required rights and authority, while downstream filesystem
 resolution enforces confinement. `Full` retains all seven rights, including
 write and delete, but exercises them only within its `FsScope`. That division
 is the same posture the trust model itself insists on at the language level —
