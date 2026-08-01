@@ -7,7 +7,11 @@ chapter is now false on exactly that claim, and true everywhere else.**
 
 **Owner:** Team Doc (`doc-leader` + `doc-author`, Librarian as QA).
 **Branch:** `wp/DOC-CAP-ASBUILT`. **Size:** S.
-**Risk:** low — one file, one narrow claim, `library/` only.
+**Risk:** low — one page, one narrow claim, `library/` only.
+⚠ **AMENDED 2026-08-01 — the shape is one PAGE plus its two first-time source
+declarations, not one FILE.** See `D5`/`AC-6`. ⭐ `AC-4` (`library/`-only) is
+unchanged and was never breached: `library/manifest.toml` and
+`library/SOURCE-ATTESTATIONS` are both inside `library/`.
 
 **Status:** Steward frame, shovel-ready. ⛔ **Gated on `CAT-CAPEX` landing on
 `main`** — see `§7`. Do not start before it does.
@@ -88,6 +92,17 @@ the trusted host).
   discipline."
 - ⛔ **No new CI gate or test asserting facts about doc, spec, or catalog
   lines** (operator test policy). ⚠ Including a "reports drift" form.
+- ⛔⛔ **DO NOT RUN `scripts/gen-source-attestations.sh`, and do not regenerate
+  `library/STATUS.md`.** ⭐ **Measured by the Steward 2026-08-01 at
+  `main = 2b424842`: `scripts/gen-doc-status.sh --check` ALREADY EXITS 1 with
+  27 drifted cited sources.** That population is the outstanding as-built audit
+  and it is ⛔ **not this WP's to clear.** A wholesale regeneration would
+  re-stamp all 27 in one commit — laundering the exact evidence the audit
+  exists to examine. ⇒ **Hand-write the two rows of `D5` and nothing else.**
+  ⚠ `gen-doc-status.sh` cannot complete while those 27 stand, so `STATUS.md`
+  **cannot** be regenerated here; leaving it untouched is correct, and the
+  audit slice regenerates ledger and `STATUS.md` together under Librarian
+  review.
 
 ---
 
@@ -104,6 +119,23 @@ the trusted host).
 - **`D4`** — a **closed** statement of what the chapter now claims the catalog
   exhibits **and what it still does not**, matching the fragment's own
   complement.
+- **`D5`** ⭐ **(added 2026-08-01)** — **declare the two sources this edit now
+  cites.** Add to this chapter's `sources` in `library/manifest.toml`, and add
+  the matching rows to `library/SOURCE-ATTESTATIONS`, for exactly:
+
+  | path | attest at this OID |
+  |---|---|
+  | `catalog/packages/Capability/Filesystem/Authority.ken.md` | `3ada325be9479b96993f0e13d4df60901c95fae1` |
+  | `crates/ken-elaborator/tests/cat_capex_authority.rs` | `23e8a161a8f803b805c832e5df3522b3cb45672e` |
+
+  ⭐ **These are FIRST-TIME attestations of never-attested paths, not
+  re-stamps.** ⚠ Re-derive both OIDs at your base with `git ls-tree HEAD --
+  <path>`; ⛔ do not copy them from this frame if your base differs.
+  ⚠ Ledger rows are `<oid>\t<path>`, **sorted by path** — the gate rejects an
+  unsorted ledger. `Authority.ken.md` sorts **after** `Capability/Console/
+  Text.ken.md` and **before** `Capability/Filesystem/Errors.ken.md`;
+  `cat_capex_authority.rs` sorts **before**
+  `crates/ken-elaborator/tests/ds1_empty_dec_acceptance.rs`.
 
 ---
 
@@ -133,6 +165,33 @@ the trusted host).
 - **`AC-5`** — no link or section anchor is broken. **Control:** the chapter's
   existing spec cross-references still resolve; ⚠ you are editing prose that
   carries several `../../../spec/...#anchor` links.
+
+- **`AC-6`** ⭐ **(added 2026-08-01 — the anti-laundering control)** — the
+  ledger edit **adds two rows and changes nothing else.**
+  **Control:** `git diff library/SOURCE-ATTESTATIONS` shows **exactly 2 added
+  lines and 0 removed lines.** ⛔ **Any removed line means a drifted row was
+  re-stamped — that is the laundering this WP is forbidden to do, and it is a
+  hard stop, not a fixup.**
+
+- **`AC-7`** ⭐ **(added 2026-08-01 — the positive control on `AC-6`)** — the
+  drift population is **unchanged in both directions.**
+  **Control:** run `scripts/gen-doc-status.sh --check` before and after your
+  edit. It exits 1 both times. **The listed drifted paths must be the SAME 27,
+  byte-for-byte** — ⛔ not 26, ⛔ not 29, and ⛔ neither new path may appear.
+  ⭐ **Why this is a real control and not ceremony:** the ledger's
+  sortedness check and the cited-set exact-match check both run **before** the
+  drift check, so a malformed, misplaced, or missing row changes *which error
+  the script reports*. An unchanged 27-path drift block is therefore positive
+  evidence that the two rows landed well-formed **and** that nothing else moved.
+
+- **`AC-8`** ⭐ **(added 2026-08-01 — Librarian `BLOCK 1`)** — every source
+  the edit **quotes or paraphrases** matches that source's blob **at your
+  base**, not a remembered version. ⚠ Specifically:
+  `catalog/packages/Capability/Filesystem/Errors.ken.md` **no longer says
+  authority is unconfined** — it now scopes `Full` to its `FsScope` with
+  downstream resolution enforcing confinement. **Control:** quote the current
+  blob. ⛔ The candidate's own rewrite of that paragraph makes this a live
+  derived claim, ⛔ **not** a frozen historical quotation that may stand stale.
 
 ---
 
