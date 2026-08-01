@@ -197,21 +197,21 @@ fact about **which suite runs where**, not evidence that the native backend and
 interpreter must agree — the test's result, rather than its placement, carries
 that evidence.
 
-Chapter [04](04-effects-capabilities-and-authority.md) already showed you
-that no checked fragment anywhere in `catalog/packages/` carries an explicit
-capability token, an attenuation call, or an authority comparison — a
-whole-catalog measurement, not limited to this curriculum's seven entries.
-That gap has an execution-time consequence: a
-program's `main` is resolved by an ABI-shaped name and supplied capabilities
-by the host at the moment `ken run` drives it
-([runtime entry](../../../crates/ken-cli/src/lib.rs), `run_program`) — but
-since no registered fragment
-is a program with a capability parameter, nothing in this corpus ever
-exercises that supply step for you to read. Label it, once more, precisely:
-**unavailable** in checked-fragment form — the corpus does not show a
-program whose execution is authority-gated, not that authority-gating is
-unsupported. The filesystem limitation and authority discipline in chapter
-04 establish the boundary from artifact prose and normative specification.
+Chapter [04](04-effects-capabilities-and-authority.md) now shows a checked
+filesystem authority exemplar: an explicit `Cap a` parameter beside `[FS]`,
+with elaboration controls for missing capability and authority-index
+separation. Authority-as-signature is therefore **available** in checked
+catalog form. The exemplar and its controls establish elaboration, not a
+driven run. A program's `main` is resolved by an ABI-shaped name and supplied
+capabilities by the host at the moment `ken run` drives it
+([runtime entry](../../../crates/ken-cli/src/lib.rs), `run_program`), while
+none of the seven registered teaching fragments declares a `proc main` with a
+capability parameter. Nothing in this curriculum therefore exercises that
+host-supply step. Label the execution evidence precisely: **partial** — the
+checked corpus shows authority-bearing signatures, but not a driven program
+whose execution is authority-gated. That is a corpus gap, not evidence that
+authority-gating is unsupported. Chapter 04 keeps the checked surface and the
+trusted host/runner complement distinct.
 
 You can now separate elaboration from execution, identify the marked places
 where partial behavior may enter, and treat the interpreter as the semantic
