@@ -101,7 +101,8 @@ heading change moves the blob just as a prose change does.
 
 **Slice 1 — [[DOC-ASBUILT-FRAGMENTS]]** ✅ **merged** (`d7435f50`, PR #1282).
 **Slice 2 — [[DOC-ASBUILT-EXECUTION]]** ✅ **merged** (`f8ede8a3`, PR #1287).
-**Slice 3 — [[DOC-ASBUILT-SOLUTIONS]]** ✅ framed, `ready`, **in flight**.
+**Slice 3 — [[DOC-ASBUILT-SOLUTIONS]]** ✅ framed, `ready`, **in flight** —
+⭐ **amended 2026-08-01 to TWO pages** (`solutions.md` + `exercises.md`).
 **Slice 4 — [[DOC-ASBUILT-CHAPTERS]]** ✅ framed and `ready`.
 **Slice 5 — [[DOC-ASBUILT-READER]]** ✅ framed and `ready`.
 **Slice 6 — [[DOC-ASBUILT-AGENTS]]** ✅ framed and `ready`.
@@ -126,9 +127,9 @@ different at its base is measuring wrong.
 |---|---|---|---|
 | — | `library/learn/reading-ken/fragments.md` ✅ **merged** | 9 | 10 |
 | 2 | [[DOC-ASBUILT-EXECUTION]] — `06-execution.md` | **16** | 25 |
-| 3 | [[DOC-ASBUILT-SOLUTIONS]] — `exercises/solutions.md` | **11** | 12 |
+| 3 | [[DOC-ASBUILT-SOLUTIONS]] — ⭐ `exercises/solutions.md` **+ `exercises/exercises.md`** (amended) | **11** | 15 |
 | 4 | [[DOC-ASBUILT-CHAPTERS]] — `01-anatomy.md` + `02-types-contracts-and-proofs.md` + `03-assurance-and-trust.md` + `05-packages-and-provenance.md` | ⭐ **9** (union) | 30 |
-| 5 | [[DOC-ASBUILT-READER]] — the **five** reader-facing entry pages: `quickstart.md` · `introduction.md` · `learn/exercises/exercises.md` · `learn/exercises/README.md` · `reading-ken/04-effects-capabilities-and-authority.md` | ⭐ **9** (union) | 14 |
+| 5 | [[DOC-ASBUILT-READER]] — the ⭐ **four** reader-facing entry pages (amended): `quickstart.md` · `introduction.md` · `learn/exercises/README.md` · `reading-ken/04-effects-capabilities-and-authority.md` | ⭐ **6** (union) | 11 |
 | 6 | [[DOC-ASBUILT-AGENTS]] — the **thirteen**-page agents corpus: `library/README.md` + all twelve `library/agents/**` | ⭐ **7** (union) | 18 |
 
 ⭐ **Six slices cover all 25 consuming documents.** Cut by audience, then by
@@ -155,6 +156,27 @@ whose sweep nobody could audit.
 >
 > ⇒ ⛔ **Do not cut a remaining slice one-page-per-WP by default.** Measure the
 > union first.
+>
+> ### ⭐⭐ AND THE CUT CAN BE WRONG IN THE OTHER DIRECTION — BY **AUDIENCE**
+>
+> ⚠ **Slices 3 and 5 were cut by audience, and that split a PAIR.** `exercises.md`
+> reads as reader-facing; `solutions.md` reads as answer-key. But **an exercise
+> and its solution are one artifact split across two files** — slice 3 hard-stopped
+> before any edit (`evt_41th5chexqwv`) on an exercise whose *premise* a catalog
+> source had retired. ⛔ There is no solution-only repair of that: it writes a
+> correct answer to a wrong question, which reads as reconciled and is worse than
+> the stale pair.
+>
+> ⇒ ⭐ **`exercises.md` moved from slice 5 into slice 3**, and the move was free —
+> its three drifted sources were a **strict subset** of `solutions.md`'s 11.
+> ⭐⭐ **The general rule: before cutting by genre or audience, ask whether the
+> two pages are ONE ARTIFACT.** Shared *sources* argue for grouping; shared
+> *identity* requires it.
+>
+> ⛔ **The alternative — a new node for the exercise repair — was rejected on the
+> node gate.** The only constraint arguing for one was **this campaign's own frame
+> prose**, which the gate names explicitly as ungrounded, *including prose the
+> Steward wrote*.
 
 **25 consuming documents**, and ⭐ **all 28 drifted sources are cited by at least
 one of them** — none is reachable only through the generated `library/STATUS.md`,

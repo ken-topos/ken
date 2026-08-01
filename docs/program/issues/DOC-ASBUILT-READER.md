@@ -1,6 +1,6 @@
 ---
 id: DOC-ASBUILT-READER
-title: "As-built slice 5 — reconcile the five reader-facing entry pages against their 9 shared drifted sources"
+title: "As-built slice 5 — reconcile the four reader-facing entry pages against their 6 shared drifted sources"
 status: ready
 owner: doc
 size: M
@@ -14,17 +14,24 @@ origin: "Steward 2026-08-01, phase A slice 5 of DOC-ASBUILT-AUDIT, measured at o
 > # ▶ SLICE 5 OF PHASE A — THE READER-FACING ENTRY PAGES
 >
 > `library/quickstart.md` · `library/introduction.md` ·
-> `library/learn/exercises/exercises.md` · `library/learn/exercises/README.md` ·
+> `library/learn/exercises/README.md` ·
 > `library/learn/reading-ken/04-effects-capabilities-and-authority.md`
 >
-> ⭐ **5 pages · 9 distinct drifted sources · 14 citations.**
+> ⭐ **4 pages · 6 distinct drifted sources · 11 citations.**
+>
+> ⚠⚠ **AMENDED 2026-08-01 — `library/learn/exercises/exercises.md` MOVED OUT**
+> to [[DOC-ASBUILT-SOLUTIONS]], taking `EmptyDec`, `Combinators` and `Property`
+> with it. ⭐ **An exercise and its solution are one artifact split across two
+> files**, and those three sources were already in slice 3 — so the move was free
+> and ⛔ **no source is read twice across the two slices** any more.
+> ⚠ `library/learn/exercises/README.md` **stayed** — it is still yours.
 
 ## ▶ THE FRAME IS WRITTEN
 
 `docs/program/wp/DOC-ASBUILT-READER.md`. ⛔ **Read the frame, not this node**,
 and read [[DOC-ASBUILT-AUDIT]] first — its two-phase law binds this slice.
 
-## ⭐ Why these five
+## ⭐ Why these four
 
 **Cut by audience, per the campaign's shared-source-set rule** — these are the
 pages a *person* meets first. ⚠ They share claim classes with each other (an
@@ -60,5 +67,5 @@ is still not re-stampable, because phase A writes none at all.
 
 ## ⭐ The drift baseline is **28** and does not move
 
-⛔ None of these five is attested, so editing them adds no row. **29 means
+⛔ None of these four is attested, so editing them adds no row. **29 means
 something was written that should not have been; 27 means a pre-slice-1 base.**
