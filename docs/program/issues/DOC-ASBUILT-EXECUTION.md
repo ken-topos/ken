@@ -1,7 +1,7 @@
 ---
 id: DOC-ASBUILT-EXECUTION
 title: "As-built slice 2 — reconcile 06-execution.md against its 16 drifted cited sources, the largest phase-A population"
-status: ready
+status: merged
 owner: doc
 size: L
 gate: none
@@ -11,6 +11,29 @@ github: null
 origin: "Steward 2026-08-01, phase A slice 2 of DOC-ASBUILT-AUDIT, measured at origin/main 5619748c."
 ---
 
+> # ✅ MERGED 2026-08-01 — `origin/main = f8ede8a3` (PR #1287)
+>
+> Candidate `a1f564219e6485d7a1f3ba7893a8219934a63dbb`, one file, `+17/−18`.
+> Verified by **content**, ⛔ not ancestry — the publisher squashes. Both
+> post-conditions were asserted **before** publishing and both came back exact:
+> merged tree `6f413d8e`, `06-execution.md` blob `172ba03b`.
+>
+> Librarian QA approve `evt_66395f8wda9tk`; Decision `dec_49g4krcmgk7pv`
+> resolved. Base staleness (`7a263d28` → `bb648bd2`) was answered by an **empty
+> merge-base path intersection**.
+>
+> ⭐ **The 16th source was real and the ring absorbed it mid-turn.** The
+> correction (`evt_3j54h1jaa6zh5`) reached the Librarian between its loading a
+> 15-source QA basis and its superseding that basis — *"a 15-source report is
+> incomplete."*
+>
+> ⚠ **The first candidate `2250fb22` was REJECTED on a real defect**, and the
+> rejection is the more valuable artifact: the page asserted that an admitted,
+> hole-free definition does not diverge, while `43-termination.md` §1 narrows SCT
+> to **transparent** admission and §2 case 4 permits an opaque definition to
+> diverge. ⭐ **The page falsified itself 20 lines later** — it documented the
+> opaque SCT-rejected escape and still made the unqualified claim.
+>
 > # ▶ SLICE 2 OF PHASE A — THE HEAVIEST PAGE
 >
 > `library/learn/reading-ken/06-execution.md` carries ⭐ **16 distinct drifted
