@@ -1,7 +1,7 @@
 ---
 id: DOC-W3-DEPDATA
 title: "Wave 3 slice 3 — the dependent-data guide page, the one guide subject of seven with no explanatory coverage anywhere in library/"
-status: ready
+status: merged
 owner: doc
 size: S
 gate: none
