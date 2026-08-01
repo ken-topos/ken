@@ -15,7 +15,7 @@
 
 | input | value |
 |---|---|
-| **base** | ⭐ **current `origin/main` = `e91f8c88`.** ⛔ Not `93746ada`, ⛔ not a preservation ref, ⛔ not another slice's branch. |
+| **base** | ⭐ **`origin/main` as of when you cut the branch — whatever SHA that is, provided it contains this frame.** ⛔ Not `93746ada`, ⛔ not a preservation ref, ⛔ not another slice's branch. |
 | semantic oracle (read-only) | `93746adaaef845f6c857b6c007aeac336c6c800c` — ⛔ **an oracle, not a base;** six Runtime paths at +2,467/−526 |
 | prototype reference | `origin/preserved/rt-recursor-freeze-465fab90` (`465fab90`, patch `d04a64a7…`) — ⛔ **no acceptance transfer** |
 | binding rulings | `evt_7dhwrk26ks9m0` (mechanism) · `evt_4t09329vdrf` (sizing) · `evt_6wkw2c7ykjxsy` (this slice) |
