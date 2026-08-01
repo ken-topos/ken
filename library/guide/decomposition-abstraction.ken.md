@@ -2,9 +2,7 @@
 
 Which shape to reach for is a design choice with real consequences in a
 verified language: the wrong one costs a rewrite once the proofs are half
-written. This strand distills design moves the fleet has paid for in real
-build failures (`agent/memory/enclave/`) into public guide prose, in Ken's
-own terms.
+written. This strand distills recurring design moves into Ken's own terms.
 
 ## Contents
 
@@ -147,10 +145,9 @@ review checklist while reading one:
 
 ## Findings
 
-None yet — this strand is the V1 draft; the reusable-moves table above is
-deliberately short (four moves), not exhaustive. As more of
-`agent/memory/enclave/` proves durable through repeated catalog authoring,
-fold the next validated move in here (retro-action wiring, `README.md`).
+None yet. The reusable-moves table above is deliberately short (four moves),
+not exhaustive; it covers only choices for which Ken has a concrete,
+repeatable design rule.
 
 ## References
 

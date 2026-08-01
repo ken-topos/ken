@@ -437,20 +437,15 @@ proof rather than creating a local namespace.
 
 ## Findings
 
-- A landed conformance fixture
+- The conformance fixture
   (`conformance/challenge/C1-deceq-noncanonical/unsound-deceq-decimal.ken`)
   writes `Refl Bool True` — the **applied** form, which fails with
   `UnresolvedCon` (`Refl` is checked-only, matching solely a bare
-  `RCon("Refl")`, `crates/ken-elaborator/src/elab.rs`). Routed to CV as a
-  fixture-fidelity bug. **Correction, via CV's own differential
-  investigation:** the fix is not simply "use bare `Refl`" — bare `Refl`
-  *also* fails there (`"the two sides of the goal are not convertible"`),
-  and so does `Proved`, because `decimalEq` bottoms out in the opaque
-  primitives `eq_int`/`and_bool`, which never reduce under conversion
-  (§1.1 — this Finding is exactly what §1.1 now teaches, added because of
-  it). The honest witness is `Axiom`. This is the campaign's own retro loop
-  working as designed: authoring against the guide surfaced a gap, and
-  fixing the gap sharpened the guide itself.
+  `RCon("Refl")`, `crates/ken-elaborator/src/elab.rs`). Replacing it with bare
+  `Refl` is not sufficient: bare `Refl` also fails there (`"the two sides of
+  the goal are not convertible"`), as does `Proved`, because `decimalEq`
+  bottoms out in the opaque primitives `eq_int`/`and_bool`, which never
+  reduce under conversion (§1.1). The honest witness is `Axiom`.
 
 ## References
 

@@ -370,7 +370,7 @@ sources = [
   "spec/10-kernel/17-conversion.md#4-termination-of-conversion--the-sct-gate",
   "spec/50-stdlib/51-lawful-classes.md#5-laws-proved-not-postulated--the-hard-soundness-gate-ac3",
   "spec/30-surface/31-lexical.md#1d-canonical-form-and-layout",
-  "spec/30-surface/32-grammar.md#5-specifications",
+  "spec/30-surface/32-grammar.md#3-expressions",
   "catalog/packages/Core/Logic/Transport.ken.md",
   "catalog/packages/Core/Classes/LawfulClasses.ken.md",
 ]

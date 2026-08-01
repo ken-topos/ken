@@ -564,9 +564,9 @@ type signature, a snippet missing its surrounding declarations).
 
 - **Why explicit type parameters over implicit ones**: the elaborator's
   `instance_search`/unification story for implicit-argument inference is
-  still developing (the CAT-2 `class`-dictionary rulings track this); explicit
-  parameters are unambiguous today and cost the caller one extra argument at
-  each call site. Prefer them until the guide says otherwise.
+  still developing; explicit parameters are unambiguous today and cost the
+  caller one extra argument at each call site. Prefer them until the guide
+  says otherwise.
 - **Why refinements over a separate assertion mechanism**: a refinement is
   *in the type*, so every caller sees the postcondition at the call site
   without reading the body — the same reason `sort`'s result type states
@@ -582,16 +582,15 @@ type signature, a snippet missing its surrounding declarations).
     canonical, and only meaningful, use of a value so named.
   - Declaring `fn absurd (...) = ...`, or a `data`/explicit-family
     constructor literally named `Refl`/`Axiom`/`absurd`, no longer silently
-    shadows the sugar — it's a resolve-time hard error (FR-2,
-    `docs/program/wp/ds-1-findings-remediation.md`):
+    shadows the sugar — it is a resolve-time hard error:
 
     ```ken reject
     -- Fails: 'absurd' collides with a reserved surface sugar identifier.
     fn absurd (C : Type) (e : Bool) : C = absurd e
     ```
 
-    Pick a different name for the same idea — DS-1's `Empty` eliminator,
-    for example, is named `absurd_empty`, not `absurd`.
+    Pick a different name for the same idea. The `Empty` eliminator, for
+    example, is named `absurd_empty`, not `absurd`.
   - `J` and `Eq`, by contrast, only intercept a **3-argument** application
     (`Eq A a b`, `J motive base eq`) — the kernel equality/`J` sugar. A
     lower-arity type-former or `class` of the same name **coexists
@@ -611,10 +610,8 @@ type signature, a snippet missing its surrounding declarations).
   the family to exactly its own bound parameters, so genuine inductive
   relations (list-append-shaped, order-shaped) can't be expressed as a
   `prop where` block yet — §7 above teaches the `theorem`-with-explicit-goal
-  workaround instead. Routed as a language-surface follow-on (retro-action
-  wiring, `README.md`): widening the seed shape to accept fresh premise
-  binders and constructor-applied arguments is Language's call, not a
-  catalog-authoring one.
+  workaround instead. The surface does not yet accept fresh premise binders
+  and constructor-applied arguments in that seed shape.
 
 ## References
 
