@@ -5420,6 +5420,258 @@ impl<'a> Lowering<'a> {
     /// makes selection closed is therefore not one caller but that
     /// `Lowered::Closure`/`DeclarationClosure` carry only a tag — so this is the
     /// *only* way any of them can reach a term at all.
+    /// **`D2` -- the binder-lowering helper.** Lowers a `Let`'s bound value
+    /// into the one binding authority.
+    ///
+    /// The default is exactly what it was before this node:
+    /// `Value(lower_expr(..))`. The single new outcome is a lexical closure
+    /// **any** of whose captures is carried, which installs a
+    /// [`LoweringEnvironmentBinding::StaticWorker`] instead -- that case
+    /// previously failed closed in `specialized_operands_at`, which is the
+    /// narrowing this node removes.
+    ///
+    /// All captures are classified **exhaustively before** the outcome is
+    /// selected. The selection is never made from syntax spelling, and never
+    /// from a partially emitted `specialized_at` failure: the captures are
+    /// lowered in full first, then counted.
+    ///
+    /// `RuntimeExpr::Closure` keeps its own arm rather than sharing this one.
+    /// Its captures are seed-provenance symbols resolved to JIT-time ground
+    /// values, not lexical children, so it has no carried capture to find and
+    /// projecting it as one would conflate the two provenances the ABI keeps
+    /// apart.
+    fn lower_binder(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        occurrence: SourceOccurrence<'_>,
+        env: &[LoweringEnvironmentBinding],
+    ) -> Result<LoweringEnvironmentBinding, CraneliftBackendError> {
+        let SourceOccurrence {
+            expr,
+            static_origin,
+        } = occurrence;
+        let RuntimeExpr::LexicalClosure {
+            captures,
+            params,
+            body,
+        } = expr
+        else {
+            // Every other binder, `RuntimeExpr::Closure` included, keeps the
+            // pre-existing route unchanged.
+            return self
+                .lower_expr(builder, occurrence, env)
+                .map(LoweringEnvironmentBinding::Value);
+        };
+        if !matches!(
+            self.body_emission_authority,
+            BodyEmissionAuthority::FunctionizedUnits
+        ) {
+            return self
+                .lower_expr(builder, occurrence, env)
+                .map(LoweringEnvironmentBinding::Value);
+        }
+
+        // Positional projection from this occurrence: body is exact child 0,
+        // lexical capture `i` is exact child `1 + i`. The declaration order
+        // (`captures, params, body`) is NOT the child order.
+        let body = self.child_occurrence(static_origin, 0, body)?;
+        let lowered_captures = captures
+            .iter()
+            .enumerate()
+            .map(|(position, capture)| {
+                let capture = self.child_occurrence(static_origin, 1 + position, capture)?;
+                self.lower_expr(builder, capture, env)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Exhaustive classification, completed before anything is selected.
+        let mut carried = 0usize;
+        let mut specialized = 0usize;
+        for capture in &lowered_captures {
+            match capture {
+                LoweringOperand::Carried(_) => carried += 1,
+                LoweringOperand::Specialized(_) => specialized += 1,
+            }
+        }
+        debug_assert_eq!(carried + specialized, lowered_captures.len());
+
+        if carried == 0 {
+            // All-specialized: preserve the existing compile-time closure.
+            return Ok(LoweringEnvironmentBinding::Value(
+                LoweringOperand::Specialized(Lowered::Closure {
+                    captures: specialized_operands_at(&lowered_captures, "a closure capture")?,
+                    params: params.clone(),
+                    body: body.static_origin,
+                }),
+            ));
+        }
+
+        let declared_arity = u32::try_from(params.len()).map_err(|_| {
+            unsupported(
+                "StaticWorkerBinding",
+                "source closure parameter count exceeds addressable range",
+            )
+        })?;
+        self.construct_static_worker_binding(
+            static_origin,
+            body.static_origin,
+            declared_arity,
+            captures.len(),
+            lowered_captures,
+        )
+        .map(LoweringEnvironmentBinding::StaticWorker)
+    }
+
+    /// **`D2` -- THE SOLE CONSTRUCTION ROUTE for a static worker binding.**
+    ///
+    /// The projection is positional and exact, taken from the closure's own
+    /// retained occurrence: the closure origin is the occurrence origin, the
+    /// body origin is exact child `0`, and lexical capture `i` is exact child
+    /// `1 + i`. Declared arity is the source parameter count.
+    ///
+    /// There is no source re-walk and no global closure search here -- the
+    /// caller has already resolved the occurrence and lowered the captures
+    /// through `child_occurrence`, and this routine only validates and
+    /// installs.
+    ///
+    /// Every one of the checks below runs **before** the binding is returned,
+    /// so a missing, duplicate, wrong-body, wrong-arity or wrong-capture fact
+    /// rejects before any worker call could be emitted. `captures` arrive as
+    /// `LoweringOperand` and are stored unchanged: a carried capture stays
+    /// carried, and nothing here converts a phase.
+    fn construct_static_worker_binding(
+        &self,
+        closure_origin: StaticOriginId,
+        body_origin: StaticOriginId,
+        declared_arity: u32,
+        source_capture_count: usize,
+        captures: Vec<LoweringOperand>,
+    ) -> Result<StaticWorkerBinding, CraneliftBackendError> {
+        // 1. The capture vector agrees with the retained definition. The caller
+        //    builds it from the retained children, so a disagreement means the
+        //    two walks diverged rather than that the source is odd.
+        if captures.len() != source_capture_count {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "retained definition declares {source_capture_count} lexical captures but \
+                     {} were projected",
+                    captures.len()
+                ),
+            ));
+        }
+
+        // 2. This function has a declared static-body target for `body_origin`.
+        //    A missing target is the "worker body was never declared into this
+        //    function" fact, and it rejects here rather than at emission.
+        let target = self
+            .function_local
+            .unit_calls
+            .get(&body_origin)
+            .ok_or_else(|| {
+                unsupported(
+                    "StaticWorkerBinding",
+                    format!(
+                        "no declared static-body target for worker body origin {body_origin:?} \
+                         in this function"
+                    ),
+                )
+            })?;
+
+        // 3. The declared unit call is the one for this exact body origin. The
+        //    map is keyed by origin, so a disagreement here means the entry was
+        //    built for another body -- a wrong-body fact, not a lookup miss.
+        if target.origin != body_origin {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "declared unit call carries origin {:?} but the worker body origin is \
+                     {body_origin:?}",
+                    target.origin
+                ),
+            ));
+        }
+
+        // 4. The descriptor's parameter count is the declared arity.
+        if target.header.parameters != declared_arity {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "worker descriptor declares {} parameters but the source closure declares \
+                     {declared_arity}",
+                    target.header.parameters
+                ),
+            ));
+        }
+
+        // 5. The descriptor's capture count is the capture vector's length.
+        let descriptor_captures = usize::try_from(target.header.captures).map_err(|_| {
+            unsupported(
+                "StaticWorkerBinding",
+                "worker descriptor capture count exceeds addressable range",
+            )
+        })?;
+        if descriptor_captures != captures.len() {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "worker descriptor declares {descriptor_captures} captures but {} were \
+                     projected from the retained definition",
+                    captures.len()
+                ),
+            ));
+        }
+
+        // 6. Slots, offsets and frame bytes are taken from that descriptor
+        //    unchanged, so they must agree with it before installation. The
+        //    slot run is the authority for the counts, and `frame_bytes` is
+        //    derived from it -- a slot run that disagrees with the header is a
+        //    descriptor this binding must not carry.
+        if target.slots.len() != target.offsets.len() {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "worker descriptor has {} slots but {} offsets",
+                    target.slots.len(),
+                    target.offsets.len()
+                ),
+            ));
+        }
+        let slot_parameters = target
+            .slots
+            .iter()
+            .filter(|slot| matches!(slot.kind, AbiSlotKind::Parameter))
+            .count();
+        let slot_captures = target
+            .slots
+            .iter()
+            .filter(|slot| matches!(slot.kind, AbiSlotKind::Capture))
+            .count();
+        if slot_parameters != declared_arity as usize || slot_captures != descriptor_captures {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "worker descriptor slot run declares {slot_parameters} parameters and \
+                     {slot_captures} captures, disagreeing with its header's {declared_arity} \
+                     and {descriptor_captures}"
+                ),
+            ));
+        }
+        if target.header.frame_bytes == 0 && !target.slots.is_empty() {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                "worker descriptor declares a non-empty slot run in a zero-byte frame",
+            ));
+        }
+
+        Ok(StaticWorkerBinding {
+            closure_origin,
+            body_origin,
+            declared_arity,
+            captures,
+        })
+    }
+
     pub(super) fn retained_body_occurrence(
         &self,
         static_origin: StaticOriginId,
@@ -6810,14 +7062,23 @@ impl<'a> Lowering<'a> {
             }
             RuntimeExpr::Let { value, body } => {
                 let value = self.child_occurrence(static_origin, 0, value)?;
-                let lowered_value = self.lower_expr(builder, value, env)?;
-                if matches!(lowered_value, LoweringOperand::Specialized(Lowered::RecursiveBackedge)) {
-                    return Ok(LoweringOperand::Specialized(Lowered::RecursiveBackedge));
+                let bound = self.lower_binder(builder, value, env)?;
+                // The two short-circuits below are value-shaped, so they read
+                // through the binding rather than around it. A static worker
+                // binding is neither a backedge nor a trap, so it falls
+                // through to the ordinary installation.
+                if let LoweringEnvironmentBinding::Value(lowered_value) = &bound {
+                    if matches!(
+                        lowered_value,
+                        LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+                    ) {
+                        return Ok(LoweringOperand::Specialized(Lowered::RecursiveBackedge));
+                    }
+                    if let LoweringOperand::Specialized(Lowered::Trap(trap)) = lowered_value {
+                        return Ok(LoweringOperand::Specialized(Lowered::Trap(trap.clone())));
+                    }
                 }
-                if let LoweringOperand::Specialized(Lowered::Trap(trap)) = lowered_value {
-                    return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
-                }
-                let mut body_env = vec![LoweringEnvironmentBinding::Value(lowered_value)];
+                let mut body_env = vec![bound];
                 body_env.extend_from_slice(env);
                 let body = self.child_occurrence(static_origin, 1, body)?;
                 self.lower_expr(builder, body, &body_env)
