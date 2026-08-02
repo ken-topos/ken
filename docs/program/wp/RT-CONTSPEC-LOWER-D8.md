@@ -22,7 +22,8 @@ successors from that baseline, unions their consumed sets, and restores the
 union after their join. `lower_forked_branch` is the sole connection: it
 replaces the existing baseline/union spelling without adding an authority or
 keying axis. The test harness receives that live field from a real `Lowering`
-fixture; it does not construct a separate ledger.
+fixture; it does not construct a separate ledger. No collision was observed
+across predeclared functions.
 
 | Test | First refusal, copied from TSV | Phase | D8 | Causal root / cascade owner |
 |---|---|---|---|---|
