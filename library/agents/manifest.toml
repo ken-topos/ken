@@ -18,11 +18,14 @@ prerequisites = []
 sources = [
   "spec/30-surface/33-declarations.md",
   "spec/30-surface/36-effects.md",
+  "spec/30-surface/31-lexical.md",
+  "spec/30-surface/39-elaboration.md",
+  "spec/40-runtime/42-evaluation.md",
   "library/learn/reading-ken/fragments.md",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
-measured_tokens = 549
+measured_tokens = 591
 
 [[module]]
 id = "core/write-ken"
@@ -34,12 +37,13 @@ sources = [
   "docs/program/07-catalog-style-guide.md#61-local-bindings-as-exposition",
   "spec/30-surface/33-declarations.md#52-class-declaration--a-record-type",
   "spec/30-surface/33-declarations.md#53-instance-declaration--a-record-value--the-orphan-check",
+  "spec/10-kernel/17-conversion.md",
   "library/guide/surface-reference.ken.md#5-class-and-instance",
   "library/guide/proof-techniques.ken.md#1-proved-vs-refl-the-two-way-discriminator",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
-measured_tokens = 729
+measured_tokens = 764
 
 [[module]]
 id = "core/proof-and-trust"
@@ -50,11 +54,13 @@ prerequisites = ["core/read-ken"]
 sources = [
   "spec/20-verification/21-spec-syntax.md",
   "spec/60-security/64-trust-model.md",
+  "spec/10-kernel/16-observational.md",
+  "spec/10-kernel/17-conversion.md",
   "library/guide/proof-techniques.ken.md",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
-measured_tokens = 578
+measured_tokens = 614
 
 [[module]]
 id = "core/toolchain"
@@ -66,10 +72,11 @@ sources = [
   "crates/ken-cli/src/main.rs",
   "spec/40-runtime/42-evaluation.md",
   "spec/40-runtime/45-native-backend.md",
+  "spec/40-runtime/48-executable-artifact-contract.md",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
-measured_tokens = 557
+measured_tokens = 598
 
 [[module]]
 id = "tasks/read-review"
@@ -156,11 +163,13 @@ prerequisites = ["core/read-ken"]
 sources = [
   "spec/30-surface/36-effects.md",
   "spec/60-security/62-authority.md",
+  "spec/40-runtime/42-evaluation.md",
+  "spec/30-surface/38-ffi-io.md",
   "catalog/packages/Capability/",
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
-measured_tokens = 531
+measured_tokens = 568
 
 [[pack]]
 id = "read-review"
@@ -182,7 +191,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 2093
+measured_tokens = 2212
 
 [[pack]]
 id = "write-pure"
@@ -205,7 +214,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 2825
+measured_tokens = 2979
 
 [[pack]]
 id = "write-effectful"
@@ -221,7 +230,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 3356
+measured_tokens = 3547
 
 [[pack]]
 id = "author-package"
@@ -237,7 +246,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 3305
+measured_tokens = 3459
 
 [[pack]]
 id = "repair-proof"
@@ -253,7 +262,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 3230
+measured_tokens = 3384
 
 [[pack]]
 id = "diagnose"
@@ -274,4 +283,4 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 2120
+measured_tokens = 2239

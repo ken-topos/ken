@@ -63,15 +63,18 @@ from a generic authority inventory. Row names refer to the routing table above.
 | `find-package-by-task` | Trust and CLI evidence | `core/proof-and-trust.md`: trust posture; `core/toolchain.md`: implemented or observed command. |
 | `write-effectful-boundary` | Runtime host-driver authority | `tasks/effects-and-capabilities.md`: host-driver boundary; `core/toolchain.md`: runtime or host-driven run. |
 | `refuse-unsupported` | FFI and executable-portability authority | `tasks/effects-and-capabilities.md`: FFI support boundary; `core/toolchain.md`: native ABI or executable portability. |
-| `diagnose-layers` | Loaded normative layer sources and CLI evidence | `core/read-ken.md`: parsing, elaboration, and runtime classification; `core/proof-and-trust.md`: kernel proof terminal; `core/toolchain.md`: implemented or observed command. |
+| `diagnose-layers` | Loaded normative layer sources, including the unresolved judgments authority, and CLI evidence | `core/read-ken.md`: parsing, elaboration, and runtime classification; `core/proof-and-trust.md`: the kernel proof-terminal claim class is assigned here, but the exact `spec/10-kernel/18-judgments.md` pointer remains unresolved; `core/toolchain.md`: implemented or observed command. |
 
 ## Checkpoint 1 disposition
 
-All scored omissions route to at least one of the five existing modules, so no
-claim class requires a sixth module and hard stop 2 does not fire. Every route
-has an explicit claim antecedent; none instructs an unconditional load. Module
-edits, context-cost measurement, and the seven-answer paper check remain for
-later checkpoints after leader acceptance of this table.
+D1 assigns every scored claim class to at least one of the five existing
+modules, so no claim class requires a sixth module and hard stop 2 does not
+fire. For `diagnose-layers`, the proof/kernel-failure class is assigned to
+`core/proof-and-trust.md`, but the exact
+`spec/10-kernel/18-judgments.md` pointer remains unresolved. Every written
+route has an explicit claim antecedent; none instructs an unconditional load.
+Module edits, context-cost measurement, and the seven-answer paper check remain
+for later checkpoints after leader acceptance of this table.
 
 ## D2 — claim-triggered module edits
 
@@ -104,6 +107,19 @@ section.
 | `tasks/effects-and-capabilities` | 87 | 92 | +5 |
 | **Five-module total** | **468** | **492** | **+24** |
 
+Token counts use the `unicode-whitespace-v1` measurement declared by
+`library/agents/manifest.toml`. They measure the exact checkpoint-1 and
+checkpoint-2 module blobs.
+
+| Module | Before | After | Growth |
+|---|---:|---:|---:|
+| `core/read-ken` | 549 | 591 | +42 |
+| `core/write-ken` | 729 | 764 | +35 |
+| `core/proof-and-trust` | 578 | 614 | +36 |
+| `core/toolchain` | 557 | 598 | +41 |
+| `tasks/effects-and-capabilities` | 531 | 568 | +37 |
+| **Five-module total** | **2,944** | **3,135** | **+191** |
+
 Pack closure counts sum the line counts of each pack's unique transitive module
 closure, dependencies first, matching the resolution rule documented in
 `library/agents/manifest.toml`. Pack manifest lines are not module context and
@@ -117,6 +133,17 @@ are not included. Unchanged task modules retain their checkpoint-1 counts.
 | `author-package` | `write-pure` closure plus `author-package` | 544 | 563 | +19 |
 | `repair-proof` | `write-pure` closure plus `prove-or-repair` | 534 | 553 | +19 |
 | `diagnose` | `read-ken`, `proof-and-trust`, `toolchain`, `diagnose` | 345 | 359 | +14 |
+
+The same resolved closures measured in tokens are:
+
+| Pack | Before | After | Growth |
+|---|---:|---:|---:|
+| `read-review` | 2,093 | 2,212 | +119 |
+| `write-pure` | 2,825 | 2,979 | +154 |
+| `write-effectful` | 3,356 | 3,547 | +191 |
+| `author-package` | 3,305 | 3,459 | +154 |
+| `repair-proof` | 3,230 | 3,384 | +154 |
+| `diagnose` | 2,120 | 2,239 | +119 |
 
 ## Checkpoint 2 disposition
 
@@ -282,9 +309,11 @@ D2 rule remains unchanged and remains the scoring authority.
 
 ## Final disposition
 
-D1 routes every scored omission into the five framed modules without blanket
-loading. D2 applies those routes as pointers, D3 records their context cost,
-and D4 demonstrates that the revised modules would fully reach six preserved
-answers while exposing—not concealing—the one judgments-source residual. D5
-routes that residual to a bounded future amendment. No evaluation, fixture,
-pack, task, result, or normative source was changed or re-run.
+D1 assigns every scored claim class to the five framed modules without blanket
+loading, but leaves the exact `spec/10-kernel/18-judgments.md` pointer
+unresolved in the assigned `core/proof-and-trust.md` module. D2 applies the
+written routes as pointers, D3 records their context cost, and D4 demonstrates
+that the revised modules would fully reach six preserved answers while
+exposing—not concealing—the judgments-source residual. D5 routes that residual
+to a bounded future amendment. No evaluation, fixture, pack, task, result, or
+normative source was changed or re-run.
