@@ -139,22 +139,76 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
 ⇒ A `Toolchain`-stage `ObjectLinkerPackagingError` is an environment finding,
 not a baseline finding.
 
-## The one bounded exemption to the prior-slice freeze
+## The two bounded exemptions to the prior-slice freeze
 
-Seam 1 froze six prior-slice surfaces. **That freeze holds here with exactly one
-narrow exemption**, granted by the Architect at `evt_3xj4eqwqmn46n` item 1
-because the planned population is private and lowering cannot otherwise reach it
-without re-deriving planner facts:
+Seam 1 froze six prior-slice surfaces. **That freeze holds here with exactly two
+narrow exemptions.** Both are for reachability, not for authority.
+
+### Exemption 1 — the activation projection
+
+Granted by the Architect at `evt_3xj4eqwqmn46n` item 1, because the planned
+population is private and lowering cannot otherwise reach it without re-deriving
+planner facts:
 
 > `planning/static_transition.rs` may add an **activation projection only**.
 
-Everything else on that file stays put: planner derivation, interning, key
-construction, ABI construction, `planning/static_transition/abi.rs`, semantic IR,
-`planning.rs`, `boundary_value.rs`, `boundary_value_clif.rs` — all frozen at
-their `main` blobs.
+### Exemption 2 — the facade route, added by the 05:12 recut
 
-⇒ **This exemption is for reachability, not for authority.** The projection may
-expose what the planner already decided. It may not decide anything.
+Granted at `evt_4hrnfc81h6t81`. **The first cut of this frame froze
+`planning.rs` while `D2` required the typed identity to survive into lowering.
+Those two are mutually unsatisfiable, and hard stop 2 fired on exactly that.**
+
+Measured at base `86c7cedf`:
+
+| fact | value |
+|---|---|
+| `planning.rs` blob at base | `0b2fdb22a05fbf58bd0cfed22f308011b69fb969` |
+| `planning.rs:14` | `mod static_transition;` — **private** |
+| `ContinuationSpecializationId` | `pub(in crate::cranelift_backend)`, `static_transition.rs:406` |
+
+The item's visibility is backend-wide, but it sits inside a **private module**,
+so a sibling `lowering` cannot *name* it by path.
+`UnitBundle::continuation_functions: BTreeMap<ContinuationSpecializationId,
+FuncId>` therefore has no lawful route without a facade. ⇒ **Deleting the re-export while keeping the typed map is not
+a repair; it is the contradiction restated.**
+
+> `planning.rs` may perform **namespace wiring only** — re-exporting the opaque
+> typed activation identities and views that lowering needs. **No derivation,
+> selection, construction, validation, or mutation may move there.**
+
+### What both exemptions still exclude
+
+`planning/static_transition/abi.rs`, semantic IR, `boundary_value.rs`,
+`boundary_value_clif.rs`, and planner derivation/interning/key/ABI construction
+inside `static_transition.rs` — all frozen at their `main` blobs.
+
+⇒ **The projection may expose what the planner already decided. It may not
+decide anything, and the facade may not compute anything.**
+
+## The integration boundary, ruled at `evt_4hrnfc81h6t81`
+
+Once the typed projection is lawfully routable, the seam is exactly this and
+stops here:
+
+1. `static_transition.rs` completes the read-only projection **from already
+   validated facts only**.
+2. `units.rs` **declares and defines** each projected continuation target from
+   its exact projected definition, descriptor, slot, and input contract, and
+   resolves each projected causal token to that declared `FuncId`.
+3. Ordinary unit body emission carries its actual `PredeclaredFunctionId` as
+   **function-scoped defining-unit context** into the producer-alternative
+   lowering path. That context is compared with the token's `producer_owner`.
+   ⇒ It is **not** a resurrected global historical selector.
+4. At the exact producer construct, alternative, and sequence named by the
+   token, lowering **removes the exact claim once**, emits the resolved direct
+   call before the identity-erasing join, and rejects wrong owner, absent or
+   duplicate claim, wrong target, and leftover claims.
+5. Completion compares the exact **planned / declared / defined / called** sets.
+
+**Still forbidden:** positional ordinals, symbol parsing, source re-enumeration,
+and any second arm authority. `D3` necessarily integrates `lowering/units.rs`,
+`lowering/core.rs`, and lowering's per-function emission context — that is
+in scope and is not a finding.
 
 ## Deliverables
 
@@ -170,13 +224,31 @@ expose what the planner already decided. It may not decide anything.
   enumerate source syntax to reconstruct the population nor invent an id, owner,
   descriptor, or call.
 
+  ⛔ **`D1` is NOT complete at `4a058dbb`** (ruled `evt_4hrnfc81h6t81` item 4).
+  That projection exposes only `id()` on the unit view and `target()` plus
+  `call_site_sequence()` on the call view. **The immutable specialization key
+  facts, the validated descriptor/slots/input authority, and the call's full
+  producer tuple are all still owed.** Without them the current source cannot
+  define the continuation body, locate the exact producer alternative, compare
+  the actual defining owner, or consume the exact claim — and every one of those
+  is `D3`'s content. A checkpoint that declares symbols has not discharged this.
+
 - **D2 — the lowering consumption.** `lowering/units.rs` consumes those views to
   forward-declare one continuation target per planned specialization and resolve
   the exact direct call per causal token, **emitted in the producer alternative
   before the identity-erasing join.**
   Keep continuation identity typed: do **not** alias a
   `ContinuationSpecializationId` to an ordinal, and do **not** fabricate a
-  `PredeclaredFunctionId`.
+  `PredeclaredFunctionId`. The typed identity reaches lowering through the
+  exemption-2 facade, which is now permitted.
+
+  ⛔ **`D2` is NOT complete because symbols were declared.** `declare_unit_bundle`
+  declaring continuation symbols while `define_unit_bodies` still iterates only
+  `emittable_units()` leaves the continuation map with **no lawful defining or
+  call-resolution consumer**. That is the expected consequence of `D1` being
+  incomplete — it is **not** authority to invent a consumer in lowering. `D2` is
+  discharged when each projected target is declared **and defined** from its
+  projected contract, and each causal token resolves to that declared `FuncId`.
 
 - **D3 — affine consumption and owner agreement.** Exactly **one** affine
   consumption of the exact planned continuation-call token. "Active emitted
@@ -226,15 +298,23 @@ expose what the planner already decided. It may not decide anything.
   *Control:* both mutations run and shown red, then reverted. Commit the real
   fix before any mutation proof and reset after.
 
-- **AC-4 — the frozen surfaces are blob-identical to the merge base, with one
-  named exemption.** All six prior-slice surfaces must be blob-equal, **except**
-  the bounded activation-projection delta in `planning/static_transition.rs`.
-  *Control:* `git rev-parse <candidate>:<path>` against
-  `git rev-parse <merge-base>:<path>` for the other five. For
-  `static_transition.rs`, a control showing the underlying **specialization and
-  call populations are byte-or-claim identical before and after the
-  projection** — the diff adds a view and changes no derived value.
-  `planning/static_transition/abi.rs` is **not** exempt.
+- **AC-4 — the frozen surfaces are blob-identical to the merge base, with two
+  named and blob-bounded exemptions.**
+  - **Frozen, blob-equal, no exceptions:** `planning/static_transition/abi.rs`,
+    `planning/static_transition/semantic_ir.rs`, `boundary_value.rs`,
+    `boundary_value_clif.rs`.
+    *Control:* `git rev-parse <candidate>:<path>` against
+    `git rev-parse <merge-base>:<path>` for each.
+  - **Exemption 1 — `planning/static_transition.rs`**, activation projection
+    only. *Control:* the underlying **specialization and call populations are
+    byte-or-claim identical before and after** — the diff adds a view and
+    changes no derived value.
+  - **Exemption 2 — `planning.rs`**, facade namespace wiring only. Base blob is
+    `0b2fdb22a05fbf58bd0cfed22f308011b69fb969`.
+    *Control:* the whole diff against that blob is `pub use` / `pub(in …) use`
+    re-export lines and nothing else. ⛔ **Any `fn`, `impl`, `struct`, `enum`,
+    control flow, or literal in `planning.rs`'s delta fails this AC outright** —
+    the facade routes names and computes nothing.
 
 - **AC-5 — no test outside the `D4` fixture changes status in either
   direction.** A row that starts failing is a regression; a row that starts
@@ -252,8 +332,9 @@ expose what the planner already decided. It may not decide anything.
   reachable; it does not extend it.
 - **No planner or ABI semantic repair.** A planner- or ABI-worded refusal on the
   lawful assembly is a **new interface fact**: route it, do not repair it.
-- **No edit to `planning/static_transition/abi.rs`**, semantic IR, `planning.rs`,
-  `boundary_value.rs`, or `boundary_value_clif.rs` (`AC-4`).
+- **No edit to `planning/static_transition/abi.rs`**, semantic IR,
+  `boundary_value.rs`, or `boundary_value_clif.rs` (`AC-4`). `planning.rs` is
+  open **only** for re-export lines under exemption 2.
 - **No second authority in `lowering`.** No reconstruction of the population
   from source syntax, no minted id, owner, descriptor, or call, and no
   lowering-only ledger beside the planner's call token.
@@ -280,12 +361,27 @@ full-workspace build, the `--locked` gate and conformance run in CI.
 is 2 units and 2 calls that already exist and are already validated, not 37 rows
 to be selected and moved. The work is a projection, a consumption, and a fixture.
 
-⇒ **Commit at these three checkpoints and post the exact SHA at each:**
+⇒ **Commit at these checkpoints and post the exact SHA at each.** The list is
+restated by the 05:12 recut, because the first two were accepted before their
+deliverables were complete:
 
-1. `D1` activation projection, with its fail-closed revalidation.
-2. `D2` lowering consumption — targets declared, direct call resolved before the
-   join.
+1. **`D1` complete** — the facade route, plus a projection carrying the
+   specialization key facts, the validated descriptor/slots/input authority, and
+   the call's **full producer tuple**. Not just `id()` / `target()` /
+   `call_site_sequence()`.
+2. **`D2` complete** — each projected target declared **and defined** from its
+   projected contract, and each causal token resolved to that declared `FuncId`.
+   Declaring symbols alone is not this checkpoint.
 3. `D3` affine and owner controls, `D4` fixture, their mutation proofs, `D5`.
+
+⛔ **Do not accept a checkpoint against its label. Accept it against the
+deliverable's text.** Checkpoints 1 and 2 were both accepted on a reading of
+their headline rather than their content, and hard stop 2 is what surfaced it
+two checkpoints later.
+
+Work already on the branch is preserved and reusable: `4a058dbb` (partial
+projection), `d7291746` (typed identity restored). Neither is discarded; both
+are extended.
 
 If any single checkpoint runs past an hour, stop and route. That is a sizing
 finding and the recut is the Steward's.
