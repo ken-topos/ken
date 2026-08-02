@@ -1,7 +1,7 @@
 ---
 id: DOC-W4-RESIDUAL
 title: "Wave 4 slice 3 — the terminal residual measurement across the four remaining reference surfaces and the four indexes, authoring only what survives it"
-status: ready
+status: merged
 owner: doc
 size: S
 gate: none
