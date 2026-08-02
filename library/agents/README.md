@@ -62,20 +62,18 @@ facts while preserving the repository's own workflow.
 ## Integrity and evaluation
 
 `schemas/agent-manifest.schema.json` and `schemas/pack.schema.json` are the
-only schemas, because those are the two manifest formats consumed by the
-targeted agent-library gate. The gate checks:
+only schemas, because those are the two controlled manifest formats. The test
+target exercises detector behavior through planted fixtures. It:
 
-- both manifest formats against every constraint class declared by their
-  shipped schemas, failing if a schema introduces an unsupported constraint;
-- every manifest module and pack path exists;
-- every module and pack source path and heading anchor exists;
-- pack includes resolve to declared modules;
-- pack dependencies resolve and are acyclic;
-- measured sizes match current file bytes under the declared measurement;
-- all ten modules carry the ten contract sections in order, with non-empty
-  point 10; and
-- planted schema, missing-module, circular-dependency, duplicate-ID, and
-  escaping-path fixtures are rejected.
+- exercises the shipped schema constraint classes and fails on an unsupported
+  schema keyword;
+- rejects a planted pack include whose module is absent and a planted circular
+  pack dependency; and
+- rejects planted duplicate pack and task IDs and repository-escaping paths.
+
+The test target does not currently apply the agent-manifest, source,
+token-measurement, contract-section, or resolved-closure helpers to the live
+agent-library corpus.
 
 `evaluations/README.md` defines the seven cold-context tasks. Results report
 correctness, unnecessary loads, invented syntax or capabilities, and cited
