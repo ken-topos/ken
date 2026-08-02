@@ -233,6 +233,7 @@ fn run_dynamic_constructor_dispatch_fixture(
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            worker_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
@@ -481,18 +482,33 @@ fn dynamic_constructor_fields_precede_outer_environment_in_declaration_order() {
     };
     let env = materialize_dynamic_constructor_env(
         &alternative,
-        &[LoweringOperand::Specialized(Lowered::Bytes(
-            b"outer".to_vec(),
+        &[LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(
+            Lowered::Bytes(b"outer".to_vec()),
         ))],
     );
     assert!(
-        matches!(&env[0], LoweringOperand::Specialized(Lowered::Bytes(value)) if value == b"first")
+        matches!(
+            &env[0],
+            LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(Lowered::Bytes(
+                value,
+            ))) if value == b"first"
+        )
     );
     assert!(
-        matches!(&env[1], LoweringOperand::Specialized(Lowered::String(value)) if value == "second")
+        matches!(
+            &env[1],
+            LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(Lowered::String(
+                value,
+            ))) if value == "second"
+        )
     );
     assert!(
-        matches!(&env[2], LoweringOperand::Specialized(Lowered::Bytes(value)) if value == b"outer")
+        matches!(
+            &env[2],
+            LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(Lowered::Bytes(
+                value,
+            ))) if value == b"outer"
+        )
     );
 }
 
@@ -1903,6 +1919,7 @@ fn bare_carrier_test_lowering<'src>(
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            worker_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
@@ -2095,9 +2112,9 @@ fn c1_d3_a_carried_operand_survives_case_env_and_nested_lowering() {
     let seeded_word = builder.ins().iconst(types::I64, 0x0c1_d3);
 
     // ── the carried phase ─────────────────────────────────────────────────
-    let carried_env = [LoweringOperand::Carried(CarriedBoundaryWord {
-        word: seeded_word,
-    })];
+    let carried_env = [LoweringEnvironmentBinding::Value(LoweringOperand::Carried(
+        CarriedBoundaryWord { word: seeded_word },
+    ))];
     let carried_out = compiler
         .lower_expr(
             &mut builder,
@@ -2124,10 +2141,12 @@ fn c1_d3_a_carried_operand_survives_case_env_and_nested_lowering() {
     //
     // ⛔ Without this the test is consistent with a spine that answers
     // `Carried` for everything.
-    let specialized_env = [LoweringOperand::Specialized(Lowered::Bool {
-        value: seeded_word,
-        known: Some(true),
-    })];
+    let specialized_env = [LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(
+        Lowered::Bool {
+            value: seeded_word,
+            known: Some(true),
+        },
+    ))];
     let specialized_out = compiler
         .lower_expr(
             &mut builder,
@@ -2906,7 +2925,7 @@ fn ac_c7_project_edge(fields: [(&str, &str); 2], project: &str) -> (i64, u64, u6
                 expr: project_expr.as_ref(),
                 static_origin: project_origin,
             },
-            &[LoweringOperand::Carried(word)],
+            &[LoweringEnvironmentBinding::Value(LoweringOperand::Carried(word))],
         )?;
         let LoweringOperand::Carried(child) = eliminated else {
             panic!(
@@ -3135,7 +3154,7 @@ fn ac_c7_match_edge(scrutinee: &str, inner: &str) -> (i64, u64, u64) {
                 expr: match_expr.as_ref(),
                 static_origin: match_origin,
             },
-            &[LoweringOperand::Carried(word)],
+            &[LoweringEnvironmentBinding::Value(LoweringOperand::Carried(word))],
         )?;
         let LoweringOperand::Carried(selected) = eliminated else {
             panic!("a carried `Match` merges in the carrier lane, so its result is `Carried`");
@@ -3295,7 +3314,7 @@ fn ac_c7_computational_match_edge(scrutinee: &str, inner: &str) -> (i64, u64, u6
                 expr: match_expr.as_ref(),
                 static_origin: match_origin,
             },
-            &[LoweringOperand::Carried(word)],
+            &[LoweringEnvironmentBinding::Value(LoweringOperand::Carried(word))],
         )?;
         let LoweringOperand::Carried(selected) = eliminated else {
             panic!(
@@ -3428,7 +3447,7 @@ fn ac_c4_recursive_edge(
                 expr: match_expr.as_ref(),
                 static_origin: match_origin,
             },
-            &[LoweringOperand::Carried(word)],
+            &[LoweringEnvironmentBinding::Value(LoweringOperand::Carried(word))],
         )?;
         let LoweringOperand::Carried(selected) = eliminated else {
             panic!(
@@ -3643,7 +3662,7 @@ fn ac_c4_ownership_edge_with_case_body(
                 expr: match_expr.as_ref(),
                 static_origin: match_origin,
             },
-            &[LoweringOperand::Carried(word)],
+            &[LoweringEnvironmentBinding::Value(LoweringOperand::Carried(word))],
         )?;
         let LoweringOperand::Carried(selected) = eliminated else {
             panic!("a carried `ComputationalMatch` merges in the carrier lane")
@@ -4740,5 +4759,938 @@ fn b2f_d9_a_no_pair_spillable_crosses_on_its_own_tag() {
         BoundaryTag::ImmediateInt as u8,
         "NON-VACUITY: the two tags must differ, or the assertion above cannot \
          tell a per-variant tag from a hardcoded one"
+    );
+}
+
+// ─── RT-WORKER-BIND `D2` — the construction route's pre-installation facts ───
+
+/// A planned `Let` whose bound value is a lexical closure with one capture.
+///
+/// The origins come from the plan, positionally, exactly as `D2` projects
+/// them: the closure is the `Let`'s child `0`, the worker body is the
+/// closure's child `0`, and capture `i` is the closure's child `1 + i`.
+#[cfg(test)]
+fn worker_source() -> RuntimeExpr {
+    RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::Value(RuntimeValue::Int(7.into()))],
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Var(0)),
+        }),
+        body: Box::new(RuntimeExpr::Var(0)),
+    }
+}
+
+/// A descriptor that agrees with itself: `parameters` parameters, `captures`
+/// captures, one slot per declared item, and an offset per slot.
+#[cfg(test)]
+fn worker_descriptor(
+    origin: StaticOriginId,
+    parameters: u32,
+    captures: u32,
+) -> units::DeclaredUnitCall {
+    let mut slots = Vec::new();
+    for ordinal in 0..parameters {
+        slots.push(AbiSlot {
+            kind: AbiSlotKind::Parameter,
+            carrier: AbiCarrier::ValueWord,
+            ownership: AbiOwnership::OwnedByFrame,
+            storage_owner: AbiStorageOwner::ActivationFrame,
+            width_bytes: 8,
+            align_bytes: 8,
+            ordinal,
+        });
+    }
+    for ordinal in 0..captures {
+        slots.push(AbiSlot {
+            kind: AbiSlotKind::Capture,
+            carrier: AbiCarrier::ValueWord,
+            ownership: AbiOwnership::OwnedByFrame,
+            storage_owner: AbiStorageOwner::ActivationFrame,
+            width_bytes: 8,
+            align_bytes: 8,
+            ordinal,
+        });
+    }
+    let offsets = (0..slots.len() as u32).map(|index| index * 8).collect();
+    units::DeclaredUnitCall {
+        function: cranelift_codegen::ir::FuncRef::from_u32(0),
+        origin,
+        header: AbiFrameHeader {
+            parameters,
+            captures,
+            frame_bytes: (slots.len() as u32) * 8,
+            align_bytes: 8,
+        },
+        slots,
+        offsets,
+    }
+}
+
+/// Drives one construction attempt against a descriptor the caller shapes.
+///
+/// Returns the route's own verdict, so a test asserts on the construction
+/// rather than on some later emission.
+#[cfg(test)]
+fn attempt_worker_construction(
+    install: impl FnOnce(StaticOriginId, StaticOriginId) -> Option<units::DeclaredUnitCall>,
+    declared_arity: u32,
+    source_capture_count: usize,
+    capture_operands: usize,
+) -> Result<StaticWorkerBinding, CraneliftBackendError> {
+    let source = worker_source();
+    let (plan, root) = planned_root_occurrence(&source);
+    let closure_origin = plan
+        .child_static_origin(root, 0)
+        .expect("the Let's bound value is planned as child 0");
+    let body_origin = plan
+        .child_static_origin(closure_origin, 0)
+        .expect("a lexical closure plans its body as child 0");
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+    if let Some(target) = install(body_origin, closure_origin) {
+        compiler.function_local.unit_calls.insert(body_origin, target);
+    }
+    // `Lowered::Bytes` needs no emitted value, so the fixture builds captures
+    // without a builder. The route is phase-agnostic by design -- it stores
+    // operands unchanged -- so the descriptor facts below are what is under
+    // test, not the capture phase.
+    let captures = (0..capture_operands)
+        .map(|index| {
+            LoweringOperand::Specialized(Lowered::Bytes(format!("capture{index}").into_bytes()))
+        })
+        .collect::<Vec<_>>();
+    compiler.construct_static_worker_binding(
+        closure_origin,
+        body_origin,
+        declared_arity,
+        source_capture_count,
+        captures,
+    )
+}
+
+/// `StaticWorkerBinding` deliberately has no `Debug` (it holds
+/// `LoweringOperand`, which has none), so the tests below destructure rather
+/// than reach for `expect`/`expect_err`.
+#[cfg(test)]
+fn expect_worker_rejection(
+    result: Result<StaticWorkerBinding, CraneliftBackendError>,
+) -> CraneliftBackendError {
+    match result {
+        Ok(_) => panic!("the construction route installed a binding where it must reject"),
+        Err(error) => error,
+    }
+}
+
+#[cfg(test)]
+fn expect_worker_binding(
+    result: Result<StaticWorkerBinding, CraneliftBackendError>,
+) -> StaticWorkerBinding {
+    match result {
+        Ok(binding) => binding,
+        Err(error) => panic!("an agreeing descriptor must install: {error:?}"),
+    }
+}
+
+/// The route succeeds when every declared fact agrees, and stores exactly the
+/// projected origins, arity and captures.
+#[test]
+fn static_worker_construction_installs_on_agreeing_descriptor() {
+    let binding = expect_worker_binding(attempt_worker_construction(
+        |origin, _| Some(worker_descriptor(origin, 1, 1)),
+        1,
+        1,
+        1,
+    ));
+    assert_eq!(binding.declared_arity, 1);
+    assert_eq!(binding.captures.len(), 1);
+    assert!(
+        matches!(&binding.captures[0], LoweringOperand::Specialized(Lowered::Bytes(value))
+            if value == b"capture0"),
+        "captures are stored unchanged, in order"
+    );
+    assert_ne!(
+        binding.closure_origin, binding.body_origin,
+        "the closure occurrence and its child-0 body are distinct origins"
+    );
+}
+
+/// A worker body with no declared static-body target in this function rejects
+/// before installation, rather than yielding a binding that could later be
+/// called.
+#[test]
+fn static_worker_construction_rejects_missing_target() {
+    let error = expect_worker_rejection(attempt_worker_construction(|_, _| None, 1, 1, 1));
+    assert!(
+        format!("{error:?}").contains("no declared static-body target"),
+        "rejects for the missing-target reason, not some later one: {error:?}"
+    );
+}
+
+/// A declared unit call recorded against a different body origin is a
+/// wrong-body fact and rejects.
+#[test]
+fn static_worker_construction_rejects_wrong_body_origin() {
+    let error = expect_worker_rejection(attempt_worker_construction(
+        |origin, other| {
+            let mut target = worker_descriptor(origin, 1, 1);
+            // Point the entry at the closure's own origin -- a real planned
+            // origin that is not the body -- while leaving the entry keyed
+            // under the worker's body origin.
+            target.origin = other;
+            Some(target)
+        },
+        1,
+        1,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("but the worker body origin is"),
+        "rejects for the wrong-body reason: {error:?}"
+    );
+}
+
+/// A descriptor whose parameter count disagrees with the source closure's
+/// declared arity rejects.
+#[test]
+fn static_worker_construction_rejects_wrong_arity() {
+    let error = expect_worker_rejection(attempt_worker_construction(
+        |origin, _| Some(worker_descriptor(origin, 2, 1)),
+        1,
+        1,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("parameters but the source closure declares"),
+        "rejects for the wrong-arity reason: {error:?}"
+    );
+}
+
+/// A descriptor whose capture count disagrees with the projected capture
+/// vector rejects.
+#[test]
+fn static_worker_construction_rejects_wrong_capture_count() {
+    let error = expect_worker_rejection(attempt_worker_construction(
+        |origin, _| Some(worker_descriptor(origin, 1, 2)),
+        1,
+        1,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("captures but"),
+        "rejects for the wrong-capture reason: {error:?}"
+    );
+}
+
+/// A capture vector that disagrees with the retained definition rejects before
+/// the descriptor is even consulted.
+#[test]
+fn static_worker_construction_rejects_capture_count_against_definition() {
+    let error = expect_worker_rejection(attempt_worker_construction(
+        |origin, _| Some(worker_descriptor(origin, 1, 1)),
+        1,
+        2,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("were projected"),
+        "rejects against the retained definition: {error:?}"
+    );
+}
+
+/// A descriptor whose slot run disagrees with its own offsets rejects, so the
+/// binding never carries a layout it did not take unchanged.
+#[test]
+fn static_worker_construction_rejects_slot_offset_disagreement() {
+    let error = expect_worker_rejection(attempt_worker_construction(
+        |origin, _| {
+            let mut target = worker_descriptor(origin, 1, 1);
+            target.offsets.pop();
+            Some(target)
+        },
+        1,
+        1,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("offsets"),
+        "rejects for the layout-agreement reason: {error:?}"
+    );
+}
+
+/// A descriptor whose slot run disagrees with its header's counts rejects.
+#[test]
+fn static_worker_construction_rejects_slot_run_against_header() {
+    let error = expect_worker_rejection(attempt_worker_construction(
+        |origin, _| {
+            let mut target = worker_descriptor(origin, 1, 1);
+            // Header still claims one parameter and one capture; the slot run
+            // now carries two captures and no parameter.
+            target.slots[0].kind = AbiSlotKind::Capture;
+            Some(target)
+        },
+        1,
+        1,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("slot run declares"),
+        "rejects for the slot-run reason: {error:?}"
+    );
+}
+
+// ─── RT-WORKER-BIND `D3`/`D4` — the callee-only consumer and its escapes ────
+
+/// Drives one lowering of `subject` in a function whose environment binds a
+/// static worker at de Bruijn index 0.
+///
+/// `declare_target` decides whether this function has a worker call target
+/// declared for the binding's body origin, which is the `D4` axis; the
+/// binding's own arity is the `D3` axis.
+#[cfg(test)]
+fn lower_against_static_worker(
+    subject: &RuntimeExpr,
+    declared_arity: u32,
+    declare_target: bool,
+) -> Result<LoweringOperand, CraneliftBackendError> {
+    let source = worker_source();
+    let (plan, root) = planned_root_occurrence(&source);
+    let closure_origin = plan
+        .child_static_origin(root, 0)
+        .expect("the Let's bound value is planned as child 0");
+    let body_origin = plan
+        .child_static_origin(closure_origin, 0)
+        .expect("a lexical closure plans its body as child 0");
+    let (subject_plan, subject_origin) = planned_root_occurrence(subject);
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = bare_carrier_test_lowering(&seed_env, subject_plan);
+    if declare_target {
+        compiler
+            .function_local
+            .worker_calls
+            .insert(body_origin, worker_descriptor(body_origin, declared_arity, 1));
+    }
+    let env = [LoweringEnvironmentBinding::StaticWorker(StaticWorkerBinding {
+        closure_origin,
+        body_origin,
+        declared_arity,
+        captures: vec![LoweringOperand::Specialized(Lowered::Bytes(b"cap".to_vec()))],
+    })];
+    let mut func = Function::with_name_signature(
+        UserFuncName::user(0, 0),
+        cranelift_codegen::ir::Signature::new(cranelift_codegen::isa::CallConv::SystemV),
+    );
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    compiler.lower_expr(
+        &mut builder,
+        SourceOccurrence {
+            expr: subject,
+            static_origin: subject_origin,
+        },
+        &env,
+    )
+}
+
+/// `LoweringOperand` has no `Debug` either, so worker-consumer rejections are
+/// destructured rather than reached for with `expect_err`.
+#[cfg(test)]
+fn expect_lowering_rejection(
+    result: Result<LoweringOperand, CraneliftBackendError>,
+) -> CraneliftBackendError {
+    match result {
+        Ok(_) => panic!("lowering produced an operand where it must fail closed"),
+        Err(error) => error,
+    }
+}
+
+/// A bare `Var` naming the worker is a value-producing position and fails
+/// closed: a static worker binding has no value representation.
+#[test]
+fn static_worker_fails_closed_in_value_position() {
+    let subject = RuntimeExpr::Var(0);
+    let error = expect_lowering_rejection(lower_against_static_worker(&subject, 1, true));
+    assert!(
+        format!("{error:?}").contains("value-producing position"),
+        "fails closed for the value-position reason: {error:?}"
+    );
+}
+
+/// The same binding used as an aggregate field fails closed before any
+/// carrier transfer, rather than entering the constructor's argument list.
+#[test]
+fn static_worker_fails_closed_as_aggregate_field() {
+    let subject = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::Box::Wrap".to_string(),
+        args: vec![RuntimeExpr::Var(0)],
+    };
+    let error = expect_lowering_rejection(lower_against_static_worker(&subject, 1, true));
+    assert!(
+        format!("{error:?}").contains("value-producing position"),
+        "fails closed for the value-position reason: {error:?}"
+    );
+}
+
+/// The same binding as a match scrutinee fails closed.
+///
+/// This control sits on the scrutinee rather than on an ordinary call's
+/// argument, and the reason is a measured one: with a non-closure callee the
+/// `Call` arm rejects the callee before it lowers any argument, so a worker in
+/// that position is never reached and a control there would pass for the
+/// wrong reason. The scrutinee is reached directly.
+#[test]
+fn static_worker_fails_closed_as_match_scrutinee() {
+    let subject = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Var(0)),
+        cases: vec![crate::RuntimeMatchCase {
+            constructor: "ctor:fixture::Box::Wrap".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Value(RuntimeValue::Int(1.into())),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "worker scrutinee control".to_string(),
+        },
+    };
+    let error = expect_lowering_rejection(lower_against_static_worker(&subject, 1, true));
+    assert!(
+        format!("{error:?}").contains("value-producing position"),
+        "fails closed for the value-position reason: {error:?}"
+    );
+}
+
+/// The consumer is reached through the exact `Var` callee, and validates the
+/// supplied argument count against the binding's declared arity.
+#[test]
+fn static_worker_call_rejects_arity_disagreement() {
+    let subject = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Var(0)),
+        args: vec![
+            RuntimeExpr::Value(RuntimeValue::Int(1.into())),
+            RuntimeExpr::Value(RuntimeValue::Int(2.into())),
+        ],
+    };
+    let error = expect_lowering_rejection(lower_against_static_worker(&subject, 1, true));
+    assert!(
+        format!("{error:?}").contains("static worker expects"),
+        "reaches the consumer and rejects on arity: {error:?}"
+    );
+}
+
+/// `D4`: a worker whose body origin was never declared into this function
+/// rejects, rather than reaching for another function's target.
+#[test]
+fn static_worker_call_rejects_undeclared_target() {
+    let subject = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Var(0)),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+    };
+    let error = expect_lowering_rejection(lower_against_static_worker(&subject, 1, false));
+    assert!(
+        format!("{error:?}").contains("was declared into this"),
+        "rejects for the undeclared-target reason: {error:?}"
+    );
+}
+
+// ─── RT-WORKER-BIND `D8` — the independent ordinary witness ─────────────────
+
+/// **The `D8` witness program, and it contains ZERO continuation machinery.**
+///
+/// An ordinary `FunctionizedUnits` program: no `ComputationalMatch`, no
+/// continuation specialization, identity, descriptor or token anywhere in it.
+/// `FunctionizedUnits` is the *default* authority -- it is selected whenever
+/// the source carries no recursive-descent residual -- so this fixture reaches
+/// it by being ordinary, not by asking for it.
+///
+/// Shape:
+///
+/// - a normal unit receives a real ABI input, so `x` arrives **`Carried`**;
+/// - an ordinary `Let` binds a lexical closure capturing two operands in
+///   order -- the carried `x` first, a specialized constant second;
+/// - the `Let` body calls `Var(0)`, which is that binding.
+///
+/// The carried capture is what routes the binder to `StaticWorker`; the call
+/// through the exact `Var(0)` callee is what consumes it.
+#[cfg(test)]
+fn static_worker_witness(capture_first: bool) -> RuntimeExpr {
+    let carried = RuntimeExpr::Var(0);
+    let constant = RuntimeExpr::Value(RuntimeValue::Int(3.into()));
+    let captures = if capture_first {
+        vec![carried, constant]
+    } else {
+        vec![constant, carried]
+    };
+    // Inside the worker body the environment is the unit's slot run: the
+    // parameter first, then the captures in declared order.
+    let worker = RuntimeExpr::LexicalClosure {
+        captures,
+        params: vec!["y".to_string()],
+        body: Box::new(RuntimeExpr::Var(1)),
+    };
+    let outer_body = RuntimeExpr::Let {
+        value: Box::new(worker),
+        body: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::Var(0)),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(100.into()))],
+        }),
+    };
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(outer_body),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    }
+}
+
+/// The witness contains no continuation spelling. This is `AC-4`'s first half,
+/// asserted over the fixture the test actually runs.
+#[test]
+fn static_worker_witness_contains_no_continuation_machinery() {
+    let witness = static_worker_witness(true);
+    let rendered = format!("{witness:?}");
+    for spelling in [
+        "ComputationalMatch",
+        "ContinuationSpecializationId",
+        "ContinuationCallIdentity",
+        "ContinuationDescriptor",
+        "ContinuationToken",
+    ] {
+        assert!(
+            !rendered.contains(spelling),
+            "the witness must contain zero continuation machinery, found {spelling}"
+        );
+    }
+}
+
+/// The witness compiles and executes end to end, and its result distinguishes
+/// capture order.
+#[test]
+fn static_worker_witness_runs_and_distinguishes_capture_order() {
+    let ordered = static_worker_witness(true);
+    let compiled = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &ordered,
+        &NativeSeedEnvironment::empty(),
+    )
+    .expect("the ordinary witness compiles");
+    let observed = compiled.run(None).expect("the witness runs").0;
+    let swapped = static_worker_witness(false);
+    let swapped_observed =
+        crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+            &swapped,
+            &NativeSeedEnvironment::empty(),
+        )
+        .expect("the capture-swapped witness compiles")
+        .run(None)
+        .expect("the swapped witness runs")
+        .0;
+    assert_ne!(
+        observed, swapped_observed,
+        "swapping the capture order must change the linked result"
+    );
+}
+
+/// `AC-8`/judgment 3 -- **the binding is NOT affine.** An installed worker
+/// that is never called must still compile and run.
+///
+/// If any consumed-set, once-token or required-empty ledger existed, this
+/// would fail; it is the companion that would catch one being introduced.
+#[test]
+fn static_worker_unused_binding_succeeds() {
+    let expr = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: vec![
+                        RuntimeExpr::Var(0),
+                        RuntimeExpr::Value(RuntimeValue::Int(3.into())),
+                    ],
+                    params: vec!["y".to_string()],
+                    body: Box::new(RuntimeExpr::Var(1)),
+                }),
+                // The binding is installed and simply never called.
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(42.into()))),
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    };
+    let compiled = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &expr,
+        &NativeSeedEnvironment::empty(),
+    )
+    .expect("an unused worker binding is lawful and must compile");
+    assert_eq!(
+        compiled.run(None).expect("the unused-binding fixture runs").0,
+        RuntimeObservation::Returned(RuntimeGroundValue::Int(42.into()))
+    );
+}
+
+/// `AC-8`/judgment 3 -- a binding called **twice** is lawful too. Nothing
+/// consumes the binding on first use.
+#[test]
+fn static_worker_twice_called_binding_succeeds() {
+    // The inner `Let` shifts de Bruijn indices, so the second call names the
+    // worker at `Var(1)` while the first names it at `Var(0)`. Same binding,
+    // called twice.
+    let call = |index: u32| RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Var(index)),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(100.into()))],
+    };
+    let expr = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: vec![
+                        RuntimeExpr::Var(0),
+                        RuntimeExpr::Value(RuntimeValue::Int(3.into())),
+                    ],
+                    params: vec!["y".to_string()],
+                    body: Box::new(RuntimeExpr::Var(1)),
+                }),
+                // Called once, then called again in the same scope.
+                body: Box::new(RuntimeExpr::Let {
+                    value: Box::new(call(0)),
+                    body: Box::new(call(1)),
+                }),
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    };
+    let compiled = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &expr,
+        &NativeSeedEnvironment::empty(),
+    )
+    .expect("a twice-called worker binding is lawful and must compile");
+    compiled
+        .run(None)
+        .expect("the twice-called fixture runs");
+}
+
+// ─── RT-WORKER-BIND `D5`/`D6`/`D7` — multiple, nested, and completion ───────
+
+/// Two same-shape workers -- same arity, same capture count -- at distinct de
+/// Bruijn slots, with distinct bodies and distinct capture orders, both
+/// called. The result is an aggregate of both calls, so it depends on each
+/// worker's body **and** its capture order independently.
+#[cfg(test)]
+fn two_same_shape_workers(first_body: u32, second_body: u32, swap_second: bool) -> RuntimeExpr {
+    let cap_a = vec![
+        RuntimeExpr::Var(0),
+        RuntimeExpr::Value(RuntimeValue::Int(3.into())),
+    ];
+    // `x` sits at index 1 here, not 0: worker A is already bound at 0 by the
+    // enclosing `Let`. Naming `Var(0)` would capture the WORKER as a value,
+    // which fails closed -- the guard caught exactly that while this fixture
+    // was being written.
+    let cap_b = if swap_second {
+        vec![
+            RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+            RuntimeExpr::Var(1),
+        ]
+    } else {
+        vec![
+            RuntimeExpr::Var(1),
+            RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+        ]
+    };
+    // Two `Let`s in one environment: worker A ends at index 1 once B is bound,
+    // so the pair also exercises binder-order preservation at distinct slots.
+    let inner = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::LexicalClosure {
+            captures: cap_b,
+            params: vec!["y".to_string()],
+            body: Box::new(RuntimeExpr::Var(second_body)),
+        }),
+        body: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Pair::Both".to_string(),
+            args: vec![
+                RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(1)),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(100.into()))],
+                },
+                RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(200.into()))],
+                },
+            ],
+        }),
+    };
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: cap_a,
+                    params: vec!["y".to_string()],
+                    body: Box::new(RuntimeExpr::Var(first_body)),
+                }),
+                body: Box::new(inner),
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    }
+}
+
+#[cfg(test)]
+fn run_worker_fixture(expr: &RuntimeExpr) -> RuntimeObservation {
+    crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        expr,
+        &NativeSeedEnvironment::empty(),
+    )
+    .expect("the worker fixture compiles")
+    .run(None)
+    .expect("the worker fixture runs")
+    .0
+}
+
+/// `D5` -- two same-shape workers in one environment are genuinely
+/// distinguished, and swapping either one's body or its capture order changes
+/// the linked result.
+///
+/// This is also `AC-5`'s target-redirect red: the two workers are same-shape,
+/// so a call resolving to the other one's body is exactly a redirected target.
+#[test]
+fn two_same_shape_workers_are_distinguished() {
+    let baseline = run_worker_fixture(&two_same_shape_workers(1, 1, false));
+    let body_swapped = run_worker_fixture(&two_same_shape_workers(2, 1, false));
+    let capture_swapped = run_worker_fixture(&two_same_shape_workers(1, 1, true));
+    assert_ne!(
+        baseline, body_swapped,
+        "changing which capture the first worker's body selects must move the result"
+    );
+    assert_ne!(
+        baseline, capture_swapped,
+        "swapping the second worker's capture order must move the result"
+    );
+    assert_ne!(
+        body_swapped, capture_swapped,
+        "the two mutations must be distinguishable from each other, not merely from the baseline"
+    );
+}
+
+/// `D6` -- a static worker body that binds and calls **another** static
+/// worker.
+///
+/// The inner closure's captures are the outer worker function's own value
+/// operands, carried ones included: capture 0 is the outer worker's parameter
+/// and capture 1 is the outer worker's own first capture. Both are carried
+/// inside that function, so the inner binder installs a second `StaticWorker`
+/// whose target must be declared afresh **into the outer worker's function**.
+///
+/// `outer_body` and `inner_body` select which operand each level returns, so
+/// the result depends on both levels independently.
+#[cfg(test)]
+fn nested_workers(inner_body: u32, swap_inner_captures: bool) -> RuntimeExpr {
+    let inner_captures = if swap_inner_captures {
+        vec![RuntimeExpr::Var(1), RuntimeExpr::Var(0)]
+    } else {
+        vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)]
+    };
+    // Inside the OUTER worker body: [y(param), cap0 = x, cap1 = 3].
+    let outer_worker_body = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::LexicalClosure {
+            captures: inner_captures,
+            params: vec!["z".to_string()],
+            body: Box::new(RuntimeExpr::Var(inner_body)),
+        }),
+        body: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::Var(0)),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(500.into()))],
+        }),
+    };
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: vec![
+                        RuntimeExpr::Var(0),
+                        RuntimeExpr::Value(RuntimeValue::Int(3.into())),
+                    ],
+                    params: vec!["y".to_string()],
+                    body: Box::new(outer_worker_body),
+                }),
+                body: Box::new(RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(100.into()))],
+                }),
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    }
+}
+
+/// `D6`/`AC-7` -- the nested positive depends on BOTH levels, and each
+/// mutation moves the result independently.
+///
+/// This is also `AC-9`'s evidence: the inner worker's target is declared into
+/// the **outer worker's** function, which is a different `Function` from the
+/// root. A `FuncRef` copied across functions would not verify, so a green
+/// nested run is exactly the fresh-per-function declaration working.
+#[test]
+fn nested_worker_depends_on_both_levels() {
+    let baseline = run_worker_fixture(&nested_workers(1, false));
+    let inner_body_moved = run_worker_fixture(&nested_workers(2, false));
+    let inner_captures_swapped = run_worker_fixture(&nested_workers(1, true));
+    assert_ne!(
+        baseline, inner_body_moved,
+        "moving which operand the inner body selects must move the result"
+    );
+    assert_ne!(
+        baseline, inner_captures_swapped,
+        "swapping the inner worker's capture order must move the result"
+    );
+}
+
+/// `D8` companion -- **capture omission.** Dropping a capture the body reads
+/// must not silently succeed with a shifted environment.
+///
+/// The witness body reads capture 0 at `Var(1)`; with only one capture
+/// declared, `Var(2)` names nothing and the lowering fails closed rather than
+/// reading past the worker's environment.
+#[test]
+fn static_worker_capture_omission_fails_closed() {
+    let omitted = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::LexicalClosure {
+                    // One capture declared, but the body reads a second.
+                    captures: vec![RuntimeExpr::Var(0)],
+                    params: vec!["y".to_string()],
+                    body: Box::new(RuntimeExpr::Var(2)),
+                }),
+                body: Box::new(RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(100.into()))],
+                }),
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    };
+    let error = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &omitted,
+        &NativeSeedEnvironment::empty(),
+    )
+    .err()
+    .expect("omitting a capture the body reads must fail closed");
+    assert!(
+        format!("{error:?}").contains("no runtime binding for index"),
+        "fails closed on the missing binding rather than reading past it: {error:?}"
+    );
+}
+
+// ─── RT-WORKER-BIND `AC-5` — the two executable production-seam mutations ───
+
+/// Runs `body` with a static-worker mutation installed, restoring `Exact`
+/// afterwards **even if `body` panics**, so one failing control cannot leak a
+/// mutation into every later test in the thread.
+#[cfg(test)]
+fn with_static_worker_mutation<T>(mutation: StaticWorkerMutation, body: impl FnOnce() -> T) -> T {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            set_static_worker_mutation(StaticWorkerMutation::Exact);
+        }
+    }
+    set_static_worker_mutation(mutation);
+    let _restore = Restore;
+    body()
+}
+
+/// `AC-5` mutation 1, at the real `D2` binder seam.
+///
+/// The **same** ordinary witness is green under `Exact` and red with the
+/// pre-node carried-capture narrowing restored. No fixture is substituted:
+/// the source program is identical in both runs and only production
+/// resolution moves.
+#[test]
+fn ac5_restoring_carried_capture_narrowing_reds_the_ordinary_witness() {
+    let witness = static_worker_witness(true);
+    // Positive control first: without the mutation this exact program runs.
+    let baseline = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &witness,
+        &NativeSeedEnvironment::empty(),
+    );
+    assert!(
+        baseline.is_ok(),
+        "the witness must be green at the same seam the mutation reddens"
+    );
+    let error = with_static_worker_mutation(
+        StaticWorkerMutation::RestoreCarriedCaptureNarrowing,
+        || {
+            crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+                &witness,
+                &NativeSeedEnvironment::empty(),
+            )
+            .err()
+        },
+    )
+    .expect("restoring the carried-capture narrowing must red the witness");
+    assert!(
+        format!("{error:?}").contains("specialized-only surface"),
+        "reds at the D2 carried-capture seam, not somewhere else: {error:?}"
+    );
+    // The mutation is scoped: the same program is green again immediately.
+    assert!(
+        crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+            &witness,
+            &NativeSeedEnvironment::empty(),
+        )
+        .is_ok(),
+        "the mutation must not leak past its scope"
+    );
+}
+
+/// `AC-5` mutation 2, at the real `D4` transport seam.
+///
+/// The **same** planned two-same-shape-worker program is green under `Exact`
+/// and red when the already-resolved worker target is redirected to the other
+/// same-shape worker in that same function. The binding and its construction
+/// are untouched; only transport resolution moves, which is the whole point of
+/// the control.
+#[test]
+fn ac5_redirecting_the_resolved_worker_target_reds_the_same_shape_witness() {
+    let program = two_same_shape_workers(1, 1, false);
+    let baseline = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &program,
+        &NativeSeedEnvironment::empty(),
+    );
+    assert!(
+        baseline.is_ok(),
+        "the same-shape witness must be green at the seam the mutation reddens"
+    );
+    let error = with_static_worker_mutation(
+        StaticWorkerMutation::RedirectResolvedWorkerTarget,
+        || {
+            crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+                &program,
+                &NativeSeedEnvironment::empty(),
+            )
+            .err()
+        },
+    )
+    .expect("redirecting the resolved worker target must red the same-shape witness");
+    assert!(
+        format!("{error:?}").contains("worker call target carries origin"),
+        "reds at the D4 transport seam's own origin check: {error:?}"
+    );
+    assert!(
+        crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+            &program,
+            &NativeSeedEnvironment::empty(),
+        )
+        .is_ok(),
+        "the mutation must not leak past its scope"
     );
 }

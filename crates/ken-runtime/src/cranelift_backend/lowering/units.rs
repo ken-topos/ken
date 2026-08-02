@@ -307,6 +307,93 @@ impl CallEdgeTargets {
 /// ⚠ `the_resolved_call_edge_population_moves_with_the_program` pins the edge
 /// **count** and is blind to the edge's **destination**; those are different
 /// claims and only the first has a defender today.
+/// **`D4` -- the static-body units, projected by exact body origin.**
+///
+/// This is a **projection of `emittable_units`**, not a new unit or call-edge
+/// population: every entry is a unit the planner already emitted and the
+/// bundle already declared, re-keyed by the body origin a static worker
+/// binding names. Nothing here mints a unit, an edge, or a descriptor.
+///
+/// A body origin that appears twice is rejected rather than resolved by
+/// last-writer, because a duplicate means two units claim one body and the
+/// binding could not name either unambiguously.
+pub(in crate::cranelift_backend) struct WorkerTargets {
+    by_origin: BTreeMap<StaticOriginId, ResolvedUnitTarget>,
+}
+
+impl WorkerTargets {
+    /// Declare every projected target **into one generated function**, and
+    /// hand back that function's own `DeclaredUnitCall`s.
+    ///
+    /// The `FuncRef`s produced here belong to `func` alone. They are minted
+    /// per function and never copied between functions -- which is why the
+    /// binding stores origins and not a `FuncRef` (`D4`).
+    ///
+    /// This is also the operation a separately emitted caller uses: it takes
+    /// any `Function`, so a caller emitted outside the main loop declares its
+    /// own refs through the same route rather than borrowing another's.
+    pub(in crate::cranelift_backend) fn declare_in_func<M: Module>(
+        &self,
+        module: &mut M,
+        func: &mut Function,
+    ) -> BTreeMap<StaticOriginId, DeclaredUnitCall> {
+        self.by_origin
+            .iter()
+            .map(|(origin, target)| {
+                (
+                    *origin,
+                    DeclaredUnitCall {
+                        function: module.declare_func_in_func(target.function, func),
+                        origin: target.origin,
+                        header: target.header,
+                        slots: target.slots.clone(),
+                        offsets: target.offsets.clone(),
+                    },
+                )
+            })
+            .collect()
+    }
+}
+
+/// Project the already-validated emittable units by exact body origin.
+pub(in crate::cranelift_backend) fn resolve_worker_targets(
+    plan: &StaticTransitionPlan<'_>,
+    bundle: &UnitBundle,
+) -> Result<WorkerTargets, CraneliftBackendError> {
+    let mut by_origin: BTreeMap<StaticOriginId, ResolvedUnitTarget> = BTreeMap::new();
+    for unit in plan.emittable_units()? {
+        let function = bundle.function(unit.function()).ok_or_else(|| {
+            backend_module(
+                "a planned unit has no forward-declared function to project as a worker target"
+                    .to_string(),
+            )
+        })?;
+        let (offsets, frame_bytes) = unit.slot_offsets()?;
+        if frame_bytes != unit.header().frame_bytes {
+            return Err(backend_module(
+                "worker target frame size disagrees with its slot run".to_string(),
+            ));
+        }
+        let origin = unit.origin();
+        let target = ResolvedUnitTarget {
+            function,
+            origin,
+            call_site_origin: origin,
+            kind: EmittableCallKind::StaticBody,
+            header: unit.header(),
+            slots: unit.slots().to_vec(),
+            offsets,
+        };
+        if by_origin.insert(origin, target).is_some() {
+            return Err(backend_module(
+                "two emittable units claim the same body origin, so no worker binding could                  name either unambiguously"
+                    .to_string(),
+            ));
+        }
+    }
+    Ok(WorkerTargets { by_origin })
+}
+
 pub(in crate::cranelift_backend) fn resolve_call_edges(
     plan: &StaticTransitionPlan<'_>,
     bundle: &UnitBundle,
@@ -622,6 +709,8 @@ pub(super) fn define_unit_bodies<M: Module>(
     staged_root_value: Option<&RuntimeValue>,
 ) -> Result<RootUnitResult, CraneliftBackendError> {
     let root = compiler.static_transition_plan.root_emittable_unit()?.function();
+    // `D4`: projected once, declared afresh into each generated function below.
+    let worker_targets = resolve_worker_targets(&compiler.static_transition_plan, bundle)?;
     let mut root_result = None;
     let emissions = compiler
         .static_transition_plan
@@ -651,6 +740,7 @@ pub(super) fn define_unit_bodies<M: Module>(
             unit,
             id,
             call_edges,
+            &worker_targets,
             is_root,
             staged_root_value,
         )?;
@@ -683,6 +773,7 @@ fn define_unit_body<M: Module>(
     unit: OwnedUnitEmission,
     id: FuncId,
     call_edges: &CallEdgeTargets,
+    worker_targets: &WorkerTargets,
     is_root: bool,
     staged_root_value: Option<&RuntimeValue>,
 ) -> Result<Option<RootUnitResult>, CraneliftBackendError> {
@@ -743,6 +834,8 @@ fn define_unit_body<M: Module>(
     let declared_calls = call_edges.declare_in_func(unit.function, module, &mut func)?;
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
+    // `D4`: this function's own worker refs, minted here and never copied.
+    function_local.worker_calls = worker_targets.declare_in_func(module, &mut func);
     let mut func_ctx = FunctionBuilderContext::new();
     let root_outcome;
     {
@@ -888,7 +981,7 @@ fn define_unit_body<M: Module>(
                 } else {
                     LoweringOperand::Carried(carried)
                 };
-                env.push(operand);
+                env.push(LoweringEnvironmentBinding::Value(operand));
             }
         }
         // The in-process validation API historically stages one ground
@@ -899,8 +992,8 @@ fn define_unit_body<M: Module>(
         // ordinary declared captures.
         if is_root {
             if let Some(value) = staged_root_value {
-                env.push(LoweringOperand::Specialized(
-                    compiler.lower_value(&mut builder, value)?,
+                env.push(LoweringEnvironmentBinding::Value(
+                    LoweringOperand::Specialized(compiler.lower_value(&mut builder, value)?),
                 ));
             }
         }

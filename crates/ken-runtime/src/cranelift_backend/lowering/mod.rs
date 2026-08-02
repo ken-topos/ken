@@ -650,6 +650,7 @@ impl ArtifactHelpers<'_> {
             // two structs are separate types rather than one with a `reset()`.
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            worker_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit,
             terminal_result_origins: BTreeSet::new(),
@@ -756,6 +757,10 @@ struct FunctionLocalRefs {
     /// reaching an emitted call.
     boundary_carrier: Option<BoundaryCarrierRefs>,
     unit_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    /// **`D4`** -- this function's own static-worker call targets, keyed by
+    /// exact body origin. Minted per generated function; a `FuncRef` here
+    /// belongs to that function and is never copied to another.
+    worker_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     declaration_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     /// The current function's closed trap-exit authority. Absence is an error
     /// state, never an implicit Root.
@@ -941,8 +946,48 @@ enum TrapCallerProtocolMutation {
     ReadResultBeforeTrap,
 }
 
+/// **`AC-5` -- the two executable mutation controls for the static-worker
+/// substrate.**
+///
+/// These perturb **production resolution**, at the two seams the substrate
+/// actually depends on, and they are committed rather than applied by hand so
+/// the proof does not evaporate when a reviewer closes their terminal. Both
+/// arms are `#[cfg(test)]`; production compiles as if they did not exist.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StaticWorkerMutation {
+    Exact,
+    /// `D2` seam: restore the pre-node carried-capture narrowing in
+    /// `lower_binder`, so a carried capture again goes to the specialized-only
+    /// fold instead of installing a `StaticWorker`.
+    RestoreCarriedCaptureNarrowing,
+    /// `D4` transport seam: hand the consumer a **distinct** already-resolved
+    /// target from this function's own `worker_calls`, selected by `AC-6`'s
+    /// same-shape definition -- same declared arity, same capture count -- and
+    /// by nothing else.
+    ///
+    /// `AC-5` clause (c): this switch runs on the **two-same-shape-worker
+    /// program and only there**. The ordinary single-worker witness has no
+    /// distinct same-shape candidate at all, which is a property of that
+    /// fixture's population; it discharges the carried-capture arm and nothing
+    /// more. Widening the predicate back toward mere difference to make it
+    /// find something there is clause (b)'s defect reintroduced as a repair.
+    ///
+    /// The binding and its construction are untouched -- this is a redirect
+    /// performed *after* the worker was constructed, which is the only place
+    /// it proves anything.
+    RedirectResolvedWorkerTarget,
+}
+
+#[cfg(test)]
+fn set_static_worker_mutation(mutation: StaticWorkerMutation) {
+    STATIC_WORKER_MUTATION.with(|cell| cell.set(mutation));
+}
+
 #[cfg(test)]
 thread_local! {
+    static STATIC_WORKER_MUTATION: std::cell::Cell<StaticWorkerMutation> =
+        const { std::cell::Cell::new(StaticWorkerMutation::Exact) };
     static TRAP_FRAME_BINDING_MUTATION: std::cell::Cell<TrapFrameBindingMutation> =
         const { std::cell::Cell::new(TrapFrameBindingMutation::Exact) };
     static TRAP_IDENTITY_MUTATION: std::cell::Cell<TrapIdentityMutation> =
@@ -1111,7 +1156,7 @@ enum RecursorLayerRole {
 struct ComputationalRecursorFramePayload {
     cases: Vec<crate::RuntimeComputationalMatchCase>,
     default: RuntimeTrap,
-    outer_env: Vec<LoweringOperand>,
+    outer_env: Vec<LoweringEnvironmentBinding>,
     /// The origin of the computational-match occurrence these cases came from,
     /// cloned into this payload **in the same constructor as the cases** so a
     /// later resumption can still derive a case body's origin positionally
@@ -1419,6 +1464,96 @@ enum LoweringOperand {
     Carried(CarriedBoundaryWord),
 }
 
+/// **THE ONE BINDING AUTHORITY** for a lexical environment (`RT-WORKER-BIND`
+/// judgment 4). Every lexical environment reaching [`Lowering::lower_expr`] is
+/// a slice of these -- saved ordinary and computational eliminator
+/// environments, pending-`Let` environments, and recursor outer environments
+/// alike.
+///
+/// There is deliberately **no** parallel operand environment and **no**
+/// de-Bruijn side map. Either would create a second binding authority, and then
+/// the question *"what is bound here"* would have two answers.
+///
+/// This sum is compiler-only. It is **not** a [`Lowered`] variant, not a third
+/// [`LoweringOperand`] arm, and it never becomes a runtime value.
+#[derive(Clone)]
+enum LoweringEnvironmentBinding {
+    /// An ordinary bound value. Every binder that existed before this node
+    /// installs this arm, and the outer spine forwards it unchanged.
+    Value(LoweringOperand),
+    /// A statically-bound worker: a lexical callable whose body is a declared
+    /// static-body unit. Its sole admissible use is as the callee of a `Call`
+    /// with an exact `Var` callee; every value-producing position rejects it.
+    ///
+    /// `D2` constructs this arm from a lexical closure's retained occurrence.
+    /// The callee-only consumer is `D3`, so nothing *reads* the binding's
+    /// fields in production yet -- see the note on [`StaticWorkerBinding`].
+    StaticWorker(StaticWorkerBinding),
+}
+
+/// The compiler-only description of a static worker binding.
+///
+/// It carries no runtime word, tag, layout, vtable, descriptor or environment
+/// pointer, and no callable identity. `captures` stay [`LoweringOperand`], so a
+/// carried capture stays carried -- the binding never becomes a value.
+///
+/// A `FuncRef` deliberately does **not** live here: it belongs to one Cranelift
+/// `Function`, and the target is declared afresh into each generated function
+/// (`D4`).
+///
+/// `D3` reads `body_origin`, `declared_arity` and `captures`. It does **not**
+/// read `closure_origin`, so the allowance is narrowed to that one field
+/// rather than blanketing the struct.
+///
+/// `closure_origin` is preserved because judgment 1 rules these four fields
+/// and the separation may not vary; it is the binding's own occurrence
+/// identity, which no consumer needs today. Narrowing the allowance is what
+/// keeps a future genuinely-unread field visible instead of silently covered.
+#[derive(Clone)]
+struct StaticWorkerBinding {
+    #[allow(dead_code)]
+    closure_origin: StaticOriginId,
+    body_origin: StaticOriginId,
+    declared_arity: u32,
+    captures: Vec<LoweringOperand>,
+}
+
+impl LoweringEnvironmentBinding {
+    /// **THE FAIL-CLOSED READ** for a value-producing position.
+    ///
+    /// `Var` in every value-producing position accepts **only** [`Self::Value`]
+    /// (`D3`). A [`Self::StaticWorker`] used as a result, aggregate field,
+    /// primitive or effect argument, stored value, projection subject, match
+    /// scrutinee, or ordinary call argument fails closed **here**, before any
+    /// carrier transfer.
+    ///
+    /// The match is exhaustive with no wildcard, and that is the mechanism: a
+    /// future third arm is a compile error at every value-producing read rather
+    /// than a silent escape. `edge` names the call site in the diagnostic.
+    fn value_at(&self, edge: &'static str) -> Result<&LoweringOperand, CraneliftBackendError> {
+        match self {
+            LoweringEnvironmentBinding::Value(operand) => Ok(operand),
+            LoweringEnvironmentBinding::StaticWorker(_) => Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "{edge} is a value-producing position and a static worker binding has no \
+                     value representation; its only admissible use is as the callee of a call \
+                     with an exact Var callee"
+                ),
+            )),
+        }
+    }
+}
+
+/// A freshly bound operand entering the one binding authority. Every binder
+/// that predates this node goes through here, which is what makes *"existing
+/// binders install `Value`"* structural rather than tested.
+impl From<LoweringOperand> for LoweringEnvironmentBinding {
+    fn from(operand: LoweringOperand) -> Self {
+        LoweringEnvironmentBinding::Value(operand)
+    }
+}
+
 impl LoweringOperand {
     /// ⭐ **THE RULED TYPED PHASE BOUNDARY** in front of a specialized-only
     /// helper — `§2h` ¶2, verbatim: *"Every edge from `LoweringOperand` into
@@ -1509,19 +1644,47 @@ impl LoweringOperand {
     }
 }
 
-/// ⭐ The spine's bulk phase boundary — an **environment** of operands rendered
-/// as the specialized templates a specialized-only helper reads.
+/// The spine's bulk phase boundary -- a **list of operands** rendered as the
+/// specialized templates a specialized-only helper reads: a constructor's
+/// arguments, a closure's captures, a primitive's operands.
 ///
-/// ⚠ Same ruling and the same ⛔ prohibitions as
+/// Same ruling and the same prohibitions as
 /// [`LoweringOperand::specialized_at`]; this exists because several leaves take
 /// a whole `&[Lowered]` rather than one, and hand-writing the fold at each
 /// would multiply the classification instead of sharing it.
-fn specialized_env_at(
-    env: &[LoweringOperand],
+///
+/// This is deliberately **not** the environment form. An operand list has no
+/// binding to classify, so there is nothing here to fail closed on; a lexical
+/// environment goes through [`specialized_bindings_at`] instead, which crosses
+/// the binding authority first. The two are named apart so that passing an
+/// environment to the operand form is a type error rather than a silent
+/// bypass of the value-producing rule.
+fn specialized_operands_at(
+    operands: &[LoweringOperand],
+    edge: &'static str,
+) -> Result<Vec<Lowered>, CraneliftBackendError> {
+    operands
+        .iter()
+        .map(|operand| operand.specialized_ref_at(edge).cloned())
+        .collect()
+}
+
+/// [`specialized_operands_at`] for a **lexical environment** rather than a bare
+/// operand list.
+///
+/// The two are deliberately distinct functions. This one crosses the binding
+/// authority first, so a [`LoweringEnvironmentBinding::StaticWorker`] fails
+/// closed before any template is read; [`specialized_operands_at`] takes an operand
+/// list -- a constructor's arguments, a closure's captures, a primitive's
+/// operands -- which is not an environment and has no binding to classify.
+/// Collapsing them would put a value-producing read on a surface that has no
+/// binding to reject.
+fn specialized_bindings_at(
+    env: &[LoweringEnvironmentBinding],
     edge: &'static str,
 ) -> Result<Vec<Lowered>, CraneliftBackendError> {
     env.iter()
-        .map(|operand| operand.specialized_ref_at(edge).cloned())
+        .map(|binding| binding.value_at(edge)?.specialized_ref_at(edge).cloned())
         .collect()
 }
 
@@ -1542,11 +1705,11 @@ fn specialized_env_at(
 /// operand and is prepended as one.
 fn env_with(
     bindings: impl IntoIterator<Item = Lowered>,
-    outer: &[LoweringOperand],
-) -> Vec<LoweringOperand> {
+    outer: &[LoweringEnvironmentBinding],
+) -> Vec<LoweringEnvironmentBinding> {
     bindings
         .into_iter()
-        .map(LoweringOperand::Specialized)
+        .map(|lowered| LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(lowered)))
         .chain(outer.iter().cloned())
         .collect()
 }
@@ -1560,19 +1723,46 @@ fn env_with(
 /// arm that re-specializes or drops one — it is moved into the environment as
 /// it stands, which is what makes *"remains `Carried` through `case_env` and
 /// nested lowering"* a structural fact rather than a tested one.
+/// Bind already-lowered operands into the one binding authority, in order.
+///
+/// This is the phase-preserving entry every pre-existing binder takes: an
+/// operand becomes [`LoweringEnvironmentBinding::Value`] and nothing else, so
+/// a projected `Carried` child stays carried on the way in. It exists so the
+/// many sites that build an environment out of lowered operands all spell the
+/// installation the same way rather than each re-deriving it.
+fn bound_values(
+    operands: impl IntoIterator<Item = LoweringOperand>,
+) -> Vec<LoweringEnvironmentBinding> {
+    operands
+        .into_iter()
+        .map(LoweringEnvironmentBinding::Value)
+        .collect()
+}
+
 fn env_with_operands(
     bindings: impl IntoIterator<Item = LoweringOperand>,
-    outer: &[LoweringOperand],
-) -> Vec<LoweringOperand> {
-    bindings.into_iter().chain(outer.iter().cloned()).collect()
+    outer: &[LoweringEnvironmentBinding],
+) -> Vec<LoweringEnvironmentBinding> {
+    bindings
+        .into_iter()
+        .map(LoweringEnvironmentBinding::Value)
+        .chain(outer.iter().cloned())
+        .collect()
 }
 
 /// Append specialized bindings **after** operands already in an environment —
 /// the same rule as [`env_with`], for the sites whose leading bindings are
 /// themselves lowered operands (a call's arguments) and whose trailing ones are
 /// a closure's captured templates.
-fn extend_specialized(env: &mut Vec<LoweringOperand>, bindings: impl IntoIterator<Item = Lowered>) {
-    env.extend(bindings.into_iter().map(LoweringOperand::Specialized));
+fn extend_specialized(
+    env: &mut Vec<LoweringEnvironmentBinding>,
+    bindings: impl IntoIterator<Item = Lowered>,
+) {
+    env.extend(
+        bindings
+            .into_iter()
+            .map(|lowered| LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(lowered))),
+    );
 }
 
 /// ⭐ The inverse direction, which needs **no** boundary at all: a freshly
@@ -5027,8 +5217,8 @@ fn select_dynamic_constructor_case<'a>(
 }
 fn materialize_dynamic_constructor_env(
     alternative: &DynamicConstructorAlternativeV1,
-    env: &[LoweringOperand],
-) -> Vec<LoweringOperand> {
+    env: &[LoweringEnvironmentBinding],
+) -> Vec<LoweringEnvironmentBinding> {
     env_with(alternative.fields.clone(), env)
 }
 fn console_stream_tag(value: &Lowered) -> Option<i64> {
@@ -5138,7 +5328,7 @@ fn dynamic_host_result_producer_case<'a>(
 struct ComputationalEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeComputationalMatchCase],
     default: &'a RuntimeTrap,
-    env: &'a [LoweringOperand],
+    env: &'a [LoweringEnvironmentBinding],
     /// The origin of the computational-match occurrence these cases belong to.
     /// Case *i*'s body is `child(static_origin, 1 + i)`.
     static_origin: StaticOriginId,
@@ -5154,7 +5344,7 @@ struct ComputationalEliminatorFrame<'a> {
 struct OrdinaryEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeMatchCase],
     default: &'a RuntimeTrap,
-    env: &'a [LoweringOperand],
+    env: &'a [LoweringEnvironmentBinding],
     /// The origin of the **match occurrence these cases belong to**. Case *i*'s
     /// body is `child(static_origin, 1 + i)`; see `SourceContinuation::
     /// MatchScrutinee` for why one parent origin beats a per-case vector.
@@ -5174,7 +5364,7 @@ struct PendingLetContinuationFrame<'a> {
     /// The origin of the `Call` occurrence `args` belong to; argument *i* is
     /// `child(call_origin, 1 + i)`.
     call_origin: StaticOriginId,
-    env: &'a [LoweringOperand],
+    env: &'a [LoweringEnvironmentBinding],
     recursive_unit_body: Option<StaticOriginId>,
 }
 #[derive(Clone, Copy)]
@@ -5192,7 +5382,7 @@ struct ActiveContinuationFrame<'a> {
 struct ComputationalRecursorLayer {
     cases: Vec<crate::RuntimeComputationalMatchCase>,
     default: RuntimeTrap,
-    outer_env: Vec<LoweringOperand>,
+    outer_env: Vec<LoweringEnvironmentBinding>,
     /// The origin of the computational-match occurrence these cases came from,
     /// carried with the clone so a resumed selection can still derive a case
     /// body's origin positionally.
@@ -6331,7 +6521,7 @@ enum SourceContinuation<'a> {
     },
     LetBody {
         body: OwnedSourceOccurrence,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourceContinuation<'a>>,
     },
     ApplyRecursorSelection {
@@ -6346,7 +6536,7 @@ enum SourceContinuation<'a> {
     IfScrutinee {
         then_expr: OwnedSourceOccurrence,
         else_expr: OwnedSourceOccurrence,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourceContinuation<'a>>,
     },
     ConstructArgument {
@@ -6354,7 +6544,7 @@ enum SourceContinuation<'a> {
         static_origin: StaticOriginId,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourceContinuation<'a>>,
     },
     /// ⭐ `static_origin` is the **match occurrence's own** origin, carried in
@@ -6367,14 +6557,14 @@ enum SourceContinuation<'a> {
     MatchScrutinee {
         cases: Vec<crate::RuntimeMatchCase>,
         default: RuntimeTrap,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         static_origin: StaticOriginId,
         next: Box<SourceContinuation<'a>>,
     },
     ComputationalMatchScrutinee {
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         static_origin: StaticOriginId,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
@@ -6387,14 +6577,14 @@ enum SourceContinuation<'a> {
     },
     CallCallee {
         args: Vec<OwnedSourceOccurrence>,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourceContinuation<'a>>,
     },
     CallArgument {
         callee: LoweringOperand,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<LoweringOperand>,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourceContinuation<'a>>,
     },
 }
@@ -6458,7 +6648,7 @@ enum SourcePrefixTemplate {
     },
     LetBody {
         body: OwnedSourceOccurrence,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourcePrefixTemplate>,
     },
     ApplyRecursorSelection {
@@ -6473,7 +6663,7 @@ enum SourcePrefixTemplate {
     IfScrutinee {
         then_expr: OwnedSourceOccurrence,
         else_expr: OwnedSourceOccurrence,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourcePrefixTemplate>,
     },
     ConstructArgument {
@@ -6481,20 +6671,20 @@ enum SourcePrefixTemplate {
         static_origin: StaticOriginId,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<Lowered>,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourcePrefixTemplate>,
     },
     MatchScrutinee {
         cases: Vec<crate::RuntimeMatchCase>,
         default: RuntimeTrap,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         static_origin: StaticOriginId,
         next: Box<SourcePrefixTemplate>,
     },
     ComputationalMatchScrutinee {
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         static_origin: StaticOriginId,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,
@@ -6507,14 +6697,14 @@ enum SourcePrefixTemplate {
     },
     CallCallee {
         args: Vec<OwnedSourceOccurrence>,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourcePrefixTemplate>,
     },
     CallArgument {
         callee: LoweringOperand,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<LoweringOperand>,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourcePrefixTemplate>,
     },
 }
@@ -6613,7 +6803,7 @@ enum SourceMachineState<'a> {
     /// same population reached two ways.
     Eval {
         expr: OwnedSourceOccurrence,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         control: SourceControl<'a>,
     },
     Value {
@@ -6630,13 +6820,13 @@ enum DynamicConstructorContinuation<'a> {
     Ordinary {
         cases: &'a [crate::RuntimeMatchCase],
         default: &'a RuntimeTrap,
-        env: &'a [LoweringOperand],
+        env: &'a [LoweringEnvironmentBinding],
         static_origin: StaticOriginId,
     },
     Producer {
         cases: &'a [crate::RuntimeMatchCase],
         default: &'a RuntimeTrap,
-        env: &'a [LoweringOperand],
+        env: &'a [LoweringEnvironmentBinding],
         static_origin: StaticOriginId,
         eliminators: &'a [EliminatorFrame<'a>],
     },
@@ -6671,7 +6861,7 @@ struct DeferredConstructorCaseEnvironment<'a> {
     /// of that constructor is its child *i*, so `trailing_fields[j]` is
     /// `child(construct_origin, selected_field + 1 + j)`.
     construct_origin: StaticOriginId,
-    producer_env: &'a [LoweringOperand],
+    producer_env: &'a [LoweringEnvironmentBinding],
     outer_eliminator: EliminatorFrame<'a>,
     splice_caller: Option<&'a ActiveContinuationFrame<'a>>,
     selected_active: ActiveContinuationFrame<'a>,
@@ -6746,18 +6936,25 @@ fn requires_heterogeneous_deforestation(expr: &RuntimeExpr) -> bool {
 }
 fn reaches_environment_computational_recursor(
     expr: &RuntimeExpr,
-    env: &[LoweringOperand],
+    env: &[LoweringEnvironmentBinding],
     introduced_binders: usize,
 ) -> bool {
     let recursive_hypotheses = env
         .iter()
         .enumerate()
-        .filter_map(|(index, value)| {
-            matches!(
-                value,
-                LoweringOperand::Specialized(Lowered::ComputationalRecursorClosure { .. })
-            )
-            .then_some(index + introduced_binders)
+        .filter_map(|(index, binding)| {
+            // Exhaustive with no wildcard. A static worker is a lexical
+            // callable, never a computational recursor closure, so it is not a
+            // recursive hypothesis -- this is a classification, not a
+            // value-producing read, so it answers rather than fails closed.
+            let is_recursor = match binding {
+                LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(
+                    Lowered::ComputationalRecursorClosure { .. },
+                )) => true,
+                LoweringEnvironmentBinding::Value(_) => false,
+                LoweringEnvironmentBinding::StaticWorker(_) => false,
+            };
+            is_recursor.then_some(index + introduced_binders)
         })
         .collect();
     produces_deforestable_aggregate_with_ih(expr, &recursive_hypotheses)
@@ -7537,7 +7734,7 @@ impl<'a> Lowering<'a> {
         recursive: LoweringOperand,
         cases: Vec<crate::RuntimeComputationalMatchCase>,
         default: RuntimeTrap,
-        outer_env: Vec<LoweringOperand>,
+        outer_env: Vec<LoweringEnvironmentBinding>,
         static_origin: StaticOriginId,
         provenance: RecursorFrameProvenance,
         checked_frame_id: Option<u64>,

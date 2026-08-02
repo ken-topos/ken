@@ -687,19 +687,21 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                         crate::boundary_activation::ROOT_INGRESS_CAPABILITY,
                     );
                     compiler.function_local.host_dispatch_context = Some(host_dispatch_context);
-                    initial_env.push(LoweringOperand::Specialized(Lowered::BorrowedNativeValue {
-                        pointer: process_input,
-                    }));
-                    initial_env.push(LoweringOperand::Specialized(Lowered::CapabilityToken {
-                        value: capability,
-                    }));
+                    initial_env.push(LoweringEnvironmentBinding::Value(
+                        LoweringOperand::Specialized(Lowered::BorrowedNativeValue {
+                            pointer: process_input,
+                        }),
+                    ));
+                    initial_env.push(LoweringEnvironmentBinding::Value(
+                        LoweringOperand::Specialized(Lowered::CapabilityToken { value: capability }),
+                    ));
                 } else {
                     compiler.function_local.host_dispatch_context =
                         Some(builder.ins().iconst(pointer_type, 0));
                 }
                 if let Some(value) = staged_process_input {
-                    initial_env.push(LoweringOperand::Specialized(
-                        compiler.lower_value(&mut builder, value)?,
+                    initial_env.push(LoweringEnvironmentBinding::Value(
+                        LoweringOperand::Specialized(compiler.lower_value(&mut builder, value)?),
                     ));
                 }
                 compiler.root_terminal_authority =
@@ -861,8 +863,8 @@ impl<'a> Lowering<'a> {
         residual: &LoweringOperand,
         args: &[RuntimeExpr],
         call_origin: StaticOriginId,
-        argument_env: &[LoweringOperand],
-        saved_producer_env: &[LoweringOperand],
+        argument_env: &[LoweringEnvironmentBinding],
+        saved_producer_env: &[LoweringEnvironmentBinding],
         outer_eliminators: &[EliminatorFrame<'_>],
         recursive_unit_body: Option<StaticOriginId>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
@@ -930,6 +932,7 @@ impl<'a> Lowering<'a> {
             .map(|(position, arg)| {
                 let arg = self.child_occurrence(call_origin, 1 + position, arg)?;
                 self.lower_expr(builder, arg, argument_env)
+                    .map(LoweringEnvironmentBinding::Value)
             })
             .collect::<Result<Vec<_>, _>>()?;
         if params.len() != call_env.len() {
@@ -962,8 +965,8 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeComputationalMatchCase],
         default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        producer_env: &[LoweringOperand],
-        eliminator_env: &[LoweringOperand],
+        producer_env: &[LoweringEnvironmentBinding],
+        eliminator_env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let checked_frame_id = self.consume_checked_subcontinuation_frame(cases, default)?;
         let checked_invocation_id = checked_frame_id.map(|_| {
@@ -1012,7 +1015,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         occurrence: SourceOccurrence<'_>,
-        producer_env: &[LoweringOperand],
+        producer_env: &[LoweringEnvironmentBinding],
         eliminators: &[EliminatorFrame<'_>],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let SourceOccurrence {
@@ -1039,7 +1042,7 @@ impl<'a> Lowering<'a> {
             if let LoweringOperand::Specialized(Lowered::Trap(trap)) = value {
                 return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
             }
-            let mut continuation_env = vec![value];
+            let mut continuation_env = vec![LoweringEnvironmentBinding::Value(value)];
             continuation_env.extend_from_slice(continuation.env);
             return self.lower_recursor_residual_call(
                 builder,
@@ -1131,8 +1134,10 @@ impl<'a> Lowering<'a> {
                     if let RuntimeExpr::Call { callee, args } = body.as_ref() {
                         if let RuntimeExpr::Var(index) = callee.as_ref() {
                             if let Some(index) = (*index as usize).checked_sub(1) {
-                                if let Some(LoweringOperand::Specialized(
-                                    callee @ Lowered::ComputationalRecursorClosure { .. },
+                                if let Some(LoweringEnvironmentBinding::Value(
+                                    LoweringOperand::Specialized(
+                                        callee @ Lowered::ComputationalRecursorClosure { .. },
+                                    ),
                                 )) = producer_env.get(index)
                                 {
                                     let (residual, boundary) = decompose_computational_recursor(
@@ -1211,7 +1216,7 @@ impl<'a> Lowering<'a> {
                 if let LoweringOperand::Specialized(Lowered::Trap(trap)) = value {
                     return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
                 }
-                let mut body_env = vec![value];
+                let mut body_env = vec![LoweringEnvironmentBinding::Value(value)];
                 body_env.extend_from_slice(producer_env);
                 self.lower_computational_producer_expr(
                     builder,
@@ -1290,7 +1295,7 @@ impl<'a> Lowering<'a> {
                                 ),
                             ));
                         }
-                        let mut call_env = args
+                        let mut call_inputs = args
                             .iter()
                             .enumerate()
                             .map(|(position, arg)| {
@@ -1314,15 +1319,15 @@ impl<'a> Lowering<'a> {
                                 }
                             })
                             .collect::<Result<Vec<_>, _>>()?;
-                        call_env.extend(captures.into_iter().map(LoweringOperand::Specialized));
-                        if matches!(
-                            self.body_emission_authority,
-                            BodyEmissionAuthority::RecursiveDescent
-                        ) {
-                            call_env.extend_from_slice(producer_env);
-                        }
+                        // These operands serve two different roles below: a
+                        // unit call's ordered inputs, and the prefix of a
+                        // lexical environment. They stay operands here, and
+                        // only the environment role crosses the binding
+                        // authority -- there is no route back the other way.
+                        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
                         match self.body_emission_authority {
                             BodyEmissionAuthority::RecursiveDescent => {
+                                let call_env = env_with_operands(call_inputs, producer_env);
                                 let body = self.retained_body_occurrence(body)?;
                                 self.lower_computational_producer_expr(
                                     builder,
@@ -1335,7 +1340,7 @@ impl<'a> Lowering<'a> {
                                 let returned = self.call_declared_unit(
                                     builder,
                                     body,
-                                    &call_env,
+                                    &call_inputs,
                                     #[cfg(test)]
                                     None,
                                 )?;
@@ -1483,7 +1488,7 @@ impl<'a> Lowering<'a> {
                                 ),
                             ));
                         }
-                        let mut call_env = args
+                        let mut call_inputs = args
                             .iter()
                             .enumerate()
                             .map(|(position, arg)| {
@@ -1507,16 +1512,14 @@ impl<'a> Lowering<'a> {
                                 }
                             })
                             .collect::<Result<Vec<_>, _>>()?;
-                        call_env.extend(captures.into_iter().map(LoweringOperand::Specialized));
-                        if matches!(
-                            self.body_emission_authority,
-                            BodyEmissionAuthority::RecursiveDescent
-                        ) {
-                            call_env.extend_from_slice(producer_env);
-                        }
+                        // Two roles, as above: ordered unit-call inputs, or the
+                        // prefix of a lexical environment. Only the second
+                        // crosses the binding authority.
+                        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
                         self.enter_oriented_semantic_region(installed.checked);
                         let returned = match self.body_emission_authority {
                             BodyEmissionAuthority::RecursiveDescent => {
+                                let call_env = env_with_operands(call_inputs, producer_env);
                                 let body = self.retained_body_occurrence(body)?;
                                 self.lower_computational_producer_expr(
                                     builder, body, &call_env, &composed,
@@ -1526,7 +1529,7 @@ impl<'a> Lowering<'a> {
                                 let returned = self.call_declared_unit(
                                     builder,
                                     body,
-                                    &call_env,
+                                    &call_inputs,
                                     #[cfg(test)]
                                     None,
                                 )?;
@@ -1587,7 +1590,7 @@ impl<'a> Lowering<'a> {
                             self.static_transition_plan
                                 .constructor_symbol_identity(static_origin)?,
                         ),
-                        args: specialized_env_at(&lowered_args, "a constructor argument")?,
+                        args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                     }));
                 }
                 let (case_body, argument_binder_offset) = match eliminator {
@@ -1749,7 +1752,7 @@ impl<'a> Lowering<'a> {
                     // **template** below (`outer_scrutinee`), so it is a
                     // specialized-only surface, not a spine edge.
                     let lowered_prefix =
-                        specialized_env_at(&lowered_prefix, "a deferred constructor prefix")?;
+                        specialized_operands_at(&lowered_prefix, "a deferred constructor prefix")?;
                     let deferred = DeferredConstructorCaseEnvironment {
                         constructor,
                         lowered_prefix: &lowered_prefix,
@@ -1829,7 +1832,7 @@ impl<'a> Lowering<'a> {
                             self.static_transition_plan
                                 .constructor_symbol_identity(static_origin)?,
                         ),
-                        args: specialized_env_at(&lowered_args, "a constructor argument")?,
+                        args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                     })
                 };
                 self.lower_computational_match_value_composed(builder, produced, eliminators)
@@ -2463,10 +2466,10 @@ impl<'a> Lowering<'a> {
                     )?;
                     #[cfg(test)]
                     px8j_record_recursor_carrier(Px8jProducerPath::Composed, &induction_hypothesis);
-                    induction_hypotheses.push(induction_hypothesis);
+                    induction_hypotheses.push(LoweringEnvironmentBinding::Value(induction_hypothesis));
                 }
                 let mut case_env = induction_hypotheses;
-                case_env.extend(args.into_iter().map(LoweringOperand::Specialized));
+                extend_specialized(&mut case_env, args);
                 let frame_env = match self.materialize_eliminator_frame_env(
                     builder,
                     EliminatorFrame::Computational(eliminator),
@@ -2778,9 +2781,13 @@ impl<'a> Lowering<'a> {
         let induction = self.lowered_from_scalar_pair(result_kind, induction);
         let mut suc_env = Vec::new();
         if computational {
-            suc_env.push(LoweringOperand::Specialized(induction));
+            suc_env.push(LoweringEnvironmentBinding::Value(
+                LoweringOperand::Specialized(induction),
+            ));
         }
-        suc_env.push(LoweringOperand::Specialized(predecessor));
+        suc_env.push(LoweringEnvironmentBinding::Value(
+            LoweringOperand::Specialized(predecessor),
+        ));
         suc_env.extend(frame_env);
         let suc_lowered = if remaining.is_empty() {
             self.lower_expr(builder, suc_body, &suc_env)?
@@ -2829,7 +2836,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         eliminator: EliminatorFrame<'_>,
         retained_scrutinee: &Lowered,
-    ) -> Result<Result<Vec<LoweringOperand>, RuntimeTrap>, CraneliftBackendError> {
+    ) -> Result<Result<Vec<LoweringEnvironmentBinding>, RuntimeTrap>, CraneliftBackendError> {
         let (env, retained_index, deferred, construct) = match eliminator {
             EliminatorFrame::Computational(frame) => (
                 frame.env,
@@ -2864,7 +2871,9 @@ impl<'a> Lowering<'a> {
                 }
                 env.insert(
                     index,
-                    LoweringOperand::Specialized(retained_scrutinee.clone()),
+                    LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(
+                        retained_scrutinee.clone(),
+                    )),
                 );
             }
             return Ok(Ok(env));
@@ -2990,13 +2999,9 @@ impl<'a> Lowering<'a> {
                         Px8jProducerPath::DeferredConstructor,
                         &induction_hypothesis,
                     );
-                    induction_hypotheses.push(induction_hypothesis);
+                    induction_hypotheses.push(LoweringEnvironmentBinding::Value(induction_hypothesis));
                 }
-                induction_hypotheses.extend(
-                    constructor_args
-                        .into_iter()
-                        .map(LoweringOperand::Specialized),
-                );
+                extend_specialized(&mut induction_hypotheses, constructor_args);
                 induction_hypotheses.extend(outer_tail);
                 Ok(Ok(induction_hypotheses))
             }
@@ -3016,14 +3021,13 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
-                constructor_args.extend(specialized_env_at(
+                constructor_args.extend(specialized_bindings_at(
                     &outer_tail,
                     "a deferred constructor's trailing field",
                 )?);
-                Ok(Ok(constructor_args
-                    .into_iter()
-                    .map(LoweringOperand::Specialized)
-                    .collect()))
+                Ok(Ok(bound_values(
+                    constructor_args.into_iter().map(LoweringOperand::Specialized),
+        )))
             }
             EliminatorFrame::PendingLet(_) => {
                 unreachable!("pending Let continuations cannot be deferred constructor frames")
@@ -3041,7 +3045,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         occurrence: SourceOccurrence<'_>,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
         active: &ActiveContinuationFrame<'_>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let mut root_authority = self.root_terminal_authority.take();
@@ -3086,7 +3090,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         expr: OwnedSourceOccurrence,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         control: SourceControl<'b>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let previous_source_root = self.source_control_root.replace(control.terminal_outer);
@@ -3107,7 +3111,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         expr: OwnedSourceOccurrence,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         control: SourceControl<'b>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let mut state = SourceMachineState::Eval { expr, env, control };
@@ -3182,10 +3186,20 @@ impl<'a> Lowering<'a> {
                         value: LoweringOperand::Specialized(self.lower_value(builder, &value)?),
                         control,
                     },
+                    // Same value-producing rule as the direct descent's `Var`:
+                    // only `Value` yields a machine value, and a static worker
+                    // binding fails closed here rather than entering one.
                     RuntimeExpr::Var(index) => SourceMachineState::Value {
-                        value: env.get(index as usize).cloned().ok_or_else(|| {
-                            unsupported("Var", format!("no runtime binding for index {index}"))
-                        })?,
+                        value: env
+                            .get(index as usize)
+                            .ok_or_else(|| {
+                                unsupported(
+                                    "Var",
+                                    format!("no runtime binding for index {index}"),
+                                )
+                            })?
+                            .value_at("a source-machine Var in value position")?
+                            .clone(),
                         control,
                     },
                     RuntimeExpr::Let { value, body } => {
@@ -4110,7 +4124,7 @@ impl<'a> Lowering<'a> {
                                         Px8jProducerPath::SourceMachine,
                                         &induction_hypothesis,
                                     );
-                                    induction_hypotheses.push(induction_hypothesis);
+                                    induction_hypotheses.push(LoweringEnvironmentBinding::Value(induction_hypothesis));
                                 }
                             }
                             let frame_env = match self.materialize_eliminator_frame_env(
@@ -4122,7 +4136,7 @@ impl<'a> Lowering<'a> {
                                 Err(trap) => return Ok(LoweringOperand::Specialized(Lowered::Trap(trap))),
                             };
                             let mut case_env = induction_hypotheses;
-                            case_env.extend(args.into_iter().map(LoweringOperand::Specialized));
+                            extend_specialized(&mut case_env, args);
                             case_env.extend(frame_env);
                             let previous_selected = control.selected.clone();
                             let pending = std::mem::take(&mut control.selected.pending);
@@ -4280,7 +4294,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         _default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
         suffix_control: SourceControl<'b>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let zero = cases.iter().enumerate().find(|(_, case)| {
@@ -4465,7 +4479,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         frame_scope: &mut CheckedFrameBranchScope,
         expr: OwnedSourceOccurrence,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         control: SourceControl<'b>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         self.consumed_subcontinuation_frames = frame_scope.start_successor();
@@ -4481,7 +4495,7 @@ impl<'a> Lowering<'a> {
         true_body: SourceOccurrence<'_>,
         false_body: SourceOccurrence<'_>,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
         suffix_control: SourceControl<'b>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let (source_prefix_template, terminal) =
@@ -4601,7 +4615,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         default: RuntimeTrap,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
         suffix_control: SourceControl<'b>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let (source_prefix_template, terminal) =
@@ -4744,7 +4758,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
         suffix_control: SourceControl<'b>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         validate_dynamic_constructor_alternatives(
@@ -4782,7 +4796,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
         suffix_control: SourceControl<'b>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let (source_prefix_template, terminal) =
@@ -4871,7 +4885,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
         suffix_control: SourceControl<'b>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let active = suffix_control
@@ -4999,7 +5013,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         callee: LoweringOperand,
         args: Vec<LoweringOperand>,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         control: SourceControl<'b>,
     ) -> Result<SourceCallOutcome<'b>, CraneliftBackendError> {
         // ⭐ A call needs a **callable template** — `params`, `captures`, a body
@@ -5023,7 +5037,7 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
-                let mut call_env = args;
+                let mut call_env = bound_values(args);
                 extend_specialized(&mut call_env, captures);
                 call_env.extend(env);
                 Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
@@ -5205,8 +5219,10 @@ impl<'a> Lowering<'a> {
                             ),
                         ));
                     }
-                    let mut call_env = args;
-                    extend_specialized(&mut call_env, captures);
+                    // Two roles, as elsewhere on this path: ordered unit-call
+                    // inputs, or an environment prefix. Only the second binds.
+                    let mut call_inputs = args;
+                    call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
                     let mut suspended = armed.suspended;
                     suspended.continuation = self.install_recursor_invocation(
                         suspended.continuation,
@@ -5218,17 +5234,19 @@ impl<'a> Lowering<'a> {
                         self.body_emission_authority,
                         BodyEmissionAuthority::FunctionizedUnits
                     ) {
-                        let value =
-                            self.call_declared_recursive_position_unit(builder, body, &call_env)?;
+                        let value = self.call_declared_recursive_position_unit(
+                            builder,
+                            body,
+                            &call_inputs,
+                        )?;
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                             value,
                             control: suspended,
                         }));
                     }
-                    call_env.extend(env);
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
                         expr: self.machine_body_occurrence(body)?,
-                        env: call_env,
+                        env: env_with_operands(call_inputs, &env),
                         control: suspended,
                     }));
                 }
@@ -5245,12 +5263,12 @@ impl<'a> Lowering<'a> {
         captures: Vec<Lowered>,
         body: OwnedSourceOccurrence,
         args: Vec<LoweringOperand>,
-        env: Vec<LoweringOperand>,
+        env: Vec<LoweringEnvironmentBinding>,
         control: SourceControl<'b>,
     ) -> Result<SourceCallOutcome<'b>, CraneliftBackendError> {
         let _checked_invocation = self.consume_checked_recursive_invocation_call(&symbol)?;
         if !self.declaration_is_recursive(&symbol) {
-            let mut call_env = args;
+            let mut call_env = bound_values(args);
             extend_specialized(&mut call_env, captures);
             call_env.extend(env);
             return Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
@@ -5270,7 +5288,7 @@ impl<'a> Lowering<'a> {
         // non-recursive direct call above forwards `args` into `call_env`
         // untouched — that path stays phase-preserving and must not be made to
         // fail closed for a property only the loop needs.
-        let args = specialized_env_at(&args, "a recursive source-declaration argument")?;
+        let args = specialized_operands_at(&args, "a recursive source-declaration argument")?;
         if let Some(active) = self
             .active_recursive_declarations
             .iter()
@@ -5361,13 +5379,13 @@ impl<'a> Lowering<'a> {
                 argument_templates: args,
                 induction: None,
             });
-        let mut call_env = loop_args
+        let mut call_inputs = loop_args
             .into_iter()
             .rev()
             .map(LoweringOperand::Specialized)
             .collect::<Vec<_>>();
-        extend_specialized(&mut call_env, captures);
-        call_env.extend(env);
+        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+        let call_env = env_with_operands(call_inputs, &env);
         let lowered = self.lower_source_machine_with_continuation(builder, body, call_env, control);
         self.active_recursive_declarations.pop();
         Ok(SourceCallOutcome::Complete(lowered?))
@@ -5402,6 +5420,397 @@ impl<'a> Lowering<'a> {
     /// makes selection closed is therefore not one caller but that
     /// `Lowered::Closure`/`DeclarationClosure` carry only a tag — so this is the
     /// *only* way any of them can reach a term at all.
+    /// **`D3` -- the callee-only consumer.**
+    ///
+    /// Emits the call to a statically-bound worker: validate the argument
+    /// count against the declared arity, lower the explicit arguments in
+    /// source order, append the stored captures **without phase conversion**,
+    /// resolve this function's own `DeclaredUnitCall` by exact body origin,
+    /// and call it through `call_declared_unit_target`.
+    ///
+    /// There is no `call_indirect`, no runtime selection, no tag or layout
+    /// dispatch, no environment decode, and no body re-lowering: the target is
+    /// a declared unit and the call is an ordinary direct call to it.
+    ///
+    /// The target comes from `worker_calls`, which was minted **into this
+    /// function** (`D4`). Reading it here rather than from the binding is what
+    /// keeps a `FuncRef` from ever crossing a function boundary.
+    fn call_static_worker(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        worker: &StaticWorkerBinding,
+        args: &[RuntimeExpr],
+        static_origin: StaticOriginId,
+        env: &[LoweringEnvironmentBinding],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let supplied = u32::try_from(args.len()).map_err(|_| {
+            unsupported("Call", "call argument count exceeds addressable range")
+        })?;
+        if supplied != worker.declared_arity {
+            return Err(unsupported(
+                "Call",
+                format!(
+                    "static worker expects {} arguments but call provides {supplied}",
+                    worker.declared_arity
+                ),
+            ));
+        }
+
+        // Explicit arguments in source order: argument `i` is child `1 + i` of
+        // the `Call` occurrence, the callee being child `0`.
+        let mut inputs = args
+            .iter()
+            .enumerate()
+            .map(|(position, argument)| {
+                let argument = self.child_occurrence(static_origin, 1 + position, argument)?;
+                self.lower_expr(builder, argument, env)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Stored captures follow, unchanged. A carried capture stays carried:
+        // there is deliberately no conversion on this edge, which is the whole
+        // reason the binding holds operands rather than templates.
+        inputs.extend(worker.captures.iter().cloned());
+
+        // Resolve the exact target FIRST. The mutation below perturbs only what
+        // the consumer is handed, never what the binding named.
+        let exact = self
+            .function_local
+            .worker_calls
+            .get(&worker.body_origin)
+            .cloned()
+            .ok_or_else(|| {
+                unsupported(
+                    "Call",
+                    format!(
+                        "no worker call target for body origin {:?} was declared into this \
+                         function",
+                        worker.body_origin
+                    ),
+                )
+            })?;
+
+        // `AC-5` clause (b): the redirect selects a **distinct** target by
+        // `AC-6`'s definition of same-shape -- **same declared arity and same
+        // capture count** -- and by nothing else.
+        //
+        // Selecting on `origin != body_origin` would establish only
+        // difference. The target map is populated from every projected
+        // emittable unit, so over a heterogeneous fixture that picks an
+        // arbitrary unrelated unit and the red proves nothing about the origin
+        // check. Requiring full header/slot/offset equality is the opposite
+        // error: it over-constrains past the shape `AC-6` actually names.
+        //
+        // No candidate is a loud failure, never a fall back to exact: a silent
+        // fallback would make this control vacuously green.
+        #[cfg(test)]
+        let target = if STATIC_WORKER_MUTATION.with(std::cell::Cell::get)
+            == StaticWorkerMutation::RedirectResolvedWorkerTarget
+        {
+            self.function_local
+                .worker_calls
+                .iter()
+                .find(|(origin, call)| {
+                    **origin != worker.body_origin
+                        && call.header.parameters == exact.header.parameters
+                        && call.header.captures == exact.header.captures
+                })
+                .map(|(_, call)| call.clone())
+                .ok_or_else(|| {
+                    unsupported(
+                        "StaticWorkerMutation",
+                        "the AC-5 redirect found no DISTINCT target of the same declared arity \
+                         and capture count; it never falls back to exact, because a fallback \
+                         would make this control vacuously green. Clause (c): run this switch \
+                         on the two-same-shape-worker program only",
+                    )
+                })?
+        } else {
+            exact
+        };
+        #[cfg(not(test))]
+        let target = exact;
+
+        if target.origin != worker.body_origin {
+            return Err(unsupported(
+                "Call",
+                format!(
+                    "worker call target carries origin {:?} but the binding names body origin \
+                     {:?}",
+                    target.origin, worker.body_origin
+                ),
+            ));
+        }
+
+        self.call_declared_unit_target(
+            builder,
+            target,
+            &inputs,
+            #[cfg(test)]
+            None,
+        )
+    }
+
+    /// **`D2` -- the binder-lowering helper.** Lowers a `Let`'s bound value
+    /// into the one binding authority.
+    ///
+    /// The default is exactly what it was before this node:
+    /// `Value(lower_expr(..))`. The single new outcome is a lexical closure
+    /// **any** of whose captures is carried, which installs a
+    /// [`LoweringEnvironmentBinding::StaticWorker`] instead -- that case
+    /// previously failed closed in `specialized_operands_at`, which is the
+    /// narrowing this node removes.
+    ///
+    /// All captures are classified **exhaustively before** the outcome is
+    /// selected. The selection is never made from syntax spelling, and never
+    /// from a partially emitted `specialized_at` failure: the captures are
+    /// lowered in full first, then counted.
+    ///
+    /// `RuntimeExpr::Closure` keeps its own arm rather than sharing this one.
+    /// Its captures are seed-provenance symbols resolved to JIT-time ground
+    /// values, not lexical children, so it has no carried capture to find and
+    /// projecting it as one would conflate the two provenances the ABI keeps
+    /// apart.
+    fn lower_binder(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        occurrence: SourceOccurrence<'_>,
+        env: &[LoweringEnvironmentBinding],
+    ) -> Result<LoweringEnvironmentBinding, CraneliftBackendError> {
+        let SourceOccurrence {
+            expr,
+            static_origin,
+        } = occurrence;
+        let RuntimeExpr::LexicalClosure {
+            captures,
+            params,
+            body,
+        } = expr
+        else {
+            // Every other binder, `RuntimeExpr::Closure` included, keeps the
+            // pre-existing route unchanged.
+            return self
+                .lower_expr(builder, occurrence, env)
+                .map(LoweringEnvironmentBinding::Value);
+        };
+        if !matches!(
+            self.body_emission_authority,
+            BodyEmissionAuthority::FunctionizedUnits
+        ) {
+            return self
+                .lower_expr(builder, occurrence, env)
+                .map(LoweringEnvironmentBinding::Value);
+        }
+
+        // Positional projection from this occurrence: body is exact child 0,
+        // lexical capture `i` is exact child `1 + i`. The declaration order
+        // (`captures, params, body`) is NOT the child order.
+        let body = self.child_occurrence(static_origin, 0, body)?;
+        let lowered_captures = captures
+            .iter()
+            .enumerate()
+            .map(|(position, capture)| {
+                let capture = self.child_occurrence(static_origin, 1 + position, capture)?;
+                self.lower_expr(builder, capture, env)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Exhaustive classification, completed before anything is selected.
+        let mut carried = 0usize;
+        let mut specialized = 0usize;
+        for capture in &lowered_captures {
+            match capture {
+                LoweringOperand::Carried(_) => carried += 1,
+                LoweringOperand::Specialized(_) => specialized += 1,
+            }
+        }
+        debug_assert_eq!(carried + specialized, lowered_captures.len());
+
+        // `AC-5` mutation 1 lives on this exact branch: with the narrowing
+        // restored, a carried capture takes the specialized-only fold again
+        // and the ordinary witness must go red.
+        #[cfg(test)]
+        let narrowing_restored = STATIC_WORKER_MUTATION.with(std::cell::Cell::get)
+            == StaticWorkerMutation::RestoreCarriedCaptureNarrowing;
+        #[cfg(not(test))]
+        let narrowing_restored = false;
+        if carried == 0 || narrowing_restored {
+            // All-specialized: preserve the existing compile-time closure.
+            return Ok(LoweringEnvironmentBinding::Value(
+                LoweringOperand::Specialized(Lowered::Closure {
+                    captures: specialized_operands_at(&lowered_captures, "a closure capture")?,
+                    params: params.clone(),
+                    body: body.static_origin,
+                }),
+            ));
+        }
+
+        let declared_arity = u32::try_from(params.len()).map_err(|_| {
+            unsupported(
+                "StaticWorkerBinding",
+                "source closure parameter count exceeds addressable range",
+            )
+        })?;
+        self.construct_static_worker_binding(
+            static_origin,
+            body.static_origin,
+            declared_arity,
+            captures.len(),
+            lowered_captures,
+        )
+        .map(LoweringEnvironmentBinding::StaticWorker)
+    }
+
+    /// **`D2` -- THE SOLE CONSTRUCTION ROUTE for a static worker binding.**
+    ///
+    /// The projection is positional and exact, taken from the closure's own
+    /// retained occurrence: the closure origin is the occurrence origin, the
+    /// body origin is exact child `0`, and lexical capture `i` is exact child
+    /// `1 + i`. Declared arity is the source parameter count.
+    ///
+    /// There is no source re-walk and no global closure search here -- the
+    /// caller has already resolved the occurrence and lowered the captures
+    /// through `child_occurrence`, and this routine only validates and
+    /// installs.
+    ///
+    /// Every one of the checks below runs **before** the binding is returned,
+    /// so a missing, duplicate, wrong-body, wrong-arity or wrong-capture fact
+    /// rejects before any worker call could be emitted. `captures` arrive as
+    /// `LoweringOperand` and are stored unchanged: a carried capture stays
+    /// carried, and nothing here converts a phase.
+    fn construct_static_worker_binding(
+        &self,
+        closure_origin: StaticOriginId,
+        body_origin: StaticOriginId,
+        declared_arity: u32,
+        source_capture_count: usize,
+        captures: Vec<LoweringOperand>,
+    ) -> Result<StaticWorkerBinding, CraneliftBackendError> {
+        // 1. The capture vector agrees with the retained definition. The caller
+        //    builds it from the retained children, so a disagreement means the
+        //    two walks diverged rather than that the source is odd.
+        if captures.len() != source_capture_count {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "retained definition declares {source_capture_count} lexical captures but \
+                     {} were projected",
+                    captures.len()
+                ),
+            ));
+        }
+
+        // 2. This function has a declared static-body target for `body_origin`.
+        //    A missing target is the "worker body was never declared into this
+        //    function" fact, and it rejects here rather than at emission.
+        let target = self
+            .function_local
+            .unit_calls
+            .get(&body_origin)
+            .ok_or_else(|| {
+                unsupported(
+                    "StaticWorkerBinding",
+                    format!(
+                        "no declared static-body target for worker body origin {body_origin:?} \
+                         in this function"
+                    ),
+                )
+            })?;
+
+        // 3. The declared unit call is the one for this exact body origin. The
+        //    map is keyed by origin, so a disagreement here means the entry was
+        //    built for another body -- a wrong-body fact, not a lookup miss.
+        if target.origin != body_origin {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "declared unit call carries origin {:?} but the worker body origin is \
+                     {body_origin:?}",
+                    target.origin
+                ),
+            ));
+        }
+
+        // 4. The descriptor's parameter count is the declared arity.
+        if target.header.parameters != declared_arity {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "worker descriptor declares {} parameters but the source closure declares \
+                     {declared_arity}",
+                    target.header.parameters
+                ),
+            ));
+        }
+
+        // 5. The descriptor's capture count is the capture vector's length.
+        let descriptor_captures = usize::try_from(target.header.captures).map_err(|_| {
+            unsupported(
+                "StaticWorkerBinding",
+                "worker descriptor capture count exceeds addressable range",
+            )
+        })?;
+        if descriptor_captures != captures.len() {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "worker descriptor declares {descriptor_captures} captures but {} were \
+                     projected from the retained definition",
+                    captures.len()
+                ),
+            ));
+        }
+
+        // 6. Slots, offsets and frame bytes are taken from that descriptor
+        //    unchanged, so they must agree with it before installation. The
+        //    slot run is the authority for the counts, and `frame_bytes` is
+        //    derived from it -- a slot run that disagrees with the header is a
+        //    descriptor this binding must not carry.
+        if target.slots.len() != target.offsets.len() {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "worker descriptor has {} slots but {} offsets",
+                    target.slots.len(),
+                    target.offsets.len()
+                ),
+            ));
+        }
+        let slot_parameters = target
+            .slots
+            .iter()
+            .filter(|slot| matches!(slot.kind, AbiSlotKind::Parameter))
+            .count();
+        let slot_captures = target
+            .slots
+            .iter()
+            .filter(|slot| matches!(slot.kind, AbiSlotKind::Capture))
+            .count();
+        if slot_parameters != declared_arity as usize || slot_captures != descriptor_captures {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                format!(
+                    "worker descriptor slot run declares {slot_parameters} parameters and \
+                     {slot_captures} captures, disagreeing with its header's {declared_arity} \
+                     and {descriptor_captures}"
+                ),
+            ));
+        }
+        if target.header.frame_bytes == 0 && !target.slots.is_empty() {
+            return Err(unsupported(
+                "StaticWorkerBinding",
+                "worker descriptor declares a non-empty slot run in a zero-byte frame",
+            ));
+        }
+
+        Ok(StaticWorkerBinding {
+            closure_origin,
+            body_origin,
+            declared_arity,
+            captures,
+        })
+    }
+
     pub(super) fn retained_body_occurrence(
         &self,
         static_origin: StaticOriginId,
@@ -5828,7 +6237,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let join_plan = self.consumed_join_plan_token(static_origin)?;
         if cases.is_empty() {
@@ -5953,7 +6362,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
         join_plan: &JoinPlanToken,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         // ⭐ Handled before any block is created, and that ordering matters: a
@@ -6112,7 +6521,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
         join_plan: &JoinPlanToken,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         // Read identity and arity ONCE, ahead of the chain: both are properties
@@ -6535,13 +6944,13 @@ impl<'a> Lowering<'a> {
                     )?;
                     #[cfg(test)]
                     px8j_record_recursor_carrier(Px8jProducerPath::Composed, &induction_hypothesis);
-                    induction_hypotheses.push(induction_hypothesis);
+                    induction_hypotheses.push(LoweringEnvironmentBinding::Value(induction_hypothesis));
                 }
                 active_scope = Some((activation, cursor, producer_origin, splice_caller));
             }
 
             let mut case_env = induction_hypotheses;
-            case_env.extend(children);
+            case_env.extend(bound_values(children));
             // The frame's own environment, with the retained scrutinee inserted
             // where the frame asked for it. ⭐ Retention is phase-preserving:
             // the retained value is the **same carried word**, ⛔ never a
@@ -6554,7 +6963,10 @@ impl<'a> Lowering<'a> {
                         "retained scrutinee index exceeds the frame environment",
                     ));
                 }
-                frame_env.insert(retained, LoweringOperand::Carried(scrutinee));
+                frame_env.insert(
+                    retained,
+                    LoweringEnvironmentBinding::Value(LoweringOperand::Carried(scrutinee)),
+                );
             }
             case_env.extend(frame_env);
 
@@ -6710,7 +7122,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         occurrence: SourceOccurrence<'_>,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let SourceOccurrence {
             expr,
@@ -6776,23 +7188,36 @@ impl<'a> Lowering<'a> {
                 let value = self.lower_expr(builder, body, env)?;
                 self.finish_checked_computational_ih_marker(value)
             }
+            // A `Var` here is a value-producing position, so it accepts only
+            // `Value`. A static worker binding fails closed in `value_at`
+            // rather than being cloned out as if it were a value.
             RuntimeExpr::Var(index) => env
                 .get(*index as usize)
-                .cloned()
-                .ok_or_else(|| unsupported("Var", format!("no runtime binding for index {index}"))),
+                .ok_or_else(|| unsupported("Var", format!("no runtime binding for index {index}")))?
+                .value_at("a Var in value position")
+                .cloned(),
             RuntimeExpr::PrimitiveCall { primitive, args } => {
                 self.lower_primitive_call(builder, primitive, args, static_origin, env)
             }
             RuntimeExpr::Let { value, body } => {
                 let value = self.child_occurrence(static_origin, 0, value)?;
-                let lowered_value = self.lower_expr(builder, value, env)?;
-                if matches!(lowered_value, LoweringOperand::Specialized(Lowered::RecursiveBackedge)) {
-                    return Ok(LoweringOperand::Specialized(Lowered::RecursiveBackedge));
+                let bound = self.lower_binder(builder, value, env)?;
+                // The two short-circuits below are value-shaped, so they read
+                // through the binding rather than around it. A static worker
+                // binding is neither a backedge nor a trap, so it falls
+                // through to the ordinary installation.
+                if let LoweringEnvironmentBinding::Value(lowered_value) = &bound {
+                    if matches!(
+                        lowered_value,
+                        LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+                    ) {
+                        return Ok(LoweringOperand::Specialized(Lowered::RecursiveBackedge));
+                    }
+                    if let LoweringOperand::Specialized(Lowered::Trap(trap)) = lowered_value {
+                        return Ok(LoweringOperand::Specialized(Lowered::Trap(trap.clone())));
+                    }
                 }
-                if let LoweringOperand::Specialized(Lowered::Trap(trap)) = lowered_value {
-                    return Ok(LoweringOperand::Specialized(Lowered::Trap(trap)));
-                }
-                let mut body_env = vec![lowered_value];
+                let mut body_env = vec![bound];
                 body_env.extend_from_slice(env);
                 let body = self.child_occurrence(static_origin, 1, body)?;
                 self.lower_expr(builder, body, &body_env)
@@ -6932,7 +7357,7 @@ impl<'a> Lowering<'a> {
                         self.static_transition_plan
                             .constructor_symbol_identity(static_origin)?,
                     ),
-                    args: specialized_env_at(&lowered_args, "a constructor argument")?,
+                    args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                 }))
             }
             RuntimeExpr::Match {
@@ -7316,7 +7741,7 @@ impl<'a> Lowering<'a> {
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(LoweringOperand::Specialized(Lowered::Closure {
-                    captures: specialized_env_at(&captures, "a closure capture")?,
+                    captures: specialized_operands_at(&captures, "a closure capture")?,
                     params: params.clone(),
                     body: body.static_origin,
                 }))
@@ -7337,6 +7762,29 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::Call { callee, args } => {
                 let join_plan = self.consumed_join_plan_token(static_origin)?;
                 let callee = self.child_occurrence(static_origin, 0, callee)?;
+                // **`D3` -- THE SOLE CONSUMER of a static worker binding.**
+                //
+                // Only a `Call` whose callee is an exact `Var` resolving to
+                // `StaticWorker` may consume one, and this is the only place
+                // that reads the arm without going through `value_at`. It sits
+                // ahead of every other callee route precisely so the binding is
+                // consumed here or fails closed everywhere else: a `Var`
+                // resolving to `Value` falls through to the pre-existing paths
+                // untouched.
+                if let RuntimeExpr::Var(index) = callee.expr {
+                    if let Some(LoweringEnvironmentBinding::StaticWorker(worker)) =
+                        env.get(*index as usize)
+                    {
+                        let worker = worker.clone();
+                        return self.call_static_worker(
+                            builder,
+                            &worker,
+                            args,
+                            static_origin,
+                            env,
+                        );
+                    }
+                }
                 if matches!(
                     self.body_emission_authority,
                     BodyEmissionAuthority::FunctionizedUnits
@@ -7420,7 +7868,7 @@ impl<'a> Lowering<'a> {
                         params,
                         body,
                     }) => {
-                        let mut call_env = args
+                        let mut call_inputs = args
                             .iter()
                             .enumerate()
                             .map(|(position, arg)| {
@@ -7448,19 +7896,24 @@ impl<'a> Lowering<'a> {
                                 }
                             })
                             .collect::<Result<Vec<_>, _>>()?;
-                        if params.len() != call_env.len() {
+                        if params.len() != call_inputs.len() {
                             return Err(unsupported(
                                 "Call",
                                 format!(
                                     "closure expects {} args but call provides {}",
                                     params.len(),
-                                    call_env.len()
+                                    call_inputs.len()
                                 ),
                             ));
                         }
-                        call_env.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                        // Two roles, as above. A lexical closure's body sees
+                        // exactly its arguments and captures, so the
+                        // environment role is the bare installation with no
+                        // enclosing spine behind it.
+                        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
                         match self.body_emission_authority {
                             BodyEmissionAuthority::RecursiveDescent => {
+                                let call_env = bound_values(call_inputs);
                                 let body = self.retained_body_occurrence(body)?;
                                 self.lower_expr(builder, body, &call_env)
                             }
@@ -7468,7 +7921,7 @@ impl<'a> Lowering<'a> {
                                 self.call_declared_unit(
                                     builder,
                                     body,
-                                    &call_env,
+                                    &call_inputs,
                                     #[cfg(test)]
                                     None,
                                 )
@@ -7580,7 +8033,7 @@ impl<'a> Lowering<'a> {
                                 "recursive constructor field is not a closure",
                             ));
                         };
-                        let mut call_env = args
+                        let mut call_inputs = args
                             .iter()
                             .enumerate()
                             .map(|(position, arg)| {
@@ -7589,17 +8042,19 @@ impl<'a> Lowering<'a> {
                                 self.lower_expr(builder, arg, env)
                             })
                             .collect::<Result<Vec<_>, _>>()?;
-                        if params.len() != call_env.len() {
+                        if params.len() != call_inputs.len() {
                             return Err(unsupported(
                                 "ComputationalMatch",
                                 format!(
                                     "recursive field expects {} args but call provides {}",
                                     params.len(),
-                                    call_env.len()
+                                    call_inputs.len()
                                 ),
                             ));
                         }
-                        call_env.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                        // Two roles, as above: ordered unit-call inputs, or an
+                        // environment prefix. Only the second is bound.
+                        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
                         if matches!(
                             self.body_emission_authority,
                             BodyEmissionAuthority::FunctionizedUnits
@@ -7609,7 +8064,7 @@ impl<'a> Lowering<'a> {
                                 .call_declared_recursive_position_unit(
                                     builder,
                                     body,
-                                    &call_env,
+                                    &call_inputs,
                                 )
                                 .and_then(|value| {
                                     self.lower_computational_match_value_composed(
@@ -7621,7 +8076,7 @@ impl<'a> Lowering<'a> {
                             self.leave_oriented_semantic_region(installed.checked);
                             return result;
                         }
-                        call_env.extend_from_slice(env);
+                        let call_env = env_with_operands(call_inputs, env);
                         self.enter_oriented_semantic_region(installed.checked);
                         let result = self.lower_computational_producer_expr(
                             builder,
@@ -7707,7 +8162,7 @@ impl<'a> Lowering<'a> {
         capability: Option<&crate::RuntimeCapabilityUse>,
         args: &[RuntimeExpr],
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         if !CRANELIFT_HOST_EFFECT_CONSUMERS_V1.contains(&operation) {
             return Err(unsupported(
@@ -7734,7 +8189,7 @@ impl<'a> Lowering<'a> {
         let specialized_lowered = if operation == ken_host::HostOpV1::BufferFreeze {
             None
         } else {
-            Some(specialized_env_at(&lowered, "a host-effect operand")?)
+            Some(specialized_operands_at(&lowered, "a host-effect operand")?)
         };
         let pointer_type = builder.func.dfg.value_type(
             self.function_local
@@ -8643,7 +9098,7 @@ impl<'a> Lowering<'a> {
         argument: Lowered,
         zero_body: SourceOccurrence<'_>,
         suc_body: SourceOccurrence<'_>,
-        producer_env: &[LoweringOperand],
+        producer_env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let _join_plan = self.consumed_join_plan_token(join_origin)?;
         let (target, structural) = match argument {
@@ -8772,7 +9227,7 @@ impl<'a> Lowering<'a> {
         body: SourceOccurrence<'_>,
         args: &[RuntimeExpr],
         call_origin: StaticOriginId,
-        producer_env: &[LoweringOperand],
+        producer_env: &[LoweringEnvironmentBinding],
         eliminators: Option<&[EliminatorFrame<'_>]>,
         join_plan: JoinPlanToken,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
@@ -8790,7 +9245,7 @@ impl<'a> Lowering<'a> {
         // (`same_recursive_argument_shapes`) and lowered into block params. A
         // carried boundary word has no such shape, so this is a
         // specialized-only surface with the ruled fail-closed arm.
-        let lowered_args = specialized_env_at(&lowered_args, "a recursive declaration argument")?;
+        let lowered_args = specialized_operands_at(&lowered_args, "a recursive declaration argument")?;
         if params.len() != lowered_args.len() {
             return Err(unsupported(
                 "DeclarationRef",
@@ -8855,13 +9310,13 @@ impl<'a> Lowering<'a> {
         // closure below. Preserve the established direct-call lowering for
         // ordinary declarations, including constructor-valued HostIO trees.
         if !self.declaration_is_recursive(symbol) {
-            let mut call_env = lowered_args
+            let mut call_inputs = lowered_args
                 .into_iter()
                 .rev()
                 .map(LoweringOperand::Specialized)
                 .collect::<Vec<_>>();
-            extend_specialized(&mut call_env, captures.iter().cloned());
-            call_env.extend_from_slice(producer_env);
+            call_inputs.extend(captures.iter().cloned().map(LoweringOperand::Specialized));
+            let call_env = env_with_operands(call_inputs, producer_env);
             return if let Some(eliminators) = eliminators {
                 self.lower_computational_producer_expr(builder, body, &call_env, eliminators)
             } else {
@@ -8961,13 +9416,13 @@ impl<'a> Lowering<'a> {
         // Runtime environments are de Bruijn-nearest first: source arguments
         // are evaluated left-to-right, then installed in reverse binder order,
         // followed by captures and the producer environment.
-        let mut call_env = loop_args
+        let mut call_inputs = loop_args
             .into_iter()
             .rev()
             .map(LoweringOperand::Specialized)
             .collect::<Vec<_>>();
-        extend_specialized(&mut call_env, captures.iter().cloned());
-        call_env.extend_from_slice(producer_env);
+        call_inputs.extend(captures.iter().cloned().map(LoweringOperand::Specialized));
+        let call_env = env_with_operands(call_inputs, producer_env);
         let lowered = if let Some(eliminators) = eliminators {
             self.lower_computational_producer_expr(builder, body, &call_env, eliminators)
         } else {
@@ -9074,7 +9529,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
         join_plan: &JoinPlanToken,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let kind = builder
@@ -9122,13 +9577,13 @@ impl<'a> Lowering<'a> {
             if expected_arity != 0 {
                 Self::require_nonzero(builder, fields);
             }
-            let mut arm_env = (0..expected_arity)
-                .map(|index| {
+            let arm_env = env_with_operands(
+                (0..expected_arity).map(|index| {
                     let field = builder.ins().iadd_imm(fields, (index * 32) as i64);
                     LoweringOperand::Specialized(Lowered::BorrowedNativeValue { pointer: field })
-                })
-                .collect::<Vec<_>>();
-            arm_env.extend_from_slice(env);
+                }),
+                env,
+            );
             // The single-case fast path is still case 0 of this match.
             let body = self.case_body_occurrence(static_origin, 0, &case.body)?;
             return self.lower_expr(builder, body, &arm_env);
@@ -9172,13 +9627,13 @@ impl<'a> Lowering<'a> {
             if expected_arity != 0 {
                 Self::require_nonzero(builder, fields);
             }
-            let mut arm_env = (0..expected_arity)
-                .map(|index| {
+            let arm_env = env_with_operands(
+                (0..expected_arity).map(|index| {
                     let field = builder.ins().iadd_imm(fields, (index * 32) as i64);
                     LoweringOperand::Specialized(Lowered::BorrowedNativeValue { pointer: field })
-                })
-                .collect::<Vec<_>>();
-            arm_env.extend_from_slice(env);
+                }),
+                env,
+            );
             let body = self.case_body_occurrence(static_origin, index, &case.body)?;
             let lowered = self.lower_expr(builder, body, &arm_env)?;
             if !self.seal_source_trap_branch(builder, &lowered)? {
@@ -9227,7 +9682,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         _default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let join_plan = self.consumed_join_plan_token(static_origin)?;
         let merge = join_plan
@@ -9312,7 +9767,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         // D8: the source traversal consumed the origin-keyed contract before
         // reaching this helper. Reborrow it before creating a block or lowering
@@ -9419,7 +9874,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeMatchCase],
         _default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let join_plan = self.consumed_join_plan_token(static_origin)?;
         let zero = cases.iter().enumerate().find(|(_, case)| {
@@ -9630,7 +10085,7 @@ impl<'a> Lowering<'a> {
         primitive: &RuntimePrimitive,
         args: &[RuntimeExpr],
         static_origin: StaticOriginId,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let lowered_args = args
             .iter()
@@ -9685,7 +10140,7 @@ impl<'a> Lowering<'a> {
         let lowered_args = if primitive.symbol == "bytes_length" {
             match lowered_args.as_slice() {
                 [LoweringOperand::Specialized(_)] => {
-                    specialized_env_at(&lowered_args, "the bytes_length operand")?
+                    specialized_operands_at(&lowered_args, "the bytes_length operand")?
                 }
                 [LoweringOperand::Carried(word)] => {
                     let class = self.emit_carrier_class(builder, *word)?;
@@ -9763,7 +10218,7 @@ impl<'a> Lowering<'a> {
                 })
                 .collect::<Result<Vec<_>, CraneliftBackendError>>()?
         } else {
-            specialized_env_at(&lowered_args, "a primitive-call operand")?
+            specialized_operands_at(&lowered_args, "a primitive-call operand")?
         };
         let lowered = match primitive.symbol.as_str() {
             "add_int" => self.lower_int_binop(builder, "add_int", lowered_args, |lhs, rhs| {
