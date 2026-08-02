@@ -73,6 +73,20 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/reference/catalog/Core/Logic/EmptyDec.md` | reference | derived-reference | partial |
 | `library/reference/catalog/Core/Logic/Transport.md` | reference | derived-reference | partial |
 | `library/reference/catalog/Tooling/Testing/Property.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Application/CommandLine/ArgParse.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Application/Configuration/Decoder.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Application/Input/Schema.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Data/Binary/BytesKeys.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Data/Collections/Derived.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Data/Collections/Map.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Data/Collections/NonEmpty.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Data/Numeric/Nat/Arithmetic.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Data/Numeric/Nat/Order.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Data/Sums/Combinators.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Data/Sums/Validation.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Data/Text/Codec.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Data/Text/StringBijection.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Data/Text/StringKeys.md` | reference | derived-reference | partial |
 | `library/learn/reading-ken/fragments.md` | reference | derived-reference | current |
 | `library/learn/reading-ken/01-anatomy.md` | explanatory | explanatory | current |
 | `library/learn/reading-ken/02-types-contracts-and-proofs.md` | explanatory | explanatory | current |
@@ -86,7 +100,7 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/quickstart.md` | tutorial | tutorial | current |
 | `library/STATUS.md` | status | status | current |
 
-**Total:** 52 registered document(s).
+**Total:** 66 registered document(s).
 
 ## Regenerating
 
