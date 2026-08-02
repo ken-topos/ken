@@ -25,4 +25,3 @@ ken fmt --check: non-canonical: target/doc-w4-toolchain/format-me.ken
 
 For the safe copy, rewrite, and verification procedure, see
 [Format a Ken source file](../../how-to/format-source.md).
-

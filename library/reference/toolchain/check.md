@@ -28,4 +28,3 @@ ken check: cannot read 'target/doc-w4-toolchain/does-not-exist.ken': No such fil
 
 For the checking procedure and remedy, see
 [Check a Ken source file](../../how-to/check-a-source.md).
-

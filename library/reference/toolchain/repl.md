@@ -23,7 +23,5 @@ kernel 0.0.0
 ken> bye
 ```
 
-Evaluation and elaboration errors are reported inside the session while the
-loop remains active. For session commands and a verified replacement after an
-unresolved name, see [Use the REPL](../../how-to/use-the-repl.md).
-
+For session commands and a verified replacement after an unresolved name, see
+[Use the REPL](../../how-to/use-the-repl.md).

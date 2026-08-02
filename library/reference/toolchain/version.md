@@ -22,4 +22,3 @@ ken reference interpreter (X1)
 
 The output does not identify a compilation target. `--version` and `-V` are
 accepted global option aliases, but the current `ken help` text omits them.
-

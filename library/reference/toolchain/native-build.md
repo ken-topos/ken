@@ -29,4 +29,3 @@ ken native-build: program admission failed: MissingMain
 
 For the build-and-run procedure and remedy, see
 [Build a native artifact](../../how-to/build-a-native-artifact.md).
-

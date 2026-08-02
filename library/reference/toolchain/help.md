@@ -28,4 +28,3 @@ Subcommands:
 accepted global option spellings: `--version`, `-V`, `--help`, and `-h`.
 Those aliases work and are documented in this reference; the help omission is
 a toolchain finding rather than a feature this page can repair.
-

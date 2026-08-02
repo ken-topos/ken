@@ -19,4 +19,3 @@ ordered task or a repair after a refusal, follow the linked how-to instead.
 The option surface has five accepted spellings across three options:
 `fmt --check`, `--version` / `-V`, and `--help` / `-h`. The
 `native-build <output-dir>` value is positional, not an option.
-

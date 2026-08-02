@@ -36,4 +36,3 @@ ken run: missing entrypoint 'main' in 'catalog/packages/Core/Logic/Transport.ken
 
 For the executable-file procedure and remedy, see
 [Run a Ken program](../../how-to/run-a-program.md).
-
