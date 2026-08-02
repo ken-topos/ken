@@ -203,7 +203,7 @@ exited 127 and the seat stopped without retrying or claiming validation.
 
 **Loads and commands.** The initial load comprised the protocol and agent
 overview; `write-pure` pack; `read-ken`, `write-ken`, `proof-and-trust`, and
-`toolchain`; `write-program` and `author-package`; and the authoring fixture.
+`toolchain`; `write-program`; and the authoring fixture.
 The only additional loads were the two cited spec files. `sed` reads exited 0
 with empty stderr. The one task-seat command was
 `ken check /tmp/doc-w6-agent-eval-pure-law.ken`; it exited 127 with the shell's
@@ -247,7 +247,7 @@ The answer explained that terminal choice follows the normalized goal shape:
 `collapsed` computes to `Top` and therefore uses `Proved`; `stuck` remains an
 equality with definitionally identical endpoints and therefore uses `Refl`.
 It cited `spec/10-kernel/16-observational.md`,
-`spec/10-kernel/15-propositions.md`,
+`spec/10-kernel/15-identity.md`,
 `spec/20-verification/21-spec-syntax.md`, and the selected proof/task modules.
 It preserved the validation fact that the one cold-seat `ken check` attempt
 could not run because `ken` was absent from `PATH`; it made no validation
@@ -455,6 +455,66 @@ unnecessary load or invention, but every task scores
 The citation-authority axis therefore fails for the current corpus. Under the
 suite exit predicate, `agent_core_ready` cannot be true for this run.
 
-That is the frame's hard stop 1. This checkpoint records the false-axis result
-and stops without a fixture retry, corpus repair, D4 verdict artifact, or D5
-pack recommendation pending Steward disposition.
+That was the frame's hard stop 1. Checkpoint 2 recorded the false-axis result
+and stopped without a fixture retry or corpus repair. The Steward accepted the
+stop and released the bounded checkpoint-3 record below; D2 remains unchanged.
+
+## D4 — current-corpus result
+
+The canonical result for this run is
+`library/agents/evaluations/results-2026-08-02.toml`. It preserves all seven
+one-shot cold runs in the historical artifact's shape and states the suite
+verdict directly:
+
+```toml
+agent_core_ready = false
+failing_axes = ["cited_authority"]
+```
+
+All seven answers were correct, loaded no unnecessary file, and invented
+nothing. All seven scored `cited_authority = "partial"` under the
+claim-sensitive D2 rule fixed before disclosure. The failing authority axis is
+therefore sufficient to make the exit predicate false.
+
+This is not evidence that the corpus regressed since the 2026-07-24 run. The
+evaluation protocol named `cited_authority` then but did not define it. D2 is
+the suite's first written citation rule, and it is stricter than the unwritten
+scorer-local standard that produced the July values. The July and August
+authority scores are not directly comparable, so this result attributes the
+failure to the newly explicit scoring rule rather than to corpus drift.
+
+The displacement hypothesis was also tested directly and did not hold:
+**zero of seven cold answers substituted a derived `library/` page for an
+available normative, checked-package, or implementation authority.** The 54
+new derived pages from Waves 3–5 did not displace authority in this run. That
+is a positive result even though the stricter overall verdict is false.
+
+## D5 — pack reconciliation recommendation
+
+The repeated failure shape is under-citation: all seven answers made a material
+claim without loading or citing every authority D2 requires, while none
+invented a form, loaded an unnecessary file, or substituted a derived page.
+The current packs select useful explanatory modules, but those modules do not
+reliably induce the claim-sensitive normative and implementation citations.
+
+A successor WP should strengthen these existing modules rather than widen a
+pack with derived references:
+
+- `library/agents/core/read-ken.md` should require loading the exact normative
+  section before using a spec path to support a material claim; merely naming a
+  path discovered in a module is not citation closure.
+- `library/agents/core/proof-and-trust.md` should route proof-terminal,
+  conversion, and trust claims to the exact kernel, verification, and trust
+  sections D2 identified.
+- `library/agents/core/write-ken.md` should induce the declaration and
+  conversion authorities for authored `fn` and `theorem` forms.
+- `library/agents/core/toolchain.md` should distinguish a proposed command
+  from an observed artifact and route CLI, runtime, FFI, and portability claims
+  to implementation evidence or their exact normative boundaries.
+- `library/agents/tasks/effects-and-capabilities.md` should route FFI and host
+  boundary claims to the FFI and executable-artifact sections when those
+  claims arise, including in an honest refusal.
+
+This recommendation is recorded only. No pack manifest, core module, task,
+fixture, checked catalog source, derived page, or historical result was edited,
+and no fixture was rerun or spent at checkpoint 3.
