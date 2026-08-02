@@ -138,6 +138,14 @@ pub(in crate::cranelift_backend) fn b2f_units_declared_in_attempt(epoch: u64) ->
 /// removal), reintroduced one layer out.
 pub(in crate::cranelift_backend) struct UnitBundle {
     functions: BTreeMap<PredeclaredFunctionId, FuncId>,
+    /// **`RT-CONTSPEC-ACTIVATE` `D2`** -- one declared target per planned
+    /// continuation specialization, keyed by the planner's typed identity.
+    ///
+    /// Kept as its own map rather than folded into `functions`: a
+    /// `ContinuationSpecializationId` is **not** a `PredeclaredFunctionId`, and
+    /// admitting one there would alias two identities that the planner keeps
+    /// apart. Nothing resolves a continuation by ordinal or by symbol name.
+    continuations: BTreeMap<ContinuationSpecializationId, FuncId>,
 }
 
 impl UnitBundle {
@@ -152,6 +160,24 @@ impl UnitBundle {
         unit: PredeclaredFunctionId,
     ) -> Option<FuncId> {
         self.functions.get(&unit).copied()
+    }
+
+    /// The declared target for one continuation specialization.
+    ///
+    /// `None` is a real answer and must not be substituted for: a
+    /// specialization absent here was never declared, and resolving a causal
+    /// identity to a fabricated `FuncId` is exactly what this return type
+    /// exists to make visible.
+    pub(in crate::cranelift_backend) fn continuation(
+        &self,
+        specialization: ContinuationSpecializationId,
+    ) -> Option<FuncId> {
+        self.continuations.get(&specialization).copied()
+    }
+
+    /// How many continuation targets this bundle declares.
+    pub(in crate::cranelift_backend) fn continuation_len(&self) -> usize {
+        self.continuations.len()
     }
 
     /// How many target functions this bundle declares.
@@ -511,9 +537,77 @@ pub(in crate::cranelift_backend) fn declare_unit_bundle<M: Module>(
             ));
         }
     }
+    // `RT-CONTSPEC-ACTIVATE` `D2` -- forward-declare one target per planned
+    // continuation specialization, before any body is defined. The symbol
+    // carries a dense ordinal only so the linker sees distinct names; the map
+    // is keyed by the planner's typed identity, never by that string.
+    let mut continuations = BTreeMap::new();
+    for (ordinal, unit) in plan.continuation_units()?.into_iter().enumerate() {
+        let name = format!("ken_continuation_{ordinal}");
+        let id = module
+            .declare_function(&name, Linkage::Local, &sig)
+            .map_err(|err| backend_module(err.to_string()))?;
+        if continuations.insert(unit.id(), id).is_some() {
+            return Err(backend_module(
+                "two continuation descriptors claim one planned specialization".to_string(),
+            ));
+        }
+    }
     #[cfg(test)]
     B2F_UNIT_EMISSION.with(|cell| cell.set((functions.len(), 0)));
-    Ok(UnitBundle { functions })
+    Ok(UnitBundle {
+        functions,
+        continuations,
+    })
+}
+
+/// **`RT-CONTSPEC-ACTIVATE` `D2` — resolve every projected causal identity to
+/// its typed declared target.**
+///
+/// Runs after declaration and before any body is defined, for the same reason
+/// `resolve_call_edges` does: a causal edge whose target was never declared is
+/// a program that cannot be emitted, and discovering that while half the
+/// bodies exist leaves a partially emitted artifact.
+///
+/// The join is by the identity's `target()` alone. ⛔ Nothing here parses a
+/// symbol name, indexes by ordinal, or aliases a `ContinuationSpecializationId`
+/// to a `PredeclaredFunctionId` — a missing target rejects.
+pub(in crate::cranelift_backend) fn resolve_continuation_targets(
+    plan: &StaticTransitionPlan<'_>,
+    bundle: &UnitBundle,
+) -> Result<BTreeMap<ContinuationCallIdentity, FuncId>, CraneliftBackendError> {
+    let mut resolved = BTreeMap::new();
+    for call in plan.continuation_calls()? {
+        let identity = plan
+            .continuation_call_binding_for(
+                call.producer_construct_origin(),
+                call.continuation_origin(),
+                call.producer_alternative(),
+                call.recursive_position(),
+            )?
+            .ok_or_else(|| {
+                backend_module(
+                    "a projected causal call has no binding under its own four-field selector"
+                        .to_string(),
+                )
+            })?;
+        let target = bundle.continuation(identity.target()).ok_or_else(|| {
+            backend_module(
+                "a projected causal identity names a continuation specialization that was never \
+                 forward-declared"
+                    .to_string(),
+            )
+        })?;
+        if resolved.insert(identity, target).is_some() {
+            return Err(backend_module(
+                "two projected causal identities collide; the planner mints one call token per \
+                 ruled recursive position, so this is a key-arity defect rather than a \
+                 double-resolution"
+                    .to_string(),
+            ));
+        }
+    }
+    Ok(resolved)
 }
 
 pub(super) fn define_root_adapter<M: Module>(

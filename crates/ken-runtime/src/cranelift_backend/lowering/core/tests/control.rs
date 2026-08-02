@@ -3646,7 +3646,11 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             // builder/definition site for the loop-defined internal units.
             builders: 2,
             definitions: 2,
-            declarations: 1,
+            // Two declaration sites: the emittable unit bundle, and
+            // `RT-CONTSPEC-ACTIVATE` `D2`'s forward declaration of one target
+            // per planned continuation specialization. The second is a
+            // deliberate addition and this row is the record of it.
+            declarations: 2,
             data_declarations: 0,
             data_definitions: 0,
         },

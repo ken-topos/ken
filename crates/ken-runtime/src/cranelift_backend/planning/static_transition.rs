@@ -695,6 +695,50 @@ impl<'plan> ContinuationUnitView<'plan> {
     pub(in crate::cranelift_backend) fn inputs(&self) -> &'plan [abi::AbiContinuationInputAuthority] {
         self.inputs
     }
+
+    /// The static worker whose result enters this continuation's return hole.
+    ///
+    /// These are the already-validated planner facts a `D2` definition needs
+    /// to bind the body through `RT-WORKER-BIND`'s environment: the exact body
+    /// origin to lower, the declared arity, and the ordered capture count.
+    /// They are read, never re-derived -- lowering may not walk source syntax
+    /// to rediscover them.
+    pub(in crate::cranelift_backend) fn worker_body_origin(&self) -> StaticOriginId {
+        self.key.worker.body_origin
+    }
+    pub(in crate::cranelift_backend) fn worker_closure_origin(&self) -> StaticOriginId {
+        self.key.worker.closure_origin
+    }
+    pub(in crate::cranelift_backend) fn worker_declared_arity(&self) -> u32 {
+        self.key.worker.declared_arity
+    }
+    pub(in crate::cranelift_backend) fn worker_capture_count(&self) -> usize {
+        self.key.worker.captures.len()
+    }
+
+    /// Byte offsets for this unit's slot run, and the frame size, from the
+    /// **one** offset walk `B2F` owns.
+    ///
+    /// This is the same `abi::slot_offsets` the emittable path uses, not a
+    /// second derivation: a continuation body must load each declared operand
+    /// from its own frame position, and the alternative -- letting the emitter
+    /// prefix-sum widths itself -- is precisely the second layout authority
+    /// that walk exists to prevent.
+    ///
+    /// Fails closed when the walked frame size disagrees with the descriptor's
+    /// declared `frame_bytes`, so a corrupted descriptor is rejected rather
+    /// than silently emitted against.
+    pub(in crate::cranelift_backend) fn slot_offsets(
+        &self,
+    ) -> Result<(Vec<u32>, u32), CraneliftBackendError> {
+        let (offsets, frame_bytes) = abi::slot_offsets(self.slots)?;
+        if frame_bytes != self.header.frame_bytes {
+            return Err(planner_error(
+                "a continuation descriptor's frame size disagrees with its own slot run",
+            ));
+        }
+        Ok((offsets, frame_bytes))
+    }
 }
 
 /// `D1` — a read-only view of one already-validated continuation call token,

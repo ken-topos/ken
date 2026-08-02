@@ -75,7 +75,9 @@ pub(in crate::cranelift_backend) use super::planning::{
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
-    CheckedOrientedMarkerSets, ConstructorIdentity, EmittableCallKind, EmittableUnit, JoinPlanToken,
+    CheckedOrientedMarkerSets, ConstructorIdentity, ContinuationCallIdentity, ContinuationCallView,
+    ContinuationSpecializationId, ContinuationUnitView, EmittableCallKind, EmittableUnit,
+    JoinPlanToken,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
