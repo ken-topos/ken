@@ -1419,6 +1419,21 @@ enum LoweringOperand {
     Carried(CarriedBoundaryWord),
 }
 
+#[derive(Clone)]
+enum LoweringEnvironmentBinding {
+    Value(LoweringOperand),
+    StaticWorker(StaticWorkerBinding),
+}
+
+#[derive(Clone)]
+struct StaticWorkerBinding {
+    closure_origin: StaticOriginId,
+    body_origin: StaticOriginId,
+    declared_arity: u32,
+    captures: Vec<LoweringOperand>,
+}
+
+
 impl LoweringOperand {
     /// ⭐ **THE RULED TYPED PHASE BOUNDARY** in front of a specialized-only
     /// helper — `§2h` ¶2, verbatim: *"Every edge from `LoweringOperand` into

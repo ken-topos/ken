@@ -962,7 +962,7 @@ impl<'a> Lowering<'a> {
         cases: &[crate::RuntimeComputationalMatchCase],
         default: &RuntimeTrap,
         static_origin: StaticOriginId,
-        producer_env: &[LoweringOperand],
+        producer_env: &[LoweringEnvironmentBinding],
         eliminator_env: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let checked_frame_id = self.consume_checked_subcontinuation_frame(cases, default)?;
@@ -6710,7 +6710,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         occurrence: SourceOccurrence<'_>,
-        env: &[LoweringOperand],
+        env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let SourceOccurrence {
             expr,
