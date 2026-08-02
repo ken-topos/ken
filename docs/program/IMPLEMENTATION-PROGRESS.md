@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-02 04:10:34Z — from 154 issue file(s) in `docs/program/issues/`.
+2026-08-02 04:35:28Z — from 154 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -90,7 +90,7 @@ the committed file matches the generator's output.
 | `DOC-W4-TOOLCHAIN` | Wave 4 slice 1 — the toolchain reference, plus the D0 report on which of Wave 4's generated facts the toolchain can actually produce today | merged | doc | M | none | — |
 | `DOC-W5-CAPABILITY` | Wave 5 precondition — the Librarian's format-capability report: which of Wave 5's nine fact classes the checked artifact format can express today, and therefore whether Wave 5 is authorable or blocked on a generator | merged | doc | S | none | — |
 | `DOC-W5A-CARD-FORMAT` | Wave 5 slice 1 — the reference card format, the generated subject index for all 39 packages, and six proving cards across Core and Tooling | merged | doc | M | none | — |
-| `DOC-W5B-CARDS-APP-DATA` | Wave 5 slice 2 — apply the settled card format to Application (3) and Data (11): fourteen complete cards | ready | doc | M | none | — |
+| `DOC-W5B-CARDS-APP-DATA` | Wave 5 slice 2 — apply the settled card format to Application (3) and Data (11): fourteen complete cards | merged | doc | M | none | — |
 | `DOC-W5C-CARDS-CAPABILITY` | Wave 5 slice 3 — apply the settled card format to Capability (19): nineteen complete cards, closing the 39-package set | ready | doc | M | none | — |
 | `DS-9` | lawful JSON codec — the data-structures tier's acceptance test: a Json value type, encode/decode, and the proved round-trip law, assembled entirely from the landed Core/Data sections | draft | foundation | L | none | — |
 | `EFF-SPACE-ENSURES-PRESTATE` | `old` is transparent, so a space operation's `ensures` cannot express the pre/post distinction `36 §4.3` is built on | closed | language | M | none | — |
@@ -198,7 +198,7 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
-- `DOC-W5B-CARDS-APP-DATA` — Wave 5 slice 2 — apply the settled card format to Application (3) and Data (11): fourteen complete cards
+- `DOC-W5C-CARDS-CAPABILITY` — Wave 5 slice 3 — apply the settled card format to Capability (19): nineteen complete cards, closing the 39-package set
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-CONTSPEC-ACTIVATE` — ContinuationSpecialization seam 2 — lowering activation and exact-use consumption: direct call before the identity-erasing join, active emitted owner, affine call occurrence, JoinArm consumption, gating the 37-row lower-owned population
@@ -223,7 +223,6 @@ is itself not yet `merged`/`closed`:
 - `ABI-S4` blocked by `ABI-M1` (status: draft)
 - `ABI-S5` blocked by `PX9` (status: draft)
 - `ABI-S6` blocked by `ABI-S1` (status: draft)
-- `DOC-W5C-CARDS-CAPABILITY` blocked by `DOC-W5B-CARDS-APP-DATA` (status: ready)
 - `DS-9` blocked by `KERNEL-NESTED-IND` (status: active)
 - `F4` blocked by `A3` (status: draft)
 - `NATIVE-HANDLE-CARRIER` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
