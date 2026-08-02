@@ -101,13 +101,72 @@ by definition, not a stubborn class 1.
 suite runs to completion. *Control:* the command and its output. A `--no-run`
 compile is step 1 of `D8`, not this AC.
 
-### AC-10 — the classification is complete and no class-2 assertion was edited
+### AC-10 — the classification is complete and every hunk is authorized
 
 Every error from `D8` step 1, and every assertion failure from `AC-9`'s run,
 appears in `D8`'s table with its class. *Control:*
 `git diff b66dea6a..<fresh SHA> -- <the four fixture paths>` read against the
-table — **every hunk must trace to a class-1 row.** A hunk that changes an
-assertion, an expected value, or a test attribute fails this AC.
+table — **every hunk must trace either to a class-1 API retype row, or to one of
+the six authorized class-2 expectation flips below.** Any other hunk fails this
+AC, including any other assertion change, expected-value change, or test
+attribute.
+
+### Correction 2026-08-02, second pass — the six authorized class-2 flips
+
+`D8` step 2 landed the 49-row table
+(`docs/program/wp/RT-CONTSPEC-LOWER-D8.md`, `evt_348hme28zhxqj`): 46 class-1
+rows, and rows 32-34 class 2 — `control.rs:4941` on retired
+`LexicalCallArgumentRecursor`, `:4959` on retired `MatchScrutineeRecursor`,
+`:5093` on retired `TransparentDeclarationClosure`.
+
+**The first pass of this amendment was unexecutable at exactly that cell.**
+`AC-9` requires the lib suite to compile and run; `D8` step 3 permitted class-1
+repairs only; the original `AC-10` rejected every assertion hunk. Rows 32-34 are
+compile-time references to retired variants, so no permitted edit could make the
+suite compile. Architect ruling `evt_3s9j0010z8dq5` resolves it, and this
+correction is that ruling.
+
+**These rows stay class 2.** Each is an `assert_eq!` on a typed selector outcome
+paired with an authority assertion, so a symbol or path retype cannot preserve
+the assertion's meaning. They are **known ruled activation moves, not class 3**:
+the first two are the joint `RT-RECURSOR-TRANSPORT` `AC-1a` retirement already
+accepted at `d55bceb5`, and the third is the ruled transparent-declaration-closure
+port. **Hard stop 5 does not fire on them.**
+
+**Authorized: exactly six expectation changes, on the three unchanged governed
+inputs.**
+
+| at | old expectation | new expectation |
+|---|---|---|
+| `control.rs:4941` | `Some(LexicalCallArgumentRecursor)` | `None` |
+| `control.rs:4941` paired | `RecursiveDescent` | `FunctionizedUnits` |
+| `control.rs:4959` | `Some(MatchScrutineeRecursor)` | `None` |
+| `control.rs:4959` paired | `RecursiveDescent` | `FunctionizedUnits` |
+| `control.rs:5093` | `Some(TransparentDeclarationClosure)` | `None` |
+| `control.rs:5093` paired | `RecursiveDescent` | `FunctionizedUnits` |
+
+That is `recursive_descent_residual(...) == None` and
+`select_body_emission_authority(...) == FunctionizedUnits`, from the held
+production classifier now being exhaustive over `ProducerMatchCall` and
+`SeedClosureCall` alone.
+
+**This is an expectation flip, not a rewritten fixture.** The fixture
+expressions and declarations, the functions under test, the assertion strength,
+and the diagnostic messages all stay unchanged.
+
+**Four routes are banned**, because each would either falsify the
+classification or keep retired selector vocabulary alive: relabelling these rows
+class 1; resurrecting the legacy enum variants or aliases under `cfg(test)`;
+hiding or `#[ignore]`-ing the tests; deleting the old pins.
+
+**`D8`'s table must be extended for rows 32-34** with the exact old
+expectation, the exact new expectation, the base SHA and blob, and the ruling
+that caused the move. **That is what keeps the evidence rather than laundering
+it** — the old expectation stays durable and tied to the green base, while the
+live test asserts the exact ruled successor.
+
+**Fresh QA records all six flips under `AC-6`** as the activation observable,
+and separately confirms the unchanged input and subject for each.
 
 ### AC-8, sharpened
 
