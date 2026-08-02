@@ -1,10 +1,10 @@
 # library/manifest.toml — the inventory of every library/ document.
 #
-# Every document under library/ MUST have exactly one [[document]] entry
-# here (Wave 0 gate 1, docs/program/12-documentation-program.md §2: "a page
-# whose authority class you cannot name is not ready to land"). A gate
-# fails the build if a library/*.md file has no entry, or an entry's path
-# does not exist.
+# Every document under library/ is required to have exactly one [[document]]
+# entry here (docs/program/12-documentation-program.md §2: "a page whose
+# authority class you cannot name is not ready to land"). The inventory and
+# its manual/release-point tools make missing entries and paths reviewable;
+# no live validation runner currently enforces this requirement.
 #
 # Field meaning (research/librarian-documentation-program-proposal.md,
 # "Suggested manifest record"):
@@ -17,12 +17,11 @@
 #   availability  exactly one of: current, partial, planned, unavailable
 #   sources       "path" or "path#anchor" this document is grounded in;
 #                 an anchor must name a real heading in the target file
-#                 (gate 3) — this is the drift gate D1 requires
 #   validation    the CLOSED set of registered record-validation gates
 #                 that apply to this record. See VALIDATION_GATES in
-#                 crates/ken-cli/tests/library_documentation_gates.rs,
-#                 the single source of truth for vocabulary,
-#                 applicability, and executable validation.
+#                 crates/ken-cli/tests/library_documentation_gates.rs for
+#                 the retained vocabulary and applicability predicates.
+#                 The registry is not currently iterated by a live runner.
 #   owner         the team responsible
 #
 # library/REVISION holds the explicit, hand-set validated repository
@@ -324,6 +323,9 @@ availability = "current"
 sources = [
   "spec/30-surface/33-declarations.md#1-definitions",
   "spec/30-surface/36-effects.md#162-the-bidirectional-check--the-keyword-cannot-lie",
+  "spec/30-surface/31-lexical.md",
+  "spec/30-surface/39-elaboration.md",
+  "spec/40-runtime/42-evaluation.md",
 ]
 validation = [
   "manifest-coverage",
@@ -350,6 +352,7 @@ sources = [
   "docs/program/07-catalog-style-guide.md#61-local-bindings-as-exposition",
   "spec/30-surface/33-declarations.md#52-class-declaration--a-record-type",
   "spec/30-surface/33-declarations.md#53-instance-declaration--a-record-value--the-orphan-check",
+  "spec/10-kernel/17-conversion.md",
   "library/guide/surface-reference.ken.md#5-class-and-instance",
 ]
 validation = [
@@ -375,6 +378,8 @@ availability = "current"
 sources = [
   "spec/20-verification/21-spec-syntax.md#5-the-verification-status-model",
   "spec/60-security/64-trust-model.md#1-the-trusted-computing-base-tcb-precisely",
+  "spec/10-kernel/16-observational.md",
+  "spec/10-kernel/17-conversion.md",
 ]
 validation = [
   "manifest-coverage",
@@ -398,6 +403,7 @@ availability = "current"
 sources = [
   "crates/ken-cli/src/main.rs",
   "spec/40-runtime/42-evaluation.md#5-the-interpreter-as-oracle-and-the-repl",
+  "spec/40-runtime/48-executable-artifact-contract.md",
 ]
 validation = [
   "manifest-coverage",
@@ -537,6 +543,8 @@ availability = "current"
 sources = [
   "spec/30-surface/36-effects.md#1-effects-as-a-static-row",
   "spec/60-security/62-authority.md#1-no-ambient-authority",
+  "spec/40-runtime/42-evaluation.md",
+  "spec/30-surface/38-ffi-io.md",
 ]
 validation = [
   "manifest-coverage",

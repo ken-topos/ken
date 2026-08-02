@@ -71,9 +71,14 @@ named failure.
 
 ## 9. Authority and sources
 
-Normative effect rules are in `spec/30-surface/36-effects.md`; authority rules
-are in `spec/60-security/62-authority.md`. Current examples live under
-`catalog/packages/Capability/`. Revision: `library/agents/manifest.toml`.
+If asserting an effect row or authority-supply boundary, load the current
+checked `catalog/packages/Capability/**/*.ken.md` source plus the applicable
+`spec/30-surface/36-effects.md` and `spec/60-security/62-authority.md` sections
+first. If asserting a host-driver or runtime entrypoint boundary for an effect,
+load `spec/40-runtime/42-evaluation.md` first. If asserting an FFI support
+boundary, including as the reason for an honest refusal, load
+`spec/30-surface/38-ffi-io.md` first. Revision:
+`library/agents/manifest.toml`.
 
 ## 10. Known unavailable or partial behavior
 

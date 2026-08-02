@@ -41,10 +41,9 @@ fi
 # using each record's FINAL `kind`, anchor stripped, deduped) — kept as a
 # literal duplicate rather than a shared sourced function, so a change to
 # one is visible as a diff against the other rather than silently applying
-# to both; the registered source-currency/generated-current runners, executed
-# by `registered_record_validation_gates_run`, plus the ledger-population tests
-# in crates/ken-cli/tests/library_documentation_gates.rs are the safety net
-# that would catch the two drifting apart.
+# to both. Synthetic ledger-population tests exercise mismatch detection,
+# but no live validation runner currently compares these two extractors;
+# their population diff must be reviewed at a release point.
 REQUIRED_PATHS="$(awk '
   function flush_record() {
     if (kind != "status" && buf != "") {

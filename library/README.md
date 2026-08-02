@@ -33,10 +33,10 @@ pages land; it does not point at pages that do not exist.
 
 The library contains the **substrate**, the fragment-based reading curriculum
 and exercises, agent product-context packs, and checked conceptual guides.
-The substrate includes the manifest every page registers in, the generated
-status page, and the gates that keep both honest — never a hand-typed date,
-never an unregistered page, never a broken link, and never an unnoticed stale
-source.
+The substrate includes the manifest every page registers in and the generated
+status page. Manual and release-point tools make registration, links, and
+attested source revisions reviewable; no live library-validation runner
+currently enforces those properties.
 
 The checked literate guides are the
 [surface reference](guide/surface-reference.ken.md),

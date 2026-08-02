@@ -97,6 +97,11 @@ after formatting.
 
 ## 9. Authority and sources
 
+If asserting support for an authored or repaired `fn` or `theorem` form, load
+the applicable `spec/30-surface/33-declarations.md` section, including §8.3 for
+theorem form, first. If asserting that conversion justifies an authored proof
+terminal, load `spec/10-kernel/17-conversion.md` first.
+
 Local-binding guidance comes from
 `docs/program/07-catalog-style-guide.md` §6.1. The class-record and
 instance-value distinction comes from `spec/30-surface/33-declarations.md`
