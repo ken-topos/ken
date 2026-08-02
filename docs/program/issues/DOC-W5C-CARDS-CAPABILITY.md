@@ -1,7 +1,7 @@
 ---
 id: DOC-W5C-CARDS-CAPABILITY
 title: "Wave 5 slice 3 — apply the settled card format to Capability (19): nineteen complete cards, closing the 39-package set"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
