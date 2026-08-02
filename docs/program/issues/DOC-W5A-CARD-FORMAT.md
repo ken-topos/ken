@@ -1,7 +1,7 @@
 ---
 id: DOC-W5A-CARD-FORMAT
 title: "Wave 5 slice 1 — the reference card format, the generated subject index for all 39 packages, and six proving cards across Core and Tooling"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
