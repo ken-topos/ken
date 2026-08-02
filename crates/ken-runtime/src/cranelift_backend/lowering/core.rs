@@ -5472,11 +5472,29 @@ impl<'a> Lowering<'a> {
         // reason the binding holds operands rather than templates.
         inputs.extend(worker.captures.iter().cloned());
 
-        let target = self
-            .function_local
-            .worker_calls
-            .get(&worker.body_origin)
-            .cloned()
+        // `AC-5` mutation 2 lives on this exact lookup: the binding and its
+        // construction are untouched, and only the already-resolved transport
+        // is redirected to another same-shape target in this same function.
+        #[cfg(test)]
+        let redirected = (STATIC_WORKER_MUTATION.with(std::cell::Cell::get)
+            == StaticWorkerMutation::RedirectResolvedWorkerTarget)
+            .then(|| {
+                self.function_local
+                    .worker_calls
+                    .iter()
+                    .find(|(origin, _)| **origin != worker.body_origin)
+                    .map(|(_, call)| call.clone())
+            })
+            .flatten();
+        #[cfg(not(test))]
+        let redirected: Option<units::DeclaredUnitCall> = None;
+        let target = redirected
+            .or_else(|| {
+                self.function_local
+                    .worker_calls
+                    .get(&worker.body_origin)
+                    .cloned()
+            })
             .ok_or_else(|| {
                 unsupported(
                     "Call",
@@ -5582,7 +5600,15 @@ impl<'a> Lowering<'a> {
         }
         debug_assert_eq!(carried + specialized, lowered_captures.len());
 
-        if carried == 0 {
+        // `AC-5` mutation 1 lives on this exact branch: with the narrowing
+        // restored, a carried capture takes the specialized-only fold again
+        // and the ordinary witness must go red.
+        #[cfg(test)]
+        let narrowing_restored = STATIC_WORKER_MUTATION.with(std::cell::Cell::get)
+            == StaticWorkerMutation::RestoreCarriedCaptureNarrowing;
+        #[cfg(not(test))]
+        let narrowing_restored = false;
+        if carried == 0 || narrowing_restored {
             // All-specialized: preserve the existing compile-time closure.
             return Ok(LoweringEnvironmentBinding::Value(
                 LoweringOperand::Specialized(Lowered::Closure {

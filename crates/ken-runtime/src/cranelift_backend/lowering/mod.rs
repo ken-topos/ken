@@ -946,8 +946,38 @@ enum TrapCallerProtocolMutation {
     ReadResultBeforeTrap,
 }
 
+/// **`AC-5` -- the two executable mutation controls for the static-worker
+/// substrate.**
+///
+/// These perturb **production resolution**, at the two seams the substrate
+/// actually depends on, and they are committed rather than applied by hand so
+/// the proof does not evaporate when a reviewer closes their terminal. Both
+/// arms are `#[cfg(test)]`; production compiles as if they did not exist.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StaticWorkerMutation {
+    Exact,
+    /// `D2` seam: restore the pre-node carried-capture narrowing in
+    /// `lower_binder`, so a carried capture again goes to the specialized-only
+    /// fold instead of installing a `StaticWorker`.
+    RestoreCarriedCaptureNarrowing,
+    /// `D4` transport seam: hand the consumer a **different** already-resolved
+    /// worker target from this function's own `worker_calls`, leaving the
+    /// binding and its construction untouched. This is a redirect performed
+    /// *after* the worker was constructed, which is the only place it proves
+    /// anything.
+    RedirectResolvedWorkerTarget,
+}
+
+#[cfg(test)]
+fn set_static_worker_mutation(mutation: StaticWorkerMutation) {
+    STATIC_WORKER_MUTATION.with(|cell| cell.set(mutation));
+}
+
 #[cfg(test)]
 thread_local! {
+    static STATIC_WORKER_MUTATION: std::cell::Cell<StaticWorkerMutation> =
+        const { std::cell::Cell::new(StaticWorkerMutation::Exact) };
     static TRAP_FRAME_BINDING_MUTATION: std::cell::Cell<TrapFrameBindingMutation> =
         const { std::cell::Cell::new(TrapFrameBindingMutation::Exact) };
     static TRAP_IDENTITY_MUTATION: std::cell::Cell<TrapIdentityMutation> =

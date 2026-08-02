@@ -5589,3 +5589,108 @@ fn static_worker_capture_omission_fails_closed() {
         "fails closed on the missing binding rather than reading past it: {error:?}"
     );
 }
+
+// ─── RT-WORKER-BIND `AC-5` — the two executable production-seam mutations ───
+
+/// Runs `body` with a static-worker mutation installed, restoring `Exact`
+/// afterwards **even if `body` panics**, so one failing control cannot leak a
+/// mutation into every later test in the thread.
+#[cfg(test)]
+fn with_static_worker_mutation<T>(mutation: StaticWorkerMutation, body: impl FnOnce() -> T) -> T {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            set_static_worker_mutation(StaticWorkerMutation::Exact);
+        }
+    }
+    set_static_worker_mutation(mutation);
+    let _restore = Restore;
+    body()
+}
+
+/// `AC-5` mutation 1, at the real `D2` binder seam.
+///
+/// The **same** ordinary witness is green under `Exact` and red with the
+/// pre-node carried-capture narrowing restored. No fixture is substituted:
+/// the source program is identical in both runs and only production
+/// resolution moves.
+#[test]
+fn ac5_restoring_carried_capture_narrowing_reds_the_ordinary_witness() {
+    let witness = static_worker_witness(true);
+    // Positive control first: without the mutation this exact program runs.
+    let baseline = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &witness,
+        &NativeSeedEnvironment::empty(),
+    );
+    assert!(
+        baseline.is_ok(),
+        "the witness must be green at the same seam the mutation reddens"
+    );
+    let error = with_static_worker_mutation(
+        StaticWorkerMutation::RestoreCarriedCaptureNarrowing,
+        || {
+            crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+                &witness,
+                &NativeSeedEnvironment::empty(),
+            )
+            .err()
+        },
+    )
+    .expect("restoring the carried-capture narrowing must red the witness");
+    assert!(
+        format!("{error:?}").contains("specialized-only surface"),
+        "reds at the D2 carried-capture seam, not somewhere else: {error:?}"
+    );
+    // The mutation is scoped: the same program is green again immediately.
+    assert!(
+        crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+            &witness,
+            &NativeSeedEnvironment::empty(),
+        )
+        .is_ok(),
+        "the mutation must not leak past its scope"
+    );
+}
+
+/// `AC-5` mutation 2, at the real `D4` transport seam.
+///
+/// The **same** planned two-same-shape-worker program is green under `Exact`
+/// and red when the already-resolved worker target is redirected to the other
+/// same-shape worker in that same function. The binding and its construction
+/// are untouched; only transport resolution moves, which is the whole point of
+/// the control.
+#[test]
+fn ac5_redirecting_the_resolved_worker_target_reds_the_same_shape_witness() {
+    let program = two_same_shape_workers(1, 1, false);
+    let baseline = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &program,
+        &NativeSeedEnvironment::empty(),
+    );
+    assert!(
+        baseline.is_ok(),
+        "the same-shape witness must be green at the seam the mutation reddens"
+    );
+    let error = with_static_worker_mutation(
+        StaticWorkerMutation::RedirectResolvedWorkerTarget,
+        || {
+            crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+                &program,
+                &NativeSeedEnvironment::empty(),
+            )
+            .err()
+        },
+    )
+    .expect("redirecting the resolved worker target must red the same-shape witness");
+    assert!(
+        format!("{error:?}").contains("worker call target carries origin"),
+        "reds at the D4 transport seam's own origin check: {error:?}"
+    );
+    assert!(
+        crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+            &program,
+            &NativeSeedEnvironment::empty(),
+        )
+        .is_ok(),
+        "the mutation must not leak past its scope"
+    );
+}
