@@ -47,21 +47,28 @@ regression**, and it does not retroactively invalidate seams 1-3.
 
 `/tmp` reached 99 percent on 2026-08-01 and produced linker
 `No space left on device` failures that sat inside the 138-row census looking
-like semantic rows. The Steward reclaimed it to 23 percent (6.0 GB free) on
-2026-08-02.
+like semantic rows.
 
-**Confirm capacity immediately before the run rather than assuming it held** —
-the reclaim is not durable, and the `px8i`/`rt-parity` suites leave roughly 37 MB
-per run:
+**The underlying cause is fixed, not merely cleared.** On 2026-08-02 the
+operator directed build scratch onto the repo volume, and `scripts/ken-cargo`
+now exports `TMPDIR=/workspaces/ken/tmp` — roughly 20 GB free against the
+7.8 GB `/tmp` tmpfs that the runtime suites were exhausting. See
+`docs/ops/compute-budget.md` §1a.
+
+**Still confirm capacity in the same shell as the run**, and confirm it on the
+volume the run will actually use:
 
 ```sh
-df -h /tmp
-ps -e -o comm= | grep -cE '^(cargo|rustc|ld|cc)$'   # must be 0 before reclaiming
+scripts/ken-cargo build -p ken-runtime   # exports TMPDIR; do this first
+df -h /workspaces
 ```
 
 ⇒ **A host row that fails with a disk error is not a semantic result and no
 semantic inference may be drawn from it.** Rerun it with capacity, or record it
-as unmeasured. Do not classify it.
+as unmeasured. Do not classify it. ⚠ **If one of these two rows still fails with
+`No space left on device` on the new volume, that is a finding worth routing** —
+20 GB is not consumed by a lib suite, so the run would be reaching a temp path
+that does not honour `TMPDIR`.
 
 ## Fixed inputs
 
@@ -161,8 +168,8 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
 
 Runtime is single-threaded. `D1` and `D3` both need the shared build lock; probe
 without blocking first. **Targeted only** — never `--workspace`. `D3` also needs
-disk headroom, so check `df -h /tmp` before taking the lock, and **do not reclaim
-`/tmp` while any seat holds the build turn.**
+disk headroom, so check `df -h /workspaces` before taking the lock, and **do not
+reclaim scratch while any seat holds the build turn.**
 
 ## Sizing
 

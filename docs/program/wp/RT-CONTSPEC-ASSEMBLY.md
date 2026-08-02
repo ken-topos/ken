@@ -51,7 +51,7 @@ Measured at `origin/main = 40f8757d`.
 | slice 0/1/2 surfaces | at their landed blobs; this seam changes none of them |
 | the accepted mechanism | `CheckedFrameBranchScope` plus its feature-gated harness, accepted and frozen by the Architect at `9d58df12` |
 | the census oracle | `46d29783`, tree `e81d315d`, 136 semantic class-3 rows + 2 host `ENOSPC` |
-| `/tmp` capacity | cleared 2026-08-02 from 99 percent to 23 percent, 6.0G free. The two `ENOSPC` rows are **host artifacts with no semantic verdict** |
+| build scratch | `ken-cargo` now exports `TMPDIR=/workspaces/ken/tmp` (operator, 2026-08-02) — the repo volume, ~20G free, not the 7.8G `/tmp` tmpfs. The two `ENOSPC` rows are **host artifacts with no semantic verdict** |
 
 ## Deliverables
 

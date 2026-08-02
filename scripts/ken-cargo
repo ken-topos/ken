@@ -13,7 +13,29 @@
 set -euo pipefail
 
 slots="${KEN_BUILD_SLOTS:-1}"
-lockdir="${KEN_LOCK_DIR:-${TMPDIR:-/tmp}/ken-build-locks}"
+
+# Build scratch goes on the repo volume, not the container's /tmp.
+#
+# /tmp here is a 7.8G tmpfs shared with everything else on the box; the
+# ken-runtime suites leave tens of MB of scratch per run and exhaust it. When
+# they do, the linker fails with "No space left on device" and those rows land
+# in a test report looking like semantic failures — that misreading has cost
+# this project real time twice. The repo volume has room, and TMPDIR is what
+# `std::env::temp_dir()`, rustc, and the linker all read.
+#
+# KEN_TMPDIR overrides (CI sets its own runner temp).
+# Only redirect when the parent volume actually exists, so this is a no-op on a
+# CI runner (which has its own ample temp) rather than creating a stray
+# directory at the filesystem root.
+ken_tmpdir="${KEN_TMPDIR:-/workspaces/ken/tmp}"
+if [[ -d "$(dirname "$ken_tmpdir")" ]] && mkdir -p "$ken_tmpdir" 2>/dev/null; then
+  export TMPDIR="$ken_tmpdir"
+fi
+
+# The build mutex must NOT follow TMPDIR. Two seats that resolve different lock
+# paths each acquire "the" lock and then build concurrently, which is the exact
+# oversubscription this wrapper exists to prevent. Pin it to a fixed path.
+lockdir="${KEN_LOCK_DIR:-/tmp/ken-build-locks}"
 mkdir -p "$lockdir"
 
 run() { cargo "$@" 9>&-; }
