@@ -2,6 +2,12 @@
 /target/
 **/*.rs.bk
 
+# Build scratch. The container's /tmp is a 7.8G tmpfs and the ken-runtime suites
+# exhaust it, which surfaces as linker "No space left on device" failures that
+# read like semantic test failures. scripts/ken-cargo points TMPDIR here instead
+# — this volume has room. Nothing in it is ever an input to a build.
+/tmp/
+
 # Editors / OS
 .DS_Store
 *.swp

@@ -25,6 +25,42 @@ scripts/ken-cargo test  -p ken-kernel
   a scoped test. Raise it (and use GNU `sem`) when you add RAM/cores.
 - Never run raw `cargo build`/`cargo test` in an agent — it bypasses the lock.
 
+### 1a. Build scratch lives on the repo volume, not `/tmp`
+
+`ken-cargo` exports `TMPDIR=/workspaces/ken/tmp` (gitignored, created on
+demand; override with `KEN_TMPDIR`). The container's `/tmp` is a **7.8 GB
+tmpfs** shared with everything else on the box, and the `ken-runtime` suites
+leave tens of megabytes of scratch per run — `px8i` and `rt-parity` alone are
+roughly 37 MB each. The repo volume has room; `/tmp` does not.
+
+**This matters because of how the failure presents.** When `/tmp` fills, the
+linker fails with `No space left on device`, and those rows arrive in a test
+report indistinguishable from semantic failures. That misreading has cost this
+project real time twice, most recently as nine rows of a 138-row census run.
+
+⇒ **A `No space left on device` row is an environment finding, never a
+baseline finding** — the same class as a `Toolchain`-stage
+`ObjectLinkerPackagingError` from a missing staticlib.
+
+The build **lock** deliberately does *not* follow `TMPDIR` (it stays at
+`/tmp/ken-build-locks`). Two seats resolving different lock paths would each
+acquire "the" lock and build concurrently, which is exactly what the lock
+exists to prevent.
+
+**Reclaiming scratch: the discriminator is liveness, not age.** With no builder
+running, every `ken-*` scratch directory is orphaned from a finished run,
+however recent — an age cutoff was measured freeing 6 MB while 6.0 GB sat in
+directories under an hour old.
+
+```sh
+ps -e -o comm= | grep -cE '^(cargo|rustc|ld|cc)$'   # MUST be 0 first
+```
+
+Use `ps -e -o comm=`, never `pgrep -f` — a `pgrep -f` pattern matches the
+command line of your own shell and reports a builder that isn't there. Never
+widen the glob past `ken-*`: campaign evidence and other seats' logs live
+alongside it.
+
 ## 2. Dedup compilation across agents — shared cache + registry
 
 N agents on different branches otherwise each recompile the *same* dependencies
