@@ -5472,29 +5472,13 @@ impl<'a> Lowering<'a> {
         // reason the binding holds operands rather than templates.
         inputs.extend(worker.captures.iter().cloned());
 
-        // `AC-5` mutation 2 lives on this exact lookup: the binding and its
-        // construction are untouched, and only the already-resolved transport
-        // is redirected to another same-shape target in this same function.
-        #[cfg(test)]
-        let redirected = (STATIC_WORKER_MUTATION.with(std::cell::Cell::get)
-            == StaticWorkerMutation::RedirectResolvedWorkerTarget)
-            .then(|| {
-                self.function_local
-                    .worker_calls
-                    .iter()
-                    .find(|(origin, _)| **origin != worker.body_origin)
-                    .map(|(_, call)| call.clone())
-            })
-            .flatten();
-        #[cfg(not(test))]
-        let redirected: Option<units::DeclaredUnitCall> = None;
-        let target = redirected
-            .or_else(|| {
-                self.function_local
-                    .worker_calls
-                    .get(&worker.body_origin)
-                    .cloned()
-            })
+        // Resolve the exact target FIRST. The mutation below perturbs only what
+        // the consumer is handed, never what the binding named.
+        let exact = self
+            .function_local
+            .worker_calls
+            .get(&worker.body_origin)
+            .cloned()
             .ok_or_else(|| {
                 unsupported(
                     "Call",
@@ -5505,6 +5489,48 @@ impl<'a> Lowering<'a> {
                     ),
                 )
             })?;
+
+        // `AC-5` clause (b): the redirect selects a **distinct** target by
+        // `AC-6`'s definition of same-shape -- **same declared arity and same
+        // capture count** -- and by nothing else.
+        //
+        // Selecting on `origin != body_origin` would establish only
+        // difference. The target map is populated from every projected
+        // emittable unit, so over a heterogeneous fixture that picks an
+        // arbitrary unrelated unit and the red proves nothing about the origin
+        // check. Requiring full header/slot/offset equality is the opposite
+        // error: it over-constrains past the shape `AC-6` actually names.
+        //
+        // No candidate is a loud failure, never a fall back to exact: a silent
+        // fallback would make this control vacuously green.
+        #[cfg(test)]
+        let target = if STATIC_WORKER_MUTATION.with(std::cell::Cell::get)
+            == StaticWorkerMutation::RedirectResolvedWorkerTarget
+        {
+            self.function_local
+                .worker_calls
+                .iter()
+                .find(|(origin, call)| {
+                    **origin != worker.body_origin
+                        && call.header.parameters == exact.header.parameters
+                        && call.header.captures == exact.header.captures
+                })
+                .map(|(_, call)| call.clone())
+                .ok_or_else(|| {
+                    unsupported(
+                        "StaticWorkerMutation",
+                        "the AC-5 redirect found no DISTINCT target of the same declared arity \
+                         and capture count; it never falls back to exact, because a fallback \
+                         would make this control vacuously green. Clause (c): run this switch \
+                         on the two-same-shape-worker program only",
+                    )
+                })?
+        } else {
+            exact
+        };
+        #[cfg(not(test))]
+        let target = exact;
+
         if target.origin != worker.body_origin {
             return Err(unsupported(
                 "Call",

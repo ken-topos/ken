@@ -961,11 +961,21 @@ enum StaticWorkerMutation {
     /// `lower_binder`, so a carried capture again goes to the specialized-only
     /// fold instead of installing a `StaticWorker`.
     RestoreCarriedCaptureNarrowing,
-    /// `D4` transport seam: hand the consumer a **different** already-resolved
-    /// worker target from this function's own `worker_calls`, leaving the
-    /// binding and its construction untouched. This is a redirect performed
-    /// *after* the worker was constructed, which is the only place it proves
-    /// anything.
+    /// `D4` transport seam: hand the consumer a **distinct** already-resolved
+    /// target from this function's own `worker_calls`, selected by `AC-6`'s
+    /// same-shape definition -- same declared arity, same capture count -- and
+    /// by nothing else.
+    ///
+    /// `AC-5` clause (c): this switch runs on the **two-same-shape-worker
+    /// program and only there**. The ordinary single-worker witness has no
+    /// distinct same-shape candidate at all, which is a property of that
+    /// fixture's population; it discharges the carried-capture arm and nothing
+    /// more. Widening the predicate back toward mere difference to make it
+    /// find something there is clause (b)'s defect reintroduced as a repair.
+    ///
+    /// The binding and its construction are untouched -- this is a redirect
+    /// performed *after* the worker was constructed, which is the only place
+    /// it proves anything.
     RedirectResolvedWorkerTarget,
 }
 
@@ -1491,12 +1501,17 @@ enum LoweringEnvironmentBinding {
 /// `Function`, and the target is declared afresh into each generated function
 /// (`D4`).
 ///
-/// `D2` writes every field; the reader is `D3`'s callee-only consumer, which
-/// is why the fields are still allowed to be unread. Remove the allow when
-/// `D3` lands rather than leaving it to outlive its reason.
+/// `D3` reads `body_origin`, `declared_arity` and `captures`. It does **not**
+/// read `closure_origin`, so the allowance is narrowed to that one field
+/// rather than blanketing the struct.
+///
+/// `closure_origin` is preserved because judgment 1 rules these four fields
+/// and the separation may not vary; it is the binding's own occurrence
+/// identity, which no consumer needs today. Narrowing the allowance is what
+/// keeps a future genuinely-unread field visible instead of silently covered.
 #[derive(Clone)]
-#[allow(dead_code)]
 struct StaticWorkerBinding {
+    #[allow(dead_code)]
     closure_origin: StaticOriginId,
     body_origin: StaticOriginId,
     declared_arity: u32,
