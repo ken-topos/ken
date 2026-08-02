@@ -621,6 +621,44 @@ mechanism"* only becomes true here.
 > and must stay absent. Creating it early invites migration notes for
 > migrations nobody performed.
 
+> ### Wave 6 is gated on two things Ken does not have — MEASURED
+> (Steward, 2026-08-02, at `origin/main = 5a0fd8e6`)
+>
+> Three of the four Produces items cannot be framed today, and one of them is
+> foreclosed by a landed operator ruling rather than by sequencing. Setting
+> each against the repository:
+>
+> | item | disposition |
+> |---|---|
+> | static searchable HTML and an offline artifact | **no reader.** Ken has no users, and the fleet's agents read the markdown directly. Deferred until there is a reader it serves. |
+> | versioned snapshots and migration notes | **blocked by this section's own rule** — there are no public releases, so `library/releases/` stays absent. |
+> | post-merge source changes wired to the as-built queue | **foreclosed.** `f52b0f61` removed the currency gate by operator ruling, naming "both call sites: the pre-merge gate and *the post-merge alarm*." `LIB-GATE-DECOUPLE` (`f84e4804`) removed live documentation/content CI coupling, and the resulting policy **explicitly accepts that source attestations drift between release points.** |
+> | the measurement set | dead ends, failed searches, and tutorial completion all require users; stale-source detection is the removed gate's output. **Agent-pack evaluation results is the one live component.** |
+>
+> ⇒ The exit property — *currency as an observable product property* — is
+> **not reachable by a post-merge mechanism**, which is the only shape the
+> Produces text describes. Under the landed policy currency is established
+> **at release points**, and Ken has none yet.
+>
+> Two nodes already cover this ground and both are `closed`.
+> `DOC-CURRENCY-ANCHOR` established the content-currency check and was
+> discharged. `DOC-ATTEST-LIVING` was retired with an explicit instruction:
+> *"Do not reuse this node if release-time attestations later need
+> anchor-subset support or better diagnostics. Its per-merge premise is false
+> and would be inherited silently by anyone resuming from it. Frame a fresh
+> release-process WP against the release-point policy that actually exists."*
+>
+> One measurement is worth carrying to whoever frames that later WP:
+> `library/manifest.toml` cites **177 of 659 sources with a heading anchor**,
+> and `gen-source-attestations.sh` strips the anchor before keying on the
+> whole-file blob OID. The finer key such a ledger would need is already
+> present in the citations and is discarded. That is a fact about the
+> substrate, **not a licence to rebuild the gate.**
+>
+> ⇒ **Wave 6's releasable residual today is agent-pack evaluation**, filed as
+> `DOC-W6-AGENT-EVAL`. The rest of the wave resumes when Ken has releases or
+> readers.
+
 ---
 
 ## 4c. What is NOT in this program, and why

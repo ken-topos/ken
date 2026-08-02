@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-02 06:35:43Z — from 155 issue file(s) in `docs/program/issues/`.
+2026-08-02 06:56:35Z — from 156 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -93,6 +93,7 @@ the committed file matches the generator's output.
 | `DOC-W5B-CARDS-APP-DATA` | Wave 5 slice 2 — apply the settled card format to Application (3) and Data (11): fourteen complete cards | merged | doc | M | none | — |
 | `DOC-W5C-CARDS-CAPABILITY` | Wave 5 slice 3 — apply the settled card format to Capability (19): nineteen complete cards, closing the 39-package set | merged | doc | M | none | — |
 | `DOC-W5D-INDEXES` | Wave 5 closeout — build the four cross-package indexes the cards can support (declaration/type, law, effect/capability, assurance) and record why the four held-class indexes cannot be built | merged | doc | M | none | — |
+| `DOC-W6-AGENT-EVAL` | Wave 6 residual — the cold-context agent evaluation certifies agent_core_ready against a corpus 3.4x smaller than today's, and three of the four pack-selected core modules have changed since | ready | doc | M | none | — |
 | `DS-9` | lawful JSON codec — the data-structures tier's acceptance test: a Json value type, encode/decode, and the proved round-trip law, assembled entirely from the landed Core/Data sections | draft | foundation | L | none | — |
 | `EFF-SPACE-ENSURES-PRESTATE` | `old` is transparent, so a space operation's `ensures` cannot express the pre/post distinction `36 §4.3` is built on | closed | language | M | none | — |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
@@ -199,6 +200,7 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
+- `DOC-W6-AGENT-EVAL` — Wave 6 residual — the cold-context agent evaluation certifies agent_core_ready against a corpus 3.4x smaller than today's, and three of the four pack-selected core modules have changed since
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-CONTSPEC-ACTIVATE` — ContinuationSpecialization seam 2 — lowering activation and exact-use consumption: direct call before the identity-erasing join, active emitted owner, affine call occurrence, JoinArm consumption, gating the 37-row lower-owned population
