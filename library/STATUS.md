@@ -87,6 +87,18 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/reference/catalog/Data/Text/Codec.md` | reference | derived-reference | partial |
 | `library/reference/catalog/Data/Text/StringBijection.md` | reference | derived-reference | partial |
 | `library/reference/catalog/Data/Text/StringKeys.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Console/Text.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Filesystem/Authority.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Filesystem/Errors.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Filesystem/Path/Posix.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Process/Arguments.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Process/Environment.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Process/Exit.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Process/WorkingDirectory.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/System/Buffer.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/System/IO.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/System/Resource.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Time/WallClock.md` | reference | derived-reference | partial |
 | `library/learn/reading-ken/fragments.md` | reference | derived-reference | current |
 | `library/learn/reading-ken/01-anatomy.md` | explanatory | explanatory | current |
 | `library/learn/reading-ken/02-types-contracts-and-proofs.md` | explanatory | explanatory | current |
@@ -100,7 +112,7 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/quickstart.md` | tutorial | tutorial | current |
 | `library/STATUS.md` | status | status | current |
 
-**Total:** 66 registered document(s).
+**Total:** 78 registered document(s).
 
 ## Regenerating
 
