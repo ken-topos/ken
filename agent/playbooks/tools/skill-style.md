@@ -148,9 +148,12 @@ models are unreliable at it.
 5. What would a reader do first, and can they tell from the top of the file?
 6. Which withdrawn or superseded content is still in the body?
 
-Require of the output: findings ranked by severity, a hard cap of ten, and an
-explicit list of rubric items checked and found clean. The reviewer is
-advisory and has no write access; it returns findings and the author decides.
+Require of the output: findings ranked by severity, a hard cap of ten, and a
+closing list of what was checked and did **not** produce a finding, answered
+per rubric question rather than as a whole. "Nothing found here" is a
+first-class verdict and must not be traded for a manufactured finding. The
+reviewer is advisory and has no write access; it returns findings and the
+author decides.
 
 The cap and the clean list exist because an adversarially prompted reviewer
 will return findings against a good document. Without them the review produces
