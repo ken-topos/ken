@@ -7,6 +7,24 @@ seam 2. **Recut 2026-08-02** on the Architect's interface ruling
 `evt_3xj4eqwqmn46n` as corrected by `evt_66t42tapvdbsj`, and the Steward's
 baseline measurement `evt_2zhx69f2fw07w`.
 
+> ## FROZEN 2026-08-02 — READ THIS BEFORE ANY LINE BELOW IT
+>
+> **Architect outcome (c) at `evt_2anwskscqz5fg`: this seam is mis-sized at the
+> target-binding boundary.** Everything below was written for a seam that could
+> reach its target through an existing route. **It cannot.** Do not start,
+> resume, or QA this frame, and do not treat any deliverable or AC below as
+> live.
+>
+> `dd0ca60e` is **preservation-only and not a base.** The full disposition —
+> what is retained as proved, and the three things now falsified including this
+> frame's own three-field binding key — is in the node banner at
+> `docs/program/issues/RT-CONTSPEC-ACTIVATE.md`. **Read it there rather than
+> reconstructing it from the text below**, which the correction post-dates.
+>
+> The substrate this seam turned out to need is `RT-WORKER-BIND`, held at
+> `draft` pending two Architect inputs (`evt_3ka1whhzj9z8x`). This frame is
+> recut after that node lands, not before.
+
 This is the seam that turns the mechanism on. Seam 1 put the accepted helper on
 the landed substrate and proved it changed nothing. This seam makes the
 already-planned continuation population **reachable by the emitter**, and proves
