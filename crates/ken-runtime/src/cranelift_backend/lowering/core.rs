@@ -29,6 +29,97 @@ fn recursive_position_unit_calls() -> usize {
     RECURSIVE_POSITION_UNIT_CALLS.with(std::cell::Cell::get)
 }
 
+type ConsumedSubcontinuationFrame = (Option<PredeclaredFunctionId>, u64, u64);
+
+/// Transactions checked-frame consumption across mutually exclusive lowering
+/// successors. A successor begins at the common predecessor baseline, while
+/// the union remains authoritative after their join.
+struct CheckedFrameBranchScope {
+    baseline: BTreeSet<ConsumedSubcontinuationFrame>,
+    union: BTreeSet<ConsumedSubcontinuationFrame>,
+}
+
+impl CheckedFrameBranchScope {
+    fn capture(consumed: &BTreeSet<ConsumedSubcontinuationFrame>) -> Self {
+        Self {
+            baseline: consumed.clone(),
+            union: consumed.clone(),
+        }
+    }
+
+    fn start_successor(&self) -> BTreeSet<ConsumedSubcontinuationFrame> {
+        self.baseline.clone()
+    }
+
+    fn merge_successor(&mut self, consumed: &BTreeSet<ConsumedSubcontinuationFrame>) {
+        self.union.extend(consumed.iter().copied());
+    }
+
+    fn finish(self) -> BTreeSet<ConsumedSubcontinuationFrame> {
+        self.union
+    }
+
+    #[cfg(feature = "px8-ds-test-support")]
+    fn harness(mut self, mutation: FrameScopeHarnessMutation) -> FrameScopeHarnessWitness {
+        let key = (None, 71, 23);
+
+        let mut first_successor = self.start_successor();
+        let first_consume_succeeds = first_successor.insert(key);
+        let same_successor_duplicate_rejected = !first_successor.insert(key);
+        self.merge_successor(&first_successor);
+
+        let mut second_successor = match mutation {
+            FrameScopeHarnessMutation::SharedLedger => first_successor.clone(),
+            FrameScopeHarnessMutation::Exact | FrameScopeHarnessMutation::DropUnion => {
+                self.start_successor()
+            }
+        };
+        let second_successor_first_consume_succeeds = second_successor.insert(key);
+        self.merge_successor(&second_successor);
+
+        let mut after_join = match mutation {
+            FrameScopeHarnessMutation::DropUnion => self.baseline,
+            FrameScopeHarnessMutation::Exact | FrameScopeHarnessMutation::SharedLedger => {
+                self.finish()
+            }
+        };
+        let post_join_duplicate_rejected = !after_join.insert(key);
+
+        FrameScopeHarnessWitness {
+            first_consume_succeeds,
+            same_successor_duplicate_rejected,
+            second_successor_first_consume_succeeds,
+            post_join_duplicate_rejected,
+        }
+    }
+}
+
+#[cfg(feature = "px8-ds-test-support")]
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FrameScopeHarnessWitness {
+    pub first_consume_succeeds: bool,
+    pub same_successor_duplicate_rejected: bool,
+    pub second_successor_first_consume_succeeds: bool,
+    pub post_join_duplicate_rejected: bool,
+}
+
+#[cfg(feature = "px8-ds-test-support")]
+#[derive(Clone, Copy)]
+pub enum FrameScopeHarnessMutation {
+    Exact,
+    SharedLedger,
+    DropUnion,
+}
+
+#[cfg(feature = "px8-ds-test-support")]
+#[doc(hidden)]
+pub fn run_frame_scope_harness(
+    mutation: FrameScopeHarnessMutation,
+) -> FrameScopeHarnessWitness {
+    CheckedFrameBranchScope::capture(&BTreeSet::new()).harness(mutation)
+}
+
 /// The closed production routes that still require retained recursive descent.
 ///
 /// This type is the D5 accounting: the selector produces one of these reasons
