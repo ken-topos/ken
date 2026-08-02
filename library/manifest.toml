@@ -1251,6 +1251,348 @@ validation = [
 owner = "doc"
 
 [[document]]
+path = "library/reference/catalog/Capability/Console/Text.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Console/Text.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Filesystem/Authority.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Filesystem/Authority.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Filesystem/Errors.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Filesystem/Errors.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Filesystem/Path/Posix.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Filesystem/Path/Posix.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Process/Arguments.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Process/Arguments.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Process/Environment.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Process/Environment.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Process/Exit.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Process/Exit.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Process/WorkingDirectory.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Process/WorkingDirectory.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/System/Buffer.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/System/Buffer.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/System/IO.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/System/IO.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/System/Resource.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/System/Resource.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Time/WallClock.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Time/WallClock.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Diagnostics/Core.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Diagnostics/Core.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Diagnostics/Render.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Diagnostics/Render.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Formatting/Doc.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Formatting/Doc.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Parsing/Cursor.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Parsing/Cursor.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Parsing/Decoder.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Parsing/Decoder.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Parsing/Numeric.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Parsing/Numeric.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/Capability/Parsing/Parsing.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "catalog/packages/Capability/Parsing/Parsing.ken.md",
+  "docs/program/wave-5-format-capability.md#d0-and-d1--capability-and-disposition",
+  "docs/program/06-catalog-campaign.md",
+]
+validation = [
+  "manifest-coverage", "manifest-completeness", "document-kind", "links",
+  "source-anchors", "availability-label", "authority-class",
+  "transport-delimiter", "source-currency",
+]
+owner = "doc"
+
+[[document]]
 path = "library/learn/reading-ken/fragments.md"
 kind = "reference"
 audience = ["human-reader", "agent-reader"]
