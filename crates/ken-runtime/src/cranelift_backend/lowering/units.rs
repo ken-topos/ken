@@ -625,9 +625,6 @@ pub(in crate::cranelift_backend) fn resolve_continuation_targets(
 /// constructor, and the semantic environment is the sole
 /// `LoweringEnvironmentBinding` authority -- no parallel operand map and no
 /// worker-body de Bruijn table.
-#[allow(dead_code)] // Wired in and reverted this turn -- see the checkpoint
-                    // message for the fixture that reddened and why the wiring
-                    // is not being guessed at.
 pub(super) fn define_continuation_bodies<M: Module>(
     module: &mut M,
     compiler: &mut Lowering<'_>,
@@ -757,7 +754,22 @@ pub(super) fn define_continuation_bodies<M: Module>(
             })?;
 
         let mut function_local = helpers.declare_in_func(module, &mut func, None);
-        function_local.worker_calls = worker_targets.declare_in_func(module, &mut func);
+        // ONE lawful declaration per continuation `Function`, retained whole
+        // and seated in BOTH existing roles. The worker constructor validates
+        // through `unit_calls`; the later callee-only consumer resolves
+        // through `worker_calls`. Seating only the second is what made the
+        // constructor refuse -- the objects are the same, the roles are not.
+        //
+        // Declared here, into THIS function: no `FuncRef` crosses a function.
+        let declared_workers = worker_targets.declare_in_func(module, &mut func);
+        if !declared_workers.contains_key(&unit.worker_body_origin) {
+            return Err(backend_module(
+                "the selected continuation worker body has no projected emittable-unit target"
+                    .to_string(),
+            ));
+        }
+        function_local.unit_calls = declared_workers.clone();
+        function_local.worker_calls = declared_workers;
         let mut func_ctx = FunctionBuilderContext::new();
         {
             let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
@@ -771,6 +783,38 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 envelope_pointer,
                 crate::activation_services::UNIT_CALL_FRAME_SLOTS,
             );
+            // The same per-function activation-services preamble every
+            // generated unit body binds, from the same envelope and services
+            // record. Omitting it is what left this function with no boundary
+            // arena; substituting the native-`Int` arena for the boundary one
+            // is the defect the `S6`/`D6` ruling exists to remove, so the
+            // record is read for both rather than one standing in for the
+            // other.
+            let host_dispatch_context = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                envelope_pointer,
+                crate::activation_services::UNIT_CALL_FRAME_HOST_DISPATCH_CONTEXT,
+            );
+            let services = builder.block_params(entry)[1];
+            let native_int_arena = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                services,
+                crate::activation_services::SERVICES_NATIVE_INT_ARENA,
+            );
+            Lowering::require_nonzero(&mut builder, native_int_arena);
+            let boundary_arena = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                services,
+                crate::activation_services::SERVICES_BOUNDARY_ARENA,
+            );
+            Lowering::require_nonzero(&mut builder, boundary_arena);
+            function_local.host_dispatch_context = Some(host_dispatch_context);
+            function_local.native_int_arena = Some(native_int_arena);
+            function_local.boundary_arena = Some(boundary_arena);
+            function_local.services_pointer = Some(services);
             function_local.bind_unit_trap_frame(
                 frame,
                 i32::try_from(trap_offset).map_err(|_| {

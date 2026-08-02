@@ -622,6 +622,15 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 call_edges,
                 staged_process_input,
             )?;
+            // `RT-CONTSPEC-ACTIVATE` `D2` — define each declared continuation
+            // target from its own projected contract, after the ordinary
+            // bodies and before the root adapter.
+            super::units::define_continuation_bodies(
+                &mut module,
+                &mut compiler,
+                helpers,
+                unit_bundle,
+            )?;
             compiler.require_complete_join_plan_consumption()?;
             compiler.require_complete_dynamic_splice_edge_consumption()?;
             super::units::define_root_adapter(
