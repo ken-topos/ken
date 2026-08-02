@@ -363,6 +363,17 @@ definition/registry-only control at lines 221-235: `check_source_anchors` has
 only its registry row and definition, and no test iterates the registry. This
 WP does not edit the program frame.
 
+A second current program-law assurance is **recorded only**:
+`docs/program/12-documentation-program.md:124-126` says currency is recorded by
+generated `STATUS.md` and build output. Generated STATUS exists, but the
+asserted build-output channel does not: `.github/` has zero references to
+`gen-doc-status.sh` or `library/REVISION`; non-test crate code has zero
+references to `library/REVISION`; and the only script file that references it
+is the manual/release-point `scripts/gen-doc-status.sh`. The same program at
+lines 635-641 records that live documentation/content CI coupling was removed
+and currency is established only at release points. This WP does not edit the
+program frame.
+
 Three ruled product pages were also examined explicitly:
 `library/introduction.md`,
 `library/learn/reading-ken/01-anatomy.md`, and
