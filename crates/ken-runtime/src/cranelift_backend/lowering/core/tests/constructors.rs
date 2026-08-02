@@ -5372,3 +5372,220 @@ fn static_worker_twice_called_binding_succeeds() {
         .run(None)
         .expect("the twice-called fixture runs");
 }
+
+// ─── RT-WORKER-BIND `D5`/`D6`/`D7` — multiple, nested, and completion ───────
+
+/// Two same-shape workers -- same arity, same capture count -- at distinct de
+/// Bruijn slots, with distinct bodies and distinct capture orders, both
+/// called. The result is an aggregate of both calls, so it depends on each
+/// worker's body **and** its capture order independently.
+#[cfg(test)]
+fn two_same_shape_workers(first_body: u32, second_body: u32, swap_second: bool) -> RuntimeExpr {
+    let cap_a = vec![
+        RuntimeExpr::Var(0),
+        RuntimeExpr::Value(RuntimeValue::Int(3.into())),
+    ];
+    // `x` sits at index 1 here, not 0: worker A is already bound at 0 by the
+    // enclosing `Let`. Naming `Var(0)` would capture the WORKER as a value,
+    // which fails closed -- the guard caught exactly that while this fixture
+    // was being written.
+    let cap_b = if swap_second {
+        vec![
+            RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+            RuntimeExpr::Var(1),
+        ]
+    } else {
+        vec![
+            RuntimeExpr::Var(1),
+            RuntimeExpr::Value(RuntimeValue::Int(7.into())),
+        ]
+    };
+    // Two `Let`s in one environment: worker A ends at index 1 once B is bound,
+    // so the pair also exercises binder-order preservation at distinct slots.
+    let inner = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::LexicalClosure {
+            captures: cap_b,
+            params: vec!["y".to_string()],
+            body: Box::new(RuntimeExpr::Var(second_body)),
+        }),
+        body: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Pair::Both".to_string(),
+            args: vec![
+                RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(1)),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(100.into()))],
+                },
+                RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(200.into()))],
+                },
+            ],
+        }),
+    };
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: cap_a,
+                    params: vec!["y".to_string()],
+                    body: Box::new(RuntimeExpr::Var(first_body)),
+                }),
+                body: Box::new(inner),
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    }
+}
+
+#[cfg(test)]
+fn run_worker_fixture(expr: &RuntimeExpr) -> RuntimeObservation {
+    crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        expr,
+        &NativeSeedEnvironment::empty(),
+    )
+    .expect("the worker fixture compiles")
+    .run(None)
+    .expect("the worker fixture runs")
+    .0
+}
+
+/// `D5` -- two same-shape workers in one environment are genuinely
+/// distinguished, and swapping either one's body or its capture order changes
+/// the linked result.
+///
+/// This is also `AC-5`'s target-redirect red: the two workers are same-shape,
+/// so a call resolving to the other one's body is exactly a redirected target.
+#[test]
+fn two_same_shape_workers_are_distinguished() {
+    let baseline = run_worker_fixture(&two_same_shape_workers(1, 1, false));
+    let body_swapped = run_worker_fixture(&two_same_shape_workers(2, 1, false));
+    let capture_swapped = run_worker_fixture(&two_same_shape_workers(1, 1, true));
+    assert_ne!(
+        baseline, body_swapped,
+        "changing which capture the first worker's body selects must move the result"
+    );
+    assert_ne!(
+        baseline, capture_swapped,
+        "swapping the second worker's capture order must move the result"
+    );
+    assert_ne!(
+        body_swapped, capture_swapped,
+        "the two mutations must be distinguishable from each other, not merely from the baseline"
+    );
+}
+
+/// `D6` -- a static worker body that binds and calls **another** static
+/// worker.
+///
+/// The inner closure's captures are the outer worker function's own value
+/// operands, carried ones included: capture 0 is the outer worker's parameter
+/// and capture 1 is the outer worker's own first capture. Both are carried
+/// inside that function, so the inner binder installs a second `StaticWorker`
+/// whose target must be declared afresh **into the outer worker's function**.
+///
+/// `outer_body` and `inner_body` select which operand each level returns, so
+/// the result depends on both levels independently.
+#[cfg(test)]
+fn nested_workers(inner_body: u32, swap_inner_captures: bool) -> RuntimeExpr {
+    let inner_captures = if swap_inner_captures {
+        vec![RuntimeExpr::Var(1), RuntimeExpr::Var(0)]
+    } else {
+        vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)]
+    };
+    // Inside the OUTER worker body: [y(param), cap0 = x, cap1 = 3].
+    let outer_worker_body = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::LexicalClosure {
+            captures: inner_captures,
+            params: vec!["z".to_string()],
+            body: Box::new(RuntimeExpr::Var(inner_body)),
+        }),
+        body: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::Var(0)),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(500.into()))],
+        }),
+    };
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: vec![
+                        RuntimeExpr::Var(0),
+                        RuntimeExpr::Value(RuntimeValue::Int(3.into())),
+                    ],
+                    params: vec!["y".to_string()],
+                    body: Box::new(outer_worker_body),
+                }),
+                body: Box::new(RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(100.into()))],
+                }),
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    }
+}
+
+/// `D6`/`AC-7` -- the nested positive depends on BOTH levels, and each
+/// mutation moves the result independently.
+///
+/// This is also `AC-9`'s evidence: the inner worker's target is declared into
+/// the **outer worker's** function, which is a different `Function` from the
+/// root. A `FuncRef` copied across functions would not verify, so a green
+/// nested run is exactly the fresh-per-function declaration working.
+#[test]
+fn nested_worker_depends_on_both_levels() {
+    let baseline = run_worker_fixture(&nested_workers(1, false));
+    let inner_body_moved = run_worker_fixture(&nested_workers(2, false));
+    let inner_captures_swapped = run_worker_fixture(&nested_workers(1, true));
+    assert_ne!(
+        baseline, inner_body_moved,
+        "moving which operand the inner body selects must move the result"
+    );
+    assert_ne!(
+        baseline, inner_captures_swapped,
+        "swapping the inner worker's capture order must move the result"
+    );
+}
+
+/// `D8` companion -- **capture omission.** Dropping a capture the body reads
+/// must not silently succeed with a shifted environment.
+///
+/// The witness body reads capture 0 at `Var(1)`; with only one capture
+/// declared, `Var(2)` names nothing and the lowering fails closed rather than
+/// reading past the worker's environment.
+#[test]
+fn static_worker_capture_omission_fails_closed() {
+    let omitted = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::LexicalClosure {
+                    // One capture declared, but the body reads a second.
+                    captures: vec![RuntimeExpr::Var(0)],
+                    params: vec!["y".to_string()],
+                    body: Box::new(RuntimeExpr::Var(2)),
+                }),
+                body: Box::new(RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![RuntimeExpr::Value(RuntimeValue::Int(100.into()))],
+                }),
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    };
+    let error = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &omitted,
+        &NativeSeedEnvironment::empty(),
+    )
+    .err()
+    .expect("omitting a capture the body reads must fail closed");
+    assert!(
+        format!("{error:?}").contains("no runtime binding for index"),
+        "fails closed on the missing binding rather than reading past it: {error:?}"
+    );
+}
