@@ -1,7 +1,7 @@
 ---
 id: RT-WORKER-BIND
 title: "compiler-only static-worker binding and transport substrate — lowering cannot bind a worker's carried capture operands into a selected semantic body, and continuation specialization cannot emit a target without it"
-status: ready
+status: merged
 owner: runtime
 size: L
 gate: none
