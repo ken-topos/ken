@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-WITNESS
 title: "ContinuationSpecialization seam 4 — integrated witness and closeout: the native population, the six formerly shadowed rows reclassified, the two host rows rerun, and the three-node closure"
-status: draft
+status: ready
 owner: runtime
 size: M
 gate: none
@@ -42,4 +42,21 @@ Also carried forward unchanged: the **761 witness gate**.
 question — did the trap become `InvalidOffset` because the defect was fixed, or
 because the assertion moved?
 
-Branches from `main` after seam 3 lands. Frame owed before release.
+Branches from `main` after seam 3 lands.
+
+## What the frame settles that this node must not be read without
+
+**A shadowed row is unmeasured, not passing and not failing.** Reclassifying the
+six means running them and recording what they actually say — either verdict. **A
+shadowed row that turns out to fail is a finding, not a regression**, it does not
+invalidate seams 1-3, and it is routed rather than repaired.
+
+**The 761 gate is an open question, not a checkbox.** Both tests were observed
+green on `b66dea6a`. That does not close it: the question is whether the trap
+became `InvalidOffset` because the defect was fixed or **because the assertion
+moved**, and a green run cannot tell the two apart. The frame requires naming the
+commit and picking one.
+
+The frame is `docs/program/wp/RT-CONTSPEC-WITNESS.md` — written 2026-08-02 while
+seam 1 is in flight. Node is `ready`; release is gated on seam 3 merging, not on
+further framing.
