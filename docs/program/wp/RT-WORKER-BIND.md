@@ -247,6 +247,29 @@ Measured at `origin/main = ce3296d8`.
   which are indistinguishable by shape are still distinguished by identity** —
   a redirect that changes shape cannot witness it.
 
+  **(c) The redirect control runs on the two-same-shape-worker program, and
+  ONLY there.** Added 2026-08-02 from the implementer's measurement at
+  `evt_c08zrpbpcgsn`, which was obtained by building the repair rather than by
+  reading this frame.
+
+  Measured: the two-same-shape-worker program really does declare two targets
+  with **byte-identical header, slot run and offsets**, and a shape-matching
+  selector finds its distinct same-shape candidate and reds at the origin
+  check. ⭐ So `(b)` is right, and it is right on the actual planned program
+  rather than only in principle.
+
+  ⚠ **But the ordinary single-worker witness has no distinct same-shape
+  candidate at all** — that is a property of the fixture population, not of the
+  selector. A shape-matching redirect there can only fail loudly, and **an
+  amendment requiring every witness to be redirectable would be requiring
+  something impossible.** This AC does not require that. The redirect mutation
+  is discharged by the `AC-6` two-same-shape-worker population; the ordinary
+  witness discharges `(a)`'s carried-capture arm and nothing more.
+
+  ⇒ ⛔ Do not "fix" a selector that finds no candidate on the single-worker
+  witness by widening the predicate back toward difference. That is the exact
+  regression `(b)` names, reintroduced as a fix.
+
   ⛔ A companion that cannot be made to fail is not a control — see
   `agent/memory/` on negative checks needing a positive control.
 - **AC-6 — two same-shape workers are genuinely distinguished.** Two

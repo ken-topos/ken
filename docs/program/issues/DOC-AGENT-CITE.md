@@ -1,7 +1,7 @@
 ---
 id: DOC-AGENT-CITE
 title: "agent core modules name normative authorities as a reading list rather than binding them to claim classes, so seven of seven cold runs made material claims without citing the sources D2 requires"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
