@@ -76,6 +76,23 @@ forwards unchanged.
 creates two binding authorities, and then the question "what is bound here" has
 two answers.
 
+⚠ **This is a property of each committed checkpoint, not of your working tree
+at every instant.** `D1` is a crate-wide type migration, and the only way to
+perform one is compiler-guided: introduce the sum, change the signatures, and
+let the compiler enumerate the sites that no longer typecheck until none
+remain. **While that pass is under way, converted and unconverted sites coexist
+and the crate does not build. That is the expected shape of the work, not a
+violation of this judgment, and it is not grounds to revert.** What must hold is
+that the **committed** `D1` checkpoint leaves no raw `&[LoweringOperand]`
+lexical environment anywhere — the compiler is the completeness oracle for
+exactly that claim.
+
+⇒ Reverting a partial migration because it is momentarily incoherent
+guarantees the checkpoint is never reached. **Do not revert to preserve this
+property mid-pass.** If the migration is genuinely too large to finish in one
+turn, that is a **sizing finding** — report the exact count of sites by file
+and stop; it is not a reason to leave the branch clean and hand back.
+
 ### 5. ⭐ THE WITNESS MUST CONTAIN ZERO CONTINUATION MACHINERY
 
 This is the load-bearing requirement and the reason this node exists as a
