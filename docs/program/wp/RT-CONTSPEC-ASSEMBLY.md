@@ -8,7 +8,8 @@ Authority: Architect ownership/sizing ruling `evt_1yymw1gdszpbs`, outcome (c).
 >
 > `RT-CONTSPEC-LOWER` did not produce a repairable candidate. Its lineage
 > **replaced the landed slice 0-2 blobs with older cumulative WIP.** Preserve
-> `46d29783` (census), `1aef3192` (parent), `9d58df12` (accepted mechanism), and
+> `46d29783` (census), `1aef3192` (parent),
+> `9d58df12` (accepted mechanism), and
 > `refs/preserved/rt-contspec-lower-held-core-rs = 88972207`.
 >
 > **None of them may be merged, rebased onto, or cherry-picked wholesale.** The
@@ -54,8 +55,9 @@ Measured at `origin/main = 40f8757d`.
 
 ## Deliverables
 
-- **D1 — the extracted helper.** `CheckedFrameBranchScope` and its feature-gated
-  harness, re-established on current `main`, **unactivated**. No call site
+- **D1 — the extracted helper.** `CheckedFrameBranchScope` and its
+  feature-gated harness, re-established on current `main`,
+  **unactivated**. No call site
   selects it; no behaviour changes.
 - **D2 — the untouched-surface proof.** A blob-identity table showing every
   slice 0-2 surface listed above at the candidate equals its blob on the
@@ -66,8 +68,9 @@ Measured at `origin/main = 40f8757d`.
   interface it needs that does not exist.
 - **D4 — the recut census correction.** `docs/program/wp/RT-CONTSPEC-LOWER-D8.md`
   currently describes **39 rows** as only "assertion after unruled production
-  activation" / "ownership matrix pending", although the captured run contains
-  their exact refusals — including the 17 source-position-outside-ABI-input rows
+  activation" / "ownership matrix pending", although the captured run
+  contains their exact refusals — including the 17
+  source-position-outside-ABI-input rows
   and 3 synthesized-ledger rows. **Replace that undifferentiated family with the
   Architect's ownership matrix.** This is a documentation repair of an existing
   artifact, and it is in scope precisely because a later seam would otherwise
@@ -93,8 +96,9 @@ Measured at `origin/main = 40f8757d`.
 - **AC-4 — the candidate's diff touches no planner, ABI, or substrate file.**
   *Control:* the path list of `git diff --name-only <merge-base> <candidate>`.
   Any of the six surfaces appearing here fails the seam outright.
-- **AC-5 — `D4`'s corrected census carries one row per failing test**, each with
-  test name, first refusal, phase, D8 class, causal root or cascade membership,
+- **AC-5 — `D4`'s corrected census carries one row per failing
+  test**, each with test name, first refusal, phase, D8 class, causal root or
+  cascade membership,
   and owning contract. No row may read "ownership matrix pending".
   *Control:* row count equals 138; grep for the placeholder text returns
   nothing.
@@ -121,11 +125,44 @@ build lock for `AC-2`; probe without blocking first. **Targeted only:**
 `scripts/ken-cargo test -p ken-runtime --lib`. **Never `--workspace`** — the
 full-workspace build, the `--locked` gate and conformance run in CI.
 
+### Two preconditions on every `AC-2` run, and on any baseline you report
+
+Both of these produced a false hard stop 2 on this seam (`evt_3q972fhrnsr0b`,
+ruled `evt_1pt7rmmw2k5d0`). Neither is optional.
+
+**1. Stand in the right tree, and prove it in the same shell.** Run
+`git rev-parse HEAD` immediately before the suite and quote its output as the
+base. A `git switch` onto a branch already checked out in another worktree fails
+**silently** when it sits inside an `&&` chain, and the chain then runs the suite
+in the old tree. Measured here: the leader's worktree was 204 commits behind the
+base its report named. ⇒ **State the base you measured, never the base you
+intended.**
+
+**2. Build before you test — `cargo test --lib` does not emit the staticlib.**
+`crates/ken-runtime/Cargo.toml` declares
+`crate-type = ["rlib", "staticlib"]`.
+`cargo test --lib` builds only the rlib for the harness, so
+`libken_runtime.a` is never produced. `object_linker_packaging.rs:1211`
+`ken_runtime_staticlib()` then finds no archive and every row that links one
+fails with a `Toolchain` error
+whose text names ken-host — stale wording; the function looks for
+`libken_runtime.a`. In a worktree that has never run a build this is **~40
+failures that say nothing about the base.** So:
+
+```sh
+scripts/ken-cargo build -p ken-runtime     # materializes libken_runtime.a
+scripts/ken-cargo test  -p ken-runtime --lib
+```
+
+⇒ **A `Toolchain`-stage `ObjectLinkerPackagingError` is an environment finding,
+not a baseline finding.** Check for `target/debug/**/libken_runtime*.a` before
+routing one as a hard stop.
+
 ## Sizing
 
 **Size `M`, and it is deliberately the smallest seam.** It adds no behaviour.
-Its whole content is: put the accepted helper on the landed substrate, prove the
-substrate did not move, and correct the census.
+Its whole content is: put the accepted helper on the landed
+substrate, prove the substrate did not move, and correct the census.
 
 If it turns out large, the reason will be `D3` — the helper needing interfaces
 the landed slices do not expose. **That is information, not scope**, and it
