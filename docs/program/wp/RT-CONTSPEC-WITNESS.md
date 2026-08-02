@@ -9,6 +9,24 @@ Seams 1-3 built and proved the mechanism. This seam **measures the result on a
 lawful assembly** and closes the campaign's held nodes. It is the only seam that
 closes anything other than itself.
 
+> ## HELD FOR RECUT — do not start this seam. Its node is `draft` on purpose.
+>
+> **Steward, 2026-08-02.** `AC-1` requires every one of the corrected census's
+> 138 rows to reach a terminal disposition, and the frame's row table asserts
+> that 6 formerly shadowed rows have "their causal roots cleared in seams 2 and
+> 3." **That premise is now false.** Seam 2 was recut off the census entirely
+> (`evt_2zhx69f2fw07w`, Architect confirmation `evt_66t42tapvdbsj`) and seam 3
+> is held for the same reason, so neither seam clears any census row.
+>
+> The defect here is narrower than seam 3's. Reconciling the 138 rows is a
+> reasonable bookkeeping deliverable in itself — but it must be stated as
+> **accounting for a historical record**, not as measuring work the earlier
+> seams performed. As written it would have every row's disposition depend on
+> clearing that will never happen.
+>
+> The node is `draft` so this frame cannot enter the frontier. The Steward
+> recuts it after seams 2 and 3.
+
 > ## The `46d29783` lineage remains an ORACLE
 >
 > `46d29783`, `1aef3192`, `9d58df12`, and
