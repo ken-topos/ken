@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-ACTIVATE
 title: "ContinuationSpecialization seam 2 — lowering activation and exact-use consumption: direct call before the identity-erasing join, active emitted owner, affine call occurrence, JoinArm consumption, gating the 37-row lower-owned population"
-status: ready
+status: active
 owner: runtime
 size: L
 gate: none
