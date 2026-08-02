@@ -1,15 +1,44 @@
 ---
 id: RT-CONTSPEC-LOWER
 title: "ContinuationSpecialization slice 3 — attach the token at each producer alternative, emit the direct call before the identity-erasing join, close nested recursion and the ledgers, then ACTIVATE"
-status: ready
+status: closed
 owner: runtime
 size: L
 gate: none
 depends_on: [RT-CONTSPEC-ABI]
-blocks: [RT-RECURSOR-TRANSPORT, RT-DECL-CLOSURE-PORT]
+blocks: []
 github: null
 origin: "Architect second WIP audit evt_4t09329vdrf (2026-08-01), outcome (c). Slice 3 of the Steward's staged recut of RT-RECURSOR-TRANSPORT + RT-DECL-CLOSURE-PORT D7. This is the slice that activates."
 ---
+
+> # CLOSED 2026-08-02 — SUPERSEDED BY A FOUR-SEAM RECUT. DO NOT WORK THIS NODE.
+>
+> Architect ownership/sizing ruling `evt_1yymw1gdszpbs` returned **outcome (c)**:
+> this node is mis-sized, and the held object
+> `46d29783b9d726e542bd9fed6833e2644a40b5fc` is a **preservation oracle, not a
+> repair base or candidate.**
+>
+> **The root cause is assembly, not the 138 failures.** The held lineage replaced
+> the landed slice 0-2 blobs with older cumulative WIP instead of consuming them
+> — `planning/static_transition.rs` alone differs +20,199/-6,120 from its
+> rule-derived base `b66dea6a`, while `origin/main` carries that base's exact
+> blob. So 76 of the 138 rows are evidence against the assembly boundary, not
+> defects to repair.
+>
+> **Successors, each branching from `main` after its predecessor lands, carrying
+> only its own delta:**
+>
+> 1. [[RT-CONTSPEC-ASSEMBLY]] — lawful assembly, helper extracted unactivated
+> 2. [[RT-CONTSPEC-ACTIVATE]] — lowering activation, the 37 lower-owned rows
+> 3. [[RT-CONTSPEC-LEDGER]] — D7 ledger closure, the 17 ledger/representation rows
+> 4. [[RT-CONTSPEC-WITNESS]] — integrated witness, closeout, and the three-node closure
+>
+> **The three-node closure obligation moved to [[RT-CONTSPEC-WITNESS]].** Do not
+> read this node's closure language as live.
+>
+> Everything below this banner is retained as the historical record of the
+> attempt and the accepted mechanism. It is **not** a live instruction.
+
 
 > # ✅ READY 2026-08-01 — SLICE 3 OF 4, THE ONLY SLICE THAT ACTIVATES
 >
