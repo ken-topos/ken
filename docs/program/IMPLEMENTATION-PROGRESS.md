@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-02 05:43:07Z — from 154 issue file(s) in `docs/program/issues/`.
+2026-08-02 05:47:42Z — from 155 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -92,6 +92,7 @@ the committed file matches the generator's output.
 | `DOC-W5A-CARD-FORMAT` | Wave 5 slice 1 — the reference card format, the generated subject index for all 39 packages, and six proving cards across Core and Tooling | merged | doc | M | none | — |
 | `DOC-W5B-CARDS-APP-DATA` | Wave 5 slice 2 — apply the settled card format to Application (3) and Data (11): fourteen complete cards | merged | doc | M | none | — |
 | `DOC-W5C-CARDS-CAPABILITY` | Wave 5 slice 3 — apply the settled card format to Capability (19): nineteen complete cards, closing the 39-package set | ready | doc | M | none | — |
+| `DOC-W5D-INDEXES` | Wave 5 closeout — build the four cross-package indexes the cards can support (declaration/type, law, effect/capability, assurance) and record why the four held-class indexes cannot be built | ready | doc | M | none | — |
 | `DS-9` | lawful JSON codec — the data-structures tier's acceptance test: a Json value type, encode/decode, and the proved round-trip law, assembled entirely from the landed Core/Data sections | draft | foundation | L | none | — |
 | `EFF-SPACE-ENSURES-PRESTATE` | `old` is transparent, so a space operation's `ensures` cannot express the pre/post distinction `36 §4.3` is built on | closed | language | M | none | — |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
@@ -223,6 +224,7 @@ is itself not yet `merged`/`closed`:
 - `ABI-S4` blocked by `ABI-M1` (status: draft)
 - `ABI-S5` blocked by `PX9` (status: draft)
 - `ABI-S6` blocked by `ABI-S1` (status: draft)
+- `DOC-W5D-INDEXES` blocked by `DOC-W5C-CARDS-CAPABILITY` (status: ready)
 - `DS-9` blocked by `KERNEL-NESTED-IND` (status: active)
 - `F4` blocked by `A3` (status: draft)
 - `NATIVE-HANDLE-CARRIER` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
