@@ -1,7 +1,7 @@
 ---
 id: RT-WORKER-BIND
 title: "compiler-only static-worker binding and transport substrate — lowering cannot bind a worker's carried capture operands into a selected semantic body, and continuation specialization cannot emit a target without it"
-status: draft
+status: ready
 owner: runtime
 size: L
 gate: none
@@ -13,21 +13,20 @@ origin: "Architect outcome (c) at evt_2anwskscqz5fg (2026-08-02), correcting evt
 
 # The substrate that continuation specialization turned out to need
 
-> ## HELD AT `draft` ON PURPOSE — the frame is incomplete by design
+> ## RELEASED 2026-08-02 — both owed inputs are ruled
 >
-> **Steward, 2026-08-02.** Two inputs are owed by the Architect before this can
-> be released, requested in one pass at `evt_3ka1whhzj9z8x`:
+> The two inputs this node was held for arrived together in the Architect's
+> complete substrate ruling `evt_4bgwqgydycd34`:
 >
-> 1. **the substrate's own representation** — the ruling names precisely what
->    blocks, and deliberately does not name what should exist instead;
-> 2. **the independent witness** — what proves this substrate *without*
->    continuation specialization as its consumer.
+> 1. **the representation** — a compiler-only `LoweringEnvironmentBinding` sum
+>    with a `StaticWorkerBinding` arm, closed against current source;
+> 2. **the independent witness** — an ordinary FunctionizedUnits program with
+>    **no continuation machinery in the fixture at all**.
 >
-> The node is `draft` so it cannot enter the frontier with those open. This is
-> the corrective for the pattern that produced three hard stops on
-> `RT-CONTSPEC-ACTIVATE`: a frame that specifies one interface hop at a time
-> costs one hard stop per hop. **Do not release this node by flipping `status`
-> until both are ruled.**
+> Asking for both in one pass rather than framing thin is the corrective for
+> the three `RT-CONTSPEC-ACTIVATE` stops that each resolved exactly one
+> interface hop. The whole contract is encoded in
+> `docs/program/wp/RT-WORKER-BIND.md`.
 
 ## How this node came to exist
 
@@ -125,5 +124,4 @@ representation, that is a hard stop back to the Architect** and the reopening
 becomes an explicit fork with operator visibility — not something the Steward's
 sequencing quietly decided.
 
-Frame: `docs/program/wp/RT-WORKER-BIND.md`, written when the two owed inputs
-land.
+Frame: `docs/program/wp/RT-WORKER-BIND.md`.
