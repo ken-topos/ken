@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-02 00:49:40Z — from 145 issue file(s) in `docs/program/issues/`.
+2026-08-02 00:51:12Z — from 145 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -86,7 +86,7 @@ the committed file matches the generator's output.
 | `DOC-W3-GUIDE` | Wave 3 slice 1 — migrate catalog/guide/ into library/guide/ under migration-local fence verification, conserving all 40 checked fences through the move | merged | doc | M | none | — |
 | `DOC-W3-HOWTO` | Wave 3 slice 2 — library/how-to/ recipes scoped by the CLI's seven-subcommand task surface, each grounded in a real diagnostic or checked artifact | merged | doc | M | none | — |
 | `DOC-W4-LANGUAGE` | Wave 4 slice 2 — the language reference, scoped to whatever survives a residual measurement against the 625-line page already named `surface-reference` | ready | doc | S | none | — |
-| `DOC-W4-TOOLCHAIN` | Wave 4 slice 1 — the toolchain reference, plus the D0 report on which of Wave 4's generated facts the toolchain can actually produce today | ready | doc | M | none | — |
+| `DOC-W4-TOOLCHAIN` | Wave 4 slice 1 — the toolchain reference, plus the D0 report on which of Wave 4's generated facts the toolchain can actually produce today | merged | doc | M | none | — |
 | `DS-9` | lawful JSON codec — the data-structures tier's acceptance test: a Json value type, encode/decode, and the proved round-trip law, assembled entirely from the landed Core/Data sections | draft | foundation | L | none | — |
 | `EFF-SPACE-ENSURES-PRESTATE` | `old` is transparent, so a space operation's `ensures` cannot express the pre/post distinction `36 §4.3` is built on | closed | language | M | none | — |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
@@ -189,7 +189,7 @@ the committed file matches the generator's output.
 Items whose status is `ready` and whose every `depends_on` entry is
 itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
-- `DOC-W4-TOOLCHAIN` — Wave 4 slice 1 — the toolchain reference, plus the D0 report on which of Wave 4's generated facts the toolchain can actually produce today
+- `DOC-W4-LANGUAGE` — Wave 4 slice 2 — the language reference, scoped to whatever survives a residual measurement against the 625-line page already named `surface-reference`
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
 - `RT-CONTSPEC-LOWER` — ContinuationSpecialization slice 3 — attach the token at each producer alternative, emit the direct call before the identity-erasing join, close nested recursion and the ledgers, then ACTIVATE
@@ -214,7 +214,6 @@ is itself not yet `merged`/`closed`:
 - `ABI-S4` blocked by `ABI-M1` (status: draft)
 - `ABI-S5` blocked by `PX9` (status: draft)
 - `ABI-S6` blocked by `ABI-S1` (status: draft)
-- `DOC-W4-LANGUAGE` blocked by `DOC-W4-TOOLCHAIN` (status: ready)
 - `DS-9` blocked by `KERNEL-NESTED-IND` (status: active)
 - `F4` blocked by `A3` (status: draft)
 - `NATIVE-HANDLE-CARRIER` blocked by `RT-DECL-CLOSURE-PORT` (status: active)

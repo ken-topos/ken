@@ -1,7 +1,7 @@
 ---
 id: DOC-W4-TOOLCHAIN
 title: "Wave 4 slice 1 — the toolchain reference, plus the D0 report on which of Wave 4's generated facts the toolchain can actually produce today"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
