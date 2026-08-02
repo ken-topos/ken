@@ -40,6 +40,27 @@ origin: "Architect second WIP audit evt_4t09329vdrf (2026-08-01), outcome (c). S
 > nothing was deferred into this slice. That is the staging working, and it is
 > the reason to hold this slice's controls to the same standard, not relax them.
 
+## RECUT 2026-08-02 — read the frame's amendment before resuming
+
+The Architect rejected exact `9d58df12` (`evt_70ssyb45tk3v3`,
+`dec_1smwstxyhh1q5`). **The `CheckedFrameBranchScope` mechanism is accepted and
+preserved unchanged**; the candidate is held, not published. Two blockers, both
+repaired in the frame's `Amendment 2026-08-02` section:
+
+1. **The candidate breaks its own in-crate test fixtures.** All four blobs under
+   `lowering/core/tests/` are byte-identical to the green base, so all 49
+   compile errors are candidate-attributable. They are `#[cfg(test)]`, so only a
+   test compile sees them, and CI runs `cargo test --workspace --locked`.
+   **Atomic repair with the capstone is forced** — the fixtures compile at the
+   base, so nothing can land ahead of it. New `D8`, `AC-9`, `AC-10`.
+2. **QA covered a fraction of the frame's surface.** No prior verdict transfers;
+   a fresh SHA needs a fresh round giving one verdict per named obligation.
+
+**49 is the floor, not the ceiling** — these tests have never run against this
+candidate. The assertion failures behind the compile errors are unmeasured, and
+a class-2 failure (an assertion the slice deliberately moved) is `AC-6`
+activation evidence, not a fixture to edit.
+
 ## Scope, as ruled
 
 Attach the exact call token at each producer alternative; emit the direct

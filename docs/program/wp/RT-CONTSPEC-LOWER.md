@@ -17,6 +17,141 @@
 
 ---
 
+## Amendment 2026-08-02 — the rejection of `dec_1smwstxyhh1q5`
+
+The Architect rejected exact `9d58df12` (`evt_70ssyb45tk3v3`). **The private
+`CheckedFrameBranchScope` branch-scope mechanism and its feature-gated harness
+are ACCEPTED and must be preserved unchanged.** Two terminal blockers stand, and
+this amendment is their binding repair. It adds `D8`, `AC-9`, `AC-10`, hard stop
+5, and an acceptance route; it changes nothing else in this frame.
+
+### The fixture break is candidate-attributable, and atomicity is forced
+
+Measured 2026-08-02, base `b66dea6a` against candidate `9d58df12`, under
+`crates/ken-runtime/src/cranelift_backend/lowering/core/tests/`:
+
+| fixture | blob at base | blob at candidate | |
+|---|---|---|---|
+| `constructors.rs` | `871f1dcc` | `871f1dcc` | identical |
+| `control.rs` | `7e4e1e4d` | `7e4e1e4d` | identical |
+| `effects.rs` | `cd846ea3` | `cd846ea3` | identical |
+| `mod.rs` | `7e04a628` | `7e04a628` | identical |
+
+All four are byte-identical to the merge base, the base compiles, and the
+candidate does not. So **every one of the 49 errors is a site where this
+candidate moved an API its own in-crate tests use.** `core.rs:11` gates the
+subtree `#[cfg(test)]`, so a plain `cargo build` never sees it and only a test
+compile does — which is how 31,942 insertions across four slices reached review
+without this surfacing.
+
+The Architect wrote *"before or atomically with the capstone."* **Before is not
+available**: the fixtures compile at the base, so a repair landing ahead of the
+capstone has nothing to repair. Atomic with the capstone is the only option
+left, and this node carries it.
+
+### 49 is the floor, not the ceiling
+
+These tests have never *run* against this candidate — they do not compile, so no
+run exists. The 49 errors are the population visible from outside a compile.
+**The population of assertion failures behind them is unmeasured.**
+
+A frame that says "make the fixtures compile" is discharged by a green compile
+and then reds on the run.
+
+### The error classes differ, and conflating them destroys evidence
+
+This is the only slice that activates, and these fixtures are the closest
+observers of lowering behaviour that exist.
+
+- **Class 1 — API drift.** The fixture names a symbol whose signature, arity, or
+  path moved. The call is retyped; the assertion is untouched. Mechanical,
+  carries no verdict content.
+- **Class 2 — ruled behavioural drift.** The fixture compiles, then asserts an
+  outcome this slice deliberately changed. **That failing assertion is an `AC-6`
+  observable** — it is the activation this slice exists to produce, reported by
+  the nearest available witness. Record it against `AC-6` and name the ruled
+  change that moved it.
+- **Class 3 — unruled behavioural drift.** The observable moved and no ruled
+  change accounts for it. Hard stop 5.
+
+**Editing a class-2 assertion so that it passes is the failure this amendment
+exists to prevent.** In the diff it is indistinguishable from a class-1 retype,
+it converts the campaign's best activation evidence into a green suite, and no
+later control recovers it — the fixture was the only thing watching.
+
+### D8 — fixture compatibility, in three ordered steps
+
+1. **Inventory.** Run `scripts/ken-cargo test -p ken-runtime --lib --no-run` and
+   capture the complete error list. Report the count; if it is not 49, say so
+   and say what moved.
+2. **Classify** every error into class 1, 2, or 3 **before editing any fixture**,
+   in a durable table: fixture file, symbol, class, and for class 1 the old and
+   new API spelling.
+3. **Repair class 1 only.** Then run the suite and classify every *failure* by
+   the same three classes.
+
+Banned inside `D8`: no fixture assertion may be weakened, deleted, or
+`#[ignore]`d, and no `#[cfg(test)]` module may be removed from the build. A
+fixture that cannot be repaired without changing what it asserts is class 2 or 3
+by definition, not a stubborn class 1.
+
+### AC-9 — `ken-runtime --lib` compiles and runs
+
+`scripts/ken-cargo test -p ken-runtime --lib` compiles with zero errors and the
+suite runs to completion. *Control:* the command and its output. A `--no-run`
+compile is step 1 of `D8`, not this AC.
+
+### AC-10 — the classification is complete and no class-2 assertion was edited
+
+Every error from `D8` step 1, and every assertion failure from `AC-9`'s run,
+appears in `D8`'s table with its class. *Control:*
+`git diff b66dea6a..<fresh SHA> -- <the four fixture paths>` read against the
+table — **every hunk must trace to a class-1 row.** A hunk that changes an
+assertion, an expected value, or a test attribute fails this AC.
+
+### AC-8, sharpened
+
+CI runs `cargo test --workspace --locked` (`.github/workflows/ci.yml:30`).
+"Green in CI" therefore covers **every `#[cfg(test)]` module in the workspace**,
+including in-crate ones that this candidate's own API changes break. A crate
+that builds while its test compile fails is not green.
+
+Per the Architect: excluding bulk fixture migration from the branch-scope
+correction did not waive `AC-8`, and the "after this capstone" timing in that
+earlier ruling is withdrawn. The narrow helper/harness ruling itself stands.
+
+### The acceptance route — a fresh SHA, and QA names the whole surface
+
+Approval `evt_6fchtyhx76qd3` covered the narrow target 3/3, `px7n` 2/2, two
+crate checks, and the diff check. The frame's surface is larger and **no prior
+verdict transfers.** A fresh QA round must give a verdict, one obligation per
+line, for each of:
+
+- `AC-1` direct call before the join, with the before/after discriminator
+- `AC-2` active-scalar/search route removed, shown by a case that took it
+- `AC-3` nested recursion at a load-bearing depth
+- `AC-4` the full 19-row population, each row named
+- `AC-5` the 761 `InvalidOffset` classification — **fixed or moved**, citing the
+  production error site that raises it
+- `AC-6` activation observables, including any class-2 finding from `D8`
+- `AC-7` no `#[cfg(test)]` deliverable
+- `AC-9` and `AC-10` above
+- `E-1` / `E-5` / `E-7`
+
+**A QA post that reports an aggregate, or that is silent on an obligation, does
+not discharge it.** Silence is not a pass.
+
+### Sizing — this is not outcome (c)
+
+One review round, one reject, and the mechanism was *accepted* in that reject.
+That is not the repeated-defeat signature that indicates a mis-sized WP. The
+surface is large — 31,942 insertions across 12 files — but it is large because
+four slices of production change are cumulative on this branch, and splitting
+now would re-open an accepted mechanism for re-review. **The bound goes on the
+acceptance route, not on the node:** `D8` plus the named-obligation QA above.
+
+---
+
 ## Fixed inputs
 
 **Base — a RULE, not a number.** Branch from `origin/main` **containing
@@ -258,3 +393,8 @@ runs concurrently.
 4. **The 19-row population cannot be run without a full-workspace local build.**
    ⇒ Route to the Steward for a CI path; ⛔ never run `--workspace` locally
    (`COORDINATION §12`).
+5. **A fixture assertion fails and no ruled change in this slice accounts for
+   the move** — class 3 in the 2026-08-02 amendment. Stop and route. That is
+   either an unruled behaviour change in the lowering or a defect inherited from
+   slices 0-2, and hard stop 1 governs the second. Do not edit the assertion to
+   find out which.
