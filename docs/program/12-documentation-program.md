@@ -68,8 +68,8 @@ from ownership I already hold, so they are settled here rather than sent up.
 ### D1. `library/` is explanatory and derived. `spec/` remains the sole normative authority. ✅ CONFIRMED
 
 `library/` **must not introduce normative language.** Where a reference page
-restates a rule for usability it cites the exact spec section, and a drift
-gate verifies that section still exists.
+restates a rule for usability it cites the exact spec section. Review verifies
+that the citation names a real section; no live runner checks it.
 
 This is the load-bearing decision. A polished duplicate that can drift is
 worse than an incomplete page that names its source — *honesty about the
@@ -122,7 +122,7 @@ stay in the canonical literate package entry, and the catalog reference
   `explanatory`, `tutorial`/`how-to`, `status`, `normative-pointer`) and its
   sources, in `library/manifest.toml`.
 - **A date is not evidence of currency.** Currency is a **source revision**,
-  recorded by generated `STATUS.md` and build output, never hand-edited into
+  recorded by generated `STATUS.md` at release points, never hand-edited into
   pages.
 - **Label capability honestly**: current / partial / planned / unavailable.
   **Planned syntax may never appear in a checked current example.**
