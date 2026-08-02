@@ -23,7 +23,7 @@ The verdicts distinguish two ways a row can close:
 | Runtime | `library/learn/reading-ken/06-execution.md` covers execution paths, marked partiality, and the native backend; `04-effects-capabilities-and-authority.md` covers effect rows, capabilities, and the checked-versus-host corpus boundary. | Explanatory: the chapters build execution and authority boundaries through narrative and cross-reading. | `none` |
 | Platform | `library/learn/reading-ken/06-execution.md` §“Native Backend” explains the backend boundary but is not a target lookup. The build-time emitter in `crates/ken-host/build.rs` writes target, target OS, backend, audited dependency identities, probed Linux ABI facts, and a manifest hash into `target_abi.rs`; `crates/ken-host/src/lib.rs` exposes the generated `TargetAbi`. It completes only for a Linux target equal to the build host and fails closed before generation for cross-target or non-Linux builds. | The existing human material is explanatory. The emitted facts are lookup-shaped but had no human reference page. | named gap `platform-current-facts`; authored as `library/reference/platform/README.md` with `partial` availability and explicit unavailable lanes. |
 | Diagnostics | The stipulated human corpus contains no diagnostics reference. The repo-wide census finds structured V4 diagnostics plus distinct `KernelError`, `RuntimeTrapCode`, and `IoErrorIdentityV1` identities in separate subsystems; it finds no one public registry or derivation interface that enumerates all of them. | No complete human lookup exists. Existing structured diagnostics are subsystem-specific, not a complete public inventory. | `not-producible`: Ken first needs a unified public diagnostic registry or derivation interface. |
-| Symbol index | No symbol-index page exists. The merged generation report records no symbol-index command or generator and no public-declaration inventory. | No human index exists to classify. | `not-producible`: Ken first needs a stable public-symbol/declaration inventory and an exporter over it. |
+| Symbol index | No symbol-index page exists. The repo-wide census finds a deterministic checked-core inventory of stable symbols and declarations, plus each elaborated scope's `pub` export table. The checked-core inventory includes non-public declarations, while the visibility-filtered export table is private compiler state and is not projected into the checked-core package. | No human index exists to classify. The two machine inventories carry complementary identity and visibility facts rather than one durable public-symbol inventory. | `not-producible`: Ken first needs a maintained visibility-filtered projection from public export identities to stable checked-core symbols, plus an exporter over that projection. |
 | Keyword index | No keyword-index page exists. `spec/30-surface/31-lexical.md` §4 carries a normative keyword proposal, while `crates/ken-elaborator/src/lexer.rs` carries the accepted token variants and spelling map. The repo-wide census finds these inventories but no exporter that derives a reader index from them. | No human index exists to classify. | `not-producible`: the inventories exist; a maintained extraction/export path does not. |
 | Diagnostic index | No diagnostic-index page exists. The diagnostics census above finds several real identity families but no unified public enumeration. | No complete human index exists to classify. | `not-producible`: the same unified public registry or derivation interface must exist before an index can be derived. |
 | Glossary index | No glossary page exists in `library/`. `spec/00-overview.md` §8 is the authoritative orientation glossary in a chapter normative for terminology. The repo-wide census finds that maintained source but no extraction path from it into `library/`. | No human lookup index exists to classify. | `not-producible`: the source exists; a maintained extraction/export path does not. |
@@ -31,8 +31,8 @@ The verdicts distinguish two ways a row can close:
 The named-gap set is exactly `{platform-current-facts}`, and the `D1` page set
 is exactly `{library/reference/platform/README.md}`. No row is `reclassify`.
 The other five undelivered promises remain mechanism-limited for the narrower
-reasons above; neither missing inventories nor a missing target emitter is
-claimed.
+reasons above. No row claims that all underlying inventories or a target
+emitter are absent.
 
 ## D3 mechanism findings
 
@@ -48,8 +48,10 @@ claimed.
    sources.
 4. The authoritative glossary source exists in `spec/00-overview.md` §8. What
    is missing is an extraction path into `library/`, not a term taxonomy.
-5. The symbol-index finding is unchanged: no stable public-declaration
-   inventory or exporter exists.
+5. Checked-core emission provides a stable symbol/declaration inventory, and
+   module elaboration provides visibility-filtered export tables. What is
+   missing is a durable projection that joins those facts into a maintained
+   public-symbol inventory, plus an exporter over that projection.
 
 These are candidate inputs to later implementation or documentation programs.
 This slice does not build the missing mechanisms.
@@ -131,6 +133,31 @@ cb2011e65082132943131fb7ecf1b38f3ea42763:spec/30-surface/31-lexical.md:522:## 4.
 The second command also returns the lexer's `Kw*` token variants at lines
 18–64 and its spelling map at lines 432–469. The two inventories are not
 treated as an already-generated public index.
+
+### Symbol and declaration census
+
+The repo-wide search returned 3,359 hits across 375 paths. It found both the
+stable checked-core inventory and the visibility-filtered module export table:
+
+```console
+$ git grep -nEi '(public[-_ ]?(symbol|declaration|export|inventory|index)|stable[-_ ]?(symbol|declaration)|CheckedCoreSemanticInputs|CheckedCorePackage|pub[-_ ]?export|export[-_ ]?table|symbols|declarations)' cb2011e65082132943131fb7ecf1b38f3ea42763 -- .
+$ git grep -nE 'pub struct CheckedCoreSemanticInputs|pub symbols:|pub declarations:|pub struct CheckedCorePackage|emit_checked_core_package|pub export table|pub.*export|publish_identity' cb2011e65082132943131fb7ecf1b38f3ea42763 -- crates/ken-elaborator/src/checked_core.rs crates/ken-elaborator/src/compiler_driver.rs crates/ken-elaborator/src/modules.rs
+cb2011e65082132943131fb7ecf1b38f3ea42763:crates/ken-elaborator/src/checked_core.rs:169:pub struct CheckedCoreSemanticInputs {
+cb2011e65082132943131fb7ecf1b38f3ea42763:crates/ken-elaborator/src/checked_core.rs:170:    pub symbols: BTreeSet<StableSymbol>,
+cb2011e65082132943131fb7ecf1b38f3ea42763:crates/ken-elaborator/src/checked_core.rs:171:    pub declarations: BTreeMap<StableSymbol, Vec<u8>>,
+cb2011e65082132943131fb7ecf1b38f3ea42763:crates/ken-elaborator/src/checked_core.rs:233:pub struct CheckedCorePackage {
+cb2011e65082132943131fb7ecf1b38f3ea42763:crates/ken-elaborator/src/checked_core.rs:1365:pub fn emit_checked_core_package(
+cb2011e65082132943131fb7ecf1b38f3ea42763:crates/ken-elaborator/src/modules.rs:1287:/// order, plus this scope's own `pub` export table.
+```
+
+`compiler_driver.rs:2949–3030` fills the stable-symbol and declaration maps
+before deterministic package emission. `modules.rs:49–54` stores each module's
+bare public name to canonical identity map, and `modules.rs:1593–1631` plus
+`1747–1753` populate it only for `pub` declarations. The checked-core package
+does not carry that export table, and the private `ModuleState` table is not a
+durable reader-facing projection. The missing mechanism is therefore the join
+between public visibility and stable checked-core identity, plus export of that
+joined inventory—not either underlying inventory.
 
 ### Diagnostics census
 
