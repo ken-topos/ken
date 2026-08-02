@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-ACTIVATE
 title: "ContinuationSpecialization seam 2 — lowering activation and exact-use consumption: direct call before the identity-erasing join, active emitted owner, affine call occurrence, JoinArm consumption, gating the 37-row lower-owned population"
-status: draft
+status: ready
 owner: runtime
 size: L
 gate: none
@@ -13,16 +13,28 @@ origin: "Architect ownership/sizing ruling evt_1yymw1gdszpbs (2026-08-02), outco
 
 # Seam 2 — the activation, scoped to the population that actually owns it
 
-> ## FROZEN 2026-08-02 — outcome (c), mis-sized at the target-binding boundary
+> ## RECUT AND RELEASED 2026-08-02 — the freeze is lifted
 >
-> **Architect `evt_2anwskscqz5fg`, correcting its own `evt_2a6dgqcn0yss4`.** Do
-> not start, resume, or QA this seam. `status` is `draft` and `depends_on` now
-> names `RT-WORKER-BIND`, so it cannot enter the frontier by either route.
+> **The substrate arrived.** `RT-WORKER-BIND` merged at `origin/main = 867cac7a`
+> (PR #1369), CI green, all six lowering paths blob-verified;
+> `RT-CONTSPEC-ASSEMBLY` was already `merged`. Architect `evt_2anwskscqz5fg`
+> deferred the recut on the explicit basis that "the substrate it recuts against
+> does not exist until then." It exists, so outcome (c)'s recut — the Steward's
+> to author — is written into the frame banner at
+> `docs/program/wp/RT-CONTSPEC-ACTIVATE.md`. `status` is now `ready`.
 >
-> **`dd0ca60e00baf9a413c397cf6892a8cf7fa23688` is preserved and
-> preservation-only.** It is not a base. Do not delete the consumer route, add
-> the four-field projection in isolation, fabricate a payload, begin D4/D5, or
-> route QA.
+> **`dd0ca60e00baf9a413c397cf6892a8cf7fa23688` remains preservation-only.** It
+> is not a base. Branch from `main` at or after `867cac7a`.
+>
+> **The frame banner is authoritative over the frame body**, which predates the
+> correction. Read it first; it names the four things the recut replaces and the
+> one gap it inherits.
+>
+> ⛔ The freeze's prohibitions that are now LIFTED, so nobody reads a stale ban:
+> deleting the consumer route, adding the four-field projection, and beginning
+> D4/D5 are all **now in scope** — they were forbidden only while the seam had
+> no lawful target-binding route. ⛔ Still forbidden: fabricating a payload
+> (that is recut item 1, and it is falsified, not merely unauthorized).
 >
 > **Retained as proved:** the function-scoped `PredeclaredFunctionId` transport
 > verified at `evt_53vaz7s3mg19r`, and the exact construct/alternative/sequence
@@ -83,13 +95,14 @@ callable identity is not a Closure` is also 37 rows and belongs to the
 **forbidden** slice-1 planner closure. Select by first-refusal kind and owner
 label together, never by count.
 
-The frame is `docs/program/wp/RT-CONTSPEC-ACTIVATE.md` — written 2026-08-02 while
-seam 1 was in flight (section 2a-bis), and **superseded by the freeze banner at
-the top of this node.** That sentence originally said the node was `ready` and
-gated only on seam 1 merging. Outcome (c) post-dates it: `status` is `draft`,
-`depends_on` names `RT-WORKER-BIND`, and **further framing is exactly what is
-owed** — the frame body below the freeze is pre-recut and is not live.
+The frame is `docs/program/wp/RT-CONTSPEC-ACTIVATE.md`. It has been through two
+corrections and the reading order matters:
 
-⇒ Read the banner, not this paragraph. The recut happens after
-`RT-WORKER-BIND` lands, because the substrate it recuts against does not exist
-until then.
+1. the **recut banner** at the top of the frame — authoritative, written
+   2026-08-02 once `RT-WORKER-BIND` landed;
+2. the frame **body**, which predates that correction and is live only where the
+   banner does not supersede it.
+
+**The framing debt this node used to carry is discharged.** `status` is `ready`
+and both `depends_on` entries (`RT-CONTSPEC-ASSEMBLY`, `RT-WORKER-BIND`) are
+`merged`, so the node is on the frontier by both routes.
