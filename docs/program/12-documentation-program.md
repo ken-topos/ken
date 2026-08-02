@@ -1,9 +1,11 @@
 # 12 — The documentation program (`library/`)
 
-**Status:** Framed 2026-07-21. **Waves 0, 1 and 2 are LANDED** — `library/`
-carries 26 documents (`library/STATUS.md`). Wave 3 and beyond remain map only;
-Wave 1b and the `ffi-and-platform` task module stay deferred. Currency
-re-measured at `origin/main = 6de2a099`, 2026-08-01, at the doc-track restart.
+**Status:** Framed 2026-07-21. `library/` carries **89 registered documents**.
+Waves 0–3 are landed; Wave 4 is partial (5 of 10 Produces items landed), Wave 5
+is partial (6 of 10), and Wave 6 is partial (1 of 4). Every residual is behind
+a named gate; none is releasable now. Wave 1b and the `ffi-and-platform` task
+module stay deferred. Currency was last re-measured at
+`origin/main = 6de2a099`, 2026-08-01, at the doc-track restart.
 **Owner:** the **doc team** (§0); Steward (frame, sequencing, gates).
 **Source proposal:** `research/librarian-documentation-program-proposal.md`
 (Research, 2026-07-18).
@@ -189,10 +191,10 @@ that inherits its substrate**, and there is no parallel track to catch it.
 | 1 | The read-Ken spine, **fragment-based** — introduction, quickstart, reading curriculum taught from real checked package fragments. **Complete-program work DEFERRED to Wave 1b** | ✅ **LANDED** — `issues/DOC-W1.md`; chapters 01–06, fragments, exercises, solutions, quickstart, introduction all present and registered |
 | **1b** | The whole-program reading pass: curriculum ch. 7, worked end-to-end review with an explicit verdict, on one real catalog **program** | not framed — ⛔ **gated on basic capabilities landing** (operator, 2026-07-22) |
 | 2 | Agent core + task packs; refactor product facts out of `write-ken`; cold-context evals. **`ffi-and-platform` deferred** | ✅ **LANDED** — `issues/DOC-W2.md`; four agent core modules, six task modules/packs, schemas, cold-context fixtures, recorded eval results |
-| 3 | Conceptual guide + how-tos; `catalog/guide/` migration (**fences verified per file before it moves, §3**) | map only — §4b · its §3 precondition is **RECONCILED**, see below — no longer a blocker |
-| 4 | Complete reader-oriented reference | map only — §4b |
-| 5 | Comprehensive catalog reference (**re-check D4 first**) | map only — §4b |
-| 6 | Release, offline, continuous as-built operation | map only — §4b |
+| 3 | Conceptual guide + how-tos; `catalog/guide/` migration (**fences verified per file before it moves, §3**) | ✅ **LANDED** — 9 of 9 Produces items; see §4b and `program-wave-reconciliation.md` |
+| 4 | Complete reader-oriented reference | **PARTIAL** — 5 of 10 landed; 5 deferred behind named generation or projection gates (§4b) |
+| 5 | Comprehensive catalog reference | **PARTIAL** — 6 of 10 landed; platform, maturity, dependency, and reverse-dependency indexes deferred behind named fact gates (§4b) |
+| 6 | Release, offline, continuous as-built operation | **PARTIAL** — agent-pack evaluation landed; the other 3 of 4 items are deferred or foreclosed by the dated §4b gates |
 
 **Wave 0's exit condition is the one that matters:** a new page cannot land
 without declaring what it is, what grounds it, and how its currency is
@@ -500,7 +502,7 @@ selects a pack. **This is a refactor with two live consumers — the fleet's own
 seats and any external agent — so the frame must inventory both before moving
 a fact.**
 
-### Wave 3 — conceptual guide and how-tos (MAP · fence precondition RECONCILED)
+### Wave 3 — conceptual guide and how-tos (LANDED · 9 of 9)
 
 **Produces.** `library/guide/` filled in demand order — contracts, dependent
 data, proofs, effects, security, packages, execution — plus `library/how-to/`
@@ -546,7 +548,7 @@ feature.
 > which is the mistake this program has already made on L5 and V3. The per-
 > subject coverage table is in `docs/program/issues/DOC-W3-DEPDATA.md`.
 
-### Wave 4 — complete reader-oriented reference (MAP)
+### Wave 4 — complete reader-oriented reference (PARTIAL · 5 of 10)
 
 **Produces.** `library/reference/` across language, verification, toolchain,
 runtime, platform, and diagnostics, plus the symbol, keyword, diagnostic, and
@@ -582,7 +584,7 @@ complete, current answer without reading the normative spec front to back.*
 > is aspirational syntax by another name. Label it `unavailable` and say why,
 > or leave it out.
 
-### Wave 5 — comprehensive catalog reference (MAP · re-check D4 FIRST)
+### Wave 5 — comprehensive catalog reference (PARTIAL · 6 of 10)
 
 **Produces.** One generated reference page or card per live package, plus
 subject, declaration/type, law, effect/capability, assurance, platform,
@@ -603,7 +605,7 @@ accomplish and by the exact checked abstractions available.*
 confidently wrong, and where a generated fact matters it needs an anchor the
 generator does not produce.
 
-### Wave 6 — release, offline, continuous as-built operation (MAP)
+### Wave 6 — release, offline, continuous as-built operation (PARTIAL · 1 of 4)
 
 **Produces.** Static searchable HTML and an offline artifact from the same
 sources; versioned snapshots and migration notes once public releases begin;
