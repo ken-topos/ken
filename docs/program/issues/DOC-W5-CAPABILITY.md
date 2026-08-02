@@ -1,7 +1,7 @@
 ---
 id: DOC-W5-CAPABILITY
 title: "Wave 5 precondition — the Librarian's format-capability report: which of Wave 5's nine fact classes the checked artifact format can express today, and therefore whether Wave 5 is authorable or blocked on a generator"
-status: ready
+status: merged
 owner: doc
 size: S
 gate: none

@@ -56,9 +56,15 @@ Measured at `origin/main = 40f8757d`.
 ## Deliverables
 
 - **D1 — the extracted helper.** `CheckedFrameBranchScope` and its
-  feature-gated harness, re-established on current `main`,
-  **unactivated**. No call site
-  selects it; no behaviour changes.
+  feature-gated harness, re-established on current `main`. **No behaviour
+  changes**: the helper encapsulates the per-branch scoping the landed
+  `lower_forked_branch` already performs inline, operation for operation, and
+  decides nothing new.
+  ⛔ **This deliverable formerly read "unactivated. No call site selects it,"
+  and that clause is RETIRED with `AC-3`'s** (ruled `evt_5p6exqgphrwxj`). Its
+  effect was to require a helper wired to nothing, which is the vacuity `D3`
+  exists to prevent. **Production call sites routing through the helper are
+  expected here** — what may not change is any emission authority.
 - **D2 — the untouched-surface proof.** A blob-identity table showing every
   slice 0-2 surface listed above at the candidate equals its blob on the
   candidate's merge base. **Blob identity, not a diff summary** — a `--stat`
@@ -95,11 +101,22 @@ Measured at `origin/main = 40f8757d`.
   that exact substitution is what let the previous node reach a 138-failure
   surprise.
   *Control:* the run output, pass/fail counts shown.
-- **AC-3 — nothing is activated.** No production path selects the helper; the
-  emission authority selected for every program is unchanged from the merge
-  base.
+- **AC-3 — nothing is specialized.** The emission authority selected for every
+  program is unchanged from the merge base, and no specialization decision is
+  made or changed.
   *Control:* a before/after authority comparison on the governed programs, both
-  taken on this seam's own base.
+  taken on this seam's own base. ⛔ **A green suite does not discharge this** —
+  a behaviour-preserving refactor's green suite says nothing about what it
+  added.
+  ⛔ **This AC formerly opened "No production path selects the helper," and that
+  clause is RETIRED** (ruled `evt_5p6exqgphrwxj`, on QA's block of
+  `767e7795`). It contradicted `D3`: the helper cannot be connected to
+  `Lowering::consumed_subcontinuation_frames` while no production path
+  references it. **The retired clause was passed by the vacuous candidate
+  `a7ab9efa` and failed by the real one** — a criterion with that polarity is
+  measuring the wrong thing. What "activation" means here is **an emission
+  authority changing**, which is seam 2's whole content; extracting existing
+  bookkeeping into a helper decides nothing and specializes nothing.
 - **AC-4 — the candidate's diff touches no planner, ABI, or substrate file.**
   *Control:* the path list of `git diff --name-only <merge-base> <candidate>`.
   Any of the six surfaces appearing here fails the seam outright.
@@ -114,7 +131,11 @@ Measured at `origin/main = 40f8757d`.
 
 ## Banned scope
 
-- **No activation of any kind.** That is seam 2.
+- **No specialization of any kind.** No emission authority may change and no
+  specialization decision may be made or changed. That is seam 2, and it is the
+  whole of what "activation" means in this campaign. ⇒ **A production call site
+  referencing the helper is NOT activation**, and citing this line against one
+  is the retired reading of `AC-3`.
 - **No edit to any slice 0-2 surface** (`AC-4`). If the helper cannot compose
   without one, that is **hard stop 1**, not a small exception.
 - **No planner or ABI repair**, however well-evidenced a refusal looks. On a
