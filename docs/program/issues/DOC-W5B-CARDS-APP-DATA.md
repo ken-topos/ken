@@ -1,7 +1,7 @@
 ---
 id: DOC-W5B-CARDS-APP-DATA
 title: "Wave 5 slice 2 — apply the settled card format to Application (3) and Data (11): fourteen complete cards"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
