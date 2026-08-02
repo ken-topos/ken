@@ -84,5 +84,12 @@ callable identity is not a Closure` is also 37 rows and belongs to the
 label together, never by count.
 
 The frame is `docs/program/wp/RT-CONTSPEC-ACTIVATE.md` — written 2026-08-02 while
-seam 1 is in flight (section 2a-bis). Node is `ready`; release is gated on seam 1
-merging, not on further framing.
+seam 1 was in flight (section 2a-bis), and **superseded by the freeze banner at
+the top of this node.** That sentence originally said the node was `ready` and
+gated only on seam 1 merging. Outcome (c) post-dates it: `status` is `draft`,
+`depends_on` names `RT-WORKER-BIND`, and **further framing is exactly what is
+owed** — the frame body below the freeze is pre-recut and is not live.
+
+⇒ Read the banner, not this paragraph. The recut happens after
+`RT-WORKER-BIND` lands, because the substrate it recuts against does not exist
+until then.
