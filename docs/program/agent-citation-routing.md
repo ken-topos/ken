@@ -141,7 +141,7 @@ The same resolved closures measured in tokens are:
 | `read-review` | 2,093 | 2,212 | +119 |
 | `write-pure` | 2,825 | 2,979 | +154 |
 | `write-effectful` | 3,356 | 3,547 | +191 |
-| `author-package` | 3,305 | 3,459 | +154 |
+| `author-package` | 3,284 | 3,438 | +154 |
 | `repair-proof` | 3,230 | 3,384 | +154 |
 | `diagnose` | 2,120 | 2,239 | +119 |
 

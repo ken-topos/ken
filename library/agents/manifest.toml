@@ -3,7 +3,8 @@
 # `measured_tokens` uses `unicode-whitespace-v1`: Rust `str::split_whitespace`
 # over the complete UTF-8 file. A module value measures that module. A pack
 # value is the sum of the unique transitive module includes, dependencies first.
-# The targeted gate recomputes every value.
+# The repository defines `unicode_whitespace_tokens`, but it currently has no
+# call sites; no targeted gate recomputes every declared value.
 
 schema_version = 1
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
@@ -121,7 +122,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["contract-order", "sources-exist", "token-measurement"]
-measured_tokens = 480
+measured_tokens = 459
 
 [[module]]
 id = "tasks/prove-or-repair"
@@ -246,7 +247,7 @@ sources = [
 ]
 revision = "a9860e9c1617e98799ac408fad8ef1e9c7085443"
 validation = ["pack-graph", "evaluation-coverage", "schema", "token-measurement"]
-measured_tokens = 3459
+measured_tokens = 3438
 
 [[pack]]
 id = "repair-proof"
