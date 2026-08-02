@@ -26,8 +26,8 @@ pub(super) use static_transition::{
 // `RT-CONTSPEC-ACTIVATE` `D1` — the activation projection's facade route.
 // Namespace re-exports only: no wrapper, no derivation, no second authority.
 pub(super) use static_transition::{
-    ContinuationCallIdentity, ContinuationCallView, ContinuationSpecializationId,
-    ContinuationUnitView,
+    ContinuationCallIdentity, ContinuationCallView, ContinuationInputView,
+    ContinuationOrdinaryEnvelopeRole, ContinuationSpecializationId, ContinuationUnitView,
 };
 #[cfg(test)]
 pub(super) use static_transition::with_last_io_error_role_omitted;

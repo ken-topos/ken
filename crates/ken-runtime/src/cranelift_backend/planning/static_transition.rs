@@ -779,11 +779,6 @@ impl<'plan> ContinuationUnitView<'plan> {
     pub(in crate::cranelift_backend) fn continuation_inputs(
         &self,
     ) -> Result<Vec<ContinuationInputView>, CraneliftBackendError> {
-        let parameter_slots = self
-            .slots
-            .iter()
-            .filter(|slot| slot.kind == AbiSlotKind::Parameter)
-            .count();
         self.key
             .continuation_inputs
             .iter()

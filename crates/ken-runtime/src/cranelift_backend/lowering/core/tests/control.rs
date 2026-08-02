@@ -3642,10 +3642,12 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
         Census {
             file: "lowering/units.rs",
             source: include_str!("../../units.rs"),
-            // One builder/definition for the public root adapter and one
-            // builder/definition site for the loop-defined internal units.
-            builders: 2,
-            definitions: 2,
+            // One builder/definition for the public root adapter, one for the
+            // loop-defined internal units, and one for
+            // `RT-CONTSPEC-ACTIVATE` `D2`'s continuation bodies, which is
+            // present but not yet wired into the emission path.
+            builders: 3,
+            definitions: 3,
             // Two declaration sites: the emittable unit bundle, and
             // `RT-CONTSPEC-ACTIVATE` `D2`'s forward declaration of one target
             // per planned continuation specialization. The second is a

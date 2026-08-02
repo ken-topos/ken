@@ -76,8 +76,8 @@ pub(in crate::cranelift_backend) use super::planning::{
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
     CheckedOrientedMarkerSets, ConstructorIdentity, ContinuationCallIdentity, ContinuationCallView,
-    ContinuationSpecializationId, ContinuationUnitView, EmittableCallKind, EmittableUnit,
-    JoinPlanToken,
+    ContinuationInputView, ContinuationOrdinaryEnvelopeRole, ContinuationSpecializationId,
+    ContinuationUnitView, EmittableCallKind, EmittableUnit, JoinPlanToken,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };

@@ -5678,7 +5678,7 @@ impl<'a> Lowering<'a> {
     /// rejects before any worker call could be emitted. `captures` arrive as
     /// `LoweringOperand` and are stored unchanged: a carried capture stays
     /// carried, and nothing here converts a phase.
-    fn construct_static_worker_binding(
+    pub(super) fn construct_static_worker_binding(
         &self,
         closure_origin: StaticOriginId,
         body_origin: StaticOriginId,
@@ -5912,7 +5912,7 @@ impl<'a> Lowering<'a> {
     /// place the lowering reaches a body by *searching* (by constructor name),
     /// and a search recovers no position — so every such site enumerates to
     /// recover the index rather than deriving identity from the match it found.
-    fn case_body_occurrence<'x>(
+    pub(super) fn case_body_occurrence<'x>(
         &self,
         parent: StaticOriginId,
         index: usize,

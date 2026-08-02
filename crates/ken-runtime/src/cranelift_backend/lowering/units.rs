@@ -610,6 +610,284 @@ pub(in crate::cranelift_backend) fn resolve_continuation_targets(
     Ok(resolved)
 }
 
+/// **`RT-CONTSPEC-ACTIVATE` `D2` — define each declared continuation target
+/// from its own projected contract.**
+///
+/// Operands come from the **descriptor**: each `Parameter` and `Capture` slot
+/// is loaded at the offset `slot_offsets` assigns it. ⛔ Function parameter 0
+/// is not the payload, and the `Result` slot is never read -- it is
+/// caller-initialized, and this body only writes it.
+///
+/// The partition is the ruled one: `Parameter` operands are the ordinary
+/// envelope (nonrecursive producer fields, then selected worker captures in
+/// capture-ordinal order), and `Capture` operands are the continuation inputs
+/// by ordinal. The worker binding is built by the **existing** static-worker
+/// constructor, and the semantic environment is the sole
+/// `LoweringEnvironmentBinding` authority -- no parallel operand map and no
+/// worker-body de Bruijn table.
+#[allow(dead_code)] // Wired in and reverted this turn -- see the checkpoint
+                    // message for the fixture that reddened and why the wiring
+                    // is not being guessed at.
+pub(super) fn define_continuation_bodies<M: Module>(
+    module: &mut M,
+    compiler: &mut Lowering<'_>,
+    helpers: ArtifactHelpers<'_>,
+    bundle: &UnitBundle,
+) -> Result<usize, CraneliftBackendError> {
+    // Own every projected fact BEFORE the loop: the projection borrows the
+    // plan, and the definition below needs the compiler mutably.
+    struct OwnedContinuationEmission {
+        id: ContinuationSpecializationId,
+        slots: Vec<AbiSlot>,
+        offsets: Vec<u32>,
+        envelope: Vec<ContinuationOrdinaryEnvelopeRole>,
+        inputs: Vec<ContinuationInputView>,
+        continuation_origin: StaticOriginId,
+        producer_alternative: u32,
+        worker_closure_origin: StaticOriginId,
+        worker_body_origin: StaticOriginId,
+        worker_declared_arity: u32,
+        worker_capture_count: usize,
+    }
+    // `RT-WORKER-BIND` `D4` exposes its local declaration operation for a
+    // separately emitted caller; a continuation function is exactly that, so
+    // it declares its own worker refs rather than borrowing another's.
+    let worker_targets = resolve_worker_targets(&compiler.static_transition_plan, bundle)?;
+    let emissions = compiler
+        .static_transition_plan
+        .continuation_units()?
+        .into_iter()
+        .map(|unit| {
+            let (offsets, _frame_bytes) = unit.slot_offsets()?;
+            Ok(OwnedContinuationEmission {
+                id: unit.id(),
+                slots: unit.slots().to_vec(),
+                offsets,
+                envelope: unit.ordinary_envelope()?,
+                inputs: unit.continuation_inputs()?,
+                continuation_origin: unit.continuation_origin(),
+                producer_alternative: unit.producer_alternative(),
+                worker_closure_origin: unit.worker_closure_origin(),
+                worker_body_origin: unit.worker_body_origin(),
+                worker_declared_arity: unit.worker_declared_arity(),
+                worker_capture_count: unit.worker_capture_count(),
+            })
+        })
+        .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+
+    let mut defined = 0usize;
+    for unit in emissions {
+        let id = bundle.continuation(unit.id).ok_or_else(|| {
+            backend_module(
+                "a planned continuation specialization was never forward-declared".to_string(),
+            )
+        })?;
+        let offsets = unit.offsets.as_slice();
+        let envelope = &unit.envelope;
+        let inputs = &unit.inputs;
+        let slots = unit.slots.as_slice();
+        if slots.len() != offsets.len() {
+            return Err(backend_module(
+                "a continuation slot run disagrees with its own offset walk".to_string(),
+            ));
+        }
+
+        // Reject BEFORE definition on partition incompleteness: the ordinary
+        // envelope must cover every Parameter slot, and the continuation
+        // inputs must cover every Capture slot densely by ordinal.
+        let parameter_slots: Vec<_> = slots
+            .iter()
+            .zip(offsets)
+            .filter(|(slot, _)| slot.kind == AbiSlotKind::Parameter)
+            .collect();
+        let capture_slots: Vec<_> = slots
+            .iter()
+            .zip(offsets)
+            .filter(|(slot, _)| slot.kind == AbiSlotKind::Capture)
+            .collect();
+        if parameter_slots.len() != envelope.len() {
+            return Err(backend_module(
+                "the ruled ordinary envelope does not cover the Parameter slot run".to_string(),
+            ));
+        }
+        if capture_slots.len() != inputs.len() {
+            return Err(backend_module(
+                "the projected continuation inputs do not cover the Capture slot run".to_string(),
+            ));
+        }
+        for (position, input) in inputs.iter().enumerate() {
+            if input.ordinal as usize != position {
+                return Err(backend_module(
+                    "continuation inputs are not dense in ordinal order".to_string(),
+                ));
+            }
+        }
+        // Provenance: every worker capture role must name the worker this key
+        // selected, so an envelope built against another closure rejects.
+        for role in envelope.iter() {
+            if let ContinuationOrdinaryEnvelopeRole::WorkerCapture { closure_origin, .. } = role {
+                if *closure_origin != unit.worker_closure_origin {
+                    return Err(backend_module(
+                        "an ordinary-envelope worker capture names a different closure than the \
+                         selected worker"
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+
+        let sig = unit_signature(module);
+        let mut func =
+            Function::with_name_signature(UserFuncName::user(0, id.as_u32()), sig);
+        let result_offset = slots
+            .iter()
+            .zip(offsets)
+            .find(|(slot, _)| slot.kind == AbiSlotKind::Result)
+            .map(|(_, offset)| *offset)
+            .ok_or_else(|| {
+                backend_module("continuation frame declares no result slot".to_string())
+            })?;
+        let trap_offset = slots
+            .iter()
+            .zip(offsets)
+            .find(|(slot, _)| slot.kind == AbiSlotKind::Trap)
+            .map(|(_, offset)| *offset)
+            .ok_or_else(|| {
+                backend_module("continuation frame declares no trap slot".to_string())
+            })?;
+
+        let mut function_local = helpers.declare_in_func(module, &mut func, None);
+        function_local.worker_calls = worker_targets.declare_in_func(module, &mut func);
+        let mut func_ctx = FunctionBuilderContext::new();
+        {
+            let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
+            let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
+            builder.switch_to_block(entry);
+            let envelope_pointer = builder.block_params(entry)[0];
+            let frame = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                envelope_pointer,
+                crate::activation_services::UNIT_CALL_FRAME_SLOTS,
+            );
+            function_local.bind_unit_trap_frame(
+                frame,
+                i32::try_from(trap_offset).map_err(|_| {
+                    backend_module("continuation trap slot offset exceeds range".to_string())
+                })?,
+            )?;
+            compiler.function_local = function_local;
+
+            // Descriptor-only loads. Each operand is read from the slot the
+            // descriptor assigns it, and from nowhere else.
+            let load_at = |builder: &mut FunctionBuilder<'_>, offset: u32| {
+                let offset = i32::try_from(offset).map_err(|_| {
+                    backend_module("continuation slot offset exceeds addressable range".to_string())
+                })?;
+                Ok::<_, CraneliftBackendError>(LoweringOperand::Carried(CarriedBoundaryWord {
+                    word: builder.ins().load(types::I64, MemFlags::trusted(), frame, offset),
+                }))
+            };
+
+            let mut ordinary = Vec::with_capacity(parameter_slots.len());
+            for (_, offset) in &parameter_slots {
+                ordinary.push(load_at(&mut builder, **offset)?);
+            }
+            let mut carried_inputs = Vec::with_capacity(capture_slots.len());
+            for (_, offset) in &capture_slots {
+                carried_inputs.push(load_at(&mut builder, **offset)?);
+            }
+
+            // The ordered capture segment for the selected worker: the
+            // envelope's `WorkerCapture` roles, in capture-ordinal order,
+            // taking each one's operand from its own Parameter position.
+            let mut worker_captures = Vec::new();
+            for (position, role) in envelope.iter().enumerate() {
+                if matches!(role, ContinuationOrdinaryEnvelopeRole::WorkerCapture { .. }) {
+                    worker_captures.push(ordinary[position].clone());
+                }
+            }
+            if worker_captures.len() != unit.worker_capture_count {
+                return Err(backend_module(
+                    "the ordinary envelope's worker-capture segment disagrees with the selected \
+                     worker's capture count"
+                        .to_string(),
+                ));
+            }
+
+            // The EXISTING constructor, with the projected identity and arity.
+            let worker = compiler.construct_static_worker_binding(
+                unit.worker_closure_origin,
+                unit.worker_body_origin,
+                unit.worker_declared_arity,
+                unit.worker_capture_count,
+                worker_captures,
+            )?;
+
+            // The semantic case environment, through the sole binding
+            // authority: the continuation inputs in ordinal order, then the
+            // worker installed in the selected case's binder order.
+            let mut env: Vec<LoweringEnvironmentBinding> = carried_inputs
+                .into_iter()
+                .map(LoweringEnvironmentBinding::Value)
+                .collect();
+            env.insert(0, LoweringEnvironmentBinding::StaticWorker(worker));
+
+            // Exact body recovery: the selected case of the computational
+            // frame this continuation belongs to, by its own alternative.
+            let frame_occurrence =
+                compiler.retained_body_occurrence(unit.continuation_origin)?;
+            let RuntimeExpr::ComputationalMatch { cases, .. } = frame_occurrence.expr else {
+                return Err(backend_module(
+                    "a continuation origin does not resolve to a computational frame".to_string(),
+                ));
+            };
+            let alternative = unit.producer_alternative as usize;
+            let case = cases.get(alternative).ok_or_else(|| {
+                backend_module(
+                    "the projected producer alternative is outside the frame's case run"
+                        .to_string(),
+                )
+            })?;
+            let body = compiler.case_body_occurrence(
+                frame_occurrence.static_origin,
+                alternative,
+                &case.body,
+            )?;
+            let lowered = compiler.lower_expr(&mut builder, body, &env)?;
+
+            // The Result slot is WRITTEN here and never read.
+            let word = match lowered {
+                LoweringOperand::Carried(carried) => carried.word,
+                LoweringOperand::Specialized(value) => {
+                    compiler.emit_result(&mut builder, value)?.0
+                }
+            };
+            let result_offset = i32::try_from(result_offset).map_err(|_| {
+                backend_module("continuation result slot offset exceeds range".to_string())
+            })?;
+            builder
+                .ins()
+                .store(MemFlags::trusted(), word, frame, result_offset);
+            let zero = builder.ins().iconst(types::I64, 0);
+            builder.ins().return_(&[zero]);
+            builder.seal_all_blocks();
+            builder.finalize();
+        }
+        // Verify, then define THIS function -- a fresh context here would
+        // define an empty body and silently discard everything emitted above.
+        verify_cranelift_function(&func, module.isa())?;
+        let mut ctx = module.make_context();
+        std::mem::swap(&mut ctx.func, &mut func);
+        module
+            .define_function(id, &mut ctx)
+            .map_err(|error| backend_module(error.to_string()))?;
+        defined += 1;
+    }
+    Ok(defined)
+}
+
 pub(super) fn define_root_adapter<M: Module>(
     module: &mut M,
     compiler: &mut Lowering<'_>,
