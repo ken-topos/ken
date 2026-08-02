@@ -26,7 +26,7 @@ under a clear home.
 |---|---|---|---|
 | `DOC-CATALOG.RQ-1` | functional | Every catalog entry presents **one** consistent, named navigation section, spelled the same way across the corpus. | `none` — the catalog is first-party product documentation; no conformance row governs entry headings |
 | `DOC-CATALOG.RQ-2` | functional | Entry format facts have **exactly one authoring home**, and every consumer that describes the format agrees with the entries. ⚠ Consumers may assert the format in prose without quoting a heading. | `none` — an internal-consistency property |
-| `DOC-CATALOG.RQ-3` | functional | **Ken fence content is byte-preserved** across any documentation-format change. A doc sweep may never alter Ken source. | the catalog's Ken fences are checked by the library documentation gates |
+| `DOC-CATALOG.RQ-3` | functional | **Ken fence content is byte-preserved** across any documentation-format change. A doc sweep may never alter Ken source. | `none` — migration candidates prove byte preservation by comparison; no standing library-validation runner enforces it |
 | `DOC-CATALOG.RQ-4` | functional | Generated library artifacts — the source-attestation ledger, `REVISION`/`STATUS.md`, and `library/agents/manifest.toml` token measures — are **consistent with the entries they describe**, including transitively. | `none` — a derived-artifact currency property |
 | `DOC-CATALOG.RQ-5` | non-functional | A catalog entry remains **readable to different depths** — a reader can orient without reading the whole entry. ⭐ Recorded because removing the named reading paths retires *one mechanism* for this; the requirement it served does not retire with it. | `none` — a quality bound, not a checkable row |
 
@@ -89,8 +89,8 @@ The four purposes are colinear, not competing, when the entry is a **literate
   sections and contents list.
 - Purpose 2 is what purposes 1+3 *produce* when done well: verified + literate
   + proof-carrying + novel.
-- Purpose 4 (Findings) falls out of the act of authoring, captured in a
-  standing section.
+- Purpose 4 (Findings) falls out of the act of authoring and routes through the
+  live gap-escalation flow.
 
 The per-entry standard format that carries these layers is the subject of
 `07-catalog-style-guide.md`. This charter fixes the *purpose, home, and layout*;
@@ -348,8 +348,9 @@ often discovers the proof before the clearest presentation of it.
    honest, and the WP's acceptance criteria are met.
 2. **Catalog refinement.** A follow-on WP raises the landed component to the
    standard entry format: literate narrative, contents navigation, examples,
-   laws, References, Findings, naming, and behavior-preserving refactor. This is a
-   planned step, not optional cleanup, and it does not weaken proof obligations.
+   laws, References, naming, and behavior-preserving refactor. Findings route
+   through the live gap-escalation flow. This is a planned step, not optional
+   cleanup, and it does not weaken proof obligations.
 
 The durable standard is `07-catalog-style-guide.md`. The Steward records a
 refinement follow-on for any component whose entry is not yet guide-quality.
