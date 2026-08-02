@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-ASSEMBLY
 title: "ContinuationSpecialization seam 1 — the lawful assembly: extract the accepted branch-scope helper and its feature-gated harness onto the landed slice 0-2 blobs, unactivated, and prove the prior-slice surfaces are untouched"
-status: ready
+status: merged
 owner: runtime
 size: M
 gate: none
