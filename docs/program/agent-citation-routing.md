@@ -323,24 +323,38 @@ record in `docs/program/12-documentation-program.md` §4. The ordered result is:
    status generation and comparison as CI-backed. **Recorded only:** the file
    is a frozen release-point artifact and remains byte-identical. Its producer
    is corrected here, so the truthful wording lands at the next release point.
-4. `scripts/gen-doc-status.sh:133-136,315-320,674-688` coupled the manual
-   generator to per-PR CI, automatic registry execution, a build-failing gate,
-   and CI-backed regeneration. **Folded here:** it now describes shallow
-   checkout handling, manual `--check`, inventory absence, and release-point
-   commands without inventing live enforcement.
+4. `scripts/gen-doc-status.sh:9,133-136,315-320,674-688` coupled the manual
+   generator to CI idempotency, per-PR CI, automatic registry execution, a
+   build-failing gate, and CI-backed regeneration. **Folded here:** it now
+   describes local/release-point idempotency, shallow-checkout handling, manual
+   `--check`, inventory absence, and release-point commands without inventing
+   live enforcement.
 5. `scripts/gen-source-attestations.sh:39-47` said the nonexistent
    `registered_record_validation_gates_run` executed the retained validators
    and acted as a safety net. **Folded here:** it distinguishes synthetic
    mismatch tests from the release-point review that compares the duplicated
    extractors.
 
-The same sweep found historical descriptions of the removed runner under
-`docs/program/issues/`, `docs/program/wp/`, and `docs/program/diary/`. They are
-**recorded only and intentionally unchanged**: they describe the mechanism at
-the time, its removal, or a superseded frame assumption rather than asserting
-that the runner is live now. `docs/program/12-documentation-program.md:223-245`
-is the current control and explicitly records that the registry is unreachable
-and migration checks are local rather than standing CI.
+The historical runner-name census is exact and **recorded only**:
+
+- `docs/program/diary/2026/Jul/25.md:1116,1234` records the runner's observed
+  implication and failure while it was live.
+- `docs/program/issues/LIB-GATE-DECOUPLE.md:66,164,169,200` records the observed
+  failure, the classifier trap, the former test body, and the removal finding.
+- `docs/program/wp/LIB-GATE-DECOUPLE-remove-the-ci-coupling.md:51,56,104`
+  preserves the same classifier trap, former test body, and failing control in
+  the work-package frame that removed the coupling.
+- `docs/program/issues/DOC-ATTEST-LIVING.md:11,20,55` records the former failure
+  and explicitly retires its live premise after the coupling was removed.
+- `docs/program/wp/RT-FNSPLIT-B2A-S-selection-defunctionalization.md:346` and
+  `docs/program/wp/RT-FNSPLIT-B2A-C-plan-lowering-correspondence.md:369` retain
+  superseded warnings from the period when the runner still fired in CI.
+
+All six files remain intentionally unchanged: they are dated evidence,
+removal records, or superseded frame assumptions rather than current product
+assurances. `docs/program/12-documentation-program.md:223-245` is the current
+control and explicitly records that the registry is unreachable and migration
+checks are local rather than standing CI.
 
 Three ruled product pages were also examined explicitly:
 `library/introduction.md`,

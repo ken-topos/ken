@@ -6,7 +6,7 @@
 # documentation-program.md §2: "a date is not evidence of currency — a
 # source revision is"). This script is the single source of truth for it,
 # mirroring scripts/gen-progress.sh's shape: plain bash + standard tools,
-# a --check mode for CI idempotency, no new dependencies.
+# a --check mode for local/release-point idempotency, no new dependencies.
 #
 # Why the revision is an EXPLICIT INPUT, not `git rev-parse HEAD` computed
 # here (librarian QA finding 1, thr_74hvpkqnxjp9q, second pass): computing
