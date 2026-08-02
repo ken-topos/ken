@@ -11,6 +11,19 @@ github: null
 origin: Architect ruling evt_3t7t27e3rv8cx (2026-07-29), outcome 2 on the Steward's PX8-ERRID-ALLOC wall discriminator (evt_s2kv0wttb5f7). Measured by the Architect in a detached scratch worktree with diagnostic-only labels against exact ad7298fb. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
+> # SUPERSEDED EDGE 2026-08-02 — READ THIS BEFORE ANY REFERENCE BELOW
+>
+> [[RT-CONTSPEC-LOWER]] is **`closed`**, superseded by a four-seam recut
+> (Architect `evt_1yymw1gdszpbs`, outcome (c)). **Every reference to it below
+> now means [[RT-CONTSPEC-WITNESS]]**, the terminal seam that carries the
+> three-node closure. The seams are [[RT-CONTSPEC-ASSEMBLY]] ->
+> [[RT-CONTSPEC-ACTIVATE]] -> [[RT-CONTSPEC-LEDGER]] -> [[RT-CONTSPEC-WITNESS]],
+> each branching from `main` after its predecessor lands.
+>
+> The closure timing below is unchanged in kind: this node still closes when the
+> terminal seam merges, in one tracker commit. Only the name of that seam moved.
+
+
 > # ⛔⛔ RECUT 2026-08-01 — ITS `D7` NO LONGER DELIVERS DIRECTLY
 >
 > ⛔ Read this before anything below.

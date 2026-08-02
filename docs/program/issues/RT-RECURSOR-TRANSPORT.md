@@ -5,11 +5,24 @@ status: active
 owner: runtime
 size: L
 gate: none
-depends_on: [RT-CONTSPEC-LOWER]
+depends_on: [RT-CONTSPEC-WITNESS]
 blocks: [RT-DESCENT-RETIRE]
 github: null
 origin: Operator directive 2026-07-29 — prioritize replacement of RecursiveDescent, migrate the remaining residual classes, do not linger half-migrated. Campaign docs/program/16-recursive-descent-retirement.md. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
+
+> # SUPERSEDED EDGE 2026-08-02 — READ THIS BEFORE ANY REFERENCE BELOW
+>
+> [[RT-CONTSPEC-LOWER]] is **`closed`**, superseded by a four-seam recut
+> (Architect `evt_1yymw1gdszpbs`, outcome (c)). **Every reference to it below
+> now means [[RT-CONTSPEC-WITNESS]]**, the terminal seam that carries the
+> three-node closure. The seams are [[RT-CONTSPEC-ASSEMBLY]] ->
+> [[RT-CONTSPEC-ACTIVATE]] -> [[RT-CONTSPEC-LEDGER]] -> [[RT-CONTSPEC-WITNESS]],
+> each branching from `main` after its predecessor lands.
+>
+> The closure timing below is unchanged in kind: this node still closes when the
+> terminal seam merges, in one tracker commit. Only the name of that seam moved.
+
 
 > # ⛔⛔ RECUT 2026-08-01 — THIS NODE NO LONGER DELIVERS DIRECTLY
 >
@@ -38,8 +51,9 @@ origin: Operator directive 2026-07-29 — prioritize replacement of RecursiveDes
 > `fbfa2403`, 173 files, +4267/−7885). It is a **prototype and reference**,
 > ⛔ **not a green checkpoint and not acceptance evidence.**
 >
-> ⚠ **`depends_on` now names [[RT-CONTSPEC-LOWER]].** That edge encodes *this
-> node closes after slice 3*, which is exactly right. ⛔ It does **not** reopen
+> ⚠ **`depends_on` names [[RT-CONTSPEC-WITNESS]]** (it named
+> [[RT-CONTSPEC-LOWER]] until the 2026-08-02 recut). That edge encodes *this
+> node closes after the terminal seam*, which is exactly right. ⛔ It does **not** reopen
 > the atomicity note below — see it for why [[RT-DECL-CLOSURE-PORT]] is still
 > not a dependency.
 
