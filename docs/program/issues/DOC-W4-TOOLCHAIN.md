@@ -43,12 +43,18 @@ pages in.
 
 ## Why the toolchain reference is the right first slice
 
-It is the one Wave 4 surface that needs **no generator at all** and is already
-measured. The CLI is closed at seven subcommands, its flags are two
-(`fmt --check`, and `native-build`'s positional output directory), and its exit
-behaviour is uniform: every failure path exits 1 except `run`, which propagates
-the program's own status. `DOC-W3-HOWTO` already established the observe-don't-
-paraphrase discipline over this same surface and produced five recipes from it.
+It is the one Wave 4 surface that needs **no generator at all**, and it is small
+and closed: seven subcommands, three options in five accepted spellings
+(`fmt --check`, `--version` / `-V`, `--help` / `-h`), one positional argument
+that is not a flag (`native-build`'s `<output-dir>`), and three exit-status
+classes. `DOC-W3-HOWTO` already established the observe-don't-paraphrase
+discipline over this same surface and produced five recipes from it.
+
+⚠ **An earlier version of this paragraph called the flag count two and the exit
+behaviour uniform. Both were false** — they came from reading `print_help` and
+counting one `exit` value rather than running the tool and enumerating. The
+frame's fixed-inputs table is authoritative and carries the measured surface
+with line numbers; this paragraph only motivates the slice.
 
 So this slice delivers a real reference page set on a surface that is small,
 closed, and verifiable by running the tool — while its D0 answers the question
