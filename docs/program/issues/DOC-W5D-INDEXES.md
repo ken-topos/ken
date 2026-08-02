@@ -1,7 +1,7 @@
 ---
 id: DOC-W5D-INDEXES
 title: "Wave 5 closeout — build the four cross-package indexes the cards can support (declaration/type, law, effect/capability, assurance) and record why the four held-class indexes cannot be built"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
