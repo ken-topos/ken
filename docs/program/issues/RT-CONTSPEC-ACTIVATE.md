@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-ACTIVATE
 title: "ContinuationSpecialization seam 2 — lowering activation and exact-use consumption: direct call before the identity-erasing join, active emitted owner, affine call occurrence, JoinArm consumption, gating the 37-row lower-owned population"
-status: draft
+status: ready
 owner: runtime
 size: L
 gate: none
@@ -33,5 +33,17 @@ is wrong and that is a hard stop, not a scope adjustment.
 
 Branches from `main` after seam 1 lands, and carries only its own delta.
 
-Frame owed before release. The Steward writes it while seam 1 is in flight
-(section 2a-bis).
+## Two things the frame settles that this node must not be read without
+
+**The scope oracle is seam 1's `D4`, not the `46d29783` census.** That census
+labels only 35 of the 37 lower-owned rows; the other 2 sit inside the 39 rows it
+records as "ownership matrix pending." Selecting from it silently drops two rows.
+
+**"37" names two disjoint populations.** Lower-owned is 37 rows; `producer
+callable identity is not a Closure` is also 37 rows and belongs to the
+**forbidden** slice-1 planner closure. Select by first-refusal kind and owner
+label together, never by count.
+
+The frame is `docs/program/wp/RT-CONTSPEC-ACTIVATE.md` — written 2026-08-02 while
+seam 1 is in flight (section 2a-bis). Node is `ready`; release is gated on seam 1
+merging, not on further framing.
