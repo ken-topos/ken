@@ -5420,6 +5420,93 @@ impl<'a> Lowering<'a> {
     /// makes selection closed is therefore not one caller but that
     /// `Lowered::Closure`/`DeclarationClosure` carry only a tag — so this is the
     /// *only* way any of them can reach a term at all.
+    /// **`D3` -- the callee-only consumer.**
+    ///
+    /// Emits the call to a statically-bound worker: validate the argument
+    /// count against the declared arity, lower the explicit arguments in
+    /// source order, append the stored captures **without phase conversion**,
+    /// resolve this function's own `DeclaredUnitCall` by exact body origin,
+    /// and call it through `call_declared_unit_target`.
+    ///
+    /// There is no `call_indirect`, no runtime selection, no tag or layout
+    /// dispatch, no environment decode, and no body re-lowering: the target is
+    /// a declared unit and the call is an ordinary direct call to it.
+    ///
+    /// The target comes from `worker_calls`, which was minted **into this
+    /// function** (`D4`). Reading it here rather than from the binding is what
+    /// keeps a `FuncRef` from ever crossing a function boundary.
+    fn call_static_worker(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        worker: &StaticWorkerBinding,
+        args: &[RuntimeExpr],
+        static_origin: StaticOriginId,
+        env: &[LoweringEnvironmentBinding],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let supplied = u32::try_from(args.len()).map_err(|_| {
+            unsupported("Call", "call argument count exceeds addressable range")
+        })?;
+        if supplied != worker.declared_arity {
+            return Err(unsupported(
+                "Call",
+                format!(
+                    "static worker expects {} arguments but call provides {supplied}",
+                    worker.declared_arity
+                ),
+            ));
+        }
+
+        // Explicit arguments in source order: argument `i` is child `1 + i` of
+        // the `Call` occurrence, the callee being child `0`.
+        let mut inputs = args
+            .iter()
+            .enumerate()
+            .map(|(position, argument)| {
+                let argument = self.child_occurrence(static_origin, 1 + position, argument)?;
+                self.lower_expr(builder, argument, env)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Stored captures follow, unchanged. A carried capture stays carried:
+        // there is deliberately no conversion on this edge, which is the whole
+        // reason the binding holds operands rather than templates.
+        inputs.extend(worker.captures.iter().cloned());
+
+        let target = self
+            .function_local
+            .worker_calls
+            .get(&worker.body_origin)
+            .cloned()
+            .ok_or_else(|| {
+                unsupported(
+                    "Call",
+                    format!(
+                        "no worker call target for body origin {:?} was declared into this \
+                         function",
+                        worker.body_origin
+                    ),
+                )
+            })?;
+        if target.origin != worker.body_origin {
+            return Err(unsupported(
+                "Call",
+                format!(
+                    "worker call target carries origin {:?} but the binding names body origin \
+                     {:?}",
+                    target.origin, worker.body_origin
+                ),
+            ));
+        }
+
+        self.call_declared_unit_target(
+            builder,
+            target,
+            &inputs,
+            #[cfg(test)]
+            None,
+        )
+    }
+
     /// **`D2` -- the binder-lowering helper.** Lowers a `Let`'s bound value
     /// into the one binding authority.
     ///
@@ -7623,6 +7710,29 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::Call { callee, args } => {
                 let join_plan = self.consumed_join_plan_token(static_origin)?;
                 let callee = self.child_occurrence(static_origin, 0, callee)?;
+                // **`D3` -- THE SOLE CONSUMER of a static worker binding.**
+                //
+                // Only a `Call` whose callee is an exact `Var` resolving to
+                // `StaticWorker` may consume one, and this is the only place
+                // that reads the arm without going through `value_at`. It sits
+                // ahead of every other callee route precisely so the binding is
+                // consumed here or fails closed everywhere else: a `Var`
+                // resolving to `Value` falls through to the pre-existing paths
+                // untouched.
+                if let RuntimeExpr::Var(index) = callee.expr {
+                    if let Some(LoweringEnvironmentBinding::StaticWorker(worker)) =
+                        env.get(*index as usize)
+                    {
+                        let worker = worker.clone();
+                        return self.call_static_worker(
+                            builder,
+                            &worker,
+                            args,
+                            static_origin,
+                            env,
+                        );
+                    }
+                }
                 if matches!(
                     self.body_emission_authority,
                     BodyEmissionAuthority::FunctionizedUnits

@@ -5038,3 +5038,158 @@ fn static_worker_construction_rejects_slot_run_against_header() {
         "rejects for the slot-run reason: {error:?}"
     );
 }
+
+// ─── RT-WORKER-BIND `D3`/`D4` — the callee-only consumer and its escapes ────
+
+/// Drives one lowering of `subject` in a function whose environment binds a
+/// static worker at de Bruijn index 0.
+///
+/// `declare_target` decides whether this function has a worker call target
+/// declared for the binding's body origin, which is the `D4` axis; the
+/// binding's own arity is the `D3` axis.
+#[cfg(test)]
+fn lower_against_static_worker(
+    subject: &RuntimeExpr,
+    declared_arity: u32,
+    declare_target: bool,
+) -> Result<LoweringOperand, CraneliftBackendError> {
+    let source = worker_source();
+    let (plan, root) = planned_root_occurrence(&source);
+    let closure_origin = plan
+        .child_static_origin(root, 0)
+        .expect("the Let's bound value is planned as child 0");
+    let body_origin = plan
+        .child_static_origin(closure_origin, 0)
+        .expect("a lexical closure plans its body as child 0");
+    let (subject_plan, subject_origin) = planned_root_occurrence(subject);
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = bare_carrier_test_lowering(&seed_env, subject_plan);
+    if declare_target {
+        compiler
+            .function_local
+            .worker_calls
+            .insert(body_origin, worker_descriptor(body_origin, declared_arity, 1));
+    }
+    let env = [LoweringEnvironmentBinding::StaticWorker(StaticWorkerBinding {
+        closure_origin,
+        body_origin,
+        declared_arity,
+        captures: vec![LoweringOperand::Specialized(Lowered::Bytes(b"cap".to_vec()))],
+    })];
+    let mut func = Function::with_name_signature(
+        UserFuncName::user(0, 0),
+        cranelift_codegen::ir::Signature::new(cranelift_codegen::isa::CallConv::SystemV),
+    );
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    compiler.lower_expr(
+        &mut builder,
+        SourceOccurrence {
+            expr: subject,
+            static_origin: subject_origin,
+        },
+        &env,
+    )
+}
+
+/// `LoweringOperand` has no `Debug` either, so worker-consumer rejections are
+/// destructured rather than reached for with `expect_err`.
+#[cfg(test)]
+fn expect_lowering_rejection(
+    result: Result<LoweringOperand, CraneliftBackendError>,
+) -> CraneliftBackendError {
+    match result {
+        Ok(_) => panic!("lowering produced an operand where it must fail closed"),
+        Err(error) => error,
+    }
+}
+
+/// A bare `Var` naming the worker is a value-producing position and fails
+/// closed: a static worker binding has no value representation.
+#[test]
+fn static_worker_fails_closed_in_value_position() {
+    let subject = RuntimeExpr::Var(0);
+    let error = expect_lowering_rejection(lower_against_static_worker(&subject, 1, true));
+    assert!(
+        format!("{error:?}").contains("value-producing position"),
+        "fails closed for the value-position reason: {error:?}"
+    );
+}
+
+/// The same binding used as an aggregate field fails closed before any
+/// carrier transfer, rather than entering the constructor's argument list.
+#[test]
+fn static_worker_fails_closed_as_aggregate_field() {
+    let subject = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::Box::Wrap".to_string(),
+        args: vec![RuntimeExpr::Var(0)],
+    };
+    let error = expect_lowering_rejection(lower_against_static_worker(&subject, 1, true));
+    assert!(
+        format!("{error:?}").contains("value-producing position"),
+        "fails closed for the value-position reason: {error:?}"
+    );
+}
+
+/// The same binding as a match scrutinee fails closed.
+///
+/// This control sits on the scrutinee rather than on an ordinary call's
+/// argument, and the reason is a measured one: with a non-closure callee the
+/// `Call` arm rejects the callee before it lowers any argument, so a worker in
+/// that position is never reached and a control there would pass for the
+/// wrong reason. The scrutinee is reached directly.
+#[test]
+fn static_worker_fails_closed_as_match_scrutinee() {
+    let subject = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Var(0)),
+        cases: vec![crate::RuntimeMatchCase {
+            constructor: "ctor:fixture::Box::Wrap".to_string(),
+            binders: 0,
+            body: RuntimeExpr::Value(RuntimeValue::Int(1.into())),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "worker scrutinee control".to_string(),
+        },
+    };
+    let error = expect_lowering_rejection(lower_against_static_worker(&subject, 1, true));
+    assert!(
+        format!("{error:?}").contains("value-producing position"),
+        "fails closed for the value-position reason: {error:?}"
+    );
+}
+
+/// The consumer is reached through the exact `Var` callee, and validates the
+/// supplied argument count against the binding's declared arity.
+#[test]
+fn static_worker_call_rejects_arity_disagreement() {
+    let subject = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Var(0)),
+        args: vec![
+            RuntimeExpr::Value(RuntimeValue::Int(1.into())),
+            RuntimeExpr::Value(RuntimeValue::Int(2.into())),
+        ],
+    };
+    let error = expect_lowering_rejection(lower_against_static_worker(&subject, 1, true));
+    assert!(
+        format!("{error:?}").contains("static worker expects"),
+        "reaches the consumer and rejects on arity: {error:?}"
+    );
+}
+
+/// `D4`: a worker whose body origin was never declared into this function
+/// rejects, rather than reaching for another function's target.
+#[test]
+fn static_worker_call_rejects_undeclared_target() {
+    let subject = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Var(0)),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+    };
+    let error = expect_lowering_rejection(lower_against_static_worker(&subject, 1, false));
+    assert!(
+        format!("{error:?}").contains("was declared into this"),
+        "rejects for the undeclared-target reason: {error:?}"
+    );
+}
