@@ -4759,3 +4759,280 @@ fn b2f_d9_a_no_pair_spillable_crosses_on_its_own_tag() {
          tell a per-variant tag from a hardcoded one"
     );
 }
+
+// ─── RT-WORKER-BIND `D2` — the construction route's pre-installation facts ───
+
+/// A planned `Let` whose bound value is a lexical closure with one capture.
+///
+/// The origins come from the plan, positionally, exactly as `D2` projects
+/// them: the closure is the `Let`'s child `0`, the worker body is the
+/// closure's child `0`, and capture `i` is the closure's child `1 + i`.
+#[cfg(test)]
+fn worker_source() -> RuntimeExpr {
+    RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::LexicalClosure {
+            captures: vec![RuntimeExpr::Value(RuntimeValue::Int(7.into()))],
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Var(0)),
+        }),
+        body: Box::new(RuntimeExpr::Var(0)),
+    }
+}
+
+/// A descriptor that agrees with itself: `parameters` parameters, `captures`
+/// captures, one slot per declared item, and an offset per slot.
+#[cfg(test)]
+fn worker_descriptor(
+    origin: StaticOriginId,
+    parameters: u32,
+    captures: u32,
+) -> units::DeclaredUnitCall {
+    let mut slots = Vec::new();
+    for ordinal in 0..parameters {
+        slots.push(AbiSlot {
+            kind: AbiSlotKind::Parameter,
+            carrier: AbiCarrier::ValueWord,
+            ownership: AbiOwnership::OwnedByFrame,
+            storage_owner: AbiStorageOwner::ActivationFrame,
+            width_bytes: 8,
+            align_bytes: 8,
+            ordinal,
+        });
+    }
+    for ordinal in 0..captures {
+        slots.push(AbiSlot {
+            kind: AbiSlotKind::Capture,
+            carrier: AbiCarrier::ValueWord,
+            ownership: AbiOwnership::OwnedByFrame,
+            storage_owner: AbiStorageOwner::ActivationFrame,
+            width_bytes: 8,
+            align_bytes: 8,
+            ordinal,
+        });
+    }
+    let offsets = (0..slots.len() as u32).map(|index| index * 8).collect();
+    units::DeclaredUnitCall {
+        function: cranelift_codegen::ir::FuncRef::from_u32(0),
+        origin,
+        header: AbiFrameHeader {
+            parameters,
+            captures,
+            frame_bytes: (slots.len() as u32) * 8,
+            align_bytes: 8,
+        },
+        slots,
+        offsets,
+    }
+}
+
+/// Drives one construction attempt against a descriptor the caller shapes.
+///
+/// Returns the route's own verdict, so a test asserts on the construction
+/// rather than on some later emission.
+#[cfg(test)]
+fn attempt_worker_construction(
+    install: impl FnOnce(StaticOriginId, StaticOriginId) -> Option<units::DeclaredUnitCall>,
+    declared_arity: u32,
+    source_capture_count: usize,
+    capture_operands: usize,
+) -> Result<StaticWorkerBinding, CraneliftBackendError> {
+    let source = worker_source();
+    let (plan, root) = planned_root_occurrence(&source);
+    let closure_origin = plan
+        .child_static_origin(root, 0)
+        .expect("the Let's bound value is planned as child 0");
+    let body_origin = plan
+        .child_static_origin(closure_origin, 0)
+        .expect("a lexical closure plans its body as child 0");
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+    if let Some(target) = install(body_origin, closure_origin) {
+        compiler.function_local.unit_calls.insert(body_origin, target);
+    }
+    // `Lowered::Bytes` needs no emitted value, so the fixture builds captures
+    // without a builder. The route is phase-agnostic by design -- it stores
+    // operands unchanged -- so the descriptor facts below are what is under
+    // test, not the capture phase.
+    let captures = (0..capture_operands)
+        .map(|index| {
+            LoweringOperand::Specialized(Lowered::Bytes(format!("capture{index}").into_bytes()))
+        })
+        .collect::<Vec<_>>();
+    compiler.construct_static_worker_binding(
+        closure_origin,
+        body_origin,
+        declared_arity,
+        source_capture_count,
+        captures,
+    )
+}
+
+/// `StaticWorkerBinding` deliberately has no `Debug` (it holds
+/// `LoweringOperand`, which has none), so the tests below destructure rather
+/// than reach for `expect`/`expect_err`.
+#[cfg(test)]
+fn expect_worker_rejection(
+    result: Result<StaticWorkerBinding, CraneliftBackendError>,
+) -> CraneliftBackendError {
+    match result {
+        Ok(_) => panic!("the construction route installed a binding where it must reject"),
+        Err(error) => error,
+    }
+}
+
+#[cfg(test)]
+fn expect_worker_binding(
+    result: Result<StaticWorkerBinding, CraneliftBackendError>,
+) -> StaticWorkerBinding {
+    match result {
+        Ok(binding) => binding,
+        Err(error) => panic!("an agreeing descriptor must install: {error:?}"),
+    }
+}
+
+/// The route succeeds when every declared fact agrees, and stores exactly the
+/// projected origins, arity and captures.
+#[test]
+fn static_worker_construction_installs_on_agreeing_descriptor() {
+    let binding = expect_worker_binding(attempt_worker_construction(
+        |origin, _| Some(worker_descriptor(origin, 1, 1)),
+        1,
+        1,
+        1,
+    ));
+    assert_eq!(binding.declared_arity, 1);
+    assert_eq!(binding.captures.len(), 1);
+    assert!(
+        matches!(&binding.captures[0], LoweringOperand::Specialized(Lowered::Bytes(value))
+            if value == b"capture0"),
+        "captures are stored unchanged, in order"
+    );
+    assert_ne!(
+        binding.closure_origin, binding.body_origin,
+        "the closure occurrence and its child-0 body are distinct origins"
+    );
+}
+
+/// A worker body with no declared static-body target in this function rejects
+/// before installation, rather than yielding a binding that could later be
+/// called.
+#[test]
+fn static_worker_construction_rejects_missing_target() {
+    let error = expect_worker_rejection(attempt_worker_construction(|_, _| None, 1, 1, 1));
+    assert!(
+        format!("{error:?}").contains("no declared static-body target"),
+        "rejects for the missing-target reason, not some later one: {error:?}"
+    );
+}
+
+/// A declared unit call recorded against a different body origin is a
+/// wrong-body fact and rejects.
+#[test]
+fn static_worker_construction_rejects_wrong_body_origin() {
+    let error = expect_worker_rejection(attempt_worker_construction(
+        |origin, other| {
+            let mut target = worker_descriptor(origin, 1, 1);
+            // Point the entry at the closure's own origin -- a real planned
+            // origin that is not the body -- while leaving the entry keyed
+            // under the worker's body origin.
+            target.origin = other;
+            Some(target)
+        },
+        1,
+        1,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("but the worker body origin is"),
+        "rejects for the wrong-body reason: {error:?}"
+    );
+}
+
+/// A descriptor whose parameter count disagrees with the source closure's
+/// declared arity rejects.
+#[test]
+fn static_worker_construction_rejects_wrong_arity() {
+    let error = expect_worker_rejection(attempt_worker_construction(
+        |origin, _| Some(worker_descriptor(origin, 2, 1)),
+        1,
+        1,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("parameters but the source closure declares"),
+        "rejects for the wrong-arity reason: {error:?}"
+    );
+}
+
+/// A descriptor whose capture count disagrees with the projected capture
+/// vector rejects.
+#[test]
+fn static_worker_construction_rejects_wrong_capture_count() {
+    let error = expect_worker_rejection(attempt_worker_construction(
+        |origin, _| Some(worker_descriptor(origin, 1, 2)),
+        1,
+        1,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("captures but"),
+        "rejects for the wrong-capture reason: {error:?}"
+    );
+}
+
+/// A capture vector that disagrees with the retained definition rejects before
+/// the descriptor is even consulted.
+#[test]
+fn static_worker_construction_rejects_capture_count_against_definition() {
+    let error = expect_worker_rejection(attempt_worker_construction(
+        |origin, _| Some(worker_descriptor(origin, 1, 1)),
+        1,
+        2,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("were projected"),
+        "rejects against the retained definition: {error:?}"
+    );
+}
+
+/// A descriptor whose slot run disagrees with its own offsets rejects, so the
+/// binding never carries a layout it did not take unchanged.
+#[test]
+fn static_worker_construction_rejects_slot_offset_disagreement() {
+    let error = expect_worker_rejection(attempt_worker_construction(
+        |origin, _| {
+            let mut target = worker_descriptor(origin, 1, 1);
+            target.offsets.pop();
+            Some(target)
+        },
+        1,
+        1,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("offsets"),
+        "rejects for the layout-agreement reason: {error:?}"
+    );
+}
+
+/// A descriptor whose slot run disagrees with its header's counts rejects.
+#[test]
+fn static_worker_construction_rejects_slot_run_against_header() {
+    let error = expect_worker_rejection(attempt_worker_construction(
+        |origin, _| {
+            let mut target = worker_descriptor(origin, 1, 1);
+            // Header still claims one parameter and one capture; the slot run
+            // now carries two captures and no parameter.
+            target.slots[0].kind = AbiSlotKind::Capture;
+            Some(target)
+        },
+        1,
+        1,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("slot run declares"),
+        "rejects for the slot-run reason: {error:?}"
+    );
+}

@@ -1440,10 +1440,9 @@ enum LoweringEnvironmentBinding {
     /// static-body unit. Its sole admissible use is as the callee of a `Call`
     /// with an exact `Var` callee; every value-producing position rejects it.
     ///
-    /// Nothing constructs this arm yet -- the construction route is `D2`, and
-    /// the callee-only consumer is `D3`. `D1` installs the authority and the
-    /// fail-closed rejections that guard it.
-    #[allow(dead_code)]
+    /// `D2` constructs this arm from a lexical closure's retained occurrence.
+    /// The callee-only consumer is `D3`, so nothing *reads* the binding's
+    /// fields in production yet -- see the note on [`StaticWorkerBinding`].
     StaticWorker(StaticWorkerBinding),
 }
 
@@ -1456,6 +1455,10 @@ enum LoweringEnvironmentBinding {
 /// A `FuncRef` deliberately does **not** live here: it belongs to one Cranelift
 /// `Function`, and the target is declared afresh into each generated function
 /// (`D4`).
+///
+/// `D2` writes every field; the reader is `D3`'s callee-only consumer, which
+/// is why the fields are still allowed to be unread. Remove the allow when
+/// `D3` lands rather than leaving it to outlive its reason.
 #[derive(Clone)]
 #[allow(dead_code)]
 struct StaticWorkerBinding {
