@@ -76,12 +76,6 @@ pub use artifact::api::{
 #[cfg(feature = "px8-ds-test-support")]
 pub use lowering::with_px8ds_retired_flat_order;
 
-#[cfg(feature = "px8-ds-test-support")]
-#[doc(hidden)]
-pub use lowering::core::{
-    run_frame_scope_harness, FrameScopeHarnessMutation, FrameScopeHarnessWitness,
-};
-
 // ⛔ This list is DERIVED, not authored: it is exactly the set of module-level
 // bare-`pub` items in `surface.rs`, enumerated mechanically and checked for set
 // equality in BOTH directions. A name dropped here vanishes from

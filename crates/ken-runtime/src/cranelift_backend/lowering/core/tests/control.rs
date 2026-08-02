@@ -101,6 +101,44 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
     }
 }
 
+fn assert_exact_frame_scope(witness: FrameScopeHarnessWitness) {
+    assert!(witness.first_consume_succeeds);
+    assert!(witness.same_successor_duplicate_rejected);
+    assert!(witness.second_successor_first_consume_succeeds);
+    assert!(witness.post_join_duplicate_rejected);
+}
+
+#[test]
+fn checked_frame_branch_scope_harness_uses_live_lowering_ledger() {
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut lowering = root_authority_test_lowering(&seed_env);
+
+    assert_exact_frame_scope(CheckedFrameBranchScope::harness(
+        &mut lowering.consumed_subcontinuation_frames,
+        FrameScopeHarnessMutation::Exact,
+    ));
+
+    let mut lowering = root_authority_test_lowering(&seed_env);
+    let shared = CheckedFrameBranchScope::harness(
+        &mut lowering.consumed_subcontinuation_frames,
+        FrameScopeHarnessMutation::SharedLedger,
+    );
+    assert!(shared.first_consume_succeeds);
+    assert!(shared.same_successor_duplicate_rejected);
+    assert!(!shared.second_successor_first_consume_succeeds);
+    assert!(shared.post_join_duplicate_rejected);
+
+    let mut lowering = root_authority_test_lowering(&seed_env);
+    let dropped = CheckedFrameBranchScope::harness(
+        &mut lowering.consumed_subcontinuation_frames,
+        FrameScopeHarnessMutation::DropUnion,
+    );
+    assert!(dropped.first_consume_succeeds);
+    assert!(dropped.same_successor_duplicate_rejected);
+    assert!(dropped.second_successor_first_consume_succeeds);
+    assert!(!dropped.post_join_duplicate_rejected);
+}
+
 #[cfg(test)]
 fn run_px8j_malformed_recursor_consumer(
     consumer: Px8jDirectRecursorConsumer,

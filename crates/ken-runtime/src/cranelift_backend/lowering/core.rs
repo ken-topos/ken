@@ -29,7 +29,7 @@ fn recursive_position_unit_calls() -> usize {
     RECURSIVE_POSITION_UNIT_CALLS.with(std::cell::Cell::get)
 }
 
-type ConsumedSubcontinuationFrame = (Option<PredeclaredFunctionId>, u64, u64);
+type ConsumedSubcontinuationFrame = (u64, u64);
 
 /// Transactions checked-frame consumption across mutually exclusive lowering
 /// successors. A successor begins at the common predecessor baseline, while
@@ -59,31 +59,35 @@ impl CheckedFrameBranchScope {
         self.union
     }
 
-    #[cfg(feature = "px8-ds-test-support")]
-    fn harness(mut self, mutation: FrameScopeHarnessMutation) -> FrameScopeHarnessWitness {
-        let key = (None, 71, 23);
+    #[cfg(any(test, feature = "px8-ds-test-support"))]
+    fn harness(
+        consumed: &mut BTreeSet<ConsumedSubcontinuationFrame>,
+        mutation: FrameScopeHarnessMutation,
+    ) -> FrameScopeHarnessWitness {
+        let key = (71, 23);
+        let mut scope = Self::capture(consumed);
 
-        let mut first_successor = self.start_successor();
+        let mut first_successor = scope.start_successor();
         let first_consume_succeeds = first_successor.insert(key);
         let same_successor_duplicate_rejected = !first_successor.insert(key);
-        self.merge_successor(&first_successor);
+        scope.merge_successor(&first_successor);
 
         let mut second_successor = match mutation {
             FrameScopeHarnessMutation::SharedLedger => first_successor.clone(),
             FrameScopeHarnessMutation::Exact | FrameScopeHarnessMutation::DropUnion => {
-                self.start_successor()
+                scope.start_successor()
             }
         };
         let second_successor_first_consume_succeeds = second_successor.insert(key);
-        self.merge_successor(&second_successor);
+        scope.merge_successor(&second_successor);
 
-        let mut after_join = match mutation {
-            FrameScopeHarnessMutation::DropUnion => self.baseline,
+        *consumed = match mutation {
+            FrameScopeHarnessMutation::DropUnion => scope.baseline,
             FrameScopeHarnessMutation::Exact | FrameScopeHarnessMutation::SharedLedger => {
-                self.finish()
+                scope.finish()
             }
         };
-        let post_join_duplicate_rejected = !after_join.insert(key);
+        let post_join_duplicate_rejected = !consumed.insert(key);
 
         FrameScopeHarnessWitness {
             first_consume_succeeds,
@@ -94,30 +98,21 @@ impl CheckedFrameBranchScope {
     }
 }
 
-#[cfg(feature = "px8-ds-test-support")]
-#[doc(hidden)]
+#[cfg(any(test, feature = "px8-ds-test-support"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct FrameScopeHarnessWitness {
-    pub first_consume_succeeds: bool,
-    pub same_successor_duplicate_rejected: bool,
-    pub second_successor_first_consume_succeeds: bool,
-    pub post_join_duplicate_rejected: bool,
+struct FrameScopeHarnessWitness {
+    first_consume_succeeds: bool,
+    same_successor_duplicate_rejected: bool,
+    second_successor_first_consume_succeeds: bool,
+    post_join_duplicate_rejected: bool,
 }
 
-#[cfg(feature = "px8-ds-test-support")]
+#[cfg(any(test, feature = "px8-ds-test-support"))]
 #[derive(Clone, Copy)]
-pub enum FrameScopeHarnessMutation {
+enum FrameScopeHarnessMutation {
     Exact,
     SharedLedger,
     DropUnion,
-}
-
-#[cfg(feature = "px8-ds-test-support")]
-#[doc(hidden)]
-pub fn run_frame_scope_harness(
-    mutation: FrameScopeHarnessMutation,
-) -> FrameScopeHarnessWitness {
-    CheckedFrameBranchScope::capture(&BTreeSet::new()).harness(mutation)
 }
 
 /// The closed production routes that still require retained recursive descent.
@@ -4359,8 +4354,8 @@ impl<'a> Lowering<'a> {
                 .icmp_imm(cranelift_codegen::ir::condcodes::IntCC::Equal, nat.value, 0);
         builder.ins().brif(is_zero, zero_block, &[], suc_block, &[]);
 
-        let frame_baseline = self.consumed_subcontinuation_frames.clone();
-        let mut frame_union = frame_baseline.clone();
+        let mut frame_scope =
+            CheckedFrameBranchScope::capture(&self.consumed_subcontinuation_frames);
         for (arm_name, block, case_body, predecessor) in [
             ("Zero", zero_block, zero_body, None),
             ("Suc", suc_block, suc_body, Some(predecessor)),
@@ -4390,8 +4385,7 @@ impl<'a> Lowering<'a> {
             };
             let lowered = self.lower_forked_branch(
                 builder,
-                &frame_baseline,
-                &mut frame_union,
+                &mut frame_scope,
                 OwnedSourceOccurrence::cloned(case_body),
                 arm_env,
                 branch_control,
@@ -4419,7 +4413,7 @@ impl<'a> Lowering<'a> {
                 ));
             }
         }
-        self.consumed_subcontinuation_frames = frame_union;
+        self.consumed_subcontinuation_frames = frame_scope.finish();
 
         let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
             local_completion
@@ -4448,8 +4442,8 @@ impl<'a> Lowering<'a> {
     }
 
     /// Lower one mutually-exclusive match arm with the checked-subcontinuation-
-    /// frame consumption set rewound to `frame_baseline`, then fold the arm's
-    /// resulting consumptions into `frame_union`.
+    /// frame consumption set rewound by `frame_scope`, then fold the arm's
+    /// resulting consumptions into that scope's union.
     ///
     /// A dynamic match lowers its shared post-match continuation once per arm —
     /// each arm inlines its own copy of the source-prefix template. The arms are
@@ -4469,15 +4463,14 @@ impl<'a> Lowering<'a> {
     fn lower_forked_branch<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        frame_baseline: &std::collections::BTreeSet<(u64, u64)>,
-        frame_union: &mut std::collections::BTreeSet<(u64, u64)>,
+        frame_scope: &mut CheckedFrameBranchScope,
         expr: OwnedSourceOccurrence,
         env: Vec<LoweringOperand>,
         control: SourceControl<'b>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        self.consumed_subcontinuation_frames = frame_baseline.clone();
+        self.consumed_subcontinuation_frames = frame_scope.start_successor();
         let lowered = self.lower_source_machine_with_continuation(builder, expr, env, control)?;
-        frame_union.extend(self.consumed_subcontinuation_frames.iter().copied());
+        frame_scope.merge_successor(&self.consumed_subcontinuation_frames);
         Ok(lowered)
     }
 
@@ -4533,8 +4526,8 @@ impl<'a> Lowering<'a> {
         builder
             .ins()
             .brif(condition, true_block, &[], false_block, &[]);
-        let frame_baseline = self.consumed_subcontinuation_frames.clone();
-        let mut frame_union = frame_baseline.clone();
+        let mut frame_scope =
+            CheckedFrameBranchScope::capture(&self.consumed_subcontinuation_frames);
         for (predecessor_id, block, body) in
             [(0, true_block, true_body), (1, false_block, false_body)]
         {
@@ -4550,8 +4543,7 @@ impl<'a> Lowering<'a> {
             };
             let lowered = self.lower_forked_branch(
                 builder,
-                &frame_baseline,
-                &mut frame_union,
+                &mut frame_scope,
                 OwnedSourceOccurrence::cloned(body),
                 env.to_vec(),
                 branch_control,
@@ -4570,7 +4562,7 @@ impl<'a> Lowering<'a> {
                 ));
             }
         }
-        self.consumed_subcontinuation_frames = frame_union;
+        self.consumed_subcontinuation_frames = frame_scope.finish();
         let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
             local_completion
         else {
@@ -4653,8 +4645,8 @@ impl<'a> Lowering<'a> {
         let err_block = builder.create_block();
         builder.ins().brif(success, ok_block, &[], err_block, &[]);
 
-        let frame_baseline = self.consumed_subcontinuation_frames.clone();
-        let mut frame_union = frame_baseline.clone();
+        let mut frame_scope =
+            CheckedFrameBranchScope::capture(&self.consumed_subcontinuation_frames);
         for (predecessor_id, block, constructor, payload) in [
             (0, ok_block, ok_constructor, ok),
             (1, err_block, err_constructor, error),
@@ -4679,8 +4671,7 @@ impl<'a> Lowering<'a> {
                     self.owned_case_body_occurrence(static_origin, index, case.body.clone())?;
                 self.lower_forked_branch(
                     builder,
-                    &frame_baseline,
-                    &mut frame_union,
+                    &mut frame_scope,
                     body,
                     arm_env,
                     branch_control,
@@ -4695,8 +4686,7 @@ impl<'a> Lowering<'a> {
                 // derived from it. ⛔ Do not mint an origin here.
                 self.lower_forked_branch(
                     builder,
-                    &frame_baseline,
-                    &mut frame_union,
+                    &mut frame_scope,
                     OwnedSourceOccurrence {
                         expr: RuntimeExpr::Trap(default.clone()),
                         static_origin,
@@ -4719,7 +4709,7 @@ impl<'a> Lowering<'a> {
                 ));
             }
         }
-        self.consumed_subcontinuation_frames = frame_union;
+        self.consumed_subcontinuation_frames = frame_scope.finish();
 
         let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
             local_completion
@@ -4811,8 +4801,8 @@ impl<'a> Lowering<'a> {
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor source match block");
-        let frame_baseline = self.consumed_subcontinuation_frames.clone();
-        let mut frame_union = frame_baseline.clone();
+        let mut frame_scope =
+            CheckedFrameBranchScope::capture(&self.consumed_subcontinuation_frames);
         for alternative in dynamic.alternatives {
             let arm = builder.create_block();
             let next = builder.create_block();
@@ -4847,8 +4837,7 @@ impl<'a> Lowering<'a> {
             };
             let lowered = self.lower_forked_branch(
                 builder,
-                &frame_baseline,
-                &mut frame_union,
+                &mut frame_scope,
                 self.owned_case_body_occurrence(static_origin, case_index, case.body.clone())?,
                 materialize_dynamic_constructor_env(&alternative, env),
                 control,
@@ -4866,7 +4855,7 @@ impl<'a> Lowering<'a> {
             }
             test_block = next;
         }
-        self.consumed_subcontinuation_frames = frame_union;
+        self.consumed_subcontinuation_frames = frame_scope.finish();
         builder.switch_to_block(test_block);
         let malformed = builder
             .ins()
@@ -4922,8 +4911,8 @@ impl<'a> Lowering<'a> {
         let mut test_block = builder
             .current_block()
             .expect("dynamic constructor source match block");
-        let frame_baseline = self.consumed_subcontinuation_frames.clone();
-        let mut frame_union = frame_baseline.clone();
+        let mut frame_scope =
+            CheckedFrameBranchScope::capture(&self.consumed_subcontinuation_frames);
         for (predecessor_id, alternative) in dynamic.alternatives.into_iter().enumerate() {
             let arm = builder.create_block();
             let next = builder.create_block();
@@ -4958,8 +4947,7 @@ impl<'a> Lowering<'a> {
             };
             let lowered = self.lower_forked_branch(
                 builder,
-                &frame_baseline,
-                &mut frame_union,
+                &mut frame_scope,
                 self.owned_case_body_occurrence(static_origin, case_index, case.body.clone())?,
                 materialize_dynamic_constructor_env(&alternative, env),
                 control,
@@ -4979,7 +4967,7 @@ impl<'a> Lowering<'a> {
             }
             test_block = next;
         }
-        self.consumed_subcontinuation_frames = frame_union;
+        self.consumed_subcontinuation_frames = frame_scope.finish();
         builder.switch_to_block(test_block);
         let malformed = builder
             .ins()

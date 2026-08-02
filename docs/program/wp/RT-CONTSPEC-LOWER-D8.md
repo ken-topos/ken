@@ -16,12 +16,13 @@ ruling: 19 planner, 2 ABI, 3 substrate, 2 conditional handoff, 2 activation,
 
 ## D3 composition record
 
-The extracted `CheckedFrameBranchScope` is dormant. It only captures the
-existing `Lowering::consumed_subcontinuation_frames` set, starts mutually
-exclusive successors from that baseline, unions their consumed sets, and returns
-the union after their join. This seam adds no production call-site selection, no
-planner/ABI/substrate interface, and no authority change. Its feature-gated
-harness exercises the private transaction through a test-only re-export.
+`CheckedFrameBranchScope` captures the existing pair-keyed
+`Lowering::consumed_subcontinuation_frames` field, starts mutually exclusive
+successors from that baseline, unions their consumed sets, and restores the
+union after their join. `lower_forked_branch` is the sole connection: it
+replaces the existing baseline/union spelling without adding an authority or
+keying axis. The test harness receives that live field from a real `Lowering`
+fixture; it does not construct a separate ledger.
 
 | Test | First refusal, copied from TSV | Phase | D8 | Causal root / cascade owner |
 |---|---|---|---|---|
