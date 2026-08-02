@@ -292,11 +292,19 @@ in scope and is not a finding.
   enumerate source syntax to reconstruct the population nor invent an id, owner,
   descriptor, or call.
 
-  ⛔ **`D1` is NOT complete at `4a058dbb`** (ruled `evt_4hrnfc81h6t81` item 4).
-  That projection exposes only `id()` on the unit view and `target()` plus
-  `call_site_sequence()` on the call view. **The immutable specialization key
-  facts, the validated descriptor/slots/input authority, and the call's full
-  producer tuple are all still owed.** Without them the current source cannot
+  ⛔ **RETIRED 2026-08-02 — this clause named a partial that is not in this
+  lineage.** It read *"`D1` is NOT complete at `4a058dbb`"* (ruled
+  `evt_4hrnfc81h6t81` item 4), which describes a projection to *extend*.
+  Measured on the recut base `07e2ca46`: `4a058dbb` is **not an ancestor** and
+  **no activation projection exists**, so D1 was a from-scratch build over the
+  populated planner facts. The implementer found this before writing code
+  (`evt_5np8mnvgsh87`); the leader confirmed it (`evt_2vdcfm87j6m4`) and the
+  Architect ruled the split a projective join (`evt_5s76mbbmrjw`). D1 landed as
+  `6ed31759`.
+
+  **What D1 must expose is unchanged, and is stated positively:** the immutable
+  specialization key facts, the validated descriptor/slots/input authority, and
+  the call's full producer tuple. Without them the current source cannot
   define the continuation body, locate the exact producer alternative, compare
   the actual defining owner, or consume the exact claim — and every one of those
   is `D3`'s content. A checkpoint that declares symbols has not discharged this.
@@ -492,9 +500,13 @@ deliverable's text.** Checkpoints 1 and 2 were both accepted on a reading of
 their headline rather than their content, and hard stop 2 is what surfaced it
 two checkpoints later.
 
-Work already on the branch is preserved and reusable: `4a058dbb` (partial
-projection), `d7291746` (typed identity restored). Neither is discarded; both
-are extended.
+⛔ **RETIRED 2026-08-02 — same false premise as the `D1` clause above.** This
+read *"Work already on the branch is preserved and reusable: `4a058dbb`
+(partial projection), `d7291746` (typed identity restored). Neither is
+discarded; both are extended."* Neither commit is an ancestor of the recut base
+`07e2ca46`; the old branch is retained at `preserved/RT-CONTSPEC-ACTIVATE-D3 =
+dd0ca60e` and is **preservation-only, not a base**. There is nothing on this
+branch to extend — every deliverable is built from `main`.
 
 If any single checkpoint runs past an hour, stop and route. That is a sizing
 finding and the recut is the Steward's.
