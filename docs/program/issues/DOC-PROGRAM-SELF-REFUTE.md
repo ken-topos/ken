@@ -1,7 +1,7 @@
 ---
 id: DOC-PROGRAM-SELF-REFUTE
 title: "three sites of current program law assert assurances the same corpus has already measured as absent, and 12-documentation-program.md now carries both a drift-gate claim and the measurement refuting it"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
