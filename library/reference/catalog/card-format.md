@@ -40,3 +40,37 @@ package-specific answers in this slice.
 
 Cards are explanatory, derived references. When a concise description would
 turn into a normative restatement, cite the owning checked source instead.
+
+## Held-class disclosure
+
+The following gaps apply uniformly to every catalog card. A card links here
+instead of inventing a package-specific answer.
+
+- **Platform — `held`.** The catalog campaign reserves a `platform` metadata
+  facet but no checked package instantiates it. The catalog campaign owns the
+  missing per-package instantiation and the still-open convention decision.
+- **Maturity — `held`.** The campaign likewise reserves `maturity` without a
+  checked per-package value. The catalog campaign owns the missing
+  instantiation and open convention decision.
+- **Dependency — `held`.** Checked core has declaration-level dependency data,
+  but no complete package-level projection exists for catalog leaves. The
+  `crates/` implementation owns that missing projection.
+- **Reverse dependency — `held`.** This requires the complete package-level
+  dependency projection plus a maintained inversion over the full population.
+  The `crates/` implementation owns both mechanisms.
+
+The reserved facets are recorded under
+[Sections, Domains, Subdomains, and Packages](../../../docs/program/06-catalog-campaign.md#sections-domains-subdomains-and-packages),
+at lines 119–121. This disclosure reports the measured gaps; it proposes no
+metadata convention, field, schema, generator, or package value.
+
+## Authored-fact rot
+
+The four authored classes require manual review when their checked sources
+change:
+
+- **Declaration/type:** any public-name or signature change.
+- **Law:** adding, removing, renaming, or changing the status of a law.
+- **Effect/capability:** an effect row, capability index, boundary, or
+  pure-to-effectful change.
+- **Assurance:** a change to proof closure, assumptions, or the trusted base.

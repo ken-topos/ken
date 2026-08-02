@@ -67,6 +67,12 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/reference/platform/README.md` | reference | derived-reference | partial |
 | `library/reference/catalog/card-format.md` | reference | derived-reference | partial |
 | `library/reference/catalog/subjects.md` | reference | derived-reference | current |
+| `library/reference/catalog/Core/Classes/EffectfulClasses.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Core/Classes/LawfulClasses.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Core/Classes/LawfulFunctors.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Core/Logic/EmptyDec.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Core/Logic/Transport.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Tooling/Testing/Property.md` | reference | derived-reference | partial |
 | `library/learn/reading-ken/fragments.md` | reference | derived-reference | current |
 | `library/learn/reading-ken/01-anatomy.md` | explanatory | explanatory | current |
 | `library/learn/reading-ken/02-types-contracts-and-proofs.md` | explanatory | explanatory | current |
@@ -80,7 +86,7 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/quickstart.md` | tutorial | tutorial | current |
 | `library/STATUS.md` | status | status | current |
 
-**Total:** 46 registered document(s).
+**Total:** 52 registered document(s).
 
 ## Regenerating
 
