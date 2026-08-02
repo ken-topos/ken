@@ -99,6 +99,13 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/reference/catalog/Capability/System/IO.md` | reference | derived-reference | partial |
 | `library/reference/catalog/Capability/System/Resource.md` | reference | derived-reference | partial |
 | `library/reference/catalog/Capability/Time/WallClock.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Diagnostics/Core.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Diagnostics/Render.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Formatting/Doc.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Parsing/Cursor.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Parsing/Decoder.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Parsing/Numeric.md` | reference | derived-reference | partial |
+| `library/reference/catalog/Capability/Parsing/Parsing.md` | reference | derived-reference | partial |
 | `library/learn/reading-ken/fragments.md` | reference | derived-reference | current |
 | `library/learn/reading-ken/01-anatomy.md` | explanatory | explanatory | current |
 | `library/learn/reading-ken/02-types-contracts-and-proofs.md` | explanatory | explanatory | current |
@@ -112,7 +119,7 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/quickstart.md` | tutorial | tutorial | current |
 | `library/STATUS.md` | status | status | current |
 
-**Total:** 78 registered document(s).
+**Total:** 85 registered document(s).
 
 ## Regenerating
 
