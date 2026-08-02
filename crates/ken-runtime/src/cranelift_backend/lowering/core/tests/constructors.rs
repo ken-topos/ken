@@ -5193,3 +5193,182 @@ fn static_worker_call_rejects_undeclared_target() {
         "rejects for the undeclared-target reason: {error:?}"
     );
 }
+
+// ─── RT-WORKER-BIND `D8` — the independent ordinary witness ─────────────────
+
+/// **The `D8` witness program, and it contains ZERO continuation machinery.**
+///
+/// An ordinary `FunctionizedUnits` program: no `ComputationalMatch`, no
+/// continuation specialization, identity, descriptor or token anywhere in it.
+/// `FunctionizedUnits` is the *default* authority -- it is selected whenever
+/// the source carries no recursive-descent residual -- so this fixture reaches
+/// it by being ordinary, not by asking for it.
+///
+/// Shape:
+///
+/// - a normal unit receives a real ABI input, so `x` arrives **`Carried`**;
+/// - an ordinary `Let` binds a lexical closure capturing two operands in
+///   order -- the carried `x` first, a specialized constant second;
+/// - the `Let` body calls `Var(0)`, which is that binding.
+///
+/// The carried capture is what routes the binder to `StaticWorker`; the call
+/// through the exact `Var(0)` callee is what consumes it.
+#[cfg(test)]
+fn static_worker_witness(capture_first: bool) -> RuntimeExpr {
+    let carried = RuntimeExpr::Var(0);
+    let constant = RuntimeExpr::Value(RuntimeValue::Int(3.into()));
+    let captures = if capture_first {
+        vec![carried, constant]
+    } else {
+        vec![constant, carried]
+    };
+    // Inside the worker body the environment is the unit's slot run: the
+    // parameter first, then the captures in declared order.
+    let worker = RuntimeExpr::LexicalClosure {
+        captures,
+        params: vec!["y".to_string()],
+        body: Box::new(RuntimeExpr::Var(1)),
+    };
+    let outer_body = RuntimeExpr::Let {
+        value: Box::new(worker),
+        body: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::Var(0)),
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(100.into()))],
+        }),
+    };
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(outer_body),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    }
+}
+
+/// The witness contains no continuation spelling. This is `AC-4`'s first half,
+/// asserted over the fixture the test actually runs.
+#[test]
+fn static_worker_witness_contains_no_continuation_machinery() {
+    let witness = static_worker_witness(true);
+    let rendered = format!("{witness:?}");
+    for spelling in [
+        "ComputationalMatch",
+        "ContinuationSpecializationId",
+        "ContinuationCallIdentity",
+        "ContinuationDescriptor",
+        "ContinuationToken",
+    ] {
+        assert!(
+            !rendered.contains(spelling),
+            "the witness must contain zero continuation machinery, found {spelling}"
+        );
+    }
+}
+
+/// The witness compiles and executes end to end, and its result distinguishes
+/// capture order.
+#[test]
+fn static_worker_witness_runs_and_distinguishes_capture_order() {
+    let ordered = static_worker_witness(true);
+    let compiled = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &ordered,
+        &NativeSeedEnvironment::empty(),
+    )
+    .expect("the ordinary witness compiles");
+    let observed = compiled.run(None).expect("the witness runs").0;
+    let swapped = static_worker_witness(false);
+    let swapped_observed =
+        crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+            &swapped,
+            &NativeSeedEnvironment::empty(),
+        )
+        .expect("the capture-swapped witness compiles")
+        .run(None)
+        .expect("the swapped witness runs")
+        .0;
+    assert_ne!(
+        observed, swapped_observed,
+        "swapping the capture order must change the linked result"
+    );
+}
+
+/// `AC-8`/judgment 3 -- **the binding is NOT affine.** An installed worker
+/// that is never called must still compile and run.
+///
+/// If any consumed-set, once-token or required-empty ledger existed, this
+/// would fail; it is the companion that would catch one being introduced.
+#[test]
+fn static_worker_unused_binding_succeeds() {
+    let expr = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: vec![
+                        RuntimeExpr::Var(0),
+                        RuntimeExpr::Value(RuntimeValue::Int(3.into())),
+                    ],
+                    params: vec!["y".to_string()],
+                    body: Box::new(RuntimeExpr::Var(1)),
+                }),
+                // The binding is installed and simply never called.
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(42.into()))),
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    };
+    let compiled = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &expr,
+        &NativeSeedEnvironment::empty(),
+    )
+    .expect("an unused worker binding is lawful and must compile");
+    assert_eq!(
+        compiled.run(None).expect("the unused-binding fixture runs").0,
+        RuntimeObservation::Returned(RuntimeGroundValue::Int(42.into()))
+    );
+}
+
+/// `AC-8`/judgment 3 -- a binding called **twice** is lawful too. Nothing
+/// consumes the binding on first use.
+#[test]
+fn static_worker_twice_called_binding_succeeds() {
+    // The inner `Let` shifts de Bruijn indices, so the second call names the
+    // worker at `Var(1)` while the first names it at `Var(0)`. Same binding,
+    // called twice.
+    let call = |index: u32| RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Var(index)),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(100.into()))],
+    };
+    let expr = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: vec![
+                        RuntimeExpr::Var(0),
+                        RuntimeExpr::Value(RuntimeValue::Int(3.into())),
+                    ],
+                    params: vec!["y".to_string()],
+                    body: Box::new(RuntimeExpr::Var(1)),
+                }),
+                // Called once, then called again in the same scope.
+                body: Box::new(RuntimeExpr::Let {
+                    value: Box::new(call(0)),
+                    body: Box::new(call(1)),
+                }),
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    };
+    let compiled = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &expr,
+        &NativeSeedEnvironment::empty(),
+    )
+    .expect("a twice-called worker binding is lawful and must compile");
+    compiled
+        .run(None)
+        .expect("the twice-called fixture runs");
+}
