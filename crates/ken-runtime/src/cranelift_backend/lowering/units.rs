@@ -888,7 +888,7 @@ fn define_unit_body<M: Module>(
                 } else {
                     LoweringOperand::Carried(carried)
                 };
-                env.push(operand);
+                env.push(LoweringEnvironmentBinding::Value(operand));
             }
         }
         // The in-process validation API historically stages one ground
@@ -899,8 +899,8 @@ fn define_unit_body<M: Module>(
         // ordinary declared captures.
         if is_root {
             if let Some(value) = staged_root_value {
-                env.push(LoweringOperand::Specialized(
-                    compiler.lower_value(&mut builder, value)?,
+                env.push(LoweringEnvironmentBinding::Value(
+                    LoweringOperand::Specialized(compiler.lower_value(&mut builder, value)?),
                 ));
             }
         }

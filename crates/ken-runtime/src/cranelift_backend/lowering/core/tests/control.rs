@@ -335,7 +335,9 @@ fn run_px8j_malformed_recursor_consumer(
         selected_scope: None,
     };
     let active_frames = [EliminatorFrame::Active(active)];
-    let env = [LoweringOperand::Specialized(recursor)];
+    let env = [LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(
+        recursor,
+    ))];
     let mut function_context = FunctionBuilderContext::new();
     let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
     let entry = builder.create_block();
@@ -618,7 +620,9 @@ fn run_px8ds_edge_consumer(
         selected_scope: None,
     };
     let active_frames = [EliminatorFrame::Active(active)];
-    let env = [LoweringOperand::Specialized(recursor)];
+    let env = [LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(
+        recursor,
+    ))];
     let call = RuntimeExpr::Call {
         callee: Box::new(RuntimeExpr::Var(0)),
         args: Vec::new(),

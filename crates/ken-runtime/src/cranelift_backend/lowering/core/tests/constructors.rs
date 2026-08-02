@@ -481,18 +481,33 @@ fn dynamic_constructor_fields_precede_outer_environment_in_declaration_order() {
     };
     let env = materialize_dynamic_constructor_env(
         &alternative,
-        &[LoweringOperand::Specialized(Lowered::Bytes(
-            b"outer".to_vec(),
+        &[LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(
+            Lowered::Bytes(b"outer".to_vec()),
         ))],
     );
     assert!(
-        matches!(&env[0], LoweringOperand::Specialized(Lowered::Bytes(value)) if value == b"first")
+        matches!(
+            &env[0],
+            LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(Lowered::Bytes(
+                value,
+            ))) if value == b"first"
+        )
     );
     assert!(
-        matches!(&env[1], LoweringOperand::Specialized(Lowered::String(value)) if value == "second")
+        matches!(
+            &env[1],
+            LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(Lowered::String(
+                value,
+            ))) if value == "second"
+        )
     );
     assert!(
-        matches!(&env[2], LoweringOperand::Specialized(Lowered::Bytes(value)) if value == b"outer")
+        matches!(
+            &env[2],
+            LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(Lowered::Bytes(
+                value,
+            ))) if value == b"outer"
+        )
     );
 }
 
@@ -2095,9 +2110,9 @@ fn c1_d3_a_carried_operand_survives_case_env_and_nested_lowering() {
     let seeded_word = builder.ins().iconst(types::I64, 0x0c1_d3);
 
     // ── the carried phase ─────────────────────────────────────────────────
-    let carried_env = [LoweringOperand::Carried(CarriedBoundaryWord {
-        word: seeded_word,
-    })];
+    let carried_env = [LoweringEnvironmentBinding::Value(LoweringOperand::Carried(
+        CarriedBoundaryWord { word: seeded_word },
+    ))];
     let carried_out = compiler
         .lower_expr(
             &mut builder,
@@ -2124,10 +2139,12 @@ fn c1_d3_a_carried_operand_survives_case_env_and_nested_lowering() {
     //
     // ⛔ Without this the test is consistent with a spine that answers
     // `Carried` for everything.
-    let specialized_env = [LoweringOperand::Specialized(Lowered::Bool {
-        value: seeded_word,
-        known: Some(true),
-    })];
+    let specialized_env = [LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(
+        Lowered::Bool {
+            value: seeded_word,
+            known: Some(true),
+        },
+    ))];
     let specialized_out = compiler
         .lower_expr(
             &mut builder,
@@ -2906,7 +2923,7 @@ fn ac_c7_project_edge(fields: [(&str, &str); 2], project: &str) -> (i64, u64, u6
                 expr: project_expr.as_ref(),
                 static_origin: project_origin,
             },
-            &[LoweringOperand::Carried(word)],
+            &[LoweringEnvironmentBinding::Value(LoweringOperand::Carried(word))],
         )?;
         let LoweringOperand::Carried(child) = eliminated else {
             panic!(
@@ -3135,7 +3152,7 @@ fn ac_c7_match_edge(scrutinee: &str, inner: &str) -> (i64, u64, u64) {
                 expr: match_expr.as_ref(),
                 static_origin: match_origin,
             },
-            &[LoweringOperand::Carried(word)],
+            &[LoweringEnvironmentBinding::Value(LoweringOperand::Carried(word))],
         )?;
         let LoweringOperand::Carried(selected) = eliminated else {
             panic!("a carried `Match` merges in the carrier lane, so its result is `Carried`");
@@ -3295,7 +3312,7 @@ fn ac_c7_computational_match_edge(scrutinee: &str, inner: &str) -> (i64, u64, u6
                 expr: match_expr.as_ref(),
                 static_origin: match_origin,
             },
-            &[LoweringOperand::Carried(word)],
+            &[LoweringEnvironmentBinding::Value(LoweringOperand::Carried(word))],
         )?;
         let LoweringOperand::Carried(selected) = eliminated else {
             panic!(
@@ -3428,7 +3445,7 @@ fn ac_c4_recursive_edge(
                 expr: match_expr.as_ref(),
                 static_origin: match_origin,
             },
-            &[LoweringOperand::Carried(word)],
+            &[LoweringEnvironmentBinding::Value(LoweringOperand::Carried(word))],
         )?;
         let LoweringOperand::Carried(selected) = eliminated else {
             panic!(
@@ -3643,7 +3660,7 @@ fn ac_c4_ownership_edge_with_case_body(
                 expr: match_expr.as_ref(),
                 static_origin: match_origin,
             },
-            &[LoweringOperand::Carried(word)],
+            &[LoweringEnvironmentBinding::Value(LoweringOperand::Carried(word))],
         )?;
         let LoweringOperand::Carried(selected) = eliminated else {
             panic!("a carried `ComputationalMatch` merges in the carrier lane")
