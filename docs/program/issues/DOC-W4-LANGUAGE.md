@@ -1,7 +1,7 @@
 ---
 id: DOC-W4-LANGUAGE
 title: "Wave 4 slice 2 — the language reference, scoped to whatever survives a residual measurement against the 625-line page already named `surface-reference`"
-status: ready
+status: merged
 owner: doc
 size: S
 gate: none
