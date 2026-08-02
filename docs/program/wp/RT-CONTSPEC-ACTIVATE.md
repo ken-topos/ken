@@ -7,23 +7,73 @@ seam 2. **Recut 2026-08-02** on the Architect's interface ruling
 `evt_3xj4eqwqmn46n` as corrected by `evt_66t42tapvdbsj`, and the Steward's
 baseline measurement `evt_2zhx69f2fw07w`.
 
-> ## FROZEN 2026-08-02 — READ THIS BEFORE ANY LINE BELOW IT
+> ## RECUT AND UNFROZEN 2026-08-02 — READ THIS BEFORE ANY LINE BELOW IT
 >
-> **Architect outcome (c) at `evt_2anwskscqz5fg`: this seam is mis-sized at the
-> target-binding boundary.** Everything below was written for a seam that could
-> reach its target through an existing route. **It cannot.** Do not start,
-> resume, or QA this frame, and do not treat any deliverable or AC below as
-> live.
+> **The freeze is lifted.** `RT-WORKER-BIND` — the substrate this seam turned
+> out to need — merged at `origin/main = 867cac7a` (PR #1369), CI green, all six
+> lowering paths blob-verified. `RT-CONTSPEC-ASSEMBLY` was already `merged`. The
+> Architect's outcome (c) at `evt_2anwskscqz5fg` deferred this recut on the
+> explicit basis that "the substrate it recuts against does not exist until
+> then." It exists now.
 >
-> `dd0ca60e` is **preservation-only and not a base.** The full disposition —
-> what is retained as proved, and the three things now falsified including this
-> frame's own three-field binding key — is in the node banner at
-> `docs/program/issues/RT-CONTSPEC-ACTIVATE.md`. **Read it there rather than
-> reconstructing it from the text below**, which the correction post-dates.
+> **This banner is the recut.** Outcome (c) makes the recut the Steward's:
+> retain what is proved, replace what the finding names. Four things below the
+> banner are superseded by the four numbered items in **"What the recut
+> replaces"**. Where this banner and the body disagree, **the banner wins** —
+> the body predates the correction.
 >
-> The substrate this seam turned out to need is `RT-WORKER-BIND`, held at
-> `draft` pending two Architect inputs (`evt_3ka1whhzj9z8x`). This frame is
-> recut after that node lands, not before.
+> `dd0ca60e` remains **preservation-only and is not a base.** Branch from
+> `main` at or after `867cac7a`.
+>
+> **Retained as proved, do not re-derive:** the function-scoped
+> `PredeclaredFunctionId` transport (`evt_53vaz7s3mg19r`); the
+> construct/alternative/sequence discriminator direction; `D1`'s projection
+> shape; `D3`'s affine/owner direction; the `AC-1` counts; `AC-4`'s frozen
+> surfaces and two exemptions.
+
+> ## What the recut replaces
+>
+> **1. `D2`'s `define_continuation_target` body is falsified — do not inherit
+> it.** It treated function parameter 0 as the payload, loaded the `Result` slot
+> **before the caller initializes it**, and XORed that uninitialized word with
+> every Parameter/Capture word. Exact source falsifies it. ⚠ **The accepted
+> checkpoint label does not make it a definition.** The body is now specified
+> against the landed `RT-WORKER-BIND` binding route — see `D2` below, which has
+> been rewritten in place.
+>
+> **2. The consumer-side `continuation_claim_for(static_origin, index, index)`
+> route is deleted.** The consumer `ComputationalMatch` origin is **not** the
+> producer `Construct` origin, and case position is **not** sequence authority.
+> Do not reach for it; there is no corrected form of it in this frame.
+>
+> **3. The three-field binding key was mine and it is wrong. The key has four
+> fields.** The planner mints **one call token per ruled recursive position**,
+> so the key is (producer construct, alternative, sequence, **`recursive_
+> position`**). A three-field key collides two distinct tokens at the same
+> source position and silently consumes the wrong one — which `D3`'s affine
+> control would report as a double-consumption of the right token rather than as
+> a key defect.
+>
+> **4. "Same-shaped" is `RT-WORKER-BIND`'s landed definition, not a fresh
+> question.** It means **same declared arity and same capture count**. `D4` item
+> 4 and `AC-2` below are bound to that definition; do not re-derive it, and do
+> not widen the selector toward difference (origin inequality, ABI layout) to
+> make a redirect find a candidate.
+
+> ## Known gap carried in from `RT-WORKER-BIND`, stated rather than assumed
+>
+> `RT-WORKER-BIND`'s `AC-5` clause (c) scoped its redirect control to the
+> two-same-shape-worker program, because the ordinary single-worker witness has
+> **no distinct same-shape candidate at all**. A consequence the implementer
+> disclosed rather than buried: **nothing separately proves the selection
+> predicate rejects a differently-shaped candidate** — both workers in that
+> program are same-shape by construction. It is correct by construction and by
+> ruling, but **uncontrolled**.
+>
+> ⇒ This seam inherits that gap. It is **not** this seam's job to close it, and
+> ⛔ **do not widen this frame's scope to build a second program for it.** If
+> your work here would make the gap closable cheaply and in-population, say so
+> in the report as a finding; do not act on it unasked.
 
 This is the seam that turns the mechanism on. Seam 1 put the accepted helper on
 the landed substrate and proved it changed nothing. This seam makes the
@@ -268,14 +318,48 @@ in scope and is not a finding.
   discharged when each projected target is declared **and defined** from its
   projected contract, and each causal token resolves to that declared `FuncId`.
 
+  ⛔ **The body: bind through `RT-WORKER-BIND`, and do not read a slot the
+  caller has not written.** The previous specification of
+  `define_continuation_target` is falsified (recut item 1) and is not a starting
+  point. The corrected shape:
+
+  - **Operands come from the binding environment**, not from a positional guess.
+    `RT-WORKER-BIND` landed
+    `LoweringEnvironmentBinding = Value(LoweringOperand) | StaticWorker(...)`
+    as the single binding authority — carried captures reach the selected
+    semantic body through it. ⛔ **Function parameter 0 is not the payload.**
+    Nothing in the ABI descriptor licenses that reading, and the projected
+    descriptor (`D1`) is what names each operand's position.
+  - **The `Result` slot is caller-initialized.** Reading it inside the callee
+    before the caller has written it is a use of an uninitialized word, and
+    every value derived from it is garbage — including anything XORed with it.
+    Read it only where the projected input authority says it is live.
+  - **One binding authority, still.** Consuming the environment binding does not
+    license a parallel operand map or a de-Bruijn side table; that is the
+    property `RT-WORKER-BIND` was built to establish, and re-introducing either
+    here would falsify it downstream.
+
+  ⚠ If the projected descriptor turns out not to name an operand you need, that
+  is a **new interface fact about `D1`'s projection** — route it under banned
+  scope, do not paper it over with a positional convention.
+
 - **D3 — affine consumption and owner agreement.** Exactly **one** affine
   consumption of the exact planned continuation-call token. "Active emitted
   owner" means the exact unit currently being defined, carried as emission
   context and compared against the producer owner on the planner claim.
   ⇒ **Do not resurrect the historical `active_emission_owner` field, and do not
   add a lowering-only `JoinArm` token beside the call token.** The token's
-  producer construct, alternative, and sequence already name the causal arm; a
-  second ledger would duplicate authority. This is the Architect's item 5.
+  producer construct, alternative, sequence, **and `recursive_position`** already
+  name the causal arm; a second ledger would duplicate authority. This is the
+  Architect's item 5.
+
+  ⛔ **The key has four fields, not three** (recut item 3). The fourth is
+  `recursive_position`, because the planner mints **one call token per ruled
+  recursive position**. ⚠ Read the failure mode before you trust a green run: a
+  three-field key **collides two distinct tokens at the same source position**,
+  so the affine control reports a double-consumption of the *right* token rather
+  than naming the key defect. ⇒ **An affine red is not self-explaining here** —
+  check the key's arity before concluding the consumption logic is wrong.
 
 - **D4 — the behavioural fixture at the emission seam.** Derived from the
   existing `contspec_plan` shape, observing at emission rather than by
@@ -285,7 +369,11 @@ in scope and is not a finding.
   3. one direct call per exact causal token, in the producer alternative, before
      the join;
   4. an answer that **depends on the selected target** — redirecting a token to
-     the other same-shaped target changes or fails the result;
+     the other same-shaped target changes or fails the result. **"Same-shaped"
+     is `RT-WORKER-BIND`'s landed definition: same declared arity and same
+     capture count** (recut item 4). The redirect resolves the exact target
+     first, then selects a *distinct* target on that predicate — ⛔ never on
+     origin inequality or ABI layout;
   5. affine rejection when the same token is consumed twice, and rejection under
      the wrong producer owner.
 
@@ -304,11 +392,18 @@ in scope and is not a finding.
   change, not an activation.
 
 - **AC-2 — the target discriminator fails when the target is wrong.** Redirect a
-  causal token to the other same-shaped target; the `D4` fixture must change or
-  fail its answer.
-  *Control:* the mutation run and shown red, then reverted. **A fixture that
-  stays green under target redirection is not observing emission** — it is
-  observing that something was declared, which is `AC-1`'s job.
+  causal token to the other same-shaped target — **same declared arity and same
+  capture count**, per `RT-WORKER-BIND` (recut item 4); the `D4` fixture must
+  change or fail its answer.
+  *Control:* a **committed** `cfg(test)`-gated switch on the exact production
+  branch, whose red **reproduces from the committed tree**. ⛔ A hand-run
+  mutation does not discharge this — that defect cost `RT-WORKER-BIND` two
+  candidate rejections. **A fixture that stays green under target redirection is
+  not observing emission** — it is observing that something was declared, which
+  is `AC-1`'s job.
+  ⚠ If the redirect finds **no** distinct same-shape candidate, that is a fact
+  about the fixture population, not a licence to widen the predicate toward
+  difference. Say so and stop.
 
 - **AC-3 — the affine and owner controls fail when mutated.** Consume the same
   token twice; the affine control must go red. Emit under the wrong producer
