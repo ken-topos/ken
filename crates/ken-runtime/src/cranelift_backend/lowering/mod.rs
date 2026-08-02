@@ -650,6 +650,7 @@ impl ArtifactHelpers<'_> {
             // two structs are separate types rather than one with a `reset()`.
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            worker_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit,
             terminal_result_origins: BTreeSet::new(),
@@ -756,6 +757,10 @@ struct FunctionLocalRefs {
     /// reaching an emitted call.
     boundary_carrier: Option<BoundaryCarrierRefs>,
     unit_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    /// **`D4`** -- this function's own static-worker call targets, keyed by
+    /// exact body origin. Minted per generated function; a `FuncRef` here
+    /// belongs to that function and is never copied to another.
+    worker_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     declaration_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     /// The current function's closed trap-exit authority. Absence is an error
     /// state, never an implicit Root.

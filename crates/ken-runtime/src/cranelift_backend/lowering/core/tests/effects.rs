@@ -99,6 +99,7 @@ fn run_checked_bounded_nat_fixture(
             native_int_resolve: None,
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
+            worker_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
