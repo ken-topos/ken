@@ -120,7 +120,7 @@ gen-doc-status --check: library/STATUS.md is current.
 $ scripts/gen-progress.sh --check
 gen-progress --check: OK (/workspaces/ken/.worktrees/doc-author/docs/program/IMPLEMENTATION-PROGRESS.md is up to date)
 $ scripts/gen-source-attestations.sh
-wrote /workspaces/ken/.worktrees/doc-author/library/SOURCE-ATTESTATIONS.proposed
+gen-source-attestations: wrote /workspaces/ken/.worktrees/doc-author/library/SOURCE-ATTESTATIONS.proposed
 Review it, then install mechanically:
   mv /workspaces/ken/.worktrees/doc-author/library/SOURCE-ATTESTATIONS.proposed /workspaces/ken/.worktrees/doc-author/library/SOURCE-ATTESTATIONS
 ```
