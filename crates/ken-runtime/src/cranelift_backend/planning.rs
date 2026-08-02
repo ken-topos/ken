@@ -23,6 +23,12 @@ pub(super) use static_transition::{
     StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
     SynthesizedFixedConstructorRole,
 };
+// `RT-CONTSPEC-ACTIVATE` `D1` — the activation projection's facade route.
+// Namespace re-exports only: no wrapper, no derivation, no second authority.
+pub(super) use static_transition::{
+    ContinuationCallIdentity, ContinuationCallView, ContinuationSpecializationId,
+    ContinuationUnitView,
+};
 #[cfg(test)]
 pub(super) use static_transition::with_last_io_error_role_omitted;
 // `RT-FNSPLIT-B2A-S` `AC-4` — the route counters behind

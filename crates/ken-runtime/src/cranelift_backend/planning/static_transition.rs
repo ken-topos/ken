@@ -618,6 +618,128 @@ struct ContinuationSpecializationKey {
     continuation_inputs: Vec<ContinuationInputProjection>,
 }
 
+/// **`RT-CONTSPEC-ACTIVATE` `D1` — the opaque causal identity.**
+///
+/// Four fields: the token's `(producer_construct_origin, producer_alternative,
+/// call_site_sequence)` plus the `recursive_position` read from the resolved
+/// target's planner key.
+///
+/// Every field is private and there is **no lowering constructor** — the only
+/// way to obtain one is
+/// [`StaticTransitionPlan::continuation_call_binding_for`], which resolves it
+/// from already-validated planner facts. There is deliberately **no sequence
+/// accessor**: the call-site sequence stays opaque *inside* the identity, so
+/// lowering can neither supply it nor derive it. Full `Eq`/`Ord` so the
+/// identity can key a map without any field being readable.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct ContinuationCallIdentity {
+    token: ContinuationSpecializationCallToken,
+    recursive_position: u32,
+}
+
+impl ContinuationCallIdentity {
+    /// The exact specialization this causal edge targets.
+    ///
+    /// This is the only fact the identity exposes: it is what a later slice
+    /// resolves to a declared target, and it reveals nothing about sequence.
+    pub(in crate::cranelift_backend) fn target(&self) -> ContinuationSpecializationId {
+        self.token.target
+    }
+}
+
+/// `D1` — a read-only view of one already-validated continuation
+/// specialization: its exact identity, immutable planner key facts, and
+/// validated ABI descriptor, slots and input authority.
+pub(in crate::cranelift_backend) struct ContinuationUnitView<'plan> {
+    id: ContinuationSpecializationId,
+    key: &'plan ContinuationSpecializationKey,
+    header: AbiFrameHeader,
+    slots: &'plan [AbiSlot],
+    inputs: &'plan [abi::AbiContinuationInputAuthority],
+}
+
+impl<'plan> ContinuationUnitView<'plan> {
+    pub(in crate::cranelift_backend) fn id(&self) -> ContinuationSpecializationId {
+        self.id
+    }
+    pub(in crate::cranelift_backend) fn producer_owner(&self) -> PredeclaredFunctionId {
+        self.key.producer_owner
+    }
+    pub(in crate::cranelift_backend) fn consumer_owner(&self) -> PredeclaredFunctionId {
+        self.key.consumer_owner
+    }
+    pub(in crate::cranelift_backend) fn producer_construct_origin(&self) -> StaticOriginId {
+        self.key.producer_construct_origin
+    }
+    pub(in crate::cranelift_backend) fn producer_result_origin(&self) -> StaticOriginId {
+        self.key.producer_result_origin
+    }
+    pub(in crate::cranelift_backend) fn producer_alternative(&self) -> u32 {
+        self.key.producer_alternative
+    }
+    pub(in crate::cranelift_backend) fn continuation_origin(&self) -> StaticOriginId {
+        self.key.continuation_origin
+    }
+    pub(in crate::cranelift_backend) fn recursive_position(&self) -> u32 {
+        self.key.recursive_position
+    }
+    pub(in crate::cranelift_backend) fn ordinary_parameters(&self) -> u32 {
+        self.key.ordinary_parameters
+    }
+    pub(in crate::cranelift_backend) fn header(&self) -> AbiFrameHeader {
+        self.header
+    }
+    pub(in crate::cranelift_backend) fn slots(&self) -> &'plan [AbiSlot] {
+        self.slots
+    }
+    pub(in crate::cranelift_backend) fn inputs(&self) -> &'plan [abi::AbiContinuationInputAuthority] {
+        self.inputs
+    }
+}
+
+/// `D1` — a read-only view of one already-validated continuation call token,
+/// carrying the full producer tuple and the exact target.
+///
+/// `continuation_origin` and `recursive_position` are read from the **resolved
+/// target's key**, never from the token; the token owns the sequence.
+pub(in crate::cranelift_backend) struct ContinuationCallView<'plan> {
+    token: &'plan ContinuationSpecializationCallToken,
+    continuation_origin: StaticOriginId,
+    recursive_position: u32,
+    target: ContinuationSpecializationId,
+}
+
+impl ContinuationCallView<'_> {
+    pub(in crate::cranelift_backend) fn producer_owner(&self) -> PredeclaredFunctionId {
+        self.token.producer_owner
+    }
+    pub(in crate::cranelift_backend) fn producer_result_origin(&self) -> StaticOriginId {
+        self.token.producer_result_origin
+    }
+    pub(in crate::cranelift_backend) fn producer_construct_origin(&self) -> StaticOriginId {
+        self.token.producer_construct_origin
+    }
+    pub(in crate::cranelift_backend) fn producer_alternative(&self) -> u32 {
+        self.token.producer_alternative
+    }
+    pub(in crate::cranelift_backend) fn continuation_origin(&self) -> StaticOriginId {
+        self.continuation_origin
+    }
+    pub(in crate::cranelift_backend) fn recursive_position(&self) -> u32 {
+        self.recursive_position
+    }
+    pub(in crate::cranelift_backend) fn target(&self) -> ContinuationSpecializationId {
+        self.target
+    }
+}
+
+/// Bounds-checked dense-range slice, failing closed rather than truncating.
+fn dense_slice<T>(arena: &[T], range: semantic_ir::DenseRange) -> Option<&[T]> {
+    let start = range.start as usize;
+    let end = start.checked_add(range.len as usize)?;
+    arena.get(start..end)
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct PlannedContinuationSpecialization {
     id: ContinuationSpecializationId,
@@ -4783,6 +4905,155 @@ impl<'src> StaticTransitionPlan<'src> {
             .into_iter()
             .find(|unit| unit.function() == root_function)
             .ok_or_else(|| planner_error("recorded root has no abi descriptor"))
+    }
+
+    // ── `RT-CONTSPEC-ACTIVATE` `D1` — the activation projection ─────────────
+    //
+    // Read-only and unmintable. Every fact below is already validated planner
+    // or ABI material, re-checked here and failing closed; nothing is derived
+    // from source syntax and no id, owner, descriptor or call is invented.
+
+    /// Every already-validated continuation specialization, with its exact
+    /// identity, its immutable planner key facts, and its validated ABI
+    /// descriptor, slots and input authority.
+    ///
+    /// Revalidates plan/ABI agreement: the two populations must be the same
+    /// size, each descriptor must name a `ContinuationSpecialization` whose id
+    /// is the planner's id at that position, and every dense range must lie
+    /// inside its plane.
+    pub(in crate::cranelift_backend) fn continuation_units(
+        &self,
+    ) -> Result<Vec<ContinuationUnitView<'_>>, CraneliftBackendError> {
+        if self.abi.continuation_descriptors.len() != self.continuation_specializations.len() {
+            return Err(planner_error(
+                "continuation ABI descriptor count disagrees with the planned specialization \
+                 population",
+            ));
+        }
+        self.continuation_specializations
+            .iter()
+            .zip(&self.abi.continuation_descriptors)
+            .map(|(planned, descriptor)| {
+                let AbiUnitDefinition::ContinuationSpecialization { specialization } =
+                    descriptor.definition
+                else {
+                    return Err(planner_error(
+                        "a continuation ABI descriptor does not define a continuation \
+                         specialization",
+                    ));
+                };
+                if specialization != planned.id {
+                    return Err(planner_error(
+                        "a continuation ABI descriptor names a different specialization than the \
+                         planner interned at that position",
+                    ));
+                }
+                let slots = dense_slice(&self.abi.continuation_slots, descriptor.slots)
+                    .ok_or_else(|| {
+                        planner_error("continuation slot range is outside the plane")
+                    })?;
+                let inputs = dense_slice(&self.abi.continuation_inputs, descriptor.inputs)
+                    .ok_or_else(|| {
+                        planner_error("continuation input range is outside the plane")
+                    })?;
+                if inputs.len() != planned.key.continuation_inputs.len() {
+                    return Err(planner_error(
+                        "continuation input authority count disagrees with the planner key's \
+                         ordered input projection",
+                    ));
+                }
+                Ok(ContinuationUnitView {
+                    id: planned.id,
+                    key: &planned.key,
+                    header: descriptor.header,
+                    slots,
+                    inputs,
+                })
+            })
+            .collect()
+    }
+
+    /// Every already-validated continuation call token, with the full producer
+    /// tuple and the exact target it names.
+    ///
+    /// The join to a specialization is **by `token.target` only**. Continuation
+    /// origin and recursive position are read from the resolved target's key;
+    /// the call-site sequence is read only from the token.
+    pub(in crate::cranelift_backend) fn continuation_calls(
+        &self,
+    ) -> Result<Vec<ContinuationCallView<'_>>, CraneliftBackendError> {
+        let units = self.continuation_units()?;
+        self.continuation_specialization_calls
+            .iter()
+            .map(|planned| {
+                let token = &planned.token;
+                let unit = units
+                    .iter()
+                    .find(|unit| unit.id == token.target)
+                    .ok_or_else(|| {
+                        planner_error(
+                            "a continuation call token names a target with no planned \
+                             specialization",
+                        )
+                    })?;
+                if unit.key.producer_construct_origin != token.producer_construct_origin
+                    || unit.key.producer_alternative != token.producer_alternative
+                    || unit.key.producer_owner != token.producer_owner
+                    || unit.key.producer_result_origin != token.producer_result_origin
+                {
+                    return Err(planner_error(
+                        "a continuation call token's producer tuple disagrees with its resolved \
+                         target's planner key",
+                    ));
+                }
+                Ok(ContinuationCallView {
+                    token,
+                    // From the RESOLVED TARGET KEY, never from the token.
+                    continuation_origin: unit.key.continuation_origin,
+                    recursive_position: unit.key.recursive_position,
+                    target: token.target,
+                })
+            })
+            .collect()
+    }
+
+    /// **The only lowering lookup selector**, keyed by the four fields the
+    /// later producer path can actually supply: the actual `Construct` origin,
+    /// the active computational-frame origin, the selected alternative, and one
+    /// member of that case's ruled recursive positions.
+    ///
+    /// Zero matches is `None` — the caller takes its existing nonspecialized
+    /// path. More than one match is a **planner invariant failure**, never a
+    /// choice: selecting the first, lowest or any other sequence here would
+    /// make lowering the authority for a fact the planner owns.
+    pub(in crate::cranelift_backend) fn continuation_call_binding_for(
+        &self,
+        producer_construct_origin: StaticOriginId,
+        continuation_origin: StaticOriginId,
+        producer_alternative: u32,
+        recursive_position: u32,
+    ) -> Result<Option<ContinuationCallIdentity>, CraneliftBackendError> {
+        let mut found: Option<ContinuationCallIdentity> = None;
+        for call in self.continuation_calls()? {
+            if call.token.producer_construct_origin == producer_construct_origin
+                && call.continuation_origin == continuation_origin
+                && call.token.producer_alternative == producer_alternative
+                && call.recursive_position == recursive_position
+            {
+                if found.is_some() {
+                    return Err(planner_error(
+                        "more than one continuation call binding matches one exact selector; the \
+                         planner mints one call token per ruled recursive position, so this is a \
+                         planner invariant failure and never a choice between sequences",
+                    ));
+                }
+                found = Some(ContinuationCallIdentity {
+                    token: call.token.clone(),
+                    recursive_position: call.recursive_position,
+                });
+            }
+        }
+        Ok(found)
     }
 
     pub(in crate::cranelift_backend) fn emittable_units(
