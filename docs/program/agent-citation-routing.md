@@ -356,14 +356,20 @@ assurances. `docs/program/12-documentation-program.md:223-245` is the current
 control and explicitly records that the registry is unreachable and migration
 checks are local rather than standing CI.
 
+One current program-law assurance is **recorded only**:
+`docs/program/12-documentation-program.md:70-72` says a drift gate verifies that
+a cited spec section still exists. That claim contradicts the same program's
+definition/registry-only control at lines 221-235: `check_source_anchors` has
+only its registry row and definition, and no test iterates the registry. This
+WP does not edit the program frame.
+
 Three ruled product pages were also examined explicitly:
 `library/introduction.md`,
 `library/learn/reading-ken/01-anatomy.md`, and
 `library/guide/surface-reference.ken.md`. Their checked/proved/elaboration
 language describes Ken's proof levels and language behavior, not execution of
 the retired library-validation registry. They are **correct as written** and
-remain byte-identical. No additional live assurance site remained after these
-dispositions.
+remain byte-identical.
 
 The recommended follow-up is to amend the existing
 `core/proof-and-trust.md` authority section with a claim-triggered pointer for

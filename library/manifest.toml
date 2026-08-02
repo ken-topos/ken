@@ -16,7 +16,7 @@
 #                 how-to, status, normative-pointer (D1 — the closed set)
 #   availability  exactly one of: current, partial, planned, unavailable
 #   sources       "path" or "path#anchor" this document is grounded in;
-#                 an anchor should name a real heading in the target file
+#                 an anchor must name a real heading in the target file
 #   validation    the CLOSED set of registered record-validation gates
 #                 that apply to this record. See VALIDATION_GATES in
 #                 crates/ken-cli/tests/library_documentation_gates.rs for
