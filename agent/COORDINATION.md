@@ -1051,16 +1051,42 @@ and publishes.
 > | **`docs/program/`** — Steward-owned program docs (trackers, issue files, WP frames, program guides) | Steward resolves, no Architect | the change is **currency or editorial**, and the Steward **authorized the expansion when routing the WP**. A change that alters *program law* or a WP's **acceptance criteria** is not editorial — it is a frame amendment, and it is the Steward's to author, not a ring's to fold in. |
 > | **the Steward's own §6a corpus route** — `agent/**`, `docs/program/IMPLEMENTATION-PROGRESS.md` | Steward publishes directly (`ken-steward` §6a) | Not a doc-ring WP at all, so §14a never governed it. Process law is the Steward's lane (§4); routing it through the Architect would **add a review cycle to the workflow graph**, which §4 forbids without operator consent. The Architect's vote **is** still required where an `agent/` edit changes a **soundness or design gate** rather than process. |
 >
-> **LEDGER RIDER — the exception that bites, and it is not about voting.**
-> Some `docs/program/` files are **attested `library/` sources**: as of
-> 2026-07-25, `07-catalog-style-guide.md`, `12-documentation-program.md`, and
-> the issue files `CAT-CAPEX.md`, `DOC-W1.md`, `DOC-W2.md`. **Editing one moves
-> its blob OID and reddens the currency gate — a locator-only edit does it
-> too.** So a `docs/program/` change that skips the Architect **still owes the
-> `library/SOURCE-ATTESTATIONS` fold in the same candidate**, and it contends
-> on the ledger axis with any WP holding it (§7b). Never bump the row
-> without diffing the **cited anchors** — the recurring case is benign, which
-> is exactly what trains the rubber stamp (`DOC-ATTEST-LIVING`).
+> **LEDGER RIDER — RETIRED 2026-08-02. Its premise was removed one day after
+> it was written, and it stood for a week claiming a gate that does not exist.**
+>
+> The rider said: some `docs/program/` files are attested `library/` sources
+> (as of 2026-07-25 — `07-catalog-style-guide.md`,
+> `12-documentation-program.md`, and the issue files `CAT-CAPEX.md`,
+> `DOC-W1.md`, `DOC-W2.md`); editing one moves its blob OID and **reddens the
+> currency gate**; so such a change **owes the `library/SOURCE-ATTESTATIONS`
+> fold in the same candidate** and contends on the ledger axis (§7b).
+>
+> **There is no currency gate.** `LIB-GATE-DECOUPLE` (`f84e4804`, merged
+> **2026-07-26** — one day after this rider's own "as of" date) removed live
+> documentation/content CI coupling, and the resulting policy **explicitly
+> accepts that source attestations drift between release points**
+> (`docs/program/12-documentation-program.md:635-641`).
+>
+> **Measured 2026-08-02 at `91e34ab0`:** `library/SOURCE-ATTESTATIONS` pins
+> `12-documentation-program.md` at blob `5aed2550`; its actual blob is
+> `c27131c0`. **The row is already stale and nothing reported it** — the
+> accepted policy working as designed. `library/REVISION` is `0cde815f`,
+> behind `main`, because attestations record the revision the corpus was
+> verified *at* and lag by construction.
+>
+> ⇒ **A `docs/program/` edit owes no attestation fold.** Leave `library/`
+> byte-untouched; currency lands at the next release point through
+> `scripts/gen-source-attestations.sh` and `scripts/gen-doc-status.sh`.
+> ⛔ **Do not bring a single row current** while the rest of the ledger sits at
+> `library/REVISION` — that makes the ledger internally inconsistent and reads
+> as though the gate were live again.
+>
+> **Why this is recorded rather than deleted.** The rider is a worked example
+> of the failure class it now warns about: an obligation that outlived its
+> mechanism, phrased in the present tense, sitting in law every seat must read.
+> It would have cost a ring a stop — the frame says do not touch `library/`,
+> the rider says you owe a fold. `DOC-ATTEST-LIVING`'s rubber-stamp warning
+> keeps its force for whatever mechanism replaces this one.
 
 > **Why this is a structural fix, not a convenience.** The doc track runs
 > **concurrently** with the build track on the basis that it is
