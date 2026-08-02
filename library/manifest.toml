@@ -783,6 +783,31 @@ validation = [
 owner = "doc"
 
 [[document]]
+path = "library/reference/platform/README.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "docs/program/wave-4-terminal-residual.md#platform-census",
+  "crates/ken-host/build.rs",
+  "crates/ken-host/src/lib.rs",
+  "crates/ken-runtime/src/target_abi.rs",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
 path = "library/learn/reading-ken/fragments.md"
 kind = "reference"
 audience = ["human-reader", "agent-reader"]

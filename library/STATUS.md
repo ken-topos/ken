@@ -16,7 +16,7 @@ proves `library/` already existed at some point on `main`'s history.
 **It does not, by itself, certify any cited source's bytes** (SRC-ATTEST
 Part 1) — that claim is the attested source-set digest below.
 
-**Attested source-set digest:** `4719aace3e4c4770e80249b08ea13957f639e80f5847bb7b202979cd2cc0748b`
+**Attested source-set digest:** `443124fa96d7b929eb112df617aae89935babe5c2ca43337c3edf532e82fddee`
 
 The SHA-256 of `library/SOURCE-ATTESTATIONS`, the ledger binding every
 manifest-cited source to its exact blob OID at the commit the Librarian
@@ -64,6 +64,7 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/reference/toolchain/repl.md` | reference | derived-reference | current |
 | `library/reference/toolchain/version.md` | reference | derived-reference | current |
 | `library/reference/toolchain/help.md` | reference | derived-reference | partial |
+| `library/reference/platform/README.md` | reference | derived-reference | partial |
 | `library/learn/reading-ken/fragments.md` | reference | derived-reference | current |
 | `library/learn/reading-ken/01-anatomy.md` | explanatory | explanatory | current |
 | `library/learn/reading-ken/02-types-contracts-and-proofs.md` | explanatory | explanatory | current |
@@ -77,7 +78,7 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/quickstart.md` | tutorial | tutorial | current |
 | `library/STATUS.md` | status | status | current |
 
-**Total:** 43 registered document(s).
+**Total:** 44 registered document(s).
 
 ## Regenerating
 
