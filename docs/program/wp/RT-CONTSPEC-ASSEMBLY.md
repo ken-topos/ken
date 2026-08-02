@@ -66,6 +66,13 @@ Measured at `origin/main = 40f8757d`.
 - **D3 — the composition record.** A short statement of how the helper composes
   with the landed planner/ABI/substrate interfaces **as they are**, naming any
   interface it needs that does not exist.
+  ⛔ **The helper must be CONNECTED to the live state it claims to encapsulate,
+  and the harness must exercise THAT state — not a set of its own
+  construction.** Specifically: `CheckedFrameBranchScope` must operate on
+  `Lowering::consumed_subcontinuation_frames`
+  (`lowering/mod.rs:1046`, `BTreeSet<(u64, u64)>`), and `D3` must name the field
+  and show the connection. A helper that compiles beside the live field without
+  touching it does **not** discharge this.
 - **D4 — the recut census correction.** `docs/program/wp/RT-CONTSPEC-LOWER-D8.md`
   currently describes **39 rows** as only "assertion after unruled production
   activation" / "ownership matrix pending", although the captured run
@@ -176,6 +183,15 @@ Stop and route to the Steward, do not improvise, if any of these hold:
    an **interface fact**, and it is the single most valuable thing this seam can
    discover. It is **not** permission to import the cumulative WIP, and it is
    not a small exception to `AC-4`. Report the exact interface needed.
+   ⛔ **A helper that composes with NOTHING does not satisfy this stop — it
+   evades it.** As written, this stop was vacuously satisfiable by a dormant,
+   disconnected helper, and that is exactly what happened on `a7ab9efa`
+   (rejected, `dec_6xa6c5v0y9q6g`): the frozen helper keyed
+   `(Option<PredeclaredFunctionId>, u64, u64)` while the live field is
+   `BTreeSet<(u64, u64)>`, nothing joined them, and the harness built its own
+   triple-key set. **The green run proved dormancy, not composition.** The stop
+   fires only when the helper is connected to the live field and *then* cannot
+   proceed. See `D3`.
 2. **The Runtime lib suite is red on current `main` before your delta.** Then
    the baseline is not what this recut assumes and nothing downstream is
    interpretable. Report the failing rows.
