@@ -29,8 +29,11 @@ cf7276e174a07138f771208aa8a6cb2d6e72ca10	crates/ken-elaborator/tests/es3_modules
 959dd19252868737ab048b2223483b6f26326a7d	crates/ken-elaborator/tests/explicit_data_elaboration.rs
 b30b91ea4ea30703a12264b70bbe9807107db2dd	crates/ken-elaborator/tests/n2_in_repo_loader.rs
 43cd4a9a664f3667ec68605f692b4d7517e5e70c	crates/ken-elaborator/tests/surface_transport_acceptance.rs
+8357c0128469b0b32d05788c8485eec2e1386795	crates/ken-host/build.rs
+ff159382f344df0a38d41a59b0ef36a5a5b3289c	crates/ken-host/src/lib.rs
 57041e577a18e6c5065c85722b06f97725346e10	crates/ken-interp/src/eval.rs
 d317ad9c2c07dcb8e330a4e6fb2fd08cdf4efd02	crates/ken-runtime/src/cranelift_backend.rs
+b95787f5d26db1ab5946c70db4ded1528721f533	crates/ken-runtime/src/target_abi.rs
 d6ca1620ba2af48d1bfdddef07fe32f491d2c724	docs/PRINCIPLES.md
 096765c6a6fd91b48a0d997ea21730ffa39bd50e	docs/program/07-catalog-style-guide.md
 5aed25503bf61f088538f30fa52cfa0196f6fa70	docs/program/12-documentation-program.md
@@ -39,6 +42,7 @@ d6ca1620ba2af48d1bfdddef07fe32f491d2c724	docs/PRINCIPLES.md
 5ffe02bd6938e15a49639dcd76c8276762d32287	docs/program/issues/DOC-W2.md
 bdb2ff7de4eb4f64ab6a65250fef8c4c307e95f8	docs/program/issues/KERNEL-NESTED-IND.md
 cab0bba5d45cdb4dc07c81902931e5e8e51d9e79	docs/program/wave-4-generation-capability.md
+353f1cca2084ff03d76c2da9711730cfbd3d69a4	docs/program/wave-4-terminal-residual.md
 1bcbc93dc15d1bac80b40ee77b4bfa283e79067e	library/guide/decomposition-abstraction.ken.md
 7d0928e3429131e4a374932b8d5bd96ffc4ab208	library/guide/proof-techniques.ken.md
 1c75f79be4337c6f5fc002e751ca3ccde64786d8	library/guide/surface-reference.ken.md
