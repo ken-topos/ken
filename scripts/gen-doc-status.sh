@@ -130,11 +130,10 @@ fi
 # re-checking both after every deepen/unshallow step, not just the first.
 #
 # Escalating deepen rather than always paying for a full `--unshallow`
-# (which every CI run would otherwise trigger unconditionally, since
-# CI's checkout is shallow by default and this gate runs on every PR).
-# `library/REVISION` is normally bumped to a recent ancestor on each
-# rebase (see the fold history in this WP), so a modest deepen resolves
-# the common case; an old anchor still resolves via `--unshallow`.
+# when this release-point/manual tool is invoked from a shallow checkout.
+# `library/REVISION` is normally bumped to a recent ancestor at a release
+# point, so a modest deepen resolves the common case; an old anchor still
+# resolves via `--unshallow`.
 revision_resolved() {
   git -C "$REPO_ROOT" cat-file -e "${REVISION}^{commit}" 2>/dev/null \
     && git -C "$REPO_ROOT" merge-base --is-ancestor "$REVISION" HEAD 2>/dev/null
@@ -313,13 +312,12 @@ fi
 #   every legitimate bump (the parent-commit self-reference this script's
 #   header explains) — checking it would fail every time REVISION is used
 #   correctly. `STATUS.md`'s manifest record visibly narrows its own claim
-#   (`crates/ken-cli/tests/library_documentation_gates.rs`,
+#   (`crates/ken-cli/tests/library_documentation_gates.rs`, retained
 #   `VALIDATION_GATES` applicability predicate): a `kind = "status"`
 #   document does not
-#   carry `source-currency` at all — its freshness is what `generated-
-#   current` (idempotency) already establishes, which subsumes "unchanged
-#   since REVISION" for a document that is, by definition, always
-#   regenerated fresh from the current working tree.
+#   carry `source-currency` at all. A manual `gen-doc-status.sh --check`
+#   establishes its `generated-current` idempotency at a release point;
+#   the retained registry does not run that check automatically.
 #
 # Extraction lives entirely in the awk below (no `grep -o` stage this
 # time — an earlier cut piped through one and had to guard its "zero
@@ -674,7 +672,7 @@ cited source, unlike \`REVISION\`. Regenerate a proposed ledger with
 ## Registered documents
 
 Every row below is one \`[[document]]\` entry in \`library/manifest.toml\`.
-A document with no row here has no manifest entry and fails gate 1.
+A document with no row here is absent from the manifest inventory.
 
 | Path | Kind | Authority | Availability |
 |---|---|---|---|
@@ -684,8 +682,8 @@ ${ROWS}
 ## Regenerating
 
 \`\`\`
-scripts/gen-doc-status.sh              # regenerate this file in place (CI-checked)
-scripts/gen-doc-status.sh --check      # verify committed file matches (CI)
+scripts/gen-doc-status.sh              # regenerate at a release point
+scripts/gen-doc-status.sh --check      # compare with a fresh local render
 scripts/gen-source-attestations.sh     # render a PROPOSED ledger for review;
                                         # only the Librarian commits it
 \`\`\`

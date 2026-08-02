@@ -1,10 +1,10 @@
 # library/manifest.toml — the inventory of every library/ document.
 #
-# Every document under library/ MUST have exactly one [[document]] entry
-# here (Wave 0 gate 1, docs/program/12-documentation-program.md §2: "a page
-# whose authority class you cannot name is not ready to land"). A gate
-# fails the build if a library/*.md file has no entry, or an entry's path
-# does not exist.
+# Every document under library/ is required to have exactly one [[document]]
+# entry here (docs/program/12-documentation-program.md §2: "a page whose
+# authority class you cannot name is not ready to land"). The inventory and
+# its manual/release-point tools make missing entries and paths reviewable;
+# no live validation runner currently enforces this requirement.
 #
 # Field meaning (research/librarian-documentation-program-proposal.md,
 # "Suggested manifest record"):
@@ -16,13 +16,12 @@
 #                 how-to, status, normative-pointer (D1 — the closed set)
 #   availability  exactly one of: current, partial, planned, unavailable
 #   sources       "path" or "path#anchor" this document is grounded in;
-#                 an anchor must name a real heading in the target file
-#                 (gate 3) — this is the drift gate D1 requires
+#                 an anchor should name a real heading in the target file
 #   validation    the CLOSED set of registered record-validation gates
 #                 that apply to this record. See VALIDATION_GATES in
-#                 crates/ken-cli/tests/library_documentation_gates.rs,
-#                 the single source of truth for vocabulary,
-#                 applicability, and executable validation.
+#                 crates/ken-cli/tests/library_documentation_gates.rs for
+#                 the retained vocabulary and applicability predicates.
+#                 The registry is not currently iterated by a live runner.
 #   owner         the team responsible
 #
 # library/REVISION holds the explicit, hand-set validated repository

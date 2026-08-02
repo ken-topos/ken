@@ -301,6 +301,56 @@ classifies a failure as a kernel judgment or proof-checking failure can still
 make that claim without any revised sentence obliging it to load
 `spec/10-kernel/18-judgments.md`.
 
+### Assurance-language sweep
+
+The final corrective fold searched assurance language across `library/`,
+`scripts/`, and `docs/program/`: present-tense claims that a check is run, a
+property is enforced or guaranteed, validation executes, or a failure reaches
+the build. This was deliberately broader than searching for the word `gate`.
+Each result was then traced to an actual call site or to the measured removal
+record in `docs/program/12-documentation-program.md` §4. The ordered result is:
+
+1. `library/manifest.toml:3-24` said a gate failed the build, described
+   `sources` as a drift gate, and described the retained `VALIDATION_GATES`
+   registry as executable validation. **Folded here:** the header now states
+   the inventory requirement, manual/release-point review surface, and the
+   absence of a live registry runner.
+2. `library/README.md:36-39` said gates guaranteed registration, links, and
+   source currency. **Folded here:** the portal now names manual/release-point
+   review and says no live library-validation runner enforces those
+   properties.
+3. `library/STATUS.md:31-32,131-132` says a missing row fails gate 1 and labels
+   status generation and comparison as CI-backed. **Recorded only:** the file
+   is a frozen release-point artifact and remains byte-identical. Its producer
+   is corrected here, so the truthful wording lands at the next release point.
+4. `scripts/gen-doc-status.sh:133-136,315-320,674-688` coupled the manual
+   generator to per-PR CI, automatic registry execution, a build-failing gate,
+   and CI-backed regeneration. **Folded here:** it now describes shallow
+   checkout handling, manual `--check`, inventory absence, and release-point
+   commands without inventing live enforcement.
+5. `scripts/gen-source-attestations.sh:39-47` said the nonexistent
+   `registered_record_validation_gates_run` executed the retained validators
+   and acted as a safety net. **Folded here:** it distinguishes synthetic
+   mismatch tests from the release-point review that compares the duplicated
+   extractors.
+
+The same sweep found historical descriptions of the removed runner under
+`docs/program/issues/`, `docs/program/wp/`, and `docs/program/diary/`. They are
+**recorded only and intentionally unchanged**: they describe the mechanism at
+the time, its removal, or a superseded frame assumption rather than asserting
+that the runner is live now. `docs/program/12-documentation-program.md:223-245`
+is the current control and explicitly records that the registry is unreachable
+and migration checks are local rather than standing CI.
+
+Three ruled product pages were also examined explicitly:
+`library/introduction.md`,
+`library/learn/reading-ken/01-anatomy.md`, and
+`library/guide/surface-reference.ken.md`. Their checked/proved/elaboration
+language describes Ken's proof levels and language behavior, not execution of
+the retired library-validation registry. They are **correct as written** and
+remain byte-identical. No additional live assurance site remained after these
+dispositions.
+
 The recommended follow-up is to amend the existing
 `core/proof-and-trust.md` authority section with a claim-triggered pointer for
 kernel-judgment classification. No new module or pack dependency is indicated,
