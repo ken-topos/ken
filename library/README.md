@@ -17,7 +17,7 @@ declared in [`manifest.toml`](manifest.toml).
 |---|---|---|
 | **Read Ken** — understand a program someone else wrote | [`introduction.md`](introduction.md) | current — six-chapter reading curriculum available |
 | **Write Ken** — author a checked program | [`guide/surface-reference.ken.md`](guide/surface-reference.ken.md) | current — checked conceptual guides available |
-| **Look something up** — a rule, a diagnostic, a CLI flag | *not yet available here* | map only — Wave 4 |
+| **Look something up** — a rule, a diagnostic, a CLI option | [`reference/toolchain/`](reference/toolchain/README.md) | current — toolchain command reference available |
 | **Find a package** — browse the catalog by task | [`catalog/packages/`](../catalog/packages/README.md) directly, for now | map only — Wave 5 generated portal |
 | **Load agent context** — select product knowledge for a coding agent | [`agents/README.md`](agents/README.md) | current |
 

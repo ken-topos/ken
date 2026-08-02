@@ -33,11 +33,12 @@ b30b91ea4ea30703a12264b70bbe9807107db2dd	crates/ken-elaborator/tests/n2_in_repo_
 d317ad9c2c07dcb8e330a4e6fb2fd08cdf4efd02	crates/ken-runtime/src/cranelift_backend.rs
 d6ca1620ba2af48d1bfdddef07fe32f491d2c724	docs/PRINCIPLES.md
 096765c6a6fd91b48a0d997ea21730ffa39bd50e	docs/program/07-catalog-style-guide.md
-187454c563dde53c4043a472fbaf1f66b8aa3f6f	docs/program/12-documentation-program.md
+5aed25503bf61f088538f30fa52cfa0196f6fa70	docs/program/12-documentation-program.md
 836e59274b34ea3a20d956dfd53ce344f1a7e001	docs/program/issues/CAT-CAPEX.md
 286e23e0c7c362227ff555528b759722d9798930	docs/program/issues/DOC-W1.md
 5ffe02bd6938e15a49639dcd76c8276762d32287	docs/program/issues/DOC-W2.md
 bdb2ff7de4eb4f64ab6a65250fef8c4c307e95f8	docs/program/issues/KERNEL-NESTED-IND.md
+cab0bba5d45cdb4dc07c81902931e5e8e51d9e79	docs/program/wave-4-generation-capability.md
 1bcbc93dc15d1bac80b40ee77b4bfa283e79067e	library/guide/decomposition-abstraction.ken.md
 7d0928e3429131e4a374932b8d5bd96ffc4ab208	library/guide/proof-techniques.ken.md
 1c75f79be4337c6f5fc002e751ca3ccde64786d8	library/guide/surface-reference.ken.md

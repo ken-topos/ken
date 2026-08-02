@@ -598,6 +598,191 @@ validation = [
 owner = "doc"
 
 [[document]]
+path = "library/reference/toolchain/README.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "current"
+sources = [
+  "docs/program/wave-4-generation-capability.md#result",
+  "docs/program/wave-4-generation-capability.md#required-finding-global-options-omitted-by-help",
+  "crates/ken-cli/src/main.rs",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/toolchain/run.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "current"
+sources = [
+  "docs/program/wave-4-generation-capability.md#exit-status-boundary",
+  "crates/ken-cli/src/main.rs",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/toolchain/check.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "current"
+sources = [
+  "docs/program/wave-4-generation-capability.md#command-log",
+  "crates/ken-cli/src/main.rs",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/toolchain/native-build.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "current"
+sources = [
+  "docs/program/wave-4-generation-capability.md#command-log",
+  "crates/ken-cli/src/main.rs",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/toolchain/fmt.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "current"
+sources = [
+  "docs/program/wave-4-generation-capability.md#command-log",
+  "crates/ken-cli/src/main.rs",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/toolchain/repl.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "current"
+sources = [
+  "docs/program/wave-4-generation-capability.md#command-log",
+  "crates/ken-cli/src/main.rs",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/toolchain/version.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "current"
+sources = [
+  "docs/program/wave-4-generation-capability.md#c2-accepted-global-option-aliases",
+  "crates/ken-cli/src/main.rs",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/toolchain/help.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "partial"
+sources = [
+  "docs/program/wave-4-generation-capability.md#required-finding-global-options-omitted-by-help",
+  "crates/ken-cli/src/main.rs",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
 path = "library/learn/reading-ken/fragments.md"
 kind = "reference"
 audience = ["human-reader", "agent-reader"]
