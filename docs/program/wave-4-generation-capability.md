@@ -53,17 +53,17 @@ $ rg --files scripts | rg '/gen-' | sort
 scripts/gen-doc-status.sh
 scripts/gen-progress.sh
 scripts/gen-source-attestations.sh
-$ rg -n '^# Usage:|^(ISSUES_DIR|MANIFEST|REVISION_FILE|OUT_FILE|PROPOSED_FILE)=' scripts/gen-doc-status.sh scripts/gen-progress.sh scripts/gen-source-attestations.sh
-scripts/gen-source-attestations.sh:20:# Usage:
-scripts/gen-source-attestations.sh:31:MANIFEST="$ROOT/library/manifest.toml"
-scripts/gen-source-attestations.sh:32:PROPOSED_FILE="$ROOT/library/SOURCE-ATTESTATIONS.proposed"
-scripts/gen-progress.sh:12:# Usage:
-scripts/gen-progress.sh:20:ISSUES_DIR="$ROOT/docs/program/issues"
-scripts/gen-progress.sh:21:OUT_FILE="$ROOT/docs/program/IMPLEMENTATION-PROGRESS.md"
-scripts/gen-doc-status.sh:28:# Usage:
-scripts/gen-doc-status.sh:36:MANIFEST="$ROOT/library/manifest.toml"
-scripts/gen-doc-status.sh:37:REVISION_FILE="$ROOT/library/REVISION"
-scripts/gen-doc-status.sh:38:OUT_FILE="$ROOT/library/STATUS.md"
+$ rg -n '^# Usage:|^(ISSUES_DIR|MANIFEST|REVISION_FILE|OUT_FILE|PROPOSED_FILE)=' scripts/gen-doc-status.sh scripts/gen-progress.sh scripts/gen-source-attestations.sh | sort
+scripts/gen-doc-status.sh:28:# Usage: scripts/gen-doc-status.sh [--check]
+scripts/gen-doc-status.sh:36:MANIFEST="$REPO_ROOT/library/manifest.toml"
+scripts/gen-doc-status.sh:37:REVISION_FILE="$REPO_ROOT/library/REVISION"
+scripts/gen-doc-status.sh:38:OUT_FILE="$REPO_ROOT/library/STATUS.md"
+scripts/gen-progress.sh:12:# Usage: scripts/gen-progress.sh [--check]
+scripts/gen-progress.sh:20:ISSUES_DIR="$REPO_ROOT/docs/program/issues"
+scripts/gen-progress.sh:21:OUT_FILE="$REPO_ROOT/docs/program/IMPLEMENTATION-PROGRESS.md"
+scripts/gen-source-attestations.sh:20:# Usage: scripts/gen-source-attestations.sh
+scripts/gen-source-attestations.sh:31:MANIFEST="$REPO_ROOT/library/manifest.toml"
+scripts/gen-source-attestations.sh:32:PROPOSED_FILE="$REPO_ROOT/library/SOURCE-ATTESTATIONS.proposed"
 ```
 
 Exit status: 0. This is a source inventory, not an observation of generator
@@ -76,35 +76,40 @@ attestation ledger.
 ```console
 $ sed -n '8,44p' crates/ken-cli/src/main.rs
 fn main() {
-    let mut args = std::env::args().skip(1);
-    let command = args.next().unwrap_or_default();
-
-    let result = match command.as_str() {
+    let args: Vec<OsString> = std::env::args_os().collect();
+    match args.get(1).and_then(|s| s.to_str()).unwrap_or("") {
         "repl" => repl::run(),
-        "run" => match args.next() {
-            Some(path) => run::run(Path::new(&path), collect_run_args(args)),
-            None => Err("ken run: expected a source file".into()),
+        "run" => match parse_run_invocation(&args[2..]) {
+            Ok(invocation) => run_file(invocation.path.as_os_str(), &invocation.arguments),
+            Err(RunArgumentError::MissingPath) => {
+                eprintln!("ken run: missing <file> argument");
+                eprintln!("Usage: ken run <file.ken> [-- <arguments>...]");
+                std::process::exit(1);
+            }
+            Err(RunArgumentError::UnexpectedBeforeSeparator(argument)) => {
+                eprintln!("ken run: unexpected argument before '--': {:?}", argument);
+                std::process::exit(1);
+            }
         },
-        "check" => match args.next() {
-            Some(path) => check::run(Path::new(&path)),
-            None => Err("ken check: expected a source file".into()),
-        },
-        "native-build" => native_build::run(args.collect()),
-        "fmt" => fmt::run(args.collect()),
+        "check" => check_file(args.get(2).map(OsString::as_os_str)),
+        "native-build" => native_build_file(
+            args.get(2).map(OsString::as_os_str),
+            args.get(3).map(OsString::as_os_str),
+        ),
+        "fmt" => format_files(&args[2..]),
         "version" | "--version" | "-V" => {
-            print_version();
-            Ok(())
+            println!(
+                "ken {} — verified topos-oriented language",
+                env!("CARGO_PKG_VERSION")
+            );
+            println!("kernel {}", ken_kernel::version());
+            println!("{}", ken_interp::describe());
         }
-        "" | "--help" | "-h" | "help" => {
-            print_help();
-            Ok(())
+        "" | "--help" | "-h" | "help" => print_help(),
+        unknown => {
+            eprintln!("ken: unknown subcommand '{}' — try 'ken help'", unknown);
+            std::process::exit(1);
         }
-        other => Err(format!("ken: unknown subcommand '{other}' — try 'ken help'").into()),
-    };
-
-    if let Err(error) = result {
-        eprintln!("{error}");
-        process::exit(1);
     }
 }
 ```
@@ -121,8 +126,10 @@ $ scripts/gen-progress.sh --check
 gen-progress --check: OK (/workspaces/ken/.worktrees/doc-author/docs/program/IMPLEMENTATION-PROGRESS.md is up to date)
 $ scripts/gen-source-attestations.sh
 gen-source-attestations: wrote /workspaces/ken/.worktrees/doc-author/library/SOURCE-ATTESTATIONS.proposed
-Review it, then install mechanically:
-  mv /workspaces/ken/.worktrees/doc-author/library/SOURCE-ATTESTATIONS.proposed /workspaces/ken/.worktrees/doc-author/library/SOURCE-ATTESTATIONS
+  Review it (diff library/SOURCE-ATTESTATIONS library/SOURCE-ATTESTATIONS.proposed),
+  record which changed sources/pages were revalidated, then:
+    mv library/SOURCE-ATTESTATIONS.proposed library/SOURCE-ATTESTATIONS
+  and commit it deliberately. This script never installs it for you.
 ```
 
 All three commands exit 0. Their observed outputs agree with S2. None emits
