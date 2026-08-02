@@ -36,6 +36,8 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/README.md` | portal | explanatory | current |
 | `library/reference/catalog/declarations.md` | reference | derived-reference | current |
 | `library/reference/catalog/laws.md` | reference | derived-reference | current |
+| `library/reference/catalog/effects-and-capabilities.md` | reference | derived-reference | current |
+| `library/reference/catalog/assurance.md` | reference | derived-reference | current |
 | `library/agents/README.md` | portal | explanatory | current |
 | `library/agents/core/read-ken.md` | reference | derived-reference | current |
 | `library/agents/core/write-ken.md` | reference | how-to | current |
@@ -121,7 +123,7 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/quickstart.md` | tutorial | tutorial | current |
 | `library/STATUS.md` | status | status | current |
 
-**Total:** 87 registered document(s).
+**Total:** 89 registered document(s).
 
 ## Regenerating
 

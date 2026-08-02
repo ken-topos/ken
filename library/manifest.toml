@@ -173,6 +173,126 @@ validation = [
 owner = "doc"
 
 [[document]]
+path = "library/reference/catalog/effects-and-capabilities.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "current"
+sources = [
+  "library/reference/catalog/Application/CommandLine/ArgParse.md",
+  "library/reference/catalog/Application/Configuration/Decoder.md",
+  "library/reference/catalog/Application/Input/Schema.md",
+  "library/reference/catalog/Capability/Console/Text.md",
+  "library/reference/catalog/Capability/Diagnostics/Core.md",
+  "library/reference/catalog/Capability/Diagnostics/Render.md",
+  "library/reference/catalog/Capability/Filesystem/Authority.md",
+  "library/reference/catalog/Capability/Filesystem/Errors.md",
+  "library/reference/catalog/Capability/Filesystem/Path/Posix.md",
+  "library/reference/catalog/Capability/Formatting/Doc.md",
+  "library/reference/catalog/Capability/Parsing/Cursor.md",
+  "library/reference/catalog/Capability/Parsing/Decoder.md",
+  "library/reference/catalog/Capability/Parsing/Numeric.md",
+  "library/reference/catalog/Capability/Parsing/Parsing.md",
+  "library/reference/catalog/Capability/Process/Arguments.md",
+  "library/reference/catalog/Capability/Process/Environment.md",
+  "library/reference/catalog/Capability/Process/Exit.md",
+  "library/reference/catalog/Capability/Process/WorkingDirectory.md",
+  "library/reference/catalog/Capability/System/Buffer.md",
+  "library/reference/catalog/Capability/System/IO.md",
+  "library/reference/catalog/Capability/System/Resource.md",
+  "library/reference/catalog/Capability/Time/WallClock.md",
+  "library/reference/catalog/Core/Classes/EffectfulClasses.md",
+  "library/reference/catalog/Core/Classes/LawfulClasses.md",
+  "library/reference/catalog/Core/Classes/LawfulFunctors.md",
+  "library/reference/catalog/Core/Logic/EmptyDec.md",
+  "library/reference/catalog/Core/Logic/Transport.md",
+  "library/reference/catalog/Data/Binary/BytesKeys.md",
+  "library/reference/catalog/Data/Collections/Derived.md",
+  "library/reference/catalog/Data/Collections/Map.md",
+  "library/reference/catalog/Data/Collections/NonEmpty.md",
+  "library/reference/catalog/Data/Numeric/Nat/Arithmetic.md",
+  "library/reference/catalog/Data/Numeric/Nat/Order.md",
+  "library/reference/catalog/Data/Sums/Combinators.md",
+  "library/reference/catalog/Data/Sums/Validation.md",
+  "library/reference/catalog/Data/Text/Codec.md",
+  "library/reference/catalog/Data/Text/StringBijection.md",
+  "library/reference/catalog/Data/Text/StringKeys.md",
+  "library/reference/catalog/Tooling/Testing/Property.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
+path = "library/reference/catalog/assurance.md"
+kind = "reference"
+audience = ["human-reader", "agent-reader"]
+authority = "derived-reference"
+availability = "current"
+sources = [
+  "library/reference/catalog/Application/CommandLine/ArgParse.md",
+  "library/reference/catalog/Application/Configuration/Decoder.md",
+  "library/reference/catalog/Application/Input/Schema.md",
+  "library/reference/catalog/Capability/Console/Text.md",
+  "library/reference/catalog/Capability/Diagnostics/Core.md",
+  "library/reference/catalog/Capability/Diagnostics/Render.md",
+  "library/reference/catalog/Capability/Filesystem/Authority.md",
+  "library/reference/catalog/Capability/Filesystem/Errors.md",
+  "library/reference/catalog/Capability/Filesystem/Path/Posix.md",
+  "library/reference/catalog/Capability/Formatting/Doc.md",
+  "library/reference/catalog/Capability/Parsing/Cursor.md",
+  "library/reference/catalog/Capability/Parsing/Decoder.md",
+  "library/reference/catalog/Capability/Parsing/Numeric.md",
+  "library/reference/catalog/Capability/Parsing/Parsing.md",
+  "library/reference/catalog/Capability/Process/Arguments.md",
+  "library/reference/catalog/Capability/Process/Environment.md",
+  "library/reference/catalog/Capability/Process/Exit.md",
+  "library/reference/catalog/Capability/Process/WorkingDirectory.md",
+  "library/reference/catalog/Capability/System/Buffer.md",
+  "library/reference/catalog/Capability/System/IO.md",
+  "library/reference/catalog/Capability/System/Resource.md",
+  "library/reference/catalog/Capability/Time/WallClock.md",
+  "library/reference/catalog/Core/Classes/EffectfulClasses.md",
+  "library/reference/catalog/Core/Classes/LawfulClasses.md",
+  "library/reference/catalog/Core/Classes/LawfulFunctors.md",
+  "library/reference/catalog/Core/Logic/EmptyDec.md",
+  "library/reference/catalog/Core/Logic/Transport.md",
+  "library/reference/catalog/Data/Binary/BytesKeys.md",
+  "library/reference/catalog/Data/Collections/Derived.md",
+  "library/reference/catalog/Data/Collections/Map.md",
+  "library/reference/catalog/Data/Collections/NonEmpty.md",
+  "library/reference/catalog/Data/Numeric/Nat/Arithmetic.md",
+  "library/reference/catalog/Data/Numeric/Nat/Order.md",
+  "library/reference/catalog/Data/Sums/Combinators.md",
+  "library/reference/catalog/Data/Sums/Validation.md",
+  "library/reference/catalog/Data/Text/Codec.md",
+  "library/reference/catalog/Data/Text/StringBijection.md",
+  "library/reference/catalog/Data/Text/StringKeys.md",
+  "library/reference/catalog/Tooling/Testing/Property.md",
+]
+validation = [
+  "manifest-coverage",
+  "manifest-completeness",
+  "document-kind",
+  "links",
+  "source-anchors",
+  "availability-label",
+  "authority-class",
+  "transport-delimiter",
+  "source-currency",
+]
+owner = "doc"
+
+[[document]]
 path = "library/agents/README.md"
 kind = "portal"
 audience = ["agent-reader"]
