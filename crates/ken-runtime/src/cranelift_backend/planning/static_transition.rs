@@ -573,7 +573,7 @@ thread_local! {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum ContinuationWorkerCaptureSource {
+pub(in crate::cranelift_backend) enum ContinuationWorkerCaptureSource {
     Seed,
     Lexical(StaticOriginId),
 }
@@ -696,6 +696,126 @@ impl<'plan> ContinuationUnitView<'plan> {
         self.inputs
     }
 
+    /// **The ruled ordinary envelope**, one role per `Parameter` ABI slot, in
+    /// slot order.
+    ///
+    /// `nonrecursive_field_count = ordinary_parameters - worker_capture_count`,
+    /// computed with checked arithmetic. Positions
+    /// `0..nonrecursive_field_count` are nonrecursive producer-`Construct`
+    /// fields in producer source order with the selected recursive position
+    /// omitted; worker capture `ordinal` occupies
+    /// `nonrecursive_field_count + ordinal`.
+    ///
+    /// Each role is recompared against the validated slot run before it is
+    /// returned: the count of `Parameter` slots must equal
+    /// `header.parameters`, which must equal the envelope length.
+    pub(in crate::cranelift_backend) fn ordinary_envelope(
+        &self,
+    ) -> Result<Vec<ContinuationOrdinaryEnvelopeRole>, CraneliftBackendError> {
+        let captures = u32::try_from(self.key.worker.captures.len()).map_err(|_| {
+            planner_error("worker capture count exceeds addressable range")
+        })?;
+        let nonrecursive_field_count = self
+            .key
+            .ordinary_parameters
+            .checked_sub(captures)
+            .ok_or_else(|| {
+                planner_error(
+                    "a continuation declares fewer ordinary parameters than its selected worker \
+                     has captures, so the ruled envelope has no nonrecursive prefix",
+                )
+            })?;
+
+        let parameter_slots = self
+            .slots
+            .iter()
+            .filter(|slot| slot.kind == AbiSlotKind::Parameter)
+            .count();
+        if parameter_slots != self.header.parameters as usize {
+            return Err(planner_error(
+                "the continuation slot run's Parameter count disagrees with its own header",
+            ));
+        }
+
+        let mut envelope = Vec::with_capacity(parameter_slots);
+        for source_position in 0..nonrecursive_field_count {
+            envelope.push(ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField {
+                source_position,
+            });
+        }
+        for capture in &self.key.worker.captures {
+            let position = nonrecursive_field_count
+                .checked_add(capture.ordinal)
+                .ok_or_else(|| planner_error("worker capture position overflows the envelope"))?;
+            if position as usize != envelope.len() {
+                return Err(planner_error(
+                    "worker captures are not dense in capture-ordinal order, so the ruled \
+                     envelope position cannot be assigned",
+                ));
+            }
+            envelope.push(ContinuationOrdinaryEnvelopeRole::WorkerCapture {
+                ordinal: capture.ordinal,
+                owner: capture.owner,
+                closure_origin: capture.closure_origin,
+                source: capture.source,
+                lifetime: capture.lifetime,
+            });
+        }
+        if envelope.len() != parameter_slots {
+            return Err(planner_error(
+                "the ruled ordinary envelope does not cover its Parameter slot run exactly",
+            ));
+        }
+        Ok(envelope)
+    }
+
+    /// **The ordered continuation inputs**, re-exposed from the immutable key
+    /// and recompared against the validated ABI input authority.
+    ///
+    /// Each projected input must agree with the authority at its position on
+    /// ordinal and source owner, and the input's `ordinary_abi_position` must
+    /// name a real `Parameter` slot, so a projection cannot point outside the
+    /// envelope it is supposed to index.
+    pub(in crate::cranelift_backend) fn continuation_inputs(
+        &self,
+    ) -> Result<Vec<ContinuationInputView>, CraneliftBackendError> {
+        let parameter_slots = self
+            .slots
+            .iter()
+            .filter(|slot| slot.kind == AbiSlotKind::Parameter)
+            .count();
+        self.key
+            .continuation_inputs
+            .iter()
+            .zip(self.inputs)
+            .map(|(projection, authority)| {
+                if projection.ordinal != authority.ordinal
+                    || projection.source_owner != authority.source_owner
+                {
+                    return Err(planner_error(
+                        "a continuation input projection disagrees with its validated ABI input \
+                         authority",
+                    ));
+                }
+                Ok(ContinuationInputView {
+                    ordinal: projection.ordinal,
+                    source_owner: projection.source_owner,
+                    source_abi_position: projection.source_abi_position,
+                    source: projection.source,
+                    carrier: projection.carrier,
+                    ownership: projection.ownership,
+                    storage_owner: projection.storage_owner,
+                    boundary_phase: projection.boundary_phase,
+                    boundary_operation: projection.boundary_operation,
+                    boundary_need: projection.boundary_need,
+                    boundary_avail: projection.boundary_avail,
+                    referent_affinity: projection.referent_affinity.clone(),
+                    ordinary_abi_position: projection.ordinary_abi_position,
+                })
+            })
+            .collect()
+    }
+
     /// The static worker whose result enters this continuation's return hole.
     ///
     /// These are the already-validated planner facts a `D2` definition needs
@@ -739,6 +859,53 @@ impl<'plan> ContinuationUnitView<'plan> {
         }
         Ok((offsets, frame_bytes))
     }
+}
+
+/// **The ruled ordinary-envelope role of one `Parameter` ABI slot.**
+///
+/// The Architect's ruling: the Parameter prefix is
+/// `[nonrecursive producer-Construct fields in source order]
+///  ++ [selected worker captures in capture-ordinal order]`,
+/// with the selected recursive field omitted.
+///
+/// This is a **role projection**, not a worker-body environment map. The
+/// continuation descriptor's contract and the worker's `arity + captures`
+/// contract are distinct, and nothing here relates a slot to a lexical
+/// position in the worker body.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum ContinuationOrdinaryEnvelopeRole {
+    /// A nonrecursive field of the producer `Construct`, at its **source**
+    /// position. The selected recursive field is not in this population.
+    NonrecursiveConstructorField { source_position: u32 },
+    /// One selected worker capture, at its capture ordinal.
+    WorkerCapture {
+        ordinal: u32,
+        owner: PredeclaredFunctionId,
+        closure_origin: StaticOriginId,
+        source: ContinuationWorkerCaptureSource,
+        lifetime: PlannedReferentLifetime,
+    },
+}
+
+/// A read-only view of one already-validated continuation input.
+///
+/// Every field is existing immutable `ContinuationInputProjection` material,
+/// re-exposed rather than re-derived.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct ContinuationInputView {
+    pub(in crate::cranelift_backend) ordinal: u32,
+    pub(in crate::cranelift_backend) source_owner: PredeclaredFunctionId,
+    pub(in crate::cranelift_backend) source_abi_position: u32,
+    pub(in crate::cranelift_backend) source: ContinuationInputSource,
+    pub(in crate::cranelift_backend) carrier: AbiCarrier,
+    pub(in crate::cranelift_backend) ownership: AbiOwnership,
+    pub(in crate::cranelift_backend) storage_owner: AbiStorageOwner,
+    pub(in crate::cranelift_backend) boundary_phase: BoundaryUsePhase,
+    pub(in crate::cranelift_backend) boundary_operation: BoundaryUseOperation,
+    pub(in crate::cranelift_backend) boundary_need: BoundaryUseNeed,
+    pub(in crate::cranelift_backend) boundary_avail: BoundaryUseAvail,
+    pub(in crate::cranelift_backend) referent_affinity: Vec<BoundaryReferentOwner>,
+    pub(in crate::cranelift_backend) ordinary_abi_position: u32,
 }
 
 /// `D1` — a read-only view of one already-validated continuation call token,
@@ -4974,24 +5141,41 @@ impl<'src> StaticTransitionPlan<'src> {
                  population",
             ));
         }
+        // The join is BY IDENTITY, not by position.
+        //
+        // An earlier form zipped the two populations and then checked that the
+        // descriptor's id equalled the planner's id at that index. That catches
+        // a reordering of one side, but agrees with an *identical* reordering
+        // of both, so it was not an independent check. Indexing the descriptors
+        // by the id they declare, and then resolving each planned
+        // specialization through that index, removes position from the join
+        // entirely: a descriptor is found by the identity it names or not at
+        // all.
+        let mut by_id: BTreeMap<ContinuationSpecializationId, &abi::AbiContinuationDescriptor> =
+            BTreeMap::new();
+        for descriptor in &self.abi.continuation_descriptors {
+            let AbiUnitDefinition::ContinuationSpecialization { specialization } =
+                descriptor.definition
+            else {
+                return Err(planner_error(
+                    "a continuation ABI descriptor does not define a continuation specialization",
+                ));
+            };
+            if by_id.insert(specialization, descriptor).is_some() {
+                return Err(planner_error(
+                    "two continuation ABI descriptors declare the same specialization identity",
+                ));
+            }
+        }
         self.continuation_specializations
             .iter()
-            .zip(&self.abi.continuation_descriptors)
-            .map(|(planned, descriptor)| {
-                let AbiUnitDefinition::ContinuationSpecialization { specialization } =
-                    descriptor.definition
-                else {
-                    return Err(planner_error(
-                        "a continuation ABI descriptor does not define a continuation \
-                         specialization",
-                    ));
-                };
-                if specialization != planned.id {
-                    return Err(planner_error(
-                        "a continuation ABI descriptor names a different specialization than the \
-                         planner interned at that position",
-                    ));
-                }
+            .map(|planned| {
+                let descriptor = *by_id.get(&planned.id).ok_or_else(|| {
+                    planner_error(
+                        "a planned continuation specialization has no ABI descriptor declaring \
+                         its identity",
+                    )
+                })?;
                 let slots = dense_slice(&self.abi.continuation_slots, descriptor.slots)
                     .ok_or_else(|| {
                         planner_error("continuation slot range is outside the plane")
