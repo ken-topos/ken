@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-02 01:24:06Z — from 146 issue file(s) in `docs/program/issues/`.
+2026-08-02 01:37:29Z — from 147 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -88,6 +88,7 @@ the committed file matches the generator's output.
 | `DOC-W4-LANGUAGE` | Wave 4 slice 2 — the language reference, scoped to whatever survives a residual measurement against the 625-line page already named `surface-reference` | merged | doc | S | none | — |
 | `DOC-W4-RESIDUAL` | Wave 4 slice 3 — the terminal residual measurement across the four remaining reference surfaces and the four indexes, authoring only what survives it | ready | doc | S | none | — |
 | `DOC-W4-TOOLCHAIN` | Wave 4 slice 1 — the toolchain reference, plus the D0 report on which of Wave 4's generated facts the toolchain can actually produce today | merged | doc | M | none | — |
+| `DOC-W5-CAPABILITY` | Wave 5 precondition — the Librarian's format-capability report: which of Wave 5's nine fact classes the checked artifact format can express today, and therefore whether Wave 5 is authorable or blocked on a generator | ready | doc | S | none | — |
 | `DS-9` | lawful JSON codec — the data-structures tier's acceptance test: a Json value type, encode/decode, and the proved round-trip law, assembled entirely from the landed Core/Data sections | draft | foundation | L | none | — |
 | `EFF-SPACE-ENSURES-PRESTATE` | `old` is transparent, so a space operation's `ensures` cannot express the pre/post distinction `36 §4.3` is built on | closed | language | M | none | — |
 | `F1-37` | F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion | ready | runtime | TBD | none | — |
@@ -215,6 +216,7 @@ is itself not yet `merged`/`closed`:
 - `ABI-S4` blocked by `ABI-M1` (status: draft)
 - `ABI-S5` blocked by `PX9` (status: draft)
 - `ABI-S6` blocked by `ABI-S1` (status: draft)
+- `DOC-W5-CAPABILITY` blocked by `DOC-W4-RESIDUAL` (status: ready)
 - `DS-9` blocked by `KERNEL-NESTED-IND` (status: active)
 - `F4` blocked by `A3` (status: draft)
 - `NATIVE-HANDLE-CARRIER` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
