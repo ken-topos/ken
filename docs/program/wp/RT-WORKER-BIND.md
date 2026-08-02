@@ -218,10 +218,37 @@ Measured at `origin/main = ce3296d8`.
   rather than asserting over a planner census.
 - **AC-5 — the negative controls bite.** At least one mutation **restores
   current carried-capture narrowing and reds the positive**, and at least one
-  **redirects a same-shape target and reds behavior**. *Control:* run both
-  mutations and show the red. ⛔ A companion that cannot be made to fail is not
-  a control — see `agent/memory/` on negative checks needing a positive
-  control.
+  **redirects a same-shape target and reds behavior**.
+
+  ⚠ **Amended 2026-08-02, after this AC rejected two consecutive candidates.
+  Both rejections were the frame's fault, not the implementer's — it did what
+  the text said each time. The two clauses below are what the text should have
+  said all along.**
+
+  **(a) The control must be COMMITTED, not run.** *Control:* each mutation is a
+  committed, `cfg(test)`-gated switch on the exact production branch, and each
+  red is **reproducible from the committed tree** by flipping it. ⛔ Running a
+  mutation by hand, observing the red, reverting it and writing up the result
+  **does not satisfy this AC** — the result is true and the control does not
+  exist, so nothing goes red if the seam later regresses. The superseded
+  wording said "run both mutations and show the red", which a hand-run
+  satisfies exactly; that is the defect.
+
+  **(b) "Same-shape" is `AC-6`'s definition, and the predicate must SELECT on
+  it.** Same shape means **same declared arity and same capture count**, with
+  behaviorally distinct bodies and captures. ⇒ The redirect mutation must
+  choose its replacement target **by matching arity and capture count**. ⛔ A
+  predicate that merely establishes *a different origin* — e.g.
+  `find(|(origin, _)| **origin != worker.body_origin)` — is not this control.
+  `WorkerTargets::declare_in_func` populates that map from **every** projected
+  emittable unit and the witness fixture is heterogeneous, so "different"
+  selects an arbitrary unit and the red proves only that redirecting to
+  something unrelated breaks. **The property under test is that two workers
+  which are indistinguishable by shape are still distinguished by identity** —
+  a redirect that changes shape cannot witness it.
+
+  ⛔ A companion that cannot be made to fail is not a control — see
+  `agent/memory/` on negative checks needing a positive control.
 - **AC-6 — two same-shape workers are genuinely distinguished.** Two
   same-arity, same-capture-count workers at distinct de-Bruijn slots with
   behaviorally distinct bodies and captures, both called; **swapping either
