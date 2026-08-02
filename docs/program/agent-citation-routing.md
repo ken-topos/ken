@@ -72,3 +72,55 @@ claim class requires a sixth module and hard stop 2 does not fire. Every route
 has an explicit claim antecedent; none instructs an unconditional load. Module
 edits, context-cost measurement, and the seven-answer paper check remain for
 later checkpoints after leader acceptance of this table.
+
+## D2 — claim-triggered module edits
+
+The five framed modules now carry D1's pointer rules in their existing
+`Authority and sources` sections. Each new obligation starts from a claim the
+answer makes and points to the source that must be loaded before asserting it.
+No rule directs an unconditional load, restates a normative language rule, or
+adds a module or pack dependency.
+
+The edit homes are exactly:
+
+- `library/agents/core/read-ken.md` §9;
+- `library/agents/core/proof-and-trust.md` §9;
+- `library/agents/core/write-ken.md` §9;
+- `library/agents/core/toolchain.md` §9; and
+- `library/agents/tasks/effects-and-capabilities.md` §9.
+
+## D3 — context-cost record
+
+Line counts use `wc -l` on the exact checkpoint-1 tree and the checkpoint-2
+working tree. Every module grew by four or five lines; none gained a new
+section.
+
+| Module | Before | After | Growth |
+|---|---:|---:|---:|
+| `core/read-ken` | 89 | 94 | +5 |
+| `core/proof-and-trust` | 89 | 93 | +4 |
+| `core/write-ken` | 114 | 119 | +5 |
+| `core/toolchain` | 89 | 94 | +5 |
+| `tasks/effects-and-capabilities` | 87 | 92 | +5 |
+| **Five-module total** | **468** | **492** | **+24** |
+
+Pack closure counts sum the line counts of each pack's unique transitive module
+closure, dependencies first, matching the resolution rule documented in
+`library/agents/manifest.toml`. Pack manifest lines are not module context and
+are not included. Unchanged task modules retain their checkpoint-1 counts.
+
+| Pack | Unique resolved module closure | Before | After | Growth |
+|---|---|---:|---:|---:|
+| `read-review` | `read-ken`, `proof-and-trust`, `toolchain`, `read-review` | 349 | 363 | +14 |
+| `write-pure` | `read-ken`, `write-ken`, `proof-and-trust`, `toolchain`, `write-program` | 456 | 475 | +19 |
+| `write-effectful` | `write-pure` closure plus `effects-and-capabilities` | 543 | 567 | +24 |
+| `author-package` | `write-pure` closure plus `author-package` | 544 | 563 | +19 |
+| `repair-proof` | `write-pure` closure plus `prove-or-repair` | 534 | 553 | +19 |
+| `diagnose` | `read-ken`, `proof-and-trust`, `toolchain`, `diagnose` | 345 | 359 | +14 |
+
+## Checkpoint 2 disposition
+
+D2 changes exactly the five framed authority sections, and D3 makes their full
+context cost visible across all six pack closures. No run or paper check was
+performed at this checkpoint; D4 and D5 remain for checkpoint 3 after leader
+acceptance.

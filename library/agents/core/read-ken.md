@@ -72,12 +72,17 @@ interpretation.
 
 ## 9. Authority and sources
 
-The normative authority is `spec/`, especially
-`spec/30-surface/33-declarations.md` and `spec/30-surface/36-effects.md`.
-Current checked examples and reading guidance come from `catalog/packages/`,
-`docs/program/07-catalog-style-guide.md`, and
-`library/learn/reading-ken/`. The verified revision is recorded in this
-module's `library/agents/manifest.toml` entry.
+If reporting a checked package's public declarations, class meaning, or effect
+signature, load that current `catalog/packages/**/*.ken.md` source and the
+applicable `spec/30-surface/33-declarations.md` or
+`spec/30-surface/36-effects.md` section first. If classifying a parser or
+elaboration/name-resolution failure, load the applicable
+`spec/30-surface/31-lexical.md` or `spec/30-surface/39-elaboration.md` section
+first. If asserting runtime behavior, a runtime boundary, or a limit on what
+checking establishes about execution, load
+`spec/40-runtime/42-evaluation.md` first. Current reading guidance comes from
+`docs/program/07-catalog-style-guide.md` and `library/learn/reading-ken/`.
+The verified revision is in `library/agents/manifest.toml`.
 
 ## 10. Known unavailable or partial behavior
 
