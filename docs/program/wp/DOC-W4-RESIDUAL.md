@@ -18,20 +18,20 @@ Measured at `origin/main = 3b873896`.
 | input | measured value |
 |---|---|
 | `library/reference/` | exists with **8 `toolchain/` pages only** |
-| diagnostics mechanism | **absent.** No diagnostics crate; the only `diagnostic` hit under `crates/ken-cli/src` is `repl.rs`. No registry to generate from |
+| diagnostics mechanism | **SUPERSEDED by the 2026-08-02 amendment — this row's census was scoped to two paths and is not a repo-wide absence claim.** `KernelError`, `RuntimeTrapCode` and `IoErrorIdentityV1` exist; what is absent is a unified public registry |
 | index pages | **zero.** No file under `library/` matching index, glossary, symbol, or keyword |
 | `library/guide/proof-techniques.ken.md` | 474 lines |
 | `library/learn/reading-ken/` | `01-anatomy` 121, `02-types-contracts-and-proofs` 142, `03-assurance-and-trust` 221, `04-effects-capabilities-and-authority` 171, `05-packages-and-provenance` 199, `06-execution` 239, `fragments` 125 |
 | manifest `kind` census | 20 `reference`, 11 `explanatory`, 5 `how-to`, 4 `tutorial`, 2 `portal`, 1 `status` |
 | the 20 `reference` records | 11 are `audience = ["agent-reader"]`, 8 are the new `toolchain/` pages, 1 is `fragments.md` |
-| generation capability | slice 1's merged `D0`. No generator for declaration, keyword, syntax, or CLI facts |
+| generation capability | slice 1's merged `D0` — **but its census could not see build scripts, and `crates/ken-host/build.rs:479` emits a generated `target_abi.rs`.** See the 2026-08-02 amendment before relying on any absence in it |
 
 Reproduce, read-only:
 
 ```sh
 find library/reference -type f -name '*.md' | sort
 find library -iname '*index*' -o -iname '*glossary*' -o -iname '*symbol*' -o -iname '*keyword*'
-git grep -lni 'diagnostic' -- crates/ken-cli/src crates/ken-diagnostics
+git grep -lni 'diagnostic' -- crates/   # repo-wide; the two-path form was the defect
 grep -oE 'kind = "[a-z-]+"' library/manifest.toml | sort | uniq -c
 wc -l library/guide/*.md library/learn/reading-ken/*.md
 ```
@@ -61,6 +61,55 @@ Diagnostics may instead close because there is **nothing to derive a page
 from** — no registry, no stable identity set. **These are different verdicts
 and `D0` must not conflate them.** A row that closes for absence of mechanism
 is a finding about Ken, not about the library, and it is reported as such.
+
+
+## Amendment 2026-08-02 — hard stop 4 upheld; four rows re-scoped
+
+Librarian QA blocked exact `4a6423d4` and was right on every count. The Steward
+verified each claim independently before ruling.
+
+### The instrument defect, which is this frame's and slice 1's
+
+Slice 1's generation-capability census searched `scripts/gen-*` and CLI
+dispatch. **That instrument cannot see a build script**, and its narrow result
+was written up as the broad claim *"no target-fact command or generator."* It is
+false: `crates/ken-host/build.rs:68-93` derives target, target OS, backend and
+probed ABI facts, and `build.rs:479` writes a generated `OUT_DIR/target_abi.rs`.
+
+This frame then carried the same narrow instrument into its own fixed inputs —
+the diagnostics census names exactly two paths, `crates/ken-cli/src` and a
+`crates/ken-diagnostics` that does not exist — and `D0` used the command the
+frame supplied.
+
+> ### BINDING — an absence claim needs a repo-wide census
+>
+> **`AC-4` is amended: a `not-producible` verdict must rest on a search that
+> could find the mechanism wherever one could live, build scripts included.**
+> Not `scripts/`, not one crate's `src`, not a path list authored from
+> expectation. A census scoped to two paths cannot support a repo-wide claim,
+> and this frame asked for one anyway.
+
+### The four re-scoped rows
+
+| row | what is now established | what the verdict must become |
+|---|---|---|
+| platform | a target-fact emitter exists (`build.rs:479`), host/Linux-only, failing closed off that lane | re-derive. Name what it emits and what it does not — there is still no ratified target-support contract or cross-target inventory. Probably `authored` with explicit `unavailable` labels, not `not-producible` |
+| glossary | `spec/00-overview.md` is normative for terminology; §8 (line 216) is an explicit glossary | narrow to the missing **extraction path** into `library/`, not a missing source |
+| keyword | `spec/30-surface/31-lexical.md §4` and `crates/ken-elaborator/src/lexer.rs`'s token enum are inventories | split the claim. "No generator" may survive; "no inventory" does not |
+| diagnostics | `KernelError`, `RuntimeTrapCode`, `IoErrorIdentityV1` exist | narrow to **no unified public registry or derivation interface**, proved by a repo-wide census |
+
+### What stands
+
+**The `verification` and `runtime` rows stand at `none`.** They were measured
+against the human-audience corpus, which is the correct instrument for them, and
+nothing here touches them. Hard stop 1 remains available on the re-measured set.
+
+### Carry-over
+
+`DOC-W5-CAPABILITY`'s fixed inputs carry the same narrow generator census
+(*"generators in `scripts/`: three"*). **Its `AC-2`/`AC-3` are read as
+incorporating the repo-wide requirement above**, and its `D0` must not repeat
+this error.
 
 ## Deliverables
 
