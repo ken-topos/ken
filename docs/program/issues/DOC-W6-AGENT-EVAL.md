@@ -1,7 +1,7 @@
 ---
 id: DOC-W6-AGENT-EVAL
 title: "Wave 6 residual — the cold-context agent evaluation certifies agent_core_ready against a corpus 3.4x smaller than today's, and three of the four pack-selected core modules have changed since"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
