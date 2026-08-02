@@ -1,7 +1,7 @@
 ---
 id: DOC-PROGRAM-WAVE-RECONCILE
 title: "Reconcile the documentation program's wave status against the landed corpus — the status line, the wave table, and the section 4b headers all say map only over bodies that measured otherwise, and produce the residual register that says what the doc ring owes next"
-status: ready
+status: merged
 owner: doc
 size: M
 gate: none
