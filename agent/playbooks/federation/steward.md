@@ -376,17 +376,3 @@ ladder, land skill changes to `agent/`, update the tracker, author
 shovel-ready briefs, release newly-ready WPs, and brief the operator. You and
 the team leaders are the only schedulers in the federation. Between passes you
 do not idle-stop.
-
-## Changelog
-
-- 2026-08-02: restructured against `agent/playbooks/tools/skill-style.md`. Six
-  task procedures moved to `steward/`; see the table in section 5. Withdrawn
-  and superseded content removed from the body and recorded here.
-- 2026-07-27: retro gating withdrawn throughout (operator). Retros do not gate
-  a handoff, a compaction, or WP closure, and are not collected or chased.
-- 2026-07-26: the `get_transcript` prohibition moved to `AGENTS.md` as the
-  fleet-wide authority. It is not restated here.
-- 2026-07-05: the Claude-Code-era compaction mechanics were superseded by the
-  Codex harness. The current mechanism is in `steward/compaction.md`; the
-  superseded recipe is not retained, because keeping both left two
-  contradictory procedures in one section.

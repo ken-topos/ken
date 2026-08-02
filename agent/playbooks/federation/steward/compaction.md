@@ -108,9 +108,7 @@ and re-verify.
 
 ### The Codex harness
 
-The fleet runs the Codex TUI in `moot-<role>` panes. The mechanics below
-supersede the earlier Claude-Code-era recipe, which inverted on several points;
-only this version is retained.
+The fleet runs the Codex TUI in `moot-<role>` panes.
 
 - **`send-keys` needs `-l` (literal) for text and slash commands.** Without it
   the string does not land.

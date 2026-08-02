@@ -99,8 +99,10 @@ other document covers.
 - **A withdrawn rule leaves the body entirely.** Never leave it as a struck-out
   numbered step inside a live checklist: it costs a read every time, and a
   hurried reader may follow it.
-- **Record the withdrawal once, in a Changelog at the end**, with the date and
-  the authority. That preserves the audit trail without taxing the reader.
+- **Do not add a changelog.** Git holds the date, the author, and the diff, and
+  a changelog in the file is a second copy that goes stale and taxes every
+  reader who is not doing history. Delete the rule and let `git log -p` answer
+  the question.
 - **Renumbering breaks references.** Before changing a section identifier,
   `grep -rn '<identifier>' agent/` and fix the citations in the same commit.
 - **Edit operative text rather than appending a correction.** A later note
@@ -169,7 +171,3 @@ recovers them. If it cannot, the rubric is decorative however well it reads.
 
 Keep at least one known-bad case on hand for this. Adding a defect to a scratch
 copy of a healthy skill, and confirming the rubric names it, is enough.
-
-## Changelog
-
-- 2026-08-02: created.
