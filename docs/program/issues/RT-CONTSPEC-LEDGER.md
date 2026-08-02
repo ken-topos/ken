@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-LEDGER
-title: "ContinuationSpecialization seam 3 — D7 ledger and population closure: the exact source and synthesized-aggregate ledger rows plus the representation and lifetime controls, from the graph-derived authorities already ruled"
-status: draft
+title: "ContinuationSpecialization seam 3 — make the boundary-use ledger record something: the four boundary-use axes are compile-time constants in production, so the ledger distinguishes no two continuation inputs"
+status: ready
 owner: runtime
 size: M
 gate: none
@@ -11,44 +11,49 @@ github: null
 origin: "Architect ownership/sizing ruling evt_1yymw1gdszpbs (2026-08-02), outcome (c) on RT-CONTSPEC-LOWER, seam 3 of four. Steward-filed (agents cannot create tracked work per COORDINATION section 2)."
 ---
 
-# Seam 3 — close the D7 ledger over a population that is finally complete
+# Seam 3 — the ledger's vocabulary exists only under `cfg(test)`
 
-Population: the Architect's **17 rows** — exact source and synthesized-aggregate
-ledger gaps, plus the D7 closure, representation and lifetime controls. The
-governing authorities are already ruled; this seam applies them, it does not
-re-derive them.
+Measured at `main = cef564f1` in
+`crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs`:
 
-Gates exact planned/emitted equality and the existing negative discriminators.
+- The four boundary-use enums (`BoundaryUsePhase` `:417`, `BoundaryUseOperation`
+  `:424`, `BoundaryUseNeed` `:431`, `BoundaryUseAvail` `:438`) each have two
+  variants, and in each the **second is `#[cfg(test)]`**.
+- `ContinuationInputProjection` has **exactly one** construction site,
+  `exact_continuation_projection` `:2754`, which hardcodes all four to the one
+  non-test variant.
 
-## The trap this seam sits directly on top of
+⇒ Every continuation input the planner produces carries the identical
+boundary-use tuple. The ledger has one row shape and records no distinction.
 
-Campaign trap 3: **a proof over an incomplete population is vacuous, and every
-control over it passes.** That is exactly what rejected `RT-JOIN-DISPOSITION`'s
-`27f9dca2` — one production site bypassed the recording call, so a whole class
-proved over an empty list.
+## The finding worth carrying: the control is green and unreachable
 
-⇒ Any proof this seam adds over a population owes a paired control that
-**reds when a member is omitted from the population**, not merely one that
-passes when the proof holds.
+`continuation_keys_equal_under_mutation` `:2832` already proves, per field, that
+the interning key separates two units differing only in that field. That proof
+is real and must keep passing. But `ContinuationProjectionOmission` `:531` is
+itself `#[cfg(test)]`, and the harness reaches a distinct value by flipping to
+the `#[cfg(test)]` variant.
 
-Branches from `main` after seam 2 lands, and carries only its own delta.
+⇒ **The discrimination is proved over a value production cannot construct.** The
+seam's subject is not a missing mechanism — it is an instantiated key over an
+uninstantiated vocabulary. A green boundary control today is not evidence the
+ledger works.
 
-## What the frame settles that this node must not be read without
+## Recut 2026-08-02 — flipped `draft` to `ready`
 
-**The scope oracle is seam 1's `D4`, not the `46d29783` census.** That census
-differentiates only **12** of the 17 D7-owned rows, all under
-`source boundary-use ledger missing`. The other 5 — the synthesized-aggregate
-ledger gaps and the representation/lifetime controls — sit inside the 39 rows it
-records as "ownership matrix pending." Selecting from it drops 5 rows silently.
+The prior cut selected 17 D7-owned rows from the `46d29783` first-refusal
+census. That census is a historical record from the held `1aef3192` lineage and
+cannot name a current source authority; seam 2 was recut off it for the same
+reason (`evt_2zhx69f2fw07w`, Architect confirmation `evt_66t42tapvdbsj`). The
+census is no longer an input to any deliverable or AC.
 
-The frame is `docs/program/wp/RT-CONTSPEC-LEDGER.md` — written 2026-08-02 while
-seam 1 is in flight. Node is `ready`; release is gated on seam 2 merging, not on
-further framing.
+The discriminator is now `D5`: distinct boundary-use tuples over a fixed
+fixture, **exactly 1 on the base and greater than 1 on the candidate**. A
+candidate census of 1 fails the seam.
 
-**Held at `draft` 2026-08-02, deliberately, not by oversight.** Its frame
-selects work from the `46d29783` first-refusal census, which is a historical
-record from the held `1aef3192` lineage and cannot name a current source
-authority. Seam 2 was recut off that census for the same reason
-(`evt_2zhx69f2fw07w`, Architect confirmation `evt_66t42tapvdbsj`). `draft`
-keeps this node out of the frontier until the Steward recuts it. See the
-HELD FOR RECUT banner in the frame.
+Release is gated on seam 2 merging via `depends_on`, not on further framing.
+Seam 2 may edit `static_transition.rs`, so the frame opens with a mandatory
+re-measurement and a hard stop if it disagrees.
+
+Frame: `docs/program/wp/RT-CONTSPEC-LEDGER.md`. Branches from `main` after seam 2
+lands and carries only its own delta.

@@ -15,8 +15,11 @@ closes anything other than itself.
 > 138 rows to reach a terminal disposition, and the frame's row table asserts
 > that 6 formerly shadowed rows have "their causal roots cleared in seams 2 and
 > 3." **That premise is now false.** Seam 2 was recut off the census entirely
-> (`evt_2zhx69f2fw07w`, Architect confirmation `evt_66t42tapvdbsj`) and seam 3
-> is held for the same reason, so neither seam clears any census row.
+> (`evt_2zhx69f2fw07w`, Architect confirmation `evt_66t42tapvdbsj`), and seam 3
+> was recut off it for the same reason on 2026-08-02 — its subject is now the
+> boundary-use vocabulary's production reachability, and it selects no census
+> rows. **Neither seam clears any census row, and this is settled, not
+> pending.**
 >
 > The defect here is narrower than seam 3's. Reconciling the 138 rows is a
 > reasonable bookkeeping deliverable in itself — but it must be stated as

@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-02 04:35:28Z — from 154 issue file(s) in `docs/program/issues/`.
+2026-08-02 05:43:07Z — from 154 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -128,7 +128,7 @@ the committed file matches the generator's output.
 | `RT-CONTSPEC-ABI` | ContinuationSpecialization slice 2 — land the explicit unit/descriptor projection and the ABI, owner/lifetime/affinity and zero-allocation negative gates, still DORMANT | merged | runtime | M | none | — |
 | `RT-CONTSPEC-ACTIVATE` | ContinuationSpecialization seam 2 — lowering activation and exact-use consumption: direct call before the identity-erasing join, active emitted owner, affine call occurrence, JoinArm consumption, gating the 37-row lower-owned population | ready | runtime | L | none | — |
 | `RT-CONTSPEC-ASSEMBLY` | ContinuationSpecialization seam 1 — the lawful assembly: extract the accepted branch-scope helper and its feature-gated harness onto the landed slice 0-2 blobs, unactivated, and prove the prior-slice surfaces are untouched | merged | runtime | M | none | — |
-| `RT-CONTSPEC-LEDGER` | ContinuationSpecialization seam 3 — D7 ledger and population closure: the exact source and synthesized-aggregate ledger rows plus the representation and lifetime controls, from the graph-derived authorities already ruled | draft | runtime | M | none | — |
+| `RT-CONTSPEC-LEDGER` | ContinuationSpecialization seam 3 — make the boundary-use ledger record something: the four boundary-use axes are compile-time constants in production, so the ledger distinguishes no two continuation inputs | ready | runtime | M | none | — |
 | `RT-CONTSPEC-LOWER` | ContinuationSpecialization slice 3 — attach the token at each producer alternative, emit the direct call before the identity-erasing join, close nested recursion and the ledgers, then ACTIVATE | closed | runtime | L | none | — |
 | `RT-CONTSPEC-PLANNER` | ContinuationSpecialization slice 1 — land the planner closure DORMANT: exact ordered projection, full-key interning before discovery, exact causal edge tokens, finite recursion | merged | runtime | M | none | — |
 | `RT-CONTSPEC-SUBSTRATE` | ContinuationSpecialization slice 0 — re-derive and independently gate the DORMANT D7 substrate: closed case-emission reachability, exact occurrence/owner/lifetime authority, pre-allocation closure | merged | runtime | M | none | — |
@@ -242,7 +242,7 @@ is itself not yet `merged`/`closed`:
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
 - `RT-BACKEND-MODULE-SPLIT` blocked by `RT-DESCENT-RETIRE` (status: ready)
 - `RT-CONTSPEC-LEDGER` blocked by `RT-CONTSPEC-ACTIVATE` (status: ready)
-- `RT-CONTSPEC-WITNESS` blocked by `RT-CONTSPEC-LEDGER` (status: draft)
+- `RT-CONTSPEC-WITNESS` blocked by `RT-CONTSPEC-LEDGER` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
 - `RT-DESCENT-RETIRE` blocked by `RT-SEED-CALL-PORT` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-PRODUCER-MATCH-PORT` (status: ready)
