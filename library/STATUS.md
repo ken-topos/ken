@@ -16,7 +16,7 @@ proves `library/` already existed at some point on `main`'s history.
 **It does not, by itself, certify any cited source's bytes** (SRC-ATTEST
 Part 1) — that claim is the attested source-set digest below.
 
-**Attested source-set digest:** `0fd284f56f3e63bb8a21da7c5a44c1b60fa72f2428d12365f2772cc5ffd8b9a3`
+**Attested source-set digest:** `0f606df907d058dfe818d86a6c73cfe8857c18d0cc484ea0793055e6bdadd57b`
 
 The SHA-256 of `library/SOURCE-ATTESTATIONS`, the ledger binding every
 manifest-cited source to its exact blob OID at the commit the Librarian
@@ -34,6 +34,10 @@ A document with no row here has no manifest entry and fails gate 1.
 | Path | Kind | Authority | Availability |
 |---|---|---|---|
 | `library/README.md` | portal | explanatory | current |
+| `library/reference/catalog/declarations.md` | reference | derived-reference | current |
+| `library/reference/catalog/laws.md` | reference | derived-reference | current |
+| `library/reference/catalog/effects-and-capabilities.md` | reference | derived-reference | current |
+| `library/reference/catalog/assurance.md` | reference | derived-reference | current |
 | `library/agents/README.md` | portal | explanatory | current |
 | `library/agents/core/read-ken.md` | reference | derived-reference | current |
 | `library/agents/core/write-ken.md` | reference | how-to | current |
@@ -119,7 +123,7 @@ A document with no row here has no manifest entry and fails gate 1.
 | `library/quickstart.md` | tutorial | tutorial | current |
 | `library/STATUS.md` | status | status | current |
 
-**Total:** 85 registered document(s).
+**Total:** 89 registered document(s).
 
 ## Regenerating
 
