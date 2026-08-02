@@ -1,7 +1,7 @@
 ---
 id: DOC-W5C-CARDS-CAPABILITY
 title: "Wave 5 slice 3 — apply the settled card format to Capability (19): nineteen complete cards, closing the 39-package set"
-status: draft
+status: ready
 owner: doc
 size: M
 gate: none
@@ -24,5 +24,6 @@ area whose packages most plausibly *look* platform-specific, and the temptation
 to write a platform row from `Capability/Filesystem`-style prose is exactly what
 the held disposition exists to refuse.
 
-**Frame owed before release.** Held at `draft` deliberately: it is framed and
-flipped `ready` when slice 2 goes to the ring.
+**Framed and released 2026-08-02.** The frame is
+`docs/program/wp/DOC-W5C-CARDS-CAPABILITY.md`, written when slice 2 went to the
+ring per section 2a-bis.

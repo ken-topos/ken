@@ -10,6 +10,28 @@ Seam 2 turned the mechanism on for the lowering population. This seam closes the
 complete. The governing authorities are already ruled — this seam **applies**
 them and does not re-derive them.
 
+> ## HELD FOR RECUT — do not start this seam. Its node is `draft` on purpose.
+>
+> **Steward, 2026-08-02.** This frame's `D3`/`AC-1`/`AC-2` tell you to select
+> exactly 17 D7-owned rows from the corrected census and make them pass. **That
+> instruction carries the same defect that was found and withdrawn on seam 2**
+> (`evt_2zhx69f2fw07w`, Architect confirmation `evt_66t42tapvdbsj`).
+>
+> The 138-row census is a **first-refusal record from the held `1aef3192`
+> lineage** — a tree carrying a mechanism that was never merged and may not be.
+> It can say what once failed and why. It **cannot name a current source
+> authority**, and its rows are green on the lawful base. Seam 2's own 37-row
+> selection was measured green at `main = 68c72c75`, and there is no reason to
+> expect these 17 to differ.
+>
+> ⇒ **Selecting from the census is retired as a scoping mechanism for this
+> campaign.** The recut must state the D7 ledger's subject the way seam 2's now
+> does: positively, from what the lawful base does and does not do, with a
+> control that can fail on the candidate.
+>
+> The node is `draft` so this frame cannot enter the frontier when seam 2
+> merges. The Steward recuts it once seam 2's landed shape is known.
+
 > ## The `46d29783` lineage remains an ORACLE
 >
 > `46d29783`, `1aef3192`, `9d58df12`, and

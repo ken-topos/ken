@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-WITNESS
 title: "ContinuationSpecialization seam 4 — integrated witness and closeout: the native population, the six formerly shadowed rows reclassified, the two host rows rerun, and the three-node closure"
-status: ready
+status: draft
 owner: runtime
 size: M
 gate: none
@@ -60,3 +60,11 @@ commit and picking one.
 The frame is `docs/program/wp/RT-CONTSPEC-WITNESS.md` — written 2026-08-02 while
 seam 1 is in flight. Node is `ready`; release is gated on seam 3 merging, not on
 further framing.
+
+**Held at `draft` 2026-08-02, deliberately, not by oversight.** Its frame
+selects work from the `46d29783` first-refusal census, which is a historical
+record from the held `1aef3192` lineage and cannot name a current source
+authority. Seam 2 was recut off that census for the same reason
+(`evt_2zhx69f2fw07w`, Architect confirmation `evt_66t42tapvdbsj`). `draft`
+keeps this node out of the frontier until the Steward recuts it. See the
+HELD FOR RECUT banner in the frame.

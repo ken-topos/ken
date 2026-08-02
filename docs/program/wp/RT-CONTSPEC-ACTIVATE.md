@@ -3,86 +3,117 @@
 Node: `docs/program/issues/RT-CONTSPEC-ACTIVATE.md`. Campaign:
 `docs/program/16-recursive-descent-retirement.md`. Owner: runtime ring.
 Authority: Architect ownership/sizing ruling `evt_1yymw1gdszpbs`, outcome (c),
-seam 2.
+seam 2. **Recut 2026-08-02** on the Architect's interface ruling
+`evt_3xj4eqwqmn46n` as corrected by `evt_66t42tapvdbsj`, and the Steward's
+baseline measurement `evt_2zhx69f2fw07w`.
 
 This is the seam that turns the mechanism on. Seam 1 put the accepted helper on
-the landed substrate and proved it changed nothing; this seam makes it the
-authority for one bounded population and proves exactly that population moved.
+the landed substrate and proved it changed nothing. This seam makes the
+already-planned continuation population **reachable by the emitter**, and proves
+that exact population became emission.
 
-> ## The `46d29783` lineage is still an ORACLE, not a base
+> ## RECUT NOTICE — the 37-row census population is RETIRED as this seam's subject
 >
-> Everything seam 1's banner says continues to bind here. `46d29783` (census),
-> `1aef3192` (parent), `9d58df12` (accepted mechanism), and
-> `refs/preserved/rt-contspec-lower-held-core-rs = 88972207` are preserved and
-> **may not be merged, rebased onto, or cherry-picked wholesale.** This seam
-> branches from `main` after seam 1 lands and carries only its own delta.
-
-## The population, and why it cannot be enumerated by grep alone
-
-The Architect's matrix assigns **37 rows** to capstone lowering
-activation/consumption, by four first-refusal kinds: inactive emitted owner,
-missing `JoinArm` use, duplicate declared-unit call, and runtime discriminator
-failure.
-
-The durable census at `46d29783` labels only **35** of them. Counted over
-`docs/program/wp/RT-CONTSPEC-LOWER-D8.md` at that commit:
-
-| first refusal in the census | rows | census owner label |
-|---|---:|---|
-| `lowering boundary use has no active emitted owner` | 31 | `CONTSPEC lower` |
-| `lowering JoinArm boundary-use ledger missing` | 4 | `CONTSPEC lower` |
-| duplicate declared-unit call | 0 | not yet differentiated |
-| runtime discriminator failure | 0 | not yet differentiated |
-
-⇒ **The remaining 2 lower-owned rows are inside the 39 rows the census records
-only as "assertion after unruled production activation" / "ownership matrix
-pending."** That is the fidelity defect the Architect named, and **seam 1's `D4`
-is what repairs it.**
-
-The partition closes exactly, which is why this is arithmetic and not an
-estimate. Differentiated rows: 37 + 12 + 1 + 31 + 4 + 12 + 2 = **99**.
-Undifferentiated: **39**. Total **138**. The 39 decompose across the matrix as
-planner 19, ABI 2, substrate 3, planned-use 2, **lower 2**, D7 ledger 5, cascade
-6 — summing to 39, and every population then reaching its matrix total.
-
-> ### BINDING — the scope oracle is `D4`'s corrected census, not the `46d29783` one
+> The first cut of this frame told you to select 37 rows from the corrected `D4`
+> census and activate against them. **That instruction was wrong and it is
+> withdrawn.** Measured at `origin/main = 68c72c75`:
 >
-> **Do not start row selection until seam 1's `D4` is on `main`.** Selecting from
-> the uncorrected census gives you 35 rows and silently drops 2. The frame states
-> the 35 so you can sanity-check `D4`, **not** so you can proceed without it.
+> - `active_emission_owner` occurs nowhere in the repository, not even in docs.
+> - `lowering boundary use has no active emitted owner` and
+>   `JoinArm boundary-use ledger missing` occur **only** in this frame and in
+>   `docs/program/wp/RT-CONTSPEC-LOWER-D8.md`. Zero hits under `crates/`.
+> - The census's test names do resolve — 24 `fn b2f_d9_*` / `fn c1_d3_*` in
+>   `crates/ken-runtime/src/cranelift_backend/lowering/core/tests/constructors.rs`
+>   — and seam 1's `AC-2` run at `767e7795`, which is in `main`'s lineage, was
+>   **589 passed, 0 failed, 1 ignored**.
+>
+> ⇒ **Those rows are green on the lawful base.** They are not a backlog of
+> failures for an activation to fix.
+>
+> **Why the first cut got there.** The 138-row census records first refusals from
+> a run against the held `1aef3192` lineage, which carried an
+> `active_emission_owner` mechanism that was never merged and that seam 1
+> forbids merging. Seam 1 correctly treated that lineage as an **oracle, not a
+> base, for its code**. This frame then used the same lineage's **census** as a
+> live source-level selector — the identical error one level up. `D4` is a
+> historical first-refusal record. It can tell you what once failed and why; it
+> **cannot name a current source authority**.
+>
+> **Checkpoint 1's `751fa18d` stands and is not redone.** Its tree equals its
+> base exactly, it contains no production delta, and it is an accurate record of
+> what the census says. It is preserved as history. It is **not** this seam's
+> population.
 
-> ### THE 37/37 COLLISION — read this before you grep for "37"
+## The live subject, stated positively
+
+The lawful base plans a continuation population and then deliberately declines to
+emit it. `contspec_planner_closes_ordered_keys_units_and_causal_edges_dormantly`
+(`planning/static_transition.rs:11770`) proves both halves in one test:
+
+| fact | where |
+|---|---|
+| `plan.continuation_specializations.len() == 2` | the test, line 11772 |
+| `plan.continuation_specialization_calls.len() == 2` | the test, line 11773 |
+| 2 distinct call targets, none orphaned or conflated | the test's `D5` assertion |
+| `abi.continuation_descriptors.len()` equals the specialization count | the test's `D1` assertion |
+| `emittable_units()` iterates `self.abi.descriptors` **only** | `static_transition.rs:4788` |
+| `emittable_call_edges()` excludes the planned continuation-call population | `static_transition.rs:4743` |
+
+So the descriptors are built, validated, and held in a **separate vector**
+(`continuation_descriptors`, `planning/static_transition/abi.rs:456`) that no
+emitter accessor projects.
+
+⇒ **The live unfinished behaviour is this: a planner-issued continuation
+specialization and its causal call both exist and are validated, but the emitter
+can declare no target for them and can emit no direct call before the producer
+result loses callable identity at the join.**
+
+This seam closes exactly that, and nothing else.
+
+> ### The subject is WRONG-BUT-GREEN, so a green suite proves nothing here
 >
-> **"37" names two disjoint populations in this campaign.** In the census,
-> `producer callable identity is not a Closure` is **37 rows owned by
-> `CONTSPEC planner`**. In the Architect's matrix, **lower-owned is 37 rows.**
-> They share a number and nothing else.
+> The baseline is expected to be green overall. The dormancy is deliberate and
+> asserted. ⇒ **Every acceptance criterion below is written against a control
+> that can fail on the candidate**, and the population counts are the discriminator:
 >
-> The planner population sits inside the 56-row slice-1 planner closure, which is
-> **forbidden prior-slice surface** for this seam. Grepping the census for `37`,
-> or filtering on the wrong owner column, hands you precisely the rows this seam
-> may not touch. **Select by first-refusal kind and owner label together, never
-> by count.**
+> ```text
+> base:       planned units = 2, planned calls = 2, emittable continuation units = 0, emittable continuation calls = 0
+> candidate:  planned units = 2, planned calls = 2, emittable continuation units = 2, emittable continuation calls = 2
+> ```
+>
+> The planned side must not move. If it does, this seam changed the plan, which
+> is seam 3 and 4 territory and is banned here.
+
+> ### The 37/37 collision — still live, and still not the same hazard
+>
+> "37" names two disjoint populations in this campaign: `producer callable
+> identity is not a Closure` is 37 rows owned by `CONTSPEC planner` in the
+> census, and the Architect's matrix separately assigns 37 rows to lower. They
+> share a number and nothing else. **Neither is this seam's population.** The
+> warning is retained only so nobody re-derives a selection from either.
 
 ## Fixed inputs
 
-Measured at `origin/main = 4e6b0744`.
+Measured at `origin/main = ab6b89fc`.
 
 | input | measured value |
 |---|---|
-| seam 1 | `RT-CONTSPEC-ASSEMBLY`, must be `merged` before this starts |
-| the corrected census | seam 1 `D4`, path fixed by that seam; the 138 rows with one row per failing test and no `ownership matrix pending` placeholder |
-| the accepted helper | `CheckedFrameBranchScope` plus its feature-gated harness, established on `main` by seam 1 and already carrying the existing per-branch scoping at the `lower_forked_branch` forks. **It changes no emission authority** — that is this seam's job, and it is what "activation" means here (ruled `evt_5p6exqgphrwxj`) |
-| lowering entry point | `crates/ken-runtime/src/cranelift_backend/lowering/core.rs` |
-| prior-slice surfaces | `planning/static_transition.rs`, `planning/static_transition/abi.rs`, `planning/static_transition/semantic_ir.rs`, `planning.rs`, `boundary_value.rs`, `boundary_value_clif.rs` — all frozen at their `main` blobs |
+| seam 1 | `RT-CONTSPEC-ASSEMBLY`, `merged` |
+| preserved history | `751fa18dee9b51155d6337a2223459e36e2c16a6` — the 37-row census record. Preserved, not consumed |
+| the planned population | `PlannedContinuationSpecialization` (`static_transition.rs:622`), `PlannedContinuationSpecializationCall` (`static_transition.rs:640`) — both **private** |
+| the call token | carries `producer_owner`, `producer_result_origin`, `producer_construct_origin`, `producer_alternative`, `call_site_sequence`, `target`, `worker` |
+| the dormancy witness | `contspec_planner_closes_ordered_keys_units_and_causal_edges_dormantly`, `static_transition.rs:11770` |
+| the emitter projections | `emittable_units()` `:4788`, `emittable_call_edges()` `:4743` |
+| lowering consumption site | `crates/ken-runtime/src/cranelift_backend/lowering/units.rs` |
+| the accepted helper | `CheckedFrameBranchScope`, landed by seam 1; it changes no emission authority |
 | baseline suite | `scripts/ken-cargo test -p ken-runtime --lib` |
 
 Reproduce, read-only:
 
 ```sh
-git rev-parse HEAD                       # prove the tree BEFORE anything else
-git log --oneline -1 origin/main
-git show origin/main:docs/program/issues/RT-CONTSPEC-ASSEMBLY.md | grep '^status:'
+git rev-parse HEAD
+git grep -n 'fn emittable_units\|fn emittable_call_edges' -- 'crates/**'
+git grep -n 'continuation_descriptors' -- 'crates/ken-runtime/src/cranelift_backend/planning/static_transition/abi.rs'
 ```
 
 ## Two preconditions on every suite run, carried from seam 1
@@ -105,106 +136,178 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
    scripts/ken-cargo test  -p ken-runtime --lib
    ```
 
-⇒ **A `Toolchain`-stage `ObjectLinkerPackagingError` is an environment finding,
-not a baseline finding.** Check for `target/debug/**/libken_runtime*.a` before
-routing one as a hard stop.
+⇒ A `Toolchain`-stage `ObjectLinkerPackagingError` is an environment finding,
+not a baseline finding.
+
+## The one bounded exemption to the prior-slice freeze
+
+Seam 1 froze six prior-slice surfaces. **That freeze holds here with exactly one
+narrow exemption**, granted by the Architect at `evt_3xj4eqwqmn46n` item 1
+because the planned population is private and lowering cannot otherwise reach it
+without re-deriving planner facts:
+
+> `planning/static_transition.rs` may add an **activation projection only**.
+
+Everything else on that file stays put: planner derivation, interning, key
+construction, ABI construction, `planning/static_transition/abi.rs`, semantic IR,
+`planning.rs`, `boundary_value.rs`, `boundary_value_clif.rs` — all frozen at
+their `main` blobs.
+
+⇒ **This exemption is for reachability, not for authority.** The projection may
+expose what the planner already decided. It may not decide anything.
 
 ## Deliverables
 
-- **D1 — the activation.** Direct call **before** the identity-erasing join;
-  active emitted owner; affine call occurrence; `JoinArm` consumption. This is
-  the whole mechanism content of the seam.
-- **D2 — the selected population, written down before any edit.** One row per
-  member of the 37, each carrying: test name, first refusal, and the `D4` owner
-  label that put it in scope. **Authored from `D4`, not from `46d29783`.**
-- **D3 — wrong-owner and duplicate-use controls.** A negative control that fails
-  when the emitted owner is wrong, and one that fails when a call occurrence is
-  used twice. These are the discriminators that keep `D1` from passing for the
-  wrong reason.
-- **D4 — the before/after row disposition.** For each of the 37: its status on
-  this seam's own base, and its status on the candidate. Rows outside the 37 get
-  a single aggregate line stating the count unchanged.
+- **D1 — the activation projection.** In `planning/static_transition.rs`, a
+  read-only, unmintable view of:
+  - each already-validated continuation unit with its exact
+    `ContinuationSpecializationId`, its immutable planner key facts, and its
+    already-validated ABI descriptor, slots, and input authority; and
+  - each already-validated continuation call token with the full producer tuple
+    and exact target.
+
+  It **revalidates plan/ABI agreement and fails closed.** Lowering may neither
+  enumerate source syntax to reconstruct the population nor invent an id, owner,
+  descriptor, or call.
+
+- **D2 — the lowering consumption.** `lowering/units.rs` consumes those views to
+  forward-declare one continuation target per planned specialization and resolve
+  the exact direct call per causal token, **emitted in the producer alternative
+  before the identity-erasing join.**
+  Keep continuation identity typed: do **not** alias a
+  `ContinuationSpecializationId` to an ordinal, and do **not** fabricate a
+  `PredeclaredFunctionId`.
+
+- **D3 — affine consumption and owner agreement.** Exactly **one** affine
+  consumption of the exact planned continuation-call token. "Active emitted
+  owner" means the exact unit currently being defined, carried as emission
+  context and compared against the producer owner on the planner claim.
+  ⇒ **Do not resurrect the historical `active_emission_owner` field, and do not
+  add a lowering-only `JoinArm` token beside the call token.** The token's
+  producer construct, alternative, and sequence already name the causal arm; a
+  second ledger would duplicate authority. This is the Architect's item 5.
+
+- **D4 — the behavioural fixture at the emission seam.** Derived from the
+  existing `contspec_plan` shape, observing at emission rather than by
+  source-text inspection:
+  1. the exact nonzero planned unit and call population;
+  2. one declared and defined continuation target per planned specialization;
+  3. one direct call per exact causal token, in the producer alternative, before
+     the join;
+  4. an answer that **depends on the selected target** — redirecting a token to
+     the other same-shaped target changes or fails the result;
+  5. affine rejection when the same token is consumed twice, and rejection under
+     the wrong producer owner.
+
+- **D5 — the before/after population disposition.** The four counts above on
+  this seam's own base and on the candidate, plus a single aggregate line
+  stating that the rest of the suite's pass/fail set is unchanged.
 
 ## Acceptance criteria
 
-- **AC-1 — every row in `D2` traces to a `D4` row with a lower-owned label**, and
-  `D2` has exactly 37 rows.
-  *Control:* the `D2` name set against the corrected census, both directions.
-  A `D2` of 35 rows fails this AC — it means the uncorrected census was used.
-- **AC-2 — the 37 selected rows pass on the candidate.**
-  *Control:* the run output, pass/fail counts shown, `git rev-parse HEAD` in the
-  same block. `--no-run` does not discharge this.
-- **AC-3 — no row outside the 37 changes status.** Neither direction: a row that
-  starts failing is a regression, and a row that starts passing means the
-  activation reached outside its population.
-  *Control:* the full pass/fail set on this seam's base against the candidate's,
-  differenced. The symmetric difference must be exactly the 37.
-- **AC-4 — the prior-slice surfaces are blob-identical to the merge base.**
-  *Control:* `git rev-parse <candidate>:<path>` against
-  `git rev-parse <merge-base>:<path>` for each of the six surfaces. Any
-  inequality fails the seam outright.
-- **AC-5 — `D3`'s controls fail when mutated.** Flip the emitted owner; the
-  wrong-owner control must go red. Use a call occurrence twice; the duplicate-use
-  control must go red. **A control that stays green under its own mutation is not
-  a control.**
+- **AC-1 — the planned population is unchanged and the emittable population
+  moved.** On the candidate: planned units 2, planned calls 2, emittable
+  continuation units 2, emittable continuation calls 2. On the base, the last
+  two are 0.
+  *Control:* `D5`'s four counts, both trees, `git rev-parse HEAD` shown in the
+  same block. **A planned count that moves fails this AC** — that is a plan
+  change, not an activation.
+
+- **AC-2 — the target discriminator fails when the target is wrong.** Redirect a
+  causal token to the other same-shaped target; the `D4` fixture must change or
+  fail its answer.
+  *Control:* the mutation run and shown red, then reverted. **A fixture that
+  stays green under target redirection is not observing emission** — it is
+  observing that something was declared, which is `AC-1`'s job.
+
+- **AC-3 — the affine and owner controls fail when mutated.** Consume the same
+  token twice; the affine control must go red. Emit under the wrong producer
+  owner; the owner control must go red.
   *Control:* both mutations run and shown red, then reverted. Commit the real
-  fix before any mutation proof, and reset after.
+  fix before any mutation proof and reset after.
+
+- **AC-4 — the frozen surfaces are blob-identical to the merge base, with one
+  named exemption.** All six prior-slice surfaces must be blob-equal, **except**
+  the bounded activation-projection delta in `planning/static_transition.rs`.
+  *Control:* `git rev-parse <candidate>:<path>` against
+  `git rev-parse <merge-base>:<path>` for the other five. For
+  `static_transition.rs`, a control showing the underlying **specialization and
+  call populations are byte-or-claim identical before and after the
+  projection** — the diff adds a view and changes no derived value.
+  `planning/static_transition/abi.rs` is **not** exempt.
+
+- **AC-5 — no test outside the `D4` fixture changes status in either
+  direction.** A row that starts failing is a regression; a row that starts
+  passing means the activation reached outside its population.
+  *Control:* the full pass/fail set on this seam's base against the candidate's,
+  differenced. **The symmetric difference must be exactly the `D4` fixture.**
+
 - **AC-6 — CI green** on the merge. Workspace-green means green in CI, never a
   local `--workspace` run.
 
 ## Banned scope
 
-- **No planner or ABI repair**, however well-evidenced a refusal looks. On a
-  lawful assembly a planner- or ABI-worded refusal is a **new interface fact**:
-  it routes back as an exact hard stop under seam 4's rule. It is not repaired
-  here, and it is not a reason to reopen a merged slice.
+- **No change to the planned population.** No new specialization, call, key, or
+  descriptor, and no change to any existing one. This seam makes the plan
+  reachable; it does not extend it.
+- **No planner or ABI semantic repair.** A planner- or ABI-worded refusal on the
+  lawful assembly is a **new interface fact**: route it, do not repair it.
+- **No edit to `planning/static_transition/abi.rs`**, semantic IR, `planning.rs`,
+  `boundary_value.rs`, or `boundary_value_clif.rs` (`AC-4`).
+- **No second authority in `lowering`.** No reconstruction of the population
+  from source syntax, no minted id, owner, descriptor, or call, and no
+  lowering-only ledger beside the planner's call token.
 - **No D7 population expansion.** The 17 ledger and representation rows are seam
-  3. Widening into them rebuilds the mis-sizing that produced this recut.
-- **No edit to any prior-slice surface** (`AC-4`).
+  3.
+- **No selection from the `D4` census**, and no reuse of `751fa18d` as a
+  population. It is preserved history.
 - **No merge, rebase, or wholesale cherry-pick of any preserved object.**
 - **No test asserting facts about source or documentation lines** (operator test
-  policy). `D2` and `D4` are review artifacts, not gates.
+  policy). `D5` is a review artifact; `D4` is a behavioural fixture and must
+  observe emission, not source text.
 
 ## Contention
 
-Runtime is single-threaded and this seam edits `lowering/` only. Take the shared
-build lock for `AC-2`/`AC-3`; probe without blocking first. **Targeted only:**
+Runtime is single-threaded. This seam edits `lowering/` plus the one bounded
+projection in `planning/static_transition.rs`. Take the shared build lock for
+`AC-1`/`AC-5`; probe without blocking first. **Targeted only:**
 `scripts/ken-cargo test -p ken-runtime --lib`. **Never `--workspace`** — the
 full-workspace build, the `--locked` gate and conformance run in CI.
 
 ## Sizing
 
-**Size `L`, and that is the one thing about this seam worth watching.** The
-Architect fixed the seam boundaries; the risk is not the boundary but the turn
-length. An uninterrupted implementer run past 60 minutes is an indication the
-work wants a further cut.
+**Size `M`.** The recut is materially smaller than the first cut: the population
+is 2 units and 2 calls that already exist and are already validated, not 37 rows
+to be selected and moved. The work is a projection, a consumption, and a fixture.
 
-⇒ **Commit at these four checkpoints, and post the exact SHA at each.** They are
-natural boundaries, not a re-cut, and they mean a long seam never sits as one
-uninspectable turn:
+⇒ **Commit at these three checkpoints and post the exact SHA at each:**
 
-1. `D2` written from the corrected census — no production edit yet.
-2. `D1` direct-call-before-join and active emitted owner.
-3. `D1` affine call occurrence and `JoinArm` consumption.
-4. `D3` controls plus their mutation proofs, then `D4`.
+1. `D1` activation projection, with its fail-closed revalidation.
+2. `D2` lowering consumption — targets declared, direct call resolved before the
+   join.
+3. `D3` affine and owner controls, `D4` fixture, their mutation proofs, `D5`.
 
-If checkpoint 2 alone runs past an hour, **stop and route** — that is a sizing
-finding, and the recut is the Steward's.
+If any single checkpoint runs past an hour, stop and route. That is a sizing
+finding and the recut is the Steward's.
+
+**Expect to end your turn at each checkpoint.** Post the SHA and wait for the
+leader's acceptance rather than assuming one turn spans all three.
 
 ## Hard stops
 
 Stop and route to the Steward, do not improvise, if any of these hold:
 
-1. **`D4`'s corrected census does not yield exactly 37 lower-owned rows.** The
-   partition is then wrong, and selection cannot proceed from a count nobody can
-   reproduce.
-2. **The activation cannot be made without touching a prior-slice surface.**
-   That is an interface fact, exactly as it was at seam 1 — not a small
-   exception.
+1. **The projection cannot expose the population without deciding something** —
+   without minting an id, choosing a descriptor, or re-deriving a planner key.
+   That is an interface fact and it is the most valuable thing this seam can
+   discover. Report the exact fact needed.
+2. **The activation cannot be made without editing a frozen surface other than
+   the one exempted `static_transition.rs` projection.** Not a small exception.
 3. **A planner- or ABI-worded refusal appears on the lawful assembly.** New
    interface fact; route it, do not repair it.
-4. **A row outside the 37 changes status in either direction** (`AC-3`). The
-   population boundary is wrong and the matrix needs the Architect, not a scope
-   adjustment.
-5. **A `D3` control stays green under its own mutation** (`AC-5`). The control is
-   not measuring what it claims and the activation is unproved.
+4. **A planned count moves** (`AC-1`). The projection changed the plan and the
+   boundary is wrong.
+5. **A `D4` control stays green under its own mutation** (`AC-2`, `AC-3`). The
+   control is not measuring what it claims and the activation is unproved.
+6. **A row outside the `D4` fixture changes status in either direction**
+   (`AC-5`).
