@@ -9,14 +9,14 @@ not propose or implement generators, output formats, or registries.
 
 | Fact class | Can emit today? | What is missing | Evidence |
 |---|---|---|---|
-| Exact syntax | No | No syntax-production emitter or generator | G1, E1 |
-| CLI | Partial | `help` emits human prose, omits four accepted global option spellings, and has no machine-readable form | C1, C2, C3 |
-| Target | No | No target-fact command or generator; `version` identifies the interpreter but emits no target | C4, E2 |
-| Public declarations | No | `check` validates declarations but emits no declaration inventory | C5, E3 |
-| Symbol index | No | No symbol-index command or generator | G1, E4 |
-| Keyword index | No | No keyword-index command or generator | G1, E5 |
-| Diagnostic index | No | No diagnostic-index command or registry-backed generator | G1, E6 |
-| Glossary index | No | No glossary command or generator | G1, E7 |
+| Exact syntax | No | No syntax-production emitter or generator | S2, S3, G1 |
+| CLI | Partial | `help` emits human prose, omits four accepted global option spellings, and has no machine-readable form | S3, C1, C2, C3 |
+| Target | No | No target-fact command or generator; `version` identifies the interpreter but emits no target | S2, S3, G1, C4 |
+| Public declarations | No | `check` validates declarations but emits no declaration inventory | S2, S3, G1, C5 |
+| Symbol index | No | No symbol-index command or generator | S2, S3, G1 |
+| Keyword index | No | No keyword-index command or generator | S2, S3, G1 |
+| Diagnostic index | No | No diagnostic-index command or generator | S2, S3, G1 |
+| Glossary index | No | No glossary command or generator | S2, S3, G1 |
 
 The result means later Wave 4 facts in these classes must be authored and
 labelled as authored unless a later implementation adds an observed emitter.
@@ -46,17 +46,88 @@ There is no uniform exit-status rule.
 All commands below ran from the repository root at the recorded revision.
 Empty output is stated explicitly.
 
-### G1 — installed documentation generators
+### S2 — complete documentation-generator inventory
 
 ```console
-$ ls scripts/ | grep '^gen-'
-gen-doc-status.sh
-gen-progress.sh
-gen-source-attestations.sh
+$ rg --files scripts | rg '/gen-' | sort
+scripts/gen-doc-status.sh
+scripts/gen-progress.sh
+scripts/gen-source-attestations.sh
+$ rg -n '^# Usage:|^(ISSUES_DIR|MANIFEST|REVISION_FILE|OUT_FILE|PROPOSED_FILE)=' scripts/gen-doc-status.sh scripts/gen-progress.sh scripts/gen-source-attestations.sh
+scripts/gen-source-attestations.sh:20:# Usage:
+scripts/gen-source-attestations.sh:31:MANIFEST="$ROOT/library/manifest.toml"
+scripts/gen-source-attestations.sh:32:PROPOSED_FILE="$ROOT/library/SOURCE-ATTESTATIONS.proposed"
+scripts/gen-progress.sh:12:# Usage:
+scripts/gen-progress.sh:20:ISSUES_DIR="$ROOT/docs/program/issues"
+scripts/gen-progress.sh:21:OUT_FILE="$ROOT/docs/program/IMPLEMENTATION-PROGRESS.md"
+scripts/gen-doc-status.sh:28:# Usage:
+scripts/gen-doc-status.sh:36:MANIFEST="$ROOT/library/manifest.toml"
+scripts/gen-doc-status.sh:37:REVISION_FILE="$ROOT/library/REVISION"
+scripts/gen-doc-status.sh:38:OUT_FILE="$ROOT/library/STATUS.md"
 ```
 
-Exit status: 0. None of these commands emits syntax, CLI, target,
-declaration, symbol, keyword, diagnostic, or glossary facts.
+Exit status: 0. This is a source inventory, not an observation of generator
+behaviour. It closes the three installed generator interfaces and their output
+paths: the documentation status, implementation progress, and proposed source
+attestation ledger.
+
+### S3 — complete CLI dispatch inventory
+
+```console
+$ sed -n '8,44p' crates/ken-cli/src/main.rs
+fn main() {
+    let mut args = std::env::args().skip(1);
+    let command = args.next().unwrap_or_default();
+
+    let result = match command.as_str() {
+        "repl" => repl::run(),
+        "run" => match args.next() {
+            Some(path) => run::run(Path::new(&path), collect_run_args(args)),
+            None => Err("ken run: expected a source file".into()),
+        },
+        "check" => match args.next() {
+            Some(path) => check::run(Path::new(&path)),
+            None => Err("ken check: expected a source file".into()),
+        },
+        "native-build" => native_build::run(args.collect()),
+        "fmt" => fmt::run(args.collect()),
+        "version" | "--version" | "-V" => {
+            print_version();
+            Ok(())
+        }
+        "" | "--help" | "-h" | "help" => {
+            print_help();
+            Ok(())
+        }
+        other => Err(format!("ken: unknown subcommand '{other}' — try 'ken help'").into()),
+    };
+
+    if let Err(error) = result {
+        eprintln!("{error}");
+        process::exit(1);
+    }
+}
+```
+
+Exit status: 0. This source inventory closes every top-level dispatch arm; it
+does not by itself establish the commands' observed behaviour.
+
+### G1 — observed documentation-generator outputs
+
+```console
+$ scripts/gen-doc-status.sh --check
+gen-doc-status --check: library/STATUS.md is current.
+$ scripts/gen-progress.sh --check
+gen-progress --check: OK (/workspaces/ken/.worktrees/doc-author/docs/program/IMPLEMENTATION-PROGRESS.md is up to date)
+$ scripts/gen-source-attestations.sh
+wrote /workspaces/ken/.worktrees/doc-author/library/SOURCE-ATTESTATIONS.proposed
+Review it, then install mechanically:
+  mv /workspaces/ken/.worktrees/doc-author/library/SOURCE-ATTESTATIONS.proposed /workspaces/ken/.worktrees/doc-author/library/SOURCE-ATTESTATIONS
+```
+
+All three commands exit 0. Their observed outputs agree with S2. None emits
+syntax, CLI, target, declaration, symbol, keyword, diagnostic, or glossary
+facts.
 
 ### C1 — human CLI output
 
@@ -132,8 +203,44 @@ The first command exits 0 with empty output. The second exits 1.
 
 ### C6: run arguments and program status
 
-A probe returns status 41 when its `ProcessInput.arguments` is empty and status
-42 when it is non-empty:
+The status-propagation probe, saved as
+`target/doc-w4-toolchain/exit-37.ken`, is:
+
+```ken
+program capabilities FS APartial
+
+proc main (_input : ProcessInput) (_caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [Console] =
+  host_exit APartial (Failure 37)
+```
+
+Its observed result is:
+
+```console
+$ target/debug/ken run target/doc-w4-toolchain/exit-37.ken
+$ echo $?
+37
+```
+
+The run prints nothing. The argument-discrimination probe, saved as
+`target/doc-w4-toolchain/arg-status.ken`, is:
+
+```ken
+program capabilities FS APartial
+
+proc main (input : ProcessInput) (_caps : ProgramCaps APartial)
+  : HostIO APartial ExitCode visits [Console] =
+  match input {
+    MkProcessInput arguments _environment _cwd |->
+      match arguments {
+        Nil |-> host_exit APartial (Failure 41);
+        Cons _ _ |-> host_exit APartial (Failure 42)
+      }
+  }
+```
+
+It returns status 41 when its `ProcessInput.arguments` is empty and status 42
+when it is non-empty:
 
 ```console
 $ target/debug/ken run target/doc-w4-toolchain/arg-status.ken
@@ -147,25 +254,19 @@ $ echo $?
 Both runs print nothing. The separator keeps `hello` out of the CLI option
 surface and passes it to the Ken program.
 
-### E1–E7 — absent fact emitters
-
-Each command exits 1 with the same unknown-subcommand shape shown here:
+### C7 — formatter refusal on a tracked input
 
 ```console
-$ target/debug/ken syntax
-ken: unknown subcommand 'syntax' — try 'ken help'
-$ target/debug/ken symbols
-ken: unknown subcommand 'symbols' — try 'ken help'
-$ target/debug/ken keywords
-ken: unknown subcommand 'keywords' — try 'ken help'
-$ target/debug/ken diagnostics
-ken: unknown subcommand 'diagnostics' — try 'ken help'
-$ target/debug/ken glossary
-ken: unknown subcommand 'glossary' — try 'ken help'
+$ target/debug/ken fmt --check conformance/challenge/C1-deceq-noncanonical/unsound-deceq-decimal.ken
+ken fmt --check: non-canonical: conformance/challenge/C1-deceq-noncanonical/unsound-deceq-decimal.ken
+$ cp conformance/challenge/C1-deceq-noncanonical/unsound-deceq-decimal.ken target/doc-w4-toolchain/format-copy.ken
+$ target/debug/ken fmt target/doc-w4-toolchain/format-copy.ken
+$ target/debug/ken fmt --check target/doc-w4-toolchain/format-copy.ken
 ```
 
-E1 is `syntax`, E2 is `target`, E3 is `declarations`, E4 is `symbols`, E5 is
-`keywords`, E6 is `diagnostics`, and E7 is `glossary`.
+The first command exits 1. The copy, rewrite, and final check exit 0 with empty
+output. The tracked challenge file makes the refusal input inspectable; the
+copy keeps the rewrite out of the tracked source tree.
 
 ### S1 — source-declared exit-status classes
 

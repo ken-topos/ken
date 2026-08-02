@@ -19,8 +19,8 @@ canonical.
 - `--check` on non-canonical input exits 1 and names the path:
 
 ```console
-$ target/debug/ken fmt --check target/doc-w4-toolchain/format-me.ken
-ken fmt --check: non-canonical: target/doc-w4-toolchain/format-me.ken
+$ target/debug/ken fmt --check conformance/challenge/C1-deceq-noncanonical/unsound-deceq-decimal.ken
+ken fmt --check: non-canonical: conformance/challenge/C1-deceq-noncanonical/unsound-deceq-decimal.ken
 ```
 
 For the safe copy, rewrite, and verification procedure, see

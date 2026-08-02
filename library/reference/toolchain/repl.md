@@ -8,8 +8,8 @@
 ken repl
 ```
 
-`repl` starts the interactive Little Prover loop. It reads declarations,
-expressions, and colon commands until `:quit` or end of input.
+`repl` starts the interactive Little Prover loop. The observed `:quit` command
+ends the session.
 
 ## Output and status
 
