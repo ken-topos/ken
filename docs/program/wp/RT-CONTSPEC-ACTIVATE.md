@@ -72,7 +72,7 @@ Measured at `origin/main = 4e6b0744`.
 |---|---|
 | seam 1 | `RT-CONTSPEC-ASSEMBLY`, must be `merged` before this starts |
 | the corrected census | seam 1 `D4`, path fixed by that seam; the 138 rows with one row per failing test and no `ownership matrix pending` placeholder |
-| the accepted helper | `CheckedFrameBranchScope` plus its feature-gated harness, established on `main` by seam 1, **unactivated** |
+| the accepted helper | `CheckedFrameBranchScope` plus its feature-gated harness, established on `main` by seam 1 and already carrying the existing per-branch scoping at the `lower_forked_branch` forks. **It changes no emission authority** — that is this seam's job, and it is what "activation" means here (ruled `evt_5p6exqgphrwxj`) |
 | lowering entry point | `crates/ken-runtime/src/cranelift_backend/lowering/core.rs` |
 | prior-slice surfaces | `planning/static_transition.rs`, `planning/static_transition/abi.rs`, `planning/static_transition/semantic_ir.rs`, `planning.rs`, `boundary_value.rs`, `boundary_value_clif.rs` — all frozen at their `main` blobs |
 | baseline suite | `scripts/ken-cargo test -p ken-runtime --lib` |
