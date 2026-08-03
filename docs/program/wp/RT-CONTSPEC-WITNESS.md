@@ -147,6 +147,27 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
 - **D6 — the three-node tracker closure**, in one commit: this node,
   `RT-RECURSOR-TRANSPORT`, `RT-DECL-CLOSURE-PORT`.
 
+- **D7 — INHERITED 2026-08-03 from [[RT-CONTSPEC-ACTIVATE]]: the behavioural
+  target-dependence witness.** Architect ruling `evt_bz62dah3ecp0`. On the
+  integrated, executed assembly, prove that **selecting the wrong same-shaped
+  target changes or fails an observable result.** "Same-shaped" is
+  `RT-WORKER-BIND`'s landed definition — same declared arity and same capture
+  count. The redirect resolves the exact target first, then selects a *distinct*
+  target on that predicate; never on origin inequality or ABI layout.
+
+  **Why it is here and not in seam 2.** `ACTIVATE` closes at the emission seam:
+  it proves the planner-issued target equals the emitted direct-call target. That
+  is not a behavioural oracle — it passes even if the call result is discarded,
+  both targets alias one body, or the callee body is malformed. Seam 2's own
+  population cannot supply the stronger witness: six shapes measured at
+  `a84dbfba` all refuse at the ordinary-`Closure` boundary before any answer is
+  observable. **This seam is the first one that runs an integrated native
+  assembly, so it is the first that can execute the witness lawfully.**
+
+  ⛔ **The obligation was deferred, not discharged.** `ACTIVATE` merging does not
+  close it. If this seam cannot execute it either, that is a routed finding, not
+  a silent drop.
+
 ## Acceptance criteria
 
 - **AC-1 — every one of the corrected census's 138 rows has a terminal
@@ -171,6 +192,22 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
   names this seam as what closed it.
   *Control:* the tracker diff; three `status` flips, one commit.
 - **AC-8 — CI green** on the merge.
+
+- **AC-9 — INHERITED from [[RT-CONTSPEC-ACTIVATE]] `D4` item 4 (2026-08-03,
+  `evt_bz62dah3ecp0`): a wrong same-shaped target changes or fails an observable
+  result.** Redirect a causal token to the other same-shaped target — same
+  declared arity, same capture count — on the integrated executed assembly; the
+  observed result must change or fail.
+  *Control:* `D7`, with a **committed** `cfg(test)`-gated switch on the exact
+  production branch whose red reproduces from the committed tree. ⛔ A hand-run
+  mutation does not discharge this.
+  ⛔ **A green that shows only "which target was claimed changed" does not
+  discharge this AC** — that is `ACTIVATE`'s `AC-2`, already met, and it observes
+  the mutation changing the field it mutates. This AC needs the **result**.
+  ⚠ If the integrated assembly cannot execute the witness, say so with the
+  refusal and route it. Do not weaken `boundary_transfer_admissibility`,
+  fabricate a durable or borrowed closure lane, change planner or ABI
+  populations, or fall back on a `0/0` witness — all remain banned outright.
 
 ## Banned scope
 
