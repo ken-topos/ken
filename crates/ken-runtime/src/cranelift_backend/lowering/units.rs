@@ -678,11 +678,6 @@ pub(super) fn define_continuation_bodies<M: Module>(
 
     // Shape index for the `D4` redirect control: declared arity and capture
     // count per specialization, which is the only same-shaped definition.
-    #[cfg(test)]
-    let shaped_targets: BTreeMap<ContinuationSpecializationId, (u32, u32)> = emissions
-        .iter()
-        .map(|unit| (unit.id, (unit.header_parameters, unit.header_captures)))
-        .collect();
     let mut defined = 0usize;
     for unit in emissions {
         // Resolve the EXACT target first; the control below perturbs only what
@@ -692,35 +687,8 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 "a planned continuation specialization was never forward-declared".to_string(),
             )
         })?;
-        #[cfg(test)]
-        let id = if CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
-            == ContinuationEmissionMutation::RedirectSameShapedTarget
-        {
-            // Same-shaped is RT-WORKER-BIND's definition and nothing else:
-            // same declared arity, same capture count. No origin inequality,
-            // no ABI layout, and no fall back to exact -- a fallback would
-            // make this control vacuously green.
-            let shape = (unit.header_parameters, unit.header_captures);
-            let candidate = shaped_targets
-                .iter()
-                .find(|(other_id, other_shape)| **other_shape == shape && **other_id != unit.id)
-                .map(|(other_id, _)| *other_id);
-            let other = candidate.ok_or_else(|| {
-                backend_module(
-                    "the D4 redirect found no DISTINCT continuation target of the same declared \
-                     arity and capture count; that is a measured fact about this fixture's \
-                     population, not a licence to widen the predicate"
-                        .to_string(),
-                )
-            })?;
-            bundle.continuation(other).ok_or_else(|| {
-                backend_module("the redirect target was never declared".to_string())
-            })?
-        } else {
-            exact_id
-        };
-        #[cfg(not(test))]
         let id = exact_id;
+
         let offsets = unit.offsets.as_slice();
         let envelope = &unit.envelope;
         let inputs = &unit.inputs;

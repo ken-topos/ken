@@ -5574,7 +5574,8 @@ impl<'a> Lowering<'a> {
                 "a continuation claim was reached with no unit currently being defined",
             )
         })?;
-        let target = self
+        // The EXACT target, resolved first.
+        let exact_target = self
             .function_local
             .continuation_calls
             .get(&identity)
@@ -5585,17 +5586,69 @@ impl<'a> Lowering<'a> {
                     "the claimed continuation target was not declared into this function",
                 )
             })?;
+        // `D4` control, on the real causal call seam: hand the call a DISTINCT
+        // same-shaped target, where same-shaped is declared arity plus capture
+        // count and nothing else. No origin inequality, no ABI layout, and no
+        // fall back to exact -- a fallback would make this control vacuous.
+        #[cfg(test)]
+        let target = if CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
+            == ContinuationEmissionMutation::RedirectSameShapedTarget
+        {
+            let shape = (exact_target.header.parameters, exact_target.header.captures);
+            self.function_local
+                .continuation_calls
+                .iter()
+                .find(|(other, call)| {
+                    other.target() != identity.target()
+                        && (call.header.parameters, call.header.captures) == shape
+                })
+                .map(|(_, call)| call.clone())
+                .ok_or_else(|| {
+                    unsupported(
+                        "ContinuationSpecialization",
+                        "the D4 redirect found no DISTINCT same-shaped call target by declared \
+                         arity and capture count; that is a measured fact about this fixture's \
+                         population, not a licence to widen the predicate",
+                    )
+                })?
+        } else {
+            exact_target
+        };
+        #[cfg(not(test))]
+        let target = exact_target;
         // Claim exactly once, with the defining unit supplied independently of
         // the token so the owner check is a real comparison.
-        self.continuation_claims
-            .as_mut()
-            .ok_or_else(|| {
-                unsupported(
-                    "ContinuationSpecialization",
-                    "a continuation claim was reached with no open claim ledger",
-                )
-            })?
-            .claim_exact(&identity, defining)?;
+        // `D4` controls, on the real claim: present the same exact token a
+        // second time, or present an owner that is not the unit actually being
+        // defined. Both perturb this call seam, not a pre-body ledger.
+        #[cfg(test)]
+        let mutation = CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get);
+        #[cfg(test)]
+        let claimed_owner = if mutation == ContinuationEmissionMutation::ClaimUnderWrongOwner {
+            // An actually wrong current owner: any planned owner that is not
+            // the unit being defined.
+            self.static_transition_plan
+                .continuation_calls()?
+                .iter()
+                .map(|call| call.producer_owner())
+                .find(|owner| *owner != defining)
+                .unwrap_or(defining)
+        } else {
+            defining
+        };
+        #[cfg(not(test))]
+        let claimed_owner = defining;
+        let ledger = self.continuation_claims.as_mut().ok_or_else(|| {
+            unsupported(
+                "ContinuationSpecialization",
+                "a continuation claim was reached with no open claim ledger",
+            )
+        })?;
+        ledger.claim_exact(&identity, claimed_owner)?;
+        #[cfg(test)]
+        if mutation == ContinuationEmissionMutation::ClaimTokenTwice {
+            ledger.claim_exact(&identity, claimed_owner)?;
+        }
 
         // Capture slots come from the EXACT producer environment, addressed by
         // the projected `source_owner` + `source_abi_position`. ⛔
