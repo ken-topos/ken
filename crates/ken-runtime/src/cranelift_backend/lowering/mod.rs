@@ -948,6 +948,40 @@ enum TrapCallerProtocolMutation {
     ReadResultBeforeTrap,
 }
 
+/// **`RT-CONTSPEC-ACTIVATE` `D4` — the three executable controls for the
+/// continuation emission seam.**
+///
+/// All `#[cfg(test)]`; production compiles as if they did not exist. Each sits
+/// on the exact production branch it perturbs, so its red reproduces from the
+/// committed tree by flipping the switch.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ContinuationEmissionMutation {
+    Exact,
+    /// `D2`/`D4` target seam: resolve the exact continuation target, then hand
+    /// the definition a **distinct same-shaped** one -- same declared arity
+    /// and same capture count, per `RT-WORKER-BIND`, and by nothing else.
+    /// Never by origin inequality or ABI layout, and never a fall back to
+    /// exact.
+    RedirectSameShapedTarget,
+    /// `D3` affine seam: claim the same causal token twice.
+    ClaimTokenTwice,
+    /// `D3` owner seam: claim under a producer owner that does not own the
+    /// token.
+    ClaimUnderWrongOwner,
+}
+
+#[cfg(test)]
+fn set_continuation_emission_mutation(mutation: ContinuationEmissionMutation) {
+    CONTINUATION_EMISSION_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
+thread_local! {
+    static CONTINUATION_EMISSION_MUTATION: std::cell::Cell<ContinuationEmissionMutation> =
+        const { std::cell::Cell::new(ContinuationEmissionMutation::Exact) };
+}
+
 /// **`AC-5` -- the two executable mutation controls for the static-worker
 /// substrate.**
 ///

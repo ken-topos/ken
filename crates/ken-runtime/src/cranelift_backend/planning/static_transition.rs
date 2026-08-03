@@ -6328,6 +6328,9 @@ pub(in crate::cranelift_backend) fn governed_nested_resource_bracket(depth: usiz
 }
 
 #[cfg(test)]
+pub(in crate::cranelift_backend) use tests::contspec_nested_fixture;
+
+#[cfg(test)]
 mod tests {
     use super::abi::{AbiCarrier, AbiSlot, AbiSlotKind};
     use super::semantic_ir::{
@@ -12117,7 +12120,7 @@ mod tests {
         );
     }
 
-    fn contspec_nested_fixture() -> RuntimeExpr {
+    pub(in crate::cranelift_backend) fn contspec_nested_fixture() -> RuntimeExpr {
         let leaf = || RuntimeExpr::Construct {
             constructor: "ctor:fixture::Contspec::Leaf".to_string(),
             args: Vec::new(),

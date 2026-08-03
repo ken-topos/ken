@@ -645,6 +645,8 @@ pub(super) fn define_continuation_bodies<M: Module>(
         worker_body_origin: StaticOriginId,
         worker_declared_arity: u32,
         worker_capture_count: usize,
+        header_parameters: u32,
+        header_captures: u32,
     }
     // `RT-WORKER-BIND` `D4` exposes its local declaration operation for a
     // separately emitted caller; a continuation function is exactly that, so
@@ -668,17 +670,57 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 worker_body_origin: unit.worker_body_origin(),
                 worker_declared_arity: unit.worker_declared_arity(),
                 worker_capture_count: unit.worker_capture_count(),
+                header_parameters: unit.header().parameters,
+                header_captures: unit.header().captures,
             })
         })
         .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
 
+    // Shape index for the `D4` redirect control: declared arity and capture
+    // count per specialization, which is the only same-shaped definition.
+    #[cfg(test)]
+    let shaped_targets: BTreeMap<ContinuationSpecializationId, (u32, u32)> = emissions
+        .iter()
+        .map(|unit| (unit.id, (unit.header_parameters, unit.header_captures)))
+        .collect();
     let mut defined = 0usize;
     for unit in emissions {
-        let id = bundle.continuation(unit.id).ok_or_else(|| {
+        // Resolve the EXACT target first; the control below perturbs only what
+        // the definition is handed.
+        let exact_id = bundle.continuation(unit.id).ok_or_else(|| {
             backend_module(
                 "a planned continuation specialization was never forward-declared".to_string(),
             )
         })?;
+        #[cfg(test)]
+        let id = if CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
+            == ContinuationEmissionMutation::RedirectSameShapedTarget
+        {
+            // Same-shaped is RT-WORKER-BIND's definition and nothing else:
+            // same declared arity, same capture count. No origin inequality,
+            // no ABI layout, and no fall back to exact -- a fallback would
+            // make this control vacuously green.
+            let shape = (unit.header_parameters, unit.header_captures);
+            let candidate = shaped_targets
+                .iter()
+                .find(|(other_id, other_shape)| **other_shape == shape && **other_id != unit.id)
+                .map(|(other_id, _)| *other_id);
+            let other = candidate.ok_or_else(|| {
+                backend_module(
+                    "the D4 redirect found no DISTINCT continuation target of the same declared \
+                     arity and capture count; that is a measured fact about this fixture's \
+                     population, not a licence to widen the predicate"
+                        .to_string(),
+                )
+            })?;
+            bundle.continuation(other).ok_or_else(|| {
+                backend_module("the redirect target was never declared".to_string())
+            })?
+        } else {
+            exact_id
+        };
+        #[cfg(not(test))]
+        let id = exact_id;
         let offsets = unit.offsets.as_slice();
         let envelope = &unit.envelope;
         let inputs = &unit.inputs;
@@ -1162,12 +1204,36 @@ impl ContinuationClaimLedger {
         &mut self,
         defining: PredeclaredFunctionId,
     ) -> Result<usize, CraneliftBackendError> {
-        let owned: Vec<ContinuationCallIdentity> = self
+        // `D4` owner control: claim under a unit that does not own the token.
+        // The selection predicate is the production one; the mutation only
+        // changes which unit is presented as the definer.
+        #[cfg(test)]
+        let defining = if CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
+            == ContinuationEmissionMutation::ClaimUnderWrongOwner
+        {
+            self.claims
+                .keys()
+                .map(|identity| identity.producer_owner())
+                .find(|owner| *owner != defining)
+                .unwrap_or(defining)
+        } else {
+            defining
+        };
+        let mut owned: Vec<ContinuationCallIdentity> = self
             .claims
             .keys()
             .filter(|identity| identity.producer_owner() == defining)
             .cloned()
             .collect();
+        // `D4` affine control: present the same causal token twice.
+        #[cfg(test)]
+        if CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
+            == ContinuationEmissionMutation::ClaimTokenTwice
+        {
+            if let Some(first) = owned.first().cloned() {
+                owned.push(first);
+            }
+        }
         for identity in &owned {
             let consumed = self.claims.get_mut(identity).ok_or_else(|| {
                 backend_module(
