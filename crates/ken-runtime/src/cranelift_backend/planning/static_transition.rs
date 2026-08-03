@@ -11711,6 +11711,206 @@ mod tests {
         );
     }
 
+    /// **`RT-DECL-CLOSURE-PORT` `D3` — the four transport classes are present
+    /// and typed at the declaration-owned callable-unit boundary.**
+    ///
+    /// Capture, parameter, result and trap, asserted as the **exact ordered slot
+    /// run** rather than as counts: a count agrees with a run that has the right
+    /// number of wrong slots.
+    #[test]
+    fn d3_the_callable_declaration_boundary_carries_typed_transport() {
+        let (root, declaration) = d2_declaration_and_anonymous_closure();
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d2", &declaration);
+        let plan = plan_static_transition_graph(&root, &declarations).expect("plannable");
+        let declaration_origin = plan
+            .declaration_occurrence_origin("decl:fixture::d2")
+            .expect("occurrence");
+
+        let unit = plan
+            .emittable_units()
+            .expect("validated units")
+            .into_iter()
+            .find(|unit| {
+                matches!(
+                    unit.definition(),
+                    AbiUnitDefinition::CallableDeclaration { declaration_origin: origin, .. }
+                        if origin == declaration_origin
+                )
+            })
+            .expect("the declaration owns a callable unit");
+
+        let run = unit
+            .slots()
+            .iter()
+            .map(|slot| (slot.kind, slot.carrier, slot.ordinal))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            run,
+            vec![
+                // the declared parameter
+                (AbiSlotKind::Parameter, AbiCarrier::ValueWord, 0),
+                // the lifted captures, in capture declaration order
+                (AbiSlotKind::Capture, AbiCarrier::ValueWord, 0),
+                (AbiSlotKind::Capture, AbiCarrier::ValueWord, 1),
+                // the result / control / trap / store convention
+                (AbiSlotKind::Result, AbiCarrier::ResultWord, 0),
+                (AbiSlotKind::Control, AbiCarrier::ControlWord, 0),
+                (AbiSlotKind::Trap, AbiCarrier::TrapWord, 0),
+                (AbiSlotKind::Store, AbiCarrier::StoreHandle, 0),
+            ],
+            "D3: the callable declaration boundary must carry typed parameter, \
+             capture, result and trap transport in ABI order"
+        );
+
+        // Ownership and storage owner are part of "typed", not decoration: a
+        // capture that transferred to the caller, or lived in the persistent
+        // store, would be a different transport with the same slot kinds.
+        for slot in unit.slots() {
+            let expected = match slot.kind {
+                AbiSlotKind::Parameter | AbiSlotKind::Capture | AbiSlotKind::Control
+                | AbiSlotKind::Trap => (AbiOwnership::OwnedByFrame, AbiStorageOwner::ActivationFrame),
+                AbiSlotKind::Result => (
+                    AbiOwnership::TransferredToCaller,
+                    AbiStorageOwner::ActivationFrame,
+                ),
+                AbiSlotKind::Store => (
+                    AbiOwnership::BorrowedForActivation,
+                    AbiStorageOwner::PersistentStore,
+                ),
+            };
+            assert_eq!(
+                (slot.ownership, slot.storage_owner),
+                expected,
+                "D3: {:?} slot crosses with the wrong ownership/storage owner",
+                slot.kind
+            );
+        }
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D3` — the SEED producer transports too, with
+    /// its own carrier.**
+    ///
+    /// ⭐ There are **two** `StaticBody` producers, `Closure` and
+    /// `LexicalClosure`, and they differ in exactly the axis under test: a seed
+    /// capture crosses as `GroundValueCarrier`, a lexical one as `ValueWord`. A
+    /// fixture exercising one producer leaves the other's transport unmeasured,
+    /// and "the ported declaration works" would then be a claim about half the
+    /// population.
+    #[test]
+    fn d3_a_seed_provenance_declaration_transports_with_its_own_carrier() {
+        let declaration = RuntimeDeclaration {
+            symbol: "decl:fixture::d3seed".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::Closure {
+                    captures: vec!["decl:fixture::cap".to_string()],
+                    params: vec!["arg0".to_string()],
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d3seed", &declaration);
+        let plan = plan_static_transition_graph(&RuntimeExpr::Value(RuntimeValue::Bool(true)), &declarations)
+            .expect("plannable");
+        let declaration_origin = plan
+            .declaration_occurrence_origin("decl:fixture::d3seed")
+            .expect("occurrence");
+
+        let unit = plan
+            .emittable_units()
+            .expect("validated units")
+            .into_iter()
+            .find(|unit| {
+                matches!(
+                    unit.definition(),
+                    AbiUnitDefinition::CallableDeclaration { declaration_origin: origin, .. }
+                        if origin == declaration_origin
+                )
+            })
+            .expect("the seed declaration owns a callable unit");
+
+        assert_eq!(
+            unit.definition(),
+            AbiUnitDefinition::CallableDeclaration {
+                declaration_origin,
+                provenance: AbiCaptureProvenance::Seed,
+            },
+            "D3: a Closure-bodied declaration must own a SEED-provenance callable unit"
+        );
+        let captures = unit
+            .slots()
+            .iter()
+            .filter(|slot| slot.kind == AbiSlotKind::Capture)
+            .map(|slot| slot.carrier)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            captures,
+            vec![AbiCarrier::GroundValueCarrier],
+            "D3: a seed capture must cross as GroundValueCarrier, not as the \
+             lexical ValueWord -- the carrier is a function of provenance"
+        );
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D3` — `C4` actually REJECTS on a
+    /// declaration-owned unit, and the control proves that is not free.**
+    ///
+    /// ⭐ This is the one the leader named: routing `C4` through the shared
+    /// predicate in `D2` is only worth something if the exclusion genuinely
+    /// fires for the new arm. ⛔ A green suite cannot establish that — an
+    /// exclusion that silently stopped seeing these units also reports no
+    /// violation.
+    #[test]
+    fn d3_an_imported_capture_on_a_declaration_owned_unit_is_refused() {
+        // The imported EDGE: an imported value in a capture position, which is
+        // where it would have to cross a frame boundary and be given a carrier.
+        let declaration = RuntimeDeclaration {
+            symbol: "decl:fixture::d3".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::ImportedDeclarationRef {
+                        symbol: "decl:other::imported".to_string(),
+                        dependency: "pkg:other".to_string(),
+                        dependency_semantic_hash: "hash".to_string(),
+                    }],
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d3", &declaration);
+        let root = RuntimeExpr::Value(RuntimeValue::Bool(true));
+
+        let refused = plan_static_transition_graph(&root, &declarations);
+        assert!(
+            refused.is_err(),
+            "D3/C4: an imported capture edge on a declaration-owned callable \
+             unit must be refused before it receives a callable descriptor"
+        );
+
+        // ⭐ The control. With `C4` restored to matching `ClosureBody` alone,
+        // the SAME program is accepted -- so the assertion above is caused by
+        // the shared predicate reaching the new arm, not by some other refusal
+        // that would have fired anyway.
+        let accepted_under_mutation =
+            super::abi::D3_C4_MATCHES_CLOSURE_BODY_ONLY.with(|flag| {
+                flag.set(true);
+                let outcome = plan_static_transition_graph(&root, &declarations).is_ok();
+                flag.set(false);
+                outcome
+            });
+        assert!(
+            accepted_under_mutation,
+            "D3/C4: the refusal must be CAUSED by C4 reaching the declaration-owned \
+             arm -- if the program is still refused with C4 narrowed back to \
+             ClosureBody, this test is measuring a different rejection and proves \
+             nothing about the population shrink"
+        );
+    }
+
     fn d8_mixed_join(swapped: bool) -> RuntimeExpr {
         let carried = RuntimeMatchCase {
             constructor: "ctor:fixture::D8::Carried".to_string(),
