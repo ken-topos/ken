@@ -10074,3 +10074,199 @@ fn ac1b_the_executable_lowering_witness_closes_its_one_token_population() {
          planned/resolved/declared/emitted set equality at closeout"
     );
 }
+
+// ─── RT-DECL-CLOSURE-PORT `D1` — the full-residual enumerator's controls ─────
+
+/// `Match` whose scrutinee is directly a `Call`. The callee is a
+/// `DeclarationRef` rather than a closure, so this witness fires
+/// `ProducerMatchCall` and nothing else.
+fn d1_producer_match_call_witness() -> RuntimeExpr {
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: "decl:fixture::d1::callee".to_string(),
+            }),
+            args: Vec::new(),
+        }),
+        cases: Vec::new(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "d1 producer-match-call witness".to_string(),
+        },
+    }
+}
+
+/// `Match` consuming an active computational recursor.
+fn d1_match_scrutinee_recursor_witness() -> RuntimeExpr {
+    RuntimeExpr::Match {
+        scrutinee: Box::new(d1_active_recursor()),
+        cases: Vec::new(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "d1 match-scrutinee-recursor witness".to_string(),
+        },
+    }
+}
+
+/// A lexical unit call whose argument is an active computational recursor.
+fn d1_lexical_call_argument_recursor_witness() -> RuntimeExpr {
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Var(0)),
+        }),
+        args: vec![d1_active_recursor()],
+    }
+}
+
+/// A call whose callee is the retained non-lexical closure form.
+fn d1_seed_closure_call_witness() -> RuntimeExpr {
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Closure {
+            captures: Vec::new(),
+            params: Vec::new(),
+            body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        }),
+        args: Vec::new(),
+    }
+}
+
+/// A transparent declaration whose body is a closure seed. Its body is a bare
+/// value so this witness contributes exactly one variant.
+fn d1_transparent_declaration_closure_witness() -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: "decl:fixture::d1::transparent".to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            },
+        },
+        metadata: RuntimeSymbolMetadata::empty(),
+    }
+}
+
+/// A `ComputationalMatch` carrying a ruled recursive position — the shape both
+/// recursor-flavoured residuals key on.
+fn d1_active_recursor() -> RuntimeExpr {
+    RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Var(0)),
+        cases: vec![crate::RuntimeComputationalMatchCase {
+            constructor: "ctor:fixture::d1::Node".to_string(),
+            argument_binders: 1,
+            recursive_positions: vec![0],
+            body: RuntimeExpr::Var(0),
+        }],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "d1 active recursor".to_string(),
+        },
+    }
+}
+
+/// **`AC-2` positive control 2 — every variant is reachable by the
+/// instrument.**
+///
+/// A variant no program reaches is a reportable gap in the measurement, not a
+/// variant that does not fire. Each of the five is named with the witness that
+/// exhibits it.
+#[test]
+fn d1_each_residual_variant_is_observable() {
+    let empty: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
+    for (witness, expected) in [
+        (
+            d1_producer_match_call_witness(),
+            RecursiveDescentResidual::ProducerMatchCall,
+        ),
+        (
+            d1_match_scrutinee_recursor_witness(),
+            RecursiveDescentResidual::MatchScrutineeRecursor,
+        ),
+        (
+            d1_lexical_call_argument_recursor_witness(),
+            RecursiveDescentResidual::LexicalCallArgumentRecursor,
+        ),
+        (
+            d1_seed_closure_call_witness(),
+            RecursiveDescentResidual::SeedClosureCall,
+        ),
+    ] {
+        let reported = enumerate_recursive_descent_residuals(&witness, &empty);
+        assert!(
+            reported.contains(&expected),
+            "{expected:?} must be observable by the enumerator; it reported {reported:?}"
+        );
+    }
+
+    // The fifth is declaration-borne, so it needs the declaration route.
+    let declaration = d1_transparent_declaration_closure_witness();
+    let mut declarations: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
+    declarations.insert(declaration.symbol.as_str(), &declaration);
+    let reported = enumerate_recursive_descent_residuals(
+        &RuntimeExpr::Value(RuntimeValue::Bool(true)),
+        &declarations,
+    );
+    assert!(
+        reported.contains(&RecursiveDescentResidual::TransparentDeclarationClosure),
+        "TransparentDeclarationClosure must be observable by the enumerator; it reported \
+         {reported:?}"
+    );
+}
+
+/// **`AC-2` positive control 1 — the enumerator does not short-circuit.**
+///
+/// ⭐ **This is the control that matters most, and the reason is that its
+/// absence is invisible.** The instrument exists to defeat the selector's
+/// `.or_else(..)`; if it silently kept that behaviour it would report exactly
+/// **one** variant — which is the answer a reader of this node already expects,
+/// so a wrong instrument would look right. Only a program firing two or more
+/// variants separates the two behaviours.
+///
+/// ⛔ Asserts the **exact set**, not a length and not a subset: a walk that
+/// found four of five and a walk that found five would both satisfy "more than
+/// one".
+///
+/// **Promise class: durable invariant.** It pins that the reported set equals
+/// the set of variants the program exhibits. `D2`-`D6` rewrite this file; every
+/// intended rewrite keeps this green.
+#[test]
+fn d1_the_enumerator_reports_every_variant_not_the_first() {
+    let compound = RuntimeExpr::Let {
+        value: Box::new(d1_producer_match_call_witness()),
+        body: Box::new(RuntimeExpr::Let {
+            value: Box::new(d1_match_scrutinee_recursor_witness()),
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(d1_lexical_call_argument_recursor_witness()),
+                body: Box::new(d1_seed_closure_call_witness()),
+            }),
+        }),
+    };
+    let declaration = d1_transparent_declaration_closure_witness();
+    let mut declarations: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
+    declarations.insert(declaration.symbol.as_str(), &declaration);
+
+    let reported = enumerate_recursive_descent_residuals(&compound, &declarations);
+    let expected: BTreeSet<RecursiveDescentResidual> = [
+        RecursiveDescentResidual::ProducerMatchCall,
+        RecursiveDescentResidual::MatchScrutineeRecursor,
+        RecursiveDescentResidual::LexicalCallArgumentRecursor,
+        RecursiveDescentResidual::SeedClosureCall,
+        RecursiveDescentResidual::TransparentDeclarationClosure,
+    ]
+    .into_iter()
+    .collect();
+    assert_eq!(
+        reported, expected,
+        "the enumerator must report every variant the program exhibits, not the selector's first"
+    );
+
+    // The selector's own answer on the same program is deliberately compared:
+    // it returns ONE reason, which is correct for its question and is exactly
+    // what this instrument must not do.
+    assert!(
+        recursive_descent_residual(&compound).is_some(),
+        "the selector still answers its own question on this program"
+    );
+}
