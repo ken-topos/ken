@@ -2653,13 +2653,19 @@ fn recursive_declaration_shape_change_hits_typed_boundary() {
         Ok(_) => panic!("a changing recursive native representation must fail closed"),
         Err(error) => error,
     };
-    assert!(matches!(
-        error,
-        CraneliftBackendError::Unsupported(UnsupportedLowering {
-            construct: "DeclarationRef",
-            reason,
-        }) if reason.contains("changes its native argument representation")
-    ));
+    assert!(
+        matches!(
+            &error,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "DeclarationRef",
+                reason,
+            }) if reason.contains("changes its native argument representation")
+        ),
+        // ⚠ A bare `matches!` assertion here reports only that the shape was
+        // wrong, never which error actually arrived — and this fixture can fail
+        // closed for several unrelated reasons upstream of the one it is about.
+        "the changing recursive representation must be the reason this fails: {error:?}"
+    );
 }
 #[test]
 fn checked_join_marker_without_exact_plan_site_rejects_before_emission() {
@@ -4579,6 +4585,12 @@ fn retained_closures_carry_a_static_origin_and_no_body_term() {
     assert_eq!(
         declared_fields(source, "    DeclarationClosure {"),
         vec![
+            // `RT-DECL-CLOSURE-PORT` `D4` added `reference`. It is argued, not
+            // absorbed: it names the planner-issued `DeclarationRef` occurrence
+            // this binding was produced at, which is the key the resolved call
+            // record is looked up by. `body` remains the sole body authority --
+            // the property this inventory protects is unchanged.
+            "reference: StaticOriginId,",
             "symbol: RuntimeSymbol,",
             "captures: Vec<Lowered>,",
             "params: Vec<String>,",
@@ -5943,6 +5955,7 @@ fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
 
     let bare = c1_closure(origin);
     let bare_declaration = Lowered::DeclarationClosure {
+        reference: origin,
         symbol: "decl:fixture::f".to_string(),
         captures: Vec::new(),
         params: Vec::new(),
@@ -7552,6 +7565,98 @@ fn computational_match_declaration_ref_emits_and_runs_the_declaration_owned_unit
         RuntimeObservation::Returned(RuntimeGroundValue::Int((73).into())),
         "the caller ran some path other than the declaration-owned unit"
     );
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D4` — a `LexicalClosure`-bodied transparent
+/// declaration retains a callable binding and still runs.**
+///
+/// Promise class: durable invariant.
+///
+/// MEASURED: both closure seed forms reach `Lowered::DeclarationClosure`, and a
+/// program that calls a lexical-closure declaration returns the value its body
+/// computes -- both for a parameter and for a capture.
+/// CLAIMED: extending the retained binding to the second seed form did not
+/// change what these programs compute on the `RecursiveDescent` path they still
+/// select.
+/// THE GAP: this says nothing about the `FunctionizedUnits` call installed by
+/// `D4`. That route is unreachable while `TransparentDeclarationClosure` retains
+/// the selector, and it is `D5`/`D6`'s to validate and activate. ⛔ A green run
+/// here is NOT evidence the new call emits.
+#[test]
+fn d4_a_lexical_closure_declaration_retains_a_binding_and_still_runs() {
+    // The parameter case: the argument reaches the body.
+    let by_parameter = "decl:fixture::d4::by_parameter".to_string();
+    let parameter_declaration = RuntimeDeclaration {
+        symbol: by_parameter.clone(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["x".to_string()],
+                body: Box::new(RuntimeExpr::Var(0)),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    // The capture case: a closed capture expression, lowered in the
+    // declaration's own empty environment and bound behind the parameters.
+    let by_capture = "decl:fixture::d4::by_capture".to_string();
+    let capture_declaration = RuntimeDeclaration {
+        symbol: by_capture.clone(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: vec![RuntimeExpr::Value(RuntimeValue::Int((58).into()))],
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Var(0)),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+
+    // Distinct values, so a test that ran the wrong declaration cannot pass.
+    for (label, symbol, declaration, expected) in [
+        ("parameter", &by_parameter, &parameter_declaration, 41i64),
+        ("capture", &by_capture, &capture_declaration, 58i64),
+    ] {
+        let args = if label == "parameter" {
+            vec![RuntimeExpr::Value(RuntimeValue::Int((41).into()))]
+        } else {
+            Vec::new()
+        };
+        let expr = RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: symbol.clone(),
+            }),
+            args,
+        };
+        let compiled = compile_expr_into_module(
+            new_jit_module().expect("JIT module"),
+            "d4_lexical_closure_declaration",
+            Linkage::Local,
+            &expr,
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::from([(symbol.as_str(), declaration)]),
+            None,
+            false,
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|error| {
+            panic!("the {label} lexical-closure declaration must compile: {error:?}")
+        });
+        assert_eq!(
+            compiled.run(None).expect("the declaration call runs").0,
+            RuntimeObservation::Returned(RuntimeGroundValue::Int(expected.into())),
+            "D4: the {label} case must still compute its own value after the \
+             retained binding was extended to the LexicalClosure seed form"
+        );
+    }
 }
 
 // ─── RT-FNSPLIT-B2F AC-11 — the producer walk can REJECT, and does not over-reject ─

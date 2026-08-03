@@ -1960,6 +1960,47 @@ impl AbiPlane {
 
         reject_imported_capture_edges(plane, sources, &definitions)?;
         self.validate_boundary_layouts(plane, sources, edges)?;
+        self.validate_declaration_call_targets(plane, edges)?;
+        Ok(())
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D4` — a `DeclarationCall` edge lands on one of
+    /// exactly two unit classes.**
+    ///
+    /// The planner's selective retarget decides, per declaration, whether the
+    /// call edge points at the zero-input scheduling entry or at the
+    /// declaration-owned callable unit. This re-reads that decision **through a
+    /// different derivation** — the edge's callee resolved to its ABI
+    /// descriptor, against the descriptor's own
+    /// [`AbiUnitDefinition`] — so a retarget that landed on an anonymous closure
+    /// body or a continuation specialization is refused here rather than
+    /// emitted.
+    ///
+    /// ⛔ Fails closed. There is no arm that tolerates an unrecognised
+    /// definition: the two admissible classes are named, and everything else is
+    /// an error. A `filter`-shaped check would have silently stopped covering
+    /// the very nodes `D2` reclassified.
+    fn validate_declaration_call_targets(
+        &self,
+        plane: &SemanticPlane,
+        edges: &[StaticEdge],
+    ) -> Result<(), CraneliftBackendError> {
+        for (_caller, callee, _callee_origin, _call_site) in plane.declaration_call_edges(edges)? {
+            let descriptor = self.descriptors.get(callee.0 as usize).ok_or_else(|| {
+                planner_error("declaration call callee is not forward-declared in the abi plane")
+            })?;
+            match descriptor.definition {
+                AbiUnitDefinition::SchedulingEntry { .. }
+                | AbiUnitDefinition::CallableDeclaration { .. } => {}
+                AbiUnitDefinition::ClosureBody { .. }
+                | AbiUnitDefinition::ContinuationSpecialization { .. } => {
+                    return Err(planner_error(
+                        "declaration call target is neither a scheduling entry nor a callable \
+                         declaration unit",
+                    ));
+                }
+            }
+        }
         Ok(())
     }
 

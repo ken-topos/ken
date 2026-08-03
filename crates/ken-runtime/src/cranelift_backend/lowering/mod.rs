@@ -76,6 +76,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
     CheckedOrientedMarkerSets, ConstructorIdentity, ContinuationCallIdentity, ContinuationCallView,
+    DeclarationCallTargetClass,
     ContinuationInputView, ContinuationOrdinaryEnvelopeRole, ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, JoinPlanToken,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
@@ -1370,6 +1371,18 @@ enum Lowered {
         body: StaticOriginId,
     },
     DeclarationClosure {
+        /// **`RT-DECL-CLOSURE-PORT` `D4` — the planner-issued
+        /// `DeclarationRef` occurrence this binding was produced at.**
+        ///
+        /// ⭐ Not a decoration and not derivable from `symbol`: the resolved
+        /// declaration-call record is keyed by the **reference** occurrence, so
+        /// two references to one declaration are two distinct call sites with
+        /// their own targets. Carrying it here is what lets the `Call` consumer
+        /// emit *this* reference's call instead of looking one up by name.
+        ///
+        /// ⛔ It is not a second body authority — `body` remains the sole
+        /// callable-body identity, exactly as `AC-1` requires.
+        reference: StaticOriginId,
         symbol: RuntimeSymbol,
         captures: Vec<Lowered>,
         params: Vec<String>,
@@ -2449,10 +2462,24 @@ impl<'a> Lowering<'a> {
         .map(|(operand, _inst)| operand)
     }
 
+    /// **`RT-DECL-CLOSURE-PORT` `D4` — the call at a `DeclarationRef`, with its
+    /// real inputs.**
+    ///
+    /// ⭐ `inputs` is the caller's ordered slice: the declaration's actual
+    /// arguments in **parameter order**, followed by its retained captures in
+    /// `D3` order. It is passed straight to the descriptor-driven emission
+    /// below, which remains the sole authority for the exact
+    /// `Parameter` + `Capture` slot run and rejects a slice that does not match
+    /// it in either direction.
+    ///
+    /// ⛔ Nothing here re-derives the target: no callable identity word, no
+    /// runtime lookup, no name parsing. The reference occurrence selects a
+    /// record the planner already resolved and the bundle already declared.
     fn call_declared_declaration_unit(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         reference_origin: StaticOriginId,
+        inputs: &[LoweringOperand],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let target = self
             .function_local
@@ -2467,7 +2494,7 @@ impl<'a> Lowering<'a> {
         self.call_declared_unit_target(
             builder,
             target,
-            &[],
+            inputs,
             #[cfg(test)]
             None,
         )

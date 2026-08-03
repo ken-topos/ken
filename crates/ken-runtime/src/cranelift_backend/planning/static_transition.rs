@@ -180,6 +180,61 @@ enum EdgeKind {
     Trap,
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D4` causal control — the two ways the selective
+/// retarget can be wrong, both compile-preserving.**
+///
+/// ⭐ Two settings and not one, because a retarget can be wrong by not moving
+/// **and** by moving to the wrong place, and no single mutation shows both.
+///
+/// `NeverRetarget` is the pre-`D4` world: the closure-seed reference keeps its
+/// zero-input scheduling entry, which is the wrong-arity target `D4` removes.
+/// `AnyStaticBody` is the ruled-out *reverse body search*: it takes the first
+/// static-body target in the graph instead of the one leaving this
+/// declaration's own entry. ⛔ The second is the one a positive assertion is
+/// most likely to agree with by accident, because a program with one closure
+/// gives both spellings the same answer — which is why the fixture carries a
+/// second, anonymous closure.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum D4DeclarationTargetMutation {
+    Exact,
+    /// Never follow the static-body edge: the pre-`D4` behaviour.
+    NeverRetarget,
+    /// Follow the first static-body edge in the graph, whoever it leaves.
+    AnyStaticBody,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D4_DECLARATION_TARGET_MUTATION: std::cell::Cell<D4DeclarationTargetMutation> =
+        const { std::cell::Cell::new(D4DeclarationTargetMutation::Exact) };
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D4` — the two lawful targets of a
+/// `EdgeKind::DeclarationCall` edge, kept apart by name.**
+///
+/// A transparent declaration is planned as one scheduling entry. Whether that
+/// entry *is* the callable unit depends on the declaration's own body:
+///
+/// - a body that is not a closure seed schedules and returns a value, so the
+///   entry is its unit and the call takes **no inputs**;
+/// - a `Closure` / `LexicalClosure` seed body owns a second unit — the
+///   declaration-owned [`abi::AbiUnitDefinition::CallableDeclaration`] reached
+///   by the entry's one forward `StaticBody` edge — which declares the
+///   declaration's parameters and captures and must be called **with them**.
+///
+/// ⛔ The two are indistinguishable downstream once flattened: both are reached
+/// by the same edge kind, both resolve to a `FuncId`, and `&[]` type-checks
+/// against either. ⇒ The class is carried, not re-inferred.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum DeclarationCallTargetClass {
+    /// The declaration's own scheduling entry, called with no inputs.
+    SchedulingEntry,
+    /// The declaration-owned callable unit, called with the declaration's
+    /// parameters followed by its captures.
+    CallableDeclaration,
+}
+
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 #[repr(u8)]
 enum StoreKind {
@@ -1034,6 +1089,19 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// asymmetric with the two `lower_expr` closure arms
     ///.
     declaration_occurrences: BTreeMap<String, StaticOriginId>,
+    /// Which of the two lawful target classes each `DeclarationRef`
+    /// occurrence's `DeclarationCall` edge resolved to, keyed by the
+    /// **reference** occurrence.
+    ///
+    /// ⭐ `RT-DECL-CLOSURE-PORT` `D4`: the planner decides this once, in
+    /// `connect_declaration_calls`, and records the decision beside the edge it
+    /// made. ⛔ It is deliberately **not** erased into a single "declared unit"
+    /// notion: a zero-input scheduling entry and a declaration-owned callable
+    /// unit are both reached by `EdgeKind::DeclarationCall`, and an empty input
+    /// slice is type-correct-looking against either. Recording the class is
+    /// what lets the consumer refuse the empty call at a callable target
+    /// instead of emitting a wrong-arity one.
+    declaration_call_targets: BTreeMap<StaticOriginId, DeclarationCallTargetClass>,
     /// Exact trap values interned during the same occurrence visit that records
     /// their source semantics. Identity zero is reserved for "no trap".
     trap_catalog: Vec<RuntimeTrap>,
@@ -3576,6 +3644,7 @@ impl<'src> Planner<'src> {
                 semantic: SemanticPlane::default(),
                 root_occurrence: None,
                 declaration_occurrences: BTreeMap::new(),
+                declaration_call_targets: BTreeMap::new(),
                 trap_catalog: Vec::new(),
                 source_occurrences: Vec::new(),
                 join_results: Vec::new(),
@@ -3722,23 +3791,143 @@ impl<'src> Planner<'src> {
         &mut self,
         declaration_entries: &BTreeMap<String, StaticNodeId>,
     ) -> Result<(), CraneliftBackendError> {
+        // ⭐ `D4`: resolve each declaration's target ONCE, before any edge is
+        // added. The class is a property of the **declaration**, not of a
+        // reference to it, so two references to one symbol cannot disagree —
+        // and a symbol with no reference at all is still resolved, so a
+        // malformed closure seed fails in planning rather than only when
+        // somebody happens to call it.
+        let mut targets: BTreeMap<&str, (StaticNodeId, DeclarationCallTargetClass)> =
+            BTreeMap::new();
+        for (symbol, entry) in declaration_entries {
+            let resolved = self.declaration_call_target(symbol, *entry)?;
+            targets.insert(symbol.as_str(), resolved);
+        }
         let calls = self
             .plan
             .source_occurrences
             .iter()
             .flatten()
             .filter_map(|occurrence| match occurrence.expr {
-                RuntimeExpr::DeclarationRef { symbol } => declaration_entries
+                RuntimeExpr::DeclarationRef { symbol } => targets
                     .get(symbol.as_str())
                     .copied()
-                    .map(|target| (StaticNodeId(occurrence.static_origin.0), target)),
+                    .map(|(target, class)| {
+                        (StaticNodeId(occurrence.static_origin.0), target, class)
+                    }),
                 _ => None,
             })
             .collect::<Vec<_>>();
-        for (caller, callee) in calls {
+        for (caller, callee, class) in calls {
             self.edge(caller, callee, EdgeKind::DeclarationCall)?;
+            // Keyed by the REFERENCE occurrence, which is the same key the
+            // resolved call record is looked up by in lowering. One reference
+            // cannot acquire two classes: `source_occurrences` is dense by
+            // origin, so each reference is visited once.
+            if self
+                .plan
+                .declaration_call_targets
+                .insert(StaticOriginId(caller.0), class)
+                .is_some()
+            {
+                return Err(planner_error(
+                    "one declaration-reference occurrence resolved two call target classes",
+                ));
+            }
         }
         Ok(())
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D4` — the selective retarget, and the only
+    /// place it is decided.**
+    ///
+    /// ⛔ **This is not a blanket retarget, and the difference is load-bearing.**
+    /// A non-closure transparent declaration's scheduling entry *is* its unit —
+    /// a legitimately zero-input thunk — so moving its `DeclarationCall` edge
+    /// would break every declaration call the corpus already makes. Only a
+    /// `Closure` / `LexicalClosure` seed owns a second, declaration-owned unit
+    /// to move to.
+    ///
+    /// The discriminator is read from the declaration's **planned occurrence**,
+    /// not from the entry's shape or from a reverse search for a body: those
+    /// two `RuntimeExpr` arms are exactly the pair that emits an
+    /// `EdgeKind::StaticBody` edge, which is what makes "is a closure seed" and
+    /// "has one forward static-body edge" the same fact stated twice. ⇒ Both are
+    /// asserted, so a plan where they disagree fails in planning.
+    fn declaration_call_target(
+        &self,
+        symbol: &str,
+        entry: StaticNodeId,
+    ) -> Result<(StaticNodeId, DeclarationCallTargetClass), CraneliftBackendError> {
+        let occurrence = self
+            .plan
+            .declaration_occurrences
+            .get(symbol)
+            .copied()
+            .ok_or_else(|| {
+                planner_error("a planned transparent declaration has no occurrence origin")
+            })?;
+        let seed = self
+            .plan
+            .source_occurrences
+            .get(occurrence.0 as usize)
+            .and_then(Option::as_ref)
+            .map(|planned| {
+                matches!(
+                    planned.expr,
+                    RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
+                )
+            })
+            .ok_or_else(|| {
+                planner_error("a planned transparent declaration has no source occurrence")
+            })?;
+
+        let mut body = None;
+        for edge in &self.plan.edges {
+            if edge.kind != EdgeKind::StaticBody || edge.from != entry {
+                continue;
+            }
+            if body.is_some() {
+                return Err(planner_error(
+                    "a transparent declaration entry has two forward static body edges",
+                ));
+            }
+            body = Some(edge.to);
+        }
+        match (seed, body) {
+            (true, Some(body)) => {
+                // The mutations act HERE, on a decision the consistency law
+                // above has already accepted -- a mutation applied to the
+                // discriminator itself would only ever trip that law, and would
+                // measure the law instead of the retarget.
+                #[cfg(test)]
+                match D4_DECLARATION_TARGET_MUTATION.with(std::cell::Cell::get) {
+                    D4DeclarationTargetMutation::Exact => {}
+                    D4DeclarationTargetMutation::NeverRetarget => {
+                        return Ok((entry, DeclarationCallTargetClass::SchedulingEntry));
+                    }
+                    D4DeclarationTargetMutation::AnyStaticBody => {
+                        let any = self
+                            .plan
+                            .edges
+                            .iter()
+                            .find(|edge| edge.kind == EdgeKind::StaticBody)
+                            .map(|edge| edge.to)
+                            .expect("this arm has at least one static body edge");
+                        return Ok((any, DeclarationCallTargetClass::CallableDeclaration));
+                    }
+                }
+                Ok((body, DeclarationCallTargetClass::CallableDeclaration))
+            }
+            (false, None) => Ok((entry, DeclarationCallTargetClass::SchedulingEntry)),
+            (true, None) => Err(planner_error(
+                "a closure-seed transparent declaration has no forward static body edge to its \
+                 callable unit",
+            )),
+            (false, Some(_)) => Err(planner_error(
+                "a non-closure transparent declaration entry has a forward static body edge",
+            )),
+        }
     }
 
     /// Files this occurrence's term under the origin the planner just gave it.
@@ -5001,6 +5190,21 @@ impl<'src> StaticTransitionPlan<'src> {
         symbol: &str,
     ) -> Option<StaticOriginId> {
         self.declaration_occurrences.get(symbol).copied()
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D4`** — which class of unit this
+    /// `DeclarationRef` occurrence's call edge targets.
+    ///
+    /// ⛔ `None` is a real answer and must not be defaulted: a reference with no
+    /// recorded class had no `DeclarationCall` edge planned for it, so there is
+    /// no call to emit and no class to guess. Substituting
+    /// [`DeclarationCallTargetClass::SchedulingEntry`] here would restore
+    /// exactly the empty-input call this record exists to prevent.
+    pub(in crate::cranelift_backend) fn declaration_call_target_class(
+        &self,
+        reference: StaticOriginId,
+    ) -> Option<DeclarationCallTargetClass> {
+        self.declaration_call_targets.get(&reference).copied()
     }
 
     pub(in crate::cranelift_backend) fn trap_identity(
@@ -11908,6 +12112,210 @@ mod tests {
              arm -- if the program is still refused with C4 narrowed back to \
              ClosureBody, this test is measuring a different rejection and proves \
              nothing about the population shrink"
+        );
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D4` fixture — one program holding BOTH target
+    /// classes, each actually referenced.**
+    ///
+    /// ⭐ A closure-seed declaration and a non-closure transparent declaration,
+    /// with a `DeclarationRef` to each, because `D4`'s property is a
+    /// **partition**. A fixture carrying only the closure seed cannot tell
+    /// "retargeted by seed class" apart from "retargeted unconditionally" — and
+    /// the unconditional reading is the hazard: a non-closure declaration's
+    /// entry *is* its unit, so moving its call breaks every declaration call
+    /// the corpus already makes.
+    ///
+    /// The two declarations carry different arities on purpose, so an assertion
+    /// cannot be satisfied by reading the wrong unit's header and still agree.
+    fn d4_both_target_classes() -> (RuntimeExpr, RuntimeDeclaration, RuntimeDeclaration) {
+        let closure_seed = RuntimeDeclaration {
+            symbol: "decl:fixture::d4::callable".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)],
+                    params: vec!["arg0".to_string()],
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        let thunk = RuntimeDeclaration {
+            symbol: "decl:fixture::d4::thunk".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::Value(RuntimeValue::Int(73.into())),
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        // ⭐ A THIRD closure, anonymous and at the root, carrying an arity that
+        // matches neither declaration. It is what makes "the static-body edge
+        // leaving THIS declaration's entry" distinguishable from "some
+        // static-body edge": with one closure in the program those two
+        // derivations agree, and a reverse body search would pass unnoticed.
+        let root = RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(7.into()))),
+                }),
+                args: Vec::new(),
+            }),
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::DeclarationRef {
+                    symbol: "decl:fixture::d4::callable".to_string(),
+                }),
+                body: Box::new(RuntimeExpr::DeclarationRef {
+                    symbol: "decl:fixture::d4::thunk".to_string(),
+                }),
+            }),
+        };
+        (root, closure_seed, thunk)
+    }
+
+    /// Every planned declaration call, as
+    /// `(recorded class, callee definition, callee (parameters, captures))`.
+    ///
+    /// ⭐ Joined through the **resolved call edge**, not through the recorded
+    /// class alone: the class is what the planner decided, and the descriptor is
+    /// where the decision landed. Reading only the class would let a correct
+    /// record sit above an edge that went somewhere else entirely.
+    fn d4_declaration_calls(
+        plan: &StaticTransitionPlan<'_>,
+    ) -> Vec<(
+        DeclarationCallTargetClass,
+        AbiUnitDefinition,
+        (u32, u32),
+    )> {
+        let units = plan.emittable_units().expect("validated units");
+        let mut calls = plan
+            .emittable_call_edges()
+            .expect("validated call edges")
+            .into_iter()
+            .filter(|edge| edge.kind() == EmittableCallKind::Declaration)
+            .map(|edge| {
+                let unit = units
+                    .iter()
+                    .find(|unit| unit.function() == edge.callee())
+                    .expect("a declaration call edge names an emittable unit");
+                (
+                    plan.declaration_call_target_class(edge.call_site_origin())
+                        .expect("a planned declaration call records its target class"),
+                    unit.definition(),
+                    (unit.header().parameters, unit.header().captures),
+                )
+            })
+            .collect::<Vec<_>>();
+        calls.sort_by_key(|(class, _, _)| *class);
+        calls
+    }
+
+    /// **`D4` — a closure-seed declaration's call reaches its declaration-owned
+    /// callable unit, and a non-closure declaration's call does NOT move.**
+    ///
+    /// Promise class: durable invariant. It is asserted as an equality over the
+    /// whole declaration-call population, so a third class, a lost call, or a
+    /// duplicated one all red — none of which a per-call `contains` would see.
+    #[test]
+    fn d4_the_declaration_call_partition_follows_the_seed_class() {
+        let (root, closure_seed, thunk) = d4_both_target_classes();
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d4::callable", &closure_seed);
+        declarations.insert("decl:fixture::d4::thunk", &thunk);
+        let plan = plan_static_transition_graph(&root, &declarations).expect("plannable");
+
+        let callable_origin = plan
+            .declaration_occurrence_origin("decl:fixture::d4::callable")
+            .expect("the closure-seed declaration has an occurrence origin");
+
+        assert_eq!(
+            d4_declaration_calls(&plan),
+            vec![
+                (
+                    DeclarationCallTargetClass::SchedulingEntry,
+                    AbiUnitDefinition::SchedulingEntry {
+                        ingress: abi::AbiSchedulingIngress::Empty,
+                    },
+                    (0, 0),
+                ),
+                (
+                    DeclarationCallTargetClass::CallableDeclaration,
+                    AbiUnitDefinition::CallableDeclaration {
+                        declaration_origin: callable_origin,
+                        provenance: AbiCaptureProvenance::Lexical,
+                    },
+                    (1, 2),
+                ),
+            ],
+            "D4: the closure-seed declaration's call must reach the unit that \
+             declares its one parameter and two captures, and the non-closure \
+             declaration's call must still reach its own zero-input scheduling \
+             entry"
+        );
+    }
+
+    /// **`D4` — the partition is CAUSAL in both directions.**
+    ///
+    /// ⭐ Two mutations, because one cannot defeat a split. Without
+    /// `NeverRetarget` the positive assertion above is consistent with the
+    /// retarget never having been installed on a plan that happened to agree;
+    /// without `AlwaysRetarget` it is consistent with a blanket retarget that
+    /// drags the thunk along and is only accidentally right about the closure
+    /// seed.
+    #[test]
+    fn d4_the_declaration_call_partition_is_causal_in_both_directions() {
+        let (root, closure_seed, thunk) = d4_both_target_classes();
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d4::callable", &closure_seed);
+        declarations.insert("decl:fixture::d4::thunk", &thunk);
+
+        let under = |mutation: D4DeclarationTargetMutation| {
+            D4_DECLARATION_TARGET_MUTATION.with(|cell| {
+                cell.set(mutation);
+                let outcome = plan_static_transition_graph(&root, &declarations)
+                    .map(|plan| d4_declaration_calls(&plan));
+                cell.set(D4DeclarationTargetMutation::Exact);
+                outcome
+            })
+        };
+
+        // Direction 1 -- the pre-`D4` world. Both calls land on a zero-input
+        // scheduling entry, so the closure-seed reference is calling a thunk
+        // that declares none of its parameters or captures. ⭐ This is the exact
+        // wrong-arity target `D4` removes, and it is what the positive test
+        // would agree with if the retarget were absent.
+        let never = under(D4DeclarationTargetMutation::NeverRetarget)
+            .expect("the pre-D4 targeting still plans");
+        assert!(
+            never.len() == 2
+                && never.iter().all(|(class, definition, arity)| {
+                    *class == DeclarationCallTargetClass::SchedulingEntry
+                        && matches!(definition, AbiUnitDefinition::SchedulingEntry { .. })
+                        && *arity == (0, 0)
+                }),
+            "D4: with the retarget suppressed both declaration calls must fall \
+             back to zero-input scheduling entries -- if they do not, the \
+             positive partition is not caused by the seed discriminator: {never:?}"
+        );
+
+        // Direction 2 -- the ruled-out reverse body search. It lands on the
+        // anonymous closure's body, which is a `ClosureBody` unit owned by
+        // nobody's declaration. ⛔ It must not merely produce a different
+        // partition: a declaration call to an anonymous closure body is not a
+        // lawful target at all, so planning refuses it.
+        let any = under(D4DeclarationTargetMutation::AnyStaticBody);
+        let Err(CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(reason))) = any
+        else {
+            panic!(
+                "D4: a declaration call retargeted by reverse body search reaches \
+                 an anonymous closure body, which must be refused rather than \
+                 planned: {any:?}"
+            );
+        };
+        assert!(
+            reason.contains("neither a scheduling entry nor a callable declaration unit"),
+            "D4: the refusal must name the target CLASS -- a refusal for some \
+             other invariant would leave the wrong-owner target unpinned: {reason}"
         );
     }
 
