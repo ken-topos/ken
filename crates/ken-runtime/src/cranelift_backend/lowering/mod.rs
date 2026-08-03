@@ -494,8 +494,15 @@ pub(super) fn verify_cranelift_function_for_artifact_tests(
 /// true, because the previous blanket claim here is now half wrong:
 ///
 /// - it **does** select a retained closure body (that is the point of the unit);
-/// - it still **never** alters a branch, keys a collection, or reaches emitted
-///   code — no comparison, ordering, or arithmetic on an origin decides anything.
+/// - since `RT-CONTSPEC-ACTIVATE` `D3` it **also keys a collection**: the
+///   producer `Construct` occurrence's origin is the first field of the
+///   four-field causal selector that resolves a continuation call binding. The
+///   earlier "never keys a collection" clause is retired, and it is retired
+///   rather than narrowed because a reader who trusted it would look for the
+///   binding lookup somewhere other than the origin;
+/// - it still **never** alters a branch or reaches emitted code by comparison,
+///   ordering, or arithmetic — the binding lookup is an exact equality on a
+///   planner-issued identity, not a decision computed from an origin's value.
 #[derive(Clone, Copy)]
 struct SourceOccurrence<'a> {
     expr: &'a RuntimeExpr,
