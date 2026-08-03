@@ -8,9 +8,82 @@ seam 2. **Recut 2026-08-02** on the Architect's interface ruling
 baseline measurement `evt_2zhx69f2fw07w`. **Recut again 2026-08-03** on the
 Architect's D4 frame/interface ruling `evt_adarqxt4hhsk`.
 
+> ## RECUT 2026-08-03 (18:50) — READ THIS FIRST
+>
+> **`D1b` IS DISCHARGED. `D4`'s NAMED OBSERVER IS UNLAWFUL BY CONSTRUCTION.**
+>
+> **This banner outranks every line below it, including both 2026-08-03 banners
+> and the 2026-08-02 banner.** Authority: Architect ruling `evt_57kjfy1s1ycjy`.
+>
+> **`D1b`'s mechanism is accepted and its checkpoint is now discharged at
+> `7280f68e9eef6ddf23886bf4e2b965dfad3a0403`** (tree `6d88ef53`, parent
+> `457b9fc6`). The separate forward-only raw-`StaticBody` endpoint projection
+> beside `emittable_call_edges`, with authoritative classification left solely in
+> `static_body_call_edges`, five fail-closed rejections, and one shared
+> declaration-map entry keyed by source body retaining both ends with no alias —
+> all of it stands unchanged. Evidence: `611+26+14` green, planned and emittable
+> counts unmoved at 2/2, every frozen surface blob-identical including
+> `semantic_ir.rs`, and the refusal *"no declared static-body target for worker
+> body origin ... in this function"* gone from `lowering/core.rs:5708`.
+>
+> **What was wrong is the frame's discharge condition, not the work.** I wrote
+> `D1b` as a conjunction — the fixture *compiles* at 2/2 **and** the named
+> refusal is gone. The second conjunct is true. The first is false: with the
+> source-binding refusal removed, the fixture now reaches a **later and
+> different** boundary, `boundary_transfer_admissibility`, refusing with *"a
+> closure cannot cross the boundary: it is runtime-local and live-domain only,
+> and it has no durable lane"*. Two independent boundaries were bundled into one
+> checkpoint. They are now separate, and the mechanism half lands discharged.
+>
+> **The second boundary is not another `D1b` repair.** Per the ruling it is an
+> ordinary-`Closure` result-observability / cross-owner boundary. The existing
+> refusal is **load-bearing**. This node may not weaken it, fabricate a durable
+> closure lane, disguise the closure as a borrowed opaque value, change
+> planner/ABI populations, or choose a `0/0`/source-only fixture. The accepted
+> exact-set join is not reopened.
+>
+> ### The measurement that locates it — `static_transition.rs:11616`
+>
+> **The observer shape named by the 09:xx recut cannot be lawful, and the reason
+> is in the fixture's own text.** `contspec_nested_fixture`'s `ComputationalMatch`
+> has, for its `Node` case, `body: RuntimeExpr::Var(0)` — and `Var(0)` in that
+> case binds the **`outer_worker` closure** carried by the scrutinee
+> `Node(outer_worker)`. So binding this fixture and invoking it with `Unit`
+> returns **a closure as the answer**. ⇒ The refusal is not a spelling problem, a
+> lifetime accident, or a missing lane: **the fixture's ground result is a closure
+> by construction**, and ordinary-`Closure` law says a closure has no durable
+> lane. An observer that returns `Var(0)` is unlawful in every spelling.
+>
+> That sentence in `D4` — *"The lawful observer shape is now named, so do not go
+> looking for another"* — is therefore **retracted**. It named an unlawful shape.
+> Looking for another is exactly the remaining work, and checkpoint `4b` below
+> states it with its own measured discharge condition rather than a premise.
+>
+> ### No new node, and no new `depends_on` — the route is fixture-internal
+>
+> The ruling offered two shapes: carry the observer route here, or add a
+> sequencing dependency on the node that supplies it. **No node supplies it.**
+> `SPEC-CLOSURE-BOUNDARY` (`merged`) is the spec that *states* the law this
+> refusal enforces, not a route around it; `RT-FNSPLIT-B2V` and
+> `RT-VALUE-TOTALITY` are `merged` and neither makes a closure observable;
+> `RT-DECL-CLOSURE-PORT` is a declaration-closure **emission** port, a different
+> variant and a different question. And a node built to make a closure observable
+> would be a durable closure lane, which the ruling bans outright.
+>
+> Applying the node gate (`steward` skill, section 4): the constraint is grounded
+> — an Architect ruling plus a measured refusal — but **grounded does not mean it
+> needs a node.** What remains is choosing what the fixture *answers with*, which
+> is inside this seam's own `D4`. ⇒ Fold, do not file. `ACTIVATE` carries it as
+> checkpoint `4b`, and `AC-1` is the single confirming gate.
+>
+> **Preserved and non-candidate:** `7280f68e` (`D1b` substrate, now discharged)
+> and `457b9fc6` (accepted control placement). Runtime resumes at checkpoint
+> `4b`, not at `D4`.
+
 > ## RECUT 2026-08-03 — D4 IS AN INTERFACE BOUNDARY. READ THIS FIRST.
 >
-> **This banner outranks every line below it, including the 2026-08-02 banner.**
+> **This banner is outranked by the 18:50 banner above.** Its `D1b` diagnosis
+> stands; its statement of the observer shape is retracted there.
 >
 > **What happened.** D3 landed complete and green at `bbf94045` (non-vacuous
 > `total=1 consumed=1`, exact source-`Construct` claim). D4's controls were then
@@ -227,6 +300,10 @@ Measured at `origin/main = ab6b89fc`.
 | the `D1b` refusal site (2026-08-03) | `lowering/core.rs:5708` — `function_local.unit_calls.get(&body_origin)`, refusing with *"no declared static-body target for worker body origin ... in this function"* |
 | what feeds that map | `function_local.unit_calls = declared_calls.static_bodies` (`lowering/units.rs:835`), from `resolve_call_edges` → `plan.emittable_call_edges()` (`lowering/units.rs:401`) |
 | the two origins that must bind | callable source-body occurrence = the outer `ComputationalMatch` (probe origin 9); emittable scheduling entry = that match's scrutinee `Construct` (probe origin 23). Architect-measured on exact `457b9fc6` |
+| `D1b` discharged at (2026-08-03) | `7280f68e9eef6ddf23886bf4e2b965dfad3a0403`, tree `6d88ef53`, parent `457b9fc6`. `611+26+14` green, four `AC-1` counts unmoved at 2/2, frozen surfaces blob-identical |
+| the second refusal, reached only once `D1b` lands (2026-08-03) | `Lowered::boundary_transfer_admissibility`, `lowering/mod.rs:4789`, arm `Lowered::Closure \| Lowered::DeclarationClosure`: *"a closure cannot cross the boundary: it is runtime-local and live-domain only, and it has no durable lane"*. Screened at `transfer_into_carrier` (`lowering/mod.rs:1805`) before the first allocation |
+| why the named observer hits it | `contspec_nested_fixture` (`static_transition.rs:11616`): the `ComputationalMatch`'s `Node` case is `body: RuntimeExpr::Var(0)`, and `Var(0)` there binds the `outer_worker` `LexicalClosure` from the scrutinee `Node(outer_worker)`. ⇒ **the fixture's answer is a closure by construction** |
+| what appears to drive the planned population | the closures present in the graph plus each case's declared `recursive_positions` (`static_transition.rs:1063`, `:1088`, `:3030`) — **not** what a case body evaluates to. ⚠ Steward-read, **not measured end-to-end**; checkpoint `4b` measures it |
 | baseline suite | `scripts/ken-cargo test -p ken-runtime --lib` |
 
 Reproduce, read-only:
@@ -453,14 +530,20 @@ in scope and is not a finding.
   5. affine rejection when the same token is consumed twice, and rejection under
      the wrong producer owner.
 
-  **The lawful observer shape is now named (2026-08-03 recut), so do not go
-  looking for another.** Bind the existing `contspec_nested_fixture` and invoke
-  it with `Unit`. That preserves the accepted population exactly — 2 continuation
-  units, 2 call tokens — and yields an observable answer through the invocation.
-  It does **not** compile until `D1b` lands; that refusal is the boundary, not a
-  fixture defect. Once `D1b` is in, D4 keeps this 2/2 fixture, invokes it,
-  observes the answer, and runs the three real-seam controls already committed at
-  `457b9fc6`.
+  ⛔ **RETRACTED 2026-08-03 18:50 — this paragraph named an unlawful observer.**
+  It read *"The lawful observer shape is now named (2026-08-03 recut), so do not
+  go looking for another. Bind the existing `contspec_nested_fixture` and invoke
+  it with `Unit`."* Binding and invoking that fixture returns **a closure**: its
+  `Node` case body is `RuntimeExpr::Var(0)`, which binds the `outer_worker`
+  closure from the scrutinee (`static_transition.rs:11616`). Ordinary-`Closure`
+  law gives a closure no durable lane, so that answer is unobservable in every
+  spelling — the instruction not to look for another shape was wrong, and
+  looking for one is checkpoint `4b`. `D1b` is discharged and is not the
+  blocker here.
+
+  **What `D4` still needs, once `4b` supplies it:** a fixture whose answer is
+  ground, whose four `AC-1` counts are 2/2/2/2, invoked, observed, and run
+  against the three real-seam controls already committed at `457b9fc6`.
 
   **A control that passes without running is the defect this WP has been blocked
   for twice.** The implementer's `units=0, calls=0` fixture was correctly
@@ -585,15 +668,52 @@ landed.** `D1` complete at `6ed31759`. `D2` complete. `D3` complete and green at
 `bbf94045` on the corrected source-`Construct` seat. The remaining checkpoints
 are:
 
-4. **`D1b` — the source-body-occurrence binding.** The fifth `D1` projection
-   item, exposed beside `emittable_call_edges` without moving an `AC-1` count.
-   Discharged when `contspec_nested_fixture`, bound and invoked with `Unit`,
-   **compiles** at 2/2 — the refusal at `lowering/core.rs:5708` is gone and no
-   planned or emittable count moved. Post the four `AC-1` counts with the SHA.
-5. **`D4` on the restored fixture** — invoke it, observe the answer, then run the
-   three controls already committed at `457b9fc6` plus their mutation proofs.
-   A green mutation is still a hard stop, but check first whether the seam was
-   reached: that discrimination is what `457b9fc6` got right.
+4. **`D1b` — the source-body-occurrence binding. DISCHARGED at `7280f68e`.**
+   The fifth `D1` projection item, exposed beside `emittable_call_edges` without
+   moving an `AC-1` count. **Discharged on the mechanism alone** — the five
+   fail-closed joins hold, the four `AC-1` counts are unmoved at 2/2, every
+   frozen surface is blob-identical, and the refusal at `lowering/core.rs:5708`
+   is gone. ⛔ **The "and the fixture compiles" conjunct is struck.** Whether a
+   given fixture compiles end-to-end is a property of the *observer*, not of this
+   projection, and bundling them is what falsified this checkpoint once already.
+   Nothing about `D1b` is reopened by checkpoint `4b`.
+
+4b. **The lawful observer route — the open prerequisite for `D4`.** `D4` item 4
+   requires an answer that changes under target redirection. That answer must be
+   **observable**, and per the 18:50 banner the currently-named observer returns
+   `Var(0)`, which binds a closure and is unlawful by construction.
+
+   **Discharged when a fixture exists whose observed answer is a ground value
+   and whose four `AC-1` counts are 2/2/2/2 — both halves measured and posted
+   together, not argued.** The closures must remain in the planned graph; what
+   changes is what the match *answers with*, not what the graph *contains*.
+
+   ⭐ **The one candidate route worth measuring first**, offered as a starting
+   point and **not as a premise**: the `Node` case's `body` is the only place the
+   closure becomes the answer, while the planned population appears to be driven
+   structurally by the closures in the scrutinee and by the declared
+   `recursive_positions` (`static_transition.rs:1063`, `:1088`, `:3030`) rather
+   than by what the case body evaluates to. **If that holds, a ground case body
+   preserves 2/2 and the observer becomes lawful. Measure it; do not assume it.**
+   The counts are the gate, and a route that moves any of the four is not this
+   checkpoint's discharge no matter how clean it looks.
+
+   ⛔ **Banned discharges, per the ruling:** weakening
+   `boundary_transfer_admissibility`, a fabricated durable closure lane, the
+   closure disguised as a borrowed opaque value, any planner/ABI population edit,
+   and a `0/0`/source-only fixture. The Architect also already tested and closed
+   two escapes — a bare closure is not an observable ground result, and making
+   the `ComputationalMatch` the root deletes the required parameter/capture
+   environment. Do not re-explore either.
+
+   ⇒ **If no ground-answer shape holds the population at 2/2, that is hard stop
+   8** — an interface fact about this fixture population, not a licence to widen
+   a predicate or to weaken the refusal.
+
+5. **`D4` on the lawful fixture from `4b`** — invoke it, observe the answer, then
+   run the three controls already committed at `457b9fc6` plus their mutation
+   proofs. A green mutation is still a hard stop, but check first whether the
+   seam was reached: that discrimination is what `457b9fc6` got right.
 6. **`D5`** — the four counts on base and candidate, plus the aggregate line.
 
 ⛔ **Do not accept a checkpoint against its label. Accept it against the
@@ -644,3 +764,10 @@ Stop and route to the Steward, do not improvise, if any of these hold:
    new. Either is an interface fact above this seam's authority: report the exact
    fact needed and stop. Do not widen `emittable_call_edges`, reconstruct the
    mapping in lowering, search by nearest origin, or fabricate an alias.
+8. **No ground-answer fixture shape holds the four `AC-1` counts at 2/2**
+   (checkpoint `4b`). Report the shapes tried and the counts each produced, and
+   stop. That is an interface fact about this fixture population and it is above
+   this seam's authority. ⛔ It is **not** a licence to weaken
+   `boundary_transfer_admissibility`, to add a durable closure lane, to widen a
+   predicate toward difference, or to fall back on a `0/0` population — the
+   refusal is load-bearing and a vacuous fixture is banned scope, not a fallback.
