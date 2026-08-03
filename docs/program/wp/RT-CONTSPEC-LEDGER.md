@@ -39,6 +39,14 @@ other.
 All line numbers below are at `main = cef564f1`, in
 `crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs`.
 
+> **Re-verified by the Steward at `main = 20162242` and at seam 2's QA-approved
+> candidate `c6268ce1`, 2026-08-03.** The load-bearing property is intact on
+> both: one construction site, four `#[cfg(test)]` second variants, the same
+> production tuple, and `continuation_keys_equal_under_mutation` still present.
+> **The addresses did move** — `exact_continuation_projection` is at `:2742` on
+> `20162242` and `:3080` on the candidate. Read every line number below as an
+> anchor to re-find, never as an assertion to check.
+
 `ContinuationInputProjection` (`:450`) carries 15 fields. Four of them are the
 boundary-use ledger:
 
@@ -65,6 +73,12 @@ boundary_avail:     BoundaryUseAvail::Value,
 
 ⇒ **Every continuation input the planner produces carries the same boundary-use
 tuple.** The ledger has one row shape and records no distinction.
+
+**The Adversary reached the same measurement independently** — `evt_5mzgtka54nd03`,
+2026-08-02: *"four of fifteen `ContinuationInputProjection` key fields are
+production constants."* Steward triage: confirmed defect, **already sequenced —
+it is this node's subject**, so it is folded here rather than filed anew. Do not
+re-derive it; `D5`'s census is what closes it.
 
 ### What the existing control does and does not prove
 
@@ -107,9 +121,21 @@ above, stop and route — do not adapt the frame yourself.**
 ```sh
 git rev-parse HEAD
 F=crates/ken-runtime/src/cranelift_backend/planning/static_transition.rs
-grep -n "ContinuationInputProjection {" $F        # expect ONE construction site
-grep -n -A3 "enum BoundaryUse" $F | grep -c "cfg(test)"   # expect 4
+# TWO hits, and they are different things: the struct declaration, then the
+# one construction site. Read the hits, do not count them.
+grep -n "ContinuationInputProjection {" $F
+grep -c "^struct ContinuationInputProjection {" $F         # expect 1 (the decl)
+grep -c "Ok(ContinuationInputProjection {" $F              # expect 1 (the site)
+grep -n -A3 "enum BoundaryUse" $F | grep -c "cfg(test)"    # expect 4
 ```
+
+> ⛔ **The earlier form of this probe was `grep -n "ContinuationInputProjection
+> {" $F  # expect ONE construction site`. It returns 2 — the declaration at
+> `:450` and the construction at `:2754` — so an implementer comparing the count
+> to "ONE" takes hard stop 1 on its first act, on a frame whose subject is
+> entirely intact.** Measured by the Steward at `20162242` and `c6268ce1`,
+> 2026-08-03. The two hits are the expected reading; the property is that
+> exactly one of them constructs.
 
 ## Two preconditions on every suite run, carried from seams 1 and 2
 
@@ -243,9 +269,12 @@ past an hour, stop and route; the recut is the Steward's.
 
 Stop and route to the Steward, do not improvise, if any of these hold:
 
-1. **The `D1` re-measurement disagrees with the fixed-inputs table** — the
-   construction site count is not 1, or the four `cfg(test)` gates are not
-   there. Seam 2 moved something this frame depends on.
+1. **The `D1` re-measurement disagrees with the fixed-inputs table** — more than
+   one site *constructs* a `ContinuationInputProjection`, or the four
+   `cfg(test)` gates are not there. Seam 2 moved something this frame depends
+   on. ⛔ **A moved line number is not this hard stop, and neither is a raw
+   grep count of 2** — that count includes the struct declaration. Re-find the
+   construction site and check the property.
 2. **The ruled D7 authorities do not determine which planner condition selects
    which boundary-use variant.** That is a design question and it is not yours.
    ⛔ Do not pick a plausible mapping to keep moving.
