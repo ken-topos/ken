@@ -653,6 +653,7 @@ impl ArtifactHelpers<'_> {
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            continuation_calls: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit,
             terminal_result_origins: BTreeSet::new(),
@@ -763,6 +764,10 @@ struct FunctionLocalRefs {
     /// exact body origin. Minted per generated function; a `FuncRef` here
     /// belongs to that function and is never copied to another.
     worker_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    /// **`RT-CONTSPEC-ACTIVATE` `D3`** -- this Function's own `FuncRef` per
+    /// causal token it owns, keyed by the complete four-field identity.
+    /// Minted into this `Function`; never passed across functions.
+    continuation_calls: BTreeMap<ContinuationCallIdentity, cranelift_codegen::ir::FuncRef>,
     declaration_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     /// The current function's closed trap-exit authority. Absence is an error
     /// state, never an implicit Root.
@@ -1136,6 +1141,13 @@ struct Lowering<'a> {
     assumptions: BTreeSet<String>,
     unsupported: Vec<String>,
     body_emission_authority: BodyEmissionAuthority,
+    /// **`RT-CONTSPEC-ACTIVATE` `D3`** -- the affine claim ledger, held across
+    /// the whole unit-definition pass so a token claimed at one producer
+    /// occurrence cannot be claimed again at another.
+    continuation_claims: Option<units::ContinuationClaimLedger>,
+    /// The exact unit currently being defined, so `D3`'s owner check compares
+    /// against a fact supplied independently of the token.
+    defining_unit: Option<PredeclaredFunctionId>,
     process_object: bool,
     process_symbols: crate::NativeProcessSymbols,
     #[cfg(test)]

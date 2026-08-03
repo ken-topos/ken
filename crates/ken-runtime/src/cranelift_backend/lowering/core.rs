@@ -567,6 +567,8 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
         helpers.declare_in_func(&mut module, &mut ctx.func, root_trap_exit);
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
+        continuation_claims: None,
+        defining_unit: None,
         seed_env,
         declarations,
         static_transition_plan,
@@ -2445,6 +2447,23 @@ impl<'a> Lowering<'a> {
                 let ih_slots =
                     self.computational_ih_slots_for_case(case, eliminator.checked_frame_id)?;
                 for position in case.recursive_positions.iter().rev().copied() {
+                    // `RT-CONTSPEC-ACTIVATE` `D3` — THE PRODUCER OCCURRENCE
+                    // IS HERE, and the claim cannot be made yet.
+                    //
+                    // `claim_and_call_continuation` below is ready and takes
+                    // the ruled four-field selector. Three of its operands are
+                    // in scope: the active computational-frame origin, the
+                    // case index, and this recursive position. The fourth --
+                    // the actual producer `Construct` origin -- is NOT: this
+                    // function receives an already-lowered scrutinee operand,
+                    // and `producer_origin` here is a minted
+                    // `RecursorProducerOriginId`, a different axis entirely.
+                    //
+                    // ⛔ Substituting the frame origin or the minted recursor
+                    // id would compile and would silently never match, so the
+                    // ledger would report leftover claims and point at the
+                    // wrong thing. Threading the real origin is a lowering
+                    // signature change and is routed rather than invented.
                     let slot_template_id = case
                         .recursive_positions
                         .iter()
@@ -5429,6 +5448,78 @@ impl<'a> Lowering<'a> {
     /// makes selection closed is therefore not one caller but that
     /// `Lowered::Closure`/`DeclarationClosure` carry only a tag — so this is the
     /// *only* way any of them can reach a term at all.
+    /// **`RT-CONTSPEC-ACTIVATE` `D3` — claim one exact causal token at its
+    /// producer occurrence and emit the declared direct continuation call.**
+    ///
+    /// The selector is the ruled four-field one, and the only facts lowering
+    /// supplies are ones it actually has here: the actual `Construct` origin,
+    /// the active computational-frame origin, the case index, and this member
+    /// of the case's ruled recursive positions. The call-site sequence is
+    /// never supplied or derived -- it stays opaque inside the identity the
+    /// planner returns.
+    ///
+    /// No binding is the non-specialized path: the producer keeps its existing
+    /// route unchanged. A binding claims exactly once, with the unit currently
+    /// being defined supplied as an INDEPENDENT owner check, and calls this
+    /// Function's own declared `FuncRef` -- never one borrowed from another
+    /// function.
+    #[allow(dead_code)] // Ready; blocked on the producer Construct origin.
+    fn claim_and_call_continuation(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        producer_construct_origin: StaticOriginId,
+        continuation_origin: StaticOriginId,
+        producer_alternative: usize,
+        recursive_position: usize,
+    ) -> Result<(), CraneliftBackendError> {
+        let alternative = u32::try_from(producer_alternative).map_err(|_| {
+            unsupported("ComputationalMatch", "case index exceeds addressable range")
+        })?;
+        let position = u32::try_from(recursive_position).map_err(|_| {
+            unsupported("ComputationalMatch", "recursive position exceeds addressable range")
+        })?;
+        let Some(identity) = self.static_transition_plan.continuation_call_binding_for(
+            producer_construct_origin,
+            continuation_origin,
+            alternative,
+            position,
+        )?
+        else {
+            // Zero bindings: this producer is not specialized, and its
+            // existing route is left exactly as it was.
+            return Ok(());
+        };
+        let defining = self.defining_unit.ok_or_else(|| {
+            unsupported(
+                "ContinuationSpecialization",
+                "a continuation claim was reached with no unit currently being defined",
+            )
+        })?;
+        let ledger = self.continuation_claims.as_mut().ok_or_else(|| {
+            unsupported(
+                "ContinuationSpecialization",
+                "a continuation claim was reached with no open claim ledger",
+            )
+        })?;
+        // Claim exactly once. `defining` is supplied independently of the
+        // token, so the owner check is a real comparison rather than the
+        // predicate that selected it.
+        ledger.claim_exact(&identity, defining)?;
+        let callee = *self
+            .function_local
+            .continuation_calls
+            .get(&identity)
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    "the claimed continuation target was not declared into this function",
+                )
+            })?;
+        // The declared direct call, emitted before the identity-erasing join.
+        builder.ins().call(callee, &[]);
+        Ok(())
+    }
+
     /// **`D3` -- the callee-only consumer.**
     ///
     /// Emits the call to a statically-bound worker: validate the argument

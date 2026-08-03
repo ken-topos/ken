@@ -1177,7 +1177,7 @@ pub(super) struct RootUnitResult {
 /// distinct tokens at one source position and this ledger will report a
 /// double-consumption of the *right* token while the real defect is the key's
 /// arity. Check the arity before believing the report.
-struct ContinuationClaimLedger {
+pub(super) struct ContinuationClaimLedger {
     /// The RESOLVED target for each planned causal identity. Previously this
     /// kept only the keys and threw the `FuncId` away through `into_keys`,
     /// which is why no continuation target could ever be called: the join D1
@@ -1189,7 +1189,7 @@ struct ContinuationClaimLedger {
 }
 
 impl ContinuationClaimLedger {
-    fn open(
+    pub(super) fn open(
         plan: &StaticTransitionPlan<'_>,
         bundle: &UnitBundle,
     ) -> Result<Self, CraneliftBackendError> {
@@ -1205,7 +1205,7 @@ impl ContinuationClaimLedger {
     /// it alone; ⛔ none is ever passed across functions. Declaring is not
     /// claiming -- a declared target is callable, and the affine claim happens
     /// later, at the exact producer occurrence.
-    fn declare_owned_in_func<M: Module>(
+    pub(super) fn declare_owned_in_func<M: Module>(
         &self,
         defining: PredeclaredFunctionId,
         module: &mut M,
@@ -1240,9 +1240,7 @@ impl ContinuationClaimLedger {
     /// carries all four fields including `recursive_position` before believing
     /// a double-consumption, because a collided key reports it against the
     /// right token.
-    #[allow(dead_code)] // Claimed at the producer occurrence, which is the
-                        // remaining half of the corrected D3.
-    fn claim_exact(
+    pub(super) fn claim_exact(
         &mut self,
         identity: &ContinuationCallIdentity,
         defining: PredeclaredFunctionId,
@@ -1272,7 +1270,7 @@ impl ContinuationClaimLedger {
     }
 
     /// No claim may be left over once every unit has been defined.
-    fn close(self) -> Result<(), CraneliftBackendError> {
+    pub(super) fn close(self) -> Result<(), CraneliftBackendError> {
         let leftover = self
             .claims
             .values()
@@ -1317,7 +1315,10 @@ pub(super) fn define_unit_bodies<M: Module>(
     let worker_targets = resolve_worker_targets(&compiler.static_transition_plan, bundle)?;
     // `D3` — one affine claim per planned causal token, owner-checked against
     // the exact unit being defined.
-    let mut claims = ContinuationClaimLedger::open(&compiler.static_transition_plan, bundle)?;
+    compiler.continuation_claims = Some(ContinuationClaimLedger::open(
+        &compiler.static_transition_plan,
+        bundle,
+    )?);
     let mut root_result = None;
     let emissions = compiler
         .static_transition_plan
@@ -1359,7 +1360,13 @@ pub(super) fn define_unit_bodies<M: Module>(
             }
         }
     }
-    claims.close()?;
+    // Closure accounting after every unit is defined: no planned causal token
+    // may be left unclaimed.
+    compiler
+        .continuation_claims
+        .take()
+        .ok_or_else(|| backend_module("the continuation claim ledger went missing".to_string()))?
+        .close()?;
     root_result.ok_or_else(|| {
         backend_module("the emitted unit bundle did not define its recorded root".to_string())
     })
@@ -1440,6 +1447,14 @@ fn define_unit_body<M: Module>(
     let mut function_local =
         helpers.declare_in_func(module, &mut func, unit_trap_authority);
     let declared_calls = call_edges.declare_in_func(unit.function, module, &mut func)?;
+    // `D3` — this ordinary Function declares its OWN `FuncRef` for every causal
+    // token it owns, keyed by the four-field identity. Minted here, into this
+    // `Function`; never passed across functions.
+    function_local.continuation_calls = compiler
+        .continuation_claims
+        .as_ref()
+        .map(|ledger| ledger.declare_owned_in_func(unit.function, module, &mut func))
+        .unwrap_or_default();
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
     // `D4`: this function's own worker refs, minted here and never copied.
