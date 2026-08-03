@@ -49,11 +49,24 @@ preference.
 
 ## 1. Fixed inputs
 
-| path | blob at `origin/main = eefca112` |
-|---|---|
-| `crates/ken-runtime/src/cranelift_backend/lowering/core.rs` | `f7bc0d0354d8b8d6f7aa68176846b7b05e5a8514` |
-| `crates/ken-runtime/src/cranelift_backend/lowering/units.rs` | `f57215905ad715cab67b580781d078a614e20dfd` |
-| `crates/ken-cli/tests/rt_parity_native.rs` | `b2df2bbd00644b907cae5d05efa76edd9df1b3f2` |
+| path | blob at `origin/main = eefca112` (original pin) | blob at `origin/main = d5294410` (2026-08-03) |
+|---|---|---|
+| `crates/ken-runtime/src/cranelift_backend/lowering/core.rs` | `f7bc0d0354d8b8d6f7aa68176846b7b05e5a8514` | **`b1867461424742a6352b7758fa7fb24a020dfdfe` — MOVED** |
+| `crates/ken-runtime/src/cranelift_backend/lowering/units.rs` | `f57215905ad715cab67b580781d078a614e20dfd` | **`fbbb575e052a53656d0b29a263fb3d929e5976e6` — MOVED** |
+| `crates/ken-cli/tests/rt_parity_native.rs` | `b2df2bbd00644b907cae5d05efa76edd9df1b3f2` | `b2df2bbd00644b907cae5d05efa76edd9df1b3f2` — unchanged |
+
+> ⚠ **Two of the three pinned blobs moved, and that is expected, not a stop.**
+> Measured by the Steward 2026-08-03. Four merges touched `core.rs` and
+> `units.rs` since the `eefca112` pin: `RT-JOIN-DISPOSITION` (`2f1b8897`),
+> `RT-CONTSPEC-ASSEMBLY` (`da2ef32d`), `RT-WORKER-BIND` (`867cac7a`) and
+> `RT-CONTSPEC-ACTIVATE` (`0a6e34cc`).
+>
+> **No deliverable, AC, or hard stop in this frame keys off these blob values** —
+> they are a provenance record of what was measured when the mechanism was
+> diagnosed, not a freshness gate. ⛔ **A blob mismatch here is not a hard stop
+> and must not be reported as one.** Re-measure the anchors in section 2 against
+> your own tree and quote `git rev-parse HEAD` beside them; the anchors are
+> addresses to re-find, and this node rewrites `core.rs` anyway.
 
 **Grounding:** Architect ruling `evt_3t7t27e3rv8cx`, measured in a detached
 scratch worktree with diagnostic-only labels against exact `ad7298fb`
