@@ -1604,6 +1604,11 @@ impl<'a> Lowering<'a> {
                         args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                     }));
                 }
+                // `D3` retains the selected computational case facts: the
+                // claim at the producer occurrence below needs the case index
+                // and that case's ruled recursive positions, and re-selecting
+                // them later would be a second selection authority.
+                let mut selected_computational: Option<(StaticOriginId, usize, Vec<usize>)> = None;
                 let (case_body, argument_binder_offset) = match eliminator {
                     EliminatorFrame::Computational(eliminator) => {
                         let (case_index, case) = match eliminator
@@ -1650,6 +1655,11 @@ impl<'a> Lowering<'a> {
                                 ));
                             }
                         }
+                        selected_computational = Some((
+                            eliminator.static_origin,
+                            case_index,
+                            case.recursive_positions.clone(),
+                        ));
                         (
                             self.case_body_occurrence(
                                 eliminator.static_origin,
@@ -1821,6 +1831,47 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, arg, producer_env)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
+                // `RT-CONTSPEC-ACTIVATE` `D3` — THE PRODUCER OCCURRENCE.
+                //
+                // Fields are lowered; nothing has been transferred into a
+                // carrier and the identity-erasing join has not run. This is
+                // the seat where the four-field selector's operands all exist
+                // and where the exact token is claimed at most once.
+                let mut continuation_result: Option<LoweringOperand> = None;
+                if let Some((frame_origin, case_index, recursive_positions)) =
+                    selected_computational.as_ref()
+                {
+                    for position in recursive_positions.iter().copied() {
+                        // The ordinary envelope: nonrecursive lowered fields in
+                        // source order with the selected recursive field
+                        // omitted. Worker captures follow in capture-ordinal
+                        // order, taken from the same lowered field run.
+                        let ordinary: Vec<LoweringOperand> = lowered_args
+                            .iter()
+                            .enumerate()
+                            .filter(|(index, _)| *index != position)
+                            .map(|(_, operand)| operand.clone())
+                            .collect();
+                        if let Some(returned) = self.claim_and_call_continuation(
+                            builder,
+                            static_origin,
+                            *frame_origin,
+                            *case_index,
+                            position,
+                            &ordinary,
+                            producer_env,
+                        )? {
+                            // The call's own value is the result after the
+                            // consumed computational frame, and it is never
+                            // discarded: it is handed to the frame consumption
+                            // in place of the constructor that would have been
+                            // produced. Returning it directly here would skip
+                            // the frame's planned-join disposition, which the
+                            // emitter accounts for separately.
+                            continuation_result = Some(returned);
+                        }
+                    }
+                }
                 let produced = if lowered_args
                     .iter()
                     .any(|argument| matches!(argument, LoweringOperand::Carried(_)))
@@ -1846,6 +1897,7 @@ impl<'a> Lowering<'a> {
                         args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                     })
                 };
+                let produced = continuation_result.unwrap_or(produced);
                 self.lower_computational_match_value_composed(builder, produced, eliminators)
             }
             RuntimeExpr::Match {
@@ -5463,7 +5515,23 @@ impl<'a> Lowering<'a> {
     /// being defined supplied as an INDEPENDENT owner check, and calls this
     /// Function's own declared `FuncRef` -- never one borrowed from another
     /// function.
-    #[allow(dead_code)] // Ready; blocked on the producer Construct origin.
+    /// **`RT-CONTSPEC-ACTIVATE` `D3` — claim one exact causal token at its
+    /// producer occurrence and emit the declared direct continuation call.**
+    ///
+    /// The selector is the ruled four-field one, built only from facts this
+    /// seat actually holds: the planner-issued producer `Construct`
+    /// occurrence, the active computational-frame origin, the selected case
+    /// index, and one member of that case's ruled recursive positions. The
+    /// call-site sequence is never supplied or derived -- it stays opaque
+    /// inside the identity the planner returns.
+    ///
+    /// No binding is the non-specialized path: the producer keeps its existing
+    /// route untouched, and the final ledger equality is what catches a
+    /// genuinely lost planned call.
+    ///
+    /// The call goes through the **existing** unit-call protocol with the full
+    /// declared target, so no second ABI is invented here.
+    #[allow(clippy::too_many_arguments)]
     fn claim_and_call_continuation(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -5471,13 +5539,26 @@ impl<'a> Lowering<'a> {
         continuation_origin: StaticOriginId,
         producer_alternative: usize,
         recursive_position: usize,
-    ) -> Result<(), CraneliftBackendError> {
+        ordinary_inputs: &[LoweringOperand],
+        producer_env: &[LoweringEnvironmentBinding],
+    ) -> Result<Option<LoweringOperand>, CraneliftBackendError> {
         let alternative = u32::try_from(producer_alternative).map_err(|_| {
             unsupported("ComputationalMatch", "case index exceeds addressable range")
         })?;
         let position = u32::try_from(recursive_position).map_err(|_| {
-            unsupported("ComputationalMatch", "recursive position exceeds addressable range")
+            unsupported(
+                "ComputationalMatch",
+                "recursive position exceeds addressable range",
+            )
         })?;
+        // The claim regime exists only while the unit-definition pass is open.
+        // Outside it -- a direct lowering harness, or an authority that never
+        // opens the ledger -- there is no ledger to claim against and no
+        // close() to satisfy, so the producer keeps its existing route. This
+        // is the ledger's own presence, not a guess about the caller.
+        if self.continuation_claims.is_none() {
+            return Ok(None);
+        }
         let Some(identity) = self.static_transition_plan.continuation_call_binding_for(
             producer_construct_origin,
             continuation_origin,
@@ -5485,9 +5566,7 @@ impl<'a> Lowering<'a> {
             position,
         )?
         else {
-            // Zero bindings: this producer is not specialized, and its
-            // existing route is left exactly as it was.
-            return Ok(());
+            return Ok(None);
         };
         let defining = self.defining_unit.ok_or_else(|| {
             unsupported(
@@ -5495,29 +5574,81 @@ impl<'a> Lowering<'a> {
                 "a continuation claim was reached with no unit currently being defined",
             )
         })?;
-        let ledger = self.continuation_claims.as_mut().ok_or_else(|| {
-            unsupported(
-                "ContinuationSpecialization",
-                "a continuation claim was reached with no open claim ledger",
-            )
-        })?;
-        // Claim exactly once. `defining` is supplied independently of the
-        // token, so the owner check is a real comparison rather than the
-        // predicate that selected it.
-        ledger.claim_exact(&identity, defining)?;
-        let callee = *self
+        let target = self
             .function_local
             .continuation_calls
             .get(&identity)
+            .cloned()
             .ok_or_else(|| {
                 unsupported(
                     "ContinuationSpecialization",
                     "the claimed continuation target was not declared into this function",
                 )
             })?;
-        // The declared direct call, emitted before the identity-erasing join.
-        builder.ins().call(callee, &[]);
-        Ok(())
+        // Claim exactly once, with the defining unit supplied independently of
+        // the token so the owner check is a real comparison.
+        self.continuation_claims
+            .as_mut()
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    "a continuation claim was reached with no open claim ledger",
+                )
+            })?
+            .claim_exact(&identity, defining)?;
+
+        // Capture slots come from the EXACT producer environment, addressed by
+        // the projected `source_owner` + `source_abi_position`. ⛔
+        // `ordinary_abi_position` is not a source position and is never used
+        // as one -- it indexes the producer's own ABI, which this call is not
+        // reading.
+        let unit = self
+            .static_transition_plan
+            .continuation_units()?
+            .into_iter()
+            .find(|unit| unit.id() == identity.target())
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    "the claimed target has no projected continuation unit",
+                )
+            })?;
+        let mut inputs = ordinary_inputs.to_vec();
+        for input in unit.continuation_inputs()? {
+            if input.source_owner != defining {
+                return Err(unsupported(
+                    "ContinuationSpecialization",
+                    format!(
+                        "a continuation input names source owner {:?}, which is not the unit \
+                         currently being defined",
+                        input.source_owner
+                    ),
+                ));
+            }
+            let binding = producer_env
+                .get(input.source_abi_position as usize)
+                .ok_or_else(|| {
+                    unsupported(
+                        "ContinuationSpecialization",
+                        "a continuation input names a source ABI position outside the exact \
+                         producer environment",
+                    )
+                })?;
+            inputs.push(
+                binding
+                    .value_at("a continuation capture input")?
+                    .clone(),
+            );
+        }
+
+        self.call_declared_unit_target(
+            builder,
+            target,
+            &inputs,
+            #[cfg(test)]
+            None,
+        )
+        .map(Some)
     }
 
     /// **`D3` -- the callee-only consumer.**

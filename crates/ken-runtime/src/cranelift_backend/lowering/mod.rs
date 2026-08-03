@@ -774,7 +774,7 @@ struct FunctionLocalRefs {
     /// **`RT-CONTSPEC-ACTIVATE` `D3`** -- this Function's own `FuncRef` per
     /// causal token it owns, keyed by the complete four-field identity.
     /// Minted into this `Function`; never passed across functions.
-    continuation_calls: BTreeMap<ContinuationCallIdentity, cranelift_codegen::ir::FuncRef>,
+    continuation_calls: BTreeMap<ContinuationCallIdentity, units::DeclaredUnitCall>,
     declaration_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     /// The current function's closed trap-exit authority. Absence is an error
     /// state, never an implicit Root.

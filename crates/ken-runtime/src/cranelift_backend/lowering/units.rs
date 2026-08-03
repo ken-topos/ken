@@ -1210,15 +1210,39 @@ impl ContinuationClaimLedger {
         defining: PredeclaredFunctionId,
         module: &mut M,
         func: &mut Function,
-    ) -> BTreeMap<ContinuationCallIdentity, cranelift_codegen::ir::FuncRef> {
+        plan: &StaticTransitionPlan<'_>,
+    ) -> Result<BTreeMap<ContinuationCallIdentity, DeclaredUnitCall>, CraneliftBackendError> {
+        // The declared target is the FULL contract, not a bare `FuncRef`:
+        // `DeclaredUnitCall` already carries the function, the target origin,
+        // and the projected header/slots/offsets, which is exactly what
+        // `call_declared_unit_target` consumes. Reusing it is what keeps this
+        // on the existing unit-call ABI instead of inventing a second one.
+        let units = plan.continuation_units()?;
         self.resolved
             .iter()
             .filter(|(identity, _)| identity.producer_owner() == defining)
             .map(|(identity, target)| {
-                (
+                let unit = units
+                    .iter()
+                    .find(|unit| unit.id() == identity.target())
+                    .ok_or_else(|| {
+                        backend_module(
+                            "a resolved causal identity names a specialization with no projected \
+                             unit"
+                                .to_string(),
+                        )
+                    })?;
+                let (offsets, _frame_bytes) = unit.slot_offsets()?;
+                Ok((
                     identity.clone(),
-                    module.declare_func_in_func(*target, func),
-                )
+                    DeclaredUnitCall {
+                        function: module.declare_func_in_func(*target, func),
+                        origin: unit.continuation_origin(),
+                        header: unit.header(),
+                        slots: unit.slots().to_vec(),
+                        offsets,
+                    },
+                ))
             })
             .collect()
     }
@@ -1450,11 +1474,18 @@ fn define_unit_body<M: Module>(
     // `D3` — this ordinary Function declares its OWN `FuncRef` for every causal
     // token it owns, keyed by the four-field identity. Minted here, into this
     // `Function`; never passed across functions.
-    function_local.continuation_calls = compiler
-        .continuation_claims
-        .as_ref()
-        .map(|ledger| ledger.declare_owned_in_func(unit.function, module, &mut func))
-        .unwrap_or_default();
+    function_local.continuation_calls = match compiler.continuation_claims.as_ref() {
+        Some(ledger) => ledger.declare_owned_in_func(
+            unit.function,
+            module,
+            &mut func,
+            &compiler.static_transition_plan,
+        )?,
+        None => BTreeMap::new(),
+    };
+    // `D3`: the owner operand for the claim, supplied independently of any
+    // token -- this is the ordinary producer unit currently being defined.
+    compiler.defining_unit = Some(unit.function);
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
     // `D4`: this function's own worker refs, minted here and never copied.
