@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSPEC-WITNESS
 title: "ContinuationSpecialization seam 4 — integrated witness and closeout: the native population, the six formerly shadowed rows reclassified, the two host rows rerun, and the three-node closure"
-status: draft
+status: ready
 owner: runtime
 size: M
 gate: none
@@ -57,14 +57,20 @@ became `InvalidOffset` because the defect was fixed or **because the assertion
 moved**, and a green run cannot tell the two apart. The frame requires naming the
 commit and picking one.
 
-The frame is `docs/program/wp/RT-CONTSPEC-WITNESS.md` — written 2026-08-02 while
-seam 1 is in flight. Node is `ready`; release is gated on seam 3 merging, not on
-further framing.
+The frame is `docs/program/wp/RT-CONTSPEC-WITNESS.md`.
 
-**Held at `draft` 2026-08-02, deliberately, not by oversight.** Its frame
-selects work from the `46d29783` first-refusal census, which is a historical
-record from the held `1aef3192` lineage and cannot name a current source
-authority. Seam 2 was recut off that census for the same reason
-(`evt_2zhx69f2fw07w`, Architect confirmation `evt_66t42tapvdbsj`). `draft`
-keeps this node out of the frontier until the Steward recuts it. See the
-HELD FOR RECUT banner in the frame.
+**Recut 2026-08-03 and now `ready`.** It was held at `draft` from 2026-08-02
+because its frame treated the `46d29783` first-refusal census as a worklist whose
+rows seams 2 and 3 would clear. They do not: seam 2 was recut off the census
+entirely (`evt_2zhx69f2fw07w`, Architect confirmation `evt_66t42tapvdbsj`) and
+merged that way at `0a6e34cc`, and seam 3's landed frame selects no census rows.
+Every row's disposition therefore depended on a clearing that will never happen.
+
+The recut keeps the reconciliation and changes its footing: the 138 rows are
+**accounted for as a record of what once failed in the held `1aef3192`
+lineage**, each `superseded`, `live` with a current verdict on the lawful base,
+or `open` with an owner. **No row's disposition may depend on a seam having
+cleared its causal root.**
+
+Release gates on [[RT-CONTSPEC-LEDGER]] merging — a `depends_on` edge, not a
+framing debt.
