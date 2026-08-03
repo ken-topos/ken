@@ -168,6 +168,16 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
   close it. If this seam cannot execute it either, that is a routed finding, not
   a silent drop.
 
+  ⚠ **AMENDED 2026-08-03 20:20 (`evt_6bf2mmehjzy3k`) — the two-target
+  precondition is now this seam's to satisfy.** `ACTIVATE`'s generated function
+  has exactly one entry in `continuation_calls`, so a same-shaped redirect
+  refuses before reaching the call seam and `ACTIVATE` no longer attempts it.
+  ⇒ **This seam's integrated fixture must supply at least two distinct
+  same-shaped targets in one lawful callable population**, and the redirect must
+  reach the seam and change or fail the observed result. ⛔ A pre-call "found no
+  distinct same-shaped call target" refusal is a missing fixture precondition,
+  not a discharge — and it is the precondition this seam owns.
+
 ## Acceptance criteria
 
 - **AC-1 — every one of the corrected census's 138 rows has a terminal
