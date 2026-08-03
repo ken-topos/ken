@@ -573,7 +573,7 @@ thread_local! {
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum ContinuationWorkerCaptureSource {
+pub(in crate::cranelift_backend) enum ContinuationWorkerCaptureSource {
     Seed,
     Lexical(StaticOriginId),
 }
@@ -616,6 +616,344 @@ struct ContinuationSpecializationKey {
     worker: ContinuationWorkerProvenance,
     ordinary_parameters: u32,
     continuation_inputs: Vec<ContinuationInputProjection>,
+}
+
+/// **`RT-CONTSPEC-ACTIVATE` `D1` — the opaque causal identity.**
+///
+/// Four fields: the token's `(producer_construct_origin, producer_alternative,
+/// call_site_sequence)` plus the `recursive_position` read from the resolved
+/// target's planner key.
+///
+/// Every field is private and there is **no lowering constructor** — the only
+/// way to obtain one is
+/// [`StaticTransitionPlan::continuation_call_binding_for`], which resolves it
+/// from already-validated planner facts. There is deliberately **no sequence
+/// accessor**: the call-site sequence stays opaque *inside* the identity, so
+/// lowering can neither supply it nor derive it. Full `Eq`/`Ord` so the
+/// identity can key a map without any field being readable.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct ContinuationCallIdentity {
+    token: ContinuationSpecializationCallToken,
+    recursive_position: u32,
+}
+
+impl ContinuationCallIdentity {
+    /// The exact specialization this causal edge targets.
+    ///
+    /// This is the only fact the identity exposes: it is what a later slice
+    /// resolves to a declared target, and it reveals nothing about sequence.
+    pub(in crate::cranelift_backend) fn target(&self) -> ContinuationSpecializationId {
+        self.token.target
+    }
+
+    /// The producer unit that owns this causal edge.
+    ///
+    /// `D3` compares this against the exact unit currently being defined. It
+    /// is the token's own immutable fact, re-exposed and not reconstructed --
+    /// there is no second owner authority, and nothing derives an owner from
+    /// emission position.
+    pub(in crate::cranelift_backend) fn producer_owner(&self) -> PredeclaredFunctionId {
+        self.token.producer_owner
+    }
+}
+
+/// `D1` — a read-only view of one already-validated continuation
+/// specialization: its exact identity, immutable planner key facts, and
+/// validated ABI descriptor, slots and input authority.
+pub(in crate::cranelift_backend) struct ContinuationUnitView<'plan> {
+    id: ContinuationSpecializationId,
+    key: &'plan ContinuationSpecializationKey,
+    header: AbiFrameHeader,
+    slots: &'plan [AbiSlot],
+    inputs: &'plan [abi::AbiContinuationInputAuthority],
+}
+
+impl<'plan> ContinuationUnitView<'plan> {
+    pub(in crate::cranelift_backend) fn id(&self) -> ContinuationSpecializationId {
+        self.id
+    }
+    pub(in crate::cranelift_backend) fn producer_owner(&self) -> PredeclaredFunctionId {
+        self.key.producer_owner
+    }
+    pub(in crate::cranelift_backend) fn consumer_owner(&self) -> PredeclaredFunctionId {
+        self.key.consumer_owner
+    }
+    pub(in crate::cranelift_backend) fn producer_construct_origin(&self) -> StaticOriginId {
+        self.key.producer_construct_origin
+    }
+    pub(in crate::cranelift_backend) fn producer_result_origin(&self) -> StaticOriginId {
+        self.key.producer_result_origin
+    }
+    pub(in crate::cranelift_backend) fn producer_alternative(&self) -> u32 {
+        self.key.producer_alternative
+    }
+    pub(in crate::cranelift_backend) fn continuation_origin(&self) -> StaticOriginId {
+        self.key.continuation_origin
+    }
+    pub(in crate::cranelift_backend) fn recursive_position(&self) -> u32 {
+        self.key.recursive_position
+    }
+    pub(in crate::cranelift_backend) fn ordinary_parameters(&self) -> u32 {
+        self.key.ordinary_parameters
+    }
+    pub(in crate::cranelift_backend) fn header(&self) -> AbiFrameHeader {
+        self.header
+    }
+    pub(in crate::cranelift_backend) fn slots(&self) -> &'plan [AbiSlot] {
+        self.slots
+    }
+    pub(in crate::cranelift_backend) fn inputs(&self) -> &'plan [abi::AbiContinuationInputAuthority] {
+        self.inputs
+    }
+
+    /// **The ruled ordinary envelope**, one role per `Parameter` ABI slot, in
+    /// slot order.
+    ///
+    /// `nonrecursive_field_count = ordinary_parameters - worker_capture_count`,
+    /// computed with checked arithmetic. Positions
+    /// `0..nonrecursive_field_count` are nonrecursive producer-`Construct`
+    /// fields in producer source order with the selected recursive position
+    /// omitted; worker capture `ordinal` occupies
+    /// `nonrecursive_field_count + ordinal`.
+    ///
+    /// Each role is recompared against the validated slot run before it is
+    /// returned: the count of `Parameter` slots must equal
+    /// `header.parameters`, which must equal the envelope length.
+    pub(in crate::cranelift_backend) fn ordinary_envelope(
+        &self,
+    ) -> Result<Vec<ContinuationOrdinaryEnvelopeRole>, CraneliftBackendError> {
+        let captures = u32::try_from(self.key.worker.captures.len()).map_err(|_| {
+            planner_error("worker capture count exceeds addressable range")
+        })?;
+        let nonrecursive_field_count = self
+            .key
+            .ordinary_parameters
+            .checked_sub(captures)
+            .ok_or_else(|| {
+                planner_error(
+                    "a continuation declares fewer ordinary parameters than its selected worker \
+                     has captures, so the ruled envelope has no nonrecursive prefix",
+                )
+            })?;
+
+        let parameter_slots = self
+            .slots
+            .iter()
+            .filter(|slot| slot.kind == AbiSlotKind::Parameter)
+            .count();
+        if parameter_slots != self.header.parameters as usize {
+            return Err(planner_error(
+                "the continuation slot run's Parameter count disagrees with its own header",
+            ));
+        }
+
+        let mut envelope = Vec::with_capacity(parameter_slots);
+        for source_position in 0..nonrecursive_field_count {
+            envelope.push(ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField {
+                source_position,
+            });
+        }
+        for capture in &self.key.worker.captures {
+            let position = nonrecursive_field_count
+                .checked_add(capture.ordinal)
+                .ok_or_else(|| planner_error("worker capture position overflows the envelope"))?;
+            if position as usize != envelope.len() {
+                return Err(planner_error(
+                    "worker captures are not dense in capture-ordinal order, so the ruled \
+                     envelope position cannot be assigned",
+                ));
+            }
+            envelope.push(ContinuationOrdinaryEnvelopeRole::WorkerCapture {
+                ordinal: capture.ordinal,
+                owner: capture.owner,
+                closure_origin: capture.closure_origin,
+                source: capture.source,
+                lifetime: capture.lifetime,
+            });
+        }
+        if envelope.len() != parameter_slots {
+            return Err(planner_error(
+                "the ruled ordinary envelope does not cover its Parameter slot run exactly",
+            ));
+        }
+        Ok(envelope)
+    }
+
+    /// **The ordered continuation inputs**, re-exposed from the immutable key
+    /// and recompared against the validated ABI input authority.
+    ///
+    /// Each projected input must agree with the authority at its position on
+    /// ordinal and source owner, and the input's `ordinary_abi_position` must
+    /// name a real `Parameter` slot, so a projection cannot point outside the
+    /// envelope it is supposed to index.
+    pub(in crate::cranelift_backend) fn continuation_inputs(
+        &self,
+    ) -> Result<Vec<ContinuationInputView>, CraneliftBackendError> {
+        self.key
+            .continuation_inputs
+            .iter()
+            .zip(self.inputs)
+            .map(|(projection, authority)| {
+                if projection.ordinal != authority.ordinal
+                    || projection.source_owner != authority.source_owner
+                {
+                    return Err(planner_error(
+                        "a continuation input projection disagrees with its validated ABI input \
+                         authority",
+                    ));
+                }
+                Ok(ContinuationInputView {
+                    ordinal: projection.ordinal,
+                    source_owner: projection.source_owner,
+                    source_abi_position: projection.source_abi_position,
+                    source: projection.source,
+                    carrier: projection.carrier,
+                    ownership: projection.ownership,
+                    storage_owner: projection.storage_owner,
+                    boundary_phase: projection.boundary_phase,
+                    boundary_operation: projection.boundary_operation,
+                    boundary_need: projection.boundary_need,
+                    boundary_avail: projection.boundary_avail,
+                    referent_affinity: projection.referent_affinity.clone(),
+                    ordinary_abi_position: projection.ordinary_abi_position,
+                })
+            })
+            .collect()
+    }
+
+    /// The static worker whose result enters this continuation's return hole.
+    ///
+    /// These are the already-validated planner facts a `D2` definition needs
+    /// to bind the body through `RT-WORKER-BIND`'s environment: the exact body
+    /// origin to lower, the declared arity, and the ordered capture count.
+    /// They are read, never re-derived -- lowering may not walk source syntax
+    /// to rediscover them.
+    pub(in crate::cranelift_backend) fn worker_body_origin(&self) -> StaticOriginId {
+        self.key.worker.body_origin
+    }
+    pub(in crate::cranelift_backend) fn worker_closure_origin(&self) -> StaticOriginId {
+        self.key.worker.closure_origin
+    }
+    pub(in crate::cranelift_backend) fn worker_declared_arity(&self) -> u32 {
+        self.key.worker.declared_arity
+    }
+    pub(in crate::cranelift_backend) fn worker_capture_count(&self) -> usize {
+        self.key.worker.captures.len()
+    }
+
+    /// Byte offsets for this unit's slot run, and the frame size, from the
+    /// **one** offset walk `B2F` owns.
+    ///
+    /// This is the same `abi::slot_offsets` the emittable path uses, not a
+    /// second derivation: a continuation body must load each declared operand
+    /// from its own frame position, and the alternative -- letting the emitter
+    /// prefix-sum widths itself -- is precisely the second layout authority
+    /// that walk exists to prevent.
+    ///
+    /// Fails closed when the walked frame size disagrees with the descriptor's
+    /// declared `frame_bytes`, so a corrupted descriptor is rejected rather
+    /// than silently emitted against.
+    pub(in crate::cranelift_backend) fn slot_offsets(
+        &self,
+    ) -> Result<(Vec<u32>, u32), CraneliftBackendError> {
+        let (offsets, frame_bytes) = abi::slot_offsets(self.slots)?;
+        if frame_bytes != self.header.frame_bytes {
+            return Err(planner_error(
+                "a continuation descriptor's frame size disagrees with its own slot run",
+            ));
+        }
+        Ok((offsets, frame_bytes))
+    }
+}
+
+/// **The ruled ordinary-envelope role of one `Parameter` ABI slot.**
+///
+/// The Architect's ruling: the Parameter prefix is
+/// `[nonrecursive producer-Construct fields in source order]
+///  ++ [selected worker captures in capture-ordinal order]`,
+/// with the selected recursive field omitted.
+///
+/// This is a **role projection**, not a worker-body environment map. The
+/// continuation descriptor's contract and the worker's `arity + captures`
+/// contract are distinct, and nothing here relates a slot to a lexical
+/// position in the worker body.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum ContinuationOrdinaryEnvelopeRole {
+    /// A nonrecursive field of the producer `Construct`, at its **source**
+    /// position. The selected recursive field is not in this population.
+    NonrecursiveConstructorField { source_position: u32 },
+    /// One selected worker capture, at its capture ordinal.
+    WorkerCapture {
+        ordinal: u32,
+        owner: PredeclaredFunctionId,
+        closure_origin: StaticOriginId,
+        source: ContinuationWorkerCaptureSource,
+        lifetime: PlannedReferentLifetime,
+    },
+}
+
+/// A read-only view of one already-validated continuation input.
+///
+/// Every field is existing immutable `ContinuationInputProjection` material,
+/// re-exposed rather than re-derived.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct ContinuationInputView {
+    pub(in crate::cranelift_backend) ordinal: u32,
+    pub(in crate::cranelift_backend) source_owner: PredeclaredFunctionId,
+    pub(in crate::cranelift_backend) source_abi_position: u32,
+    pub(in crate::cranelift_backend) source: ContinuationInputSource,
+    pub(in crate::cranelift_backend) carrier: AbiCarrier,
+    pub(in crate::cranelift_backend) ownership: AbiOwnership,
+    pub(in crate::cranelift_backend) storage_owner: AbiStorageOwner,
+    pub(in crate::cranelift_backend) boundary_phase: BoundaryUsePhase,
+    pub(in crate::cranelift_backend) boundary_operation: BoundaryUseOperation,
+    pub(in crate::cranelift_backend) boundary_need: BoundaryUseNeed,
+    pub(in crate::cranelift_backend) boundary_avail: BoundaryUseAvail,
+    pub(in crate::cranelift_backend) referent_affinity: Vec<BoundaryReferentOwner>,
+    pub(in crate::cranelift_backend) ordinary_abi_position: u32,
+}
+
+/// `D1` — a read-only view of one already-validated continuation call token,
+/// carrying the full producer tuple and the exact target.
+///
+/// `continuation_origin` and `recursive_position` are read from the **resolved
+/// target's key**, never from the token; the token owns the sequence.
+pub(in crate::cranelift_backend) struct ContinuationCallView<'plan> {
+    token: &'plan ContinuationSpecializationCallToken,
+    continuation_origin: StaticOriginId,
+    recursive_position: u32,
+    target: ContinuationSpecializationId,
+}
+
+impl ContinuationCallView<'_> {
+    pub(in crate::cranelift_backend) fn producer_owner(&self) -> PredeclaredFunctionId {
+        self.token.producer_owner
+    }
+    pub(in crate::cranelift_backend) fn producer_result_origin(&self) -> StaticOriginId {
+        self.token.producer_result_origin
+    }
+    pub(in crate::cranelift_backend) fn producer_construct_origin(&self) -> StaticOriginId {
+        self.token.producer_construct_origin
+    }
+    pub(in crate::cranelift_backend) fn producer_alternative(&self) -> u32 {
+        self.token.producer_alternative
+    }
+    pub(in crate::cranelift_backend) fn continuation_origin(&self) -> StaticOriginId {
+        self.continuation_origin
+    }
+    pub(in crate::cranelift_backend) fn recursive_position(&self) -> u32 {
+        self.recursive_position
+    }
+    pub(in crate::cranelift_backend) fn target(&self) -> ContinuationSpecializationId {
+        self.target
+    }
+}
+
+/// Bounds-checked dense-range slice, failing closed rather than truncating.
+fn dense_slice<T>(arena: &[T], range: semantic_ir::DenseRange) -> Option<&[T]> {
+    let start = range.start as usize;
+    let end = start.checked_add(range.len as usize)?;
+    arena.get(start..end)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -4740,6 +5078,94 @@ impl<'src> StaticTransitionPlan<'src> {
     /// destructured `SemanticOwner::Function(..)` right here — a third file
     /// naming the classification is how a second, divergent classification
     /// authority starts.
+    /// **`RT-CONTSPEC-ACTIVATE` `D1b` — the source-body binding, beside
+    /// `emittable_call_edges` and never widening its filter.**
+    ///
+    /// An exact-set join over facts that already exist. Authoritative
+    /// caller/callee classification stays **solely** with
+    /// `static_body_call_edges`; the raw `EdgeKind::StaticBody` walk supplies
+    /// **endpoints only**, and every derivation is forward:
+    ///
+    /// ```text
+    /// closure_occurrence     = descriptors[edge.from].origin
+    /// source_body_occurrence = child_origin(closure_occurrence, 0)
+    /// scheduling_entry       = descriptors[edge.to].origin
+    /// ```
+    ///
+    /// It classifies no edge, creates no unit or call, and moves no `AC-1`
+    /// count. Five facts fail closed: a non-closure source, a missing child 0,
+    /// a duplicate scheduling entry, an authoritative call with no endpoint
+    /// record, and any endpoint record left over.
+    pub(in crate::cranelift_backend) fn static_body_source_bindings(
+        &self,
+    ) -> Result<
+        Vec<(PredeclaredFunctionId, StaticOriginId, StaticOriginId)>,
+        CraneliftBackendError,
+    > {
+        let origin_of = |node: StaticNodeId| -> Result<StaticOriginId, CraneliftBackendError> {
+            self.semantic
+                .descriptors
+                .get(node.0 as usize)
+                .map(|descriptor| descriptor.origin)
+                .ok_or_else(|| planner_error("a static body edge endpoint has no descriptor"))
+        };
+        let shape_of = |node: StaticNodeId| -> Option<semantic_ir::RuntimeExprShape> {
+            self.semantic_sources
+                .iter()
+                .find(|seed| seed.planned_node == node)
+                .and_then(|seed| match seed.source {
+                    SemanticSourceKind::Expression(shape) => Some(shape),
+                    _ => None,
+                })
+        };
+
+        // Endpoints only, from the raw edges.
+        let mut endpoints: BTreeMap<StaticOriginId, StaticOriginId> = BTreeMap::new();
+        for edge in &self.edges {
+            if edge.kind != EdgeKind::StaticBody {
+                continue;
+            }
+            match shape_of(edge.from) {
+                Some(semantic_ir::RuntimeExprShape::Closure)
+                | Some(semantic_ir::RuntimeExprShape::LexicalClosure) => {}
+                _ => {
+                    return Err(planner_error(
+                        "a static body edge's source is not exactly a Closure or LexicalClosure \
+                         occurrence",
+                    ));
+                }
+            }
+            let closure_occurrence = origin_of(edge.from)?;
+            let source_body = self.semantic.child_origin(closure_occurrence, 0)?;
+            let scheduling_entry = origin_of(edge.to)?;
+            if endpoints.insert(scheduling_entry, source_body).is_some() {
+                return Err(planner_error(
+                    "two static body edges declare the same scheduling entry",
+                ));
+            }
+        }
+
+        // One-for-one drain against the authoritative classification.
+        let mut bindings = Vec::new();
+        for (caller, _callee, callee_origin) in
+            self.semantic.static_body_call_edges(&self.edges)?
+        {
+            let source_body = endpoints.remove(&callee_origin).ok_or_else(|| {
+                planner_error(
+                    "an authoritative static body call has no raw endpoint record for its \
+                     scheduling entry",
+                )
+            })?;
+            bindings.push((caller, source_body, callee_origin));
+        }
+        if !endpoints.is_empty() {
+            return Err(planner_error(
+                "a raw static body endpoint record was never claimed by an authoritative call",
+            ));
+        }
+        Ok(bindings)
+    }
+
     pub(in crate::cranelift_backend) fn emittable_call_edges(
         &self,
     ) -> Result<Vec<EmittableCallEdge>, CraneliftBackendError> {
@@ -4783,6 +5209,172 @@ impl<'src> StaticTransitionPlan<'src> {
             .into_iter()
             .find(|unit| unit.function() == root_function)
             .ok_or_else(|| planner_error("recorded root has no abi descriptor"))
+    }
+
+    // ── `RT-CONTSPEC-ACTIVATE` `D1` — the activation projection ─────────────
+    //
+    // Read-only and unmintable. Every fact below is already validated planner
+    // or ABI material, re-checked here and failing closed; nothing is derived
+    // from source syntax and no id, owner, descriptor or call is invented.
+
+    /// Every already-validated continuation specialization, with its exact
+    /// identity, its immutable planner key facts, and its validated ABI
+    /// descriptor, slots and input authority.
+    ///
+    /// Revalidates plan/ABI agreement: the two populations must be the same
+    /// size, each descriptor must name a `ContinuationSpecialization` whose id
+    /// is the planner's id at that position, and every dense range must lie
+    /// inside its plane.
+    pub(in crate::cranelift_backend) fn continuation_units(
+        &self,
+    ) -> Result<Vec<ContinuationUnitView<'_>>, CraneliftBackendError> {
+        if self.abi.continuation_descriptors.len() != self.continuation_specializations.len() {
+            return Err(planner_error(
+                "continuation ABI descriptor count disagrees with the planned specialization \
+                 population",
+            ));
+        }
+        // The join is BY IDENTITY, not by position.
+        //
+        // An earlier form zipped the two populations and then checked that the
+        // descriptor's id equalled the planner's id at that index. That catches
+        // a reordering of one side, but agrees with an *identical* reordering
+        // of both, so it was not an independent check. Indexing the descriptors
+        // by the id they declare, and then resolving each planned
+        // specialization through that index, removes position from the join
+        // entirely: a descriptor is found by the identity it names or not at
+        // all.
+        let mut by_id: BTreeMap<ContinuationSpecializationId, &abi::AbiContinuationDescriptor> =
+            BTreeMap::new();
+        for descriptor in &self.abi.continuation_descriptors {
+            let AbiUnitDefinition::ContinuationSpecialization { specialization } =
+                descriptor.definition
+            else {
+                return Err(planner_error(
+                    "a continuation ABI descriptor does not define a continuation specialization",
+                ));
+            };
+            if by_id.insert(specialization, descriptor).is_some() {
+                return Err(planner_error(
+                    "two continuation ABI descriptors declare the same specialization identity",
+                ));
+            }
+        }
+        self.continuation_specializations
+            .iter()
+            .map(|planned| {
+                let descriptor = *by_id.get(&planned.id).ok_or_else(|| {
+                    planner_error(
+                        "a planned continuation specialization has no ABI descriptor declaring \
+                         its identity",
+                    )
+                })?;
+                let slots = dense_slice(&self.abi.continuation_slots, descriptor.slots)
+                    .ok_or_else(|| {
+                        planner_error("continuation slot range is outside the plane")
+                    })?;
+                let inputs = dense_slice(&self.abi.continuation_inputs, descriptor.inputs)
+                    .ok_or_else(|| {
+                        planner_error("continuation input range is outside the plane")
+                    })?;
+                if inputs.len() != planned.key.continuation_inputs.len() {
+                    return Err(planner_error(
+                        "continuation input authority count disagrees with the planner key's \
+                         ordered input projection",
+                    ));
+                }
+                Ok(ContinuationUnitView {
+                    id: planned.id,
+                    key: &planned.key,
+                    header: descriptor.header,
+                    slots,
+                    inputs,
+                })
+            })
+            .collect()
+    }
+
+    /// Every already-validated continuation call token, with the full producer
+    /// tuple and the exact target it names.
+    ///
+    /// The join to a specialization is **by `token.target` only**. Continuation
+    /// origin and recursive position are read from the resolved target's key;
+    /// the call-site sequence is read only from the token.
+    pub(in crate::cranelift_backend) fn continuation_calls(
+        &self,
+    ) -> Result<Vec<ContinuationCallView<'_>>, CraneliftBackendError> {
+        let units = self.continuation_units()?;
+        self.continuation_specialization_calls
+            .iter()
+            .map(|planned| {
+                let token = &planned.token;
+                let unit = units
+                    .iter()
+                    .find(|unit| unit.id == token.target)
+                    .ok_or_else(|| {
+                        planner_error(
+                            "a continuation call token names a target with no planned \
+                             specialization",
+                        )
+                    })?;
+                if unit.key.producer_construct_origin != token.producer_construct_origin
+                    || unit.key.producer_alternative != token.producer_alternative
+                    || unit.key.producer_owner != token.producer_owner
+                    || unit.key.producer_result_origin != token.producer_result_origin
+                {
+                    return Err(planner_error(
+                        "a continuation call token's producer tuple disagrees with its resolved \
+                         target's planner key",
+                    ));
+                }
+                Ok(ContinuationCallView {
+                    token,
+                    // From the RESOLVED TARGET KEY, never from the token.
+                    continuation_origin: unit.key.continuation_origin,
+                    recursive_position: unit.key.recursive_position,
+                    target: token.target,
+                })
+            })
+            .collect()
+    }
+
+    /// **The only lowering lookup selector**, keyed by the four fields the
+    /// later producer path can actually supply: the actual `Construct` origin,
+    /// the active computational-frame origin, the selected alternative, and one
+    /// member of that case's ruled recursive positions.
+    ///
+    /// Zero matches is `None` — the caller takes its existing nonspecialized
+    /// path. More than one match is a **planner invariant failure**, never a
+    /// choice: selecting the first, lowest or any other sequence here would
+    /// make lowering the authority for a fact the planner owns.
+    pub(in crate::cranelift_backend) fn continuation_call_binding_for(
+        &self,
+        producer_construct_origin: StaticOriginId,
+        continuation_origin: StaticOriginId,
+        producer_alternative: u32,
+        recursive_position: u32,
+    ) -> Result<Option<ContinuationCallIdentity>, CraneliftBackendError> {
+        let mut found: Option<ContinuationCallIdentity> = None;
+        for call in self.continuation_calls()? {
+            if call.token.producer_construct_origin == producer_construct_origin
+                && call.continuation_origin == continuation_origin
+                && call.token.producer_alternative == producer_alternative
+                && call.recursive_position == recursive_position
+            {
+                if found.is_some() {
+                    return Err(planner_error(
+                        "more than one continuation call binding matches one exact selector; the \
+                         planner mints one call token per ruled recursive position, so this is a \
+                         planner invariant failure and never a choice between sequences",
+                    ));
+                }
+                found = Some(ContinuationCallIdentity {
+                    token: call.token.clone(),
+                    recursive_position: call.recursive_position,
+                });
+            }
+        }
+        Ok(found)
     }
 
     pub(in crate::cranelift_backend) fn emittable_units(
@@ -5822,6 +6414,9 @@ pub(in crate::cranelift_backend) fn governed_nested_resource_bracket(depth: usiz
         default: trap("allocate result"),
     }
 }
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) use tests::contspec_nested_fixture;
 
 #[cfg(test)]
 mod tests {
@@ -11613,7 +12208,7 @@ mod tests {
         );
     }
 
-    fn contspec_nested_fixture() -> RuntimeExpr {
+    pub(in crate::cranelift_backend) fn contspec_nested_fixture() -> RuntimeExpr {
         let leaf = || RuntimeExpr::Construct {
             constructor: "ctor:fixture::Contspec::Leaf".to_string(),
             args: Vec::new(),

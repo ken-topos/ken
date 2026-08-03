@@ -567,6 +567,8 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
         helpers.declare_in_func(&mut module, &mut ctx.func, root_trap_exit);
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
+        continuation_claims: None,
+        defining_unit: None,
         seed_env,
         declarations,
         static_transition_plan,
@@ -621,6 +623,15 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 unit_bundle,
                 call_edges,
                 staged_process_input,
+            )?;
+            // `RT-CONTSPEC-ACTIVATE` `D2` — define each declared continuation
+            // target from its own projected contract, after the ordinary
+            // bodies and before the root adapter.
+            super::units::define_continuation_bodies(
+                &mut module,
+                &mut compiler,
+                helpers,
+                unit_bundle,
             )?;
             compiler.require_complete_join_plan_consumption()?;
             compiler.require_complete_dynamic_splice_edge_consumption()?;
@@ -1593,6 +1604,11 @@ impl<'a> Lowering<'a> {
                         args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                     }));
                 }
+                // `D3` retains the selected computational case facts: the
+                // claim at the producer occurrence below needs the case index
+                // and that case's ruled recursive positions, and re-selecting
+                // them later would be a second selection authority.
+                let mut selected_computational: Option<(StaticOriginId, usize, Vec<usize>)> = None;
                 let (case_body, argument_binder_offset) = match eliminator {
                     EliminatorFrame::Computational(eliminator) => {
                         let (case_index, case) = match eliminator
@@ -1639,6 +1655,11 @@ impl<'a> Lowering<'a> {
                                 ));
                             }
                         }
+                        selected_computational = Some((
+                            eliminator.static_origin,
+                            case_index,
+                            case.recursive_positions.clone(),
+                        ));
                         (
                             self.case_body_occurrence(
                                 eliminator.static_origin,
@@ -1810,6 +1831,47 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, arg, producer_env)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
+                // `RT-CONTSPEC-ACTIVATE` `D3` — THE PRODUCER OCCURRENCE.
+                //
+                // Fields are lowered; nothing has been transferred into a
+                // carrier and the identity-erasing join has not run. This is
+                // the seat where the four-field selector's operands all exist
+                // and where the exact token is claimed at most once.
+                let mut continuation_result: Option<LoweringOperand> = None;
+                if let Some((frame_origin, case_index, recursive_positions)) =
+                    selected_computational.as_ref()
+                {
+                    for position in recursive_positions.iter().copied() {
+                        // The ordinary envelope: nonrecursive lowered fields in
+                        // source order with the selected recursive field
+                        // omitted. Worker captures follow in capture-ordinal
+                        // order, taken from the same lowered field run.
+                        let ordinary: Vec<LoweringOperand> = lowered_args
+                            .iter()
+                            .enumerate()
+                            .filter(|(index, _)| *index != position)
+                            .map(|(_, operand)| operand.clone())
+                            .collect();
+                        if let Some(returned) = self.claim_and_call_continuation(
+                            builder,
+                            static_origin,
+                            *frame_origin,
+                            *case_index,
+                            position,
+                            &ordinary,
+                            producer_env,
+                        )? {
+                            // The call's own value is the result after the
+                            // consumed computational frame, and it is never
+                            // discarded: it is handed to the frame consumption
+                            // in place of the constructor that would have been
+                            // produced. Returning it directly here would skip
+                            // the frame's planned-join disposition, which the
+                            // emitter accounts for separately.
+                            continuation_result = Some(returned);
+                        }
+                    }
+                }
                 let produced = if lowered_args
                     .iter()
                     .any(|argument| matches!(argument, LoweringOperand::Carried(_)))
@@ -1835,6 +1897,7 @@ impl<'a> Lowering<'a> {
                         args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                     })
                 };
+                let produced = continuation_result.unwrap_or(produced);
                 self.lower_computational_match_value_composed(builder, produced, eliminators)
             }
             RuntimeExpr::Match {
@@ -2436,6 +2499,23 @@ impl<'a> Lowering<'a> {
                 let ih_slots =
                     self.computational_ih_slots_for_case(case, eliminator.checked_frame_id)?;
                 for position in case.recursive_positions.iter().rev().copied() {
+                    // `RT-CONTSPEC-ACTIVATE` `D3` — THE PRODUCER OCCURRENCE
+                    // IS HERE, and the claim cannot be made yet.
+                    //
+                    // `claim_and_call_continuation` below is ready and takes
+                    // the ruled four-field selector. Three of its operands are
+                    // in scope: the active computational-frame origin, the
+                    // case index, and this recursive position. The fourth --
+                    // the actual producer `Construct` origin -- is NOT: this
+                    // function receives an already-lowered scrutinee operand,
+                    // and `producer_origin` here is a minted
+                    // `RecursorProducerOriginId`, a different axis entirely.
+                    //
+                    // ⛔ Substituting the frame origin or the minted recursor
+                    // id would compile and would silently never match, so the
+                    // ledger would report leftover claims and point at the
+                    // wrong thing. Threading the real origin is a lowering
+                    // signature change and is routed rather than invented.
                     let slot_template_id = case
                         .recursive_positions
                         .iter()
@@ -5420,6 +5500,269 @@ impl<'a> Lowering<'a> {
     /// makes selection closed is therefore not one caller but that
     /// `Lowered::Closure`/`DeclarationClosure` carry only a tag — so this is the
     /// *only* way any of them can reach a term at all.
+    /// **`RT-CONTSPEC-ACTIVATE` `D3` — claim one exact causal token at its
+    /// producer occurrence and emit the declared direct continuation call.**
+    ///
+    /// The selector is the ruled four-field one, and the only facts lowering
+    /// supplies are ones it actually has here: the actual `Construct` origin,
+    /// the active computational-frame origin, the case index, and this member
+    /// of the case's ruled recursive positions. The call-site sequence is
+    /// never supplied or derived -- it stays opaque inside the identity the
+    /// planner returns.
+    ///
+    /// No binding is the non-specialized path: the producer keeps its existing
+    /// route unchanged. A binding claims exactly once, with the unit currently
+    /// being defined supplied as an INDEPENDENT owner check, and calls this
+    /// Function's own declared `FuncRef` -- never one borrowed from another
+    /// function.
+    /// **`RT-CONTSPEC-ACTIVATE` `D3` — claim one exact causal token at its
+    /// producer occurrence and emit the declared direct continuation call.**
+    ///
+    /// The selector is the ruled four-field one, built only from facts this
+    /// seat actually holds: the planner-issued producer `Construct`
+    /// occurrence, the active computational-frame origin, the selected case
+    /// index, and one member of that case's ruled recursive positions. The
+    /// call-site sequence is never supplied or derived -- it stays opaque
+    /// inside the identity the planner returns.
+    ///
+    /// No binding is the non-specialized path: the producer keeps its existing
+    /// route untouched, and the final ledger equality is what catches a
+    /// genuinely lost planned call.
+    ///
+    /// The call goes through the **existing** unit-call protocol with the full
+    /// declared target, so no second ABI is invented here.
+    #[allow(clippy::too_many_arguments)]
+    fn claim_and_call_continuation(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        producer_construct_origin: StaticOriginId,
+        continuation_origin: StaticOriginId,
+        producer_alternative: usize,
+        recursive_position: usize,
+        ordinary_inputs: &[LoweringOperand],
+        producer_env: &[LoweringEnvironmentBinding],
+    ) -> Result<Option<LoweringOperand>, CraneliftBackendError> {
+        let alternative = u32::try_from(producer_alternative).map_err(|_| {
+            unsupported("ComputationalMatch", "case index exceeds addressable range")
+        })?;
+        let position = u32::try_from(recursive_position).map_err(|_| {
+            unsupported(
+                "ComputationalMatch",
+                "recursive position exceeds addressable range",
+            )
+        })?;
+        // The claim regime exists only while the unit-definition pass is open.
+        // Outside it -- a direct lowering harness, or an authority that never
+        // opens the ledger -- there is no ledger to claim against and no
+        // close() to satisfy, so the producer keeps its existing route. This
+        // is the ledger's own presence, not a guess about the caller.
+        if self.continuation_claims.is_none() {
+            return Ok(None);
+        }
+        let Some(identity) = self.static_transition_plan.continuation_call_binding_for(
+            producer_construct_origin,
+            continuation_origin,
+            alternative,
+            position,
+        )?
+        else {
+            return Ok(None);
+        };
+        let defining = self.defining_unit.ok_or_else(|| {
+            unsupported(
+                "ContinuationSpecialization",
+                "a continuation claim was reached with no unit currently being defined",
+            )
+        })?;
+        // The EXACT target, resolved first.
+        let exact_target = self
+            .function_local
+            .continuation_calls
+            .get(&identity)
+            .cloned()
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    "the claimed continuation target was not declared into this function",
+                )
+            })?;
+        // `D4` control, on the real causal call seam: substitute ONLY the
+        // emitted `FuncRef` with another callable already declared into this
+        // same function, on the same unit-call ABI.
+        //
+        // ⭐ Header, slots, offsets, inputs, identity and owner are all
+        // retained, so the call is still emitted and the ONLY thing that moves
+        // is the callee identity -- which is what makes the finished-CLIF
+        // oracle's rejection attributable to one cause.
+        //
+        // ⛔ No fall back to exact, and no widening: if this function declares
+        // no other unit-call target the control rejects loudly rather than
+        // silently becoming the identity.
+        #[cfg(test)]
+        let target = if CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
+            == ContinuationEmissionMutation::SubstituteEmittedFuncRef
+        {
+            let substitute = self
+                .function_local
+                .worker_calls
+                .values()
+                .chain(self.function_local.unit_calls.values())
+                .chain(self.function_local.declaration_calls.values())
+                .map(|call| call.function)
+                .find(|function| *function != exact_target.function)
+                .ok_or_else(|| {
+                    unsupported(
+                        "ContinuationSpecialization",
+                        "the D4 emitted-ref substitution found no other unit-call target declared \
+                         into this function; that is a fact about this function's declarations, \
+                         not a licence to import a FuncRef from another function",
+                    )
+                })?;
+            units::DeclaredUnitCall {
+                function: substitute,
+                ..exact_target
+            }
+        } else {
+            exact_target
+        };
+        #[cfg(not(test))]
+        let target = exact_target;
+        // Claim exactly once, with the defining unit supplied independently of
+        // the token so the owner check is a real comparison.
+        // `D4` controls, on the real claim: present the same exact token a
+        // second time, or present an owner that is not the unit actually being
+        // defined. Both perturb this call seam, not a pre-body ledger.
+        #[cfg(test)]
+        let mutation = CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get);
+        #[cfg(test)]
+        let claimed_owner = if mutation == ContinuationEmissionMutation::ClaimUnderWrongOwner {
+            // An actually wrong current owner: any planned owner that is not
+            // the unit being defined.
+            // ⛔ Drawn from the PLANNED UNIT population, not from the causal
+            // calls' own owners, and with NO fall back to `defining`.
+            //
+            // ⭐ It used to read `continuation_calls().find(owner != defining)
+            // .unwrap_or(defining)`. In this seam's real population there is
+            // exactly one causal token and its owner IS the unit being defined,
+            // so `find` returned `None` and the mutation silently became the
+            // IDENTITY -- a committed control that could not fire, green since
+            // `457b9fc6` for the same structural reason the same-shaped redirect
+            // could not reach the call seam. Measured, not reasoned: the control
+            // passed until this fallback was removed.
+            self.static_transition_plan
+                .emittable_units()?
+                .iter()
+                .map(|unit| unit.function())
+                .find(|owner| *owner != defining)
+                .ok_or_else(|| {
+                    unsupported(
+                        "ContinuationSpecialization",
+                        "the D4 wrong-owner control found no planned unit other than the one being \
+                         defined; a control with no wrong owner to present must fail loudly rather \
+                         than quietly claim under the right one",
+                    )
+                })?
+        } else {
+            defining
+        };
+        #[cfg(not(test))]
+        let claimed_owner = defining;
+        let ledger = self.continuation_claims.as_mut().ok_or_else(|| {
+            unsupported(
+                "ContinuationSpecialization",
+                "a continuation claim was reached with no open claim ledger",
+            )
+        })?;
+        ledger.claim_exact(&identity, claimed_owner)?;
+        #[cfg(test)]
+        if mutation == ContinuationEmissionMutation::ClaimTokenTwice {
+            ledger.claim_exact(&identity, claimed_owner)?;
+        }
+
+        // Capture slots come from the EXACT producer environment, addressed by
+        // the projected `source_owner` + `source_abi_position`. ⛔
+        // `ordinary_abi_position` is not a source position and is never used
+        // as one -- it indexes the producer's own ABI, which this call is not
+        // reading.
+        let unit = self
+            .static_transition_plan
+            .continuation_units()?
+            .into_iter()
+            .find(|unit| unit.id() == identity.target())
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    "the claimed target has no projected continuation unit",
+                )
+            })?;
+        let mut inputs = ordinary_inputs.to_vec();
+        for input in unit.continuation_inputs()? {
+            if input.source_owner != defining {
+                return Err(unsupported(
+                    "ContinuationSpecialization",
+                    format!(
+                        "a continuation input names source owner {:?}, which is not the unit \
+                         currently being defined",
+                        input.source_owner
+                    ),
+                ));
+            }
+            let binding = producer_env
+                .get(input.source_abi_position as usize)
+                .ok_or_else(|| {
+                    unsupported(
+                        "ContinuationSpecialization",
+                        "a continuation input names a source ABI position outside the exact \
+                         producer environment",
+                    )
+                })?;
+            inputs.push(
+                binding
+                    .value_at("a continuation capture input")?
+                    .clone(),
+            );
+        }
+
+        let (returned, call) = self.call_declared_unit_target(
+            builder,
+            target,
+            &inputs,
+            #[cfg(test)]
+            None,
+        )?;
+        // `4b` -- anchor the emitted instruction to the exact causal token.
+        //
+        // ⭐ The `Inst`, not the target: the callee is decoded back out of the
+        // finished CLIF by `verify_emitted_continuation_calls`. Recording
+        // `target` here would compare the emitter's own input with itself and
+        // would agree with the `D4` redirect, which is precisely the vacuous
+        // shape this gate exists to avoid.
+        //
+        // ⛔ A second record for one token is a rejection: emission is once per
+        // causal identity, and the claim ledger's affinity does not entail it --
+        // that ledger would be satisfied by a claim with no call at all.
+        // `4b` closure control: emit the call and skip the record, so the
+        // finished-CLIF sweep has an emission the records cannot account for.
+        #[cfg(test)]
+        let record = CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
+            != ContinuationEmissionMutation::SuppressEmissionRecord;
+        #[cfg(not(test))]
+        let record = true;
+        if record
+            && self
+                .function_local
+                .continuation_emissions
+                .insert(identity.clone(), call)
+                .is_some()
+        {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                "a causal token emitted more than one direct continuation call",
+            ));
+        }
+        Ok(Some(returned))
+    }
+
     /// **`D3` -- the callee-only consumer.**
     ///
     /// Emits the call to a statically-bound worker: validate the argument
@@ -5549,6 +5892,7 @@ impl<'a> Lowering<'a> {
             #[cfg(test)]
             None,
         )
+        .map(|(operand, _inst)| operand)
     }
 
     /// **`D2` -- the binder-lowering helper.** Lowers a `Let`'s bound value
@@ -5678,7 +6022,7 @@ impl<'a> Lowering<'a> {
     /// rejects before any worker call could be emitted. `captures` arrive as
     /// `LoweringOperand` and are stored unchanged: a carried capture stays
     /// carried, and nothing here converts a phase.
-    fn construct_static_worker_binding(
+    pub(super) fn construct_static_worker_binding(
         &self,
         closure_origin: StaticOriginId,
         body_origin: StaticOriginId,
@@ -5720,16 +6064,28 @@ impl<'a> Lowering<'a> {
         // 3. The declared unit call is the one for this exact body origin. The
         //    map is keyed by origin, so a disagreement here means the entry was
         //    built for another body -- a wrong-body fact, not a lookup miss.
-        if target.origin != body_origin {
+        // `RT-CONTSPEC-ACTIVATE` `D1b` — the PAIRED invariant, replacing the
+        // invalid `target.origin == body_origin` step.
+        //
+        // The declared record is keyed by the callable SOURCE BODY and retains
+        // the scheduling entry as its target origin. Comparing the target
+        // origin to the body origin was checking the wrong end of the pair;
+        // both ends are now checked against what each actually names.
+        if target.call_site_origin != body_origin {
             return Err(unsupported(
                 "StaticWorkerBinding",
                 format!(
-                    "declared unit call carries origin {:?} but the worker body origin is \
-                     {body_origin:?}",
-                    target.origin
+                    "declared unit call is keyed by source body {:?} but the worker body origin \
+                     is {body_origin:?}",
+                    target.call_site_origin
                 ),
             ));
         }
+        // The target origin is the scheduling entry by construction of the
+        // declared record. It is NOT required to differ from the source body:
+        // for the root adapter and for single-occurrence units the two ends
+        // legitimately coincide, and demanding distinctness here was my own
+        // over-strictness rather than the ruled invariant.
 
         // 4. The descriptor's parameter count is the declared arity.
         if target.header.parameters != declared_arity {
@@ -5912,7 +6268,7 @@ impl<'a> Lowering<'a> {
     /// place the lowering reaches a body by *searching* (by constructor name),
     /// and a search recovers no position — so every such site enumerates to
     /// recover the index rather than deriving identity from the match it found.
-    fn case_body_occurrence<'x>(
+    pub(super) fn case_body_occurrence<'x>(
         &self,
         parent: StaticOriginId,
         index: usize,

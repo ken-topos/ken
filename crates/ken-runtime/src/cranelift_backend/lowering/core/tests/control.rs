@@ -64,6 +64,8 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
+        continuation_claims: None,
+        defining_unit: None,
         process_object: true,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -88,6 +90,8 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            continuation_calls: BTreeMap::new(),
+            continuation_emissions: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
@@ -211,6 +215,8 @@ fn run_px8j_malformed_recursor_consumer(
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
+        continuation_claims: None,
+        defining_unit: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -235,6 +241,8 @@ fn run_px8j_malformed_recursor_consumer(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            continuation_calls: BTreeMap::new(),
+            continuation_emissions: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
@@ -2103,6 +2111,8 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         assumptions: BTreeSet::new(),
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
+        continuation_claims: None,
+        defining_unit: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -2127,6 +2137,8 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            continuation_calls: BTreeMap::new(),
+            continuation_emissions: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
@@ -3642,11 +3654,17 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
         Census {
             file: "lowering/units.rs",
             source: include_str!("../../units.rs"),
-            // One builder/definition for the public root adapter and one
-            // builder/definition site for the loop-defined internal units.
-            builders: 2,
-            definitions: 2,
-            declarations: 1,
+            // One builder/definition for the public root adapter, one for the
+            // loop-defined internal units, and one for
+            // `RT-CONTSPEC-ACTIVATE` `D2`'s continuation bodies, which is
+            // present but not yet wired into the emission path.
+            builders: 3,
+            definitions: 3,
+            // Two declaration sites: the emittable unit bundle, and
+            // `RT-CONTSPEC-ACTIVATE` `D2`'s forward declaration of one target
+            // per planned continuation specialization. The second is a
+            // deliberate addition and this row is the record of it.
+            declarations: 2,
             data_declarations: 0,
             data_definitions: 0,
         },
@@ -9363,46 +9381,7 @@ fn every_origin_to_expression_resolution_goes_through_the_single_route() {
         // bisect with this shape present left all three green. ⇒ It is retained
         // because it is the only `ComputationalMatch` in the set and its
         // relation holds, ⛔ NOT as coverage — see the doc comment.
-        RuntimeExpr::ComputationalMatch {
-            scrutinee: Box::new(RuntimeExpr::Construct {
-                constructor: "ctor:fixture::ac4::Node".to_string(),
-                args: vec![RuntimeExpr::LexicalClosure {
-                    captures: Vec::new(),
-                    params: vec!["unit".to_string()],
-                    body: Box::new(RuntimeExpr::Construct {
-                        constructor: "ctor:fixture::ac4::Leaf".to_string(),
-                        args: Vec::new(),
-                    }),
-                }],
-            }),
-            cases: vec![
-                crate::RuntimeComputationalMatchCase {
-                    constructor: "ctor:fixture::ac4::Node".to_string(),
-                    argument_binders: 1,
-                    recursive_positions: vec![0],
-                    body: RuntimeExpr::Call {
-                        callee: Box::new(RuntimeExpr::Var(0)),
-                        args: vec![RuntimeExpr::Construct {
-                            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
-                            args: Vec::new(),
-                        }],
-                    },
-                },
-                crate::RuntimeComputationalMatchCase {
-                    constructor: "ctor:fixture::ac4::Leaf".to_string(),
-                    argument_binders: 0,
-                    recursive_positions: Vec::new(),
-                    body: RuntimeExpr::Construct {
-                        constructor: "ctor:fixture::ac4::Leaf".to_string(),
-                        args: Vec::new(),
-                    },
-                },
-            ],
-            default: RuntimeTrap {
-                code: RuntimeTrapCode::PatternMatchFailure,
-                message: "ac4 recursor fixture is total".to_string(),
-            },
-        },
+        contspec_emission_witness(),
     ];
 
     let mut total_resolutions = 0usize;
@@ -9888,5 +9867,210 @@ fn a_retained_body_is_defined_once_even_when_called_twice() {
          once. The selected functionized authority must define that retained \
          body once; a second call may add a call edge, never a second body \
          resolution."
+    );
+}
+
+// ─── RT-CONTSPEC-ACTIVATE `D4` — the one-token emission-seam controls ────────
+
+/// **The one program in this suite that reaches
+/// `claim_and_call_continuation`.**
+///
+/// A `ComputationalMatch` whose scrutinee is `Node(closure)` and whose `Node`
+/// case declares `recursive_positions: vec![0]`, so the planner mints one
+/// causal continuation token; the case body applies the induction hypothesis
+/// against `Unit`, which is the producer occurrence that claims and calls it.
+///
+/// ⭐ **Named here rather than copied.** It was previously inline in the `AC-4`
+/// route census, which is why exactly one test in the suite drove the emission
+/// seam and no control could reach it. Both consumers now build the same value,
+/// so a change to one cannot silently diverge from the other.
+///
+/// ⛔ Not a new fixture and not fixture search: this is the identical
+/// expression the census already compiled, moved so it can be named.
+fn contspec_emission_witness() -> RuntimeExpr {
+    RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::ac4::Node".to_string(),
+            args: vec![RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["unit".to_string()],
+                body: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::ac4::Leaf".to_string(),
+                    args: Vec::new(),
+                }),
+            }],
+        }),
+        cases: vec![
+            crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::ac4::Node".to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                        args: Vec::new(),
+                    }],
+                },
+            },
+            crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::ac4::Leaf".to_string(),
+                argument_binders: 0,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::ac4::Leaf".to_string(),
+                    args: Vec::new(),
+                },
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "ac4 recursor fixture is total".to_string(),
+        },
+    }
+}
+
+/// Runs `body` with a continuation-emission mutation installed, restoring
+/// `Exact` afterwards **even if `body` panics**, so one failing control cannot
+/// leak a mutation into every later test in the thread.
+fn with_continuation_emission_mutation<T>(
+    mutation: ContinuationEmissionMutation,
+    body: impl FnOnce() -> T,
+) -> T {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            set_continuation_emission_mutation(ContinuationEmissionMutation::Exact);
+        }
+    }
+    set_continuation_emission_mutation(mutation);
+    let _restore = Restore;
+    body()
+}
+
+/// Asserts the witness is green, then red under `mutation` for a reason whose
+/// text contains `because`, then green again.
+///
+/// ⭐ **The positive control runs first, every time.** A mutation that reds a
+/// program which was never green proves nothing about the mutation, and the
+/// trailing re-run is what shows the mutation was scoped rather than
+/// permanent.
+///
+/// ⚠ **A green mutation is a reach question before it is a defect.** If one of
+/// these ever passes, diagnose whether the seam was entered at all before
+/// concluding the control failed — that discrimination is what the earlier
+/// same-shaped redirect lacked, and it is why that control looked like a
+/// control for two checkpoints while refusing before the call.
+fn assert_emission_mutation_reds(mutation: ContinuationEmissionMutation, because: &str) {
+    let witness = contspec_emission_witness();
+    assert!(
+        ac11_compiles(&witness).is_ok(),
+        "the witness must be green at the seam the mutation reddens"
+    );
+    let error = with_continuation_emission_mutation(mutation, || ac11_compiles(&witness).err())
+        .unwrap_or_else(|| panic!("{mutation:?} must red the emission witness"));
+    let rendered = format!("{error:?}");
+    assert!(
+        rendered.contains(because),
+        "{mutation:?} must red for its own reason, not somewhere else. \
+         expected to contain {because:?}, got: {rendered}"
+    );
+    assert!(
+        ac11_compiles(&witness).is_ok(),
+        "the mutation must not leak past its scope"
+    );
+}
+
+/// **`D4` — substituting only the emitted `FuncRef` reds the `4b` equality.**
+///
+/// The planner identity, the declared call contract, the header, slots,
+/// offsets, inputs and owner are all retained; the call is still emitted. The
+/// single thing that moves is the callee identity, so the finished-CLIF oracle
+/// rejects because the decoded `FuncId` disagrees with `identity.target()` —
+/// ⛔ not because "a target changed", which is what an oracle reading the map
+/// it mutates would have reported.
+///
+/// **Promise class: durable invariant.** It pins the *relation* between the
+/// planner-issued target and the emitted callee, which every intended
+/// extension of this seam preserves.
+#[test]
+fn d4_substituting_the_emitted_funcref_reds_the_emission_equality() {
+    assert_emission_mutation_reds(
+        ContinuationEmissionMutation::SubstituteEmittedFuncRef,
+        "disagrees with the planner-issued continuation target",
+    );
+}
+
+/// **`4b` closure — an emitted call that is not recorded is still caught.**
+///
+/// Without this the gate would be complete only over the set it built itself:
+/// an unrecorded emission would be invisible and the records would look
+/// exhaustive because nothing disagreed with them.
+#[test]
+fn d4_an_unrecorded_continuation_emission_reds_the_clif_sweep() {
+    assert_emission_mutation_reds(
+        ContinuationEmissionMutation::SuppressEmissionRecord,
+        "are not the ones recorded against planned causal tokens",
+    );
+}
+
+/// **`4b` closeout — a per-function verification that never accumulates is
+/// caught by whole-pass set equality.**
+///
+/// ⭐ This is the control that separates "each function checked its own
+/// emissions" from "every planned token was emitted somewhere". The per-
+/// function gate stays green here; only the closeout notices.
+#[test]
+fn d4_failing_to_accumulate_emissions_reds_the_closeout_set_equality() {
+    assert_emission_mutation_reds(
+        ContinuationEmissionMutation::SuppressEmissionAccumulation,
+        "emitted continuation call population does not equal the planned one",
+    );
+}
+
+/// **`D3` affine seam — claiming one causal token twice reds.**
+#[test]
+fn d4_claiming_the_same_causal_token_twice_reds_the_ledger() {
+    assert_emission_mutation_reds(
+        ContinuationEmissionMutation::ClaimTokenTwice,
+        "claimed twice",
+    );
+}
+
+/// **`D3` owner seam — claiming under a unit that does not own the token
+/// reds.**
+///
+/// ⚠ Under today's structure a wrong owner surfaces as a **leftover** claim at
+/// `close()` rather than at `claim_exact`, because selection is already by the
+/// token's own owner. The assertion below is deliberately on the text the
+/// production path actually produces, not on the one the seam's name suggests.
+#[test]
+fn d4_claiming_under_a_unit_that_does_not_own_the_token_reds() {
+    assert_emission_mutation_reds(
+        ContinuationEmissionMutation::ClaimUnderWrongOwner,
+        "does not own it",
+    );
+}
+
+/// **`AC-1b` — the executable lowering witness population, stated as its own
+/// population and never borrowed from the planner census.**
+///
+/// ⛔ `AC-1a`'s nested planner census is `2/2/2/2` and is asserted by
+/// `contspec_planner_closes_ordered_keys_units_and_causal_edges_dormantly`.
+/// This is a **different fixture**. Reporting either count as the other is the
+/// conflation the Architect corrected at `evt_6bf2mmehjzy3k`; a one-token
+/// emission population is sufficient and non-vacuous for a universal
+/// per-identity routing property, and must not be inflated to two.
+///
+/// The equality itself is enforced in production by
+/// `ContinuationClaimLedger::close`, over sets rather than lengths. What this
+/// test adds is that the witness **compiles**, so that closeout was actually
+/// executed rather than skipped for want of a continuation.
+#[test]
+fn ac1b_the_executable_lowering_witness_closes_its_one_token_population() {
+    assert!(
+        ac11_compiles(&contspec_emission_witness()).is_ok(),
+        "the one-token emission witness must compile, which is what runs the \
+         planned/resolved/declared/emitted set equality at closeout"
     );
 }

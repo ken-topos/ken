@@ -138,6 +138,14 @@ pub(in crate::cranelift_backend) fn b2f_units_declared_in_attempt(epoch: u64) ->
 /// removal), reintroduced one layer out.
 pub(in crate::cranelift_backend) struct UnitBundle {
     functions: BTreeMap<PredeclaredFunctionId, FuncId>,
+    /// **`RT-CONTSPEC-ACTIVATE` `D2`** -- one declared target per planned
+    /// continuation specialization, keyed by the planner's typed identity.
+    ///
+    /// Kept as its own map rather than folded into `functions`: a
+    /// `ContinuationSpecializationId` is **not** a `PredeclaredFunctionId`, and
+    /// admitting one there would alias two identities that the planner keeps
+    /// apart. Nothing resolves a continuation by ordinal or by symbol name.
+    continuations: BTreeMap<ContinuationSpecializationId, FuncId>,
 }
 
 impl UnitBundle {
@@ -152,6 +160,24 @@ impl UnitBundle {
         unit: PredeclaredFunctionId,
     ) -> Option<FuncId> {
         self.functions.get(&unit).copied()
+    }
+
+    /// The declared target for one continuation specialization.
+    ///
+    /// `None` is a real answer and must not be substituted for: a
+    /// specialization absent here was never declared, and resolving a causal
+    /// identity to a fabricated `FuncId` is exactly what this return type
+    /// exists to make visible.
+    pub(in crate::cranelift_backend) fn continuation(
+        &self,
+        specialization: ContinuationSpecializationId,
+    ) -> Option<FuncId> {
+        self.continuations.get(&specialization).copied()
+    }
+
+    /// How many continuation targets this bundle declares.
+    pub(in crate::cranelift_backend) fn continuation_len(&self) -> usize {
+        self.continuations.len()
     }
 
     /// How many target functions this bundle declares.
@@ -211,7 +237,13 @@ pub(in crate::cranelift_backend) struct ResolvedUnitTarget {
 #[derive(Clone)]
 pub(in crate::cranelift_backend) struct DeclaredUnitCall {
     pub(in crate::cranelift_backend) function: FuncRef,
+    /// The callee's scheduling entry -- `RT-CONTSPEC-ACTIVATE` `D1b` keeps
+    /// this as the target origin.
     pub(in crate::cranelift_backend) origin: StaticOriginId,
+    /// The callable source body this call is keyed by. Both ends are retained
+    /// in the declared record, not just the map key, so a consumer can check
+    /// the pair rather than infer it.
+    pub(in crate::cranelift_backend) call_site_origin: StaticOriginId,
     pub(in crate::cranelift_backend) header: AbiFrameHeader,
     pub(in crate::cranelift_backend) slots: Vec<AbiSlot>,
     pub(in crate::cranelift_backend) offsets: Vec<u32>,
@@ -237,6 +269,7 @@ impl CallEdgeTargets {
             let call = DeclaredUnitCall {
                 function: module.declare_func_in_func(target.function, func),
                 origin: target.origin,
+                call_site_origin: target.call_site_origin,
                 header: target.header,
                 slots: target.slots.clone(),
                 offsets: target.offsets.clone(),
@@ -345,6 +378,7 @@ impl WorkerTargets {
                     DeclaredUnitCall {
                         function: module.declare_func_in_func(target.function, func),
                         origin: target.origin,
+                        call_site_origin: target.call_site_origin,
                         header: target.header,
                         slots: target.slots.clone(),
                         offsets: target.offsets.clone(),
@@ -399,6 +433,15 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
     bundle: &UnitBundle,
 ) -> Result<CallEdgeTargets, CraneliftBackendError> {
     let derived = plan.emittable_call_edges()?;
+    // `RT-CONTSPEC-ACTIVATE` `D1b`: the exact-set source-body binding, joined
+    // on validated caller + callee scheduling entry. A `StaticBody` edge's
+    // resolved `call_site_origin` becomes the callable SOURCE BODY; the
+    // scheduling entry stays the target origin.
+    let source_bindings: BTreeMap<(PredeclaredFunctionId, StaticOriginId), StaticOriginId> = plan
+        .static_body_source_bindings()?
+        .into_iter()
+        .map(|(caller, source_body, entry)| ((caller, entry), source_body))
+        .collect();
     let mut edges = Vec::with_capacity(derived.len());
     for edge in derived {
         let target = bundle.function(edge.callee()).ok_or_else(|| {
@@ -425,7 +468,17 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
             ResolvedUnitTarget {
                 function: target,
                 origin: edge.callee_origin(),
-                call_site_origin: edge.call_site_origin(),
+                call_site_origin: match edge.kind() {
+                    EmittableCallKind::StaticBody => *source_bindings
+                        .get(&(edge.caller(), edge.callee_origin()))
+                        .ok_or_else(|| {
+                            backend_module(
+                                "a static body call edge has no D1b source-body binding"
+                                    .to_string(),
+                            )
+                        })?,
+                    EmittableCallKind::Declaration => edge.call_site_origin(),
+                },
                 kind: edge.kind(),
                 header: unit.header(),
                 slots: unit.slots().to_vec(),
@@ -511,9 +564,409 @@ pub(in crate::cranelift_backend) fn declare_unit_bundle<M: Module>(
             ));
         }
     }
+    // `RT-CONTSPEC-ACTIVATE` `D2` -- forward-declare one target per planned
+    // continuation specialization, before any body is defined. The symbol
+    // carries a dense ordinal only so the linker sees distinct names; the map
+    // is keyed by the planner's typed identity, never by that string.
+    let mut continuations = BTreeMap::new();
+    for (ordinal, unit) in plan.continuation_units()?.into_iter().enumerate() {
+        let name = format!("ken_continuation_{ordinal}");
+        let id = module
+            .declare_function(&name, Linkage::Local, &sig)
+            .map_err(|err| backend_module(err.to_string()))?;
+        if continuations.insert(unit.id(), id).is_some() {
+            return Err(backend_module(
+                "two continuation descriptors claim one planned specialization".to_string(),
+            ));
+        }
+    }
     #[cfg(test)]
     B2F_UNIT_EMISSION.with(|cell| cell.set((functions.len(), 0)));
-    Ok(UnitBundle { functions })
+    Ok(UnitBundle {
+        functions,
+        continuations,
+    })
+}
+
+/// **`RT-CONTSPEC-ACTIVATE` `D2` — resolve every projected causal identity to
+/// its typed declared target.**
+///
+/// Runs after declaration and before any body is defined, for the same reason
+/// `resolve_call_edges` does: a causal edge whose target was never declared is
+/// a program that cannot be emitted, and discovering that while half the
+/// bodies exist leaves a partially emitted artifact.
+///
+/// The join is by the identity's `target()` alone. ⛔ Nothing here parses a
+/// symbol name, indexes by ordinal, or aliases a `ContinuationSpecializationId`
+/// to a `PredeclaredFunctionId` — a missing target rejects.
+pub(in crate::cranelift_backend) fn resolve_continuation_targets(
+    plan: &StaticTransitionPlan<'_>,
+    bundle: &UnitBundle,
+) -> Result<BTreeMap<ContinuationCallIdentity, FuncId>, CraneliftBackendError> {
+    let mut resolved = BTreeMap::new();
+    for call in plan.continuation_calls()? {
+        let identity = plan
+            .continuation_call_binding_for(
+                call.producer_construct_origin(),
+                call.continuation_origin(),
+                call.producer_alternative(),
+                call.recursive_position(),
+            )?
+            .ok_or_else(|| {
+                backend_module(
+                    "a projected causal call has no binding under its own four-field selector"
+                        .to_string(),
+                )
+            })?;
+        let target = bundle.continuation(identity.target()).ok_or_else(|| {
+            backend_module(
+                "a projected causal identity names a continuation specialization that was never \
+                 forward-declared"
+                    .to_string(),
+            )
+        })?;
+        if resolved.insert(identity, target).is_some() {
+            return Err(backend_module(
+                "two projected causal identities collide; the planner mints one call token per \
+                 ruled recursive position, so this is a key-arity defect rather than a \
+                 double-resolution"
+                    .to_string(),
+            ));
+        }
+    }
+    Ok(resolved)
+}
+
+/// **`RT-CONTSPEC-ACTIVATE` `D2` — define each declared continuation target
+/// from its own projected contract.**
+///
+/// Operands come from the **descriptor**: each `Parameter` and `Capture` slot
+/// is loaded at the offset `slot_offsets` assigns it. ⛔ Function parameter 0
+/// is not the payload, and the `Result` slot is never read -- it is
+/// caller-initialized, and this body only writes it.
+///
+/// The partition is the ruled one: `Parameter` operands are the ordinary
+/// envelope (nonrecursive producer fields, then selected worker captures in
+/// capture-ordinal order), and `Capture` operands are the continuation inputs
+/// by ordinal. The worker binding is built by the **existing** static-worker
+/// constructor, and the semantic environment is the sole
+/// `LoweringEnvironmentBinding` authority -- no parallel operand map and no
+/// worker-body de Bruijn table.
+pub(super) fn define_continuation_bodies<M: Module>(
+    module: &mut M,
+    compiler: &mut Lowering<'_>,
+    helpers: ArtifactHelpers<'_>,
+    bundle: &UnitBundle,
+) -> Result<usize, CraneliftBackendError> {
+    // Own every projected fact BEFORE the loop: the projection borrows the
+    // plan, and the definition below needs the compiler mutably.
+    struct OwnedContinuationEmission {
+        id: ContinuationSpecializationId,
+        slots: Vec<AbiSlot>,
+        offsets: Vec<u32>,
+        envelope: Vec<ContinuationOrdinaryEnvelopeRole>,
+        inputs: Vec<ContinuationInputView>,
+        continuation_origin: StaticOriginId,
+        producer_alternative: u32,
+        worker_closure_origin: StaticOriginId,
+        worker_body_origin: StaticOriginId,
+        worker_declared_arity: u32,
+        worker_capture_count: usize,
+        header_parameters: u32,
+        header_captures: u32,
+    }
+    // `RT-WORKER-BIND` `D4` exposes its local declaration operation for a
+    // separately emitted caller; a continuation function is exactly that, so
+    // it declares its own worker refs rather than borrowing another's.
+    let worker_targets = resolve_worker_targets(&compiler.static_transition_plan, bundle)?;
+    let emissions = compiler
+        .static_transition_plan
+        .continuation_units()?
+        .into_iter()
+        .map(|unit| {
+            let (offsets, _frame_bytes) = unit.slot_offsets()?;
+            Ok(OwnedContinuationEmission {
+                id: unit.id(),
+                slots: unit.slots().to_vec(),
+                offsets,
+                envelope: unit.ordinary_envelope()?,
+                inputs: unit.continuation_inputs()?,
+                continuation_origin: unit.continuation_origin(),
+                producer_alternative: unit.producer_alternative(),
+                worker_closure_origin: unit.worker_closure_origin(),
+                worker_body_origin: unit.worker_body_origin(),
+                worker_declared_arity: unit.worker_declared_arity(),
+                worker_capture_count: unit.worker_capture_count(),
+                header_parameters: unit.header().parameters,
+                header_captures: unit.header().captures,
+            })
+        })
+        .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+
+    // Shape index for the `D4` redirect control: declared arity and capture
+    // count per specialization, which is the only same-shaped definition.
+    let mut defined = 0usize;
+    for unit in emissions {
+        // Resolve the EXACT target first; the control below perturbs only what
+        // the definition is handed.
+        let exact_id = bundle.continuation(unit.id).ok_or_else(|| {
+            backend_module(
+                "a planned continuation specialization was never forward-declared".to_string(),
+            )
+        })?;
+        let id = exact_id;
+
+        let offsets = unit.offsets.as_slice();
+        let envelope = &unit.envelope;
+        let inputs = &unit.inputs;
+        let slots = unit.slots.as_slice();
+        if slots.len() != offsets.len() {
+            return Err(backend_module(
+                "a continuation slot run disagrees with its own offset walk".to_string(),
+            ));
+        }
+
+        // Reject BEFORE definition on partition incompleteness: the ordinary
+        // envelope must cover every Parameter slot, and the continuation
+        // inputs must cover every Capture slot densely by ordinal.
+        let parameter_slots: Vec<_> = slots
+            .iter()
+            .zip(offsets)
+            .filter(|(slot, _)| slot.kind == AbiSlotKind::Parameter)
+            .collect();
+        let capture_slots: Vec<_> = slots
+            .iter()
+            .zip(offsets)
+            .filter(|(slot, _)| slot.kind == AbiSlotKind::Capture)
+            .collect();
+        if parameter_slots.len() != envelope.len() {
+            return Err(backend_module(
+                "the ruled ordinary envelope does not cover the Parameter slot run".to_string(),
+            ));
+        }
+        if capture_slots.len() != inputs.len() {
+            return Err(backend_module(
+                "the projected continuation inputs do not cover the Capture slot run".to_string(),
+            ));
+        }
+        for (position, input) in inputs.iter().enumerate() {
+            if input.ordinal as usize != position {
+                return Err(backend_module(
+                    "continuation inputs are not dense in ordinal order".to_string(),
+                ));
+            }
+        }
+        // Provenance: every worker capture role must name the worker this key
+        // selected, so an envelope built against another closure rejects.
+        for role in envelope.iter() {
+            if let ContinuationOrdinaryEnvelopeRole::WorkerCapture { closure_origin, .. } = role {
+                if *closure_origin != unit.worker_closure_origin {
+                    return Err(backend_module(
+                        "an ordinary-envelope worker capture names a different closure than the \
+                         selected worker"
+                            .to_string(),
+                    ));
+                }
+            }
+        }
+
+        let sig = unit_signature(module);
+        let mut func =
+            Function::with_name_signature(UserFuncName::user(0, id.as_u32()), sig);
+        let result_offset = slots
+            .iter()
+            .zip(offsets)
+            .find(|(slot, _)| slot.kind == AbiSlotKind::Result)
+            .map(|(_, offset)| *offset)
+            .ok_or_else(|| {
+                backend_module("continuation frame declares no result slot".to_string())
+            })?;
+        let trap_offset = slots
+            .iter()
+            .zip(offsets)
+            .find(|(slot, _)| slot.kind == AbiSlotKind::Trap)
+            .map(|(_, offset)| *offset)
+            .ok_or_else(|| {
+                backend_module("continuation frame declares no trap slot".to_string())
+            })?;
+
+        let mut function_local = helpers.declare_in_func(module, &mut func, None);
+        // ONE lawful declaration per continuation `Function`, retained whole
+        // and seated in BOTH existing roles. The worker constructor validates
+        // through `unit_calls`; the later callee-only consumer resolves
+        // through `worker_calls`. Seating only the second is what made the
+        // constructor refuse -- the objects are the same, the roles are not.
+        //
+        // Declared here, into THIS function: no `FuncRef` crosses a function.
+        let declared_workers = worker_targets.declare_in_func(module, &mut func);
+        if !declared_workers.contains_key(&unit.worker_body_origin) {
+            return Err(backend_module(
+                "the selected continuation worker body has no projected emittable-unit target"
+                    .to_string(),
+            ));
+        }
+        function_local.unit_calls = declared_workers.clone();
+        function_local.worker_calls = declared_workers;
+        let mut func_ctx = FunctionBuilderContext::new();
+        {
+            let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
+            let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
+            builder.switch_to_block(entry);
+            let envelope_pointer = builder.block_params(entry)[0];
+            let frame = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                envelope_pointer,
+                crate::activation_services::UNIT_CALL_FRAME_SLOTS,
+            );
+            // The same per-function activation-services preamble every
+            // generated unit body binds, from the same envelope and services
+            // record. Omitting it is what left this function with no boundary
+            // arena; substituting the native-`Int` arena for the boundary one
+            // is the defect the `S6`/`D6` ruling exists to remove, so the
+            // record is read for both rather than one standing in for the
+            // other.
+            let host_dispatch_context = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                envelope_pointer,
+                crate::activation_services::UNIT_CALL_FRAME_HOST_DISPATCH_CONTEXT,
+            );
+            let services = builder.block_params(entry)[1];
+            let native_int_arena = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                services,
+                crate::activation_services::SERVICES_NATIVE_INT_ARENA,
+            );
+            Lowering::require_nonzero(&mut builder, native_int_arena);
+            let boundary_arena = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                services,
+                crate::activation_services::SERVICES_BOUNDARY_ARENA,
+            );
+            Lowering::require_nonzero(&mut builder, boundary_arena);
+            function_local.host_dispatch_context = Some(host_dispatch_context);
+            function_local.native_int_arena = Some(native_int_arena);
+            function_local.boundary_arena = Some(boundary_arena);
+            function_local.services_pointer = Some(services);
+            function_local.bind_unit_trap_frame(
+                frame,
+                i32::try_from(trap_offset).map_err(|_| {
+                    backend_module("continuation trap slot offset exceeds range".to_string())
+                })?,
+            )?;
+            compiler.function_local = function_local;
+
+            // Descriptor-only loads. Each operand is read from the slot the
+            // descriptor assigns it, and from nowhere else.
+            let load_at = |builder: &mut FunctionBuilder<'_>, offset: u32| {
+                let offset = i32::try_from(offset).map_err(|_| {
+                    backend_module("continuation slot offset exceeds addressable range".to_string())
+                })?;
+                Ok::<_, CraneliftBackendError>(LoweringOperand::Carried(CarriedBoundaryWord {
+                    word: builder.ins().load(types::I64, MemFlags::trusted(), frame, offset),
+                }))
+            };
+
+            let mut ordinary = Vec::with_capacity(parameter_slots.len());
+            for (_, offset) in &parameter_slots {
+                ordinary.push(load_at(&mut builder, **offset)?);
+            }
+            let mut carried_inputs = Vec::with_capacity(capture_slots.len());
+            for (_, offset) in &capture_slots {
+                carried_inputs.push(load_at(&mut builder, **offset)?);
+            }
+
+            // The ordered capture segment for the selected worker: the
+            // envelope's `WorkerCapture` roles, in capture-ordinal order,
+            // taking each one's operand from its own Parameter position.
+            let mut worker_captures = Vec::new();
+            for (position, role) in envelope.iter().enumerate() {
+                if matches!(role, ContinuationOrdinaryEnvelopeRole::WorkerCapture { .. }) {
+                    worker_captures.push(ordinary[position].clone());
+                }
+            }
+            if worker_captures.len() != unit.worker_capture_count {
+                return Err(backend_module(
+                    "the ordinary envelope's worker-capture segment disagrees with the selected \
+                     worker's capture count"
+                        .to_string(),
+                ));
+            }
+
+            // The EXISTING constructor, with the projected identity and arity.
+            let worker = compiler.construct_static_worker_binding(
+                unit.worker_closure_origin,
+                unit.worker_body_origin,
+                unit.worker_declared_arity,
+                unit.worker_capture_count,
+                worker_captures,
+            )?;
+
+            // The semantic case environment, through the sole binding
+            // authority: the continuation inputs in ordinal order, then the
+            // worker installed in the selected case's binder order.
+            let mut env: Vec<LoweringEnvironmentBinding> = carried_inputs
+                .into_iter()
+                .map(LoweringEnvironmentBinding::Value)
+                .collect();
+            env.insert(0, LoweringEnvironmentBinding::StaticWorker(worker));
+
+            // Exact body recovery: the selected case of the computational
+            // frame this continuation belongs to, by its own alternative.
+            let frame_occurrence =
+                compiler.retained_body_occurrence(unit.continuation_origin)?;
+            let RuntimeExpr::ComputationalMatch { cases, .. } = frame_occurrence.expr else {
+                return Err(backend_module(
+                    "a continuation origin does not resolve to a computational frame".to_string(),
+                ));
+            };
+            let alternative = unit.producer_alternative as usize;
+            let case = cases.get(alternative).ok_or_else(|| {
+                backend_module(
+                    "the projected producer alternative is outside the frame's case run"
+                        .to_string(),
+                )
+            })?;
+            let body = compiler.case_body_occurrence(
+                frame_occurrence.static_origin,
+                alternative,
+                &case.body,
+            )?;
+            let lowered = compiler.lower_expr(&mut builder, body, &env)?;
+
+            // The Result slot is WRITTEN here and never read.
+            let word = match lowered {
+                LoweringOperand::Carried(carried) => carried.word,
+                LoweringOperand::Specialized(value) => {
+                    compiler.emit_result(&mut builder, value)?.0
+                }
+            };
+            let result_offset = i32::try_from(result_offset).map_err(|_| {
+                backend_module("continuation result slot offset exceeds range".to_string())
+            })?;
+            builder
+                .ins()
+                .store(MemFlags::trusted(), word, frame, result_offset);
+            let zero = builder.ins().iconst(types::I64, 0);
+            builder.ins().return_(&[zero]);
+            builder.seal_all_blocks();
+            builder.finalize();
+        }
+        // Verify, then define THIS function -- a fresh context here would
+        // define an empty body and silently discard everything emitted above.
+        verify_cranelift_function(&func, module.isa())?;
+        let mut ctx = module.make_context();
+        std::mem::swap(&mut ctx.func, &mut func);
+        module
+            .define_function(id, &mut ctx)
+            .map_err(|error| backend_module(error.to_string()))?;
+        defined += 1;
+    }
+    Ok(defined)
 }
 
 pub(super) fn define_root_adapter<M: Module>(
@@ -566,6 +1019,9 @@ pub(super) fn define_root_adapter<M: Module>(
         DeclaredUnitCall {
             function: module.declare_func_in_func(root_id, &mut func),
             origin: root_origin,
+            // The root adapter's own entry: source body and scheduling entry
+            // are the same occurrence.
+            call_site_origin: root_origin,
             header: root.header(),
             slots: root.slots().to_vec(),
             offsets,
@@ -700,6 +1156,279 @@ pub(super) struct RootUnitResult {
     pub(super) trap: Option<RuntimeTrap>,
 }
 
+/// **`RT-CONTSPEC-ACTIVATE` `D3` — the affine claim ledger over the exact
+/// planned continuation-call tokens.**
+///
+/// Each projected causal identity is claimed **exactly once**, by the exact
+/// producer unit the token itself names. This is affine on the *causal token*,
+/// which is a different object from `RT-WORKER-BIND`'s worker binding -- that
+/// one is deliberately NOT affine, and nothing here changes it.
+///
+/// ⛔ There is no `active_emission_owner`, no lowering-minted arm token, and no
+/// second owner authority: the owner compared against is the token's own
+/// immutable `producer_owner`, and the unit compared to it is the one
+/// currently being defined.
+///
+/// ⚠ An affine rejection from here is **not self-explaining**. The identity is
+/// four-field -- producer construct, alternative, call-site sequence, and
+/// `recursive_position`. A key that lost `recursive_position` collides two
+/// distinct tokens at one source position and this ledger will report a
+/// double-consumption of the *right* token while the real defect is the key's
+/// arity. Check the arity before believing the report.
+pub(super) struct ContinuationClaimLedger {
+    /// The RESOLVED target for each planned causal identity. Previously this
+    /// kept only the keys and threw the `FuncId` away through `into_keys`,
+    /// which is why no continuation target could ever be called: the join D1
+    /// performed was discarded at the moment it became useful.
+    resolved: BTreeMap<ContinuationCallIdentity, FuncId>,
+    /// `None` until claimed; then the exact unit that claimed it, so owner
+    /// agreement is a recorded fact rather than an inference.
+    claims: BTreeMap<ContinuationCallIdentity, Option<PredeclaredFunctionId>>,
+    /// **`4b`** -- the PLANNED set, read straight off the plan's own causal call
+    /// projection at open time and never derived from [`Self::resolved`].
+    planned: BTreeSet<ContinuationCallIdentity>,
+    /// **`4b`** -- every identity some generated function minted a `FuncRef`
+    /// for, accumulated across all of them.
+    declared: BTreeSet<ContinuationCallIdentity>,
+    /// **`4b`** -- every identity a direct call was actually emitted for,
+    /// accumulated across all generated functions after each one's CLIF has been
+    /// checked.
+    emitted: BTreeSet<ContinuationCallIdentity>,
+}
+
+impl ContinuationClaimLedger {
+    pub(super) fn open(
+        plan: &StaticTransitionPlan<'_>,
+        bundle: &UnitBundle,
+    ) -> Result<Self, CraneliftBackendError> {
+        let resolved = resolve_continuation_targets(plan, bundle)?;
+        let claims = resolved.keys().cloned().map(|identity| (identity, None)).collect();
+        // The PLANNED set, taken from the plan's causal call projection rather
+        // than from `resolved`. ⚠ Honest note: `resolve_continuation_targets`
+        // walks the same projection, so planned == resolved is structural today
+        // and would only separate if resolution ever dropped or added a key. It
+        // is recorded because `close()` asserts the four sets equal and a set
+        // that is *implied* by another is not the same evidence as one that was
+        // read independently -- the load-bearing pairs are declared and emitted.
+        let planned = plan
+            .continuation_calls()?
+            .iter()
+            .map(|call| {
+                plan.continuation_call_binding_for(
+                    call.producer_construct_origin(),
+                    call.continuation_origin(),
+                    call.producer_alternative(),
+                    call.recursive_position(),
+                )?
+                .ok_or_else(|| {
+                    backend_module(
+                        "a projected causal call has no binding under its own four-field selector"
+                            .to_string(),
+                    )
+                })
+            })
+            .collect::<Result<BTreeSet<_>, CraneliftBackendError>>()?;
+        Ok(Self {
+            resolved,
+            claims,
+            planned,
+            declared: BTreeSet::new(),
+            emitted: BTreeSet::new(),
+        })
+    }
+
+    /// **`4b`** -- record the causal tokens one generated function minted call
+    /// refs for.
+    pub(super) fn record_declared(
+        &mut self,
+        declared: impl IntoIterator<Item = ContinuationCallIdentity>,
+    ) -> Result<(), CraneliftBackendError> {
+        for identity in declared {
+            if !self.declared.insert(identity) {
+                return Err(backend_module(
+                    "a causal token was declared into more than one generated function".to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// **`4b`** -- record the causal tokens one generated function actually
+    /// emitted a verified direct call for.
+    ///
+    /// ⛔ Called only *after* that function's CLIF has been checked, so a token
+    /// reaches this set only once its emitted callee has been decoded from the
+    /// instruction stream and matched against the planner-issued target.
+    pub(super) fn record_emitted(
+        &mut self,
+        emitted: impl IntoIterator<Item = ContinuationCallIdentity>,
+    ) -> Result<(), CraneliftBackendError> {
+        for identity in emitted {
+            if !self.emitted.insert(identity) {
+                return Err(backend_module(
+                    "a causal token emitted a direct call from more than one generated function"
+                        .to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Declare THIS owning Function's own `FuncRef` for every causal token it
+    /// owns, keyed by the complete four-field identity.
+    ///
+    /// Each `FuncRef` is minted into the `Function` passed here and belongs to
+    /// it alone; ⛔ none is ever passed across functions. Declaring is not
+    /// claiming -- a declared target is callable, and the affine claim happens
+    /// later, at the exact producer occurrence.
+    pub(super) fn declare_owned_in_func<M: Module>(
+        &self,
+        defining: PredeclaredFunctionId,
+        module: &mut M,
+        func: &mut Function,
+        plan: &StaticTransitionPlan<'_>,
+    ) -> Result<BTreeMap<ContinuationCallIdentity, DeclaredUnitCall>, CraneliftBackendError> {
+        // The declared target is the FULL contract, not a bare `FuncRef`:
+        // `DeclaredUnitCall` already carries the function, the target origin,
+        // and the projected header/slots/offsets, which is exactly what
+        // `call_declared_unit_target` consumes. Reusing it is what keeps this
+        // on the existing unit-call ABI instead of inventing a second one.
+        let units = plan.continuation_units()?;
+        self.resolved
+            .iter()
+            .filter(|(identity, _)| identity.producer_owner() == defining)
+            .map(|(identity, target)| {
+                let unit = units
+                    .iter()
+                    .find(|unit| unit.id() == identity.target())
+                    .ok_or_else(|| {
+                        backend_module(
+                            "a resolved causal identity names a specialization with no projected \
+                             unit"
+                                .to_string(),
+                        )
+                    })?;
+                let (offsets, _frame_bytes) = unit.slot_offsets()?;
+                Ok((
+                    identity.clone(),
+                    DeclaredUnitCall {
+                        function: module.declare_func_in_func(*target, func),
+                        origin: unit.continuation_origin(),
+                        call_site_origin: unit.continuation_origin(),
+                        header: unit.header(),
+                        slots: unit.slots().to_vec(),
+                        offsets,
+                    },
+                ))
+            })
+            .collect()
+    }
+
+    /// Claim ONE exact token, at its producer occurrence.
+    ///
+    /// ⛔ This replaces a bulk discharge that consumed every token owned by a
+    /// unit before any producer occurrence was reached. That was affine
+    /// bookkeeping at the wrong seat: it could not tell a call that happened
+    /// from one that did not, so it would have reported a clean ledger for a
+    /// program that emitted no continuation call at all.
+    ///
+    /// Rejects an **absent** token, a **duplicate** claim, and a **wrong
+    /// owner** -- and unlike the previous shape the owner check is reachable
+    /// here, because the caller supplies the unit currently being defined
+    /// rather than the token's own owner being used to select it.
+    ///
+    /// ⚠ An affine red is not self-explaining: confirm the identity still
+    /// carries all four fields including `recursive_position` before believing
+    /// a double-consumption, because a collided key reports it against the
+    /// right token.
+    pub(super) fn claim_exact(
+        &mut self,
+        identity: &ContinuationCallIdentity,
+        defining: PredeclaredFunctionId,
+    ) -> Result<FuncId, CraneliftBackendError> {
+        if identity.producer_owner() != defining {
+            return Err(backend_module(
+                "a continuation call token was claimed by a unit that does not own it".to_string(),
+            ));
+        }
+        let consumed = self.claims.get_mut(identity).ok_or_else(|| {
+            backend_module(
+                "a continuation call token was claimed that this ledger never planned".to_string(),
+            )
+        })?;
+        if let Some(previous) = consumed {
+            return Err(backend_module(format!(
+                "a continuation call token was claimed twice, first by {previous:?}; before \
+                 reading this as a real double-consumption, confirm the causal identity still \
+                 carries all four fields including recursive_position, because a collided key \
+                 reports this against the right token"
+            )));
+        }
+        *consumed = Some(defining);
+        self.resolved.get(identity).copied().ok_or_else(|| {
+            backend_module("a claimed causal token has no resolved target".to_string())
+        })
+    }
+
+    /// No claim may be left over once every unit has been defined -- and, since
+    /// `4b`, the exact planned population must equal the population that was
+    /// resolved, declared, and **emitted**.
+    ///
+    /// ⭐ The emitted set is the one that is not bookkeeping: an identity enters
+    /// it only after its emitted callee was decoded from the finished CLIF and
+    /// matched the planner-issued target. Set equality against it is therefore
+    /// "every planned continuation call became exactly one correct direct call,
+    /// and no other continuation call was emitted."
+    ///
+    /// ⛔ Equality is asserted between sets, not between counts. Two sets of the
+    /// same size can differ, and a length comparison here would pass for a
+    /// population that swapped one token for another.
+    pub(super) fn close(self) -> Result<(), CraneliftBackendError> {
+        for (name, set) in [
+            ("resolved", self.resolved.keys().cloned().collect::<BTreeSet<_>>()),
+            ("declared", self.declared.clone()),
+            ("emitted", self.emitted.clone()),
+        ] {
+            if set != self.planned {
+                let missing = self.planned.difference(&set).count();
+                let extra = set.difference(&self.planned).count();
+                return Err(backend_module(format!(
+                    "the {name} continuation call population does not equal the planned one: \
+                     {missing} planned tokens absent, {extra} unplanned tokens present"
+                )));
+            }
+        }
+        let leftover = self
+            .claims
+            .values()
+            .filter(|consumed| consumed.is_none())
+            .count();
+        if leftover != 0 {
+            return Err(backend_module(format!(
+                "{leftover} planned continuation call tokens were never claimed by the unit that \
+                 owns them"
+            )));
+        }
+        // Owner agreement, asserted on the RECORDED consumer.
+        //
+        // Honest note: selection above is already by the token's own owner, so
+        // this holds by construction today and cannot fire against the current
+        // code. It is kept because it is the property `D3` actually promises,
+        // and it is the check that would fire if selection were ever decoupled
+        // from ownership. A wrong owner under today's structure does not reach
+        // here -- it surfaces as a leftover claim above.
+        for (identity, consumed) in &self.claims {
+            if *consumed != Some(identity.producer_owner()) {
+                return Err(backend_module(
+                    "a continuation call token was claimed by a unit that does not own it"
+                        .to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 pub(super) fn define_unit_bodies<M: Module>(
     module: &mut M,
     compiler: &mut Lowering<'_>,
@@ -711,6 +1440,12 @@ pub(super) fn define_unit_bodies<M: Module>(
     let root = compiler.static_transition_plan.root_emittable_unit()?.function();
     // `D4`: projected once, declared afresh into each generated function below.
     let worker_targets = resolve_worker_targets(&compiler.static_transition_plan, bundle)?;
+    // `D3` — one affine claim per planned causal token, owner-checked against
+    // the exact unit being defined.
+    compiler.continuation_claims = Some(ContinuationClaimLedger::open(
+        &compiler.static_transition_plan,
+        bundle,
+    )?);
     let mut root_result = None;
     let emissions = compiler
         .static_transition_plan
@@ -739,6 +1474,7 @@ pub(super) fn define_unit_bodies<M: Module>(
             helpers,
             unit,
             id,
+            bundle,
             call_edges,
             &worker_targets,
             is_root,
@@ -752,6 +1488,13 @@ pub(super) fn define_unit_bodies<M: Module>(
             }
         }
     }
+    // Closure accounting after every unit is defined: no planned causal token
+    // may be left unclaimed.
+    compiler
+        .continuation_claims
+        .take()
+        .ok_or_else(|| backend_module("the continuation claim ledger went missing".to_string()))?
+        .close()?;
     root_result.ok_or_else(|| {
         backend_module("the emitted unit bundle did not define its recorded root".to_string())
     })
@@ -772,6 +1515,7 @@ fn define_unit_body<M: Module>(
     helpers: ArtifactHelpers<'_>,
     unit: OwnedUnitEmission,
     id: FuncId,
+    bundle: &UnitBundle,
     call_edges: &CallEdgeTargets,
     worker_targets: &WorkerTargets,
     is_root: bool,
@@ -832,6 +1576,26 @@ fn define_unit_body<M: Module>(
     let mut function_local =
         helpers.declare_in_func(module, &mut func, unit_trap_authority);
     let declared_calls = call_edges.declare_in_func(unit.function, module, &mut func)?;
+    // `D3` — this ordinary Function declares its OWN `FuncRef` for every causal
+    // token it owns, keyed by the four-field identity. Minted here, into this
+    // `Function`; never passed across functions.
+    function_local.continuation_calls = match compiler.continuation_claims.as_ref() {
+        Some(ledger) => ledger.declare_owned_in_func(
+            unit.function,
+            module,
+            &mut func,
+            &compiler.static_transition_plan,
+        )?,
+        None => BTreeMap::new(),
+    };
+    // `4b`: the DECLARED half of the four-set equality, recorded where the refs
+    // are actually minted.
+    if let Some(ledger) = compiler.continuation_claims.as_mut() {
+        ledger.record_declared(function_local.continuation_calls.keys().cloned())?;
+    }
+    // `D3`: the owner operand for the claim, supplied independently of any
+    // token -- this is the ordinary producer unit currently being defined.
+    compiler.defining_unit = Some(unit.function);
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
     // `D4`: this function's own worker refs, minted here and never copied.
@@ -1104,6 +1868,23 @@ fn define_unit_body<M: Module>(
         builder.finalize();
     }
     compiler.validate_materialized_dead_join_cfg(unit.function, &func)?;
+    // `4b` -- the emission-seam equality gate, on the FINISHED function and
+    // before it is defined into the module. The callee of every recorded causal
+    // emission is decoded out of this CLIF and compared with the planner-issued
+    // target; a disagreement rejects here rather than being emitted.
+    compiler.verify_emitted_continuation_calls(&func, bundle)?;
+    // `4b` closeout control: verify this function's emissions but never
+    // accumulate them, so whole-pass set equality has a population to miss.
+    #[cfg(test)]
+    let accumulate = CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
+        != ContinuationEmissionMutation::SuppressEmissionAccumulation;
+    #[cfg(not(test))]
+    let accumulate = true;
+    if let Some(ledger) = compiler.continuation_claims.as_mut() {
+        if accumulate {
+            ledger.record_emitted(compiler.function_local.continuation_emissions.keys().cloned())?;
+        }
+    }
     verify_cranelift_function(&func, module.isa())?;
     #[cfg(test)]
     scale_b_record_unit_body(&func);

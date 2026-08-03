@@ -16,12 +16,19 @@ mod static_transition;
 pub(super) use static_transition::plan_static_transition_graph_with_symbols;
 #[cfg(test)]
 pub(super) use static_transition::{
-    governed_nested_resource_bracket, plan_static_transition_graph, ScaleBPlanCensus,
+    contspec_nested_fixture, governed_nested_resource_bracket, plan_static_transition_graph,
+    ScaleBPlanCensus,
 };
 pub(super) use static_transition::{
     planned_partiality_trap, ConstructorIdentity, JoinPlanToken, JoinResultRepresentation,
     StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
     SynthesizedFixedConstructorRole,
+};
+// `RT-CONTSPEC-ACTIVATE` `D1` — the activation projection's facade route.
+// Namespace re-exports only: no wrapper, no derivation, no second authority.
+pub(super) use static_transition::{
+    ContinuationCallIdentity, ContinuationCallView, ContinuationInputView,
+    ContinuationOrdinaryEnvelopeRole, ContinuationSpecializationId, ContinuationUnitView,
 };
 #[cfg(test)]
 pub(super) use static_transition::with_last_io_error_role_omitted;
