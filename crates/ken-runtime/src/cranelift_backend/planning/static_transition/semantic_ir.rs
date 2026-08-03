@@ -1829,14 +1829,52 @@ impl SemanticPlane {
                         "declaration call edge targets a shared exit",
                     ));
                 };
-                if to_unit == from_unit {
+                // ⭐ `RT-DECL-CLOSURE-PORT` `D4` — the target is a **function
+                // unit head**, and there are exactly two classes of those.
+                //
+                // The ruled seed set is `entries` ∪ every `StaticBody` target.
+                // Before `D4` a declaration call could only reach the first
+                // class, because every declaration reference targeted its own
+                // scheduling entry. The selective retarget makes a closure-seed
+                // declaration's reference reach the second — its
+                // declaration-owned callable unit — so the law is widened to
+                // the full head set and no further.
+                //
+                // ⛔ It is NOT relaxed to "any node in a distinct unit": the
+                // seed check below is what keeps a call from landing in the
+                // middle of a unit, and it runs on both classes.
+                let scheduling_entry = entries.contains(&edge.to);
+                let callable_declaration = edges
+                    .iter()
+                    .any(|body| body.kind == EdgeKind::StaticBody && body.to == edge.to);
+                if !scheduling_entry && !callable_declaration {
                     return Err(planner_error(
-                        "declaration call edge does not cross a function unit boundary",
+                        "declaration call edge target is neither a scheduling entry nor a \
+                         static body unit head",
                     ));
                 }
-                if !entries.contains(&edge.to) {
+                if self.functions[to_unit.0 as usize].planned_node != edge.to {
                     return Err(planner_error(
-                        "declaration call edge target is not a scheduling entry",
+                        "declaration call edge target is not its function unit's seed",
+                    ));
+                }
+                // ⭐⭐ **`D4`: a call to the caller's OWN unit is lawful for the
+                // callable-declaration class and for that class only.**
+                //
+                // A closure-seed declaration that refers to itself does so from
+                // inside its own body — which, after the retarget, IS the unit
+                // being called. That edge is direct recursion, and it is the
+                // one case where a declaration call legitimately does not cross
+                // a unit boundary.
+                //
+                // ⛔ The ban is kept intact for the scheduling-entry class,
+                // where it still means what it always meant: a declaration
+                // whose reference resolves back into the unit it already sits
+                // in has no second unit to call, so the edge would be an
+                // intra-unit transfer misfiled as a call.
+                if to_unit == from_unit && !callable_declaration {
+                    return Err(planner_error(
+                        "declaration call edge does not cross a function unit boundary",
                     ));
                 }
                 let source = node_indexed_sources

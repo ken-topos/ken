@@ -1426,22 +1426,45 @@ impl<'a> Lowering<'a> {
                 let callee = self.lower_expr(builder, callee, producer_env)?;
                 match callee {
                     LoweringOperand::Specialized(Lowered::DeclarationClosure {
+                        reference,
                         symbol,
                         captures,
                         params,
                         body,
-                    }) => self.lower_recursive_declaration_call(
-                        builder,
-                        &symbol,
-                        &captures,
-                        &params,
-                        self.retained_body_occurrence(body)?,
-                        args,
-                        static_origin,
-                        producer_env,
-                        Some(eliminators),
-                        join_plan,
-                    ),
+                    }) => {
+                        // `RT-DECL-CLOSURE-PORT` `D4`, consumer 2 of 3.
+                        if self.body_emission_authority
+                            == BodyEmissionAuthority::FunctionizedUnits
+                        {
+                            let args = args
+                                .iter()
+                                .enumerate()
+                                .map(|(position, argument)| {
+                                    let argument = self.child_occurrence(
+                                        static_origin,
+                                        1 + position,
+                                        argument,
+                                    )?;
+                                    self.lower_expr(builder, argument, producer_env)
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
+                            return self.call_declaration_closure_unit(
+                                builder, reference, &symbol, &params, captures, args,
+                            );
+                        }
+                        self.lower_recursive_declaration_call(
+                            builder,
+                            &symbol,
+                            &captures,
+                            &params,
+                            self.retained_body_occurrence(body)?,
+                            args,
+                            static_origin,
+                            producer_env,
+                            Some(eliminators),
+                            join_plan,
+                        )
+                    }
                     LoweringOperand::Specialized(Lowered::Closure {
                         captures,
                         params,
@@ -5311,11 +5334,22 @@ impl<'a> Lowering<'a> {
                 }))
             }
             Lowered::DeclarationClosure {
+                reference,
                 symbol,
                 captures,
                 params,
                 body,
             } => {
+                // `RT-DECL-CLOSURE-PORT` `D4`, consumer 3 of 3 -- the
+                // source-machine route. Its arguments are already operands, so
+                // it hands them to the shared ordering directly; the arity
+                // check lives there for every consumer rather than once here.
+                if self.body_emission_authority == BodyEmissionAuthority::FunctionizedUnits {
+                    let called = self.call_declaration_closure_unit(
+                        builder, reference, &symbol, &params, captures, args,
+                    )?;
+                    return Ok(SourceCallOutcome::Complete(called));
+                }
                 if params.len() != args.len() {
                     return Err(unsupported(
                         "Call",
@@ -8387,22 +8421,46 @@ impl<'a> Lowering<'a> {
                 let lowered_callee = self.lower_expr(builder, callee, env)?;
                 match lowered_callee {
                     LoweringOperand::Specialized(Lowered::DeclarationClosure {
+                        reference,
                         symbol,
                         captures,
                         params,
                         body,
-                    }) => self.lower_recursive_declaration_call(
-                        builder,
-                        &symbol,
-                        &captures,
-                        &params,
-                        self.retained_body_occurrence(body)?,
-                        args,
-                        static_origin,
-                        env,
-                        None,
-                        join_plan,
-                    ),
+                    }) => {
+                        // `RT-DECL-CLOSURE-PORT` `D4`, consumer 1 of 3 -- the
+                        // ordinary lowering route.
+                        if self.body_emission_authority
+                            == BodyEmissionAuthority::FunctionizedUnits
+                        {
+                            let args = args
+                                .iter()
+                                .enumerate()
+                                .map(|(position, argument)| {
+                                    let argument = self.child_occurrence(
+                                        static_origin,
+                                        1 + position,
+                                        argument,
+                                    )?;
+                                    self.lower_expr(builder, argument, env)
+                                })
+                                .collect::<Result<Vec<_>, _>>()?;
+                            return self.call_declaration_closure_unit(
+                                builder, reference, &symbol, &params, captures, args,
+                            );
+                        }
+                        self.lower_recursive_declaration_call(
+                            builder,
+                            &symbol,
+                            &captures,
+                            &params,
+                            self.retained_body_occurrence(body)?,
+                            args,
+                            static_origin,
+                            env,
+                            None,
+                            join_plan,
+                        )
+                    }
                     LoweringOperand::Specialized(Lowered::Closure {
                         captures,
                         params,
@@ -10027,26 +10085,106 @@ impl<'a> Lowering<'a> {
             expr: body,
             static_origin: declaration_origin,
         };
-        if let RuntimeExpr::Closure {
-            captures,
-            params,
-            body,
-        } = body
-        {
-            let body = self.child_occurrence(declaration_origin, 0, body)?;
-            let captures = captures
-                .iter()
-                .map(|capture| self.lower_seed_capture(builder, capture))
-                .collect::<Result<Vec<_>, _>>()?;
+        // ⭐⭐ **`RT-DECL-CLOSURE-PORT` `D4` — BOTH closure seed forms retain a
+        // compiler-only callable binding, and evaluating the naked
+        // `DeclarationRef` never calls the unit.**
+        //
+        // ⚠ Before `D4` only the `Closure` arm produced a binding here. A
+        // `LexicalClosure`-bodied declaration fell through to the
+        // `FunctionizedUnits` arm below and was called with `&[]` — an empty
+        // input slice against a unit that declares this declaration's
+        // parameters and captures. That call was unreachable in production
+        // (the `TransparentDeclarationClosure` residual still forces
+        // `RecursiveDescent`) but it was wrong-arity by construction, and
+        // "unreachable today" is not the property this needs.
+        //
+        // ⚠ The two arms differ in their capture MATERIAL and only there.
+        // `Closure` captures are seed symbols resolved out of seed material;
+        // `LexicalClosure` captures are expressions of the declaration's own
+        // body. That is the `Seed` / `Lexical` split `D3` established at the
+        // ABI boundary, reaching the same distinction one layer up.
+        let seed_binding = match body {
+            RuntimeExpr::Closure {
+                captures,
+                params,
+                body,
+            } => {
+                let body = self.child_occurrence(declaration_origin, 0, body)?;
+                let captures = captures
+                    .iter()
+                    .map(|capture| self.lower_seed_capture(builder, capture))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Some((captures, params.clone(), body.static_origin))
+            }
+            RuntimeExpr::LexicalClosure {
+                captures,
+                params,
+                body,
+            } => {
+                // ⚠ HAZARD (`D3`): the planner plans the body FIRST and the
+                // capture sequence after it, so body is child `0` and capture
+                // *i* is child `1 + i` — the declaration order
+                // (`captures, params, body`) is NOT the child order.
+                let body = self.child_occurrence(declaration_origin, 0, body)?;
+                let captures = captures
+                    .iter()
+                    .enumerate()
+                    .map(|(position, capture)| {
+                        let capture =
+                            self.child_occurrence(declaration_origin, 1 + position, capture)?;
+                        // ⛔ The EMPTY environment, not the reference site's.
+                        // A declaration body is closed — that is why the
+                        // recursive-descent arm below lowers it with `&[]` too
+                        // — so a capture expression of this closure cannot see,
+                        // and must not be able to see, whatever bindings happen
+                        // to be live where the declaration was referenced.
+                        self.lower_expr(builder, capture, &[])
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Some((
+                    specialized_operands_at(&captures, "a declaration closure capture")?,
+                    params.clone(),
+                    body.static_origin,
+                ))
+            }
+            _ => None,
+        };
+        if let Some((captures, params, body)) = seed_binding {
             return Ok(LoweringOperand::Specialized(Lowered::DeclarationClosure {
+                reference: reference_origin,
                 symbol: symbol.clone(),
                 captures,
-                params: params.clone(),
-                body: body.static_origin,
+                params,
+                body,
             }));
         }
         if self.body_emission_authority == BodyEmissionAuthority::FunctionizedUnits {
-            return self.call_declared_declaration_unit(builder, reference_origin);
+            // ⛔⛔ **The empty-input call, and the guard that keeps it lawful.**
+            //
+            // Reaching here means this declaration's body is not a closure
+            // seed, so its scheduling entry IS its unit and the call genuinely
+            // takes no inputs. The planner decided the same thing
+            // independently — from the declaration's *planned occurrence*, not
+            // from the `RuntimeExpr` arm matched above — and recorded it. ⇒ The
+            // two derivations are cross-checked here, so a callable target can
+            // only reach this `&[]` call if the planner and the lowering
+            // disagree about what the declaration is, which fails closed rather
+            // than emitting a wrong-arity call.
+            let class = self
+                .static_transition_plan
+                .declaration_call_target_class(reference_origin)
+                .ok_or_else(|| {
+                    backend(BackendFailure::PlannerInvariant(format!(
+                        "declaration reference to {symbol} has no planned call target class"
+                    )))
+                })?;
+            if class != DeclarationCallTargetClass::SchedulingEntry {
+                return Err(backend(BackendFailure::PlannerInvariant(format!(
+                    "declaration {symbol} lowers as a zero-input thunk but its planned call \
+                     targets a declaration-owned callable unit"
+                ))));
+            }
+            return self.call_declared_declaration_unit(builder, reference_origin, &[]);
         }
         if self.declaration_stack.contains(symbol) {
             return Err(unsupported(
@@ -10058,6 +10196,84 @@ impl<'a> Lowering<'a> {
         let result = self.lower_expr(builder, declaration_body, &[]);
         self.declaration_stack.pop();
         result
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D4` — the complete call to a declaration-owned
+    /// callable unit, and the SOLE place its input order is decided.**
+    ///
+    /// Every `Call` consumer that can reach a [`Lowered::DeclarationClosure`]
+    /// routes through here, because the input slice is the one thing they must
+    /// not each remember for themselves: the callee descriptor declares its
+    /// `Parameter` slots and then its `Capture` slots, so
+    ///
+    /// ```text
+    /// inputs = actual arguments in PARAMETER order ++ retained captures in D3 order
+    /// ```
+    ///
+    /// is a property of the ABI, not of any one call site. ⛔ A consumer that
+    /// assembled its own slice would be a second ordering authority, and a
+    /// swapped one still type-checks — every input is a word.
+    ///
+    /// ⚠ `args` arrive already lowered because the three consumers lower them
+    /// differently (ordinary child occurrences, producer-env child occurrences,
+    /// source-machine operands). What they must NOT differ on is what happens
+    /// afterwards.
+    fn call_declaration_closure_unit(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        reference: StaticOriginId,
+        symbol: &RuntimeSymbol,
+        params: &[String],
+        captures: Vec<Lowered>,
+        args: Vec<LoweringOperand>,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        // ⛔⛔ **The pending checked-recursion marker is CONSUMED here, and a
+        // present one is refused.**
+        //
+        // ⚠ Every consumer this route diverts from reached
+        // `lower_recursive_declaration_call`, which consumes the marker on
+        // entry. A branch that returns before it would leave the marker set —
+        // to be picked up by whatever call came next, which
+        // `consume_checked_recursive_invocation_call` would then report as a
+        // marker "transplanted to another callee". That is a silent
+        // mis-attribution, not a missing feature. ⇒ Taking it here is not
+        // optional bookkeeping; it is what keeps the diversion from corrupting
+        // an unrelated call site.
+        //
+        // ⛔ And a marker that IS present is refused rather than dropped. A
+        // checked same-SCC invocation is a soundness obligation carried by the
+        // oriented plan, and a direct call to a declaration-owned unit has no
+        // mechanism to honour it. Discharging it by ignoring it would be a
+        // silent accept of exactly the kind the conservative-guard rule
+        // forbids.
+        if self
+            .consume_checked_recursive_invocation_call(symbol)?
+            .is_some()
+        {
+            return Err(unsupported(
+                "Call",
+                format!(
+                    "checked recursive invocation of {symbol} cannot cross a \
+                     declaration-owned unit call"
+                ),
+            ));
+        }
+        // The declared arity, checked against the call before anything is
+        // emitted. The descriptor rejects a mismatched slice too, but it can
+        // only say "the frame is missing an input"; this says which call.
+        if params.len() != args.len() {
+            return Err(unsupported(
+                "Call",
+                format!(
+                    "closure expects {} args but call provides {}",
+                    params.len(),
+                    args.len()
+                ),
+            ));
+        }
+        let mut inputs = args;
+        inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+        self.call_declared_declaration_unit(builder, reference, &inputs)
     }
 
     /// `static_origin` is the origin of the **match occurrence** whose cases

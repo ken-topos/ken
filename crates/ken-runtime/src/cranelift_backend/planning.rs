@@ -20,8 +20,8 @@ pub(super) use static_transition::{
     ScaleBPlanCensus,
 };
 pub(super) use static_transition::{
-    planned_partiality_trap, ConstructorIdentity, JoinPlanToken, JoinResultRepresentation,
-    StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
+    planned_partiality_trap, ConstructorIdentity, DeclarationCallTargetClass, JoinPlanToken,
+    JoinResultRepresentation, StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
     SynthesizedFixedConstructorRole,
 };
 // `RT-CONTSPEC-ACTIVATE` `D1` — the activation projection's facade route.
