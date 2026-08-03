@@ -986,12 +986,41 @@ enum TrapCallerProtocolMutation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ContinuationEmissionMutation {
     Exact,
-    /// `D2`/`D4` target seam: resolve the exact continuation target, then hand
-    /// the definition a **distinct same-shaped** one -- same declared arity
-    /// and same capture count, per `RT-WORKER-BIND`, and by nothing else.
-    /// Never by origin inequality or ABI layout, and never a fall back to
-    /// exact.
-    RedirectSameShapedTarget,
+    /// `D4` emission seam: substitute **only the function-local emitted
+    /// `FuncRef`** with another callable already declared in this same
+    /// function, retaining the continuation's header, slots, offsets, inputs,
+    /// identity, and owner.
+    ///
+    /// ⭐ **This replaces the same-shaped two-target redirect, which was
+    /// unreachable here and was therefore never a control at all.** That one
+    /// searched `continuation_calls` for a *distinct same-shaped* entry; this
+    /// generated function holds exactly one entry, so it refused with "found no
+    /// distinct same-shaped call target" **before reaching the call seam**. A
+    /// pre-call refusal proves a missing fixture precondition, not emitted-
+    /// target equality. Architect `evt_6bf2mmehjzy3k`.
+    ///
+    /// ⛔ Substituting the ref and nothing else is what isolates the `ACTIVATE`
+    /// property: the call is still emitted, on the same ABI, with the same
+    /// inputs -- only the callee identity moves, so the finished-CLIF oracle
+    /// must reject for exactly one reason.
+    ///
+    /// ⛔ No fall back to exact. If no other callable is declared in this
+    /// function the control fails loudly, because a control that silently
+    /// becomes the identity is vacuous.
+    ///
+    /// The **two-target same-shaped** redirect and its observable behavioural
+    /// consequence live wholly in `RT-CONTSPEC-WITNESS` `D7`/`AC-9`, whose
+    /// integrated fixture must supply two distinct same-shaped targets in one
+    /// lawful callable population.
+    SubstituteEmittedFuncRef,
+    /// `4b` closure seam: emit the direct call but do not record it against its
+    /// causal token, so the finished-CLIF sweep must notice an emission the
+    /// records do not account for.
+    SuppressEmissionRecord,
+    /// `4b` closeout seam: verify each function's emissions but never
+    /// accumulate them, so the whole-pass set equality must notice the missing
+    /// population.
+    SuppressEmissionAccumulation,
     /// `D3` affine seam: claim the same causal token twice.
     ClaimTokenTwice,
     /// `D3` owner seam: claim under a producer owner that does not own the

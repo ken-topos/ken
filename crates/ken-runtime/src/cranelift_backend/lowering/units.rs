@@ -1873,8 +1873,17 @@ fn define_unit_body<M: Module>(
     // emission is decoded out of this CLIF and compared with the planner-issued
     // target; a disagreement rejects here rather than being emitted.
     compiler.verify_emitted_continuation_calls(&func, bundle)?;
+    // `4b` closeout control: verify this function's emissions but never
+    // accumulate them, so whole-pass set equality has a population to miss.
+    #[cfg(test)]
+    let accumulate = CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
+        != ContinuationEmissionMutation::SuppressEmissionAccumulation;
+    #[cfg(not(test))]
+    let accumulate = true;
     if let Some(ledger) = compiler.continuation_claims.as_mut() {
-        ledger.record_emitted(compiler.function_local.continuation_emissions.keys().cloned())?;
+        if accumulate {
+            ledger.record_emitted(compiler.function_local.continuation_emissions.keys().cloned())?;
+        }
     }
     verify_cranelift_function(&func, module.isa())?;
     #[cfg(test)]

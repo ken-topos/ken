@@ -5586,31 +5586,42 @@ impl<'a> Lowering<'a> {
                     "the claimed continuation target was not declared into this function",
                 )
             })?;
-        // `D4` control, on the real causal call seam: hand the call a DISTINCT
-        // same-shaped target, where same-shaped is declared arity plus capture
-        // count and nothing else. No origin inequality, no ABI layout, and no
-        // fall back to exact -- a fallback would make this control vacuous.
+        // `D4` control, on the real causal call seam: substitute ONLY the
+        // emitted `FuncRef` with another callable already declared into this
+        // same function, on the same unit-call ABI.
+        //
+        // ⭐ Header, slots, offsets, inputs, identity and owner are all
+        // retained, so the call is still emitted and the ONLY thing that moves
+        // is the callee identity -- which is what makes the finished-CLIF
+        // oracle's rejection attributable to one cause.
+        //
+        // ⛔ No fall back to exact, and no widening: if this function declares
+        // no other unit-call target the control rejects loudly rather than
+        // silently becoming the identity.
         #[cfg(test)]
         let target = if CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
-            == ContinuationEmissionMutation::RedirectSameShapedTarget
+            == ContinuationEmissionMutation::SubstituteEmittedFuncRef
         {
-            let shape = (exact_target.header.parameters, exact_target.header.captures);
-            self.function_local
-                .continuation_calls
-                .iter()
-                .find(|(other, call)| {
-                    other.target() != identity.target()
-                        && (call.header.parameters, call.header.captures) == shape
-                })
-                .map(|(_, call)| call.clone())
+            let substitute = self
+                .function_local
+                .worker_calls
+                .values()
+                .chain(self.function_local.unit_calls.values())
+                .chain(self.function_local.declaration_calls.values())
+                .map(|call| call.function)
+                .find(|function| *function != exact_target.function)
                 .ok_or_else(|| {
                     unsupported(
                         "ContinuationSpecialization",
-                        "the D4 redirect found no DISTINCT same-shaped call target by declared \
-                         arity and capture count; that is a measured fact about this fixture's \
-                         population, not a licence to widen the predicate",
+                        "the D4 emitted-ref substitution found no other unit-call target declared \
+                         into this function; that is a fact about this function's declarations, \
+                         not a licence to import a FuncRef from another function",
                     )
-                })?
+                })?;
+            units::DeclaredUnitCall {
+                function: substitute,
+                ..exact_target
+            }
         } else {
             exact_target
         };
@@ -5627,12 +5638,30 @@ impl<'a> Lowering<'a> {
         let claimed_owner = if mutation == ContinuationEmissionMutation::ClaimUnderWrongOwner {
             // An actually wrong current owner: any planned owner that is not
             // the unit being defined.
+            // ⛔ Drawn from the PLANNED UNIT population, not from the causal
+            // calls' own owners, and with NO fall back to `defining`.
+            //
+            // ⭐ It used to read `continuation_calls().find(owner != defining)
+            // .unwrap_or(defining)`. In this seam's real population there is
+            // exactly one causal token and its owner IS the unit being defined,
+            // so `find` returned `None` and the mutation silently became the
+            // IDENTITY -- a committed control that could not fire, green since
+            // `457b9fc6` for the same structural reason the same-shaped redirect
+            // could not reach the call seam. Measured, not reasoned: the control
+            // passed until this fallback was removed.
             self.static_transition_plan
-                .continuation_calls()?
+                .emittable_units()?
                 .iter()
-                .map(|call| call.producer_owner())
+                .map(|unit| unit.function())
                 .find(|owner| *owner != defining)
-                .unwrap_or(defining)
+                .ok_or_else(|| {
+                    unsupported(
+                        "ContinuationSpecialization",
+                        "the D4 wrong-owner control found no planned unit other than the one being \
+                         defined; a control with no wrong owner to present must fail loudly rather \
+                         than quietly claim under the right one",
+                    )
+                })?
         } else {
             defining
         };
@@ -5712,11 +5741,19 @@ impl<'a> Lowering<'a> {
         // ⛔ A second record for one token is a rejection: emission is once per
         // causal identity, and the claim ledger's affinity does not entail it --
         // that ledger would be satisfied by a claim with no call at all.
-        if self
-            .function_local
-            .continuation_emissions
-            .insert(identity.clone(), call)
-            .is_some()
+        // `4b` closure control: emit the call and skip the record, so the
+        // finished-CLIF sweep has an emission the records cannot account for.
+        #[cfg(test)]
+        let record = CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
+            != ContinuationEmissionMutation::SuppressEmissionRecord;
+        #[cfg(not(test))]
+        let record = true;
+        if record
+            && self
+                .function_local
+                .continuation_emissions
+                .insert(identity.clone(), call)
+                .is_some()
         {
             return Err(unsupported(
                 "ContinuationSpecialization",
