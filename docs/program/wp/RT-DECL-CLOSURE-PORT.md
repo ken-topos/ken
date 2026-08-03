@@ -136,6 +136,28 @@ to widen.
   enumeration reporting every residual variant present on a given program, not
   the short-circuited first. Run it on the fixture and record the complete set.
   ⛔ Do not proceed to `D2` until `D1`'s result is posted.
+
+  > **Fixture topology — Steward ruling `evt_7cpaj2p98j6vq`, 2026-08-03.**
+  > `AC-1` records that **`main` alone passes the row** (`evt_5mtkdft1nxmwp`),
+  > which is why two deltas were required. ⇒ **An enumeration on bare `main` is a
+  > false clear and is not the reading.** Measure each governed delta —
+  > `ad7298fb` and `85dcee25` — in a **detached scratch worktree**, exactly as
+  > the Architect grounded this frame. **That is not a merge, rebase, or
+  > cherry-pick**; the banned-scope clause governs objects entering the candidate
+  > lineage, and `85dcee25` being preserved makes it unmergeable, not unreadable.
+  > Carry the committed instrument in rather than rebuilding it per tree; label
+  > each result by its delta and **never union the two sets**. ⛔ If a delta will
+  > not apply or build, record it **unmeasured** with the reason and route it —
+  > a conflict resolved so a row passes measures the resolver.
+  >
+  > ⛔⛔ **A control proving "all N variants are reachable" is BLIND to
+  > short-circuiting and is not a weaker version of the exact-set control.**
+  > Measured 2026-08-03 on the rebuilt instrument (`38b05ac9`): under the
+  > short-circuit mutation the exact-set control went red while the
+  > all-five-reachable control **stayed green**, because each witness fires
+  > exactly one variant, so short-circuiting cannot change its answer. ⇒ **A
+  > later node that re-proves only reachability has re-proved nothing about
+  > short-circuiting.** The exact-set assertion is the load-bearing one.
 - **`D2`** — **Planner-owned callable declaration units.** Transparent
   closure-seed declarations become separately owned callable units rather than
   bodies recursively lowered into the generated root.
@@ -146,6 +168,38 @@ to widen.
 - **`D5`** — **Complete owner/phase validation**, in place **before**
   `TransparentDeclarationClosure` is removed from the retained residual.
 - **`D6`** — Remove the residual variant, and only then re-run `AC-1`.
+
+> ### ⭐⭐ `D7` NOW CARRIES THE EXACT-RECORD RE-DERIVATION, AND IT GATES ANOTHER NODE
+>
+> **Architect ruling `evt_40ra70t92mjd2`, 2026-08-03, on `RT-CONTSPEC-LEDGER`
+> hard stop 2.** That seam needed a mapping from planner facts to the four
+> boundary-use variants, found none, and stopped. The ruling sustained the stop:
+> **no current lawful mapping authority exists**, and the re-derivation this
+> section already names is where it must come from. It is **not** a seventh
+> disposition, a carrier lane, or an independent node.
+>
+> **`D7` must materialize one planner-issued record for every exact boundary-use
+> event** after the generated-unit / specialization / continuation fixed point
+> closes. Source-backed and synthesized events inhabit the **same closed set**.
+> Each record binds:
+>
+> 1. exact producer and consumer owners and phases;
+> 2. source occurrence plus slot/path, or an earned synthesized-edge identity;
+> 3. the exact downstream semantic operation and the consumer-derived `Need`;
+> 4. the selected disposition and its guaranteed `Avail`; and
+> 5. the lifetime/use fact that distinguishes **forwarding** from **retention**.
+>
+> **Closure is proved by exact planned-set membership and a pre-emission
+> planned/consumed bijection.** Missing, duplicate, ambiguous, wrong-owner,
+> wrong-phase, wrong-slot/path, and unconsumed records all **fail closed**.
+> ⛔ **Reached traces, fixture names, source kind alone, and the historical
+> census are evidence only — never selectors.**
+>
+> ⇒ **`RT-CONTSPEC-LEDGER` is now `depends_on` this node** and stays held after
+> its accepted `D1` until this authority lands. Its four fields are a
+> **projection** of the record above. ⚠ A disposition need not determine a unique
+> tuple; if the binary enums cannot total-project without coercion, that is
+> LEDGER's stop to raise, not a reason to widen anything here.
 
 ### ⛔⛔ `D7` — ITS CLAIM TO BE A **CLOSED** MATRIX IS WITHDRAWN (2026-07-29)
 
