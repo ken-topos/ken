@@ -5,7 +5,57 @@ Node: `docs/program/issues/RT-CONTSPEC-ACTIVATE.md`. Campaign:
 Authority: Architect ownership/sizing ruling `evt_1yymw1gdszpbs`, outcome (c),
 seam 2. **Recut 2026-08-02** on the Architect's interface ruling
 `evt_3xj4eqwqmn46n` as corrected by `evt_66t42tapvdbsj`, and the Steward's
-baseline measurement `evt_2zhx69f2fw07w`.
+baseline measurement `evt_2zhx69f2fw07w`. **Recut again 2026-08-03** on the
+Architect's D4 frame/interface ruling `evt_adarqxt4hhsk`.
+
+> ## RECUT 2026-08-03 — D4 IS AN INTERFACE BOUNDARY. READ THIS FIRST.
+>
+> **This banner outranks every line below it, including the 2026-08-02 banner.**
+>
+> **What happened.** D3 landed complete and green at `bbf94045` (non-vacuous
+> `total=1 consumed=1`, exact source-`Construct` claim). D4's controls were then
+> correctly seated on the real seam in `claim_and_call_continuation` at
+> `457b9fc6`. Both are accepted. D4 then stopped, because **no fixture in this
+> population both preserves the planned continuation population and yields an
+> observable answer**, and item 4 of D4 requires an answer that changes under
+> target redirection.
+>
+> **The frame premise that failed is mine.** This frame assumed D4 could finish
+> as fixture work while every planner-facing activation projection stayed frozen.
+> The Architect reproduced the boundary on exact `457b9fc6` in a detached
+> worktree and falsified that assumption. Lowering resolves the **callable
+> source-body occurrence** (the outer `ComputationalMatch`, probe origin 9) and
+> looks up `function_local.unit_calls[body_origin]`; the projection holds only
+> the **emittable scheduling entry** (origin 23, that match's scrutinee
+> `Construct`). There is no exact projected binding between the two, so the
+> lawful observer shape refuses at `lowering/core.rs:5708` with *"no declared
+> static-body target for worker body origin ... in this function"*.
+>
+> **The boundary is inside the surface this frame already exempted.** The missing
+> projection is fed by `plan.emittable_call_edges()` (`lowering/units.rs:401`),
+> which lives in `planning/static_transition.rs` — open under **exemption 1**,
+> activation projection only. **No new surface is unfrozen and AC-4 is unchanged.**
+> What was wrong was `D1`'s *enumeration* of what the projection carries, not the
+> exemption's boundary. `D1` gains a fifth item below; nothing else moves.
+>
+> **The two fixture-only escapes are closed — do not re-explore them.** The
+> Architect tested both:
+>
+> 1. A bare closure is not an observable ground result. That is the reported
+>    refusal, not a spelling problem.
+> 2. Stripping the closure and making its `ComputationalMatch` the root also
+>    preserves 2/2, but deletes the required parameter/capture environment and
+>    fails *"callee frame is missing a declared input"*.
+>
+> Changing the fixture to a 0/0 population is vacuous and is banned scope, not an
+> option. So are reconstructing the mapping in lowering, nearest-origin search,
+> fabricated aliases, predicate widening, and any planner/ABI/population edit.
+>
+> **Preserved and non-candidate:** `457b9fc6227d9481ddf1827e38f971bf7e12d339`.
+> The control placement in `claim_and_call_continuation` is accepted scaffolding
+> and is retained; **D4 is not discharged**. Runtime does not resume repair on
+> `457b9fc6` and does not route QA on it. Work resumes at the new `D1b`
+> checkpoint below.
 
 > ## RECUT AND UNFROZEN 2026-08-02 — READ THIS BEFORE ANY LINE BELOW IT
 >
@@ -174,6 +224,9 @@ Measured at `origin/main = ab6b89fc`.
 | the emitter projections | `emittable_units()` `:4788`, `emittable_call_edges()` `:4743` |
 | lowering consumption site | `crates/ken-runtime/src/cranelift_backend/lowering/units.rs` |
 | the accepted helper | `CheckedFrameBranchScope`, landed by seam 1; it changes no emission authority |
+| the `D1b` refusal site (2026-08-03) | `lowering/core.rs:5708` — `function_local.unit_calls.get(&body_origin)`, refusing with *"no declared static-body target for worker body origin ... in this function"* |
+| what feeds that map | `function_local.unit_calls = declared_calls.static_bodies` (`lowering/units.rs:835`), from `resolve_call_edges` → `plan.emittable_call_edges()` (`lowering/units.rs:401`) |
+| the two origins that must bind | callable source-body occurrence = the outer `ComputationalMatch` (probe origin 9); emittable scheduling entry = that match's scrutinee `Construct` (probe origin 23). Architect-measured on exact `457b9fc6` |
 | baseline suite | `scripts/ken-cargo test -p ken-runtime --lib` |
 
 Reproduce, read-only:
@@ -286,7 +339,11 @@ in scope and is not a finding.
     `ContinuationSpecializationId`, its immutable planner key facts, and its
     already-validated ABI descriptor, slots, and input authority; and
   - each already-validated continuation call token with the full producer tuple
-    and exact target.
+    and exact target; and
+  - **(added by the 2026-08-03 recut)** for a computational-match-bodied
+    closure, the exact binding from its **callable source-body occurrence** to
+    that body's **emittable scheduling-entry / unit target**. Planner-issued,
+    read-only, exact. This is the binding whose absence stops `D4`.
 
   It **revalidates plan/ABI agreement and fails closed.** Lowering may neither
   enumerate source syntax to reconstruct the population nor invent an id, owner,
@@ -302,12 +359,23 @@ in scope and is not a finding.
   Architect ruled the split a projective join (`evt_5s76mbbmrjw`). D1 landed as
   `6ed31759`.
 
-  **What D1 must expose is unchanged, and is stated positively:** the immutable
-  specialization key facts, the validated descriptor/slots/input authority, and
-  the call's full producer tuple. Without them the current source cannot
+  **What D1 must expose, stated positively:** the immutable specialization key
+  facts, the validated descriptor/slots/input authority, the call's full producer
+  tuple, and — as of the 2026-08-03 recut — the source-body-occurrence to
+  scheduling-entry binding. Without the first three the current source cannot
   define the continuation body, locate the exact producer alternative, compare
-  the actual defining owner, or consume the exact claim — and every one of those
-  is `D3`'s content. A checkpoint that declares symbols has not discharged this.
+  the actual defining owner, or consume the exact claim; every one of those is
+  `D3`'s content, and `D3` is now discharged at `bbf94045`. Without the fourth,
+  no lawful fixture can observe the seam at all, which is `D4`'s content.
+  A checkpoint that declares symbols has not discharged this.
+
+  **The binding is a separate projection, not a widened filter.** `AC-1` pins
+  emittable continuation units at 2 and emittable continuation calls at 2.
+  `emittable_call_edges` is what produces that emittable population, so
+  **widening its filter to carry the body-occurrence binding would move an
+  `AC-1` count and fail the AC outright.** Expose the binding beside that
+  projection, reading facts the planner has already validated. This constraint
+  is derived from the ratified `AC-1`, not a fresh preference.
 
 - **D2 — the lowering consumption.** `lowering/units.rs` consumes those views to
   forward-declare one continuation target per planned specialization and resolve
@@ -384,6 +452,23 @@ in scope and is not a finding.
      origin inequality or ABI layout;
   5. affine rejection when the same token is consumed twice, and rejection under
      the wrong producer owner.
+
+  **The lawful observer shape is now named (2026-08-03 recut), so do not go
+  looking for another.** Bind the existing `contspec_nested_fixture` and invoke
+  it with `Unit`. That preserves the accepted population exactly — 2 continuation
+  units, 2 call tokens — and yields an observable answer through the invocation.
+  It does **not** compile until `D1b` lands; that refusal is the boundary, not a
+  fixture defect. Once `D1b` is in, D4 keeps this 2/2 fixture, invokes it,
+  observes the answer, and runs the three real-seam controls already committed at
+  `457b9fc6`.
+
+  **A control that passes without running is the defect this WP has been blocked
+  for twice.** The implementer's `units=0, calls=0` fixture was correctly
+  measured and correctly not committed: its three green mutations proved nothing
+  had run, not that a control had failed. Do not commit a control whose green is
+  unaccompanied by evidence that the seam was reached — state the claim count the
+  way `D3` did at `bbf94045` (`claim_exact` fires; `close` reports
+  `total=1 consumed=1`).
 
 - **D5 — the before/after population disposition.** The four counts above on
   this seam's own base and on the candidate, plus a single aggregate line
@@ -495,6 +580,22 @@ deliverables were complete:
    Declaring symbols alone is not this checkpoint.
 3. `D3` affine and owner controls, `D4` fixture, their mutation proofs, `D5`.
 
+**Checkpoint state as of the 2026-08-03 recut — 1, 2 and 3's `D3` half are
+landed.** `D1` complete at `6ed31759`. `D2` complete. `D3` complete and green at
+`bbf94045` on the corrected source-`Construct` seat. The remaining checkpoints
+are:
+
+4. **`D1b` — the source-body-occurrence binding.** The fifth `D1` projection
+   item, exposed beside `emittable_call_edges` without moving an `AC-1` count.
+   Discharged when `contspec_nested_fixture`, bound and invoked with `Unit`,
+   **compiles** at 2/2 — the refusal at `lowering/core.rs:5708` is gone and no
+   planned or emittable count moved. Post the four `AC-1` counts with the SHA.
+5. **`D4` on the restored fixture** — invoke it, observe the answer, then run the
+   three controls already committed at `457b9fc6` plus their mutation proofs.
+   A green mutation is still a hard stop, but check first whether the seam was
+   reached: that discrimination is what `457b9fc6` got right.
+6. **`D5`** — the four counts on base and candidate, plus the aggregate line.
+
 ⛔ **Do not accept a checkpoint against its label. Accept it against the
 deliverable's text.** Checkpoints 1 and 2 were both accepted on a reading of
 their headline rather than their content, and hard stop 2 is what surfaced it
@@ -528,7 +629,18 @@ Stop and route to the Steward, do not improvise, if any of these hold:
    interface fact; route it, do not repair it.
 4. **A planned count moves** (`AC-1`). The projection changed the plan and the
    boundary is wrong.
-5. **A `D4` control stays green under its own mutation** (`AC-2`, `AC-3`). The
-   control is not measuring what it claims and the activation is unproved.
+5. **A `D4` control stays green under its own mutation** (`AC-2`, `AC-3`).
+   **Corrected 2026-08-03: measure the cause before filing this.** A green
+   mutation has two distinct causes — the control failed to bite, or the fixture
+   never reached the seam. They are different findings and only the first is this
+   hard stop. Report the planned `units`/`calls` for the fixture alongside the
+   mutation result; a `0/0` population means file the *fixture* fact instead.
+   As written this stop would have forced a wrong filing at `457b9fc6`; the
+   implementer discriminated correctly and the frame was wrong.
 6. **A row outside the `D4` fixture changes status in either direction**
    (`AC-5`).
+7. **`D1b` cannot expose the source-body-occurrence binding without moving an
+   `AC-1` count**, or cannot expose it without the planner deciding something
+   new. Either is an interface fact above this seam's authority: report the exact
+   fact needed and stop. Do not widen `emittable_call_edges`, reconstruct the
+   mapping in lowering, search by nearest origin, or fabricate an alias.

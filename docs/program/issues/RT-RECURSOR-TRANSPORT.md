@@ -1,7 +1,7 @@
 ---
 id: RT-RECURSOR-TRANSPORT
 title: "Active-recursor transport — an active computational recursor's invocation-local scope/return-hole state cannot cross a functionized unit boundary, retaining two residual classes"
-status: active
+status: ready
 owner: runtime
 size: L
 gate: none
