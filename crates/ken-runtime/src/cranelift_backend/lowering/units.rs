@@ -1178,6 +1178,11 @@ pub(super) struct RootUnitResult {
 /// double-consumption of the *right* token while the real defect is the key's
 /// arity. Check the arity before believing the report.
 struct ContinuationClaimLedger {
+    /// The RESOLVED target for each planned causal identity. Previously this
+    /// kept only the keys and threw the `FuncId` away through `into_keys`,
+    /// which is why no continuation target could ever be called: the join D1
+    /// performed was discarded at the moment it became useful.
+    resolved: BTreeMap<ContinuationCallIdentity, FuncId>,
     /// `None` until claimed; then the exact unit that claimed it, so owner
     /// agreement is a recorded fact rather than an inference.
     claims: BTreeMap<ContinuationCallIdentity, Option<PredeclaredFunctionId>>,
@@ -1188,69 +1193,82 @@ impl ContinuationClaimLedger {
         plan: &StaticTransitionPlan<'_>,
         bundle: &UnitBundle,
     ) -> Result<Self, CraneliftBackendError> {
-        let claims = resolve_continuation_targets(plan, bundle)?
-            .into_keys()
-            .map(|identity| (identity, None))
-            .collect();
-        Ok(Self { claims })
+        let resolved = resolve_continuation_targets(plan, bundle)?;
+        let claims = resolved.keys().cloned().map(|identity| (identity, None)).collect();
+        Ok(Self { resolved, claims })
     }
 
-    /// Claim every token owned by the unit now being defined.
+    /// Declare THIS owning Function's own `FuncRef` for every causal token it
+    /// owns, keyed by the complete four-field identity.
     ///
-    /// Rejects an **absent** claim (a token this ledger never planned), a
-    /// **duplicate** claim (the same exact identity consumed twice), and a
-    /// **wrong owner** (a token whose producer owner is not this unit).
-    fn claim_for_unit(
-        &mut self,
+    /// Each `FuncRef` is minted into the `Function` passed here and belongs to
+    /// it alone; ⛔ none is ever passed across functions. Declaring is not
+    /// claiming -- a declared target is callable, and the affine claim happens
+    /// later, at the exact producer occurrence.
+    fn declare_owned_in_func<M: Module>(
+        &self,
         defining: PredeclaredFunctionId,
-    ) -> Result<usize, CraneliftBackendError> {
-        // `D4` owner control: claim under a unit that does not own the token.
-        // The selection predicate is the production one; the mutation only
-        // changes which unit is presented as the definer.
-        #[cfg(test)]
-        let defining = if CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
-            == ContinuationEmissionMutation::ClaimUnderWrongOwner
-        {
-            self.claims
-                .keys()
-                .map(|identity| identity.producer_owner())
-                .find(|owner| *owner != defining)
-                .unwrap_or(defining)
-        } else {
-            defining
-        };
-        let mut owned: Vec<ContinuationCallIdentity> = self
-            .claims
-            .keys()
-            .filter(|identity| identity.producer_owner() == defining)
-            .cloned()
-            .collect();
-        // `D4` affine control: present the same causal token twice.
-        #[cfg(test)]
-        if CONTINUATION_EMISSION_MUTATION.with(std::cell::Cell::get)
-            == ContinuationEmissionMutation::ClaimTokenTwice
-        {
-            if let Some(first) = owned.first().cloned() {
-                owned.push(first);
-            }
-        }
-        for identity in &owned {
-            let consumed = self.claims.get_mut(identity).ok_or_else(|| {
-                backend_module(
-                    "a continuation claim was consumed that this ledger never planned".to_string(),
+        module: &mut M,
+        func: &mut Function,
+    ) -> BTreeMap<ContinuationCallIdentity, cranelift_codegen::ir::FuncRef> {
+        self.resolved
+            .iter()
+            .filter(|(identity, _)| identity.producer_owner() == defining)
+            .map(|(identity, target)| {
+                (
+                    identity.clone(),
+                    module.declare_func_in_func(*target, func),
                 )
-            })?;
-            if let Some(previous) = consumed {
-                return Err(backend_module(format!(
-                    "a continuation call token was claimed twice, first by {previous:?}; before \
-                     reading this as a real double-consumption, confirm the causal identity still \
-                     carries all four fields including recursive_position, because a collided key \
-                     reports this against the right token"
-                )));
-            }
-            *consumed = Some(defining);
+            })
+            .collect()
+    }
+
+    /// Claim ONE exact token, at its producer occurrence.
+    ///
+    /// ⛔ This replaces a bulk discharge that consumed every token owned by a
+    /// unit before any producer occurrence was reached. That was affine
+    /// bookkeeping at the wrong seat: it could not tell a call that happened
+    /// from one that did not, so it would have reported a clean ledger for a
+    /// program that emitted no continuation call at all.
+    ///
+    /// Rejects an **absent** token, a **duplicate** claim, and a **wrong
+    /// owner** -- and unlike the previous shape the owner check is reachable
+    /// here, because the caller supplies the unit currently being defined
+    /// rather than the token's own owner being used to select it.
+    ///
+    /// ⚠ An affine red is not self-explaining: confirm the identity still
+    /// carries all four fields including `recursive_position` before believing
+    /// a double-consumption, because a collided key reports it against the
+    /// right token.
+    #[allow(dead_code)] // Claimed at the producer occurrence, which is the
+                        // remaining half of the corrected D3.
+    fn claim_exact(
+        &mut self,
+        identity: &ContinuationCallIdentity,
+        defining: PredeclaredFunctionId,
+    ) -> Result<FuncId, CraneliftBackendError> {
+        if identity.producer_owner() != defining {
+            return Err(backend_module(
+                "a continuation call token was claimed by a unit that does not own it".to_string(),
+            ));
         }
-        Ok(owned.len())
+        let consumed = self.claims.get_mut(identity).ok_or_else(|| {
+            backend_module(
+                "a continuation call token was claimed that this ledger never planned".to_string(),
+            )
+        })?;
+        if let Some(previous) = consumed {
+            return Err(backend_module(format!(
+                "a continuation call token was claimed twice, first by {previous:?}; before \
+                 reading this as a real double-consumption, confirm the causal identity still \
+                 carries all four fields including recursive_position, because a collided key \
+                 reports this against the right token"
+            )));
+        }
+        *consumed = Some(defining);
+        self.resolved.get(identity).copied().ok_or_else(|| {
+            backend_module("a claimed causal token has no resolved target".to_string())
+        })
     }
 
     /// No claim may be left over once every unit has been defined.
@@ -1322,7 +1340,6 @@ pub(super) fn define_unit_bodies<M: Module>(
             backend_module("a planned unit was never forward-declared".to_string())
         })?;
         let is_root = root == unit.function;
-        claims.claim_for_unit(unit.function)?;
         let outcome = define_unit_body(
             module,
             compiler,
