@@ -661,6 +661,7 @@ impl ArtifactHelpers<'_> {
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
+            continuation_emissions: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit,
             terminal_result_origins: BTreeSet::new(),
@@ -775,6 +776,21 @@ struct FunctionLocalRefs {
     /// causal token it owns, keyed by the complete four-field identity.
     /// Minted into this `Function`; never passed across functions.
     continuation_calls: BTreeMap<ContinuationCallIdentity, units::DeclaredUnitCall>,
+    /// **`RT-CONTSPEC-ACTIVATE` `4b`** -- the exact `Inst` this Function emitted
+    /// for each causal token, recorded at the `builder.ins().call` that produced
+    /// it.
+    ///
+    /// ⭐ This is an **anchor, not an answer**. It records *where* a call was
+    /// emitted, never *what* it calls: the callee is decoded back out of the
+    /// finished CLIF at
+    /// [`Lowering::verify_emitted_continuation_calls`]. Recording the target
+    /// here instead would make the gate compare the value it was handed with
+    /// the value it was handed.
+    ///
+    /// ⛔ An entry exists only because a call instruction exists, so a token
+    /// that was claimed and never called leaves no entry -- which is the whole
+    /// reason the emission set is kept separately from the claim ledger.
+    continuation_emissions: BTreeMap<ContinuationCallIdentity, cranelift_codegen::ir::Inst>,
     declaration_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     /// The current function's closed trap-exit authority. Absence is an error
     /// state, never an implicit Root.
@@ -2401,6 +2417,7 @@ impl<'a> Lowering<'a> {
             #[cfg(test)]
             launch_ingress,
         )
+        .map(|(operand, _inst)| operand)
     }
 
     fn call_declared_declaration_unit(
@@ -2425,15 +2442,23 @@ impl<'a> Lowering<'a> {
             #[cfg(test)]
             None,
         )
+        .map(|(operand, _inst)| operand)
     }
 
+    /// Emit the direct call to a declared unit target.
+    ///
+    /// Returns the produced operand **and the exact `Inst` emitted for the
+    /// call**. ⭐ The `Inst` is returned rather than kept in a `last_call` field
+    /// so that a caller which needs to attribute the emitted instruction has to
+    /// take it from the emission itself; a stale side-channel would attribute
+    /// one call site's instruction to another's token.
     fn call_declared_unit_target(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         target: units::DeclaredUnitCall,
         inputs: &[LoweringOperand],
         #[cfg(test)] launch_ingress: Option<cranelift_codegen::ir::Value>,
-    ) -> Result<LoweringOperand, CraneliftBackendError> {
+    ) -> Result<(LoweringOperand, cranelift_codegen::ir::Inst), CraneliftBackendError> {
         let payload = builder.create_sized_stack_slot(StackSlotData::new(
             StackSlotKind::ExplicitSlot,
             target.header.frame_bytes,
@@ -2601,7 +2626,7 @@ impl<'a> Lowering<'a> {
             == TrapCallerProtocolMutation::ReadResultBeforeTrap
         {
             let word = builder.ins().stack_load(types::I64, payload, result_offset);
-            return Ok(LoweringOperand::Carried(CarriedBoundaryWord { word }));
+            return Ok((LoweringOperand::Carried(CarriedBoundaryWord { word }), call));
         }
         let trap_word = builder.ins().stack_load(types::I64, payload, trap_offset);
         let trapped = builder.ins().icmp_imm(
@@ -2652,9 +2677,155 @@ impl<'a> Lowering<'a> {
         builder.switch_to_block(result_block);
         builder.seal_block(result_block);
         let word = builder.ins().stack_load(types::I64, payload, result_offset);
-        Ok(LoweringOperand::Carried(CarriedBoundaryWord {
-            word,
-        }))
+        Ok((LoweringOperand::Carried(CarriedBoundaryWord { word }), call))
+    }
+
+    /// **`RT-CONTSPEC-ACTIVATE` `4b` — decode the callee of an emitted direct
+    /// call out of the finished CLIF.**
+    ///
+    /// ⭐ **This is the independent side of the emission gate.** It reads the
+    /// instruction stream that was actually built: the instruction's
+    /// `func_ref`, that ref's `ExtFuncData` name, and the function's own
+    /// imported-user-name table, which `Module::declare_func_in_func` populates
+    /// with `UserExternalName { namespace: 0, index: func_id }`. ⛔ Nothing here
+    /// consults `continuation_calls`, the claim ledger's `resolved` map, or the
+    /// `DeclaredUnitCall` that was handed to the emitter -- those are all
+    /// downstream of the same resolution and comparing against one of them
+    /// would be a re-run of the builder under test.
+    ///
+    /// ⛔ A non-direct call, a non-user name, or a foreign namespace is a
+    /// rejection rather than a skip: an unattributable callee must not read as
+    /// agreement.
+    fn decode_direct_callee(
+        func: &Function,
+        inst: cranelift_codegen::ir::Inst,
+    ) -> Result<FuncId, CraneliftBackendError> {
+        let cranelift_codegen::ir::InstructionData::Call { func_ref, .. } = func.dfg.insts[inst]
+        else {
+            return Err(backend_module(
+                "an emitted continuation call site does not hold a direct call instruction"
+                    .to_string(),
+            ));
+        };
+        let cranelift_codegen::ir::ExternalName::User(name_ref) = func.dfg.ext_funcs[func_ref].name
+        else {
+            return Err(backend_module(
+                "an emitted continuation call names a callee that is not a user function"
+                    .to_string(),
+            ));
+        };
+        let user = &func.params.user_named_funcs()[name_ref];
+        if user.namespace != 0 {
+            return Err(backend_module(
+                "an emitted continuation call names a callee outside the module function namespace"
+                    .to_string(),
+            ));
+        }
+        Ok(FuncId::from_u32(user.index))
+    }
+
+    /// **`RT-CONTSPEC-ACTIVATE` `4b` — the emission-seam equality gate for one
+    /// generated function.**
+    ///
+    /// For every causal token this function emitted a call for, prove
+    ///
+    /// ```text
+    /// bundle.continuation(identity.target())  ==  callee decoded from the CLIF
+    /// ```
+    ///
+    /// **The two sides come from different producers.** The left is the
+    /// planner's own four-field projection (`continuation_call_binding_for`)
+    /// carried through the forward-declaration table; the right is the finished
+    /// instruction stream. ⛔ Neither is `continuation_calls` and neither is the
+    /// ledger's `resolved` map -- those are what the emitter *was handed*, and a
+    /// gate built on them would agree with a redirected emission.
+    ///
+    /// ⚠ **The honest residual:** `bundle` is the naming authority that decides
+    /// which `FuncId` a specialization *is*, so a gate cannot get behind it --
+    /// if the forward declaration itself named the wrong function, both sides
+    /// move together. What this proves is that the routing from planned identity
+    /// to emitted callee is exact, not that the declaration table is right.
+    /// What the callee's **body** then computes is deferred to
+    /// `RT-CONTSPEC-WITNESS` `D7`/`AC-9` and is not claimed here.
+    ///
+    /// The second half is closure: every direct call in the function whose
+    /// callee is *any* planned continuation specialization must be one of the
+    /// recorded ones. ⛔ Without it the gate would be complete only over the set
+    /// it built itself -- an unrecorded emission would be invisible, and the
+    /// records would look exhaustive because nothing disagreed with them.
+    fn verify_emitted_continuation_calls(
+        &self,
+        func: &Function,
+        bundle: &units::UnitBundle,
+    ) -> Result<(), CraneliftBackendError> {
+        let mut expected_by_callee: BTreeMap<FuncId, usize> = BTreeMap::new();
+        for (identity, inst) in &self.function_local.continuation_emissions {
+            let planned = bundle.continuation(identity.target()).ok_or_else(|| {
+                backend_module(
+                    "an emitted causal token names a specialization that was never \
+                     forward-declared"
+                        .to_string(),
+                )
+            })?;
+            let emitted = Self::decode_direct_callee(func, *inst)?;
+            if emitted != planned {
+                return Err(backend_module(format!(
+                    "the emitted direct-call target {emitted:?} disagrees with the planner-issued \
+                     continuation target {planned:?} for a causal token; the call that was built \
+                     is not the call that was planned"
+                )));
+            }
+            *expected_by_callee.entry(planned).or_default() += 1;
+        }
+
+        // Closure: no continuation call may be emitted that was not recorded.
+        let mut specialization_callees = BTreeSet::new();
+        for unit in self.static_transition_plan.continuation_units()? {
+            let id = bundle.continuation(unit.id()).ok_or_else(|| {
+                backend_module(
+                    "a planned continuation specialization was never forward-declared".to_string(),
+                )
+            })?;
+            specialization_callees.insert(id);
+        }
+        // ⛔ Not a fast path around the check: with no planned specialization
+        // there is no callee the scan could recognise, and the loop above has
+        // already rejected any recorded emission naming one -- so `expected` is
+        // necessarily empty here too. A program with no continuations skips an
+        // instruction walk it could only ever conclude nothing from.
+        if specialization_callees.is_empty() {
+            return Ok(());
+        }
+        let mut observed_by_callee: BTreeMap<FuncId, usize> = BTreeMap::new();
+        for block in func.layout.blocks() {
+            for inst in func.layout.block_insts(block) {
+                let cranelift_codegen::ir::InstructionData::Call { func_ref, .. } =
+                    func.dfg.insts[inst]
+                else {
+                    continue;
+                };
+                let cranelift_codegen::ir::ExternalName::User(name_ref) =
+                    func.dfg.ext_funcs[func_ref].name
+                else {
+                    continue;
+                };
+                let user = &func.params.user_named_funcs()[name_ref];
+                if user.namespace != 0 {
+                    continue;
+                }
+                let callee = FuncId::from_u32(user.index);
+                if specialization_callees.contains(&callee) {
+                    *observed_by_callee.entry(callee).or_default() += 1;
+                }
+            }
+        }
+        if observed_by_callee != expected_by_callee {
+            return Err(backend_module(format!(
+                "the continuation calls this function actually emitted {observed_by_callee:?} are \
+                 not the ones recorded against planned causal tokens {expected_by_callee:?}"
+            )));
+        }
+        Ok(())
     }
 
     /// The recursive emission step. ⛔ Private, and ⛔ never the entry point —

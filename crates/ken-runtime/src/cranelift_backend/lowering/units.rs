@@ -1184,6 +1184,16 @@ pub(super) struct ContinuationClaimLedger {
     /// `None` until claimed; then the exact unit that claimed it, so owner
     /// agreement is a recorded fact rather than an inference.
     claims: BTreeMap<ContinuationCallIdentity, Option<PredeclaredFunctionId>>,
+    /// **`4b`** -- the PLANNED set, read straight off the plan's own causal call
+    /// projection at open time and never derived from [`Self::resolved`].
+    planned: BTreeSet<ContinuationCallIdentity>,
+    /// **`4b`** -- every identity some generated function minted a `FuncRef`
+    /// for, accumulated across all of them.
+    declared: BTreeSet<ContinuationCallIdentity>,
+    /// **`4b`** -- every identity a direct call was actually emitted for,
+    /// accumulated across all generated functions after each one's CLIF has been
+    /// checked.
+    emitted: BTreeSet<ContinuationCallIdentity>,
 }
 
 impl ContinuationClaimLedger {
@@ -1193,7 +1203,75 @@ impl ContinuationClaimLedger {
     ) -> Result<Self, CraneliftBackendError> {
         let resolved = resolve_continuation_targets(plan, bundle)?;
         let claims = resolved.keys().cloned().map(|identity| (identity, None)).collect();
-        Ok(Self { resolved, claims })
+        // The PLANNED set, taken from the plan's causal call projection rather
+        // than from `resolved`. ⚠ Honest note: `resolve_continuation_targets`
+        // walks the same projection, so planned == resolved is structural today
+        // and would only separate if resolution ever dropped or added a key. It
+        // is recorded because `close()` asserts the four sets equal and a set
+        // that is *implied* by another is not the same evidence as one that was
+        // read independently -- the load-bearing pairs are declared and emitted.
+        let planned = plan
+            .continuation_calls()?
+            .iter()
+            .map(|call| {
+                plan.continuation_call_binding_for(
+                    call.producer_construct_origin(),
+                    call.continuation_origin(),
+                    call.producer_alternative(),
+                    call.recursive_position(),
+                )?
+                .ok_or_else(|| {
+                    backend_module(
+                        "a projected causal call has no binding under its own four-field selector"
+                            .to_string(),
+                    )
+                })
+            })
+            .collect::<Result<BTreeSet<_>, CraneliftBackendError>>()?;
+        Ok(Self {
+            resolved,
+            claims,
+            planned,
+            declared: BTreeSet::new(),
+            emitted: BTreeSet::new(),
+        })
+    }
+
+    /// **`4b`** -- record the causal tokens one generated function minted call
+    /// refs for.
+    pub(super) fn record_declared(
+        &mut self,
+        declared: impl IntoIterator<Item = ContinuationCallIdentity>,
+    ) -> Result<(), CraneliftBackendError> {
+        for identity in declared {
+            if !self.declared.insert(identity) {
+                return Err(backend_module(
+                    "a causal token was declared into more than one generated function".to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// **`4b`** -- record the causal tokens one generated function actually
+    /// emitted a verified direct call for.
+    ///
+    /// ⛔ Called only *after* that function's CLIF has been checked, so a token
+    /// reaches this set only once its emitted callee has been decoded from the
+    /// instruction stream and matched against the planner-issued target.
+    pub(super) fn record_emitted(
+        &mut self,
+        emitted: impl IntoIterator<Item = ContinuationCallIdentity>,
+    ) -> Result<(), CraneliftBackendError> {
+        for identity in emitted {
+            if !self.emitted.insert(identity) {
+                return Err(backend_module(
+                    "a causal token emitted a direct call from more than one generated function"
+                        .to_string(),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Declare THIS owning Function's own `FuncRef` for every causal token it
@@ -1292,8 +1370,34 @@ impl ContinuationClaimLedger {
         })
     }
 
-    /// No claim may be left over once every unit has been defined.
+    /// No claim may be left over once every unit has been defined -- and, since
+    /// `4b`, the exact planned population must equal the population that was
+    /// resolved, declared, and **emitted**.
+    ///
+    /// ⭐ The emitted set is the one that is not bookkeeping: an identity enters
+    /// it only after its emitted callee was decoded from the finished CLIF and
+    /// matched the planner-issued target. Set equality against it is therefore
+    /// "every planned continuation call became exactly one correct direct call,
+    /// and no other continuation call was emitted."
+    ///
+    /// ⛔ Equality is asserted between sets, not between counts. Two sets of the
+    /// same size can differ, and a length comparison here would pass for a
+    /// population that swapped one token for another.
     pub(super) fn close(self) -> Result<(), CraneliftBackendError> {
+        for (name, set) in [
+            ("resolved", self.resolved.keys().cloned().collect::<BTreeSet<_>>()),
+            ("declared", self.declared.clone()),
+            ("emitted", self.emitted.clone()),
+        ] {
+            if set != self.planned {
+                let missing = self.planned.difference(&set).count();
+                let extra = set.difference(&self.planned).count();
+                return Err(backend_module(format!(
+                    "the {name} continuation call population does not equal the planned one: \
+                     {missing} planned tokens absent, {extra} unplanned tokens present"
+                )));
+            }
+        }
         let leftover = self
             .claims
             .values()
@@ -1370,6 +1474,7 @@ pub(super) fn define_unit_bodies<M: Module>(
             helpers,
             unit,
             id,
+            bundle,
             call_edges,
             &worker_targets,
             is_root,
@@ -1410,6 +1515,7 @@ fn define_unit_body<M: Module>(
     helpers: ArtifactHelpers<'_>,
     unit: OwnedUnitEmission,
     id: FuncId,
+    bundle: &UnitBundle,
     call_edges: &CallEdgeTargets,
     worker_targets: &WorkerTargets,
     is_root: bool,
@@ -1482,6 +1588,11 @@ fn define_unit_body<M: Module>(
         )?,
         None => BTreeMap::new(),
     };
+    // `4b`: the DECLARED half of the four-set equality, recorded where the refs
+    // are actually minted.
+    if let Some(ledger) = compiler.continuation_claims.as_mut() {
+        ledger.record_declared(function_local.continuation_calls.keys().cloned())?;
+    }
     // `D3`: the owner operand for the claim, supplied independently of any
     // token -- this is the ordinary producer unit currently being defined.
     compiler.defining_unit = Some(unit.function);
@@ -1757,6 +1868,14 @@ fn define_unit_body<M: Module>(
         builder.finalize();
     }
     compiler.validate_materialized_dead_join_cfg(unit.function, &func)?;
+    // `4b` -- the emission-seam equality gate, on the FINISHED function and
+    // before it is defined into the module. The callee of every recorded causal
+    // emission is decoded out of this CLIF and compared with the planner-issued
+    // target; a disagreement rejects here rather than being emitted.
+    compiler.verify_emitted_continuation_calls(&func, bundle)?;
+    if let Some(ledger) = compiler.continuation_claims.as_mut() {
+        ledger.record_emitted(compiler.function_local.continuation_emissions.keys().cloned())?;
+    }
     verify_cranelift_function(&func, module.isa())?;
     #[cfg(test)]
     scale_b_record_unit_body(&func);

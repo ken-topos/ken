@@ -5694,14 +5694,36 @@ impl<'a> Lowering<'a> {
             );
         }
 
-        self.call_declared_unit_target(
+        let (returned, call) = self.call_declared_unit_target(
             builder,
             target,
             &inputs,
             #[cfg(test)]
             None,
-        )
-        .map(Some)
+        )?;
+        // `4b` -- anchor the emitted instruction to the exact causal token.
+        //
+        // ⭐ The `Inst`, not the target: the callee is decoded back out of the
+        // finished CLIF by `verify_emitted_continuation_calls`. Recording
+        // `target` here would compare the emitter's own input with itself and
+        // would agree with the `D4` redirect, which is precisely the vacuous
+        // shape this gate exists to avoid.
+        //
+        // ⛔ A second record for one token is a rejection: emission is once per
+        // causal identity, and the claim ledger's affinity does not entail it --
+        // that ledger would be satisfied by a claim with no call at all.
+        if self
+            .function_local
+            .continuation_emissions
+            .insert(identity.clone(), call)
+            .is_some()
+        {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                "a causal token emitted more than one direct continuation call",
+            ));
+        }
+        Ok(Some(returned))
     }
 
     /// **`D3` -- the callee-only consumer.**
@@ -5833,6 +5855,7 @@ impl<'a> Lowering<'a> {
             #[cfg(test)]
             None,
         )
+        .map(|(operand, _inst)| operand)
     }
 
     /// **`D2` -- the binder-lowering helper.** Lowers a `Let`'s bound value

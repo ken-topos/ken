@@ -103,6 +103,7 @@ fn run_checked_bounded_nat_fixture(
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
+            continuation_emissions: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
