@@ -8,7 +8,92 @@ seam 2. **Recut 2026-08-02** on the Architect's interface ruling
 baseline measurement `evt_2zhx69f2fw07w`. **Recut again 2026-08-03** on the
 Architect's D4 frame/interface ruling `evt_adarqxt4hhsk`.
 
-> ## RECUT 2026-08-03 (19:05) — READ THIS FIRST
+> ## RECUT 2026-08-03 (20:20) — READ THIS FIRST
+>
+> **`4b` IS ACCEPTED AT `73725ec7`. THIS NODE HAS TWO DIFFERENT POPULATIONS AND
+> THE FRAME WAS WRITING THEM AS ONE. `D4`'s SAME-SHAPED REDIRECT IS UNREACHABLE
+> AND IS REPLACED.**
+>
+> **This banner outranks every line below it.** Authority: Architect ruling
+> `evt_6bf2mmehjzy3k`.
+>
+> **`4b` accepted on exact `73725ec7453be1bb323c6087f54c0133a4517c1b`** (tree
+> `72b7cefe`, parent rebased `D1b` `d37dc43afd9755fe9fa549bba401741bbaf741f2`).
+> Preserved as the accepted checkpoint; **not yet a merge candidate, no QA
+> route.** The independence is real and was shown rather than argued: the planner
+> side is the `D1` causal identity's `identity.target()`; the emission side is
+> the callee decoded out of the **finished CLIF** through the call instruction's
+> `FuncRef`, its `ExtFuncData`, and the imported `UserExternalName` table. The
+> gate never reads the declared map — and the decisive probe corrupts exactly
+> that unread map and still goes red. Planner-vs-declared **is** the self-oracle
+> the implementer feared; the finished-CLIF decode is a genuinely third producer.
+>
+> ⚠ **`D1b`'s accepted SHA moved.** The branch was rebased onto main `5dbfe7a7`,
+> rewriting all 14 commits: accepted `D1b` `7280f68e` → `d37dc43a`, with **zero
+> `crates/**` delta** between them (the 26-file diff is all `agent/` and
+> `docs/`). D1b's acceptance re-attaches to the rebased content and does not need
+> re-earning. `a84dbfba` is tagged `preserve/RT-CONTSPEC-ACTIVATE-hardstop8` and
+> was not carried forward; its false comment is not in this candidate.
+>
+> ### The count correction — two populations, never one
+>
+> **The frame wrote `AC-1`'s `2/2/2/2` as though it also described the seam the
+> gate runs on. It does not. They are different fixtures.**
+>
+> | population | what it is | counts |
+> |---|---|---|
+> | the **nested planner census** | `contspec_planner_closes_...` on the nested planner fixture. The no-plan-change control | planned units 2, planned calls 2, emittable units 2, emittable calls 2 |
+> | the **executable lowering witness** | what actually reaches `claim_and_call_continuation` | planned / resolved / declared / emitted all **1**, causal count exactly 1 |
+>
+> ⭐ **A one-token emission population is sufficient and non-vacuous for a
+> universal per-identity routing property.** ⛔ **It must not be inflated to two
+> by borrowing counts from the other fixture**, and neither count may be
+> presented as the other. Every count claim in this frame now names its
+> population.
+>
+> ### `D4`'s same-shaped redirect is unreachable here, and is replaced
+>
+> This generated function's `continuation_calls` holds **exactly one entry**, so
+> the committed `RedirectSameShapedTarget` control hits its own *"found no
+> distinct same-shaped call target"* refusal **before reaching the call seam**.
+> ⛔ A pre-call "no distinct target" refusal is **not an acceptable result** — it
+> proves a missing fixture precondition, not emitted-target equality.
+>
+> This is a **frame correction inside `ACTIVATE`**. ⛔ Not a planner or ABI
+> repair, not a population expansion, not a new node, not a new carrier lane. Do
+> not manufacture a second specialization, import a `FuncRef` across functions,
+> widen "same-shaped", or search source variants.
+>
+> **The replacement discriminator, which the one-token seam can lawfully
+> execute:** start from the exact planner identity and its exact declared call
+> contract; in a committed `cfg(test)` control on the production call branch,
+> **substitute only the function-local emitted `FuncRef` with a distinct
+> callable**, retaining the original continuation header, slots, offsets, inputs,
+> identity and owner. Require the call to be emitted and the finished-CLIF oracle
+> to reject **specifically because the decoded callee `FuncId` disagrees with
+> `identity.target()`**. That isolates the `ACTIVATE` property exactly: change
+> only the emitted callee, and the independent routing equality goes red.
+>
+> **The same-shaped two-target redirect now lives wholly in
+> [[RT-CONTSPEC-WITNESS]]**, whose integrated fixture must supply at least two
+> distinct same-shaped targets in one lawful callable population and prove the
+> observable behavioural consequence. ⛔ `ACTIVATE` may no longer duplicate that
+> unreachable precondition.
+>
+> **The honest boundary, unchanged:** `bundle` remains the naming authority for
+> which `FuncId` a specialization denotes, so this proves **routing from planner
+> identity to emitted callee is exact** — not that the declaration table is
+> correctly built, and not what the callee's body computes. The latter stays
+> deferred to `RT-CONTSPEC-WITNESS` `D7`/`AC-9`.
+>
+> **Resume `D4` from exact `73725ec7`. Do not alter the accepted `4b`
+> mechanism.**
+
+> ## RECUT 2026-08-03 (19:05)
+>
+> **Superseded in part by the 20:20 banner.** Its emission-seam split stands. Its
+> `4b` discharge sentence — "the four `AC-1` counts unmoved at 2/2/2/2" — is
+> **corrected there**: that is the planner census, not the seam the gate runs on.
 >
 > **`4b` IS NOW AN EMISSION-SEAM EQUALITY GATE. THE BEHAVIOURAL
 > ANSWER-DEPENDENCE OBLIGATION IS DEFERRED TO `RT-CONTSPEC-WITNESS`, NOT
@@ -387,6 +472,11 @@ Measured at `origin/main = ab6b89fc`.
 | what that fixes and what it leaves open | fixes: the answer body does not determine what crosses, and the population is independent of it. **Open:** which of the three closures (root lexical, `outer_worker`, `inner_worker`) crosses, and whether the refusal precedes or follows the ruled direct continuation call — `boundary_transfer_admissibility` reports no origin, defining unit, child path or claim state |
 | the rulings that recut this node | `evt_6scvrkh69sec8` (hard stop 8 confirmed; no further fixture search; no carrier authorized) as amended by `evt_bz62dah3ecp0` (emission-seam observation admissible for the activation property; behavioural obligation moves to `RT-CONTSPEC-WITNESS`) |
 | the self-oracle hazard on this planner | `evt_5mzgtka54nd03` — six sites compare `build_X(plan)` against `build_X(plan)`; an injected defect into `build_case_emission_plan` reds 114/611 while the gate fires 0 times. `4b`'s two sides must be independently derived |
+| `4b` accepted at (2026-08-03) | `73725ec7453be1bb323c6087f54c0133a4517c1b`, tree `72b7cefe`, parent rebased `D1b` `d37dc43afd9755fe9fa549bba401741bbaf741f2`. Suite `611+26+14` green, frozen surfaces blob-identical, `planning/` untouched. Accepted `evt_6bf2mmehjzy3k`; **not a merge candidate** |
+| the rebase that moved an accepted SHA | branch rebased onto main `5dbfe7a7`, rewriting all 14 commits. Accepted `D1b` `7280f68e` → `d37dc43a`, **zero `crates/**` delta** (26 files, all `agent/` and `docs/`) ⇒ acceptance re-attaches, no re-earning. `a84dbfba` tagged `preserve/RT-CONTSPEC-ACTIVATE-hardstop8`, not carried forward |
+| the two populations, measured | **nested planner census** (`contspec_planner_closes_...`): planned units 2, planned calls 2, emittable 2/2 — the no-plan-change control. **Executable lowering witness** at `claim_and_call_continuation`: resolved 1, distinct `FuncId`s 1, distinct specializations 1, planned 1, units 1, causal count 1. ⛔ Different fixtures; never report one as the other |
+| the independent emission side | the callee decoded from the finished CLIF: call instruction `FuncRef` → `ExtFuncData` name → imported-user-name table, which `declare_func_in_func` populates with `UserExternalName { namespace: 0, index: func_id }` (verified in cranelift-module 0.113.1). `continuation_emissions` records the `Inst` only, never a target answer |
+| why the old `AC-2` control is unreachable | `continuation_calls` holds exactly one entry per function, so `RedirectSameShapedTarget` hits its own *"found no distinct same-shaped call target"* refusal before the call seam. Moved wholly to `RT-CONTSPEC-WITNESS` |
 | baseline suite | `scripts/ken-cargo test -p ken-runtime --lib` |
 
 Reproduce, read-only:
@@ -607,14 +697,12 @@ in scope and is not a finding.
   4. **RECUT 2026-08-03 19:05 — split into 4a here and 4b deferred.**
 
      **4a, this node's obligation: exact emitted-target equality at the emission
-     seam.** For every exact planned causal identity, the planner-issued target
-     equals the independently resolved and declared target the emitter hands to
-     the direct-call instruction, once and only once per causal token. Under the
-     same-shaped redirect the gate goes red **because the two disagree**.
-     **"Same-shaped" is `RT-WORKER-BIND`'s landed definition: same declared arity
-     and same capture count.** The redirect resolves the exact target first, then
-     selects a *distinct* target on that predicate — ⛔ never on origin
-     inequality or ABI layout.
+     seam.** For every exact planned causal identity, `identity.target()` equals
+     the callee decoded out of the **finished CLIF**, once and only once per
+     causal token. **Recut again 20:20:** the negative control is the
+     **`FuncRef` substitution** of `AC-2`, not a same-shaped redirect — this
+     function's `continuation_calls` holds one entry, so the two-target redirect
+     refuses before the call seam.
 
      **4b, DEFERRED to [[RT-CONTSPEC-WITNESS]] — stated here, not discharged
      here.** That selecting the wrong same-shaped target **changes or fails an
@@ -650,28 +738,58 @@ in scope and is not a finding.
   way `D3` did at `bbf94045` (`claim_exact` fires; `close` reports
   `total=1 consumed=1`).
 
-- **D5 — the before/after population disposition.** The four counts above on
-  this seam's own base and on the candidate, plus a single aggregate line
-  stating that the rest of the suite's pass/fail set is unchanged.
+- **D5 — the before/after population disposition. RECUT 2026-08-03 20:20: two
+  populations, reported separately.**
+  - **D5a, the nested planner census** — planned units, planned calls, emittable
+    units, emittable calls, on this seam's own base and on the candidate.
+  - **D5b, the executable lowering witness** — planned / resolved / declared /
+    emitted and the causal per-identity count, on the candidate, at the seam the
+    `4b` gate runs on.
+  - one aggregate line stating that the rest of the suite's pass/fail set is
+    unchanged.
+
+  ⛔ **Label every count with its population.** Reporting one set of numbers as
+  though it described both is the defect this recut exists to fix.
 
 ## Acceptance criteria
 
-- **AC-1 — the planned population is unchanged and the emittable population
-  moved.** On the candidate: planned units 2, planned calls 2, emittable
-  continuation units 2, emittable continuation calls 2. On the base, the last
-  two are 0.
-  *Control:* `D5`'s four counts, both trees, `git rev-parse HEAD` shown in the
-  same block. **A planned count that moves fails this AC** — that is a plan
-  change, not an activation.
+- **AC-1 — RECUT 2026-08-03 20:20: BOTH populations hold, each stated as
+  itself.**
 
-- **AC-2 — RECUT 2026-08-03 19:05: the emitted target equals the planner-issued
-  target, and the redirect breaks that equality.** For every exact planned causal
-  identity, the planner-issued target equals the independently resolved and
-  declared target the emitter hands to the direct-call instruction, at causal
+  **AC-1a, the nested planner census (the no-plan-change control).** On the
+  candidate: planned units 2, planned calls 2, emittable continuation units 2,
+  emittable continuation calls 2. On the base, the last two are 0.
+  *Control:* `D5a`'s four counts, both trees, `git rev-parse HEAD` in the same
+  block. **A planned count that moves fails this AC** — that is a plan change,
+  not an activation.
+
+  **AC-1b, the executable lowering witness (the seam the `4b` gate runs on).**
+  Planned / resolved / declared / emitted are each **1**, with causal count
+  exactly `1`, and the four are **set-equal** — sets, not lengths.
+  *Control:* `D5b`'s measured counts on the candidate.
+
+  ⛔ **Neither may be reported as the other.** These are different fixtures, and
+  the frame previously wrote them as one. A one-token emission population is
+  sufficient and non-vacuous for a universal per-identity routing property; it
+  must **not** be inflated to two by borrowing the planner census's counts.
+
+- **AC-2 — RECUT 2026-08-03 20:20: the decoded emitted callee equals the
+  planner-issued target, and substituting only the emitted `FuncRef` breaks that
+  equality.** For every exact planned causal identity, `identity.target()` equals
+  the callee **decoded out of the finished CLIF** — the call instruction's
+  `FuncRef`, its `ExtFuncData`, the imported `UserExternalName` — at causal
   per-identity count exactly `1`, with exact set equality across
-  planned / resolved / declared / emitted. Redirect a causal token to the other
-  same-shaped target — **same declared arity and same capture count**, per
-  `RT-WORKER-BIND` — and the gate must go red.
+  planned / resolved / declared / emitted.
+
+  **The negative control.** ⛔ **The same-shaped two-target redirect is NOT this
+  AC's control and is unreachable here** — `continuation_calls` holds exactly one
+  entry in this function, so that control refuses before the call seam. It moved
+  wholly to [[RT-CONTSPEC-WITNESS]]. Instead: start from the exact planner
+  identity and its exact declared call contract, and **substitute only the
+  function-local emitted `FuncRef` with a distinct callable**, retaining the
+  original continuation header, slots, offsets, inputs, identity and owner. The
+  call must still be emitted, and the oracle must reject **specifically because
+  the decoded callee `FuncId` disagrees with `identity.target()`**.
   *Control:* a **committed** `cfg(test)`-gated switch on the exact production
   branch, whose red **reproduces from the committed tree**. ⛔ A hand-run
   mutation does not discharge this — that defect cost `RT-WORKER-BIND` two
@@ -690,9 +808,11 @@ in scope and is not a finding.
   (`evt_5mzgtka54nd03`), where an injected defect reds 114/611 while the gate
   fires zero times.
 
-  ⚠ If the redirect finds **no** distinct same-shape candidate, that is a fact
-  about the fixture population, not a licence to widen the predicate toward
-  difference. Say so and stop.
+  ⛔ **A pre-call "found no distinct same-shaped call target" refusal does not
+  discharge this AC.** It proves a missing fixture precondition, not
+  emitted-target equality. Do not manufacture a second specialization, import a
+  `FuncRef` across functions, widen "same-shaped", or search source variants to
+  make the old control reachable — the control was replaced, not blocked.
 
   ⛔ **What this AC no longer claims.** It does **not** prove that a wrong target
   changes or fails an observable program answer. That obligation is real,
@@ -816,22 +936,39 @@ are:
    injected defect while the gate itself fires zero times. **State which
    derivation each side comes from.**
 
-   **Discharged when the equality holds at count 1 per token, and the four
-   `AC-1` counts are unmoved at 2/2/2/2.** Post both with the SHA.
+   **ACCEPTED 2026-08-03 at `73725ec7453be1bb323c6087f54c0133a4517c1b`**
+   (`evt_6bf2mmehjzy3k`), tree `72b7cefe`, parent rebased `D1b` `d37dc43a`.
+   Independence found in the finished CLIF; no hard stop 9. Four probes fire —
+   reach (1 recorded emission, non-vacuous), discrimination (corrupt the
+   **unread** declared map, gate still red), closure (emit without recording),
+   closeout (fail to accumulate). Preserved as the accepted checkpoint; **not a
+   merge candidate, no QA route.**
+
+   ⛔ **The discharge sentence written at 19:05 — "the four `AC-1` counts are
+   unmoved at 2/2/2/2" — was wrong.** That is the nested planner census. The seam
+   this gate runs on is the executable lowering witness at 1/1/1/1. See `AC-1a`
+   and `AC-1b`.
 
    ⛔ **No fixture variants.** Further case-body or source-spelling search is
    explicitly unauthorized (`evt_6scvrkh69sec8`). The six shapes at `a84dbfba`
    settled it.
 
-5. **`D4`'s emission property, mutation-proved.** Run the same-shaped redirect
-   against the `4b` gate. The gate must go **red because the emitted target
-   disagrees with the planner-issued target**. ⛔ A control that merely reports
-   "the target changed" does not discharge this — it observes the mutation
-   changing the field it mutates, and passes even when the result is discarded,
-   both targets alias one body, or the callee body is malformed. Then run the
-   affine and owner controls already committed at `457b9fc6` plus their mutation
-   proofs. A green mutation is still a hard stop, but check first whether the
-   seam was reached: that discrimination is what `457b9fc6` got right.
+5. **`D4`'s emission property, mutation-proved. Resume from exact `73725ec7`;
+   do not alter the accepted `4b` mechanism.** Run the **`FuncRef`-substitution**
+   negative control of `AC-2` — substitute only the function-local emitted
+   `FuncRef` with a distinct callable, retaining header, slots, offsets, inputs,
+   identity and owner. The call must still be emitted, and the oracle must reject
+   **specifically because the decoded callee `FuncId` disagrees with
+   `identity.target()`**.
+
+   ⛔ **Do not run the same-shaped two-target redirect here.** It is unreachable
+   in this one-entry population and it moved to [[RT-CONTSPEC-WITNESS]]. A
+   pre-call "no distinct same-shaped target" refusal is not an acceptable result.
+
+   Then run the affine and owner controls already committed at `457b9fc6` plus
+   their mutation proofs. A green mutation is still a hard stop, but check first
+   whether the seam was reached: that discrimination is what `457b9fc6` got
+   right.
 6. **`D5`** — the four counts on base and candidate, plus the aggregate line.
 
 ⛔ **Do not accept a checkpoint against its label. Accept it against the
