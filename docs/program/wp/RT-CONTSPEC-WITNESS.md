@@ -9,26 +9,35 @@ Seams 1-3 built and proved the mechanism. This seam **measures the result on a
 lawful assembly** and closes the campaign's held nodes. It is the only seam that
 closes anything other than itself.
 
-> ## HELD FOR RECUT — do not start this seam. Its node is `draft` on purpose.
+> ## RECUT 2026-08-03 — the census is a HISTORICAL RECORD here, not a worklist
 >
-> **Steward, 2026-08-02.** `AC-1` requires every one of the corrected census's
-> 138 rows to reach a terminal disposition, and the frame's row table asserts
-> that 6 formerly shadowed rows have "their causal roots cleared in seams 2 and
-> 3." **That premise is now false.** Seam 2 was recut off the census entirely
-> (`evt_2zhx69f2fw07w`, Architect confirmation `evt_66t42tapvdbsj`), and seam 3
-> was recut off it for the same reason on 2026-08-02 — its subject is now the
-> boundary-use vocabulary's production reachability, and it selects no census
-> rows. **Neither seam clears any census row, and this is settled, not
-> pending.**
+> **Steward.** The prior cut had `AC-1` require every one of the corrected
+> census's 138 rows to reach a terminal disposition, and its population table
+> asserted that 6 formerly shadowed rows have "their causal roots cleared in
+> seams 2 and 3." **That premise is false and it is settled, not pending.**
+> Seam 2 was recut off the census entirely (`evt_2zhx69f2fw07w`, Architect
+> confirmation `evt_66t42tapvdbsj`) and merged that way at `0a6e34cc`; seam 3
+> was recut off it for the same reason, and its landed frame says in its own
+> operative text that *"the census is not an input to any deliverable or AC
+> below."* **Neither seam clears any census row.**
 >
-> The defect here is narrower than seam 3's. Reconciling the 138 rows is a
-> reasonable bookkeeping deliverable in itself — but it must be stated as
-> **accounting for a historical record**, not as measuring work the earlier
-> seams performed. As written it would have every row's disposition depend on
-> clearing that will never happen.
+> As written, every row's disposition depended on clearing that will never
+> happen — an obligation with no possible discharge.
 >
-> The node is `draft` so this frame cannot enter the frontier. The Steward
-> recuts it after seams 2 and 3.
+> ⇒ **The reconciliation stays, and its meaning changes.** The 138 rows are
+> accounted for as a **record of what once failed in the held `1aef3192`
+> lineage**, not as measurements of work seams 1-3 performed. `AC-1`, `AC-2`,
+> `D2` and the population table below are all restated on that footing. **No row's
+> disposition may be stated as, or made to depend on, a seam having cleared its
+> causal root.**
+>
+> **Why this was recut before seam 3 merged**, where the earlier note said to
+> wait for it: the question the wait was for is already answered. Seam 2 is
+> landed and cleared zero rows, and seam 3's census disposition is fixed in its
+> own merged frame rather than pending its execution. Holding the node at `draft`
+> past that point would only guarantee an unframed successor at seam 3's merge.
+> ⇒ **The node is now `ready`.** Release still gates on `RT-CONTSPEC-LEDGER`
+> merging, which is a `depends_on` edge, not a framing debt.
 
 > ## The `46d29783` lineage remains an ORACLE
 >
@@ -54,15 +63,35 @@ closes anything other than itself.
 | population | rows | what makes it measurable now |
 |---|---:|---|
 | the native population | run on a lawful assembly | seams 1-3 established the assembly; the held lineage never had one |
-| formerly shadowed rows | 6 | their causal roots cleared in seams 2 and 3; until then their assertions were shadowed by a first refusal and said nothing |
+| formerly shadowed rows | 6 | **nothing cleared their causal roots** — see below; they are read against the lawful base, not against a clearing that happened |
 | host `ENOSPC` rows | 2 | disk capacity, not semantics — see below |
 
-The six shadowed rows are the subtle population. **A shadowed row is not a
-failing row and it is not a passing row — it is an unmeasured one.** Its
-assertion never ran because an earlier refusal stopped the test. Reclassifying
-them means running them and recording what they actually say, which may be
-either verdict. **A shadowed row that turns out to fail is a finding, not a
-regression**, and it does not retroactively invalidate seams 1-3.
+The six shadowed rows are the subtle population, and the subtlety is not the one
+the earlier cut named. **A shadowed row is not a failing row and it is not a
+passing row — it is an unmeasured one.** Its assertion never ran, because an
+earlier refusal stopped the test **in the held `1aef3192` tree**.
+
+⛔ **Their causal roots were never cleared and no seam will clear them.** The
+refusals that shadowed them belong to a mechanism that was never merged and may
+never be. So the question "what does this row say now that its root is cleared"
+has no referent, and you must not ask it.
+
+⇒ **The question that does have a referent: does the test the row names exist on
+the lawful base, and what does it do there?** That is a fact about `main`, which
+you can measure, and it is entirely independent of the held tree's refusal. Three
+dispositions are available per row and they are exhaustive:
+
+- **superseded** — the row's refusal was a property of the held mechanism, and no
+  test on the lawful base carries the assertion. The row records a failure of
+  something that does not exist here. This is expected to be the common case and
+  it is a complete disposition, not a dodge.
+- **live, with a current verdict** — a test on the lawful base carries the
+  assertion. Run it and record what it says, either way.
+- **open, with a named owner** — you cannot determine which of the two it is.
+
+**A row that turns out to fail on the lawful base is a finding, not a
+regression**, it does not retroactively invalidate seams 1-3, and it is routed
+rather than repaired.
 
 ### The two host rows are a capacity precondition, not a semantic one
 
@@ -93,12 +122,16 @@ that does not honour `TMPDIR`.
 
 ## Fixed inputs
 
-Measured at `origin/main = 767bf20f`.
+Measured at `origin/main = 767bf20f`; the seam-2 and census rows re-stated at
+`origin/main = 5d430082` on 2026-08-03. **Re-measure on your own tree before any
+edit and quote it** — seams 2 and 3 both edit `static_transition.rs`, so
+addresses move.
 
 | input | measured value |
 |---|---|
-| seam 3 | `RT-CONTSPEC-LEDGER`, must be `merged` before this starts |
-| the corrected census | seam 1 `D4`, as carried through seams 2 and 3 |
+| seam 2 | `RT-CONTSPEC-ACTIVATE`, merged at `0a6e34cc`; clears **zero** census rows |
+| seam 3 | `RT-CONTSPEC-LEDGER`, must be `merged` before this starts; its frame selects **zero** census rows |
+| the corrected census | seam 1 `D4` — a first-refusal record of the held `1aef3192` lineage, **not** a worklist carried through seams 2 and 3 |
 | the 761 witness gate | `fs_read_at_malformed_offset_narrows_to_invalid_offset`, and its sibling at `crates/ken-cli/tests/rt_parity_native.rs:544` |
 | nodes closed on merge | this node, `RT-RECURSOR-TRANSPORT`, `RT-DECL-CLOSURE-PORT` |
 | prior-slice surfaces | the six, frozen at their `main` blobs |
@@ -133,17 +166,25 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
 
 - **D1 — the native population run** on the lawful assembly, with full pass/fail
   counts and the proving `git rev-parse HEAD`.
-- **D2 — the six formerly shadowed rows reclassified.** One row each: the first
-  refusal that shadowed it, the seam that cleared that root, and what the
-  assertion says now. Verdicts may be either way.
+- **D2 — the six formerly shadowed rows reclassified against the lawful base.**
+  One row each: the first refusal that shadowed it in the held tree, whether the
+  lawful base carries a test bearing that assertion, and the resulting
+  disposition — `superseded`, `live` with its current verdict, or `open` with an
+  owner. ⛔ **Do not write "the seam that cleared this root" for any row. No
+  seam cleared any root**, and a row claiming one is a defect in `D2`, not a
+  finding about the seam.
 - **D3 — the two host rows rerun under confirmed capacity**, with the `df -h`
   output that established it, or recorded as unmeasured with the reason.
 - **D4 — the 761 discrimination.** The commit that made
   `fs_read_at_malformed_offset_narrows_to_invalid_offset` green, and whether it
   fixed the defect or moved the assertion. Same for the
   `rt_parity_native.rs:544` sibling.
-- **D5 — the campaign closeout record**: what the four seams established, what
-  the corrected census's 138 rows resolved to, and what remains open.
+- **D5 — the campaign closeout record**: what the four seams established, the
+  full 138-row disposition table (`superseded` / `live` with verdict / `open`
+  with owner — one row each, this is `AC-1`'s control), and what remains open.
+  ⛔ **State plainly in it that the census recorded first refusals of a mechanism
+  that was never merged**, so a later reader does not mistake `superseded` for
+  work that was silently dropped.
 - **D6 — the three-node tracker closure**, in one commit: this node,
   `RT-RECURSOR-TRANSPORT`, `RT-DECL-CLOSURE-PORT`.
 
@@ -181,12 +222,19 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
 ## Acceptance criteria
 
 - **AC-1 — every one of the corrected census's 138 rows has a terminal
-  disposition.** Resolved by a seam, reclassified here, or explicitly open with
-  an owner. No row is unaccounted for.
-  *Control:* the 138-row set against the union of the four seams' dispositions.
-- **AC-2 — the six shadowed rows are reclassified with a stated verdict each**,
-  and no row is recorded as "still shadowed."
-  *Control:* `D2`'s six rows; grep for shadow-language returns nothing.
+  disposition, as a historical record.** Each row is `superseded` (its refusal
+  belonged to the held mechanism and the lawful base carries no test bearing the
+  assertion), `live` with a current verdict measured on the lawful base, or
+  `open` with a named owner. No row is unaccounted for.
+  *Control:* the 138-row set against `D5`'s disposition table — every row appears
+  exactly once and carries one of the three.
+  ⛔ **A disposition of the form "resolved by seam N" is invalid for every row
+  and fails this AC.** Seams 2 and 3 were both recut off the census and resolve
+  nothing in it; a row so marked means the false premise was reintroduced.
+- **AC-2 — the six shadowed rows carry a stated disposition each**, and no row is
+  recorded as "still shadowed" or as awaiting a clearing.
+  *Control:* `D2`'s six rows; a grep for shadow-language and for
+  cleared-root language both return nothing.
 - **AC-3 — `D4` names a commit and picks one of the two explanations** for each
   of the two 761 tests. A green run does not discharge this AC.
   *Control:* read `D4` against `git log` on the named test.
@@ -260,8 +308,12 @@ Stop and route to the Steward, do not improvise, if any of these hold:
 2. **A formerly shadowed row fails.** Record and route; do not repair.
 3. **`D4` cannot discriminate fixed-from-moved** for either 761 test. That is a
    real finding about the campaign's evidence, and it belongs to the Architect.
-4. **The census's 138 rows do not fully account** (`AC-1`). A row with no
-   disposition means a seam's population boundary was wrong.
+4. **A census row resists all three dispositions** (`AC-1`) — you can neither
+   show the lawful base carries no test bearing its assertion, nor find one to
+   run, nor name an owner for it. ⛔ **This is no longer evidence that a seam's
+   population boundary was wrong**, which is what the prior cut inferred; seams 2
+   and 3 have no census population to be wrong about. It means the census row
+   itself is unreadable, which is a finding about seam 1's `D4` record.
 5. **Disk capacity cannot be established** for `D3` and no seat is free to
    release it.
 6. **Closing the three nodes reveals a fourth that depended on them.** The DAG
