@@ -123,7 +123,7 @@ enum FrameScopeHarnessMutation {
 /// result-directed joins; D7/S4 exercise their corrected governed composition.
 /// S4's completed-emission rows establish collection capability only; they are
 /// not an asymptotic verdict about those rows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum RecursiveDescentResidual {
     /// An ordinary producer match whose scrutinee is directly a call.
     ProducerMatchCall,
@@ -234,6 +234,190 @@ fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResi
         | RuntimeExpr::DeclarationRef { .. }
         | RuntimeExpr::ImportedDeclarationRef { .. }
         | RuntimeExpr::Trap(_) => None,
+    }
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D1` -- report EVERY residual variant present, not
+/// the first.**
+///
+/// [`recursive_descent_residual`] answers the selector's question: *is there at
+/// least one residual?* It is built from `.or_else(..)` and `find_map`, so it
+/// stops at the first hit and is **correct for that question and useless for
+/// this one**. ⛔ This walk never short-circuits: every classification is
+/// recorded and every child is visited regardless of what a sibling produced.
+///
+/// ⚠ **The reason this instrument owes a compound control rather than a
+/// plausibility read.** If it silently kept the short-circuit it would report
+/// exactly one variant on the governed fixture -- which is precisely the answer
+/// the frame leads a reader to expect, so nothing would look wrong. Only a
+/// program that fires two or more variants can tell the two behaviours apart.
+///
+/// ⭐ The campaign reuses this instrument (`RT-SEED-CALL-PORT`,
+/// `RT-PRODUCER-MATCH-PORT`, `RT-RECURSOR-TRANSPORT`, `RT-DESCENT-RETIRE`), and
+/// `RT-DESCENT-RETIRE`'s "no residual fires anywhere" becomes vacuous at exactly
+/// the moment it authorizes deleting the lane if this walk has a gap. Re-prove
+/// it cheaply at each point of use -- `D2`-`D6` rewrite this file underneath it.
+fn enumerate_recursive_descent_residuals(
+    expr: &RuntimeExpr,
+    declarations: &BTreeMap<&str, &RuntimeDeclaration>,
+) -> BTreeSet<RecursiveDescentResidual> {
+    let mut found = BTreeSet::new();
+    collect_recursive_descent_residuals(expr, &mut found);
+    for declaration in declarations.values() {
+        collect_declaration_recursive_descent_residuals(declaration, &mut found);
+    }
+    found
+}
+
+/// The non-short-circuiting twin of [`recursive_descent_residual`].
+///
+/// ⛔ The `match` is exhaustive with no wildcard arm, exactly as its twin is
+/// (`AC-5`): a new `RuntimeExpr` form must still be unable to compile until
+/// someone classifies it. A wildcard here would make the instrument silently
+/// under-report the moment the IR grows.
+fn collect_recursive_descent_residuals(
+    expr: &RuntimeExpr,
+    found: &mut BTreeSet<RecursiveDescentResidual>,
+) {
+    match expr {
+        RuntimeExpr::CheckedJoinSite { body, .. }
+        | RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+        | RuntimeExpr::CheckedRecursiveInvocation { body, .. }
+        | RuntimeExpr::CheckedComputationalIHSlots { body, .. }
+        | RuntimeExpr::CheckedComputationalIHInvocation { body, .. }
+        | RuntimeExpr::Closure { body, .. } => {
+            collect_recursive_descent_residuals(body, found);
+        }
+        RuntimeExpr::LexicalClosure { captures, body, .. } => {
+            for capture in captures {
+                collect_recursive_descent_residuals(capture, found);
+            }
+            collect_recursive_descent_residuals(body, found);
+        }
+        RuntimeExpr::Let { value, body } => {
+            collect_recursive_descent_residuals(value, found);
+            collect_recursive_descent_residuals(body, found);
+        }
+        RuntimeExpr::If {
+            scrutinee,
+            then_expr,
+            else_expr,
+        } => {
+            collect_recursive_descent_residuals(scrutinee, found);
+            collect_recursive_descent_residuals(then_expr, found);
+            collect_recursive_descent_residuals(else_expr, found);
+        }
+        RuntimeExpr::PrimitiveCall { args, .. } | RuntimeExpr::Construct { args, .. } => {
+            for argument in args {
+                collect_recursive_descent_residuals(argument, found);
+            }
+        }
+        RuntimeExpr::Match {
+            scrutinee, cases, ..
+        } => {
+            // ⛔ BOTH classifications, then BOTH walks. The twin stops after
+            // whichever fires first.
+            if matches!(scrutinee.as_ref(), RuntimeExpr::Call { .. }) {
+                found.insert(RecursiveDescentResidual::ProducerMatchCall);
+            }
+            if matches!(
+                scrutinee.as_ref(),
+                RuntimeExpr::ComputationalMatch { cases, .. }
+                    if cases
+                        .iter()
+                        .any(|case| !case.recursive_positions.is_empty())
+            ) {
+                found.insert(RecursiveDescentResidual::MatchScrutineeRecursor);
+            }
+            collect_recursive_descent_residuals(scrutinee, found);
+            for case in cases {
+                collect_recursive_descent_residuals(&case.body, found);
+            }
+        }
+        RuntimeExpr::ComputationalMatch {
+            scrutinee, cases, ..
+        } => {
+            collect_recursive_descent_residuals(scrutinee, found);
+            for case in cases {
+                collect_recursive_descent_residuals(&case.body, found);
+            }
+        }
+        RuntimeExpr::Record { fields } => {
+            for (_, value) in fields {
+                collect_recursive_descent_residuals(value, found);
+            }
+        }
+        RuntimeExpr::Project { record, .. } => {
+            collect_recursive_descent_residuals(record, found);
+        }
+        RuntimeExpr::Call { callee, args } => {
+            if matches!(callee.as_ref(), RuntimeExpr::Closure { .. }) {
+                found.insert(RecursiveDescentResidual::SeedClosureCall);
+            }
+            if matches!(callee.as_ref(), RuntimeExpr::LexicalClosure { .. })
+                && args.iter().any(|argument| {
+                    matches!(
+                        argument,
+                        RuntimeExpr::ComputationalMatch { cases, .. }
+                            if cases
+                                .iter()
+                                .any(|case| !case.recursive_positions.is_empty())
+                    )
+                })
+            {
+                found.insert(RecursiveDescentResidual::LexicalCallArgumentRecursor);
+            }
+            collect_recursive_descent_residuals(callee, found);
+            for argument in args {
+                collect_recursive_descent_residuals(argument, found);
+            }
+        }
+        RuntimeExpr::Effect {
+            capability, args, ..
+        } => {
+            if let Some(capability) = capability.as_ref() {
+                collect_recursive_descent_residuals(&capability.value, found);
+            }
+            for argument in args {
+                collect_recursive_descent_residuals(argument, found);
+            }
+        }
+        RuntimeExpr::Value(_)
+        | RuntimeExpr::Var(_)
+        | RuntimeExpr::DeclarationRef { .. }
+        | RuntimeExpr::ImportedDeclarationRef { .. }
+        | RuntimeExpr::Trap(_) => {}
+    }
+}
+
+/// The non-short-circuiting twin of
+/// [`declaration_recursive_descent_residual`].
+///
+/// ⛔ A transparent closure-seed declaration records
+/// `TransparentDeclarationClosure` **and still walks its body**. The twin uses
+/// `.or_else(..)`, so a declaration that is both a closure seed and contains a
+/// second residual reports only the first -- which is exactly the shape this
+/// node's own fixture has.
+fn collect_declaration_recursive_descent_residuals(
+    declaration: &RuntimeDeclaration,
+    found: &mut BTreeSet<RecursiveDescentResidual>,
+) {
+    match &declaration.kind {
+        RuntimeDeclarationKind::Transparent { body } => {
+            if matches!(
+                body,
+                RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
+            ) {
+                found.insert(RecursiveDescentResidual::TransparentDeclarationClosure);
+            }
+            collect_recursive_descent_residuals(body, found);
+        }
+        RuntimeDeclarationKind::Primitive { .. }
+        | RuntimeDeclarationKind::Data { .. }
+        | RuntimeDeclarationKind::Record { .. }
+        | RuntimeDeclarationKind::RecursiveGroup { .. }
+        | RuntimeDeclarationKind::EffectBoundary { .. }
+        | RuntimeDeclarationKind::MetadataOnly => {}
     }
 }
 
