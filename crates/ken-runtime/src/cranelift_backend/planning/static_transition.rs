@@ -2476,9 +2476,20 @@ fn continuation_owner_entry_sources(
                     .ok_or_else(|| {
                         planner_capacity_error("continuation capture ABI position exhausted")
                     })?;
+                // ⭐ `RT-DECL-CLOSURE-PORT` `D2`: `CallableDeclaration` is
+                // matched **beside** `ClosureBody`, with the identical sourcing,
+                // because it occupies the identical graph position — same
+                // defining closure occurrence, same `[body, captures..]` child
+                // layout. Before `D2` these very nodes WERE `ClosureBody`, so
+                // anything else here (an error arm, a fresh derivation) would be
+                // a behaviour change smuggled in under a reclassification.
                 match descriptor.definition {
                     AbiUnitDefinition::ClosureBody {
                         defining_origin,
+                        provenance: AbiCaptureProvenance::Lexical,
+                    }
+                    | AbiUnitDefinition::CallableDeclaration {
+                        declaration_origin: defining_origin,
                         provenance: AbiCaptureProvenance::Lexical,
                     } => {
                         let defining = occurrence_authority(plan, defining_origin)?;
@@ -2506,6 +2517,10 @@ fn continuation_owner_entry_sources(
                     }
                     AbiUnitDefinition::ClosureBody {
                         defining_origin,
+                        provenance: AbiCaptureProvenance::Seed,
+                    }
+                    | AbiUnitDefinition::CallableDeclaration {
+                        declaration_origin: defining_origin,
                         provenance: AbiCaptureProvenance::Seed,
                     } => {
                         occurrence_authority(plan, defining_origin)?;
@@ -4303,12 +4318,21 @@ impl<'src> Planner<'src> {
             .root_entry
             .ok_or_else(|| planner_error("plan has no root scheduling entry"))?;
         self.plan.root_ingress = root_ingress;
+        // `RT-DECL-CLOSURE-PORT` `D2` — the declaration occurrences are the
+        // discriminator that splits a `StaticBody` target into a callable
+        // declaration unit or an anonymous closure body. They come from the one
+        // loop that plans transparent declarations, so the ABI plane cannot
+        // classify a unit as declaration-owned unless the planner actually
+        // planned that declaration.
+        let declaration_origins: BTreeSet<StaticOriginId> =
+            self.plan.declaration_occurrences.values().copied().collect();
         self.plan.abi = build_abi_plane(
             &self.plan.semantic,
             &self.plan.nodes,
             &self.plan.semantic_sources,
             &self.plan.edges,
             &self.plan.entries,
+            &declaration_origins,
             root_entry,
             root_ingress,
         )?;
@@ -5641,6 +5665,7 @@ impl<'src> StaticTransitionPlan<'src> {
             &self.semantic_sources,
             &self.edges,
             &self.entries,
+            &self.declaration_occurrences.values().copied().collect(),
             self.root_entry
                 .ok_or_else(|| planner_error("plan has no root scheduling entry"))?,
             self.root_ingress,
@@ -10562,6 +10587,7 @@ mod tests {
                 &plan.semantic_sources,
                 &plan.edges,
                 &plan.entries,
+                &plan.declaration_occurrences.values().copied().collect(),
                 plan.root_entry.expect("root entry"),
                 plan.root_ingress,
             )
@@ -10745,6 +10771,7 @@ mod tests {
                 &shallow.semantic_sources,
                 &shallow.edges,
                 &shallow.entries,
+                &shallow.declaration_occurrences.values().copied().collect(),
                 shallow.root_entry.expect("root entry"),
                 shallow.root_ingress,
             )
@@ -11073,6 +11100,7 @@ mod tests {
                 &plan.semantic_sources,
                 &plan.edges,
                 &plan.entries,
+                &plan.declaration_occurrences.values().copied().collect(),
                 plan.root_entry.expect("root entry"),
                 plan.root_ingress,
             ) {
@@ -11147,6 +11175,7 @@ mod tests {
             &lexical_plan.semantic_sources,
             &lexical_plan.edges,
             &lexical_plan.entries,
+            &lexical_plan.declaration_occurrences.values().copied().collect(),
             lexical_plan.root_entry.expect("root entry"),
             lexical_plan.root_ingress,
         ) {
@@ -11405,6 +11434,7 @@ mod tests {
                     Some((ingress, unit.header().parameters))
                 }
                 AbiUnitDefinition::ClosureBody { .. }
+                | AbiUnitDefinition::CallableDeclaration { .. }
                 | AbiUnitDefinition::ContinuationSpecialization { .. } => None,
             })
             .collect::<Vec<_>>();
@@ -11460,7 +11490,14 @@ mod tests {
             .expect("validated units")
             .into_iter()
             .filter_map(|unit| match unit.definition() {
-                AbiUnitDefinition::ClosureBody { .. } => Some(unit.header().captures),
+                // `D2`: grouped WITH `ClosureBody`, not with the `None` arm.
+                // These fixtures plan no declarations, so this changes nothing
+                // today -- but a declaration added later would otherwise have
+                // its captures silently dropped from the measured population.
+                AbiUnitDefinition::ClosureBody { .. }
+                | AbiUnitDefinition::CallableDeclaration { .. } => {
+                    Some(unit.header().captures)
+                }
                 AbiUnitDefinition::SchedulingEntry { .. }
                 | AbiUnitDefinition::ContinuationSpecialization { .. } => None,
             })
@@ -11481,7 +11518,14 @@ mod tests {
             .expect("validated units")
             .into_iter()
             .filter_map(|unit| match unit.definition() {
-                AbiUnitDefinition::ClosureBody { .. } => Some(unit.header().captures),
+                // `D2`: grouped WITH `ClosureBody`, not with the `None` arm.
+                // These fixtures plan no declarations, so this changes nothing
+                // today -- but a declaration added later would otherwise have
+                // its captures silently dropped from the measured population.
+                AbiUnitDefinition::ClosureBody { .. }
+                | AbiUnitDefinition::CallableDeclaration { .. } => {
+                    Some(unit.header().captures)
+                }
                 AbiUnitDefinition::SchedulingEntry { .. }
                 | AbiUnitDefinition::ContinuationSpecialization { .. } => None,
             })
@@ -11490,6 +11534,180 @@ mod tests {
             capture_counts,
             vec![0],
             "an otherwise identical body without a free binding acquired a slot"
+        );
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D2` fixture — one program holding BOTH owners.**
+    ///
+    /// A transparent declaration whose body is a lexical closure seed, and a
+    /// separate anonymous lexical closure at the root. ⭐ Both are in the *same*
+    /// program on purpose: the property `D2` establishes is a **split**, and a
+    /// fixture carrying only the declaration cannot tell "classified by owner"
+    /// apart from "classified `CallableDeclaration` unconditionally".
+    fn d2_declaration_and_anonymous_closure() -> (RuntimeExpr, RuntimeDeclaration) {
+        // The declaration's own body: two captures, one parameter.
+        let declaration = RuntimeDeclaration {
+            symbol: "decl:fixture::d2".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::Var(0), RuntimeExpr::Var(1)],
+                    params: vec!["arg0".to_string()],
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        // The anonymous closure: a DIFFERENT arity, so an assertion cannot be
+        // satisfied by reading the wrong unit's header and still agreeing.
+        let root = RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: vec![RuntimeExpr::Var(0)],
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(7.into()))),
+            }),
+            args: Vec::new(),
+        };
+        (root, declaration)
+    }
+
+    /// The definition arms of a `D2` plan, paired with each unit's declared
+    /// `(parameters, captures)`.
+    fn d2_units(plan: &StaticTransitionPlan<'_>) -> Vec<(AbiUnitDefinition, (u32, u32))> {
+        plan.emittable_units()
+            .expect("validated units")
+            .into_iter()
+            .map(|unit| {
+                (
+                    unit.definition(),
+                    (unit.header().parameters, unit.header().captures),
+                )
+            })
+            .collect()
+    }
+
+    /// **`D2` — a transparent closure-seed declaration owns its own callable
+    /// unit, and an anonymous closure in the same program does not.**
+    #[test]
+    fn d2_a_transparent_closure_seed_declaration_owns_a_callable_unit() {
+        let (root, declaration) = d2_declaration_and_anonymous_closure();
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d2", &declaration);
+        let plan = plan_static_transition_graph(&root, &declarations).expect("plannable");
+
+        let declaration_origin = plan
+            .declaration_occurrence_origin("decl:fixture::d2")
+            .expect("the transparent declaration has an occurrence origin");
+        let units = d2_units(&plan);
+
+        // The declaration's callable unit: owned by the DECLARATION's occurrence,
+        // carrying the closure's own arity. Asserted as an exact member rather
+        // than "some unit is a CallableDeclaration", so a unit owned by the
+        // wrong occurrence cannot satisfy it.
+        assert!(
+            units.contains(&(
+                AbiUnitDefinition::CallableDeclaration {
+                    declaration_origin,
+                    provenance: AbiCaptureProvenance::Lexical,
+                },
+                (1, 2),
+            )),
+            "D2: the declaration's closure-seed body must be a callable unit \
+             owned by the declaration, with the closure's own arity; got {units:?}"
+        );
+
+        // The discriminator: the anonymous closure stays an anonymous body. ⛔ Its
+        // defining origin is NOT the declaration's, and that is the whole content
+        // of "separately owned".
+        let anonymous = units
+            .iter()
+            .filter_map(|(definition, arity)| match definition {
+                AbiUnitDefinition::ClosureBody {
+                    defining_origin, ..
+                } => Some((*defining_origin, *arity)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        let [(anonymous_origin, anonymous_arity)] = anonymous[..] else {
+            panic!("D2: expected exactly one anonymous ClosureBody unit, got {anonymous:?}");
+        };
+        assert_eq!(
+            anonymous_arity,
+            (0, 1),
+            "D2: the anonymous closure must keep its own arity, distinct from \
+             the declaration's -- reading the wrong unit's header would agree \
+             with the declaration's (1, 2) instead"
+        );
+        assert_ne!(
+            anonymous_origin, declaration_origin,
+            "D2: the anonymous closure body must not be owned by the declaration"
+        );
+    }
+
+    /// **`D2` causal control — the derivation, not the fixture, decides.**
+    ///
+    /// ⭐ Two mutations, and **each catches a defect the other cannot**. Ignoring
+    /// ownership reds only the positive arm; claiming universal ownership reds
+    /// only the discriminator. A single control here would leave one of the two
+    /// wrong derivations green, and both wrong derivations still compile.
+    #[test]
+    fn d2_the_owner_split_is_causal_in_both_directions() {
+        let (root, declaration) = d2_declaration_and_anonymous_closure();
+        let mut declarations = BTreeMap::new();
+        declarations.insert("decl:fixture::d2", &declaration);
+
+        let arms = |units: &[(AbiUnitDefinition, (u32, u32))]| {
+            let callable = units
+                .iter()
+                .filter(|(definition, _)| {
+                    matches!(definition, AbiUnitDefinition::CallableDeclaration { .. })
+                })
+                .count();
+            let bodies = units
+                .iter()
+                .filter(|(definition, _)| {
+                    matches!(definition, AbiUnitDefinition::ClosureBody { .. })
+                })
+                .count();
+            (callable, bodies)
+        };
+
+        let plan = plan_static_transition_graph(&root, &declarations).expect("plannable");
+        assert_eq!(
+            arms(&d2_units(&plan)),
+            (1, 1),
+            "D2: the fixture must hold exactly one unit of each owner"
+        );
+
+        // Mutation 1 -- the pre-port derivation. The declaration loses its unit.
+        let ignored = super::abi::D2_IGNORE_DECLARATION_OWNERSHIP.with(|flag| {
+            flag.set(true);
+            let plan = plan_static_transition_graph(&root, &declarations).expect("plannable");
+            let observed = arms(&d2_units(&plan));
+            flag.set(false);
+            observed
+        });
+        assert_eq!(
+            ignored,
+            (0, 2),
+            "D2: ignoring the owner discriminator must restore the pre-port \
+             classification -- if this stays (1, 1) the split is not derived \
+             from declaration ownership at all"
+        );
+
+        // Mutation 2 -- the opposite defect. The anonymous closure is captured
+        // by the new arm, which the positive assertion alone accepts happily.
+        let claimed = super::abi::D2_CLAIM_ALL_BODIES_DECLARATION_OWNED.with(|flag| {
+            flag.set(true);
+            let plan = plan_static_transition_graph(&root, &declarations).expect("plannable");
+            let observed = arms(&d2_units(&plan));
+            flag.set(false);
+            observed
+        });
+        assert_eq!(
+            claimed,
+            (2, 0),
+            "D2: claiming universal declaration ownership must swallow the \
+             anonymous closure -- the discriminator is what rejects this"
         );
     }
 

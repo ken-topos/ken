@@ -17,6 +17,8 @@
 //! `RT-FNSPLIT-B2F` performs the atomic switch-over; this node only makes the
 //! contract expressible and checkable before it does.
 
+use std::collections::BTreeSet;
+
 use super::semantic_ir::{
     positioned_sources, DenseRange, PredeclaredFunctionId, RuntimeExprShape, SemanticAtomKind,
     SemanticOperandElement, SemanticOwner,
@@ -280,10 +282,15 @@ impl AbiCaptureProvenance {
 
 /// How a function unit came to be a function unit.
 ///
-/// ⛔ Closed, and **derived from the graph**: the two arms are exactly `B2O`'s
-/// two seed classes, which that node already validated to be disjoint and
-/// exhaustive over the partition. A unit that is neither, or both, is a planner
-/// error rather than a defaulted arm.
+/// ⛔ Closed, and **derived from the graph**: the seed classes are `B2O`'s two,
+/// which that node already validated to be disjoint and exhaustive over the
+/// partition, plus the planner-interned arms below. A unit that is neither, or
+/// both, is a planner error rather than a defaulted arm.
+///
+/// ⚠ **The "two arms are exhaustive" claim this comment used to make was already
+/// false before `RT-DECL-CLOSURE-PORT` touched it** — `ContinuationSpecialization`
+/// is a third, planner-interned arm — and `RT-DECL-CLOSURE-PORT` §4 row #24
+/// names that stale claim as the thing a new arm must not be smuggled past.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(C)]
 pub(in crate::cranelift_backend) enum AbiUnitDefinition {
@@ -301,6 +308,34 @@ pub(in crate::cranelift_backend) enum AbiUnitDefinition {
         defining_origin: StaticOriginId,
         provenance: AbiCaptureProvenance,
     },
+    /// **`RT-DECL-CLOSURE-PORT` `D2` — a planner-owned callable declaration
+    /// unit.**
+    ///
+    /// The body of a transparent declaration whose own body is a closure seed.
+    /// Such a declaration is *callable*: it has the closure's parameters and
+    /// captures. Before this arm existed the same node was classified
+    /// [`AbiUnitDefinition::ClosureBody`], owned by the anonymous closure
+    /// occurrence, and the declaration's own entry was a zero-arity
+    /// [`AbiUnitDefinition::SchedulingEntry`] — so **no unit was owned by the
+    /// declaration**, and `DeclarationRef` had to produce a compiler-only
+    /// `Lowered::DeclarationClosure` capsule whose body was then recursively
+    /// lowered into the generated root.
+    ///
+    /// ⛔ **Separately owned, and that is the whole point of the arm.** The
+    /// identity is the **declaration's** planned occurrence, not the anonymous
+    /// closure occurrence a `ClosureBody` records. ⛔ It is deliberately not
+    /// smuggled through `SchedulingEntry` or `ClosureBody`
+    /// (`RT-DECL-CLOSURE-PORT` §4, row #24).
+    ///
+    /// ⚠ `D2` establishes the unit and its ownership **only**. It mints no call
+    /// edge (`D4`) and no typed capture/parameter/result transport across the
+    /// boundary (`D3`), and it does not retire the selector residual (`D6`).
+    CallableDeclaration {
+        /// The transparent declaration's planned occurrence — the closure
+        /// occurrence that is the source of this unit's `StaticBody` edge.
+        declaration_origin: StaticOriginId,
+        provenance: AbiCaptureProvenance,
+    },
     /// A planner-interned continuation specialization.
     ///
     /// The identity is compiler-only and resolves to the immutable Slice 1
@@ -310,6 +345,32 @@ pub(in crate::cranelift_backend) enum AbiUnitDefinition {
     ContinuationSpecialization {
         specialization: ContinuationSpecializationId,
     },
+}
+
+impl AbiUnitDefinition {
+    /// The defining closure occurrence and capture provenance of the arms that
+    /// **declare captures off a closure occurrence**, if this is one.
+    ///
+    /// ⭐ **`RT-DECL-CLOSURE-PORT` `D2` — one predicate, so the two arms cannot
+    /// drift apart.** `ClosureBody` and `CallableDeclaration` sit at the same
+    /// graph position and differ only in who owns them, so every rule keyed on
+    /// "declares captures off a closure occurrence" must reach both. Each such
+    /// site asking `match … ClosureBody` separately is precisely how a new arm
+    /// inherits none of the invariants the old one carried — a check that then
+    /// still passes, on a quietly smaller population.
+    const fn closure_shaped_captures(self) -> Option<(StaticOriginId, AbiCaptureProvenance)> {
+        match self {
+            Self::ClosureBody {
+                defining_origin,
+                provenance,
+            }
+            | Self::CallableDeclaration {
+                declaration_origin: defining_origin,
+                provenance,
+            } => Some((defining_origin, provenance)),
+            Self::SchedulingEntry { .. } | Self::ContinuationSpecialization { .. } => None,
+        }
+    }
 }
 
 /// Static compilation mode for the explicitly recorded root scheduling entry.
@@ -485,6 +546,10 @@ impl AbiPlane {
         let (definition_is_closure_body, provenance) = match descriptor.definition {
             AbiUnitDefinition::SchedulingEntry { .. } => (false, None),
             AbiUnitDefinition::ClosureBody { provenance, .. } => (true, Some(provenance)),
+            // `D2`: a callable declaration unit has a closure body's frame
+            // shape, so the `AC-2`/`AC-4` invariance controls must see the same
+            // provenance they would have seen before the port reclassified it.
+            AbiUnitDefinition::CallableDeclaration { provenance, .. } => (true, Some(provenance)),
             AbiUnitDefinition::ContinuationSpecialization { .. } => (false, None),
         };
         Ok(AbiDescriptorShape {
@@ -524,6 +589,7 @@ pub(super) fn build_abi_plane(
     sources_in: &[SemanticSourceSeed],
     edges: &[StaticEdge],
     entries: &[StaticNodeId],
+    declaration_origins: &BTreeSet<StaticOriginId>,
     root_entry: StaticNodeId,
     root_ingress: AbiRootIngress,
 ) -> Result<AbiPlane, CraneliftBackendError> {
@@ -534,8 +600,15 @@ pub(super) fn build_abi_plane(
     let sources = positioned_sources(nodes, sources_in)?;
     let sources = sources.as_slice();
 
-    let definitions =
-        unit_definitions(plane, sources, edges, entries, root_entry, root_ingress)?;
+    let definitions = unit_definitions(
+        plane,
+        sources,
+        edges,
+        entries,
+        declaration_origins,
+        root_entry,
+        root_ingress,
+    )?;
 
     // `C4`, and deliberately before any descriptor is minted: an imported edge
     // must receive **no** callable descriptor at all, so the exclusion runs
@@ -580,6 +653,7 @@ pub(super) fn build_abi_plane(
         sources_in,
         edges,
         entries,
+        declaration_origins,
         root_entry,
         root_ingress,
     )?;
@@ -588,6 +662,22 @@ pub(super) fn build_abi_plane(
 
 #[cfg(test)]
 thread_local! {
+    /// **`RT-DECL-CLOSURE-PORT` `D2` causal control — the PRE-PORT defect.**
+    ///
+    /// Ignore the declaration-owner discriminator, so every `StaticBody` target
+    /// classifies as an anonymous `ClosureBody` exactly as it did before `D2`.
+    /// The positive owner assertion must go red under this.
+    pub(super) static D2_IGNORE_DECLARATION_OWNERSHIP: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+    /// **`RT-DECL-CLOSURE-PORT` `D2` causal control — the OPPOSITE defect.**
+    ///
+    /// Claim every `StaticBody` target is declaration-owned. ⭐ This is the
+    /// control the positive assertion alone cannot catch: a derivation that
+    /// simply answers `CallableDeclaration` for everything satisfies "the
+    /// declaration's body is declaration-owned" and is still wrong. Only the
+    /// anonymous-closure discriminator reds under it.
+    pub(super) static D2_CLAIM_ALL_BODIES_DECLARATION_OWNED: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
     /// Compile-preserving D4 mutation: construction begins without the exact
     /// capacity preflight, so the first descriptor grows boundary storage.
     pub(super) static SKIP_CONTINUATION_ABI_PREFLIGHT: std::cell::Cell<bool> =
@@ -810,11 +900,11 @@ fn reject_imported_capture_edges(
     definitions: &[AbiUnitDefinition],
 ) -> Result<(), CraneliftBackendError> {
     for definition in definitions {
-        let AbiUnitDefinition::ClosureBody {
-            defining_origin,
-            provenance,
-        } = *definition
-        else {
+        // ⛔ `D2`: a callable declaration unit captures exactly as a closure body
+        // does, so it is in this exclusion's population too. Matching only
+        // `ClosureBody` here would have silently exempted every ported
+        // declaration from `C4` — the check would still pass, on a smaller set.
+        let Some((defining_origin, provenance)) = definition.closure_shaped_captures() else {
             continue;
         };
         if provenance != AbiCaptureProvenance::Lexical {
@@ -930,11 +1020,23 @@ fn result_carrier(source: SemanticSourceKind) -> Result<AbiCarrier, CraneliftBac
 /// the partition; this function re-derives the classification rather than
 /// trusting it, and a seed that is **neither** or **both** is a named planner
 /// error instead of a defaulted arm.
+///
+/// **`RT-DECL-CLOSURE-PORT` `D2`** splits the `StaticBody`-target class in two,
+/// again from the graph and not from a list: a body whose defining occurrence is
+/// a **transparent declaration's** planned occurrence is that declaration's own
+/// callable unit ([`AbiUnitDefinition::CallableDeclaration`]); every other body
+/// stays an anonymous [`AbiUnitDefinition::ClosureBody`].
+///
+/// ⛔ The discriminator is `declaration_origins` — the planner's
+/// `declaration_occurrences`, which is populated only by the one loop that plans
+/// transparent declarations. It is **not** a source-origin whitelist and not a
+/// syntactic test on the body, both of which §4's prohibitions forbid.
 fn unit_definitions(
     plane: &SemanticPlane,
     sources: &[SemanticSourceSeed],
     edges: &[StaticEdge],
     entries: &[StaticNodeId],
+    declaration_origins: &BTreeSet<StaticOriginId>,
     root_entry: StaticNodeId,
     root_ingress: AbiRootIngress,
 ) -> Result<Vec<AbiUnitDefinition>, CraneliftBackendError> {
@@ -986,9 +1088,28 @@ fn unit_definitions(
             (false, Some(from)) => {
                 let defining_origin = StaticOriginId(from.0);
                 let seed = source_for(sources, defining_origin)?;
-                AbiUnitDefinition::ClosureBody {
-                    defining_origin,
-                    provenance: closure_provenance(seed.source)?,
+                let provenance = closure_provenance(seed.source)?;
+                // `D2`: the same graph position, split by **who owns the
+                // defining occurrence**. A transparent declaration's planned
+                // occurrence owns a callable declaration unit; anything else
+                // owns an anonymous closure body.
+                #[cfg(test)]
+                let declaration_owned = !D2_IGNORE_DECLARATION_OWNERSHIP
+                    .with(std::cell::Cell::get)
+                    && (D2_CLAIM_ALL_BODIES_DECLARATION_OWNED.with(std::cell::Cell::get)
+                        || declaration_origins.contains(&defining_origin));
+                #[cfg(not(test))]
+                let declaration_owned = declaration_origins.contains(&defining_origin);
+                if declaration_owned {
+                    AbiUnitDefinition::CallableDeclaration {
+                        declaration_origin: defining_origin,
+                        provenance,
+                    }
+                } else {
+                    AbiUnitDefinition::ClosureBody {
+                        defining_origin,
+                        provenance,
+                    }
                 }
             }
             (true, Some(_)) => {
@@ -1040,9 +1161,16 @@ fn declared_arity(
     sources: &[SemanticSourceSeed],
     definition: AbiUnitDefinition,
 ) -> Result<(u32, u32), CraneliftBackendError> {
+    // `D2`: a callable declaration unit's arity comes from its own defining
+    // closure occurrence, exactly as a closure body's does — the parameters and
+    // captures are the declaration's callable identity.
     let defining_origin = match definition {
         AbiUnitDefinition::ClosureBody {
             defining_origin, ..
+        }
+        | AbiUnitDefinition::CallableDeclaration {
+            declaration_origin: defining_origin,
+            ..
         } => defining_origin,
         AbiUnitDefinition::SchedulingEntry { ingress } => {
             return Ok(match ingress {
@@ -1140,7 +1268,10 @@ fn push_slots(
             }
             None
         }
-        AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
+        // `D2`: same carrier rule, same provenance question — a callable
+        // declaration unit's captures are carried exactly as a closure body's.
+        AbiUnitDefinition::ClosureBody { provenance, .. }
+        | AbiUnitDefinition::CallableDeclaration { provenance, .. } => Some(provenance.carrier()),
         AbiUnitDefinition::ContinuationSpecialization { .. } => {
             return Err(planner_error(
                 "continuation specialization slots require their exact planner projection",
@@ -1699,6 +1830,7 @@ impl AbiPlane {
         sources: &[SemanticSourceSeed],
         edges: &[StaticEdge],
         entries: &[StaticNodeId],
+        declaration_origins: &BTreeSet<StaticOriginId>,
         root_entry: StaticNodeId,
         root_ingress: AbiRootIngress,
     ) -> Result<(), CraneliftBackendError> {
@@ -1712,8 +1844,15 @@ impl AbiPlane {
             ));
         }
 
-        let definitions =
-            unit_definitions(plane, sources, edges, entries, root_entry, root_ingress)?;
+        let definitions = unit_definitions(
+            plane,
+            sources,
+            edges,
+            entries,
+            declaration_origins,
+            root_entry,
+            root_ingress,
+        )?;
 
         for (ordinal, descriptor) in self.descriptors.iter().enumerate() {
             // `AC-1`, direction 2 — every descriptor names a member of the
@@ -1825,13 +1964,19 @@ impl AbiPlane {
 
             // The provenance the graph says, against the provenance the
             // descriptor recorded.
-            let AbiUnitDefinition::ClosureBody {
-                defining_origin,
-                provenance,
-            } = descriptor.definition
+            //
+            // ⭐ `RT-DECL-CLOSURE-PORT` `D2`: the callee of a `StaticBody` edge
+            // is a closure body **or** a callable declaration unit — the port
+            // reclassified some of these very nodes, and this layout agreement
+            // must keep holding across that split. ⛔ The check is not relaxed
+            // for the new arm: it compares the identical four axes (defining
+            // occurrence, provenance, captures, parameters) against the same
+            // caller-side signature.
+            let Some((defining_origin, provenance)) =
+                descriptor.definition.closure_shaped_captures()
             else {
                 return Err(planner_error(
-                    "static body edge callee is not a closure-body unit",
+                    "static body edge callee is not a closure-body or callable-declaration unit",
                 ));
             };
             if defining_origin != signature.defining_origin {
@@ -1995,7 +2140,10 @@ fn validate_slot_run(
 ) -> Result<(), CraneliftBackendError> {
     let capture_carrier = match definition {
         AbiUnitDefinition::SchedulingEntry { .. } => None,
-        AbiUnitDefinition::ClosureBody { provenance, .. } => Some(provenance.carrier()),
+        // `D2`: same carrier rule, same provenance question — a callable
+        // declaration unit's captures are carried exactly as a closure body's.
+        AbiUnitDefinition::ClosureBody { provenance, .. }
+        | AbiUnitDefinition::CallableDeclaration { provenance, .. } => Some(provenance.carrier()),
         AbiUnitDefinition::ContinuationSpecialization { .. } => {
             return Err(planner_error(
                 "continuation specialization slots require their exact planner projection",
