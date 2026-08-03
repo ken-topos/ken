@@ -1116,6 +1116,110 @@ pub(super) struct RootUnitResult {
     pub(super) trap: Option<RuntimeTrap>,
 }
 
+/// **`RT-CONTSPEC-ACTIVATE` `D3` — the affine claim ledger over the exact
+/// planned continuation-call tokens.**
+///
+/// Each projected causal identity is claimed **exactly once**, by the exact
+/// producer unit the token itself names. This is affine on the *causal token*,
+/// which is a different object from `RT-WORKER-BIND`'s worker binding -- that
+/// one is deliberately NOT affine, and nothing here changes it.
+///
+/// ⛔ There is no `active_emission_owner`, no lowering-minted arm token, and no
+/// second owner authority: the owner compared against is the token's own
+/// immutable `producer_owner`, and the unit compared to it is the one
+/// currently being defined.
+///
+/// ⚠ An affine rejection from here is **not self-explaining**. The identity is
+/// four-field -- producer construct, alternative, call-site sequence, and
+/// `recursive_position`. A key that lost `recursive_position` collides two
+/// distinct tokens at one source position and this ledger will report a
+/// double-consumption of the *right* token while the real defect is the key's
+/// arity. Check the arity before believing the report.
+struct ContinuationClaimLedger {
+    /// `None` until claimed; then the exact unit that claimed it, so owner
+    /// agreement is a recorded fact rather than an inference.
+    claims: BTreeMap<ContinuationCallIdentity, Option<PredeclaredFunctionId>>,
+}
+
+impl ContinuationClaimLedger {
+    fn open(
+        plan: &StaticTransitionPlan<'_>,
+        bundle: &UnitBundle,
+    ) -> Result<Self, CraneliftBackendError> {
+        let claims = resolve_continuation_targets(plan, bundle)?
+            .into_keys()
+            .map(|identity| (identity, None))
+            .collect();
+        Ok(Self { claims })
+    }
+
+    /// Claim every token owned by the unit now being defined.
+    ///
+    /// Rejects an **absent** claim (a token this ledger never planned), a
+    /// **duplicate** claim (the same exact identity consumed twice), and a
+    /// **wrong owner** (a token whose producer owner is not this unit).
+    fn claim_for_unit(
+        &mut self,
+        defining: PredeclaredFunctionId,
+    ) -> Result<usize, CraneliftBackendError> {
+        let owned: Vec<ContinuationCallIdentity> = self
+            .claims
+            .keys()
+            .filter(|identity| identity.producer_owner() == defining)
+            .cloned()
+            .collect();
+        for identity in &owned {
+            let consumed = self.claims.get_mut(identity).ok_or_else(|| {
+                backend_module(
+                    "a continuation claim was consumed that this ledger never planned".to_string(),
+                )
+            })?;
+            if let Some(previous) = consumed {
+                return Err(backend_module(format!(
+                    "a continuation call token was claimed twice, first by {previous:?}; before \
+                     reading this as a real double-consumption, confirm the causal identity still \
+                     carries all four fields including recursive_position, because a collided key \
+                     reports this against the right token"
+                )));
+            }
+            *consumed = Some(defining);
+        }
+        Ok(owned.len())
+    }
+
+    /// No claim may be left over once every unit has been defined.
+    fn close(self) -> Result<(), CraneliftBackendError> {
+        let leftover = self
+            .claims
+            .values()
+            .filter(|consumed| consumed.is_none())
+            .count();
+        if leftover != 0 {
+            return Err(backend_module(format!(
+                "{leftover} planned continuation call tokens were never claimed by the unit that \
+                 owns them"
+            )));
+        }
+        // Owner agreement, asserted on the RECORDED consumer.
+        //
+        // Honest note: selection above is already by the token's own owner, so
+        // this holds by construction today and cannot fire against the current
+        // code. It is kept because it is the property `D3` actually promises,
+        // and it is the check that would fire if selection were ever decoupled
+        // from ownership. A wrong owner under today's structure does not reach
+        // here -- it surfaces as a leftover claim above.
+        for (identity, consumed) in &self.claims {
+            if *consumed != Some(identity.producer_owner()) {
+                return Err(backend_module(
+                    "a continuation call token was claimed by a unit that does not own it"
+                        .to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 pub(super) fn define_unit_bodies<M: Module>(
     module: &mut M,
     compiler: &mut Lowering<'_>,
@@ -1127,6 +1231,9 @@ pub(super) fn define_unit_bodies<M: Module>(
     let root = compiler.static_transition_plan.root_emittable_unit()?.function();
     // `D4`: projected once, declared afresh into each generated function below.
     let worker_targets = resolve_worker_targets(&compiler.static_transition_plan, bundle)?;
+    // `D3` — one affine claim per planned causal token, owner-checked against
+    // the exact unit being defined.
+    let mut claims = ContinuationClaimLedger::open(&compiler.static_transition_plan, bundle)?;
     let mut root_result = None;
     let emissions = compiler
         .static_transition_plan
@@ -1149,6 +1256,7 @@ pub(super) fn define_unit_bodies<M: Module>(
             backend_module("a planned unit was never forward-declared".to_string())
         })?;
         let is_root = root == unit.function;
+        claims.claim_for_unit(unit.function)?;
         let outcome = define_unit_body(
             module,
             compiler,
@@ -1168,6 +1276,7 @@ pub(super) fn define_unit_bodies<M: Module>(
             }
         }
     }
+    claims.close()?;
     root_result.ok_or_else(|| {
         backend_module("the emitted unit bundle did not define its recorded root".to_string())
     })

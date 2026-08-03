@@ -645,6 +645,16 @@ impl ContinuationCallIdentity {
     pub(in crate::cranelift_backend) fn target(&self) -> ContinuationSpecializationId {
         self.token.target
     }
+
+    /// The producer unit that owns this causal edge.
+    ///
+    /// `D3` compares this against the exact unit currently being defined. It
+    /// is the token's own immutable fact, re-exposed and not reconstructed --
+    /// there is no second owner authority, and nothing derives an owner from
+    /// emission position.
+    pub(in crate::cranelift_backend) fn producer_owner(&self) -> PredeclaredFunctionId {
+        self.token.producer_owner
+    }
 }
 
 /// `D1` — a read-only view of one already-validated continuation
