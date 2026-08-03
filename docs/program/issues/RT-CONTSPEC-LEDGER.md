@@ -5,7 +5,7 @@ status: ready
 owner: runtime
 size: M
 gate: none
-depends_on: [RT-CONTSPEC-ACTIVATE]
+depends_on: [RT-CONTSPEC-ACTIVATE, RT-DECL-CLOSURE-PORT]
 blocks: [RT-CONTSPEC-WITNESS]
 github: null
 origin: "Architect ownership/sizing ruling evt_1yymw1gdszpbs (2026-08-02), outcome (c) on RT-CONTSPEC-LOWER, seam 3 of four. Steward-filed (agents cannot create tracked work per COORDINATION section 2)."

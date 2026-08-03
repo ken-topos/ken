@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-03 21:30:46Z — from 160 issue file(s) in `docs/program/issues/`.
+2026-08-03 21:58:16Z — from 160 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -206,7 +206,6 @@ itself `merged` or `closed` (i.e. nothing left blocking a kickoff):
 
 - `F1-37` — F1 [task-list #37] — bignum Int soundness review for K3 trusted-base promotion
 - `MODELS-TIER` — agent/MODELS.md — the Runtime seating is the fleet-wide norm, not an exception
-- `RT-CONTSPEC-LEDGER` — ContinuationSpecialization seam 3 — make the boundary-use ledger record something: the four boundary-use axes are compile-time constants in production, so the ledger distinguishes no two continuation inputs
 - `RT-EFFECT-DIFF` — One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can
 - `RT-FNSPLIT-B2O-CHECK` — the B2O checking layer advertises more than it enforces — structural closure for the item enumerator and reachability for the validator arms
 
@@ -246,6 +245,7 @@ is itself not yet `merged`/`closed`:
 - `PX9` blocked by `PX8` (status: draft)
 - `PX9` blocked by `ABI-REVOKE` (status: draft)
 - `RT-BACKEND-MODULE-SPLIT` blocked by `RT-DESCENT-RETIRE` (status: ready)
+- `RT-CONTSPEC-LEDGER` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
 - `RT-CONTSPEC-WITNESS` blocked by `RT-CONTSPEC-LEDGER` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
 - `RT-DESCENT-RETIRE` blocked by `RT-SEED-CALL-PORT` (status: ready)

@@ -178,9 +178,45 @@ Both produced a false hard stop on seam 1 (`evt_3q972fhrnsr0b`, ruled
   any edit.
 - **D2 — the production-reachable vocabulary.** Remove the `#[cfg(test)]` gate
   from the four second variants and have the planner **issue** them from real
-  planner facts at the construction site. ⛔ **Which planner condition selects
-  which variant comes from the ruled D7 authorities — you apply them, you do not
-  invent the mapping.** If they do not settle it, that is hard stop 2.
+  planner facts at the construction site.
+
+  > ⛔⛔ **HELD 2026-08-03 — hard stop 2 fired and was SUSTAINED. Architect
+  > ruling `evt_40ra70t92mjd2`: no current lawful mapping authority exists.**
+  >
+  > The prior text said the mapping *"comes from the ruled D7 authorities — you
+  > apply them, you do not invent the mapping."* **That instruction could not be
+  > followed.** Those authorities deliberately supply only the consumer-first law
+  > `Need(e) ⊆ Avail(e)`, the six-disposition semantic codomain, and **the
+  > obligation to re-derive a closed domain**. They explicitly withdrew the
+  > mechanism that once claimed to close it. ⇒ **None of the four plausible
+  > mappings is authorized, and no exhaustive lookup from a six-way disposition
+  > to one four-field tuple is authorized either.**
+  >
+  > **The four fields are a PROJECTION of an already-classified exact record,
+  > not a classifier and not four independent syntax guesses:**
+  >
+  > - `boundary_phase` — the **planned** representation phase at the continuation
+  >   input seat. ⛔ Never a lowering-time observation.
+  > - `boundary_operation` — the planned edge's forward/retain obligation.
+  > - `boundary_need` — the exact consumer operation's `Need`, derived **before**
+  >   selection.
+  > - `boundary_avail` — the selected representation's guarantee, which must
+  >   satisfy that `Need`.
+  >
+  > **The authority that must exist first is `RT-DECL-CLOSURE-PORT` `D7`**, which
+  > is the authority that withdrew the old domain and already names the
+  > replacement derivation. It is now a `depends_on` of this node. This seam may
+  > **consume** the landed exact-record projection; its own banned scope forbids
+  > planner repair and D7 re-derivation, so **it may not build that authority
+  > itself.**
+  >
+  > ⚠ **A disposition need not determine a unique tuple** — a semantic eliminator
+  > may lawfully consume in either phase. **If the current binary enums cannot
+  > total-project every real event without coercion, that is a fresh hard stop.
+  > ⛔ Do not collapse the domain to fit the enum.**
+  >
+  > `D1` is delivered and accepted at `5d430082` and does **not** need redoing on
+  > resume.
 - **D3 — the ledger closure** over the now-distinguishable inputs: the exact
   source and synthesized-aggregate ledger rows, closed from those same ruled
   authorities.
@@ -275,9 +311,15 @@ Stop and route to the Steward, do not improvise, if any of these hold:
    on. ⛔ **A moved line number is not this hard stop, and neither is a raw
    grep count of 2** — that count includes the struct declaration. Re-find the
    construction site and check the property.
-2. **The ruled D7 authorities do not determine which planner condition selects
-   which boundary-use variant.** That is a design question and it is not yours.
-   ⛔ Do not pick a plausible mapping to keep moving.
+2. ✅ **FIRED AND SUSTAINED 2026-08-03 — do not re-raise it, and do not treat it
+   as still open against you.** The ruled D7 authorities do not determine which
+   planner condition selects which boundary-use variant. Architect
+   `evt_40ra70t92mjd2` confirmed no current lawful mapping authority exists, and
+   the re-derivation is `RT-DECL-CLOSURE-PORT` `D7`'s, now a `depends_on` of this
+   node. ⛔ Do not pick a plausible mapping to keep moving. **On resume, the
+   mapping is read off the landed exact-record projection**, and if that
+   projection cannot total-project every real event without coercion, that is a
+   *new* stop under item 7 below.
 3. **The vocabulary cannot be made production-reachable** without touching a
    prior-slice surface or the planner. Interface fact, exactly as at seams 1
    and 2.
@@ -287,3 +329,9 @@ Stop and route to the Steward, do not improvise, if any of these hold:
 5. **A ruled D7 authority appears wrong.** Route it; do not apply an authority
    you believe is incorrect, and do not silently correct it.
 6. **A planner- or ABI-worded refusal appears.** New interface fact.
+7. **The landed exact-record projection cannot total-project every real
+   boundary-use event into the four binary enums without coercion.** Architect
+   `evt_40ra70t92mjd2` names this explicitly as a fresh stop rather than a
+   modelling choice. ⛔ **Do not collapse the domain to fit the enum**, and do
+   not widen an enum to make a coercion unnecessary — either is a design change
+   and neither is yours.
