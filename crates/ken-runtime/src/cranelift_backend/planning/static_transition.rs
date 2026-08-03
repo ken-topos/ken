@@ -5078,6 +5078,94 @@ impl<'src> StaticTransitionPlan<'src> {
     /// destructured `SemanticOwner::Function(..)` right here — a third file
     /// naming the classification is how a second, divergent classification
     /// authority starts.
+    /// **`RT-CONTSPEC-ACTIVATE` `D1b` — the source-body binding, beside
+    /// `emittable_call_edges` and never widening its filter.**
+    ///
+    /// An exact-set join over facts that already exist. Authoritative
+    /// caller/callee classification stays **solely** with
+    /// `static_body_call_edges`; the raw `EdgeKind::StaticBody` walk supplies
+    /// **endpoints only**, and every derivation is forward:
+    ///
+    /// ```text
+    /// closure_occurrence     = descriptors[edge.from].origin
+    /// source_body_occurrence = child_origin(closure_occurrence, 0)
+    /// scheduling_entry       = descriptors[edge.to].origin
+    /// ```
+    ///
+    /// It classifies no edge, creates no unit or call, and moves no `AC-1`
+    /// count. Five facts fail closed: a non-closure source, a missing child 0,
+    /// a duplicate scheduling entry, an authoritative call with no endpoint
+    /// record, and any endpoint record left over.
+    pub(in crate::cranelift_backend) fn static_body_source_bindings(
+        &self,
+    ) -> Result<
+        Vec<(PredeclaredFunctionId, StaticOriginId, StaticOriginId)>,
+        CraneliftBackendError,
+    > {
+        let origin_of = |node: StaticNodeId| -> Result<StaticOriginId, CraneliftBackendError> {
+            self.semantic
+                .descriptors
+                .get(node.0 as usize)
+                .map(|descriptor| descriptor.origin)
+                .ok_or_else(|| planner_error("a static body edge endpoint has no descriptor"))
+        };
+        let shape_of = |node: StaticNodeId| -> Option<semantic_ir::RuntimeExprShape> {
+            self.semantic_sources
+                .iter()
+                .find(|seed| seed.planned_node == node)
+                .and_then(|seed| match seed.source {
+                    SemanticSourceKind::Expression(shape) => Some(shape),
+                    _ => None,
+                })
+        };
+
+        // Endpoints only, from the raw edges.
+        let mut endpoints: BTreeMap<StaticOriginId, StaticOriginId> = BTreeMap::new();
+        for edge in &self.edges {
+            if edge.kind != EdgeKind::StaticBody {
+                continue;
+            }
+            match shape_of(edge.from) {
+                Some(semantic_ir::RuntimeExprShape::Closure)
+                | Some(semantic_ir::RuntimeExprShape::LexicalClosure) => {}
+                _ => {
+                    return Err(planner_error(
+                        "a static body edge's source is not exactly a Closure or LexicalClosure \
+                         occurrence",
+                    ));
+                }
+            }
+            let closure_occurrence = origin_of(edge.from)?;
+            let source_body = self.semantic.child_origin(closure_occurrence, 0)?;
+            let scheduling_entry = origin_of(edge.to)?;
+            if endpoints.insert(scheduling_entry, source_body).is_some() {
+                return Err(planner_error(
+                    "two static body edges declare the same scheduling entry",
+                ));
+            }
+        }
+
+        // One-for-one drain against the authoritative classification.
+        let mut bindings = Vec::new();
+        for (caller, _callee, callee_origin) in
+            self.semantic.static_body_call_edges(&self.edges)?
+        {
+            let source_body = endpoints.remove(&callee_origin).ok_or_else(|| {
+                planner_error(
+                    "an authoritative static body call has no raw endpoint record for its \
+                     scheduling entry",
+                )
+            })?;
+            bindings.push((caller, source_body, callee_origin));
+        }
+        if !endpoints.is_empty() {
+            return Err(planner_error(
+                "a raw static body endpoint record was never claimed by an authoritative call",
+            ));
+        }
+        Ok(bindings)
+    }
+
     pub(in crate::cranelift_backend) fn emittable_call_edges(
         &self,
     ) -> Result<Vec<EmittableCallEdge>, CraneliftBackendError> {

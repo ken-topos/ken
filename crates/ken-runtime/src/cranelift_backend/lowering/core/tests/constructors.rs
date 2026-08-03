@@ -4822,6 +4822,9 @@ fn worker_descriptor(
     units::DeclaredUnitCall {
         function: cranelift_codegen::ir::FuncRef::from_u32(0),
         origin,
+        // The D2 worker-descriptor fixture keys on the same origin it targets;
+        // the D1b pair is exercised by the production join, not here.
+        call_site_origin: origin,
         header: AbiFrameHeader {
             parameters,
             captures,
@@ -4940,10 +4943,11 @@ fn static_worker_construction_rejects_wrong_body_origin() {
     let error = expect_worker_rejection(attempt_worker_construction(
         |origin, other| {
             let mut target = worker_descriptor(origin, 1, 1);
-            // Point the entry at the closure's own origin -- a real planned
-            // origin that is not the body -- while leaving the entry keyed
-            // under the worker's body origin.
-            target.origin = other;
+            // `D1b` moved the wrong-body fact onto the end that names the
+            // source body. The declared record is keyed by `call_site_origin`,
+            // so perturbing THAT is what a wrong body now is; `origin` carries
+            // the scheduling entry and is a different fact.
+            target.call_site_origin = other;
             Some(target)
         },
         1,
@@ -4951,7 +4955,7 @@ fn static_worker_construction_rejects_wrong_body_origin() {
         1,
     ));
     assert!(
-        format!("{error:?}").contains("but the worker body origin is"),
+        format!("{error:?}").contains("but the worker body origin"),
         "rejects for the wrong-body reason: {error:?}"
     );
 }

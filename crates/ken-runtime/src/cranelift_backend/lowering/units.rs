@@ -237,7 +237,13 @@ pub(in crate::cranelift_backend) struct ResolvedUnitTarget {
 #[derive(Clone)]
 pub(in crate::cranelift_backend) struct DeclaredUnitCall {
     pub(in crate::cranelift_backend) function: FuncRef,
+    /// The callee's scheduling entry -- `RT-CONTSPEC-ACTIVATE` `D1b` keeps
+    /// this as the target origin.
     pub(in crate::cranelift_backend) origin: StaticOriginId,
+    /// The callable source body this call is keyed by. Both ends are retained
+    /// in the declared record, not just the map key, so a consumer can check
+    /// the pair rather than infer it.
+    pub(in crate::cranelift_backend) call_site_origin: StaticOriginId,
     pub(in crate::cranelift_backend) header: AbiFrameHeader,
     pub(in crate::cranelift_backend) slots: Vec<AbiSlot>,
     pub(in crate::cranelift_backend) offsets: Vec<u32>,
@@ -263,6 +269,7 @@ impl CallEdgeTargets {
             let call = DeclaredUnitCall {
                 function: module.declare_func_in_func(target.function, func),
                 origin: target.origin,
+                call_site_origin: target.call_site_origin,
                 header: target.header,
                 slots: target.slots.clone(),
                 offsets: target.offsets.clone(),
@@ -371,6 +378,7 @@ impl WorkerTargets {
                     DeclaredUnitCall {
                         function: module.declare_func_in_func(target.function, func),
                         origin: target.origin,
+                        call_site_origin: target.call_site_origin,
                         header: target.header,
                         slots: target.slots.clone(),
                         offsets: target.offsets.clone(),
@@ -425,6 +433,15 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
     bundle: &UnitBundle,
 ) -> Result<CallEdgeTargets, CraneliftBackendError> {
     let derived = plan.emittable_call_edges()?;
+    // `RT-CONTSPEC-ACTIVATE` `D1b`: the exact-set source-body binding, joined
+    // on validated caller + callee scheduling entry. A `StaticBody` edge's
+    // resolved `call_site_origin` becomes the callable SOURCE BODY; the
+    // scheduling entry stays the target origin.
+    let source_bindings: BTreeMap<(PredeclaredFunctionId, StaticOriginId), StaticOriginId> = plan
+        .static_body_source_bindings()?
+        .into_iter()
+        .map(|(caller, source_body, entry)| ((caller, entry), source_body))
+        .collect();
     let mut edges = Vec::with_capacity(derived.len());
     for edge in derived {
         let target = bundle.function(edge.callee()).ok_or_else(|| {
@@ -451,7 +468,17 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
             ResolvedUnitTarget {
                 function: target,
                 origin: edge.callee_origin(),
-                call_site_origin: edge.call_site_origin(),
+                call_site_origin: match edge.kind() {
+                    EmittableCallKind::StaticBody => *source_bindings
+                        .get(&(edge.caller(), edge.callee_origin()))
+                        .ok_or_else(|| {
+                            backend_module(
+                                "a static body call edge has no D1b source-body binding"
+                                    .to_string(),
+                            )
+                        })?,
+                    EmittableCallKind::Declaration => edge.call_site_origin(),
+                },
                 kind: edge.kind(),
                 header: unit.header(),
                 slots: unit.slots().to_vec(),
@@ -992,6 +1019,9 @@ pub(super) fn define_root_adapter<M: Module>(
         DeclaredUnitCall {
             function: module.declare_func_in_func(root_id, &mut func),
             origin: root_origin,
+            // The root adapter's own entry: source body and scheduling entry
+            // are the same occurrence.
+            call_site_origin: root_origin,
             header: root.header(),
             slots: root.slots().to_vec(),
             offsets,
@@ -1206,6 +1236,7 @@ impl ContinuationClaimLedger {
                     DeclaredUnitCall {
                         function: module.declare_func_in_func(*target, func),
                         origin: unit.continuation_origin(),
+                        call_site_origin: unit.continuation_origin(),
                         header: unit.header(),
                         slots: unit.slots().to_vec(),
                         offsets,

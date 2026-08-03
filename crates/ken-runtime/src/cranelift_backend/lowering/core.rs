@@ -6004,16 +6004,28 @@ impl<'a> Lowering<'a> {
         // 3. The declared unit call is the one for this exact body origin. The
         //    map is keyed by origin, so a disagreement here means the entry was
         //    built for another body -- a wrong-body fact, not a lookup miss.
-        if target.origin != body_origin {
+        // `RT-CONTSPEC-ACTIVATE` `D1b` — the PAIRED invariant, replacing the
+        // invalid `target.origin == body_origin` step.
+        //
+        // The declared record is keyed by the callable SOURCE BODY and retains
+        // the scheduling entry as its target origin. Comparing the target
+        // origin to the body origin was checking the wrong end of the pair;
+        // both ends are now checked against what each actually names.
+        if target.call_site_origin != body_origin {
             return Err(unsupported(
                 "StaticWorkerBinding",
                 format!(
-                    "declared unit call carries origin {:?} but the worker body origin is \
-                     {body_origin:?}",
-                    target.origin
+                    "declared unit call is keyed by source body {:?} but the worker body origin \
+                     is {body_origin:?}",
+                    target.call_site_origin
                 ),
             ));
         }
+        // The target origin is the scheduling entry by construction of the
+        // declared record. It is NOT required to differ from the source body:
+        // for the root adapter and for single-occurrence units the two ends
+        // legitimately coincide, and demanding distinctness here was my own
+        // over-strictness rather than the ruled invariant.
 
         // 4. The descriptor's parameter count is the declared arity.
         if target.header.parameters != declared_arity {
