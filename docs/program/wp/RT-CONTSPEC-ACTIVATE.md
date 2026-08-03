@@ -8,9 +8,88 @@ seam 2. **Recut 2026-08-02** on the Architect's interface ruling
 baseline measurement `evt_2zhx69f2fw07w`. **Recut again 2026-08-03** on the
 Architect's D4 frame/interface ruling `evt_adarqxt4hhsk`.
 
-> ## RECUT 2026-08-03 (18:50) — READ THIS FIRST
+> ## RECUT 2026-08-03 (19:05) — READ THIS FIRST
 >
-> **`D1b` IS DISCHARGED. `D4`'s NAMED OBSERVER IS UNLAWFUL BY CONSTRUCTION.**
+> **`4b` IS NOW AN EMISSION-SEAM EQUALITY GATE. THE BEHAVIOURAL
+> ANSWER-DEPENDENCE OBLIGATION IS DEFERRED TO `RT-CONTSPEC-WITNESS`, NOT
+> DISCHARGED HERE.**
+>
+> **This banner outranks every line below it.** Authority: Architect ruling
+> `evt_6scvrkh69sec8` as amended by `evt_bz62dah3ecp0`. The amendment supersedes
+> only the mandatory-attribution-checkpoint part of the first ruling; its
+> preservation, hard-stop-8, no-more-fixture-search, false-comment and
+> no-carrier rulings all remain in force.
+>
+> **What the six measurements settled.** At
+> `a84dbfba761463e0b8df260649e2f97ccc4a1ba4`
+> (tree `569a56ec`, parent `7280f68e`) the ring measured three Node case bodies
+> against two invocation forms. All six retain the exact planned population at
+> 2/2 and all six refuse before an observable answer with the ordinary-`Closure`
+> boundary law. ⇒ The "change only the Node case body" route is **falsified**,
+> the planned population is independent of the tested answer bodies, and
+> **further case-body or source-spelling search is not authorized.** `a84dbfba`
+> is preserved and non-candidate.
+>
+> **What they did not settle, and why no node was created.** The identical
+> refusal string does not identify the same crossing occurrence — the fixture
+> holds at least the root lexical closure, `outer_worker` and `inner_worker`, and
+> `boundary_transfer_admissibility` reports no origin, defining unit, child path
+> or claim state. So "no lawful observer can exist in any shape" is **not**
+> ruled, and no carrier or new node is authorized from this evidence. An
+> unattributed error string is not a mechanism ruling.
+>
+> ### The split, and the part of it that is easy to get wrong
+>
+> **Emission-seam observation is admissible for what this node is named to
+> deliver** — that the exact planner-issued continuation population becomes exact
+> direct-call emission. A ground value observed after
+> `boundary_transfer_admissibility` is not intrinsically required for that.
+>
+> ⛔ **But "the redirect mutation changed which target was claimed" does NOT
+> discharge it.** That observes the mutation changing the field it mutates. It
+> passes even if the call result is discarded, both targets alias one body, the
+> callee body is malformed, or no selected-body effect reaches the program
+> answer — exactly the implementations the original wording existed to exclude.
+> `D3`'s `total=1 consumed=1` was sufficient for `D3` because `D3`'s property is
+> **affine claim consumption**; an identity ledger is not thereby a behavioural
+> oracle for target-body semantics.
+>
+> ⇒ **The gate is an independent exact equality**, not a change-detector:
+>
+> ```
+> planned exact identity -> resolved declared target
+>                        == actual emitted direct-call target
+> ```
+>
+> once and only once per causal token. Under the same-shaped redirect the gate
+> must go **red because the emitted target disagrees with the planner-issued
+> target** — not because something changed.
+>
+> **The behavioural obligation moves, it is not erased.** That selecting the
+> wrong same-shaped target changes or fails an observable result must still be
+> proved by an integrated, executed witness. That is `RT-CONTSPEC-WITNESS`'s
+> charter (seam 4), and its frame now carries the same-shaped redirect obligation
+> explicitly. `ACTIVATE` states it as **deferred**, never as discharged. This is
+> not a new node — it is a correction of which seam proves which property.
+>
+> **Resume from `7280f68e`, not from `a84dbfba`.** The new gate is seam-level and
+> needs no fixture variants, so the parameterised-fixture delta has no consumer.
+> It may land only if the new gate actually uses it **and** its false comment —
+> that the Node body is "the only place the answer becomes a closure", which the
+> six measurements disprove — is corrected first. Historical scaffolding is not a
+> reason to add it to the candidate.
+>
+> **Still absolute:** no weakening of `boundary_transfer_admissibility`, no
+> durable or borrowed closure lane, no `0/0` witness, no planner/ABI population
+> change. `7280f68e`'s `D1b` remains accepted and discharged and is not reopened.
+
+> ## RECUT 2026-08-03 (18:50)
+>
+> **Superseded in part by the 19:05 banner.** Its `D1b` discharge and its
+> retraction of the named observer stand. Its checkpoint `4b` — "find a fixture
+> whose answer is a ground value at 2/2" — is **withdrawn**: the six-shape
+> measurement falsified the route and the Architect has since ruled that no
+> ground observer is claimed for this node.
 >
 > **This banner outranks every line below it, including both 2026-08-03 banners
 > and the 2026-08-02 banner.** Authority: Architect ruling `evt_57kjfy1s1ycjy`.
@@ -304,6 +383,10 @@ Measured at `origin/main = ab6b89fc`.
 | the second refusal, reached only once `D1b` lands (2026-08-03) | `Lowered::boundary_transfer_admissibility`, `lowering/mod.rs:4789`, arm `Lowered::Closure \| Lowered::DeclarationClosure`: *"a closure cannot cross the boundary: it is runtime-local and live-domain only, and it has no durable lane"*. Screened at `transfer_into_carrier` (`lowering/mod.rs:1805`) before the first allocation |
 | why the named observer hits it | `contspec_nested_fixture` (`static_transition.rs:11616`): the `ComputationalMatch`'s `Node` case is `body: RuntimeExpr::Var(0)`, and `Var(0)` there binds the `outer_worker` `LexicalClosure` from the scrutinee `Node(outer_worker)`. ⇒ **the fixture's answer is a closure by construction** |
 | what appears to drive the planned population | the closures present in the graph plus each case's declared `recursive_positions` (`static_transition.rs:1063`, `:1088`, `:3030`) — **not** what a case body evaluates to. ⚠ Steward-read, **not measured end-to-end**; checkpoint `4b` measures it |
+| hard stop 8 evidence (2026-08-03) | `a84dbfba761463e0b8df260649e2f97ccc4a1ba4`, tree `569a56ec`, parent `7280f68e`. Six shapes — Node body `Var(0)` / `Int 7` / `Construct Leaf`, each `Let`-bound and called directly with `Unit`. **All six planned 2/2; all six refuse identically** at the ordinary-`Closure` boundary. Preserved, non-candidate. Suite `611+26+14` green |
+| what that fixes and what it leaves open | fixes: the answer body does not determine what crosses, and the population is independent of it. **Open:** which of the three closures (root lexical, `outer_worker`, `inner_worker`) crosses, and whether the refusal precedes or follows the ruled direct continuation call — `boundary_transfer_admissibility` reports no origin, defining unit, child path or claim state |
+| the rulings that recut this node | `evt_6scvrkh69sec8` (hard stop 8 confirmed; no further fixture search; no carrier authorized) as amended by `evt_bz62dah3ecp0` (emission-seam observation admissible for the activation property; behavioural obligation moves to `RT-CONTSPEC-WITNESS`) |
+| the self-oracle hazard on this planner | `evt_5mzgtka54nd03` — six sites compare `build_X(plan)` against `build_X(plan)`; an injected defect into `build_case_emission_plan` reds 114/611 while the gate fires 0 times. `4b`'s two sides must be independently derived |
 | baseline suite | `scripts/ken-cargo test -p ken-runtime --lib` |
 
 Reproduce, read-only:
@@ -521,12 +604,26 @@ in scope and is not a finding.
   2. one declared and defined continuation target per planned specialization;
   3. one direct call per exact causal token, in the producer alternative, before
      the join;
-  4. an answer that **depends on the selected target** — redirecting a token to
-     the other same-shaped target changes or fails the result. **"Same-shaped"
-     is `RT-WORKER-BIND`'s landed definition: same declared arity and same
-     capture count** (recut item 4). The redirect resolves the exact target
-     first, then selects a *distinct* target on that predicate — ⛔ never on
-     origin inequality or ABI layout;
+  4. **RECUT 2026-08-03 19:05 — split into 4a here and 4b deferred.**
+
+     **4a, this node's obligation: exact emitted-target equality at the emission
+     seam.** For every exact planned causal identity, the planner-issued target
+     equals the independently resolved and declared target the emitter hands to
+     the direct-call instruction, once and only once per causal token. Under the
+     same-shaped redirect the gate goes red **because the two disagree**.
+     **"Same-shaped" is `RT-WORKER-BIND`'s landed definition: same declared arity
+     and same capture count.** The redirect resolves the exact target first, then
+     selects a *distinct* target on that predicate — ⛔ never on origin
+     inequality or ABI layout.
+
+     **4b, DEFERRED to [[RT-CONTSPEC-WITNESS]] — stated here, not discharged
+     here.** That selecting the wrong same-shaped target **changes or fails an
+     observable result** requires an integrated, executed witness, and this
+     population cannot supply one: six measured shapes at `a84dbfba` all refuse
+     at the ordinary-`Closure` boundary before any answer is observable.
+     `RT-CONTSPEC-WITNESS`'s frame carries this obligation verbatim as its
+     `AC-9`. ⛔ **`ACTIVATE` may not report this as discharged, and closing
+     `ACTIVATE` does not close it.**
   5. affine rejection when the same token is consumed twice, and rejection under
      the wrong producer owner.
 
@@ -567,19 +664,40 @@ in scope and is not a finding.
   same block. **A planned count that moves fails this AC** — that is a plan
   change, not an activation.
 
-- **AC-2 — the target discriminator fails when the target is wrong.** Redirect a
-  causal token to the other same-shaped target — **same declared arity and same
-  capture count**, per `RT-WORKER-BIND` (recut item 4); the `D4` fixture must
-  change or fail its answer.
+- **AC-2 — RECUT 2026-08-03 19:05: the emitted target equals the planner-issued
+  target, and the redirect breaks that equality.** For every exact planned causal
+  identity, the planner-issued target equals the independently resolved and
+  declared target the emitter hands to the direct-call instruction, at causal
+  per-identity count exactly `1`, with exact set equality across
+  planned / resolved / declared / emitted. Redirect a causal token to the other
+  same-shaped target — **same declared arity and same capture count**, per
+  `RT-WORKER-BIND` — and the gate must go red.
   *Control:* a **committed** `cfg(test)`-gated switch on the exact production
   branch, whose red **reproduces from the committed tree**. ⛔ A hand-run
   mutation does not discharge this — that defect cost `RT-WORKER-BIND` two
-  candidate rejections. **A fixture that stays green under target redirection is
-  not observing emission** — it is observing that something was declared, which
-  is `AC-1`'s job.
+  candidate rejections.
+
+  ⛔ **The red must be "these two disagree", not "this value changed."** A
+  control that reports the redirect changed which target was claimed observes the
+  mutation changing the field it mutates, and stays green when the call result is
+  discarded, when both targets alias one body, when the callee body is malformed,
+  or when no selected-body effect reaches the answer. Those are the
+  implementations this AC exists to exclude.
+
+  ⛔ **The two sides must come from independent derivations, and the frame text
+  must name them.** Comparing a value to a re-run of the builder that produced it
+  is a self-oracle: measured at six sites in this planner
+  (`evt_5mzgtka54nd03`), where an injected defect reds 114/611 while the gate
+  fires zero times.
+
   ⚠ If the redirect finds **no** distinct same-shape candidate, that is a fact
   about the fixture population, not a licence to widen the predicate toward
   difference. Say so and stop.
+
+  ⛔ **What this AC no longer claims.** It does **not** prove that a wrong target
+  changes or fails an observable program answer. That obligation is real,
+  undischarged, and deferred to [[RT-CONTSPEC-WITNESS]] `AC-9`
+  (`evt_bz62dah3ecp0`). ⛔ Do not report `AC-2` green as though it covered it.
 
 - **AC-3 — the affine and owner controls fail when mutated.** Consume the same
   token twice; the affine control must go red. Emit under the wrong producer
@@ -678,40 +796,40 @@ are:
    projection, and bundling them is what falsified this checkpoint once already.
    Nothing about `D1b` is reopened by checkpoint `4b`.
 
-4b. **The lawful observer route — the open prerequisite for `D4`.** `D4` item 4
-   requires an answer that changes under target redirection. That answer must be
-   **observable**, and per the 18:50 banner the currently-named observer returns
-   `Var(0)`, which binds a closure and is unlawful by construction.
+4b. **The exact emission-seam equality gate.** Recut 2026-08-03 19:05 on
+   `evt_bz62dah3ecp0`; this replaces the withdrawn fixture-only `4b`. Resume from
+   `7280f68e`.
 
-   **Discharged when a fixture exists whose observed answer is a ground value
-   and whose four `AC-1` counts are 2/2/2/2 — both halves measured and posted
-   together, not argued.** The closures must remain in the planned graph; what
-   changes is what the match *answers with*, not what the graph *contains*.
+   For every exact planned causal identity, compare the **planner-issued** target
+   with the **independently resolved and declared** target that the emitter
+   actually hands to the direct-call instruction, observed at
+   `claim_and_call_continuation` / the call-emission seat. Record:
 
-   ⭐ **The one candidate route worth measuring first**, offered as a starting
-   point and **not as a premise**: the `Node` case's `body` is the only place the
-   closure becomes the answer, while the planned population appears to be driven
-   structurally by the closures in the scrutinee and by the declared
-   `recursive_positions` (`static_transition.rs:1063`, `:1088`, `:3030`) rather
-   than by what the case body evaluates to. **If that holds, a ground case body
-   preserves 2/2 and the observer becomes lawful. Measure it; do not assume it.**
-   The counts are the gate, and a route that moves any of the four is not this
-   checkpoint's discharge no matter how clean it looks.
+   - the causal per-identity count, which must be exactly `1` — once and only
+     once per causal token; and
+   - exact set equality across planned / resolved / declared / emitted.
 
-   ⛔ **Banned discharges, per the ruling:** weakening
-   `boundary_transfer_admissibility`, a fabricated durable closure lane, the
-   closure disguised as a borrowed opaque value, any planner/ABI population edit,
-   and a `0/0`/source-only fixture. The Architect also already tested and closed
-   two escapes — a bare closure is not an observable ground result, and making
-   the `ComputationalMatch` the root deletes the required parameter/capture
-   environment. Do not re-explore either.
+   ⛔ **The two sides must be derived independently.** A gate that reads one
+   value and compares it to itself is the self-oracle defect the Adversary
+   measured elsewhere in this planner (`evt_5mzgtka54nd03`): six sites where
+   `build_X(plan)` is checked against `build_X(plan)`, reddening 114/611 under an
+   injected defect while the gate itself fires zero times. **State which
+   derivation each side comes from.**
 
-   ⇒ **If no ground-answer shape holds the population at 2/2, that is hard stop
-   8** — an interface fact about this fixture population, not a licence to widen
-   a predicate or to weaken the refusal.
+   **Discharged when the equality holds at count 1 per token, and the four
+   `AC-1` counts are unmoved at 2/2/2/2.** Post both with the SHA.
 
-5. **`D4` on the lawful fixture from `4b`** — invoke it, observe the answer, then
-   run the three controls already committed at `457b9fc6` plus their mutation
+   ⛔ **No fixture variants.** Further case-body or source-spelling search is
+   explicitly unauthorized (`evt_6scvrkh69sec8`). The six shapes at `a84dbfba`
+   settled it.
+
+5. **`D4`'s emission property, mutation-proved.** Run the same-shaped redirect
+   against the `4b` gate. The gate must go **red because the emitted target
+   disagrees with the planner-issued target**. ⛔ A control that merely reports
+   "the target changed" does not discharge this — it observes the mutation
+   changing the field it mutates, and passes even when the result is discarded,
+   both targets alias one body, or the callee body is malformed. Then run the
+   affine and owner controls already committed at `457b9fc6` plus their mutation
    proofs. A green mutation is still a hard stop, but check first whether the
    seam was reached: that discrimination is what `457b9fc6` got right.
 6. **`D5`** — the four counts on base and candidate, plus the aggregate line.
@@ -764,10 +882,14 @@ Stop and route to the Steward, do not improvise, if any of these hold:
    new. Either is an interface fact above this seam's authority: report the exact
    fact needed and stop. Do not widen `emittable_call_edges`, reconstruct the
    mapping in lowering, search by nearest origin, or fabricate an alias.
-8. **No ground-answer fixture shape holds the four `AC-1` counts at 2/2**
-   (checkpoint `4b`). Report the shapes tried and the counts each produced, and
-   stop. That is an interface fact about this fixture population and it is above
-   this seam's authority. ⛔ It is **not** a licence to weaken
-   `boundary_transfer_admissibility`, to add a durable closure lane, to widen a
-   predicate toward difference, or to fall back on a `0/0` population — the
-   refusal is load-bearing and a vacuous fixture is banned scope, not a fallback.
+8. **FIRED AND RESOLVED 2026-08-03 at `a84dbfba`.** It read: no ground-answer
+   fixture shape holds the four `AC-1` counts at 2/2. Six shapes were measured,
+   all 2/2, all refusing identically. The Architect confirmed the stop
+   (`evt_6scvrkh69sec8`) and amended the node's contract (`evt_bz62dah3ecp0`):
+   `ACTIVATE` closes at the emission seam and the behavioural obligation moves to
+   `RT-CONTSPEC-WITNESS`. ⛔ **This stop is spent. Do not re-file it, and do not
+   resume fixture search** — further case-body or source-spelling variants are
+   explicitly unauthorized.
+9. **The `4b` equality cannot be stated from two independent derivations** —
+   the only available comparison re-runs the builder that produced one side.
+   Report which derivations exist and stop; a self-oracle is not a gate.
