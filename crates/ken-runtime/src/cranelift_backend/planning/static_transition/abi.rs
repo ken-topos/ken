@@ -678,6 +678,18 @@ thread_local! {
     /// anonymous-closure discriminator reds under it.
     pub(super) static D2_CLAIM_ALL_BODIES_DECLARATION_OWNED: std::cell::Cell<bool> =
         const { std::cell::Cell::new(false) };
+    /// **`RT-DECL-CLOSURE-PORT` `D3` causal control — the SILENT population
+    /// shrink.**
+    ///
+    /// Restore `C4`'s pre-`D2` matching, where `reject_imported_capture_edges`
+    /// recognised `ClosureBody` alone. ⭐ This is the defect no green run can
+    /// reveal: the exclusion keeps returning "no violation" for a population
+    /// that no longer contains the declaration-owned units, so **every test
+    /// stays green while `C4` is simply not enforced for them.** The only
+    /// instrument that can see it is a program whose imported capture sits on a
+    /// declaration-owned unit, asserted to be REFUSED.
+    pub(super) static D3_C4_MATCHES_CLOSURE_BODY_ONLY: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
     /// Compile-preserving D4 mutation: construction begins without the exact
     /// capacity preflight, so the first descriptor grows boundary storage.
     pub(super) static SKIP_CONTINUATION_ABI_PREFLIGHT: std::cell::Cell<bool> =
@@ -904,7 +916,21 @@ fn reject_imported_capture_edges(
         // does, so it is in this exclusion's population too. Matching only
         // `ClosureBody` here would have silently exempted every ported
         // declaration from `C4` — the check would still pass, on a smaller set.
-        let Some((defining_origin, provenance)) = definition.closure_shaped_captures() else {
+        #[cfg(test)]
+        let recognised = if D3_C4_MATCHES_CLOSURE_BODY_ONLY.with(std::cell::Cell::get) {
+            match *definition {
+                AbiUnitDefinition::ClosureBody {
+                    defining_origin,
+                    provenance,
+                } => Some((defining_origin, provenance)),
+                _ => None,
+            }
+        } else {
+            definition.closure_shaped_captures()
+        };
+        #[cfg(not(test))]
+        let recognised = definition.closure_shaped_captures();
+        let Some((defining_origin, provenance)) = recognised else {
             continue;
         };
         if provenance != AbiCaptureProvenance::Lexical {
