@@ -10583,13 +10583,19 @@ impl<'a> Lowering<'a> {
                  recursion group",
             ));
         }
-        if group
-            .iter()
-            .any(|other| other.scc_index != call.scc_index || other.admission != call.admission)
-        {
+        // ⚠ Split, so each axis gets its OWN first refusal. One composite
+        // predicate is discharged by either disagreement holding, so it could
+        // not tell the `scc_index` mutation from the `admission` one.
+        if group.iter().any(|other| other.scc_index != call.scc_index) {
             return Err(unsupported(
                 "OrientedSubcontinuationPlanV1",
-                "checked recursion group disagrees about its scc index or admission",
+                "checked recursion group disagrees about its scc index",
+            ));
+        }
+        if group.iter().any(|other| other.admission != call.admission) {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked recursion group disagrees about its admission",
             ));
         }
         if plan

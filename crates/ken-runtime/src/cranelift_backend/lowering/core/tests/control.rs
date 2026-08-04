@@ -10997,3 +10997,641 @@ fn d5_c4_a_retargeted_declaration_call_is_refused_before_emission() {
         });
     });
 }
+
+// ── The MUTUAL same-SCC fixture ───────────────────────────────────────────
+//
+// ⭐⭐ **A self-call fixture cannot discriminate `recursion_group`, and this is
+// why the ruling forbids a self-call-only shortcut.** D5's same-SCC check asks
+// whether the callee is itself a recursive member of the caller's group. With
+// one template, renaming its `recursion_group` moves the template AND its own
+// witness together, so the check still passes and the mutation is inert. Two
+// templates in one group make the witness a DIFFERENT template, and the rename
+// then separates them.
+//
+// ⚠ Two declarations, two call templates (A→B and B→A), two frames in two
+// segments. `mutual_a` and `mutual_b` differ in arity so a control cannot
+// confuse them, and neither is the callee of its own template.
+
+#[cfg(test)]
+const D5_MUTUAL_A: &str = "decl:fixture::d5::mutual_a";
+#[cfg(test)]
+const D5_MUTUAL_B: &str = "decl:fixture::d5::mutual_b";
+#[cfg(test)]
+const D5_MUTUAL_A_TEMPLATE: u64 = 910;
+#[cfg(test)]
+const D5_MUTUAL_B_TEMPLATE: u64 = 911;
+#[cfg(test)]
+const D5_MUTUAL_A_FRAME: u64 = 92;
+#[cfg(test)]
+const D5_MUTUAL_B_FRAME: u64 = 93;
+
+/// One member of the mutual pair: a lexical closure whose body is a checked
+/// call to the *other* member.
+#[cfg(test)]
+fn d5_mutual_declaration(symbol: &str, callee: &str, template: u64) -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: symbol.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
+                params: vec!["n".to_string()],
+                body: Box::new(RuntimeExpr::CheckedRecursiveInvocation {
+                    call_template_id: template,
+                    checked_occurrence_path: vec![5],
+                    body: Box::new(RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::DeclarationRef {
+                            symbol: callee.to_string(),
+                        }),
+                        args: vec![RuntimeExpr::Var(0)],
+                    }),
+                }),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+/// The carrier for the pair's two frame markers.
+///
+/// ⚠ Both live here, nested, for the same reason the self-call fixture's single
+/// marker does: the transport validator requires one Runtime frame marker per
+/// planned frame, and putting a `ComputationalMatch` inside the declarations
+/// under test would drag the computational-recursor lane into a fixture about
+/// declaration calls. The plan's `frame.declaration` is what binds a frame to
+/// its declaration, not where the marker physically sits.
+#[cfg(test)]
+fn d5_mutual_frame_carrier() -> RuntimeDeclaration {
+    let inner = RuntimeExpr::CheckedSubcontinuationFrame {
+        frame_id: D5_MUTUAL_B_FRAME,
+        body: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::D5::Only".to_string(),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((0).into()))],
+            }),
+            cases: d5_cases(),
+            default: d5_default(),
+        }),
+    };
+    RuntimeDeclaration {
+        symbol: D5_FRAME_CARRIER.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::CheckedSubcontinuationFrame {
+                frame_id: D5_MUTUAL_A_FRAME,
+                body: Box::new(RuntimeExpr::ComputationalMatch {
+                    scrutinee: Box::new(RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::D5::Only".to_string(),
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int((0).into()))],
+                    }),
+                    cases: vec![crate::RuntimeComputationalMatchCase {
+                        constructor: "ctor:fixture::D5::Only".to_string(),
+                        argument_binders: 1,
+                        recursive_positions: Vec::new(),
+                        body: inner,
+                    }],
+                    default: d5_default(),
+                }),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+#[cfg(test)]
+fn d5_mutual_frame(frame_id: u64, declaration: &str, segment: u64, cases_of_outer: bool)
+-> crate::OrientedSubcontinuationFramePlanV1 {
+    let (cases, default) = if cases_of_outer {
+        (
+            vec![crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::D5::Only".to_string(),
+                argument_binders: 1,
+                recursive_positions: Vec::new(),
+                body: RuntimeExpr::CheckedSubcontinuationFrame {
+                    frame_id: D5_MUTUAL_B_FRAME,
+                    body: Box::new(RuntimeExpr::ComputationalMatch {
+                        scrutinee: Box::new(RuntimeExpr::Construct {
+                            constructor: "ctor:fixture::D5::Only".to_string(),
+                            args: vec![RuntimeExpr::Value(RuntimeValue::Int((0).into()))],
+                        }),
+                        cases: d5_cases(),
+                        default: d5_default(),
+                    }),
+                },
+            }],
+            d5_default(),
+        )
+    } else {
+        (d5_cases(), d5_default())
+    };
+    let mut frame = crate::OrientedSubcontinuationFramePlanV1 {
+        frame_id,
+        segment_site_id: segment,
+        declaration: declaration.to_string(),
+        checked_occurrence_path: vec![frame_id],
+        semantic_position: frame_id,
+        input_interface: oriented_test_interface(1),
+        output_interface: oriented_test_interface(2),
+        runtime_frame_fingerprint: crate::compiler_private_computational_match_frame_fingerprint(
+            &cases, &default,
+        ),
+        occurrence_binding_fingerprint: 0,
+        control_witness: crate::OrientedControlWitnessV1::DistinguishedRoot,
+    };
+    frame.occurrence_binding_fingerprint =
+        crate::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+    frame
+}
+
+#[cfg(test)]
+fn d5_mutual_template(
+    template: u64,
+    declaration: &str,
+    callee: &str,
+    callee_frame: u64,
+    callee_segment: u64,
+) -> crate::CheckedRecursiveInvocationTemplateV1 {
+    crate::CheckedRecursiveInvocationTemplateV1 {
+        call_template_id: template,
+        declaration: declaration.to_string(),
+        checked_occurrence_path: vec![5],
+        callee: callee.to_string(),
+        level_instantiation: Vec::new(),
+        recursion_group: "scc:fixture::d5::mutual".to_string(),
+        scc_index: 0,
+        admission: 1,
+        arity: 1,
+        local_telescope: vec![oriented_test_interface(1)],
+        result_interface: oriented_test_interface(2),
+        callee_segment_site_id: callee_segment,
+        callee_frame_templates: vec![callee_frame],
+        caller_interface: oriented_test_interface(2),
+        runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+            declaration: declaration.to_string(),
+            runtime_path: vec![3],
+        }],
+        occurrence_binding_fingerprint: 0,
+    }
+}
+
+/// The mutual plan, re-fingerprinted after `edit`.
+///
+/// `edit` receives both templates in `(A→B, B→A)` order.
+#[cfg(test)]
+fn d5_mutual_plan_with(
+    edit: impl FnOnce(
+        &mut crate::CheckedRecursiveInvocationTemplateV1,
+        &mut crate::CheckedRecursiveInvocationTemplateV1,
+    ),
+    refingerprint: bool,
+) -> crate::OrientedSubcontinuationPlanV1 {
+    let mut a = d5_mutual_template(
+        D5_MUTUAL_A_TEMPLATE,
+        D5_MUTUAL_A,
+        D5_MUTUAL_B,
+        D5_MUTUAL_B_FRAME,
+        11,
+    );
+    let mut b = d5_mutual_template(
+        D5_MUTUAL_B_TEMPLATE,
+        D5_MUTUAL_B,
+        D5_MUTUAL_A,
+        D5_MUTUAL_A_FRAME,
+        10,
+    );
+    a.occurrence_binding_fingerprint =
+        crate::compiler_private_recursive_call_binding_fingerprint(&a);
+    b.occurrence_binding_fingerprint =
+        crate::compiler_private_recursive_call_binding_fingerprint(&b);
+    edit(&mut a, &mut b);
+    // ⛔ `refingerprint: false` is how an UPSTREAM-attributed control is built:
+    // it leaves the stale fingerprint, which is exactly what
+    // `OrientedSubcontinuationPlanV1::validate` owns.
+    if refingerprint {
+        a.occurrence_binding_fingerprint =
+            crate::compiler_private_recursive_call_binding_fingerprint(&a);
+        b.occurrence_binding_fingerprint =
+            crate::compiler_private_recursive_call_binding_fingerprint(&b);
+    }
+    crate::OrientedSubcontinuationPlanV1 {
+        representation_rule_version:
+            crate::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+        frames: vec![
+            d5_mutual_frame(D5_MUTUAL_A_FRAME, D5_MUTUAL_A, 10, true),
+            d5_mutual_frame(D5_MUTUAL_B_FRAME, D5_MUTUAL_B, 11, false),
+        ],
+        recursive_calls: vec![a, b],
+        computational_ih_slots: Vec::new(),
+        computational_ih_calls: Vec::new(),
+    }
+}
+
+/// Compile the mutual fixture, returning the outcome and the emitted calls.
+#[cfg(test)]
+fn d5_mutual_compile(
+    plan: crate::OrientedSubcontinuationPlanV1,
+) -> (
+    Result<(), String>,
+    Vec<(StaticOriginId, StaticOriginId, cranelift_codegen::ir::FuncRef)>,
+) {
+    let a = d5_mutual_declaration(D5_MUTUAL_A, D5_MUTUAL_B, D5_MUTUAL_A_TEMPLATE);
+    let b = d5_mutual_declaration(D5_MUTUAL_B, D5_MUTUAL_A, D5_MUTUAL_B_TEMPLATE);
+    let carrier = d5_mutual_frame_carrier();
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D5_MUTUAL_A.to_string(),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int((5).into()))],
+    };
+    let declarations = BTreeMap::from([
+        (D5_MUTUAL_A, &a),
+        (D5_MUTUAL_B, &b),
+        (D5_FRAME_CARRIER, &carrier),
+    ]);
+    reset_d5_emitted_declaration_calls();
+    let outcome = compile_expr_into_module(
+        new_jit_module().expect("JIT module"),
+        "d5_mutual",
+        Linkage::Local,
+        &entry,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        false,
+        None,
+        None,
+        Some(plan),
+    )
+    .map(|_| ())
+    .map_err(|error| format!("{error:?}"));
+    (outcome, d5_emitted_declaration_calls())
+}
+
+/// **The mutual positive.** Both checked cross-calls reconcile and emit.
+#[test]
+fn d5_c2_mutual_same_scc_calls_reconcile_and_emit() {
+    with_transparent_declaration_closure_witness(|| {
+        let (outcome, emitted) = d5_mutual_compile(d5_mutual_plan_with(|_, _| {}, true));
+        outcome.unwrap_or_else(|error| {
+            panic!("D5: the mutual same-SCC pair must compile: {error}")
+        });
+        assert_eq!(
+            emitted.len(),
+            3,
+            "D5: the entry's unchecked call plus both checked cross-calls. \
+             Anything fewer and a mutation control below cannot distinguish a \
+             refusal from a path that was never taken: {emitted:?}"
+        );
+    });
+}
+
+// ── Control 4, the checked-plan half, on the MUTUAL fixture ───────────────
+//
+// ⭐ Each row names the axis, the mutation, and **which authority owns the
+// refusal**. That last column is the point: the Architect's ruling requires
+// interface / segment / frame-template / occurrence-fingerprint mutations to
+// stay attributed to `OrientedSubcontinuationPlanV1::validate`, and forbids
+// relabelling an upstream diagnostic as a D5-local first refusal. What D5 owes
+// for those is a proof that the mutation **reaches** the canonical validator
+// and that **no declaration-unit call is emitted**.
+//
+// ⛔ The emitted-call count is MEASURED for every row, never assumed. A refusal
+// that arrives after a call was already written is a different fact from a
+// refusal before emission, and only the count can tell them apart.
+
+#[test]
+fn d5_c4_checked_plan_mutations_each_reach_their_own_authority() {
+    // (label, mutation, refingerprint, expected reason fragment, owning plane)
+    type Edit = fn(
+        &mut crate::CheckedRecursiveInvocationTemplateV1,
+        &mut crate::CheckedRecursiveInvocationTemplateV1,
+    );
+    let rows: Vec<(&str, Edit, bool, &str, &str)> = vec![
+        // ── D5-local: the same-SCC facts nothing upstream closes ──────────
+        //
+        // ⭐⭐ This row is the whole reason the mutual fixture exists. On a
+        // self-call fixture the template is its OWN group witness, so renaming
+        // the group moves both together and the mutation is inert. Here the
+        // witness is the other template, and the rename separates them.
+        (
+            "recursion_group (needs the mutual fixture)",
+            |a, _b| a.recursion_group = "scc:fixture::d5::elsewhere".to_string(),
+            true,
+            "callee is not a recursive member of its own recursion group",
+            "D5",
+        ),
+        (
+            "scc_index",
+            |a, _b| a.scc_index = 7,
+            true,
+            "disagrees about its scc index",
+            "D5",
+        ),
+        (
+            "admission",
+            |a, _b| a.admission = 9,
+            true,
+            "disagrees about its admission",
+            "D5",
+        ),
+        (
+            "arity",
+            |a, _b| a.arity = 2,
+            true,
+            "callee or arity is stale",
+            "enter_checked_recursive_invocation",
+        ),
+        // ── transplant: the marker names a callee the call does not ───────
+        //
+        // ⚠ The callee is moved **together with its frame binding**, on
+        // purpose. Moving `callee` alone leaves the plan internally
+        // inconsistent (`callee_frame_templates` still names the other
+        // declaration's frame), so `validate` refuses first and the row would
+        // measure the plan's consistency law instead of the transplant
+        // ([[a-mutation-on-the-discriminator-input-measures-the-consistency-law-not-the-decision]]).
+        // Self-consistent, it survives to the lowering, where the marker wraps
+        // a call to `mutual_b` while the template claims `mutual_a`.
+        (
+            "transplant (callee, self-consistent)",
+            |a, _b| {
+                a.callee = D5_MUTUAL_A.to_string();
+                a.callee_frame_templates = vec![D5_MUTUAL_A_FRAME];
+                a.callee_segment_site_id = 10;
+            },
+            true,
+            "callee or arity is stale",
+            "enter_checked_recursive_invocation",
+        ),
+        // ── upstream-attributed, and kept that way ────────────────────────
+        (
+            "occurrence fingerprint",
+            |a, _b| a.scc_index = 7,
+            false,
+            "occurrence binding is inconsistent",
+            "OrientedSubcontinuationPlanV1::validate",
+        ),
+        (
+            "callee segment site",
+            |a, _b| a.callee_segment_site_id = 99,
+            true,
+            "callee binding is inconsistent",
+            "OrientedSubcontinuationPlanV1::validate",
+        ),
+        (
+            "callee frame-template set",
+            |a, _b| a.callee_frame_templates = vec![D5_MUTUAL_A_FRAME],
+            true,
+            "callee binding is inconsistent",
+            "OrientedSubcontinuationPlanV1::validate",
+        ),
+        (
+            "result interface composition",
+            |a, _b| a.result_interface = oriented_test_interface(5),
+            true,
+            "checked endpoints do not compose",
+            "OrientedSubcontinuationPlanV1::validate",
+        ),
+        (
+            "caller interface composition",
+            |a, _b| a.caller_interface = oriented_test_interface(5),
+            true,
+            "checked endpoints do not compose",
+            "OrientedSubcontinuationPlanV1::validate",
+        ),
+        // ── omission: a planned template with no Runtime marker ───────────
+        (
+            "omission (marker location)",
+            |a, _b| a.runtime_marker_locations[0].runtime_path = vec![3, 0],
+            true,
+            "Runtime occurrences differ",
+            "planning::validate_oriented_subcontinuation_transport",
+        ),
+    ];
+
+    for (label, edit, refingerprint, fragment, plane) in rows {
+        with_transparent_declaration_closure_witness(|| {
+            let plan = d5_mutual_plan_with(edit, refingerprint);
+            let (outcome, emitted) = d5_mutual_compile(plan);
+            let refusal = outcome.unwrap_err_or_panic(label);
+            assert!(
+                refusal.contains(fragment),
+                "D5 control 4 [{label}]: the refusal must be the one {plane} \
+                 owns. A different one means this row measures some other \
+                 mechanism, and the axis it names stays unpinned: {refusal}"
+            );
+            // ⚠ **Zero is the wrong floor, and measuring said so.** The
+            // entry's own call into `mutual_a`'s unit is UNCHECKED and lawful,
+            // and the root unit is emitted before any declaration body — so a
+            // refusal inside a body legitimately leaves it behind. Rows whose
+            // authority runs before lowering leave nothing at all.
+            //
+            // ⇒ The fact being asserted is that **no checked cross-call was
+            // emitted**: the unmutated fixture emits 3, so anything above 1
+            // means a checked call this row was supposed to stop got through.
+            assert!(
+                emitted.len() <= 1,
+                "D5 control 4 [{label}]: refused, but {} declaration-unit \
+                 call(s) were written — more than the entry's own unchecked \
+                 one, so a checked cross-call reached emission. Refusing after \
+                 emission is a different guarantee from refusing before it: \
+                 {emitted:?}",
+                emitted.len()
+            );
+        });
+    }
+
+    // The positive control on the harness, in the same shape as every row
+    // above: unmutated, this fixture compiles and emits its three calls.
+    with_transparent_declaration_closure_witness(|| {
+        let (outcome, emitted) = d5_mutual_compile(d5_mutual_plan_with(|_, _| {}, true));
+        assert!(
+            outcome.is_ok() && emitted.len() == 3,
+            "D5 control 4: without a mutation the fixture must reach emission. \
+             Every refusal above is otherwise consistent with a fixture that \
+             never got there: {outcome:?} {emitted:?}"
+        );
+    });
+}
+
+#[cfg(test)]
+trait D5UnwrapErr {
+    fn unwrap_err_or_panic(self, label: &str) -> String;
+}
+
+#[cfg(test)]
+impl D5UnwrapErr for Result<(), String> {
+    fn unwrap_err_or_panic(self, label: &str) -> String {
+        match self {
+            Ok(()) => panic!(
+                "D5 control 4 [{label}]: the mutation compiled. An accepted \
+                 mutation means no plane is reading that field"
+            ),
+            Err(reason) => reason,
+        }
+    }
+}
+
+/// **The mutual fixture is LOAD-BEARING, and this is the proof rather than the
+/// claim.**
+///
+/// ⭐⭐ The `recursion_group` row above is the one the ruling's "no
+/// self-call-only shortcut" clause exists for. Its comment says a self-call
+/// fixture cannot discriminate that axis; a comment is
+/// [structurally exempt from execution][[a-mechanism-claim-in-a-comment-is-structurally-exempt-from-execution]],
+/// so the same mutation is run on BOTH fixtures here and the difference is
+/// asserted.
+///
+/// ⛔ If this ever goes green in both directions, the `recursion_group` row is
+/// no longer measuring anything and the mutual fixture has stopped earning its
+/// keep.
+#[test]
+fn d5_the_recursion_group_axis_is_inert_on_a_self_call_and_causal_on_the_mutual_pair() {
+    let rename = |group: &mut String| *group = "scc:fixture::d5::elsewhere".to_string();
+
+    // Self-call: the template is its OWN group witness, so renaming the group
+    // moves the template and its witness together and nothing disagrees.
+    let (self_outcome, self_emitted) = with_transparent_declaration_closure_witness(|| {
+        d5_compile(d5_plan_with(|call| rename(&mut call.recursion_group)), None)
+    });
+    assert!(
+        self_outcome.is_ok() && self_emitted.len() == 2,
+        "the self-call fixture must be INERT under the rename — that is the \
+         gap the mutual fixture closes, and if this fixture caught it the \
+         mutual one would be redundant: {self_outcome:?} {self_emitted:?}"
+    );
+
+    // Mutual: the witness is the OTHER template, and the rename separates them.
+    let (mutual_outcome, mutual_emitted) = with_transparent_declaration_closure_witness(|| {
+        d5_mutual_compile(d5_mutual_plan_with(
+            |a, _b| rename(&mut a.recursion_group),
+            true,
+        ))
+    });
+    let reason = mutual_outcome.expect_err(
+        "the mutual fixture must CATCH the rename the self-call fixture misses",
+    );
+    assert!(
+        reason.contains("callee is not a recursive member of its own recursion group"),
+        "the mutual fixture must catch it for the same-SCC reason, not some \
+         incidental one: {reason}"
+    );
+    assert!(
+        mutual_emitted.len() <= 1,
+        "no checked cross-call may be emitted: {mutual_emitted:?}"
+    );
+}
+
+/// **Duplicate — one checked template consumed by two occurrences.**
+///
+/// ⚠ Unlike every other row, this one legitimately emits the FIRST call before
+/// refusing. The first occurrence is lawful; only its repeat is not. Asserting
+/// `emitted.is_empty()` here would be asserting the wrong property, so the
+/// count is measured and stated.
+#[test]
+fn d5_c4_a_duplicated_checked_occurrence_is_refused_after_its_lawful_first() {
+    let a = RuntimeDeclaration {
+        symbol: D5_MUTUAL_A.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
+                params: vec!["n".to_string()],
+                // Two occurrences of the SAME template id, sequenced by a
+                // `Let` so neither nests inside the other — nesting has its own
+                // separate refusal and would mask this one.
+                body: Box::new(RuntimeExpr::Let {
+                    value: Box::new(RuntimeExpr::CheckedRecursiveInvocation {
+                        call_template_id: D5_MUTUAL_A_TEMPLATE,
+                        checked_occurrence_path: vec![5],
+                        body: Box::new(RuntimeExpr::Call {
+                            callee: Box::new(RuntimeExpr::DeclarationRef {
+                                symbol: D5_MUTUAL_B.to_string(),
+                            }),
+                            args: vec![RuntimeExpr::Var(0)],
+                        }),
+                    }),
+                    body: Box::new(RuntimeExpr::CheckedRecursiveInvocation {
+                        call_template_id: D5_MUTUAL_A_TEMPLATE,
+                        checked_occurrence_path: vec![5],
+                        body: Box::new(RuntimeExpr::Call {
+                            callee: Box::new(RuntimeExpr::DeclarationRef {
+                                symbol: D5_MUTUAL_B.to_string(),
+                            }),
+                            args: vec![RuntimeExpr::Var(1)],
+                        }),
+                    }),
+                }),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    let b = d5_mutual_declaration(D5_MUTUAL_B, D5_MUTUAL_A, D5_MUTUAL_B_TEMPLATE);
+    let carrier = d5_mutual_frame_carrier();
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D5_MUTUAL_A.to_string(),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int((5).into()))],
+    };
+    // ⛔ Both structural paths are declared in the plan, so the marker-location
+    // reconciliation upstream is SATISFIED and this row reaches the affine
+    // occurrence check it names rather than stopping at transport.
+    let plan = d5_mutual_plan_with(
+        |a, _b| {
+            a.runtime_marker_locations = vec![
+                crate::CheckedRuntimeMarkerLocationV1 {
+                    declaration: D5_MUTUAL_A.to_string(),
+                    runtime_path: vec![3, 0],
+                },
+                crate::CheckedRuntimeMarkerLocationV1 {
+                    declaration: D5_MUTUAL_A.to_string(),
+                    runtime_path: vec![3, 1],
+                },
+            ];
+        },
+        true,
+    );
+    with_transparent_declaration_closure_witness(|| {
+        reset_d5_emitted_declaration_calls();
+        let outcome = compile_expr_into_module(
+            new_jit_module().expect("JIT module"),
+            "d5_duplicate",
+            Linkage::Local,
+            &entry,
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::from([
+                (D5_MUTUAL_A, &a),
+                (D5_MUTUAL_B, &b),
+                (D5_FRAME_CARRIER, &carrier),
+            ]),
+            None,
+            false,
+            None,
+            None,
+            Some(plan),
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"));
+        let reason = outcome.expect_err(
+            "D5: one checked template consumed by two occurrences must be refused",
+        );
+        assert!(
+            reason.contains("consumed twice") || reason.contains("consumed more than once"),
+            "D5: the refusal must be the affine occurrence check. Any other \
+             one leaves the duplicate class unpinned: {reason}"
+        );
+        let emitted = d5_emitted_declaration_calls();
+        assert!(
+            emitted.len() <= 2,
+            "D5: at most the entry's unchecked call and the first, LAWFUL \
+             checked occurrence may be emitted before the repeat is refused: \
+             {emitted:?}"
+        );
+    });
+}
