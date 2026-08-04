@@ -6659,6 +6659,21 @@ impl AggregateAllocationLedger {
         Ok(())
     }
 
+    /// Drop the open body's evidence without committing it, for the
+    /// discarded-commit control. There is no production path that does this:
+    /// a body either commits or the pass fails.
+    #[cfg(test)]
+    fn discard_open_body_for_tests(&mut self) {
+        self.local = None;
+    }
+
+    /// Clear committed relation entries while leaving event evidence, for the
+    /// cleared-relation control. No production path does this either.
+    #[cfg(test)]
+    fn clear_committed_relation_for_tests(&mut self) {
+        self.committed.clear();
+    }
+
     /// **Close the relation once, after every body is emitted.**
     ///
     /// ⛔ The laws are stated over the WHOLE compilation, never per function.

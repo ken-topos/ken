@@ -6138,3 +6138,165 @@ fn a_dynamic_alternative_with_no_planned_record_refuses() {
          alternative carrying no occurrence"
     );
 }
+
+/// **`D7` — the aggregate allocation relation's laws, driven at the ledger.**
+///
+/// MEASURED, as the numbered control matrix:
+///
+/// | # | case | verdict |
+/// |---|---|---|
+/// | 1 | same numeric `Value` under distinct `FuncId`s | lawful |
+/// | 2 | one planner record governing several events | lawful |
+/// | 3 | an unused planned record, closeout still succeeds | lawful |
+/// | 4 | duplicate/conflicting pairing | rejects |
+/// | 5 | event recorded, relation suppressed | rejects at local close |
+/// | 6 | relation entry with no event | rejects at local close |
+/// | 7 | committed relation entries cleared between bodies | rejects at close |
+/// | 8 | a body commit discarded | rejects via opened-vs-committed |
+/// | 9 | second build/commit of one `FuncId` | rejects |
+/// | 10 | related occurrence absent from `P` | rejects |
+/// | 11 | allocation with no open body | rejects |
+///
+/// CLAIMED: `dom(R) = E` exactly, `R` single-valued with unique pairs, and
+/// `image(R) ⊆ P` — with `P` authorizing rather than obliging, so rows 2 and 3
+/// are the lawful shapes that a surjectivity requirement would have refused.
+///
+/// THE GAP: rows 12 and 13 of the released matrix — wrong
+/// owner/seat/path/role/shape/lane/child, and per-site wrapper bypass — are NOT
+/// here. They are construction-seat properties, held by the committed
+/// reconciliation rows (`a_construction_time_occurrence_lookup_fails_closed`,
+/// `a_dynamic_alternative_with_no_planned_record_refuses`,
+/// `a_records_lookup_key_includes_its_path_not_only_its_role`) and by the path
+/// mutations recorded in their commits. This row is about the LEDGER, and
+/// driving it there is what lets rows 5 and 6 exist at all: they are only
+/// stateable because the event set and the relation are separate evidence.
+#[test]
+fn the_aggregate_allocation_relation_holds_its_laws() {
+    // Two nested constructors, so the population has two records: one is used
+    // below and the other is left unused, which is what row 3 needs.
+    let source = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::Relation::Outer".to_string(),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Relation::Inner".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let (plan, _) = planned_root_occurrence(&source);
+    let population = plan.aggregate_ownership_records();
+    assert!(
+        population.len() > 1,
+        "this row needs at least two planned records; got {}",
+        population.len()
+    );
+    let first = population[0].id;
+    let second = population[1].id;
+    let planned = population.to_vec();
+
+    // ── 1. The same numeric Value under distinct FuncIds is two events ──
+    //
+    // A CLIF `Value` is numbered per function, so this is the ordinary case,
+    // not an edge one. A ledger keyed on the value alone refused six lawful
+    // allocations before `FuncId` scoped them.
+    let mut ledger = AggregateAllocationLedger::default();
+    for function in [7_u32, 9] {
+        ledger.open(function).expect("each body opens");
+        ledger.record_event(function, 12).expect("value 12 in each");
+        // ── 2. ONE record governing several events is lawful ──
+        ledger.relate(function, 12, first).expect("the same record governs both");
+        ledger.commit().expect("each body commits");
+    }
+    let closure = ledger.close(&planned).expect("the relation closes");
+    assert_eq!(closure.events, 2, "same value, two functions, two events");
+    assert_eq!(closure.image, 1, "one record governed both");
+    // ── 3. Unused planned records are LAWFUL ──
+    assert!(
+        closure.unused > 0,
+        "this fixture must leave a planned record unused, or row 3 is vacuous"
+    );
+
+    // ── 4. A duplicate or conflicting pair rejects ──
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(1).unwrap();
+    ledger.record_event(1, 3).unwrap();
+    ledger.relate(1, 3, first).unwrap();
+    assert!(
+        ledger.relate(1, 3, second).is_err(),
+        "a second pair at one event is a duplicate or a conflict"
+    );
+
+    // ── 5. An event recorded but never related rejects at the local close ──
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(1).unwrap();
+    ledger.record_event(1, 3).unwrap();
+    assert!(
+        ledger.commit().is_err(),
+        "an allocation nothing authorized must not commit"
+    );
+
+    // ── 6. A relation entry with no event rejects at the local close ──
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(1).unwrap();
+    ledger.relate(1, 3, first).unwrap();
+    assert!(
+        ledger.commit().is_err(),
+        "an authorization nothing allocated must not commit"
+    );
+
+    // ── 7. Clearing committed relation entries between bodies rejects ──
+    //
+    // The event evidence remains, so only the two-sided comparison sees it.
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(1).unwrap();
+    ledger.record_event(1, 3).unwrap();
+    ledger.relate(1, 3, first).unwrap();
+    ledger.commit().unwrap();
+    ledger.clear_committed_relation_for_tests();
+    assert!(
+        ledger.close(&planned).is_err(),
+        "cleared relation entries leave dom(R) short of E"
+    );
+
+    // ── 8. A discarded body commit rejects via opened-vs-committed ──
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(1).unwrap();
+    ledger.record_event(1, 3).unwrap();
+    ledger.relate(1, 3, first).unwrap();
+    ledger.discard_open_body_for_tests();
+    assert!(
+        ledger.close(&planned).is_err(),
+        "a body that opened and never committed must not pass as one that \
+         allocated nothing"
+    );
+
+    // ── 9. A second build or commit of one FuncId rejects ──
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(1).unwrap();
+    ledger.commit().unwrap();
+    assert!(ledger.open(1).is_err(), "a second build of one FuncId rejects");
+
+    // ── 10. A related occurrence absent from P rejects ──
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(1).unwrap();
+    ledger.record_event(1, 3).unwrap();
+    ledger.relate(1, 3, second).unwrap();
+    ledger.commit().unwrap();
+    assert!(
+        ledger.close(&planned[..1]).is_err(),
+        "an event related to a record outside P must reject"
+    );
+
+    // ── 11. An allocation with no open body rejects ──
+    let mut ledger = AggregateAllocationLedger::default();
+    assert!(
+        ledger.record_event(1, 3).is_err(),
+        "an allocation with no open body belongs to no function's event set"
+    );
+
+    // And an open body left open at the whole-pass close rejects.
+    let mut ledger = AggregateAllocationLedger::default();
+    ledger.open(1).unwrap();
+    assert!(
+        ledger.close(&planned).is_err(),
+        "a body still open at the closeout never committed its events"
+    );
+}
