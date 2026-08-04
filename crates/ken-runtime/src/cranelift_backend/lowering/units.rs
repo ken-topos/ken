@@ -430,6 +430,126 @@ pub(in crate::cranelift_backend) fn resolve_worker_targets(
     Ok(WorkerTargets { by_origin })
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5` — the checked-call closeout ledger.**
+///
+/// One entry per checked same-SCC recursive call that reached a real direct
+/// call to a declaration-owned unit, keyed by the `call_template_id` the
+/// oriented plan issued.
+///
+/// ⭐ **The three populations are read independently.** `planned` is the
+/// oriented plan's own `recursive_calls` identities; `consumed` is what the
+/// affine marker machinery actually took; `emitted` is recorded only after the
+/// `Inst` exists, from the emitted call itself. Set equality across the three
+/// is what "every planned checked call became exactly one correct direct call,
+/// and no other checked call was emitted" means.
+///
+/// ⛔ **Sets, not counts.** Two populations of the same size can differ, and a
+/// length comparison would pass for one that swapped a template for another.
+///
+/// ⛔ **This closeout restates none of D5's other laws.** Interface, segment,
+/// frame-template, occurrence-fingerprint, ABI descriptor, SCC, admission and
+/// input-order checks all have their own authorities and keep them; duplicating
+/// one here would put a second copy in a file where the two can disagree.
+///
+/// ⚠ **Scope, stated rather than left to be discovered.** The ledger is opened
+/// and closed by `define_unit_bodies`, which runs **only** under
+/// `BodyEmissionAuthority::FunctionizedUnits`. Production selects
+/// `RecursiveDescent` until `D6` retires the `TransparentDeclarationClosure`
+/// residual, so today this gate is reachable only under the `cfg(test)` selector
+/// witness — the same reachability every other `D5` law has, and the thing `D6`
+/// changes. It is live production code on the lane it guards, not a test hook.
+#[derive(Debug, Default)]
+pub(in crate::cranelift_backend) struct CheckedCallLedger {
+    planned: BTreeSet<u64>,
+    emitted: BTreeMap<u64, CheckedCallRecord>,
+}
+
+/// One emitted checked call, bound to the exact occurrence and target the
+/// planner resolved for it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct CheckedCallRecord {
+    pub(in crate::cranelift_backend) reference: StaticOriginId,
+    pub(in crate::cranelift_backend) target: StaticOriginId,
+    /// The callee **decoded out of the emitted instruction**.
+    pub(in crate::cranelift_backend) callee: cranelift_codegen::ir::FuncRef,
+    /// The callee the planner-resolved target record carries. ⚠ Both are
+    /// `FuncRef`s minted into the same defining function, so comparing them is
+    /// lawful and is a comparison of two independently produced facts — one
+    /// read from the CLIF, one from the resolved `DeclaredUnitCall`.
+    pub(in crate::cranelift_backend) resolved: cranelift_codegen::ir::FuncRef,
+}
+
+impl CheckedCallLedger {
+    /// ⚠ `planned` is taken **directly** from `plan.recursive_calls` — that IS
+    /// the exact domain of same-SCC checked calls, so no classifier and no
+    /// whitelist stands between the plan and this set.
+    pub(in crate::cranelift_backend) fn open(
+        plan: Option<&crate::OrientedSubcontinuationPlanV1>,
+    ) -> Self {
+        Self {
+            planned: plan
+                .map(|plan| {
+                    plan.recursive_calls
+                        .iter()
+                        .map(|call| call.call_template_id)
+                        .collect()
+                })
+                .unwrap_or_default(),
+            emitted: BTreeMap::new(),
+        }
+    }
+
+    /// Record one emitted checked call. ⛔ Called only **after** the `Inst`
+    /// exists, so a template reaches this set only once its call is real.
+    pub(in crate::cranelift_backend) fn record_emitted(
+        &mut self,
+        call_template_id: u64,
+        record: CheckedCallRecord,
+    ) -> Result<(), CraneliftBackendError> {
+        if self.emitted.insert(call_template_id, record).is_some() {
+            return Err(backend_module(
+                "one checked recursive call template emitted more than one declaration-unit call"
+                    .to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// **Planned = consumed = emitted, before the artifact is published.**
+    ///
+    /// `consumed` is the affine marker machinery's own set, passed in rather
+    /// than mirrored here, so the two cannot drift.
+    pub(in crate::cranelift_backend) fn close(
+        self,
+        consumed: &BTreeSet<u64>,
+    ) -> Result<(), CraneliftBackendError> {
+        let emitted = self.emitted.keys().copied().collect::<BTreeSet<_>>();
+        for (name, set) in [("consumed", consumed), ("emitted", &emitted)] {
+            if *set != self.planned {
+                let missing = self.planned.difference(set).count();
+                let extra = set.difference(&self.planned).count();
+                return Err(backend_module(format!(
+                    "the {name} checked recursive call population does not equal the planned one:                      {missing} planned templates absent, {extra} unplanned templates present"
+                )));
+            }
+        }
+        // Each emitted call's ACTUAL callee against its exact resolved target.
+        // ⛔ The callee is the one decoded from the emitted instruction; a
+        // tuple that disagrees here is a call that went somewhere the planner
+        // did not resolve.
+        for (call_template_id, record) in &self.emitted {
+            if record.callee != record.resolved {
+                return Err(backend_module(format!(
+                    "checked recursive call template {call_template_id} emitted a call to \
+                     {:?} but the target resolved for occurrence {:?} is {:?} ({:?})",
+                    record.callee, record.reference, record.resolved, record.target
+                )));
+            }
+        }
+        Ok(())
+    }
+}
+
 pub(in crate::cranelift_backend) fn resolve_call_edges(
     plan: &StaticTransitionPlan<'_>,
     bundle: &UnitBundle,
@@ -1567,6 +1687,11 @@ pub(super) fn define_unit_bodies<M: Module>(
         &compiler.static_transition_plan,
         bundle,
     )?);
+    // `RT-DECL-CLOSURE-PORT` `D5` — opened here because this bundle pass is the
+    // only place a checked same-SCC call can reach a declaration-owned unit.
+    compiler.checked_call_ledger = Some(CheckedCallLedger::open(
+        compiler.oriented_subcontinuation_plan.as_ref(),
+    ));
     let mut root_result = None;
     let emissions = compiler
         .static_transition_plan
@@ -1616,6 +1741,15 @@ pub(super) fn define_unit_bodies<M: Module>(
         .take()
         .ok_or_else(|| backend_module("the continuation claim ledger went missing".to_string()))?
         .close()?;
+    // `D5` closeout, before the artifact is published: planned = consumed =
+    // emitted, and every emitted actual callee equals its exact resolved
+    // target. ⛔ `consumed` is the affine machinery's OWN set, passed in rather
+    // than mirrored, so the two cannot drift apart.
+    compiler
+        .checked_call_ledger
+        .take()
+        .ok_or_else(|| backend_module("the checked call ledger went missing".to_string()))?
+        .close(&compiler.consumed_recursive_call_templates)?;
     root_result.ok_or_else(|| {
         backend_module("the emitted unit bundle did not define its recorded root".to_string())
     })

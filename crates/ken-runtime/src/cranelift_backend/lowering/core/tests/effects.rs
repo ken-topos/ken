@@ -77,6 +77,7 @@ fn run_checked_bounded_nat_fixture(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         continuation_claims: None,
+        checked_call_ledger: None,
         defining_unit: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),

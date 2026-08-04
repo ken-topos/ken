@@ -1099,9 +1099,45 @@ thread_local! {
     /// [`d5_emitted_declaration_calls`] after
     /// [`reset_d5_emitted_declaration_calls`] — a bare read attributes an
     /// earlier compile's calls to the current one.
+    /// **`RT-DECL-CLOSURE-PORT` `D5`** — the causal controls on the checked-call
+    /// closeout. Each defeats exactly one of the three things the closeout
+    /// claims: that every lawful emission is recorded, that no template records
+    /// twice, and that the recorded callee is the one actually emitted.
+    static D5_CLOSEOUT_MUTATION: std::cell::Cell<D5CloseoutMutation> =
+        const { std::cell::Cell::new(D5CloseoutMutation::Exact) };
     static D5_EMITTED_DECLARATION_CALLS: std::cell::RefCell<
         Vec<(StaticOriginId, StaticOriginId, cranelift_codegen::ir::FuncRef)>,
     > = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D5CloseoutMutation {
+    Exact,
+    /// Emit the lawful call, then suppress its ledger entry.
+    SuppressLedgerEntry,
+    /// Record the entry twice under one template.
+    DuplicateLedgerEntry,
+    /// Record an entry under a template the plan never issued.
+    ExtraLedgerEntry,
+    /// Record a callee that is not the one the instruction actually calls.
+    SubstituteEmittedCallee,
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn with_d5_closeout_mutation<T>(
+    mutation: D5CloseoutMutation,
+    body: impl FnOnce() -> T,
+) -> T {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            D5_CLOSEOUT_MUTATION.with(|cell| cell.set(D5CloseoutMutation::Exact));
+        }
+    }
+    D5_CLOSEOUT_MUTATION.with(|cell| cell.set(mutation));
+    let _restore = Restore;
+    body()
 }
 
 #[cfg(test)]
@@ -1223,6 +1259,10 @@ struct Lowering<'a> {
     /// the whole unit-definition pass so a token claimed at one producer
     /// occurrence cannot be claimed again at another.
     continuation_claims: Option<units::ContinuationClaimLedger>,
+    /// **`RT-DECL-CLOSURE-PORT` `D5`** — the checked-call closeout ledger.
+    /// `None` outside the functionized unit-bundle pass, which is the only
+    /// place a checked call can reach a declaration-owned unit.
+    checked_call_ledger: Option<units::CheckedCallLedger>,
     /// The exact unit currently being defined, so `D3`'s owner check compares
     /// against a fact supplied independently of the token.
     defining_unit: Option<PredeclaredFunctionId>,
@@ -2505,6 +2545,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         reference_origin: StaticOriginId,
         inputs: &[LoweringOperand],
+        checked_template: Option<u64>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         let target = self
             .function_local
@@ -2516,8 +2557,8 @@ impl<'a> Lowering<'a> {
                     "DeclarationRef has no planner-derived declaration call target".to_string(),
                 )
             })?;
-        #[cfg(test)]
         let target_origin = target.origin;
+        let target_function = target.function;
         let (operand, call) = self.call_declared_unit_target(
             builder,
             target,
@@ -2532,17 +2573,91 @@ impl<'a> Lowering<'a> {
         // compared two reads of `declaration_calls` would agree with itself
         // whatever the emitter did; this disagrees the moment the emitted call
         // and the planner-resolved target diverge.
+        // ⛔⛔ The callee is decoded out of the instruction that was ACTUALLY
+        // emitted, never read back out of the declared map. That is what makes
+        // the closeout's target comparison a comparison of two independently
+        // produced facts.
+        let emitted_callee = match builder.func.dfg.insts[call] {
+            cranelift_codegen::ir::InstructionData::Call { func_ref, .. } => func_ref,
+            _ => {
+                return Err(backend_module(
+                    "a declared unit call was not emitted as a direct call instruction".to_string(),
+                ));
+            }
+        };
         #[cfg(test)]
-        {
-            let func_ref = match builder.func.dfg.insts[call] {
-                cranelift_codegen::ir::InstructionData::Call { func_ref, .. } => func_ref,
-                _ => panic!("a declared unit call is emitted as a direct call instruction"),
+        D5_EMITTED_DECLARATION_CALLS.with(|calls| {
+            calls
+                .borrow_mut()
+                .push((reference_origin, target_origin, emitted_callee))
+        });
+        // `RT-DECL-CLOSURE-PORT` `D5` — one ledger entry per CHECKED call,
+        // keyed by its template and bound to the exact reference occurrence and
+        // resolved target. ⚠ An unchecked entry call carries no template id and
+        // is deliberately outside this set.
+        if let Some(call_template_id) = checked_template {
+            #[cfg(test)]
+            let mutation = D5_CLOSEOUT_MUTATION.with(std::cell::Cell::get);
+            #[cfg(test)]
+            if mutation == D5CloseoutMutation::SuppressLedgerEntry {
+                // ⛔ The call itself is already emitted and lawful; only its
+                // record is withheld. That is the whole point — the closeout
+                // must notice a real call that no entry accounts for.
+                return Ok(operand);
+            }
+            let ledger = self.checked_call_ledger.as_mut().ok_or_else(|| {
+                backend_module(
+                    "a checked declaration-unit call was emitted outside the unit bundle pass"
+                        .to_string(),
+                )
+            })?;
+            #[cfg(test)]
+            let record = units::CheckedCallRecord {
+                reference: reference_origin,
+                target: target_origin,
+                callee: if mutation == D5CloseoutMutation::SubstituteEmittedCallee {
+                    target_function
+                } else {
+                    emitted_callee
+                },
+                resolved: if mutation == D5CloseoutMutation::SubstituteEmittedCallee {
+                    // A ref this function certainly did not call.
+                    builder
+                        .func
+                        .dfg
+                        .ext_funcs
+                        .keys()
+                        .find(|candidate| *candidate != emitted_callee)
+                        .unwrap_or(target_function)
+                } else {
+                    target_function
+                },
             };
-            D5_EMITTED_DECLARATION_CALLS.with(|calls| {
-                calls
-                    .borrow_mut()
-                    .push((reference_origin, target_origin, func_ref))
-            });
+            #[cfg(not(test))]
+            let record = units::CheckedCallRecord {
+                reference: reference_origin,
+                target: target_origin,
+                callee: emitted_callee,
+                resolved: target_function,
+            };
+            ledger.record_emitted(call_template_id, record)?;
+            #[cfg(test)]
+            match mutation {
+                D5CloseoutMutation::DuplicateLedgerEntry => {
+                    ledger.record_emitted(call_template_id, record)?;
+                }
+                D5CloseoutMutation::ExtraLedgerEntry => {
+                    // ⚠ Keyed off the real template so each call site adds a
+                    // DISTINCT unplanned entry. A single shared key would trip
+                    // the duplicate check at the second call site instead, and
+                    // this row would measure duplication rather than the
+                    // planned-set membership it names.
+                    ledger.record_emitted(call_template_id ^ u64::MAX, record)?;
+                }
+                D5CloseoutMutation::Exact
+                | D5CloseoutMutation::SuppressLedgerEntry
+                | D5CloseoutMutation::SubstituteEmittedCallee => {}
+            }
         }
         Ok(operand)
     }
