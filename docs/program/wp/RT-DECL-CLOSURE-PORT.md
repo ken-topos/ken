@@ -172,10 +172,11 @@ to widen.
 - **`D5`** — **Complete owner/phase validation**, in place **before**
   `TransparentDeclarationClosure` is removed from the retained residual.
 - **`D5a`** — **Continuation elimination for the planned closure-valued
-  constructor field.** The declaration-owned unit calls the declared
-  continuation directly instead of letting the closure cross a unit boundary.
-  Added 2026-08-04; **`D6` is not retried until this checkpoint is green.** Full
-  specification in the section below.
+  constructor field.** **Every exact planner-issued producer-owner unit emits
+  its own declared direct continuation call at its ruled seat**, instead of
+  letting the closure cross a unit boundary. Added 2026-08-04; **`D6` is not
+  retried until this checkpoint is green.** Full specification in the section
+  below.
 - **`D6`** — Remove the residual variant, and only then re-run `AC-1`.
 
 ### `D2a` — the population substitution D5 could not run without
@@ -323,10 +324,12 @@ preservation checkpoint `08cb257ff5118a89b72b4018e3e1c4d1733a03d7`. Steward
 recut; `08cb257f` is preservation-only and never a candidate.**
 
 **Same WP, same atomic scope. Not a new graph node, and not part of `D6`.** The
-new owner is this node's `CallableDeclaration`; the callee/call mechanism is the
-already-landed continuation specialization. Splitting either side into a third
-owner would misstate the defect: it is a composition gap between the new owner
-and the landed mechanism, not a new disposition or representation family.
+owner is **the planner-issued producer-owner population inside this same node**,
+comprising the `CallableDeclaration` and recursively discovered `ClosureBody`
+members; the callee/call mechanism is the already-landed continuation
+specialization. Splitting either side into a third atomic participant would
+misstate the defect: it is a composition gap between that population and the
+landed mechanism, not a new disposition or representation family.
 
 #### What `D6` hit
 
