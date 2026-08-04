@@ -222,6 +222,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            worker_templates: BTreeMap::new(),
             generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
@@ -1915,6 +1916,7 @@ fn bare_carrier_test_lowering<'src>(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            worker_templates: BTreeMap::new(),
             generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
@@ -4802,7 +4804,7 @@ fn worker_descriptor(
     origin: StaticOriginId,
     parameters: u32,
     captures: u32,
-) -> units::DeclaredUnitCall {
+) -> units::WorkerTemplate {
     let mut slots = Vec::new();
     for ordinal in 0..parameters {
         slots.push(AbiSlot {
@@ -4827,8 +4829,12 @@ fn worker_descriptor(
         });
     }
     let offsets = (0..slots.len() as u32).map(|index| index * 8).collect();
-    units::DeclaredUnitCall {
-        function: cranelift_codegen::ir::FuncRef::from_u32(0),
+    // `D5a` checkpoint 1: the constructor now validates against the RAW
+    // TEMPLATE, so these controls follow it there. ⭐ The move is the point --
+    // a `WorkerTemplate` has no `FuncRef` field at all, so these seven controls
+    // now measure a record that could not name a callee even if the fixture
+    // wanted it to.
+    units::WorkerTemplate {
         origin,
         // The D2 worker-descriptor fixture keys on the same origin it targets;
         // the D1b pair is exercised by the production join, not here.
@@ -4844,13 +4850,33 @@ fn worker_descriptor(
     }
 }
 
+/// Wrap a raw template as a CALL TARGET for the `worker_calls` axis.
+///
+/// ⚠ Two axes, two record types, and this helper is where they meet:
+/// `worker_templates` carries the raw contract the constructor validates, and
+/// `worker_calls` carries the callee `call_static_worker` emits. ⛔ In
+/// production those two may name different functions -- that is the `D5a`
+/// retarget -- so a fixture that needs both must build both rather than reuse
+/// one for the other.
+#[cfg(test)]
+fn worker_call_target(template: units::WorkerTemplate) -> units::DeclaredUnitCall {
+    units::DeclaredUnitCall {
+        function: cranelift_codegen::ir::FuncRef::from_u32(0),
+        origin: template.origin,
+        call_site_origin: template.call_site_origin,
+        header: template.header,
+        slots: template.slots,
+        offsets: template.offsets,
+    }
+}
+
 /// Drives one construction attempt against a descriptor the caller shapes.
 ///
 /// Returns the route's own verdict, so a test asserts on the construction
 /// rather than on some later emission.
 #[cfg(test)]
 fn attempt_worker_construction(
-    install: impl FnOnce(StaticOriginId, StaticOriginId) -> Option<units::DeclaredUnitCall>,
+    install: impl FnOnce(StaticOriginId, StaticOriginId) -> Option<units::WorkerTemplate>,
     declared_arity: u32,
     source_capture_count: usize,
     capture_operands: usize,
@@ -4866,7 +4892,10 @@ fn attempt_worker_construction(
     let seed_env = NativeSeedEnvironment::empty();
     let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
     if let Some(target) = install(body_origin, closure_origin) {
-        compiler.function_local.unit_calls.insert(body_origin, target);
+        compiler
+            .function_local
+            .worker_templates
+            .insert(body_origin, target);
     }
     // `Lowered::Bytes` needs no emitted value, so the fixture builds captures
     // without a builder. The route is phase-agnostic by design -- it stores
@@ -4939,8 +4968,13 @@ fn static_worker_construction_installs_on_agreeing_descriptor() {
 fn static_worker_construction_rejects_missing_target() {
     let error = expect_worker_rejection(attempt_worker_construction(|_, _| None, 1, 1, 1));
     assert!(
-        format!("{error:?}").contains("no declared static-body target"),
-        "rejects for the missing-target reason, not some later one: {error:?}"
+        // `D5a` checkpoint 1 moved the constructor's authority from the
+        // declared call target to the raw worker template, and the diagnostic
+        // moved with it. Same seam, and a sharper reason: what is missing is
+        // the RAW CONTRACT, which a function has whether or not it also has a
+        // callee to reach.
+        format!("{error:?}").contains("no raw worker template"),
+        "rejects for the missing-template reason, not some later one: {error:?}"
     );
 }
 
@@ -5086,7 +5120,10 @@ fn lower_against_static_worker(
         compiler
             .function_local
             .worker_calls
-            .insert(body_origin, worker_descriptor(body_origin, declared_arity, 1));
+            .insert(
+                body_origin,
+                worker_call_target(worker_descriptor(body_origin, declared_arity, 1)),
+            );
     }
     let env = [LoweringEnvironmentBinding::StaticWorker(StaticWorkerBinding {
         closure_origin,

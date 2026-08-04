@@ -6005,6 +6005,146 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(calls)
     }
 
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 1 — the raw worker bodies that
+    /// are TEMPLATE-ONLY.**
+    ///
+    /// Architect ruling `evt_5a0q3m9tnkh8e`. "Unchanged ordinary `fn2` ABI"
+    /// preserves the raw worker's **descriptor and source binding** so a
+    /// generated context can validate and lower the same body. It does not
+    /// require *defining* that body in an environment known to lack the
+    /// continuation inputs. The governing population is the **post-retarget
+    /// executable call graph**, and this method derives it.
+    ///
+    /// A body is template-only exactly when **every** route into it is
+    /// superseded by a generated context:
+    ///
+    /// | route into body `B` | superseded when |
+    /// |---|---|
+    /// | a specialization `S` whose selected worker body is `B` | a generated context exists for `(S, B)` |
+    /// | a `StaticBody` or `Declaration` call edge targeting `B` | ⛔ **never** |
+    ///
+    /// ⛔ **"A context exists" is NOT a global suppression predicate**, and the
+    /// shape above is what stops it becoming one: a mixed caller population --
+    /// one specialization retargeted and another not, or any surviving call
+    /// edge -- leaves at least one unsuperseded route and keeps the raw
+    /// `Function`. The ruling names that case explicitly.
+    ///
+    /// ## ⚠ Why a `StaticBody` edge is NEVER superseded — MEASURED, and it
+    /// refutes the obvious argument
+    ///
+    /// The tempting reasoning: a `StaticBody` edge into `B` is `B`'s *seeding*
+    /// edge, its closure occurrence `c` satisfies `child_origin(c, 0) == B`, and
+    /// `child_origin` is injective in `c` -- so if a specialization selects `B`
+    /// it selected *that* occurrence, and the edge and the worker call look like
+    /// two records of one route. ⇒ Supersede the edge with the worker call.
+    ///
+    /// **That conclusion is false, and the witness measures it.** One closure
+    /// occurrence can be realized **twice in one caller**: once as a
+    /// `StaticWorkerBinding` stored into the producer constructor (which becomes
+    /// the worker call, and retargets), and once as a **carried computational
+    /// re-entry** --
+    /// `lower_carried_computational_match` -> `lower_source_machine` ->
+    /// `lower_source_machine_with_continuation` ->
+    /// `call_declared_recursive_position_unit`, which calls `B` **directly**
+    /// through the graph-derived target. Suppressing the edge left that call
+    /// with no target and refused with *"retained body has no graph-derived call
+    /// target in this unit"*.
+    ///
+    /// ⇒ The injectivity is real; the inference from it is not. Same occurrence,
+    /// two emitted calls, and only one of them retargets. **A call edge
+    /// therefore always counts as a live route**, which is the conservative
+    /// direction: the cost of being wrong here is an emitted body that refuses,
+    /// not a call to a function that does not exist.
+    pub(in crate::cranelift_backend) fn template_only_worker_bodies(
+        &self,
+    ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+        let contexts = self.continuation_contexts()?;
+        if contexts.is_empty() {
+            // Total and fast: with no generated context nothing is superseded,
+            // which is the entire pre-`D5a` program population.
+            return Ok(BTreeSet::new());
+        }
+        let units = self.continuation_units()?;
+        let edges = self.emittable_call_edges()?;
+        let mut template_only = BTreeSet::new();
+        // Only a body some context actually names can be superseded. Starting
+        // from the contexts rather than from every unit keeps the candidate set
+        // exactly the population the retarget touches.
+        let candidates = contexts
+            .iter()
+            .map(|context| context.worker_body_origin())
+            .collect::<BTreeSet<_>>();
+        for body in candidates {
+            let selecting = units
+                .iter()
+                .filter(|unit| unit.worker_body_origin() == body)
+                .collect::<Vec<_>>();
+            if selecting.is_empty() {
+                // A context whose body no specialization selects is a planner
+                // contradiction, not a licence to suppress.
+                return Err(planner_error(
+                    "a generated context names a worker body that no specialization selects",
+                ));
+            }
+            let every_specialization_retargeted = selecting.iter().all(|unit| {
+                contexts.iter().any(|context| {
+                    context.enclosing_specialization() == unit.id()
+                        && context.worker_body_origin() == body
+                })
+            });
+            if !every_specialization_retargeted {
+                // The mixed caller population the ruling names: at least one
+                // specialization still calls the raw worker.
+                continue;
+            }
+            // Any surviving call edge into this body is a live route, of either
+            // kind. See the doc comment above for the measurement that rules
+            // out superseding a `StaticBody` edge with the worker call.
+            if edges.iter().any(|edge| edge.callee_origin() == body) {
+                continue;
+            }
+            template_only.insert(body);
+        }
+        Ok(template_only)
+    }
+
+    /// **`D5a` checkpoint 1 — the units that receive a declared and defined
+    /// `Function`.**
+    ///
+    /// [`Self::emittable_units`] stays the **descriptor / provenance / template**
+    /// population and is unchanged; this is the **executable** subset. ⛔ The two
+    /// must not be conflated in the other direction either: declaring from here
+    /// and defining from `emittable_units` (or the reverse) is exactly the
+    /// undefined-phantom the ruling forbids, so both the declaration pass and the
+    /// definition pass read this one method.
+    pub(in crate::cranelift_backend) fn executable_units(
+        &self,
+    ) -> Result<Vec<EmittableUnit<'_>>, CraneliftBackendError> {
+        let template_only = self.template_only_worker_bodies()?;
+        Ok(self
+            .emittable_units()?
+            .into_iter()
+            .filter(|unit| !template_only.contains(&unit.origin()))
+            .collect())
+    }
+
+    /// **`D5a` checkpoint 1 — the call edges that survive the retarget.**
+    ///
+    /// An edge into a template-only body is the seeding edge whose realization
+    /// retargeted; resolving it would demand a `FuncId` for a unit that has no
+    /// emitted `Function`, and fabricating one is the failure
+    /// `UnitBundle::function`'s `Option` exists to expose.
+    pub(in crate::cranelift_backend) fn executable_call_edges(
+        &self,
+    ) -> Result<Vec<EmittableCallEdge>, CraneliftBackendError> {
+        let template_only = self.template_only_worker_bodies()?;
+        Ok(self
+            .emittable_call_edges()?
+            .into_iter()
+            .filter(|edge| !template_only.contains(&edge.callee_origin()))
+            .collect())
+    }
+
     pub(in crate::cranelift_backend) fn root_emittable_unit(
         &self,
     ) -> Result<EmittableUnit<'_>, CraneliftBackendError> {

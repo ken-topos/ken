@@ -88,6 +88,7 @@ fn run_checked_bounded_nat_fixture(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: mutation,
         function_local: FunctionLocalRefs {
+            worker_templates: BTreeMap::new(),
             generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,

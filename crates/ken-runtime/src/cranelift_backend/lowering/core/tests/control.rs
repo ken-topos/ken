@@ -76,6 +76,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            worker_templates: BTreeMap::new(),
             generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
@@ -230,6 +231,7 @@ fn run_px8j_malformed_recursor_consumer(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            worker_templates: BTreeMap::new(),
             generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
@@ -2129,6 +2131,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            worker_templates: BTreeMap::new(),
             generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
@@ -12005,6 +12008,25 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
                 )
             })
             .collect::<Vec<_>>();
+        // `D5a` checkpoint 1: the template-only set and the executable
+        // population, printed from the plan alone. ⭐ Positively measured: the
+        // alternative is to read "fn2 is still emitted" off the refusal that
+        // follows, which cannot distinguish "the rule kept it" from "the rule
+        // never ran".
+        let population = format!(
+            "template_only={:?} executable={:?} emittable={:?}",
+            plan.template_only_worker_bodies().expect("template only"),
+            plan.executable_units()
+                .expect("executable units")
+                .iter()
+                .map(|unit| unit.function())
+                .collect::<Vec<_>>(),
+            plan.emittable_units()
+                .expect("units")
+                .iter()
+                .map(|unit| unit.function())
+                .collect::<Vec<_>>(),
+        );
         let envelopes = plan
             .emittable_units()
             .expect("units")
@@ -12018,12 +12040,12 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
                 )
             })
             .collect::<Vec<_>>();
-        (units, calls, specializations, contexts, envelopes)
+        (units, calls, specializations, contexts, population, envelopes)
     });
     let trace = take_d5a_trace();
     eprintln!("=== D5a PLANNER CENSUS ===");
     match &census {
-        Ok((units, calls, specializations, contexts, envelopes)) => {
+        Ok((units, calls, specializations, contexts, population, envelopes)) => {
             eprintln!("units ({}):", units.len());
             for unit in units {
                 eprintln!("  {unit}");
@@ -12040,6 +12062,8 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
             for context in contexts {
                 eprintln!("  {context}");
             }
+            eprintln!("executable population:");
+            eprintln!("  {population}");
             eprintln!("emitting-unit envelopes ({}):", envelopes.len());
             for envelope in envelopes {
                 eprintln!("  {envelope}");

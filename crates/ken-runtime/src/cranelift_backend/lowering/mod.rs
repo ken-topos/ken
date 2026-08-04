@@ -663,6 +663,7 @@ impl ArtifactHelpers<'_> {
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            worker_templates: BTreeMap::new(),
             generated_context_captures: None,
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
@@ -785,6 +786,17 @@ struct FunctionLocalRefs {
     /// exact body origin. Minted per generated function; a `FuncRef` here
     /// belongs to that function and is never copied to another.
     worker_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 1** -- the RAW descriptor
+    /// contract for every worker body, executable or template-only.
+    ///
+    /// ⛔ Separate from `worker_calls` on purpose, and carrying no `FuncRef`.
+    /// `construct_static_worker_binding` validates identity and arity against
+    /// **this**, while the call is emitted through `worker_calls`, which may
+    /// have been retargeted to a generated context. Validating against the
+    /// thing you are about to call would make the retarget invisible to the
+    /// check; validating against the raw template is what "unchanged ordinary
+    /// `fn2` ABI" actually means.
+    worker_templates: BTreeMap<StaticOriginId, units::WorkerTemplate>,
     /// **`RT-DECL-CLOSURE-PORT` `D5a`** -- the operand suffix a **retargeted**
     /// worker call must append, and the one body origin it applies to.
     ///
@@ -2584,9 +2596,9 @@ impl<'a> Lowering<'a> {
             .get(&body_origin)
             .cloned()
             .ok_or_else(|| {
-                backend_module(
-                    "retained body has no graph-derived call target in this unit".to_string(),
-                )
+                backend_module(format!(
+                    "retained body {body_origin:?} has no graph-derived call target in this unit"
+                ))
             })?;
         self.call_declared_unit_target(
             builder,

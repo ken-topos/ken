@@ -6638,19 +6638,24 @@ impl<'a> Lowering<'a> {
             ));
         }
 
-        // 2. This function has a declared static-body target for `body_origin`.
-        //    A missing target is the "worker body was never declared into this
-        //    function" fact, and it rejects here rather than at emission.
+        // 2. This function has the RAW TEMPLATE contract for `body_origin`.
+        //
+        // `D5a` checkpoint 1: this reads `worker_templates`, not `unit_calls`.
+        // The template is the raw worker's own descriptor and carries no
+        // `FuncRef`, so every check below is about the raw contract even when
+        // the call this binding eventually drives has been retargeted to a
+        // generated context. ⛔ Reading the call target here instead would
+        // validate the context against the raw closure's arity and either
+        // reject a lawful retarget or, worse, silently accept a wrong one.
         let target = self
             .function_local
-            .unit_calls
+            .worker_templates
             .get(&body_origin)
             .ok_or_else(|| {
                 unsupported(
                     "StaticWorkerBinding",
                     format!(
-                        "no declared static-body target for worker body origin {body_origin:?} \
-                         in this function"
+                        "no raw worker template for body origin {body_origin:?} in this function"
                     ),
                 )
             })?;
