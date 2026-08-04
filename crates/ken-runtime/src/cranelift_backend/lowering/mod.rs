@@ -3808,8 +3808,17 @@ impl<'a> Lowering<'a> {
                             //
                             // ⚠ No guard here refusing aggregates: measured, it
                             // would refuse those 97 inputs, which compile today.
-                            self.transfer_into_carrier(builder, target.origin, value)?
-                                .word
+                            #[cfg(test)]
+                            if value.source_aggregate_producer().is_some() {
+                                SELF_AUTHORIZED_FALLBACK_REACHES
+                                    .with(|n| n.set(n.get().saturating_add(1)));
+                            }
+                            self.transfer_into_carrier(
+                                builder,
+                                self.callee_scheduling_origin_under_mutation(target.origin),
+                                value,
+                            )?
+                            .word
                         }
                     };
                     builder.ins().stack_store(word, payload, offset);
@@ -7096,6 +7105,14 @@ pub(crate) enum GovernedAllocationMutation {
     /// record lookup rejects nonsense; taking a real one tests that ownership
     /// discriminates between two aggregates the plan considers equally real.
     SiblingAggregateProducer,
+    /// Transfer a still-specialized call input at the PROGRAM ROOT's occurrence
+    /// instead of the callee's scheduling entry, at the one call-input site that
+    /// has no caller-side occurrence to carry.
+    ///
+    /// ⭐ The self-authority probe. A template that authorizes itself is
+    /// unaffected by which coordinate it is transferred at; one that does not
+    /// resolves a different record, or none at all.
+    CalleeSchedulingOrigin,
 }
 
 #[cfg(test)]
@@ -7120,6 +7137,10 @@ thread_local! {
     /// about a different object.
     static SIBLING_PRODUCER_SUBSTITUTION: std::cell::Cell<Option<SiblingProducerSubstitution>> =
         const { std::cell::Cell::new(None) };
+    /// How many SELF-AUTHORIZING aggregates reached the callee-scheduling-entry
+    /// fallback -- the one call-input site with no caller-side occurrence.
+    static SELF_AUTHORIZED_FALLBACK_REACHES: std::cell::Cell<u32> =
+        const { std::cell::Cell::new(0) };
 }
 
 /// The exact ownership substitution one A/B run performed.
@@ -7150,6 +7171,7 @@ pub(crate) struct GovernedAllocationMutationGuard {
     previous_hits: u32,
     previous_allocations: u32,
     previous_substitution: Option<SiblingProducerSubstitution>,
+    previous_reaches: u32,
 }
 
 #[cfg(test)]
@@ -7160,17 +7182,25 @@ impl GovernedAllocationMutationGuard {
             previous_hits: GOVERNED_ALLOCATION_HITS.with(std::cell::Cell::get),
             previous_allocations: CARRIER_RAW_ALLOCATIONS.with(std::cell::Cell::get),
             previous_substitution: SIBLING_PRODUCER_SUBSTITUTION.with(std::cell::Cell::get),
+            previous_reaches: SELF_AUTHORIZED_FALLBACK_REACHES.with(std::cell::Cell::get),
         };
         GOVERNED_ALLOCATION_MUTATION.with(|cell| cell.set(mutation));
         GOVERNED_ALLOCATION_HITS.with(|cell| cell.set(0));
         CARRIER_RAW_ALLOCATIONS.with(|cell| cell.set(0));
         SIBLING_PRODUCER_SUBSTITUTION.with(|cell| cell.set(None));
+        SELF_AUTHORIZED_FALLBACK_REACHES.with(|cell| cell.set(0));
         guard
     }
 
     /// What the ownership substitution moved, if one fired.
     pub(crate) fn substitution(&self) -> Option<SiblingProducerSubstitution> {
         SIBLING_PRODUCER_SUBSTITUTION.with(std::cell::Cell::get)
+    }
+
+    /// How many self-authorizing aggregates reached the callee-scheduling-entry
+    /// fallback.
+    pub(crate) fn self_authorized_fallback_reaches(&self) -> u32 {
+        SELF_AUTHORIZED_FALLBACK_REACHES.with(std::cell::Cell::get)
     }
 
     /// How many times this mutation's seam actually fired.
@@ -7195,6 +7225,7 @@ impl Drop for GovernedAllocationMutationGuard {
         GOVERNED_ALLOCATION_HITS.with(|cell| cell.set(self.previous_hits));
         CARRIER_RAW_ALLOCATIONS.with(|cell| cell.set(self.previous_allocations));
         SIBLING_PRODUCER_SUBSTITUTION.with(|cell| cell.set(self.previous_substitution));
+        SELF_AUTHORIZED_FALLBACK_REACHES.with(|cell| cell.set(self.previous_reaches));
     }
 }
 
@@ -7770,6 +7801,44 @@ impl<'a> Lowering<'a> {
             // ordinary child, so nothing downstream sees a second carrier.
             args: args.into_iter().map(SynthesizedArgument::into_lowered).collect(),
         })
+    }
+
+    /// The program ROOT's occurrence in place of the callee's scheduling entry,
+    /// under the self-authority probe only.
+    ///
+    /// ⚠ Returns the coordinate unchanged when the plan has no root, or when the
+    /// root IS the callee's entry -- so a control must assert the hit count.
+    ///
+    /// ⛔ The root is a real, live, planned occurrence, never a fabricated one.
+    /// A refusal driven by an unusable coordinate would be a claim about
+    /// coordinate VALIDITY; the claim here is that a self-authorizing aggregate
+    /// does not care WHICH live coordinate it crosses at.
+    #[cfg(test)]
+    fn callee_scheduling_origin_under_mutation(
+        &self,
+        origin: StaticOriginId,
+    ) -> StaticOriginId {
+        if GOVERNED_ALLOCATION_MUTATION.with(std::cell::Cell::get)
+            != GovernedAllocationMutation::CalleeSchedulingOrigin
+        {
+            return origin;
+        }
+        let Ok(root) = self.static_transition_plan.root_static_origin() else {
+            return origin;
+        };
+        if root == origin {
+            return origin;
+        }
+        governed_allocation_hit();
+        root
+    }
+
+    #[cfg(not(test))]
+    fn callee_scheduling_origin_under_mutation(
+        &self,
+        origin: StaticOriginId,
+    ) -> StaticOriginId {
+        origin
     }
 
     /// Swap in a sibling effect seat, under the A/B mutation only.

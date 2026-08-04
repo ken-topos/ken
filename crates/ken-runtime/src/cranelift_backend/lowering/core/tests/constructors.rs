@@ -7097,6 +7097,132 @@ fn d7_ownership_run(
     (result, hits, allocations, substitution)
 }
 
+/// A **static worker** — a closure bound in a `Let` and called through its
+/// binder — handed an aggregate argument.
+///
+/// ⭐ This is the one call-input site with no caller-side occurrence to carry:
+/// `call_static_worker` computes each argument's exact origin with
+/// `child_occurrence` and discards it, so the input arrives still specialized at
+/// `call_declared_unit_target` and is transferred at `target.origin`, the
+/// CALLEE's scheduling entry. Every other caller now carries its inputs across
+/// at their own occurrences.
+fn d7_static_worker_with_aggregate_argument() -> RuntimeExpr {
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["x".to_string()],
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::Var(0)],
+                    params: vec!["y".to_string()],
+                    body: Box::new(RuntimeExpr::Var(0)),
+                }),
+                body: Box::new(RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(0)),
+                    args: vec![d7_wrap("ctor:fixture::CallInput::Alpha")],
+                }),
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(10.into()))],
+    }
+}
+
+/// **`D7` — an aggregate reaching the callee-scheduling-entry fallback is
+/// SELF-AUTHORIZING: which live coordinate it is transferred at is inert.**
+///
+/// MEASURED, over the whole suite with the site instrumented
+/// (`--nocapture --test-threads=1`): 89 `Constructor` parameters reach this
+/// fallback and **every one of them carries a producer occurrence** — zero
+/// carry `None`. Of the origin-consuming lookups reachable from there,
+///
+/// | consumer | reaches |
+/// |---|---|
+/// | `aggregate_carrier_authority`'s no-producer fallback | **0** |
+/// | `constructor_symbol_identity(origin)` | **0** |
+/// | `child_static_origin(origin, position)` for a constructor | **0** |
+/// | `record_field_identity(origin, position)` | **0** |
+/// | `child_static_origin(origin, position)` for a record | **0** |
+/// | parent origin passed to a synthesized child (not a lookup) | 1 |
+///
+/// ⭐⭐ **So no origin-dependent aggregate lookup remains, and the release's
+/// static-worker caller-origin transport is not required.** Every aggregate
+/// there carries its own occurrence and its own resolved constructor identity,
+/// and the whole-graph preflight has already reconciled its tree against the
+/// plan using no coordinate at all.
+///
+/// ⛔ **A census is not a pin.** The rows above were true when measured and
+/// nothing re-runs them, so this control states the same property as behaviour:
+/// with the coordinate replaced by the program root's — a real, live, planned
+/// occurrence, never a fabricated one — the artifact still builds.
+///
+/// ⭐ The hit count and the reach count are both asserted, and they answer
+/// different questions. The hit count says the coordinate was actually
+/// replaced; the reach count says an AGGREGATE actually arrived at the site. A
+/// green run missing either is green for not having happened.
+///
+/// CLAIMED: the callee's scheduling entry is a pass-through for a source
+/// aggregate at this site, not an authority.
+///
+/// THE GAP: inertness is measured for the aggregates this fixture and the suite
+/// drive there. A future input arriving with no producer occurrence would take
+/// `aggregate_carrier_authority`'s fallback and the coordinate would become
+/// load-bearing again — which is why that fallback still exists and why
+/// `an_aggregate_with_no_producer_certificate_cannot_reach_the_carrier` pins
+/// the arm that refuses one at the preflight.
+#[test]
+fn an_aggregate_at_the_callee_scheduling_fallback_authorizes_itself() {
+    let program = d7_static_worker_with_aggregate_argument();
+    let compile = || {
+        crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+            &program,
+            &NativeSeedEnvironment::empty(),
+        )
+        .map(|_| ())
+    };
+
+    let baseline_guard = GovernedAllocationMutationGuard::install(GovernedAllocationMutation::None);
+    let baseline = compile();
+    let baseline_reaches = baseline_guard.self_authorized_fallback_reaches();
+    let baseline_hits = baseline_guard.hits();
+    drop(baseline_guard);
+    baseline.expect("the static-worker fixture compiles at its own coordinates");
+    assert_eq!(
+        baseline_hits, 0,
+        "no coordinate may be replaced without the mutation installed"
+    );
+    assert!(
+        baseline_reaches > 0,
+        "NON-VACUITY: a self-authorizing aggregate must actually REACH the \
+         callee-scheduling fallback, or the substitution below is inert for the \
+         trivial reason that nothing was there"
+    );
+
+    let guard =
+        GovernedAllocationMutationGuard::install(GovernedAllocationMutation::CalleeSchedulingOrigin);
+    let result = compile();
+    let hits = guard.hits();
+    let reaches = guard.self_authorized_fallback_reaches();
+    drop(guard);
+    assert!(
+        hits > 0,
+        "the coordinate substitution never fired, so this row says nothing about \
+         whether the coordinate matters"
+    );
+    assert_eq!(
+        reaches, baseline_reaches,
+        "the substitution must not change WHICH values reach the site, only the \
+         coordinate they cross at"
+    );
+    result.unwrap_or_else(|error| {
+        panic!(
+            "an aggregate at the callee-scheduling fallback was refused after {hits} \
+             coordinate substitutions. Stated as measured: it is NOT self-authorizing \
+             there, some lookup still consumes the callee's scheduling entry, and the \
+             static-worker caller-origin transport is owed after all: {error:?}"
+        )
+    });
+}
+
 /// **`D7` — an aggregate with NO producer certificate is refused at the
 /// preflight, and the SAME aggregate carrying one gets past it.**
 ///
