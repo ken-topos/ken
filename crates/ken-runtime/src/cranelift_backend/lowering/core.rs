@@ -2644,9 +2644,23 @@ impl<'a> Lowering<'a> {
                     // never lowers it. The frame's own field stays the
                     // recursor-layer producer's authority; this is the call-result
                     // producer's, and the two join.
+                    let frame_field = frame.answer_route;
                     frame.answer_route =
                         RoutedAnswer { value: LoweringOperand::Carried(word), route: incoming_route }
                             .raise(frame.answer_route);
+                    #[cfg(test)]
+                    if d6a_route_mutation() == D6aRouteMutation::OverwriteIncomingWithFrameField {
+                        record_d6a_route_application();
+                        frame.answer_route = frame_field;
+                    }
+                    #[cfg(test)]
+                    record_d6a_route_event(D6aRouteEvent::ConsumerRoute {
+                        seat: D6aConsumerSeat::Composed,
+                        static_origin: frame.static_origin,
+                        incoming: incoming_route,
+                        frame_field,
+                        joined: frame.answer_route,
+                    });
                     self.lower_carried_computational_match(builder, word, frame, &eliminators[1..])
                 }
                 // ── ⛔ DEFERRED, and named rather than absorbed ────────────
@@ -4304,6 +4318,23 @@ impl<'a> Lowering<'a> {
                                     }
                                     .raise(answer_route),
                                 };
+                                #[cfg(test)]
+                                let mut frame = frame;
+                                #[cfg(test)]
+                                if d6a_route_mutation()
+                                    == D6aRouteMutation::OverwriteIncomingWithFrameField
+                                {
+                                    record_d6a_route_application();
+                                    frame.answer_route = answer_route;
+                                }
+                                #[cfg(test)]
+                                record_d6a_route_event(D6aRouteEvent::ConsumerRoute {
+                                    seat: D6aConsumerSeat::SourceMachine,
+                                    static_origin,
+                                    incoming: incoming_route,
+                                    frame_field: answer_route,
+                                    joined: frame.answer_route,
+                                });
                                 let eliminated = self
                                     .lower_carried_computational_match(builder, word, frame, &[])?;
                                 control.continuation = *next;
@@ -6284,6 +6315,19 @@ impl<'a> Lowering<'a> {
         // else. ⛔ Nothing about the origin, the frame, the owner, the tag or
         // the ABI is consulted, and a static-worker or raw unit call cannot
         // reach this line at all.
+        //
+        // The trace records `identity.target()` — the authority's OWN exact
+        // identity, read back out of the value this function consumed. ⛔ Not
+        // `target`, which is the emitter's input and would agree with itself.
+        #[cfg(test)]
+        record_d6a_route_event(D6aRouteEvent::CallResultRaised {
+            target: identity.target(),
+        });
+        #[cfg(test)]
+        if d6a_route_mutation() == D6aRouteMutation::DropCallResultRoute {
+            record_d6a_route_application();
+            return Ok(RoutedAnswer::direct(returned));
+        }
         Ok(RoutedAnswer::checked(returned))
     }
 
@@ -8170,7 +8214,18 @@ impl<'a> Lowering<'a> {
         eliminator: ComputationalEliminatorFrame<'_>,
         remaining_eliminators: &[EliminatorFrame<'_>],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        #[cfg(test)]
+        record_d6a_route_event(D6aRouteEvent::CarriedEliminationEntered {
+            static_origin: eliminator.static_origin,
+            route: eliminator.answer_route,
+            cases: eliminator.cases.len(),
+        });
         if eliminator.cases.is_empty() {
+            #[cfg(test)]
+            record_d6a_route_event(D6aRouteEvent::CarriedDefaultSealed {
+                static_origin: eliminator.static_origin,
+                route: eliminator.answer_route,
+            });
             return Ok(LoweringOperand::Specialized(Lowered::Trap(
                 eliminator.default.clone(),
             )));
@@ -8473,6 +8528,10 @@ impl<'a> Lowering<'a> {
                     .expect("checked answer routes carry exact frame ids"),
                 return_constructor: return_case.constructor.clone(),
             });
+            #[cfg(test)]
+            record_d6a_route_event(D6aRouteEvent::CarriedFallbackEmitted {
+                static_origin: eliminator.static_origin,
+            });
             // The one retained argument is the SAME carried word. ⛔ Not a
             // projected field of it: the checked answer is the value the return
             // case binds, and projecting would ask the carrier for structure
@@ -8517,6 +8576,11 @@ impl<'a> Lowering<'a> {
             // default, unchanged: `DirectScrutinee`, a disabled fallback,
             // malformed or ambiguous return topology, and every unmatched
             // ordinary carried scrutinee.
+            #[cfg(test)]
+            record_d6a_route_event(D6aRouteEvent::CarriedDefaultSealed {
+                static_origin: eliminator.static_origin,
+                route: eliminator.answer_route,
+            });
             let defaulted = LoweringOperand::Specialized(Lowered::Trap(eliminator.default.clone()));
             if !self.seal_source_trap_branch(builder, &defaulted)? {
                 return Err(unsupported(

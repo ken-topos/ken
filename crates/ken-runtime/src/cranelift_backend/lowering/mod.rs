@@ -410,6 +410,75 @@ pub(crate) enum Px8trTrapProvenanceEvent {
     FinalProcessObjectTrap {
         trap: RuntimeTrap,
     },
+    /// **`RT-DECL-CLOSURE-PORT` `D6a` — EXACT trap provenance, recorded at the
+    /// seat that emits the trap rather than at the seat that decided it.**
+    ///
+    /// ⭐ The frame requires the disabled checked-answer route to be proven
+    /// through *"the planner trap identity at the unit `TrapWord` and root
+    /// propagation seat"*, and states why: **the generic process `-4` string
+    /// alone is not exact provenance.** That is not a stylistic preference.
+    /// `-4` is the root adapter's single process-trap sentinel — it is the
+    /// **same word for every trap in the program**, so a row asserting it
+    /// cannot tell the checked-`ITree` default apart from any other trap the
+    /// fixture could have reached, including one reached by a bug.
+    ///
+    /// ⚠ Both words are recorded, and the pair is the point:
+    ///
+    /// - `planned_identity` — what `StaticTransitionPlan::trap_identity` issued
+    ///   for this exact `RuntimeTrap`. The authority.
+    /// - `emitted_word` — what this seat actually put in the instruction
+    ///   stream. Read according to `seat`.
+    ///
+    /// ⛔ Recording only the planned word would make this an assertion that the
+    /// planner agrees with itself: `TrapIdentityMutation::{Zero,Substitute}`
+    /// perturbs the *emitted* word and would leave such an event untouched.
+    /// Recording the pair is what makes that existing mutation reach this row.
+    PlannedTrapEmitted {
+        trap: RuntimeTrap,
+        seat: PlannedTrapSeat,
+        planned_identity: i64,
+        emitted_word: i64,
+    },
+    /// **`RT-DECL-CLOSURE-PORT` `D6a` — the ROOT PROPAGATION seat.**
+    ///
+    /// Recorded where a caller reads a callee unit's `TrapWord` and forwards
+    /// it. ⛔ **Deliberately carries no identity**, and that is not an omission:
+    /// the word here is a `stack_load`, a *runtime* value, so the compiler
+    /// genuinely does not know which trap is flowing through. Recording a
+    /// planned identity at this seat would be inventing one.
+    ///
+    /// ⭐ What the compiler *does* know is the authority, and therefore whether
+    /// the callee's exact word survives the hop. That is the fact this event
+    /// reports, and it is what makes the frame's rule legible rather than
+    /// merely asserted: the identity is exact at [`PlannedTrapSeat::UnitTrapWord`]
+    /// and is **collapsed** at [`PlannedTrapSeat::RootProcessSentinel`], which is
+    /// exactly why the process `-4` string cannot stand in for provenance.
+    UnitTrapWordPropagated {
+        seat: PlannedTrapSeat,
+        /// Whether the callee's exact trap word reaches the next frame
+        /// recoverably. `false` only for the identity-free process sentinel.
+        identity_preserved: bool,
+    },
+}
+/// The three authorities [`Lowering::emit_current_trap`] can emit a trap under.
+///
+/// ⚠ **They are not interchangeable, and only the first two carry identity.**
+/// `RootProcessSentinel` collapses every trap to one word by construction —
+/// naming the seat is what stops a reader mistaking that collapse for a
+/// measurement.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PlannedTrapSeat {
+    /// The generated unit's `TrapWord` lane. ⭐ The exact planner-issued
+    /// identity word is stored here, so this is the seat where the checked
+    /// default's provenance is genuinely exact.
+    UnitTrapWord,
+    /// The root adapter's process-object lane. ⛔ Identity-free: every trap
+    /// emits the `-4` process sentinel.
+    RootProcessSentinel,
+    /// The root adapter's value lane, which shifts and tags the exact identity
+    /// into a boundary trap token.
+    RootTrapToken,
 }
 #[cfg(test)]
 fn px8j_record_source_event(event: Px8jSourceTraceEvent) {
@@ -1461,6 +1530,178 @@ pub(in crate::cranelift_backend) fn with_d5a_route_mutation<T>(
     }
     D5A_ROUTE_MUTATION.with(|cell| cell.set(mutation));
     D5A_ROUTE_APPLICATIONS.with(|cell| cell.set(0));
+    let _restore = Restore;
+    body()
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D6a` upstream — what the routed answer did.**
+///
+/// ⭐ The route is a **predecessor-edge fact**, so every control over it has to
+/// name an *edge*: which producer raised it, and which consumer received it.
+/// A control that could only see the consumer's final value would be unable to
+/// distinguish the two producers, and the whole point of this checkpoint is
+/// that they are distinct authorities.
+///
+/// ⛔ These carry the exact planner identities they observed, never counts —
+/// *"planned, claimed and emitted call identity agree on the exact identity,
+/// not merely on counts"* is one of the discriminators this checkpoint owes.
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(in crate::cranelift_backend) enum D6aRouteEvent {
+    /// **PRODUCER 2.** The result of an exactly claimed and emitted
+    /// continuation-specialization call was raised to
+    /// `CheckedSelectedRecursor`. Recorded only after the owner/affine claim
+    /// succeeded and the emitted callee was checked against
+    /// `identity.target()`, so `target` is the authority's own identity and
+    /// not a guess about it.
+    CallResultRaised {
+        target: ContinuationSpecializationId,
+    },
+    /// **PRODUCER 1.** An exact recursor layer supplied a route.
+    ///
+    /// ⚠ Both answers are recorded, and `selects_occurrence` is recorded beside
+    /// the answer, so a reader can see the decision rather than infer it. ⛔ On
+    /// the governed witness this producer only ever fires **positively**
+    /// (`checked_frame_id: Some(7)`, `selects_occurrence: true`), so the
+    /// negative arm is not exercised here — the mutation
+    /// [`D6aRouteMutation::DropRecursorLayerRoute`] is what supplies a
+    /// `DirectScrutinee` answer at this seat.
+    RecursorLayerSupplied {
+        checked_frame_id: Option<u64>,
+        selects_occurrence: bool,
+        route: SourceComputationalAnswerRoute,
+    },
+    /// **THE CONSUMER.** The carried computational-match seat, with the route
+    /// its predecessor handed it, the frame's own recursor-layer field, and
+    /// the join of the two.
+    ///
+    /// ⚠ All three are recorded because the join is the mechanism: `incoming`
+    /// alone cannot show that the frame's field failed to overwrite it, which
+    /// is exactly the drop measured at `ae45e804`.
+    ConsumerRoute {
+        seat: D6aConsumerSeat,
+        static_origin: StaticOriginId,
+        incoming: SourceComputationalAnswerRoute,
+        frame_field: SourceComputationalAnswerRoute,
+        joined: SourceComputationalAnswerRoute,
+    },
+    /// The carried elimination this consumer handed its frame to was actually
+    /// entered. ⭐ Distinct from `ConsumerRoute`, which records only that a
+    /// seat computed a route — a seat can do that on a path the eliminator
+    /// never runs, and a control that conflated the two would credit a route
+    /// with an emission it had nothing to do with.
+    CarriedEliminationEntered {
+        static_origin: StaticOriginId,
+        route: SourceComputationalAnswerRoute,
+        cases: usize,
+    },
+    /// The carried checked-answer fallback was actually emitted, at this
+    /// consumer. ⭐ Recorded into the *route* trace as well as the trap
+    /// provenance so that one ordered sequence carries the whole edge —
+    /// producer, consumer, emission — and a row does not have to correlate two
+    /// traces to say which consumer acted.
+    CarriedFallbackEmitted {
+        static_origin: StaticOriginId,
+    },
+    /// The carried consumer took its closed default instead. ⛔ Recorded for
+    /// **every** reason it can do so, including a `DirectScrutinee` route, so
+    /// the trace can never show a consumer that neither emitted nor defaulted.
+    CarriedDefaultSealed {
+        static_origin: StaticOriginId,
+        route: SourceComputationalAnswerRoute,
+    },
+}
+
+/// Which lowering edge a carried computational-match consumer sits on.
+///
+/// ⚠ Both edges exist on the governed witness and they arrive at the **same**
+/// `StaticOriginId`, which is why the seat has to be recorded: an assertion
+/// keyed on the origin alone cannot say which predecessor it is about, and the
+/// whole premise of this checkpoint is that the origin does not determine the
+/// route.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::cranelift_backend) enum D6aConsumerSeat {
+    /// The composed eliminator edge in `lower_computational_match_value_composed`.
+    Composed,
+    /// The source machine's computational-scrutinee edge.
+    SourceMachine,
+}
+
+/// Perturbations of the `D6a` upstream transport, **one producer at a time**.
+///
+/// ⭐ Separating them is the requirement, not a convenience: the frame owes a
+/// control showing the recursor-layer producer *stays green independently* of
+/// the call-result producer, and a mutation that disabled both could not
+/// distinguish "independent" from "jointly dead".
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::cranelift_backend) enum D6aRouteMutation {
+    Exact,
+    /// Drop **only** producer 2: the exact claimed call result returns
+    /// `DirectScrutinee`. ⛔ The recursor-layer producer is untouched.
+    DropCallResultRoute,
+    /// Drop **only** producer 1: an exact selecting recursor layer supplies
+    /// `DirectScrutinee`. ⛔ The call-result producer is untouched.
+    DropRecursorLayerRoute,
+    /// Let the frame's own field **overwrite** the incoming route instead of
+    /// joining with it. ⚠ This reproduces the exact defect measured at
+    /// `ae45e804`, and it is the control that the join is load-bearing.
+    OverwriteIncomingWithFrameField,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D6A_ROUTE_MUTATION: std::cell::Cell<D6aRouteMutation> =
+        const { std::cell::Cell::new(D6aRouteMutation::Exact) };
+    static D6A_ROUTE_TRACE: std::cell::RefCell<Vec<D6aRouteEvent>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    /// How many times the live `D6a` mutation actually fired — the same
+    /// inertness guard `D5A_ROUTE_APPLICATIONS` provides, for the same reason.
+    static D6A_ROUTE_APPLICATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d6a_route_mutation() -> D6aRouteMutation {
+    D6A_ROUTE_MUTATION.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d6a_route_application() {
+    D6A_ROUTE_APPLICATIONS.with(|cell| cell.set(cell.get() + 1));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d6a_route_applications() -> usize {
+    D6A_ROUTE_APPLICATIONS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d6a_route_event(event: D6aRouteEvent) {
+    D6A_ROUTE_TRACE.with(|trace| trace.borrow_mut().push(event));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d6a_route_trace() -> Vec<D6aRouteEvent> {
+    D6A_ROUTE_TRACE.with(|trace| trace.borrow().clone())
+}
+
+/// Runs `body` under `mutation` with a **cleared** route trace, restoring the
+/// exact route on the way out even if `body` unwinds.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn with_d6a_route_mutation<T>(
+    mutation: D6aRouteMutation,
+    body: impl FnOnce() -> T,
+) -> T {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            D6A_ROUTE_MUTATION.with(|cell| cell.set(D6aRouteMutation::Exact));
+        }
+    }
+    D6A_ROUTE_MUTATION.with(|cell| cell.set(mutation));
+    D6A_ROUTE_APPLICATIONS.with(|cell| cell.set(0));
+    D6A_ROUTE_TRACE.with(|trace| trace.borrow_mut().clear());
     let _restore = Restore;
     body()
 }
@@ -3260,6 +3501,11 @@ impl<'a> Lowering<'a> {
         builder.switch_to_block(trap_block);
         match self.function_local.trap_exit {
             Some(TrapExitAuthority::UnitFrame { slots, trap_offset }) => {
+                #[cfg(test)]
+                px8tr_record_trap_provenance(Px8trTrapProvenanceEvent::UnitTrapWordPropagated {
+                    seat: PlannedTrapSeat::UnitTrapWord,
+                    identity_preserved: true,
+                });
                 builder
                     .ins()
                     .store(MemFlags::trusted(), trap_word, slots, trap_offset);
@@ -3270,6 +3516,11 @@ impl<'a> Lowering<'a> {
                 process_sentinel: true,
                 ..
             }) => {
+                #[cfg(test)]
+                px8tr_record_trap_provenance(Px8trTrapProvenanceEvent::UnitTrapWordPropagated {
+                    seat: PlannedTrapSeat::RootProcessSentinel,
+                    identity_preserved: false,
+                });
                 let process_trap = builder.ins().iconst(types::I64, -4);
                 builder.ins().return_(&[process_trap]);
             }
@@ -3277,6 +3528,11 @@ impl<'a> Lowering<'a> {
                 process_sentinel: false,
                 ..
             }) => {
+                #[cfg(test)]
+                px8tr_record_trap_provenance(Px8trTrapProvenanceEvent::UnitTrapWordPropagated {
+                    seat: PlannedTrapSeat::RootTrapToken,
+                    identity_preserved: true,
+                });
                 let shifted = builder.ins().ishl_imm(
                     trap_word,
                     crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_SHIFT,
@@ -7453,14 +7709,31 @@ impl RoutedAnswer {
     }
 }
 impl SourceComputationalAnswerRoute {
+    /// **`D6a` upstream — PRODUCER 1.** An exact recursor layer, and only the
+    /// `SelectsOccurrence` role on a checked frame, supplies the checked route.
     fn for_recursor_layer(layer: &ComputationalRecursorLayer) -> Self {
-        if layer.checked_frame_id.is_some()
-            && matches!(layer.role, RecursorLayerRole::SelectsOccurrence { .. })
-        {
+        let selects_occurrence = matches!(layer.role, RecursorLayerRole::SelectsOccurrence { .. });
+        let route = if layer.checked_frame_id.is_some() && selects_occurrence {
             Self::CheckedSelectedRecursor
         } else {
             Self::DirectScrutinee
-        }
+        };
+        #[cfg(test)]
+        let route = if d6a_route_mutation() == D6aRouteMutation::DropRecursorLayerRoute
+            && route == Self::CheckedSelectedRecursor
+        {
+            record_d6a_route_application();
+            Self::DirectScrutinee
+        } else {
+            route
+        };
+        #[cfg(test)]
+        record_d6a_route_event(D6aRouteEvent::RecursorLayerSupplied {
+            checked_frame_id: layer.checked_frame_id,
+            selects_occurrence,
+            route,
+        });
+        route
     }
 }
 fn source_case_has_no_checked_control_markers(expr: &RuntimeExpr) -> bool {
@@ -10506,6 +10779,13 @@ impl<'a> Lowering<'a> {
                     };
                 #[cfg(not(test))]
                 let identity_word = identity.abi_word();
+                #[cfg(test)]
+                px8tr_record_trap_provenance(Px8trTrapProvenanceEvent::PlannedTrapEmitted {
+                    trap: trap.clone(),
+                    seat: PlannedTrapSeat::UnitTrapWord,
+                    planned_identity: identity.abi_word(),
+                    emitted_word: identity_word,
+                });
                 let word = builder.ins().iconst(types::I64, identity_word);
                 builder
                     .ins()
@@ -10517,8 +10797,25 @@ impl<'a> Lowering<'a> {
                 source_authorized: true,
             }) => {
                 if process_sentinel {
+                    #[cfg(test)]
+                    px8tr_record_trap_provenance(Px8trTrapProvenanceEvent::PlannedTrapEmitted {
+                        trap: trap.clone(),
+                        seat: PlannedTrapSeat::RootProcessSentinel,
+                        planned_identity: identity.abi_word(),
+                        emitted_word: -4,
+                    });
                     Ok(builder.ins().iconst(types::I64, -4))
                 } else {
+                    let token = (identity.abi_word()
+                        << crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_SHIFT)
+                        | crate::cranelift_backend::compiled::ROOT_TRAP_TOKEN_TAG;
+                    #[cfg(test)]
+                    px8tr_record_trap_provenance(Px8trTrapProvenanceEvent::PlannedTrapEmitted {
+                        trap: trap.clone(),
+                        seat: PlannedTrapSeat::RootTrapToken,
+                        planned_identity: identity.abi_word(),
+                        emitted_word: token,
+                    });
                     let word = builder.ins().iconst(types::I64, identity.abi_word());
                     let shifted = builder.ins().ishl_imm(
                         word,

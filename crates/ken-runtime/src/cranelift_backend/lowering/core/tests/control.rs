@@ -13545,3 +13545,607 @@ fn d5a_reading_the_root_position_as_the_immediate_slot_is_currently_undetectable
          positive control that names the guard: {outcome:?}"
     );
 }
+
+
+// ══════════════════════════════════════════════════════════════════════════
+//  `RT-DECL-CLOSURE-PORT` `D6a` UPSTREAM — the route is a predecessor-edge fact
+// ══════════════════════════════════════════════════════════════════════════
+//
+// ⭐⭐ THE ONE FACT EVERY ROW BELOW RESTS ON, AND IT WAS MEASURED, NOT ASSUMED.
+//
+// The governed witness has **two** carried computational-match consumers, and
+// they sit at the **same** `StaticOriginId(10)` under the **same** checked
+// frame `7`. They receive **opposite** routes, from **different** producers:
+//
+// | seat | `incoming` | `frame_field` | supplied by | outcome |
+// |---|---|---|---|---|
+// | `Composed` | `CheckedSelectedRecursor` | `DirectScrutinee` | PRODUCER 2, the exact claimed `CSId(0)` call result | enters the elimination, emits the fallback |
+// | `SourceMachine` | `DirectScrutinee` | `CheckedSelectedRecursor` | PRODUCER 1, the exact selecting recursor layer | re-entry at the same origin, takes the termination backedge |
+//
+// ⛔ **That table is the whole checkpoint.** The origin does not determine the
+// route, the checked frame does not determine the route, and an
+// occurrence-global projection would mark **both** rows checked — including the
+// one whose predecessor is an ordinary direct descent. It is also why every row
+// below keys on the **seat**, never on the origin alone: two records share that
+// origin and an assertion naming only `StaticOriginId(10)` cannot say which
+// edge it is about.
+//
+// ⚠ **A DISCREPANCY WITH THE FRAME, REPORTED RATHER THAN PAPERED OVER.** The
+// frame's first upstream discriminator reads *"the exact claimed `CSId(1)` call
+// result reaches origin 10 as `CheckedSelectedRecursor`"*. **It is `CSId(0)`.**
+// `CSId(1)` is raised too, and correctly — but strictly *after* the fallback is
+// emitted, inside the return case's own body, so its result reaches no carried
+// consumer on this witness. The rows below assert what the artifact does. The
+// mechanism the discriminator was reaching for — an exactly claimed and emitted
+// continuation call result reaching the consumer as checked — holds exactly as
+// ruled; only the identity named in the bullet differs.
+
+/// One `D6a` observation of the governed witness: the route trace, the trap
+/// provenance, the raw-worker census, and whether the mutation fired.
+struct D6aObservation {
+    route: Vec<D6aRouteEvent>,
+    provenance: Vec<Px8trTrapProvenanceEvent>,
+    static_worker_calls: usize,
+    applications: usize,
+    emitted: bool,
+}
+
+impl D6aObservation {
+    /// The consumer record for one seat. ⛔ Keyed on the seat, never the
+    /// origin — both seats share `StaticOriginId(10)`.
+    fn consumer(&self, seat: D6aConsumerSeat) -> (SourceComputationalAnswerRoute, SourceComputationalAnswerRoute, SourceComputationalAnswerRoute) {
+        self.route
+            .iter()
+            .find_map(|event| match event {
+                D6aRouteEvent::ConsumerRoute {
+                    seat: recorded,
+                    incoming,
+                    frame_field,
+                    joined,
+                    ..
+                } if *recorded == seat => Some((*incoming, *frame_field, *joined)),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("the witness must reach the {seat:?} carried consumer"))
+    }
+
+    fn raised_targets(&self) -> Vec<ContinuationSpecializationId> {
+        self.route
+            .iter()
+            .filter_map(|event| match event {
+                D6aRouteEvent::CallResultRaised { target } => Some(*target),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn fallbacks(&self) -> usize {
+        self.route
+            .iter()
+            .filter(|event| matches!(event, D6aRouteEvent::CarriedFallbackEmitted { .. }))
+            .count()
+    }
+
+    fn defaults(&self) -> Vec<SourceComputationalAnswerRoute> {
+        self.route
+            .iter()
+            .filter_map(|event| match event {
+                D6aRouteEvent::CarriedDefaultSealed { route, .. } => Some(*route),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn eliminations_entered(&self) -> Vec<SourceComputationalAnswerRoute> {
+        self.route
+            .iter()
+            .filter_map(|event| match event {
+                D6aRouteEvent::CarriedEliminationEntered { route, .. } => Some(*route),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Whether the artifact sealed the **exact planned** checked-`ITree`
+    /// default into a generated unit's `TrapWord`, with the planner-issued
+    /// identity intact. ⛔ Not "did it trap" — the fixture plans a second,
+    /// unrelated default and a check that could not tell them apart would name
+    /// nothing.
+    fn sealed_the_exact_checked_itree_default(&self) -> bool {
+        let expected = RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "PX8-TR checked ITree recursor default".to_string(),
+        };
+        self.provenance.iter().any(|event| matches!(
+            event,
+            Px8trTrapProvenanceEvent::PlannedTrapEmitted {
+                trap,
+                seat: PlannedTrapSeat::UnitTrapWord,
+                planned_identity,
+                emitted_word,
+            } if trap == &expected && planned_identity == emitted_word && *planned_identity > 0
+        ))
+    }
+}
+
+fn observe_d6a(name: &str, mutation: D6aRouteMutation) -> D6aObservation {
+    with_d6a_route_mutation(mutation, || {
+        reset_d5a_marker_events();
+        let outcome =
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                name, false,
+            );
+        let (provenance, emitted) = match &outcome {
+            Ok(object) => (object.provenance.clone(), true),
+            Err(_) => (Vec::new(), false),
+        };
+        D6aObservation {
+            route: d6a_route_trace(),
+            provenance,
+            static_worker_calls: d5a_marker_events()
+                .iter()
+                .filter(|event| matches!(event, D5aMarkerEvent::WorkerCallEmitted { .. }))
+                .count(),
+            applications: d6a_route_applications(),
+            emitted,
+        }
+    })
+}
+
+/// **`D6a` upstream 1/8 — the exact claimed call result reaches the carried
+/// consumer as checked, and that is what emits the fallback.**
+///
+/// ⚠ MEASURED / CLAIMED / THE GAP.
+/// **MEASURED:** producer 2 raises an exactly claimed and emitted
+/// continuation-specialization call result; the `Composed` consumer at origin
+/// 10 receives it as `CheckedSelectedRecursor` while its **own** frame field
+/// says `DirectScrutinee`; the join keeps checked; the elimination is entered
+/// with checked; the fallback is emitted; nothing takes a closed default.
+/// **CLAIMED:** the call-result producer, alone, carries this witness's
+/// emission.
+/// **THE GAP:** this row is compile-time. That the emitted artifact then *runs*
+/// through the return case is the linked exit-0 half, asserted in
+/// `object_linker_packaging`'s
+/// `nested_post_effect_checked_recursor_reaches_success_and_retains_exact_trap_provenance`.
+/// ⛔ Neither substitutes for the other, and this row does not claim the
+/// runtime half.
+///
+/// **Promise class: durable invariant** — it asserts a relation between the two
+/// producers and the consumer, over the planner's own identities. Adding a
+/// specialization, renaming a constructor, or renumbering the plan keeps it
+/// green; erasing the route on a forward turns it red, which is the defect it
+/// exists for.
+#[test]
+fn d6a_the_exact_claimed_call_result_reaches_the_carried_consumer_as_checked() {
+    let run = observe_d6a("d6a_exact_call_result", D6aRouteMutation::Exact);
+    assert!(run.emitted, "the governed witness must still emit");
+    assert_eq!(
+        run.applications, 0,
+        "the exact run must perturb nothing"
+    );
+
+    let (incoming, frame_field, joined) = run.consumer(D6aConsumerSeat::Composed);
+    assert_eq!(
+        incoming,
+        SourceComputationalAnswerRoute::CheckedSelectedRecursor,
+        "the exact claimed call result must arrive at the composed consumer already checked"
+    );
+    // ⭐ The load-bearing half. If the frame's own field were also checked here
+    // this row could not tell the call-result producer apart from the
+    // recursor-layer one, and would pass under the `ae45e804` defect.
+    assert_eq!(
+        frame_field,
+        SourceComputationalAnswerRoute::DirectScrutinee,
+        "the composed consumer's own field must be DIRECT, or this row cannot attribute the \
+         route to the call-result producer and would stay green while the frame field \
+         overwrote the incoming one"
+    );
+    assert_eq!(
+        joined,
+        SourceComputationalAnswerRoute::CheckedSelectedRecursor,
+        "the join must keep the predecessor's checked route"
+    );
+
+    assert!(
+        !run.raised_targets().is_empty(),
+        "producer 2 must have fired at least once"
+    );
+    assert_eq!(
+        run.eliminations_entered(),
+        vec![SourceComputationalAnswerRoute::CheckedSelectedRecursor],
+        "exactly one carried elimination is entered on this witness, and it is entered checked"
+    );
+    assert_eq!(run.fallbacks(), 1, "the checked-answer fallback is emitted once");
+    assert!(
+        run.defaults().is_empty(),
+        "no carried consumer may seal a closed default on the enabled route"
+    );
+    assert!(
+        !run.sealed_the_exact_checked_itree_default(),
+        "the enabled route must not plant the checked-ITree default anywhere"
+    );
+}
+
+/// **`D6a` upstream 2/8 — dropping ONLY the call-result route recreates the
+/// exact planned default.**
+///
+/// ⭐ The mutation is surgical: producer 1 is untouched and still supplies
+/// `CheckedSelectedRecursor` at its own seat. Only the exactly claimed call
+/// result comes back `DirectScrutinee`. The composed consumer then joins
+/// direct-with-direct, the fallback is not emitted, and the closed default is
+/// sealed with the **exact planned** checked-`ITree` trap identity.
+///
+/// ⛔ Note what is asserted about the trap: the planner-issued identity, at the
+/// unit `TrapWord`, equal to the word actually emitted. *"It trapped"* would be
+/// satisfied by the fixture's other planned default too.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d6a_dropping_only_the_call_result_route_recreates_the_exact_planned_default() {
+    let run = observe_d6a("d6a_drop_call_result", D6aRouteMutation::DropCallResultRoute);
+    assert!(
+        run.applications > 0,
+        "the drop must actually have been applied, or this row records a route it never reached"
+    );
+    assert!(
+        run.emitted,
+        "dropping the route must not break emission — the defect it reproduces is a SILENT \
+         one, and a refusal here would mean this row measures something else"
+    );
+
+    let (incoming, _, joined) = run.consumer(D6aConsumerSeat::Composed);
+    assert_eq!(incoming, SourceComputationalAnswerRoute::DirectScrutinee);
+    assert_eq!(joined, SourceComputationalAnswerRoute::DirectScrutinee);
+
+    // ⭐ Producer 1 is demonstrably still alive, which is what makes this a
+    // control over ONE producer rather than over the transport as a whole.
+    let (_, recursor_field, _) = run.consumer(D6aConsumerSeat::SourceMachine);
+    assert_eq!(
+        recursor_field,
+        SourceComputationalAnswerRoute::CheckedSelectedRecursor,
+        "the recursor-layer producer must be untouched by this mutation"
+    );
+
+    assert_eq!(run.fallbacks(), 0, "the fallback must not be emitted");
+    assert_eq!(
+        run.defaults(),
+        vec![SourceComputationalAnswerRoute::DirectScrutinee],
+        "the carried consumer must seal its closed default, on a DIRECT route"
+    );
+    assert!(
+        run.sealed_the_exact_checked_itree_default(),
+        "the exact planned checked-ITree default identity must reach a unit TrapWord"
+    );
+}
+
+/// **`D6a` upstream 3/8 — the SAME checked frame, with an ordinary direct
+/// predecessor, stays `DirectScrutinee`.**
+///
+/// ⭐⭐ This is the control the frame names as *"the control that would have
+/// caught the occurrence-global projection"*, and the witness supplies it
+/// without any fixture work: **both** consumers sit at `StaticOriginId(10)`
+/// under checked frame `7`, and their incoming routes **differ**.
+///
+/// ⛔ So `checked_frame_id.is_some()`, the match origin, the frame's presence,
+/// and the existence of a continuation unit are each individually consistent
+/// with **both** rows — every one of them would mark the direct predecessor
+/// checked. Only the predecessor edge separates them.
+///
+/// **Promise class: durable invariant.** It asserts that two edges at one
+/// origin disagree; any future mechanism that genuinely made them agree would
+/// be a semantic change this row should stop.
+#[test]
+fn d6a_the_same_checked_frame_with_a_direct_predecessor_stays_direct() {
+    let run = observe_d6a("d6a_same_frame_direct", D6aRouteMutation::Exact);
+    let (composed_incoming, ..) = run.consumer(D6aConsumerSeat::Composed);
+    let (machine_incoming, ..) = run.consumer(D6aConsumerSeat::SourceMachine);
+
+    assert_eq!(
+        composed_incoming,
+        SourceComputationalAnswerRoute::CheckedSelectedRecursor
+    );
+    assert_eq!(
+        machine_incoming,
+        SourceComputationalAnswerRoute::DirectScrutinee,
+        "an ordinary direct predecessor under the same checked frame must stay direct"
+    );
+    assert_ne!(
+        composed_incoming, machine_incoming,
+        "if these ever agree the witness has stopped discriminating, and every \
+         occurrence-global projection the checkpoint forbids would pass"
+    );
+
+    // Both really are the same origin and the same checked frame — otherwise
+    // "the SAME checked frame" is not what is being measured.
+    let origins: BTreeSet<_> = run
+        .route
+        .iter()
+        .filter_map(|event| match event {
+            D6aRouteEvent::ConsumerRoute { static_origin, .. } => Some(*static_origin),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        origins.len(),
+        1,
+        "the two consumers must share one origin, or this row is comparing different \
+         occurrences and proves nothing about projection"
+    );
+    let checked_frames: BTreeSet<_> = run
+        .route
+        .iter()
+        .filter_map(|event| match event {
+            D6aRouteEvent::RecursorLayerSupplied {
+                checked_frame_id, ..
+            } => Some(*checked_frame_id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        checked_frames.len(),
+        1,
+        "one checked frame governs both consumers"
+    );
+    assert!(checked_frames.iter().all(Option::is_some));
+}
+
+/// **`D6a` upstream 4/8 — a raw or static-worker call cannot mint the checked
+/// route.**
+///
+/// The witness emits **both** kinds of call. If a raw or static-worker result
+/// could raise the route, the raise count would exceed the count of exactly
+/// claimed continuation calls the planner issued.
+///
+/// ⚠ MEASURED / CLAIMED / THE GAP.
+/// **MEASURED:** the artifact emits static-worker calls, and the raised
+/// targets are exactly the planner's continuation-call targets — no more.
+/// **CLAIMED:** no call outside the claimed continuation path mints the checked
+/// route.
+/// **THE GAP:** this is a census over the raises this fixture reaches, not a
+/// proof about unreachable code. The closure argument is structural and lives
+/// in the type: `RoutedAnswer::checked` is private to this module and the only
+/// value that can produce one on a call result is built after the owner/affine
+/// claim inside `claim_and_call_resolved_continuation` — a raw or worker call
+/// returns a `RoutedAnswer::direct` whose route a caller can only *raise* by
+/// joining, never by asserting. ⛔ That argument is a compile-time property of
+/// item visibility, and it is stated here rather than tested, because a test
+/// over source text is not a test of behaviour.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d6a_a_raw_or_static_worker_call_cannot_mint_the_checked_route() {
+    let run = observe_d6a("d6a_raw_cannot_mint", D6aRouteMutation::Exact);
+    assert!(
+        run.static_worker_calls > 0,
+        "the witness must actually emit worker calls, or this row rules out a call class the \
+         fixture never makes and is vacuous"
+    );
+
+    let planned: BTreeSet<_> = with_d5a_witness_plan(|plan| {
+        plan.continuation_calls()
+            .expect("continuation calls")
+            .iter()
+            .map(|call| call.target())
+            .collect()
+    });
+    let raised: BTreeSet<_> = run.raised_targets().into_iter().collect();
+    assert!(
+        raised.is_subset(&planned),
+        "every raise must name a planned continuation-call target; a raise outside that set \
+         is a call class minting the route. raised={raised:?} planned={planned:?}"
+    );
+    assert_eq!(
+        run.raised_targets().len(),
+        raised.len(),
+        "a target raised twice would mean one claimed identity produced two checked results"
+    );
+}
+
+/// **`D6a` upstream 5/8 — the recursor-layer producer stays green
+/// INDEPENDENTLY of the call-result producer.**
+///
+/// Dropping producer 1 alone flips only its own seat to `DirectScrutinee`. The
+/// composed consumer is untouched, the fallback is still emitted, and the
+/// artifact still builds.
+///
+/// ⭐ Read with row 2, this is what "two lawful producers" means operationally:
+/// each mutation moves exactly one seat, and neither seat's answer is derivable
+/// from the other's. ⛔ A single mutation disabling both could not tell
+/// *independent* from *jointly dead*.
+///
+/// ⚠ And it records an asymmetry honestly: on **this** witness the emission is
+/// owned by producer 2, so dropping producer 1 is invisible at the emission.
+/// That is a fact about the fixture, not a claim that producer 1 is inert —
+/// its own seat demonstrably changes answer.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d6a_the_recursor_layer_producer_stays_green_independently() {
+    let run = observe_d6a("d6a_drop_recursor", D6aRouteMutation::DropRecursorLayerRoute);
+    assert!(
+        run.applications > 0,
+        "the recursor-layer drop must actually have fired"
+    );
+    assert!(run.emitted, "the artifact must still build");
+
+    let (_, machine_field, machine_joined) = run.consumer(D6aConsumerSeat::SourceMachine);
+    assert_eq!(
+        machine_field,
+        SourceComputationalAnswerRoute::DirectScrutinee,
+        "producer 1's own seat must show the dropped answer, or the mutation did not reach it"
+    );
+    assert_eq!(machine_joined, SourceComputationalAnswerRoute::DirectScrutinee);
+
+    let (composed_incoming, _, composed_joined) = run.consumer(D6aConsumerSeat::Composed);
+    assert_eq!(
+        composed_incoming,
+        SourceComputationalAnswerRoute::CheckedSelectedRecursor,
+        "producer 2 must be untouched by a producer-1 mutation"
+    );
+    assert_eq!(
+        composed_joined,
+        SourceComputationalAnswerRoute::CheckedSelectedRecursor
+    );
+    assert_eq!(
+        run.fallbacks(),
+        1,
+        "the emission on this witness is producer 2's, so dropping producer 1 must not move it"
+    );
+    assert!(!run.sealed_the_exact_checked_itree_default());
+}
+
+/// **`D6a` upstream 6/8 — mixed-route predecessors at one origin are preserved
+/// as separate arms, and nothing collapses them.**
+///
+/// The frame requires that if composition would merge `DirectScrutinee` and
+/// `CheckedSelectedRecursor` before the consumer, the arms are **preserved as
+/// distinct predecessors** or the join **hard-stops** — and forbids collapsing
+/// to either scalar or adding a runtime discriminator.
+///
+/// ⭐ The witness *is* the mixed-route fixture: two predecessor edges, one
+/// origin, opposite incoming routes. They are preserved as separate arms
+/// structurally — the checked composed edge opens the elimination, and the
+/// direct source-machine edge is a re-entry at the same origin that takes the
+/// existing termination backedge rather than opening a second one.
+///
+/// ⛔ **What this row forbids, concretely:** a single carried elimination
+/// entered on a *collapsed* scalar. Exactly one elimination is entered and it
+/// carries `CheckedSelectedRecursor`; the direct arm never enters one. If the
+/// two routes were ever merged into one scalar before the consumer, either two
+/// eliminations would be entered on one route or the single entry would carry
+/// the wrong one.
+///
+/// **Promise class: durable invariant** — stated as a relation between the
+/// consumer records and the entries, so a legitimate change in how many
+/// predecessors the witness has keeps it green as long as no route is lost.
+#[test]
+fn d6a_mixed_route_predecessors_at_one_origin_stay_separate() {
+    let run = observe_d6a("d6a_mixed_route", D6aRouteMutation::Exact);
+
+    let incoming: Vec<_> = run
+        .route
+        .iter()
+        .filter_map(|event| match event {
+            D6aRouteEvent::ConsumerRoute { incoming, .. } => Some(*incoming),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        incoming.len() >= 2,
+        "the witness must present at least two predecessor edges, or there is no merge to \
+         preserve and this row is vacuous"
+    );
+    assert!(
+        incoming
+            .iter()
+            .any(|route| *route == SourceComputationalAnswerRoute::CheckedSelectedRecursor)
+            && incoming
+                .iter()
+                .any(|route| *route == SourceComputationalAnswerRoute::DirectScrutinee),
+        "the edges must genuinely be MIXED: {incoming:?}"
+    );
+
+    // ⛔ No collapse: one elimination, entered on the checked route, and the
+    // direct arm opened none of its own.
+    assert_eq!(
+        run.eliminations_entered(),
+        vec![SourceComputationalAnswerRoute::CheckedSelectedRecursor],
+        "a collapse would show up here — either as a second entry, or as a single entry \
+         carrying the scalar the merge chose"
+    );
+    assert_eq!(run.fallbacks(), 1);
+    assert!(run.defaults().is_empty());
+}
+
+/// **`D6a` upstream 7/8 — planned, claimed and emitted call identity agree on
+/// the EXACT identity, not merely on counts.**
+///
+/// Producer 2 records `identity.target()` — read back out of the opaque
+/// `ContinuationCallIdentity` it consumed, **after** the owner/affine claim
+/// succeeded and **after** the emitted callee was checked against that same
+/// identity. So a raise is simultaneously evidence of claim and of emission.
+///
+/// ⭐ The assertion is **set equality over the planner's identities**, and the
+/// reason the frame insists on it is visible in the numbers: the witness plans
+/// two calls and raises two results, so a count-only check reads `2 == 2` and
+/// would survive a lowering that raised one identity twice while never
+/// reaching the other.
+///
+/// **Promise class: durable invariant** — the relation is closed over whatever
+/// the plan issues, so a witness that grows a third specialization keeps it
+/// green without edit.
+#[test]
+fn d6a_planned_claimed_and_emitted_identity_agree_exactly() {
+    let run = observe_d6a("d6a_identity_agreement", D6aRouteMutation::Exact);
+    let planned: BTreeSet<_> = with_d5a_witness_plan(|plan| {
+        plan.continuation_calls()
+            .expect("continuation calls")
+            .iter()
+            .map(|call| call.target())
+            .collect()
+    });
+    let raised_list = run.raised_targets();
+    let raised: BTreeSet<_> = raised_list.iter().copied().collect();
+
+    assert!(
+        planned.len() >= 2,
+        "with fewer than two planned identities a set equality and a count check are the same \
+         assertion, and this row would not be measuring what it claims"
+    );
+    assert_eq!(
+        raised, planned,
+        "the exactly claimed and emitted call results must be precisely the planned targets"
+    );
+    assert_eq!(
+        raised_list.len(),
+        raised.len(),
+        "each planned identity is claimed and emitted exactly once"
+    );
+}
+
+/// **`D6a` upstream 8/8 — the join is load-bearing: the frame's own field must
+/// not overwrite an incoming checked route.**
+///
+/// ⭐⭐ This reproduces the exact defect measured at `ae45e804`, which is the
+/// reason the recut exists. The mutation changes **one thing** — the consumer
+/// assigns the frame's own recursor-layer field instead of joining it with the
+/// predecessor's route — and the consequence is total and silent: the artifact
+/// still builds, still links, and quietly takes the closed default.
+///
+/// ⛔ It is the silence that makes this row necessary. Nothing about the
+/// compile distinguishes the defect from the repair; only the emitted route
+/// and the planted trap identity do.
+///
+/// **Promise class: durable invariant** — a regression control over a defect
+/// that has actually occurred.
+#[test]
+fn d6a_the_frame_field_must_not_overwrite_an_incoming_checked_route() {
+    let run = observe_d6a(
+        "d6a_overwrite_join",
+        D6aRouteMutation::OverwriteIncomingWithFrameField,
+    );
+    assert!(run.applications > 0, "the overwrite must actually have fired");
+    assert!(
+        run.emitted,
+        "the ae45e804 defect is SILENT — it compiles. A refusal here would mean this row is \
+         measuring a different failure"
+    );
+
+    let (incoming, frame_field, joined) = run.consumer(D6aConsumerSeat::Composed);
+    assert_eq!(
+        incoming,
+        SourceComputationalAnswerRoute::CheckedSelectedRecursor,
+        "the predecessor still supplies the checked route — the mutation is in the JOIN"
+    );
+    assert_eq!(frame_field, SourceComputationalAnswerRoute::DirectScrutinee);
+    assert_eq!(
+        joined,
+        SourceComputationalAnswerRoute::DirectScrutinee,
+        "the overwrite must be what erases the route"
+    );
+    assert_eq!(run.fallbacks(), 0);
+    assert!(
+        run.sealed_the_exact_checked_itree_default(),
+        "the erased route must land on the exact planned checked-ITree default"
+    );
+}
