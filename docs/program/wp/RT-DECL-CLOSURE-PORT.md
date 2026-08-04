@@ -165,9 +165,151 @@ to widen.
   unit boundary.
 - **`D4`** — **`DeclarationRef` calls** to those units
   (`core.rs:148`, `:7238` are the existing reference sites).
+- **`D2a`** — **Function-unit population substitution.** A closure-seed
+  transparent declaration contributes its declaration-owned `CallableDeclaration`
+  and **no separate `SchedulingEntry` function**. Added 2026-08-04; **`D5` does
+  not complete until this lands.** Full specification in the section below.
 - **`D5`** — **Complete owner/phase validation**, in place **before**
   `TransparentDeclarationClosure` is removed from the retained residual.
 - **`D6`** — Remove the residual variant, and only then re-run `AC-1`.
+
+### `D2a` — the population substitution D5 could not run without
+
+**Added 2026-08-04. Architect ruling `evt_3twrm71vck49d`, grounded on exact
+`5e61d64096af6d2ea6b4186c22eda7274585b104` / tree
+`b9c7d58329e91fc24ed19339211536f347b244e4`. Steward recut of `D2`, which this
+frame had ordered as closed.**
+
+**Same WP, same atomic scope. This is not a new graph node, a residual, a
+disposition, a carrier lane, or an atomic participant** — it is a correction to
+`D2`'s function-unit population and ownership representation, exposed by `D5`.
+
+#### What `D5` hit
+
+`D5`'s required positive control cannot be discharged, and the reason is neither
+the selector nor `D5`. Under the lawful `cfg(test)` witness, a closure-seed
+transparent declaration is refused at `boundary_transfer_admissibility` — *"a
+closure cannot cross the boundary"* — because its now-unreachable zero-arity
+`SchedulingEntry` unit **is still emitted with the closure as its body**. The
+planner emits two functions for one source declaration:
+
+1. the old zero-input `SchedulingEntry` at the closure occurrence, and
+2. the new parameter/capture-bearing `CallableDeclaration` at the body target.
+
+Triangulated, not inferred: the **referenced** and the **unreferenced** closure
+declaration are refused identically, while a non-closure thunk compiles. **The
+unreferenced row is the discriminating one** — with no call site, the refusal
+cannot be about the call. The thunk row is the positive control on the harness:
+the `FunctionizedUnits` lane and the witness both work.
+
+`D4` proves every reference to that declaration resolves to unit (2). There is
+**no lawful runtime meaning for unit (1)**: it cannot call the callable unit
+without the missing parameters and captures, cannot return the closure, and
+cannot become a no-op without changing program meaning. ⇒ This is not an
+emission-whitelist problem and not something activation can paper over.
+
+#### Why it is `D2`'s and not `D6`'s
+
+**Do not retire, suppress, replace, or special-case the vestigial
+`SchedulingEntry` inside `D6`.** `D6` remains exactly the one production
+activation action already ruled: retire `TransparentDeclarationClosure`, then
+re-run the closed `D5`/`AC-1` evidence. Retiring the residual alone puts every
+closure-seed declaration on this lane and into this same refusal, so `D6` as
+chartered cannot discharge activation either.
+
+Folding the population rewrite into `D6` would activate a representation whose
+positive validation had **never been runnable**, which is precisely the ordering
+`AC-3` exists to prevent.
+
+#### The closed partition `D2a` must establish
+
+- the process/root entry remains one `SchedulingEntry`;
+- a transparent **non-closure** declaration remains one zero-input
+  `SchedulingEntry`;
+- a transparent `Closure` or `LexicalClosure` declaration contributes **exactly
+  one** declaration-owned `CallableDeclaration`, at its exact forward
+  `StaticBody` target, and contributes **no separate `SchedulingEntry`
+  function**;
+- an anonymous closure retains exactly one `ClosureBody`.
+
+**Derive that split from the existing exact declaration occurrence plus its one
+forward `StaticBody` relation.** No source whitelist, reverse body search,
+call-site reachability test, or "referenced declaration" filter is authorized.
+
+The declaration occurrence remains the callable unit's ownership, provenance,
+and `D3` signature authority. It must not become an unowned semantic node or a
+second emitted definition. **For the exact declaration-owned pair, the retained
+`StaticBody` relation is a definition/signature relation, not a second emitted
+cross-unit `StaticBody` call.** Preserve `D3`'s boundary-layout validation over
+that relation; exclude only this exact declaration-owned pair from the emitted
+static-body-call population. Anonymous closure-body edges keep their existing
+call and ownership law.
+
+**The semantic partition, the ABI descriptors, the declared/defined function
+population, and the emittable call population must all state the same
+one-for-one result.** Each of these is rejected, because each leaves a phantom
+owner or definition in another plane: merely skipping the old function in
+`emittable_units`; leaving an undefined descriptor; emitting a trampoline;
+changing its body.
+
+#### Controls — the complete discriminator matrix, at minimum
+
+- referenced and unreferenced lexical closure declarations;
+- seed closure declarations;
+- a non-closure transparent thunk;
+- an anonymous closure;
+- the root scheduling entry;
+- missing, duplicate, wrong-owner, and wrong-class forward-body relations;
+- a mutation retaining the obsolete closure-declaration scheduling unit;
+- exact semantic-unit = ABI-descriptor = emitted-definition equality, and exact
+  declaration-owned `StaticBody`-definition versus anonymous
+  `StaticBody`-call populations.
+
+**Re-run the `D2`, `D3`, and `D4` controls after the substitution.** `D4`'s
+target and ordered-input contract does not change.
+
+#### The falsified evidence, which must be edited rather than annotated
+
+`docs/program/wp/RT-DECL-CLOSURE-PORT-D2.md` states that **the unit population
+is unchanged** — *"D2 reclassifies, it does not add or remove"* — and that the
+durable equality `functions.len() == entries.len() + StaticBody edge count`
+stays green. **Both are falsified for the newly ported declaration-owned
+class.** Correct the operative sentences on this lineage as part of `D2a`; an
+appended note saying the earlier claim is wrong does not replace the claim, and
+a later reader takes the first statement as the record.
+
+#### Sequencing
+
+`5e61d640` is a clean **preservation checkpoint, not a candidate**. Its
+split-domain validator and executable controls may be retained; `D5` is not
+complete. After this recut publishes:
+
+1. repair the `D2` population on this lineage;
+2. prove the population / ownership / call-edge matrix above;
+3. promote `D5`'s transition sentinel into the real checked positive, and
+   complete the SCC, admission, transplant, duplicate, omission, and mutual-SCC
+   controls;
+4. only after `D5` closes, perform `D6`'s residual retirement and re-run `AC-1`.
+
+#### Upstream checked-plan refusals stay upstream
+
+Confirmed by the same ruling. Interface composition, segment site,
+frame-template set, and `occurrence_binding_fingerprint` mutations whose first
+compile-path refusal is the existing `OrientedSubcontinuationPlanV1::validate`
+**must remain attributed there.** Do not duplicate those predicates in
+`validate_declaration_unit_call`, and do not relabel the upstream diagnostic as
+a `D5`-local first refusal.
+
+`D5` owes an end-to-end control that the mutation **reaches** the canonical
+upstream validator and that **no declaration-unit call is emitted**. Its local
+validator owns only the new composition facts: exact checked occurrence to
+planner-issued declaration reference; exact symbol, target, and class; exact
+immutable-descriptor to function-local-call-record equality; the ordered `D4`
+input run; SCC and admission facts not already canonically closed upstream; and
+exact planned/consumed/emitted set closure.
+
+After the population correction, **re-run those controls**, so that a rejection
+cannot be credited to the now-removed phantom `SchedulingEntry`.
 
 > ### ⭐⭐ `D7` NOW CARRIES THE EXACT-RECORD RE-DERIVATION, AND IT GATES ANOTHER NODE
 >
@@ -1655,6 +1797,14 @@ family — that is a measurement nobody has taken.
   candidates**, which is what the reorder assumed and did not wait for.
 - **`AC-3`.** `D5`'s owner/phase validation is present and fails closed **before**
   `D6` lands. A commit ordering that removes the residual first fails this AC.
+
+  **Amended 2026-08-04 (Architect `evt_3twrm71vck49d`).** "Fails closed" is not
+  discharged by a validator no accepted input can reach. Measured at
+  `5e61d640`: the vestigial `SchedulingEntry` refuses every closure-seed
+  declaration before emission, so `D5`'s positive control asserts a blocker
+  rather than the property. ⇒ **`D2a` lands first, then `D5`'s transition
+  sentinel is promoted into the real checked positive, and only then `D6`.** A
+  `D5` whose positive is still a sentinel does not satisfy this AC.
 - **`AC-4` (no-regression).** Workspace green **in CI** — ⛔ never a local
   `--workspace` run (`COORDINATION §12`).
 - **`AC-5`.** The exhaustive-match fail-closed property at `core.rs:59-65` is
