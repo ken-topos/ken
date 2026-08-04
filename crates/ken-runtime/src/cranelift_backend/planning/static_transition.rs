@@ -464,6 +464,37 @@ struct PlannedOccurrenceAuthority {
 #[repr(transparent)]
 pub(in crate::cranelift_backend) struct ContinuationSpecializationId(u32);
 
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — the generalized emission-owner domain.**
+///
+/// Architect ruling `evt_609am4v7cdt5b`. The planner had been conflating three
+/// authorities, and the one that decides *who can emit a causal call* is
+/// neither of the two it was reading:
+///
+/// | authority | for the measured witness |
+/// |---|---|
+/// | source-occurrence provenance owner | raw `fn2` — the nested producer is textually in body 36 |
+/// | root input provenance owner | `fn3` — its parameters populate the continuation environment |
+/// | **immediate emission and availability owner** | the interned specialization that selected and invoked `fn2` |
+///
+/// ⛔ **The two variants are distinct ID domains and are never cast or aliased
+/// into one another.** That is the whole point of making this an enum rather
+/// than widening `PredeclaredFunctionId`: a specialization context is not a
+/// predeclared unit, and code that treats one as the other reintroduces exactly
+/// the conflation this type exists to remove.
+///
+/// ⚠ `Predeclared` is the *only* variant the population had before `D5a`, and
+/// every same-owner edge still lands there with identical behaviour. A
+/// `Specialization` owner appears only where the fixed point descended into a
+/// worker body from an interned specialization.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum ContinuationEmissionOwner {
+    /// An ordinary predeclared function unit emits this call from its own body.
+    Predeclared(PredeclaredFunctionId),
+    /// The generated execution context of an interned specialization emits this
+    /// call. The raw body's predeclared owner remains **provenance only**.
+    Specialization(ContinuationSpecializationId),
+}
+
 /// The source ABI provenance class of one continuation input.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum ContinuationInputSource {
@@ -665,7 +696,16 @@ struct ContinuationWorkerProvenance {
 /// count, summary, or post-assignment widening operation.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct ContinuationSpecializationKey {
+    /// ⚠ **`D5a`: PROVENANCE ONLY.** This is the raw source-occurrence owner —
+    /// the unit the producer `Construct` is textually in. It does **not** confer
+    /// emission authority; see `emission_owner` beside it.
     producer_owner: PredeclaredFunctionId,
+    /// **`D5a` — the immediate emission and availability owner.**
+    ///
+    /// Who can actually emit this call and possess its operands. Equal to
+    /// `Predeclared(producer_owner)` for every edge discovered at a top-level
+    /// computational frame, which is the entire pre-`D5a` population.
+    emission_owner: ContinuationEmissionOwner,
     producer_result_origin: StaticOriginId,
     producer_construct_origin: StaticOriginId,
     producer_alternative: u32,
@@ -714,6 +754,15 @@ impl ContinuationCallIdentity {
     pub(in crate::cranelift_backend) fn producer_owner(&self) -> PredeclaredFunctionId {
         self.token.producer_owner
     }
+
+    /// **`D5a` — who emits this call.**
+    ///
+    /// ⛔ `D3`'s owner comparison moves to THIS accessor. `producer_owner`
+    /// above is provenance and answering the claim check with it is the exact
+    /// conflation `evt_609am4v7cdt5b` ruled against.
+    pub(in crate::cranelift_backend) fn emission_owner(&self) -> ContinuationEmissionOwner {
+        self.token.emission_owner
+    }
 }
 
 /// `D1` — a read-only view of one already-validated continuation
@@ -733,6 +782,10 @@ impl<'plan> ContinuationUnitView<'plan> {
     }
     pub(in crate::cranelift_backend) fn producer_owner(&self) -> PredeclaredFunctionId {
         self.key.producer_owner
+    }
+    /// **`D5a`** — the immediate emission and availability owner.
+    pub(in crate::cranelift_backend) fn emission_owner(&self) -> ContinuationEmissionOwner {
+        self.key.emission_owner
     }
     pub(in crate::cranelift_backend) fn consumer_owner(&self) -> PredeclaredFunctionId {
         self.key.consumer_owner
@@ -988,6 +1041,10 @@ impl ContinuationCallView<'_> {
     pub(in crate::cranelift_backend) fn producer_owner(&self) -> PredeclaredFunctionId {
         self.token.producer_owner
     }
+    /// **`D5a`** — the immediate emission and availability owner.
+    pub(in crate::cranelift_backend) fn emission_owner(&self) -> ContinuationEmissionOwner {
+        self.token.emission_owner
+    }
     pub(in crate::cranelift_backend) fn producer_result_origin(&self) -> StaticOriginId {
         self.token.producer_result_origin
     }
@@ -1041,7 +1098,12 @@ struct PlannedContinuationSpecialization {
 /// Exact causal identity for one direct producer edge into an interned target.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct ContinuationSpecializationCallToken {
+    /// ⚠ **`D5a`: PROVENANCE ONLY** — the raw source-occurrence owner. Kept
+    /// because it is still the right answer to "where is this producer written";
+    /// it is no longer the answer to "who emits this call".
     producer_owner: PredeclaredFunctionId,
+    /// **`D5a` — who emits this call and holds its operands.**
+    emission_owner: ContinuationEmissionOwner,
     producer_result_origin: StaticOriginId,
     producer_construct_origin: StaticOriginId,
     producer_alternative: u32,
@@ -3433,6 +3495,21 @@ fn intern_specialization(
 struct ContinuationDiscovery {
     continuation_origin: StaticOriginId,
     result_root: StaticOriginId,
+    /// **`D5a` — the enclosing generated emission context, retained across
+    /// descent.**
+    ///
+    /// ⛔ This field is the correction. The fixed point used to descend into
+    /// `worker.body_origin` carrying only the two origins, so the next
+    /// iteration re-read the raw occurrence owner and lost the specialization
+    /// that had selected and invoked that worker. Retaining it here is what
+    /// makes "descending into the selected worker body from an interned
+    /// specialization retains that specialization as the immediate emission
+    /// owner" a fact of the traversal rather than something a later lookup has
+    /// to reconstruct — which it provably cannot do.
+    ///
+    /// `None` at a top-level `ComputationalMatch` root: there is no enclosing
+    /// generated context, so the emission owner is the raw occurrence owner.
+    enclosing_specialization: Option<ContinuationSpecializationId>,
 }
 
 #[cfg(test)]
@@ -3455,6 +3532,9 @@ fn build_continuation_specialization_plan(
             pending.push(ContinuationDiscovery {
                 continuation_origin: occurrence.static_origin,
                 result_root: plan.semantic.child_origin(occurrence.static_origin, 0)?,
+                // A top-level computational frame has no enclosing generated
+                // context; its producers emit from their raw occurrence owner.
+                enclosing_specialization: None,
             });
         }
     }
@@ -3561,8 +3641,15 @@ fn build_continuation_specialization_plan(
                     else {
                         continue;
                     };
+                    let emission_owner = match discovery.enclosing_specialization {
+                        Some(enclosing) => ContinuationEmissionOwner::Specialization(enclosing),
+                        None => ContinuationEmissionOwner::Predeclared(
+                            producer_environment.producer_owner,
+                        ),
+                    };
                     let key = ContinuationSpecializationKey {
                         producer_owner: producer_environment.producer_owner,
+                        emission_owner,
                         producer_result_origin: producer_environment.producer_result_origin,
                         producer_construct_origin: producer_environment.producer_construct_origin,
                         producer_alternative: u32::try_from(alternative).map_err(|_| {
@@ -3591,6 +3678,7 @@ fn build_continuation_specialization_plan(
                     let call = PlannedContinuationSpecializationCall {
                         token: ContinuationSpecializationCallToken {
                             producer_owner,
+                            emission_owner,
                             producer_result_origin: discovery.result_root,
                             producer_construct_origin,
                             producer_alternative: u32::try_from(alternative).map_err(|_| {
@@ -3608,9 +3696,18 @@ fn build_continuation_specialization_plan(
                     }
                     if inserted {
                         // The key is already interned when its body can add work.
+                        //
+                        // ⭐ `D5a`: the descent now carries `target` as the
+                        // enclosing generated emission context. Everything the
+                        // nested producer will need — the continuation inputs
+                        // this specialization already holds — lives in that
+                        // context, and the raw worker body's own owner cannot
+                        // reach them. Dropping it here is exactly the defect
+                        // `evt_609am4v7cdt5b` ruled on.
                         pending.push(ContinuationDiscovery {
                             continuation_origin: discovery.continuation_origin,
                             result_root: worker.body_origin,
+                            enclosing_specialization: Some(target),
                         });
                     }
                 }
@@ -5629,6 +5726,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 if unit.key.producer_construct_origin != token.producer_construct_origin
                     || unit.key.producer_alternative != token.producer_alternative
                     || unit.key.producer_owner != token.producer_owner
+                    || unit.key.emission_owner != token.emission_owner
                     || unit.key.producer_result_origin != token.producer_result_origin
                 {
                     return Err(planner_error(
@@ -5702,11 +5800,14 @@ impl<'src> StaticTransitionPlan<'src> {
     /// contract 3).
     pub(in crate::cranelift_backend) fn continuation_result_edges_owned_by(
         &self,
-        producer_owner: PredeclaredFunctionId,
+        emission_owner: ContinuationEmissionOwner,
     ) -> Result<Vec<ContinuationResultEdge>, CraneliftBackendError> {
         let mut edges = Vec::new();
         for call in self.continuation_calls()? {
-            if call.producer_owner() != producer_owner {
+            // `D5a`: keyed on the EMISSION owner, never on provenance. A unit
+            // that merely contains the producer text is not thereby able to
+            // emit the call.
+            if call.emission_owner() != emission_owner {
                 continue;
             }
             let identity = self

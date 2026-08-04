@@ -77,6 +77,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
     CheckedOrientedMarkerSets, ConstructorIdentity, ContinuationCallIdentity, ContinuationCallView,
     DeclarationCallTargetClass,
+    ContinuationEmissionOwner,
     ContinuationInputView, ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge,
     ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, JoinPlanToken,
@@ -1292,6 +1293,15 @@ struct Lowering<'a> {
     /// the whole unit-definition pass so a token claimed at one producer
     /// occurrence cannot be claimed again at another.
     continuation_claims: Option<units::ContinuationClaimLedger>,
+    /// **`RT-DECL-CLOSURE-PORT` `D5a`** — the emission owner of the context
+    /// currently being defined, in the generalized domain.
+    ///
+    /// ⛔ Deliberately a separate field from `defining_unit` rather than a
+    /// function of it. A generated specialization context lowers a raw body, so
+    /// deriving one from the other would make the raw body's predeclared owner
+    /// stand in for the generated context — the exact conflation
+    /// `evt_609am4v7cdt5b` ruled against.
+    defining_emission_owner: Option<ContinuationEmissionOwner>,
     /// **`RT-DECL-CLOSURE-PORT` `D5`** — the checked-call closeout ledger.
     /// `None` outside the functionized unit-bundle pass, which is the only
     /// place a checked call can reach a declaration-owned unit.

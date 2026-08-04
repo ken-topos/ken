@@ -79,6 +79,7 @@ fn run_checked_bounded_nat_fixture(
         continuation_claims: None,
         checked_call_ledger: None,
         defining_unit: None,
+        defining_emission_owner: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has

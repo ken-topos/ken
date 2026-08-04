@@ -67,6 +67,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         continuation_claims: None,
         checked_call_ledger: None,
         defining_unit: None,
+        defining_emission_owner: None,
         process_object: true,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -219,6 +220,7 @@ fn run_px8j_malformed_recursor_consumer(
         continuation_claims: None,
         checked_call_ledger: None,
         defining_unit: None,
+        defining_emission_owner: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -2116,6 +2118,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         continuation_claims: None,
         checked_call_ledger: None,
         defining_unit: None,
+        defining_emission_owner: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -10163,11 +10166,16 @@ fn d4_claiming_the_same_causal_token_twice_reds_the_ledger() {
 /// `close()` rather than at `claim_exact`, because selection is already by the
 /// token's own owner. The assertion below is deliberately on the text the
 /// production path actually produces, not on the one the seam's name suggests.
+///
+/// ⭐ **`D5a`: the owner this compares is now the EMISSION owner**, in the
+/// generalized domain, not the raw source-occurrence provenance owner. The
+/// substring moved with the diagnostic for that reason — the control still
+/// measures the same seam, and the reason it names is now the sharper one.
 #[test]
 fn d4_claiming_under_a_unit_that_does_not_own_the_token_reds() {
     assert_emission_mutation_reds(
         ContinuationEmissionMutation::ClaimUnderWrongOwner,
-        "does not own it",
+        "is not its emission owner",
     );
 }
 
@@ -11911,9 +11919,10 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
             .iter()
             .map(|call| {
                 format!(
-                    "owner={:?} result_root={:?} construct={:?} continuation={:?} \
-                     alt={} pos={} target={:?}",
+                    "provenance={:?} EMITS-FROM={:?} result_root={:?} construct={:?} \
+                     continuation={:?} alt={} pos={} target={:?}",
                     call.producer_owner(),
+                    call.emission_owner(),
                     call.producer_result_origin(),
                     call.producer_construct_origin(),
                     call.continuation_origin(),
@@ -11933,9 +11942,11 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
             .iter()
             .map(|unit| {
                 format!(
-                    "{:?} producer={:?} consumer={:?} ordinary_params={} inputs={:?}",
+                    "{:?} provenance={:?} EMITS-FROM={:?} consumer={:?} ordinary_params={} \
+                     inputs={:?}",
                     unit.id(),
                     unit.producer_owner(),
+                    unit.emission_owner(),
                     unit.consumer_owner(),
                     unit.ordinary_parameters(),
                     unit.continuation_inputs()
