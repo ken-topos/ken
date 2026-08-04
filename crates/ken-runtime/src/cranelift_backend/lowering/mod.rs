@@ -5322,6 +5322,43 @@ impl BoundaryInput {
             BoundaryDisposition::RepresentedHandle { tag, class } => {
                 let owner = tag.referent_owner();
                 match (owner, self.reachability) {
+                    // ⭐⭐ **`RT-DECL-CLOSURE-PORT` `D7` — the aggregate lifetime
+                    // MEET.** A `Constructor`/`Record` whose value shape is
+                    // persistable but which has a child that dies first is not
+                    // an error; it is an aggregate whose lifetime is the
+                    // invocation. The parent takes
+                    // [`BoundaryTag::InvocationAggregate`] and the whole edge
+                    // becomes sound — an invocation-owned parent naming an
+                    // invocation-owned child dangles nothing.
+                    //
+                    // ⛔ This is NOT a relaxation of the escape rule. It is the
+                    // missing lane the rule was standing in for: the refusal
+                    // below still fires for every non-aggregate shape, and this
+                    // arm's own referent owner is the arena, so every escape
+                    // check downstream governs it unchanged.
+                    //
+                    // ⚠ Keyed on the CLASS, not on the tag, and deliberately:
+                    // the incoming `tag` is whatever the value-shape
+                    // disposition reached for, and the question here is whether
+                    // this shape has children to take a meet over. `Bytes`,
+                    // `String` and `Int` do not, so they keep the refusal.
+                    (
+                        BoundaryReferentOwner::PersistentStore,
+                        ReachabilityPartition::ChildDiesBeforeParent,
+                    ) if matches!(
+                        class,
+                        BoundaryClass::Constructor | BoundaryClass::Record
+                    ) =>
+                    {
+                        BoundaryOutcome::HandleWord {
+                            tag: BoundaryTag::InvocationAggregate,
+                            class,
+                            owner: BoundaryReferentOwner::InvocationArena,
+                            identity: Self::handle_identity(
+                                BoundaryReferentOwner::InvocationArena,
+                            ),
+                        }
+                    }
                     // ⛔ A surviving parent may not name storage that dies
                     // first. Rejected before publication, with `ERR_ESCAPE`.
                     (
