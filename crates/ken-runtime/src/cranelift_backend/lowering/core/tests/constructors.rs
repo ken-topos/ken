@@ -269,12 +269,14 @@ fn run_dynamic_constructor_dispatch_fixture(
                     tag: 0,
                     constructor: "ctor:fixture::Dynamic::Zero".to_string(),
                     identity: test_synthesized_constructor_identity(),
+                    occurrence: None,
                     fields: Vec::new(),
                 },
                 DynamicConstructorAlternativeV1 {
                     tag: 1,
                     constructor: "ctor:fixture::Dynamic::One".to_string(),
                     identity: test_synthesized_constructor_identity(),
+                    occurrence: None,
                     fields: vec![Lowered::Int {
                         value: builder.ins().iconst(types::I64, 7),
                         known: Some(7),
@@ -433,6 +435,7 @@ fn dynamic_constructor_known_omission_owns_source_default() {
         tag: 0,
         constructor: "ctor:fixture::Dynamic::Missing".to_string(),
         identity: test_synthesized_constructor_identity(),
+                    occurrence: None,
         fields: Vec::new(),
     };
     let owned = RuntimeTrap {
@@ -485,6 +488,7 @@ fn dynamic_constructor_fields_precede_outer_environment_in_declaration_order() {
         tag: 7,
         constructor: "ctor:fixture::Dynamic::Pair".to_string(),
         identity: test_synthesized_constructor_identity(),
+                    occurrence: None,
         fields: vec![
             Lowered::Bytes(b"first".to_vec()),
             Lowered::String("second".to_string()),
@@ -2622,6 +2626,7 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
                     tag: 0,
                     constructor: producer_symbols.read_some.clone(),
                     identity: ok_identity,
+                    occurrence: None,
                     fields: vec![Lowered::Bool {
                         value: true_word,
                         known: Some(true),

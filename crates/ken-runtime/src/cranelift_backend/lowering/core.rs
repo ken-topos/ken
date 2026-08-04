@@ -10350,10 +10350,33 @@ impl<'a> Lowering<'a> {
             let error_root =
                 SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultError);
             let ok_root = SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk);
-            let io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
-                discriminator: builder.ins().band_imm(detail, 0xff),
-                alternatives: self.synthesized_io_error_alternatives(payload_int)?,
-            });
+            // ⭐ `D7` — the generic `IOError` value is built **per branch, at
+            // the path that branch puts it at**, not once up front.
+            //
+            // ⛔ It used to be constructed eagerly, before the operation match
+            // knew which arm it was in. The six resource-surface operations
+            // build their own `surface_io_error` and never referenced it, so
+            // that template was ABANDONED — an allocation-shaped value with no
+            // semantic use. Now it is never built for them at all, which is
+            // strictly better than planning it and proving it unreachable: it
+            // contributes neither a record nor an event because it does not
+            // exist.
+            let generic_io_error =
+                |this: &Self,
+                 builder: &mut FunctionBuilder<'_>,
+                 payload: Lowered,
+                 node: &SynthesizedAggregatePath| {
+                    Ok::<_, CraneliftBackendError>(Lowered::DynamicConstructor(
+                        DynamicConstructorV1 {
+                            discriminator: builder.ins().band_imm(detail, 0xff),
+                            alternatives: this.synthesized_io_error_alternatives(
+                                static_origin,
+                                node,
+                                payload,
+                            )?,
+                        },
+                    ))
+                };
             let error = if matches!(
                 operation,
                 ken_host::HostOpV1::FsReadFile
@@ -10396,6 +10419,8 @@ impl<'a> Lowering<'a> {
                     self.process_symbols.option_some.clone(),
                     vec![path],
                 )?;
+                let io_error =
+                    generic_io_error(self, builder, payload_int, &error_root.field(2))?;
                 self.synthesized_constructor(
                     static_origin,
                     &error_root,
@@ -10427,10 +10452,25 @@ impl<'a> Lowering<'a> {
                 let resource_required_int =
                     self.lower_unsigned_u64_int(builder, resource_required)?;
                 let resource_held_int = self.lower_unsigned_u64_int(builder, resource_held)?;
-                let surface_io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
-                    discriminator: builder.ins().band_imm(surface_io, 0xff),
-                    alternatives: self.synthesized_io_error_alternatives(surface_io_payload_int)?,
-                });
+                // ⭐ Built ONCE PER SEMANTIC USE. `ResourceHostIo` field 0 and
+                // `ResourceReleaseFailed` field 2 are two allocations at two
+                // paths; cloning one template into both would carry one
+                // occurrence to two allocations, which is exactly the aliasing
+                // the path key exists to prevent.
+                let surface_io_error = |this: &Self,
+                                        builder: &mut FunctionBuilder<'_>,
+                                        node: &SynthesizedAggregatePath| {
+                    Ok::<_, CraneliftBackendError>(Lowered::DynamicConstructor(
+                        DynamicConstructorV1 {
+                            discriminator: builder.ins().band_imm(surface_io, 0xff),
+                            alternatives: this.synthesized_io_error_alternatives(
+                                static_origin,
+                                node,
+                                surface_io_payload_int.clone(),
+                            )?,
+                        },
+                    ))
+                };
                 let identity_low = builder.ins().band_imm(resource_identity, 0xffff_ffff);
                 let identity_high = builder.ins().ushr_imm(resource_identity, 32);
                 let identity_low_int = self.lower_dynamic_small_int(builder, identity_low);
@@ -10488,7 +10528,11 @@ impl<'a> Lowering<'a> {
                             0,
                             SynthesizedFixedConstructorRole::ResourceHostIo,
                             self.process_symbols.resource_host_io.clone(),
-                            vec![surface_io_error.clone()],
+                            vec![surface_io_error(
+                                self,
+                                builder,
+                                &error_root.alternative(0).field(0),
+                            )?],
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10531,7 +10575,11 @@ impl<'a> Lowering<'a> {
                                     &error_root.alternative(4).field(0),
                                 )?,
                                 trace_identity,
-                                surface_io_error,
+                                surface_io_error(
+                                    self,
+                                    builder,
+                                    &error_root.alternative(4).field(2),
+                                )?,
                             ],
                         )?,
                         self.synthesized_dynamic_alternative(
@@ -10593,7 +10641,7 @@ impl<'a> Lowering<'a> {
                     ],
                 })
             } else {
-                io_error
+                generic_io_error(self, builder, payload_int, &error_root)?
             };
             let success = builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::Equal,

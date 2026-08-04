@@ -4706,7 +4706,47 @@ impl<'a> Lowering<'a> {
                 discriminator: dynamic.discriminator,
                 alternatives: vec![alternative.clone()],
             });
-            let (tag, class) = Self::carrier_handle_disposition(&disposition)?;
+            // ⭐ **`D7` — the selected alternative's lane comes from ITS OWN
+            // planner record.** The set is not an allocation; this is. The
+            // value-shape disposition answers `PersistentGround` for every
+            // `DynamicConstructor` because the shape is persistable, which is
+            // the same unproven persistent lane the fixed-constructor arm
+            // already stopped taking. Whether this alternative may take it
+            // depends on its children's lifetimes, which the value in hand does
+            // not carry.
+            //
+            // ⚠ The CLASS still comes from the disposition and only the TAG is
+            // replaced — the class is a fact about the shape and the
+            // disposition is its authority; the lane is a fact about the meet
+            // and the planner is its.
+            let (_, class) = Self::carrier_handle_disposition(&disposition)?;
+            let tag = match alternative.occurrence {
+                Some(occurrence) => match self
+                    .static_transition_plan
+                    .aggregate_allocation_at(occurrence, PlannedAggregateShape::Constructor)?
+                {
+                    PlannedAggregateAllocation::PersistentGround => BoundaryTag::PersistentGround,
+                    PlannedAggregateAllocation::InvocationAggregate => {
+                        BoundaryTag::InvocationAggregate
+                    }
+                },
+                // ⛔ A refusal, not a default. An alternative with no carried
+                // occurrence is one whose lifetime meet was never taken, and
+                // answering `PersistentGround` for it would reinstate exactly
+                // the unproven lane the record exists to replace — silently,
+                // and only for the alternatives the population happened to
+                // miss.
+                None => {
+                    return Err(unsupported(
+                        "DynamicConstructor",
+                        format!(
+                            "the selected alternative {} carries no planned occurrence, so its \
+                             allocation has no lifetime meet",
+                            alternative.constructor
+                        ),
+                    ));
+                }
+            };
             let word = self.emit_carrier_alloc(builder, tag, class, alternative.fields.len())?;
             self.emit_carrier_store_tag_id(builder, word, alternative.identity.tag_abi_word()?)?;
             for (position, field) in alternative.fields.iter().enumerate() {
@@ -6290,6 +6330,16 @@ struct DynamicConstructorAlternativeV1 {
     tag: i64,
     constructor: RuntimeSymbol,
     identity: ConstructorIdentity,
+    /// **`D7` — the planner's occurrence for this exact alternative.**
+    ///
+    /// ⭐ A dynamic SET is not an allocation; a selected ALTERNATIVE is. It
+    /// calls `emit_carrier_alloc` exactly as a fixed constructor does, so it
+    /// needs the same path-keyed record — otherwise its allocation has no
+    /// lifetime meet and cannot enter the event-to-record relation.
+    ///
+    /// `None` is a refusal, never a default: it means no context was being
+    /// defined, and the allocation fails loudly rather than borrowing a lane.
+    occurrence: Option<AggregateOccurrenceId>,
     fields: Vec<Lowered>,
 }
 
@@ -6339,7 +6389,12 @@ impl<'a> Lowering<'a> {
         };
         let occurrence = self
             .static_transition_plan
-            .synthesized_aggregate_occurrence(owner, seat, path, role)
+            .synthesized_aggregate_occurrence(
+                owner,
+                seat,
+                path,
+                SynthesizedConstructorRole::Fixed(role),
+            )
             .ok();
         // The recipe and this call site are two statements of one shape, so
         // they are cross-checked rather than trusted to agree. A recipe that
@@ -6349,7 +6404,12 @@ impl<'a> Lowering<'a> {
         if occurrence.is_some() {
             let declared = self
                 .static_transition_plan
-                .synthesized_aggregate_children(owner, seat, path, role)?;
+                .synthesized_aggregate_children(
+                    owner,
+                    seat,
+                    path,
+                    SynthesizedConstructorRole::Fixed(role),
+                )?;
             self.reconcile_declared_children(owner, seat, path, declared, &args)?;
         }
         Ok(Lowered::Constructor {
@@ -6438,7 +6498,7 @@ impl<'a> Lowering<'a> {
                             owner,
                             seat,
                             &path.field(position),
-                            *inner,
+                            SynthesizedConstructorRole::Fixed(*inner),
                         )
                         .ok();
                     matches!(
@@ -6453,14 +6513,24 @@ impl<'a> Lowering<'a> {
                 SynthesizedAggregateNode::Dynamic(_) => {
                     matches!(argument, Lowered::DynamicConstructor(_))
                 }
-                // ⛔ Unreachable in a RECORD's declared children: a
-                // site-dependent node makes its parent unmodellable, so the
-                // parent has no record and this loop does not run for it. It IS
-                // reachable for a dynamic alternative, which is reconciled from
-                // the tree rather than from a record -- and there it means
-                // exactly what it says: the tree does not govern this position,
-                // so nothing about the operand is checkable.
-                SynthesizedAggregateNode::SiteDependent => true,
+                // The seat's own operand. The planner derived this child's
+                // owners from the seat's operand authority, so the record IS
+                // exact -- but what arrives here is whatever the caller wrote,
+                // and no static kind is predictable. The position is checked
+                // (the arity comparison above) and the evidence is the
+                // planner's; there is nothing further to compare.
+                SynthesizedAggregateNode::SiteOperand(_) => true,
+                // ⛔ Unreachable: `Absent` marks a host-result arm that builds
+                // no aggregate, so it is never a child of a planned record.
+                // Spelled rather than swallowed by a `_` so a further node kind
+                // is a compile error here.
+                SynthesizedAggregateNode::Absent => {
+                    return Err(unsupported(
+                        "Constructor",
+                        "a synthesized aggregate is planned with an absent child, so the \
+                         tree describes an allocation whose operand is not built",
+                    ));
+                }
             };
             if !agrees {
                 return Err(unsupported(
@@ -6499,32 +6569,81 @@ impl<'a> Lowering<'a> {
         // Absent means no context is being defined, which is not an emission
         // this population covers -- the same boundary `synthesized_constructor`
         // draws, and for the same reason.
-        if let Some(owner) = self.defining_emission_owner {
-            let path = parent.alternative(position);
-            let (declared_role, declared) =
-                self.static_transition_plan.synthesized_tree_node(seat, &path)?;
-            if declared_role != role {
-                return Err(unsupported(
-                    "DynamicConstructor",
-                    format!(
-                        "alternative {position} is planned as {declared_role:?} but the emitter \
-                         built {role:?}, so the path names a different node than the one being \
-                         constructed"
-                    ),
-                ));
-            }
-            self.reconcile_declared_children(owner, seat, &path, declared, &fields)?;
-        }
+        let role = SynthesizedConstructorRole::Fixed(role);
+        let occurrence = self.reconcile_dynamic_alternative(
+            seat,
+            parent,
+            position,
+            role,
+            &fields,
+        )?;
         Ok(DynamicConstructorAlternativeV1 {
             tag,
             constructor,
-            identity: self.synthesized_fixed_identity(role)?,
+            identity: self.static_transition_plan.synthesized_constructor_identity(role)?,
+            occurrence,
             fields,
         })
     }
 
+    /// Reconcile one dynamic alternative against the tree and return its exact
+    /// path-keyed occurrence.
+    ///
+    /// ⭐ The alternative allocates, so it needs a record — not merely a schema
+    /// agreement. This resolves `owner + seat + parent.alternative(position) +
+    /// role`, checks the role the tree has at that path and the ordered
+    /// children the emitter built, and hands back the occurrence the emitter
+    /// carries to its allocation.
+    ///
+    /// `None` when no context is being defined, which is the same boundary
+    /// `synthesized_constructor` draws and for the same reason: that is not an
+    /// emission this population covers, so the allocation refuses loudly rather
+    /// than borrowing a lane.
+    fn reconcile_dynamic_alternative(
+        &self,
+        seat: StaticOriginId,
+        parent: &SynthesizedAggregatePath,
+        position: u32,
+        role: SynthesizedConstructorRole,
+        fields: &[Lowered],
+    ) -> Result<Option<AggregateOccurrenceId>, CraneliftBackendError> {
+        let Some(owner) = self.defining_emission_owner else {
+            return Ok(None);
+        };
+        let path = parent.alternative(position);
+        let (declared_role, declared) =
+            self.static_transition_plan.synthesized_tree_node(seat, &path)?;
+        if declared_role != role {
+            return Err(unsupported(
+                "DynamicConstructor",
+                format!(
+                    "alternative {position} is planned as {declared_role:?} but the emitter \
+                     built {role:?}, so the path names a different node than the one being \
+                     constructed"
+                ),
+            ));
+        }
+        self.reconcile_declared_children(owner, seat, &path, declared, fields)?;
+        Ok(Some(self.static_transition_plan.synthesized_aggregate_occurrence(
+            owner,
+            seat,
+            &path,
+            role,
+        )?))
+    }
+
+    /// The closed `IOError` alternative set at one exact position in the tree.
+    ///
+    /// ⭐ Every alternative here is a real allocation and takes its own
+    /// path-keyed record, keyed `IoError(role)`. The set is built at a `parent`
+    /// path rather than a bare role because the same inventory appears three
+    /// times in the measured trees — `FileError` field 2, `ResourceHostIo`
+    /// field 0, `ResourceReleaseFailed` field 2 — and those are different
+    /// allocations.
     fn synthesized_io_error_alternatives(
         &self,
+        seat: StaticOriginId,
+        parent: &SynthesizedAggregatePath,
         payload: Lowered,
     ) -> Result<Vec<DynamicConstructorAlternativeV1>, CraneliftBackendError> {
         let roles = self.static_transition_plan.synthesized_io_error_roles();
@@ -6540,9 +6659,25 @@ impl<'a> Lowering<'a> {
             .iter()
             .zip(roles)
             .enumerate()
-            .map(|(tag, (constructor, role))| {
+            .map(|(position, (constructor, role))| {
+                let role = SynthesizedConstructorRole::IoError(*role);
+                let fields = (position == last)
+                    .then(|| vec![payload.clone()])
+                    .unwrap_or_default();
+                let occurrence = self.reconcile_dynamic_alternative(
+                    seat,
+                    parent,
+                    u32::try_from(position).map_err(|_| {
+                        unsupported(
+                            "DynamicConstructor",
+                            "the IOError alternative population exceeds the path step space",
+                        )
+                    })?,
+                    role,
+                    &fields,
+                )?;
                 Ok(DynamicConstructorAlternativeV1 {
-                    tag: i64::try_from(tag).map_err(|_| {
+                    tag: i64::try_from(position).map_err(|_| {
                         unsupported(
                             "DynamicConstructor",
                             "the IOError alternative population exceeds the ABI discriminator",
@@ -6551,12 +6686,9 @@ impl<'a> Lowering<'a> {
                     constructor: constructor.clone(),
                     identity: self
                         .static_transition_plan
-                        .synthesized_constructor_identity(SynthesizedConstructorRole::IoError(
-                            *role,
-                        ))?,
-                    fields: (tag == last)
-                        .then(|| vec![payload.clone()])
-                        .unwrap_or_default(),
+                        .synthesized_constructor_identity(role)?,
+                    occurrence,
+                    fields,
                 })
             })
             .collect()

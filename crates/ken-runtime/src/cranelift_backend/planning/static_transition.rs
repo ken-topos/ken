@@ -2646,7 +2646,13 @@ pub(in crate::cranelift_backend) enum AggregateOccurrenceProducer {
         /// structure that both sides state independently and can be checked
         /// against each other at construction.
         path: SynthesizedAggregatePath,
-        role: SynthesizedFixedConstructorRole,
+        /// The constructor this use builds — **fixed or `IOError`**.
+        ///
+        /// ⭐ The full sum, not the fixed half. Every `IOError` alternative is
+        /// a real allocation with its own path, so the domain must be able to
+        /// name one. An earlier spelling typed this as the fixed roles alone,
+        /// which is what excluded them from `P` and from `R`.
+        role: SynthesizedConstructorRole,
     },
 }
 
@@ -2920,21 +2926,35 @@ pub(in crate::cranelift_backend) enum SynthesizedAggregateNode {
         tag: BoundaryTag,
         spill: Option<BoundaryClass>,
     },
-    /// A value the **emission site** supplies, whose owners are a property of
-    /// the site rather than of the tree.
+    /// A value the **Effect seat itself** supplies, named by the ordered
+    /// position of the operand it comes from.
     ///
-    /// ⛔ Not a gap to fill with a conservative default. `OptionSome` wraps a
-    /// user path and `PrivateBufferSpan` carries a `ResourceToken`; a record
-    /// that stated owners for those would be describing whatever the site
-    /// happened to pass. A parent containing one of these is therefore not
-    /// modellable, and refuses at its allocation rather than being allocated
-    /// over evidence nobody derived.
+    /// ⭐ **Site-dependence is not non-reachability.** `OptionSome` wraps the
+    /// seat's path operand and `PrivateBufferSpan` carries the seat's buffer
+    /// `ResourceToken`; both are real allocations that production emits. What
+    /// is unavailable for them is a *role-invariant* meet — not a meet. The
+    /// evidence is exact and it is already in the plan: the operand is a child
+    /// occurrence of this very seat, with its own lifetime and join
+    /// representation.
     ///
-    /// It is also the arm for an `ok` value that is not an aggregate at all —
+    /// ⛔ So this is resolved against the seat, never defaulted and never
+    /// pruned. Omitting the node from `P` because no role-invariant answer
+    /// exists is not the fail-closed direction once production can emit the
+    /// allocation — it leaves a real allocation with no record. If the seat's
+    /// operand evidence cannot be derived, **planning fails**.
+    ///
+    /// The index is into the seat's `args`, before the capability offset that
+    /// `RuntimeExpr::Effect` applies to its semantic children.
+    SiteOperand(u32),
+    /// This arm of the host result synthesizes no aggregate at all.
+    ///
     /// `FsReadFile`'s `ResponseBytes`, `FsOpen`'s `ResourceToken`,
-    /// `FsHandleMetadata`'s `Int`. Those take no aggregate lane, which is the
-    /// same statement: the tree does not govern this position.
-    SiteDependent,
+    /// `FsHandleMetadata`'s `Int`. Distinct from [`Self::SiteOperand`] on
+    /// purpose: that one is a child whose evidence the seat supplies, this one
+    /// is a position where the tree governs nothing because no aggregate is
+    /// built. Collapsing them would let "no allocation here" and "an allocation
+    /// whose child comes from the site" share an arm.
+    Absent,
 }
 
 /// The closed alternative set of one dynamic constructor.
@@ -3072,7 +3092,8 @@ fn host_effect_recipe_tree(operation: ken_host::HostOpV1) -> SynthesizedHostResu
     /// this node and every parent of it is unmodellable.
     const SOME_SITE_PATH: SynthesizedAggregateNode = N::Fixed {
         role: R::OptionSome,
-        children: &[N::SiteDependent],
+        // The seat's operand 0 — the path the caller passed.
+        children: &[N::SiteOperand(0)],
     };
     /// `FileError(FileOperation*, Option::Some(<site path>), IOError)`.
     const READ_FILE_ERROR_CHILDREN: &[SynthesizedAggregateNode] = &[
@@ -3115,7 +3136,9 @@ fn host_effect_recipe_tree(operation: ken_host::HostOpV1) -> SynthesizedHostResu
                     // site-dependent.
                     N::Fixed {
                         role: R::PrivateBufferSpan,
-                        children: &[N::SiteDependent, N::native_int(), N::bounded_nat()],
+                        // The seat's operand 2 — the buffer `ResourceToken`
+                        // this span is bound to (`PX8-SPAN-PROV`).
+                        children: &[N::SiteOperand(2), N::native_int(), N::bounded_nat()],
                     },
                     TRANSFER_COUNT,
                 ],
@@ -3130,10 +3153,10 @@ fn host_effect_recipe_tree(operation: ken_host::HostOpV1) -> SynthesizedHostResu
     let (error, ok) = match operation {
         // Returns a `Bool` before any synthesized producer runs, so neither arm
         // exists. Not a gap: the early return is above the synthesis entirely.
-        Op::ConsoleIsTerminal => (N::SiteDependent, N::SiteDependent),
+        Op::ConsoleIsTerminal => (N::Absent, N::Absent),
         Op::ConsoleWrite | Op::ConsoleFlush => (IO_ERRORS, UNIT),
-        Op::FsReadFile => (READ_FILE_ERROR, N::SiteDependent),
-        Op::FsOpen => (READ_FILE_ERROR, N::SiteDependent),
+        Op::FsReadFile => (READ_FILE_ERROR, N::Absent),
+        Op::FsOpen => (READ_FILE_ERROR, N::Absent),
         // ⚠ The `ok` arm here is the emitter's `else` branch, which is `Unit`.
         // The flat use table this tree replaces derived these two rows from the
         // operation match and MISSED that branch, so it planned no `Unit`
@@ -3142,14 +3165,14 @@ fn host_effect_recipe_tree(operation: ken_host::HostOpV1) -> SynthesizedHostResu
         // match the emitter uses, so an arm cannot be dropped by inattention.
         Op::FsWriteFile => (WRITE_FILE_ERROR, UNIT),
         Op::FsChangeMode => (CHANGE_MODE_ERROR, UNIT),
-        Op::BufferAllocate | Op::BufferFreeze => (RESOURCE_SURFACE, N::SiteDependent),
-        Op::FsHandleMetadata => (RESOURCE_SURFACE, N::SiteDependent),
+        Op::BufferAllocate | Op::BufferFreeze => (RESOURCE_SURFACE, N::Absent),
+        Op::FsHandleMetadata => (RESOURCE_SURFACE, N::Absent),
         Op::ResourceRelease => (RESOURCE_SURFACE, UNIT),
         Op::FsReadAt => (RESOURCE_SURFACE, READ_PROGRESS),
         Op::FsWriteAt => (RESOURCE_SURFACE, WROTE),
         // Not an admitted consumer; `lower_process_host_effect` refuses it
         // before any synthesized producer runs.
-        _ => (N::SiteDependent, N::SiteDependent),
+        _ => (N::Absent, N::Absent),
     };
     SynthesizedHostResultTree { error, ok }
 }
@@ -3174,38 +3197,48 @@ impl SynthesizedHostResultTree {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct FlattenedSynthesizedUse {
     path: SynthesizedAggregatePath,
-    role: SynthesizedFixedConstructorRole,
+    role: SynthesizedConstructorRole,
     children: &'static [SynthesizedAggregateNode],
 }
 
-/// Flatten one operation's trees to the **allocation-reachable** uses.
+/// Flatten one operation's trees to every **allocation-reachable** use.
 ///
-/// ⭐ **Reachability is structural, and it is the predicate that bounds `P`.** A
-/// node is allocation-reachable exactly when it is a `Fixed` node that is not
-/// itself an alternative of a dynamic set:
+/// ⭐ **A dynamic SET is not an allocation; every selected ALTERNATIVE is.**
+/// That is the boundary, ruled by the Architect after an earlier spelling drew
+/// it at "a `Fixed` node that is not itself a dynamic alternative". That
+/// predicate was wrong in a specific way worth recording: it was about *which
+/// authority supplies the lane today* (`emit_carrier_dynamic_constructor` read
+/// the value-shape disposition) rather than about *what allocates*. An
+/// alternative calls `emit_carrier_alloc` exactly as a fixed constructor does —
+/// dynamic allocations are measured live — so reconciling one against the tree
+/// without interning an occurrence proves only that lowering named the expected
+/// schema. It supplies no lifetime record, cannot enter `R`, and cannot satisfy
+/// "every event has exactly one record".
 ///
-/// - A `Fixed` node reached as a root, or as a field of a fixed node, or as a
-///   field of a dynamic alternative, is emitted through `Lowered::Constructor`,
-///   whose transfer takes its lane from `aggregate_carrier_disposition` — the
-///   planner's record.
-/// - A dynamic **alternative** is emitted inside
-///   `emit_carrier_dynamic_constructor`, which takes its lane from the
-///   value-shape disposition and never consults a record. Planning one would
-///   describe a seat nothing reaches.
+/// The traversal is therefore total over constructor-valued nodes:
 ///
-/// So the `IOError` alternatives are excluded by construction rather than by a
-/// ban: every one of them is a dynamic alternative. That is why no record in
-/// `P` names an `IoError` role today, and it is a measured consequence of the
-/// tree rather than a rule imposed on it.
+/// ```text
+/// Fixed(role, children):
+///   intern (owner, seat, path, Fixed(role)) with its ordered child model
+///   recurse into every aggregate-valued child at path.Field(position)
 ///
-/// The walk descends **through** unreachable nodes — a dynamic alternative's
-/// own fields are reachable, which is how `ResourceTraceIdentity` (under
-/// `ResourceReleaseFailed`) and `PrivateTransferCount` (under `ReadSome`) get
-/// records at all.
+/// Dynamic(Alternatives(alts)):
+///   visit each alternative at path.Alternative(index)
+///
+/// Dynamic(IoErrors):
+///   intern each planner-issued role at path.Alternative(index),
+///   keyed IoError(role), with that role's exact children
+/// ```
+///
+/// ⛔ Nothing is pruned for want of a role-invariant meet. A node whose child
+/// comes from the emission site gets an exact **site-bound** record derived
+/// from the seat's own operand authority, or planning fails.
 fn flatten_allocation_reachable_uses(
+    plan: &StaticTransitionPlan<'_>,
     operation: ken_host::HostOpV1,
 ) -> Vec<FlattenedSynthesizedUse> {
     let tree = host_effect_recipe_tree(operation);
+    let io_errors = plan.semantic.synthesized_io_error_roles().len();
     let mut uses = Vec::new();
     for root in [
         SynthesizedAggregateRoot::HostResultError,
@@ -3214,10 +3247,30 @@ fn flatten_allocation_reachable_uses(
         collect_reachable_uses(
             tree.node(root),
             &SynthesizedAggregatePath::root(root),
+            io_errors,
+            plan,
             &mut uses,
         );
     }
     uses
+}
+
+/// The ordered children of one `IOError` alternative.
+///
+/// The set is nullary but for its **last** alternative, which carries the
+/// decoded payload as a native `Int`. That is the emitter's own shape in
+/// `synthesized_io_error_alternatives`, restated here so the record's child
+/// model is the one the allocation actually has.
+fn io_error_alternative_children(
+    index: usize,
+    count: usize,
+) -> &'static [SynthesizedAggregateNode] {
+    const PAYLOAD: &[SynthesizedAggregateNode] = &[SynthesizedAggregateNode::native_int()];
+    if count > 0 && index + 1 == count {
+        PAYLOAD
+    } else {
+        &[]
+    }
 }
 
 /// The flattening's walk. Terminates because the tree is a finite `&'static`
@@ -3225,36 +3278,61 @@ fn flatten_allocation_reachable_uses(
 fn collect_reachable_uses(
     node: SynthesizedAggregateNode,
     path: &SynthesizedAggregatePath,
+    io_errors: usize,
+    plan: &StaticTransitionPlan<'_>,
     uses: &mut Vec<FlattenedSynthesizedUse>,
 ) {
     match node {
         SynthesizedAggregateNode::Fixed { role, children } => {
             uses.push(FlattenedSynthesizedUse {
                 path: path.clone(),
-                role,
+                role: SynthesizedConstructorRole::Fixed(role),
                 children,
             });
             for (position, child) in children.iter().enumerate() {
-                collect_reachable_uses(*child, &path.field(position as u32), uses);
+                collect_reachable_uses(
+                    *child,
+                    &path.field(position as u32),
+                    io_errors,
+                    plan,
+                    uses,
+                );
             }
         }
-        // The set itself is not a use, and neither are its alternatives. Their
-        // FIELDS are, so the walk descends one level without recording.
+        // The set is not an allocation. Each alternative is, and each is
+        // visited at its own ordered position -- which is what separates the
+        // three `ResourceKind` uses and the repeated `IOError` sets.
         SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::Alternatives(alternatives)) => {
             for (position, alternative) in alternatives.iter().enumerate() {
-                let alternative_path = path.alternative(position as u32);
-                let SynthesizedAggregateNode::Fixed { children, .. } = alternative else {
-                    continue;
-                };
-                for (field, child) in children.iter().enumerate() {
-                    collect_reachable_uses(*child, &alternative_path.field(field as u32), uses);
-                }
+                collect_reachable_uses(
+                    *alternative,
+                    &path.alternative(position as u32),
+                    io_errors,
+                    plan,
+                    uses,
+                );
             }
         }
-        // Its alternatives carry at most one `Int` payload, which is a scalar
-        // and therefore not a use either.
-        SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::IoErrors) => {}
-        SynthesizedAggregateNode::Scalar { .. } | SynthesizedAggregateNode::SiteDependent => {}
+        // The closed `IOError` inventory supplies both the alternative token
+        // and the role. The ABI tag remains non-authoritative: the path step is
+        // the ordered position, as everywhere else.
+        SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::IoErrors) => {
+            for (position, role) in plan
+                .semantic
+                .synthesized_io_error_roles()
+                .iter()
+                .enumerate()
+            {
+                uses.push(FlattenedSynthesizedUse {
+                    path: path.alternative(position as u32),
+                    role: SynthesizedConstructorRole::IoError(*role),
+                    children: io_error_alternative_children(position, io_errors),
+                });
+            }
+        }
+        SynthesizedAggregateNode::Scalar { .. }
+        | SynthesizedAggregateNode::SiteOperand(_)
+        | SynthesizedAggregateNode::Absent => {}
     }
 }
 
@@ -3315,19 +3393,23 @@ fn occurrence_subtree_contains(
 }
 
 
-/// The possible referent owners of one tree node, or `None` when the node's
-/// owners are a property of the emission site rather than of the tree.
+/// The possible referent owners of one tree node, at one exact effect seat.
 ///
 /// ⚠ Exactness matters here independently of the verdict. These sets are the
 /// record's stated evidence, and a set that is merely *sufficient* to reach the
 /// right lane is still a false statement about what the child can be.
 ///
-/// ⛔ `None` propagates upward and is never widened to a conservative set. A
-/// parent one of whose children is site-dependent has no derivable meet, so it
-/// gets no record and refuses at its allocation. Substituting "assume it can
-/// escape" would pick a lane from evidence nobody derived, and the owner sets
-/// on the record would then describe a node the planner never saw.
-fn node_referent_owners(node: SynthesizedAggregateNode) -> Option<Vec<BoundaryReferentOwner>> {
+/// ⛔ **There is no "not derivable" answer.** A node whose child comes from the
+/// emission site is resolved against that site — the operand is a child
+/// occurrence of this very seat, and its lifetime and join representation are
+/// already planned. If that evidence cannot be read, planning FAILS. Returning
+/// an absence here is what previously pruned four real constructors out of `P`,
+/// leaving allocations production emits with no record at all.
+fn node_referent_owners(
+    plan: &StaticTransitionPlan<'_>,
+    seat: StaticOriginId,
+    node: SynthesizedAggregateNode,
+) -> Result<Vec<BoundaryReferentOwner>, CraneliftBackendError> {
     match node {
         // A scalar is NOT `NoReferent` alone. `Int`, `BoundedNat`,
         // `StructuralNat` and `ProcessExitStatus` each have a declared
@@ -3336,9 +3418,9 @@ fn node_referent_owners(node: SynthesizedAggregateNode) -> Option<Vec<BoundaryRe
         // is the same either way -- and why recording `{NoReferent}` was a
         // false statement that happened not to cost anything yet.
         SynthesizedAggregateNode::Scalar { spill: None, .. } => {
-            Some(vec![BoundaryReferentOwner::NoReferent])
+            Ok(vec![BoundaryReferentOwner::NoReferent])
         }
-        SynthesizedAggregateNode::Scalar { spill: Some(_), .. } => Some(vec![
+        SynthesizedAggregateNode::Scalar { spill: Some(_), .. } => Ok(vec![
             BoundaryReferentOwner::NoReferent,
             BoundaryReferentOwner::PersistentStore,
         ]),
@@ -3347,49 +3429,107 @@ fn node_referent_owners(node: SynthesizedAggregateNode) -> Option<Vec<BoundaryRe
         // `NoReferent`, and listing alternatives it cannot take would describe
         // a different node than the one being allocated.
         SynthesizedAggregateNode::Fixed { children, .. } => {
-            Some(vec![fixed_node_selected_owner(children)?])
+            Ok(vec![fixed_node_selected_owner(plan, seat, children)?])
         }
-        // A dynamic constructor is allocated by `emit_carrier_dynamic_
-        // constructor` through the value-shape disposition, which answers
-        // `PersistentGround` for every `DynamicConstructor`. That lane is only
-        // a true statement about this node if no alternative subtree can be
-        // arena-owned, so it is CHECKED rather than assumed: an alternative
-        // that escapes, or one whose owners are site-dependent, makes the whole
-        // set non-derivable and every parent containing it refuses.
+        // ⭐ A dynamic child is the UNION of its alternatives' selected owners.
+        //
+        // ⛔ Not `None`, and not a flat `{PersistentStore}` read off the lane
+        // `emit_carrier_dynamic_constructor` happens to take. The value at this
+        // position is whichever alternative the discriminator selects, so the
+        // parent must survive every one of them: a single invocation-capable
+        // alternative makes the parent invocation-owned. Answering persistent
+        // because the *set* is shaped persistently would allocate the parent
+        // over a child that can be shorter-lived than it.
         SynthesizedAggregateNode::Dynamic(set) => {
-            for alternative in dynamic_alternative_nodes(set) {
-                let owners = node_referent_owners(alternative)?;
-                if owners.contains(&BoundaryReferentOwner::InvocationArena) {
-                    return None;
-                }
+            let mut owners = BTreeSet::new();
+            for alternative in dynamic_alternative_nodes(plan, set) {
+                owners.insert(fixed_node_selected_owner_of(plan, seat, alternative)?);
             }
-            Some(vec![BoundaryReferentOwner::PersistentStore])
+            if owners.is_empty() {
+                return Err(planner_error(
+                    "a dynamic aggregate child has no alternatives, so its owner set is empty \
+                     and would satisfy the escape test vacuously",
+                ));
+            }
+            Ok(owners.into_iter().collect())
         }
-        SynthesizedAggregateNode::SiteDependent => None,
+        // The seat's own operand. Its evidence is the child occurrence's
+        // lifetime narrowed by its join representation -- the same two
+        // authorities a source aggregate's children are read through, applied
+        // to the exact operand this node names.
+        SynthesizedAggregateNode::SiteOperand(index) => {
+            site_operand_referent_owners(plan, seat, index)
+        }
+        // ⛔ Never a child. `Absent` marks a host-result arm that builds no
+        // aggregate; reaching it as a child means the tree claims an allocation
+        // has a child at a position where nothing is built.
+        SynthesizedAggregateNode::Absent => Err(planner_error(
+            "a synthesized aggregate child is marked absent, so the tree describes an \
+             allocation whose operand is not built",
+        )),
     }
 }
 
-/// The alternative nodes of a dynamic set, as owner derivation must see them.
+/// The possible owners of the operand one [`SynthesizedAggregateNode::SiteOperand`]
+/// names, read from the seat's own child occurrence.
 ///
-/// The `IOError` set's alternatives are minted at plan time and are nullary
-/// except for one `Int` payload, so they are stated here as that shape rather
-/// than enumerated — enumerating them would need the process symbol inventory,
-/// which this derivation does not have and does not need.
-fn dynamic_alternative_nodes(set: SynthesizedDynamicSet) -> Vec<SynthesizedAggregateNode> {
-    /// The widest `IOError` alternative: nullary but for one `Int` payload on
-    /// the last one. Deriving owners over this shape covers every alternative,
-    /// because a nullary one has strictly fewer children.
-    const IO_ERROR_PAYLOAD: &[SynthesizedAggregateNode] = &[SynthesizedAggregateNode::native_int()];
+/// The index is into the Effect's `args`; its semantic child position is offset
+/// by the capability operand, exactly as `lower_process_host_effect` offsets it
+/// when it lowers the same operand.
+fn site_operand_referent_owners(
+    plan: &StaticTransitionPlan<'_>,
+    seat: StaticOriginId,
+    index: u32,
+) -> Result<Vec<BoundaryReferentOwner>, CraneliftBackendError> {
+    let occurrence = plan
+        .source_occurrences
+        .get(seat.0 as usize)
+        .and_then(|slot| slot.as_ref())
+        .ok_or_else(|| planner_error("synthesized aggregate seat is not an occurrence"))?;
+    let RuntimeExpr::Effect { capability, .. } = occurrence.expr else {
+        return Err(planner_error(
+            "a site-bound synthesized aggregate child names a seat that is not a host effect",
+        ));
+    };
+    let position = usize::from(capability.is_some())
+        .checked_add(index as usize)
+        .ok_or_else(|| planner_capacity_error("site operand position overflows"))?;
+    let authority = occurrence_authority(plan, seat)?;
+    let child = authority.children.get(position).ok_or_else(|| {
+        planner_error(
+            "a site-bound synthesized aggregate child names an operand the seat does not have",
+        )
+    })?;
+    let owners = aggregate_child_referent_owners(plan, child)?;
+    if owners.is_empty() {
+        return Err(planner_error(
+            "a site-bound synthesized aggregate child has no derivable referent owner",
+        ));
+    }
+    Ok(owners)
+}
+
+/// The alternative nodes of a dynamic set, as owner derivation must see them.
+fn dynamic_alternative_nodes(
+    plan: &StaticTransitionPlan<'_>,
+    set: SynthesizedDynamicSet,
+) -> Vec<SynthesizedAggregateNode> {
     match set {
         SynthesizedDynamicSet::Alternatives(alternatives) => alternatives.to_vec(),
-        SynthesizedDynamicSet::IoErrors => vec![SynthesizedAggregateNode::Fixed {
-            // ⚠ The role names the alternative SET's widest member for owner
-            // derivation only. `IOError` alternatives are minted per process
-            // symbol and this derivation never keys on the role -- only on the
-            // child shape, which is the same for all of them.
-            role: SynthesizedFixedConstructorRole::ResourceHostIo,
-            children: IO_ERROR_PAYLOAD,
-        }],
+        // Every `IOError` alternative is nullary but the last, which carries an
+        // `Int`. Both shapes are enumerated rather than collapsed to the widest,
+        // so the union is over the alternatives that actually exist.
+        SynthesizedDynamicSet::IoErrors => {
+            let count = plan.semantic.synthesized_io_error_roles().len();
+            (0..count)
+                .map(|index| SynthesizedAggregateNode::Fixed {
+                    // The role names an alternative for shape purposes only;
+                    // owner derivation never keys on it, only on the children.
+                    role: SynthesizedFixedConstructorRole::ResourceHostIo,
+                    children: io_error_alternative_children(index, count),
+                })
+                .collect()
+        }
     }
 }
 
@@ -3400,22 +3540,46 @@ fn dynamic_alternative_nodes(set: SynthesizedDynamicSet) -> Vec<SynthesizedAggre
 /// chain is computed rather than asserted per role, so a verdict cannot
 /// disagree with the tree it is supposed to follow.
 fn fixed_node_selected_owner(
+    plan: &StaticTransitionPlan<'_>,
+    seat: StaticOriginId,
     children: &'static [SynthesizedAggregateNode],
-) -> Option<BoundaryReferentOwner> {
+) -> Result<BoundaryReferentOwner, CraneliftBackendError> {
     let mut escapes = false;
     for child in children {
-        if node_referent_owners(*child)?.contains(&BoundaryReferentOwner::InvocationArena) {
+        if node_referent_owners(plan, seat, *child)?
+            .contains(&BoundaryReferentOwner::InvocationArena)
+        {
             escapes = true;
         }
     }
-    Some(if escapes {
+    Ok(if escapes {
         BoundaryReferentOwner::InvocationArena
     } else {
         BoundaryReferentOwner::PersistentStore
     })
 }
 
-
+/// [`fixed_node_selected_owner`] for a node rather than a child list.
+fn fixed_node_selected_owner_of(
+    plan: &StaticTransitionPlan<'_>,
+    seat: StaticOriginId,
+    node: SynthesizedAggregateNode,
+) -> Result<BoundaryReferentOwner, CraneliftBackendError> {
+    match node {
+        SynthesizedAggregateNode::Fixed { children, .. } => {
+            fixed_node_selected_owner(plan, seat, children)
+        }
+        // A dynamic set nested directly inside a dynamic set is not a shape the
+        // measured tree has; it would be an alternative that is itself a
+        // choice, with no constructor to allocate.
+        other => {
+            let _ = other;
+            Err(planner_error(
+                "a dynamic aggregate alternative is not a constructor, so it allocates nothing",
+            ))
+        }
+    }
+}
 
 /// Derive one ownership record for every aggregate producer occurrence.
 ///
@@ -3500,18 +3664,16 @@ fn build_aggregate_ownership_plan(
         };
         let seat = occurrence.static_origin;
         for owner in synthesized_seat_emission_owners(plan, seat)? {
-            for semantic_use in flatten_allocation_reachable_uses(*operation) {
+            for semantic_use in flatten_allocation_reachable_uses(plan, *operation) {
                 let mut children = Vec::with_capacity(semantic_use.children.len());
-                let mut derivable = true;
                 for (position, child) in semantic_use.children.iter().enumerate() {
-                    // A site-dependent child leaves this use unmodellable. It
-                    // gets no record and refuses at its allocation, which is
-                    // the honest answer for a node whose children are a
-                    // property of the emission site.
-                    let Some(owners) = node_referent_owners(*child) else {
-                        derivable = false;
-                        break;
-                    };
+                    // ⛔ No pruning. A child the emission site supplies is
+                    // resolved AGAINST that site; a child that cannot be
+                    // resolved fails planning. Skipping the use here is what
+                    // left four real constructors -- `OptionSome`, `FileError`,
+                    // `PrivateBufferSpan`, `ReadSome` -- allocating with no
+                    // record.
+                    let owners = node_referent_owners(plan, seat, *child)?;
                     children.push(PlannedAggregateChild {
                         position: u32::try_from(position).map_err(|_| {
                             planner_capacity_error(
@@ -3527,9 +3689,6 @@ fn build_aggregate_ownership_plan(
                         },
                         owners,
                     });
-                }
-                if !derivable {
-                    continue;
                 }
                 let escapes = children
                     .iter()
@@ -6855,7 +7014,7 @@ impl<'src> StaticTransitionPlan<'src> {
         owner: ContinuationEmissionOwner,
         seat: StaticOriginId,
         path: &SynthesizedAggregatePath,
-        role: SynthesizedFixedConstructorRole,
+        role: SynthesizedConstructorRole,
     ) -> Result<AggregateOccurrenceId, CraneliftBackendError> {
         self.synthesized_aggregate_record(owner, seat, path, role)
             .map(|record| record.id)
@@ -6872,7 +7031,7 @@ impl<'src> StaticTransitionPlan<'src> {
         owner: ContinuationEmissionOwner,
         seat: StaticOriginId,
         path: &SynthesizedAggregatePath,
-        role: SynthesizedFixedConstructorRole,
+        role: SynthesizedConstructorRole,
     ) -> Result<&PlannedAggregateOwnership, CraneliftBackendError> {
         self.aggregate_ownership
             .iter()
@@ -6924,12 +7083,41 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
         seat: StaticOriginId,
         path: &SynthesizedAggregatePath,
-    ) -> Result<(SynthesizedFixedConstructorRole, &'static [SynthesizedAggregateNode]),
+    ) -> Result<(SynthesizedConstructorRole, &'static [SynthesizedAggregateNode]),
         CraneliftBackendError>
     {
         let operation = self.host_effect_operation(seat)?;
+        let roles = self.semantic.synthesized_io_error_roles();
         let mut node = host_effect_recipe_tree(operation).node(path.root);
-        for step in &path.steps {
+        for (depth, step) in path.steps.iter().enumerate() {
+            // The `IOError` set's alternatives are minted by the planner, so
+            // they are resolved from the inventory rather than from a static
+            // child list. This is a terminal step: an `IOError` alternative is
+            // nullary or carries one scalar, and neither is a node a further
+            // step can enter.
+            if let SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::IoErrors) = node {
+                let SynthesizedAggregateStep::Alternative(position) = step else {
+                    return Err(planner_error(
+                        "synthesized aggregate path takes a field step into the IOError set",
+                    ));
+                };
+                if depth + 1 != path.steps.len() {
+                    return Err(planner_error(
+                        "synthesized aggregate path continues past an IOError alternative, \
+                         which has no constructor-valued child",
+                    ));
+                }
+                let role = roles.get(*position as usize).copied().ok_or_else(|| {
+                    planner_error(
+                        "synthesized aggregate path names an IOError alternative the closed \
+                         inventory does not have",
+                    )
+                })?;
+                return Ok((
+                    SynthesizedConstructorRole::IoError(role),
+                    io_error_alternative_children(*position as usize, roles.len()),
+                ));
+            }
             node = match (node, step) {
                 (
                     SynthesizedAggregateNode::Fixed { children, .. },
@@ -6959,7 +7147,9 @@ impl<'src> StaticTransitionPlan<'src> {
             };
         }
         match node {
-            SynthesizedAggregateNode::Fixed { role, children } => Ok((role, children)),
+            SynthesizedAggregateNode::Fixed { role, children } => {
+                Ok((SynthesizedConstructorRole::Fixed(role), children))
+            }
             _ => Err(planner_error(
                 "synthesized aggregate path does not name a constructor node",
             )),
@@ -6989,7 +7179,7 @@ impl<'src> StaticTransitionPlan<'src> {
         owner: ContinuationEmissionOwner,
         seat: StaticOriginId,
         path: &SynthesizedAggregatePath,
-        role: SynthesizedFixedConstructorRole,
+        role: SynthesizedConstructorRole,
     ) -> Result<&'static [SynthesizedAggregateNode], CraneliftBackendError> {
         self.synthesized_aggregate_record(owner, seat, path, role)?
             .declared_children
@@ -15569,7 +15759,9 @@ mod tests {
                     owner,
                     seat: StaticOriginId(seat),
                     path,
-                    role: SynthesizedFixedConstructorRole::Unit,
+                    role: SynthesizedConstructorRole::Fixed(
+                        SynthesizedFixedConstructorRole::Unit,
+                    ),
                 },
                 owner: None,
                 shape: PlannedAggregateShape::Constructor,
@@ -15637,6 +15829,43 @@ mod tests {
         );
     }
 
+    /// A seat-bearing fixture and its first emission owner.
+    ///
+    /// Every `D7` row below needs a real `Effect` occurrence, because the
+    /// corrected population resolves site-bound children against the seat's own
+    /// operand authority. A hand-built key cannot stand in for that.
+    fn d7_seat_fixture(
+        operation: ken_host::HostOpV1,
+        args: Vec<RuntimeExpr>,
+    ) -> (StaticTransitionPlan<'static>, StaticOriginId, ContinuationEmissionOwner) {
+        let expr = Box::leak(Box::new(RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation,
+            capability: None,
+            args,
+        }));
+        let plan = plan_static_transition_graph(expr, &BTreeMap::new()).expect("plans");
+        let seat = plan
+            .source_occurrences
+            .iter()
+            .flatten()
+            .find(|occurrence| matches!(occurrence.expr, RuntimeExpr::Effect { .. }))
+            .expect("the fixture has an effect seat")
+            .static_origin;
+        let owner = *synthesized_seat_emission_owners(&plan, seat)
+            .expect("the seat has emission owners")
+            .first()
+            .expect("a seat is emitted by at least its own predeclared unit");
+        (plan, seat, owner)
+    }
+
+    /// Three `Int` operands — enough for `FsReadAt`'s buffer at position 2.
+    fn d7_three_operands() -> Vec<RuntimeExpr> {
+        (1..=3)
+            .map(|value| RuntimeExpr::Value(RuntimeValue::Int(value.into())))
+            .collect()
+    }
+
     /// `D7` — a scalar node's owner set is derived from its EXACT disposition.
     ///
     /// MEASURED: a `spill: None` scalar yields exactly `{NoReferent}`; a
@@ -15650,16 +15879,17 @@ mod tests {
     ///
     /// THE GAP: neither set contains `InvocationArena`, so **this distinction
     /// changes no lane verdict today**. It is asserted because the sets are the
-    /// record's stated evidence and a merely-sufficient set is a false one; a
-    /// reader should not mistake this row for lane coverage.
+    /// record's stated evidence and a merely-sufficient set is a false one.
     #[test]
     fn a_scalar_nodes_owner_set_comes_from_its_exact_spill_disposition() {
+        let (plan, seat, _) = d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
+
         let spill_free = SynthesizedAggregateNode::Scalar {
             tag: BoundaryTag::ImmediateBool,
             spill: None,
         };
         assert_eq!(
-            node_referent_owners(spill_free).expect("a spill-free scalar resolves"),
+            node_referent_owners(&plan, seat, spill_free).expect("a spill-free scalar resolves"),
             vec![BoundaryReferentOwner::NoReferent],
             "a `Bool` never becomes a node at any magnitude, so `PersistentStore` \
              is not among its possible owners"
@@ -15670,7 +15900,8 @@ mod tests {
             SynthesizedAggregateNode::bounded_nat(),
         ] {
             assert_eq!(
-                node_referent_owners(spilling).expect("a spill-capable scalar resolves"),
+                node_referent_owners(&plan, seat, spilling)
+                    .expect("a spill-capable scalar resolves"),
                 vec![
                     BoundaryReferentOwner::NoReferent,
                     BoundaryReferentOwner::PersistentStore,
@@ -15683,8 +15914,9 @@ mod tests {
         // The two sets must actually differ, or the row is vacuous and would
         // pass against the single family-wide answer it exists to reject.
         assert_ne!(
-            node_referent_owners(spill_free),
-            node_referent_owners(SynthesizedAggregateNode::native_int()),
+            node_referent_owners(&plan, seat, spill_free).expect("resolves"),
+            node_referent_owners(&plan, seat, SynthesizedAggregateNode::native_int())
+                .expect("resolves"),
             "spill presence must change the recorded owner set, or recording the \
              disposition bought nothing over the broad immediate family"
         );
@@ -15709,117 +15941,254 @@ mod tests {
         }
     }
 
-    /// A site-dependent node is NOT derivable, and the refusal PROPAGATES.
+    /// **A site-bound child is RESOLVED against the seat, never pruned.**
     ///
-    /// MEASURED: `OptionSome`'s owners are `None`; so are `FileError`'s, which
-    /// contains it, and `PrivateBufferSpan`'s, whose first child is the site's
-    /// `ResourceToken`. A dynamic set containing a non-derivable alternative is
-    /// likewise `None`.
+    /// MEASURED: at a real `FsReadFile` seat, `OptionSome` — whose only child
+    /// is the seat's path operand — has a record, and so does `FileError`,
+    /// which contains it. At `FsReadAt`, `PrivateBufferSpan` and `ReadSome`
+    /// have records. The owner set recorded for the site-bound child equals the
+    /// one the seat's own operand occurrence yields.
     ///
-    /// CLAIMED: `None` is never widened to a conservative set on the way up, so
-    /// no record states owners for a node whose owners nobody derived.
+    /// CLAIMED: site-dependence bounds the *role-invariant* meet, not the meet.
+    /// Every one of these is a real allocation production emits, so each gets
+    /// an exact site-bound record.
     ///
-    /// THE GAP: this proves the propagation, not that the *right* nodes are
-    /// site-dependent — that is the tree's own shape, measured separately by
-    /// `the_flattening_reproduces_the_measured_tree`.
+    /// THE GAP — this is the correction's whole subject, so it is worth saying
+    /// plainly what the previous spelling did. It pruned these four
+    /// constructors from `P` on the grounds that no role-invariant answer
+    /// existed. That is not the fail-closed direction: it left four
+    /// allocations that production emits with **no record at all**, which reads
+    /// as "refuses at allocation" and was in fact "allocates with the unproven
+    /// persistent lane, via the value-shape disposition".
     #[test]
-    fn a_site_dependent_node_refuses_and_the_refusal_propagates_upward() {
-        use SynthesizedAggregateNode as N;
+    fn a_site_bound_child_is_resolved_against_the_seat_not_pruned() {
+        use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+        use SynthesizedConstructorRole::Fixed;
         use SynthesizedFixedConstructorRole as R;
 
+        // `OptionSome` and its parent `FileError`, at a file-operation seat.
+        let (plan, seat, owner) = d7_seat_fixture(
+            ken_host::HostOpV1::FsReadFile,
+            vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+        );
+        let err = SynthesizedAggregatePath::root(ERR);
+        for (path, role) in [
+            (err.clone(), R::FileError),
+            (err.field(0), R::FileOperationRead),
+            (err.field(1), R::OptionSome),
+        ] {
+            plan.synthesized_aggregate_occurrence(owner, seat, &path, Fixed(role))
+                .unwrap_or_else(|error| {
+                    panic!("{role:?} at {path:?} must have a record, not be pruned: {error:?}")
+                });
+        }
+
+        // The site-bound child's recorded owners ARE the seat's operand's.
+        let record = plan
+            .synthesized_aggregate_record(owner, seat, &err.field(1), Fixed(R::OptionSome))
+            .expect("`OptionSome` has a record");
+        let authority = occurrence_authority(&plan, seat).expect("the seat has an authority");
+        let operand = authority
+            .children
+            .first()
+            .expect("the seat has its path operand");
         assert_eq!(
-            node_referent_owners(N::SiteDependent),
-            None,
-            "a value the site supplies has no owners this tree can state"
+            record.children[0].owners,
+            aggregate_child_referent_owners(&plan, operand).expect("the operand resolves"),
+            "the site-bound child's evidence must BE the seat operand's, not a \
+             conservative stand-in for it"
         );
 
-        // A parent one level up.
-        const SOME: &[SynthesizedAggregateNode] = &[N::SiteDependent];
-        assert_eq!(
-            node_referent_owners(N::Fixed {
-                role: R::OptionSome,
-                children: SOME,
-            }),
-            None,
-            "`Option::Some(<site path>)` is unmodellable, so it gets no record"
-        );
+        // `PrivateBufferSpan` and `ReadSome`, at a positioned-read seat.
+        let (plan, seat, owner) =
+            d7_seat_fixture(ken_host::HostOpV1::FsReadAt, d7_three_operands());
+        let ok = SynthesizedAggregatePath::root(OK);
+        for (path, role) in [
+            (ok.alternative(1), R::ReadSome),
+            (ok.alternative(1).field(0), R::PrivateBufferSpan),
+            (ok.alternative(1).field(1), R::PrivateTransferCount),
+            (ok.alternative(0), R::ReadEof),
+        ] {
+            plan.synthesized_aggregate_occurrence(owner, seat, &path, Fixed(role))
+                .unwrap_or_else(|error| {
+                    panic!("{role:?} at {path:?} must have a record: {error:?}")
+                });
+        }
+    }
 
-        // And two levels up, through an intervening derivable sibling. This is
-        // the propagation half: a parent with SOME derivable children must
-        // still refuse.
-        const OUTER: &[SynthesizedAggregateNode] = &[
-            N::native_int(),
-            N::Fixed {
-                role: R::OptionSome,
-                children: SOME,
-            },
-        ];
-        assert_eq!(
-            node_referent_owners(N::Fixed {
-                role: R::FileError,
-                children: OUTER,
-            }),
-            None,
-            "one site-dependent descendant is enough; a derivable sibling does \
-             not supply the missing evidence"
+    /// **An `Absent` node is never a child.**
+    ///
+    /// MEASURED: deriving owners for `Absent` in a child position is a planner
+    /// refusal, while the derivable node in the same position resolves.
+    ///
+    /// CLAIMED: `Absent` marks a host-result arm that builds no aggregate, and
+    /// it is a distinct arm from `SiteOperand` precisely so "nothing is built
+    /// here" cannot be read as "a child the site supplies".
+    ///
+    /// THE GAP: this drives the derivation directly; that the production tree
+    /// puts `Absent` only at roots is the tree's own shape.
+    #[test]
+    fn an_absent_node_is_never_a_child() {
+        let (plan, seat, _) = d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
+        assert!(
+            node_referent_owners(&plan, seat, SynthesizedAggregateNode::Absent).is_err(),
+            "an absent child means the tree claims an allocation whose operand \
+             is not built"
         );
-
-        // The control: the same parent with the site-dependent child replaced
-        // by a derivable one DOES resolve, so the row above fails for the
-        // stated reason rather than because parents never resolve.
-        const DERIVABLE: &[SynthesizedAggregateNode] = &[N::native_int(), N::bounded_nat()];
-        assert_eq!(
-            node_referent_owners(N::Fixed {
-                role: R::FileError,
-                children: DERIVABLE,
-            }),
-            Some(vec![BoundaryReferentOwner::PersistentStore]),
-            "a fully derivable parent must resolve, or the refusal above is \
-             not discriminating"
-        );
-
-        // A dynamic set inherits its alternatives' refusal.
-        const ALTS: &[SynthesizedAggregateNode] = &[
-            N::nullary(R::ReadEof),
-            N::Fixed {
-                role: R::ReadSome,
-                children: SOME,
-            },
-        ];
-        assert_eq!(
-            node_referent_owners(N::Dynamic(SynthesizedDynamicSet::Alternatives(ALTS))),
-            None,
-            "a dynamic set is only persistent if EVERY alternative is, so one \
-             unmodellable alternative refuses the whole set"
+        // The positive control: the same position with a real node resolves,
+        // so the refusal above is not "children never resolve".
+        assert!(
+            node_referent_owners(&plan, seat, SynthesizedAggregateNode::native_int()).is_ok(),
+            "a scalar in the same position must resolve, or the refusal is vacuous"
         );
     }
 
-    /// **`D7` — the flattening reproduces the MEASURED tree.**
+    /// **A dynamic child's owners are the UNION of its alternatives'.**
+    ///
+    /// MEASURED: a two-alternative set whose members are both persistent yields
+    /// `{PersistentStore}`. The SAME set with one arena-capable alternative
+    /// yields a set containing `InvocationArena`, and a parent holding it is
+    /// `InvocationAggregate` rather than `PersistentGround`.
+    ///
+    /// CLAIMED: the value at a dynamic position is whichever alternative the
+    /// discriminator selects, so the parent must survive every one of them —
+    /// one invocation-capable alternative makes the parent invocation-owned.
+    ///
+    /// THE GAP: the arena-capable alternative is reached through a seat operand
+    /// that is a closure, because **no alternative in the production tree is
+    /// arena-capable today**. So this proves the UNION rule and the lane it
+    /// selects, not that any production parent takes the invocation lane
+    /// through a dynamic child. Without the escaping half the row would pass
+    /// equally for the flat `{PersistentStore}` answer it replaced, which is
+    /// why both halves are asserted against the same set shape.
+    #[test]
+    fn a_dynamic_childs_owners_are_the_union_of_its_alternatives() {
+        use SynthesizedAggregateNode as N;
+        use SynthesizedFixedConstructorRole as R;
+
+        // Operand 0 is a closure, which `derive_occurrence_lifetime` answers
+        // `ActivationOwned` for -- so `SiteOperand(0)` at this seat is the
+        // arena-capable leaf the production tree does not have.
+        let (plan, seat, _) = d7_seat_fixture(
+            ken_host::HostOpV1::FsWriteAt,
+            vec![
+                RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["x".to_string()],
+                    body: Box::new(unit()),
+                },
+                RuntimeExpr::Value(RuntimeValue::Int(2.into())),
+                RuntimeExpr::Value(RuntimeValue::Int(3.into())),
+            ],
+        );
+        assert!(
+            node_referent_owners(&plan, seat, N::SiteOperand(0))
+                .expect("the closure operand resolves")
+                .contains(&BoundaryReferentOwner::InvocationArena),
+            "the fixture's operand 0 must be arena-capable, or the escaping half              below is not testing anything"
+        );
+
+        // Both alternatives persistent.
+        const PERSISTENT: &[SynthesizedAggregateNode] = &[
+            N::nullary(R::ReadEof),
+            N::Fixed {
+                role: R::PrivateTransferCount,
+                children: &[N::bounded_nat(), N::bounded_nat()],
+            },
+        ];
+        assert_eq!(
+            node_referent_owners(
+                &plan,
+                seat,
+                N::Dynamic(SynthesizedDynamicSet::Alternatives(PERSISTENT))
+            )
+            .expect("an all-persistent set resolves"),
+            vec![BoundaryReferentOwner::PersistentStore],
+            "no alternative can be arena-owned, so the union is persistent"
+        );
+
+        // The SAME shape with one arena-capable alternative.
+        const ESCAPING: &[SynthesizedAggregateNode] = &[
+            N::nullary(R::ReadEof),
+            N::Fixed {
+                role: R::PrivateTransferCount,
+                children: &[N::SiteOperand(0)],
+            },
+        ];
+        let union = node_referent_owners(
+            &plan,
+            seat,
+            N::Dynamic(SynthesizedDynamicSet::Alternatives(ESCAPING)),
+        )
+        .expect("a set with an escaping alternative resolves");
+        assert!(
+            union.contains(&BoundaryReferentOwner::InvocationArena),
+            "one arena-capable alternative must reach the union, got {union:?}"
+        );
+
+        // And it must change the PARENT's lane, not merely its owner set.
+        const PARENT_PERSISTENT: &[SynthesizedAggregateNode] =
+            &[N::Dynamic(SynthesizedDynamicSet::Alternatives(PERSISTENT))];
+        const PARENT_ESCAPING: &[SynthesizedAggregateNode] =
+            &[N::Dynamic(SynthesizedDynamicSet::Alternatives(ESCAPING))];
+        assert_eq!(
+            fixed_node_selected_owner(&plan, seat, PARENT_PERSISTENT)
+                .expect("the persistent parent resolves"),
+            BoundaryReferentOwner::PersistentStore
+        );
+        assert_eq!(
+            fixed_node_selected_owner(&plan, seat, PARENT_ESCAPING)
+                .expect("the escaping parent resolves"),
+            BoundaryReferentOwner::InvocationArena,
+            "a parent whose dynamic child has ONE invocation-capable alternative              must take the invocation lane; answering persistent because the set              is shaped persistently would allocate it over a child that can be              shorter-lived than it"
+        );
+
+        // An empty alternative list is a refusal, not a vacuous persistent
+        // answer -- an empty owner set satisfies the escape test trivially.
+        assert!(
+            node_referent_owners(
+                &plan,
+                seat,
+                N::Dynamic(SynthesizedDynamicSet::Alternatives(&[]))
+            )
+            .is_err(),
+            "an alternative-less dynamic child must refuse rather than resolve              persistent by having nothing to check"
+        );
+    }
+
+    /// **`D7` — the flattening reproduces the MEASURED tree, alternatives
+    /// included.**
     ///
     /// MEASURED: instrumenting every `synthesized_constructor` and
     /// `synthesized_dynamic_alternative` call with the kinds of its own
     /// children, single-threaded, produced the edge set restated below. The
-    /// flattening's allocation-reachable population for each operation is
-    /// exactly the fixed nodes of that edge set that are not themselves dynamic
-    /// alternatives.
+    /// corrected flattening interns every constructor-valued node: fixed nodes,
+    /// every dynamic alternative at its ordered position, and every
+    /// planner-issued `IOError` role.
     ///
     /// CLAIMED: the tree in `host_effect_recipe_tree` is the structure the
-    /// emitter actually builds, and the paths it flattens to are the positions
-    /// those uses actually occupy.
+    /// emitter actually builds, the paths it flattens to are the positions
+    /// those uses occupy, and `P` now covers every allocation.
     ///
-    /// THE GAP: this is a fixed expectation checked against the tree, so it
-    /// pins the tree against **the measurement**, not against the emitter. What
-    /// keeps the emitter honest is the per-construction reconciliation in
-    /// `reconcile_declared_children` and `synthesized_dynamic_alternative`,
-    /// which fail at build time if a path in `core.rs` names a different node.
-    /// Two operations — `FsWriteFile` and `FsChangeMode` — have no fixture, so
-    /// their rows are derived from the emitter's own operation match rather
-    /// than observed, and are marked below.
+    /// THE GAP: this pins the flattening against **the measurement**, not
+    /// against the emitter. What keeps the emitter honest is the
+    /// per-construction reconciliation. `FsWriteFile` and `FsChangeMode` have
+    /// no fixture, so their rows are derived from the emitter's own operation
+    /// match rather than observed, and are marked below.
     #[test]
     fn the_flattening_reproduces_the_measured_tree() {
         use ken_host::HostOpV1 as Op;
         use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+        use SynthesizedConstructorRole::Fixed;
         use SynthesizedFixedConstructorRole as R;
+
+        let (plan, _, _) = d7_seat_fixture(Op::FsWriteAt, d7_three_operands());
+        let io_errors = plan.semantic.synthesized_io_error_roles().len();
+        assert!(
+            io_errors > 1,
+            "the closed IOError inventory must be non-trivial, or the alternative \
+             rows below are vacuous"
+        );
 
         let path = |root, steps: &[SynthesizedAggregateStep]| SynthesizedAggregatePath {
             root,
@@ -15828,103 +16197,193 @@ mod tests {
         let field = SynthesizedAggregateStep::Field;
         let alt = SynthesizedAggregateStep::Alternative;
 
-        // The allocation-reachable population, per operation. Every row is a
-        // (path, role) pair the flattening must produce, and the comparison is
-        // set equality — an extra row fails as loudly as a missing one.
-        let expected: Vec<(Op, Vec<(SynthesizedAggregatePath, R)>)> = vec![
+        // The ten resource-surface alternatives, in the emitter's order.
+        let surface: Vec<(SynthesizedAggregatePath, SynthesizedConstructorRole)> = [
+            R::ResourceHostIo,
+            R::ResourceClosed,
+            R::ResourceMalformed,
+            R::ResourceRightNotHeld,
+            R::ResourceReleaseFailed,
+            R::ResourceKindMismatch,
+            R::ResourceBufferLimit,
+            R::ResourceInvalidOffset,
+            R::ResourceInvalidBounds,
+            R::ResourceNoProgress,
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, role)| (path(ERR, &[alt(index as u32)]), Fixed(role)))
+        .chain(
+            // `ResourceKind` at its THREE distinct parent paths, each with its
+            // own two alternatives. These are the repeated-role sites.
+            [
+                (4_u32, 0_u32),
+                (5, 0),
+                (5, 1),
+            ]
+            .into_iter()
+            .flat_map(|(alternative, position)| {
+                [R::ResourceKindFsHandle, R::ResourceKindBuffer]
+                    .into_iter()
+                    .enumerate()
+                    .map(move |(index, role)| {
+                        (
+                            path(
+                                ERR,
+                                &[alt(alternative), field(position), alt(index as u32)],
+                            ),
+                            Fixed(role),
+                        )
+                    })
+            }),
+        )
+        .chain(std::iter::once((
+            path(ERR, &[alt(4), field(1)]),
+            Fixed(R::ResourceTraceIdentity),
+        )))
+        .collect();
+
+        // The two `IOError` sets the resource surface reaches.
+        let surface_io: Vec<(SynthesizedAggregatePath, SynthesizedConstructorRole)> =
+            [(0_u32, 0_u32), (4, 2)]
+                .into_iter()
+                .flat_map(|(alternative, position)| {
+                    plan.semantic
+                        .synthesized_io_error_roles()
+                        .iter()
+                        .enumerate()
+                        .map(move |(index, role)| {
+                            (
+                                path(
+                                    ERR,
+                                    &[alt(alternative), field(position), alt(index as u32)],
+                                ),
+                                SynthesizedConstructorRole::IoError(*role),
+                            )
+                        })
+                })
+                .collect();
+
+        let file_error = |operation: R| -> Vec<(SynthesizedAggregatePath, SynthesizedConstructorRole)> {
+            let mut rows = vec![
+                (path(ERR, &[]), Fixed(R::FileError)),
+                (path(ERR, &[field(0)]), Fixed(operation)),
+                (path(ERR, &[field(1)]), Fixed(R::OptionSome)),
+            ];
+            rows.extend(
+                plan.semantic
+                    .synthesized_io_error_roles()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, role)| {
+                        (
+                            path(ERR, &[field(2), alt(index as u32)]),
+                            SynthesizedConstructorRole::IoError(*role),
+                        )
+                    }),
+            );
+            rows
+        };
+        let console_error = || -> Vec<(SynthesizedAggregatePath, SynthesizedConstructorRole)> {
+            plan.semantic
+                .synthesized_io_error_roles()
+                .iter()
+                .enumerate()
+                .map(|(index, role)| {
+                    (
+                        path(ERR, &[alt(index as u32)]),
+                        SynthesizedConstructorRole::IoError(*role),
+                    )
+                })
+                .collect()
+        };
+        let unit = || vec![(path(OK, &[]), Fixed(R::Unit))];
+
+        let expected: Vec<(Op, Vec<(SynthesizedAggregatePath, SynthesizedConstructorRole)>)> = vec![
             // Returns a `Bool` above the synthesis entirely.
             (Op::ConsoleIsTerminal, vec![]),
-            (Op::ConsoleWrite, vec![(path(OK, &[]), R::Unit)]),
-            (Op::ConsoleFlush, vec![(path(OK, &[]), R::Unit)]),
-            // `FileError` itself is NOT here: its `Option::Some` child wraps
-            // the site's path operand, so it is unmodellable and refuses at
-            // its own allocation.
             (
-                Op::FsReadFile,
-                vec![(path(ERR, &[field(0)]), R::FileOperationRead)],
+                Op::ConsoleWrite,
+                console_error().into_iter().chain(unit()).collect(),
             ),
             (
-                Op::FsOpen,
-                vec![(path(ERR, &[field(0)]), R::FileOperationRead)],
+                Op::ConsoleFlush,
+                console_error().into_iter().chain(unit()).collect(),
             ),
+            (Op::FsReadFile, file_error(R::FileOperationRead)),
+            (Op::FsOpen, file_error(R::FileOperationRead)),
             // ⚠ DERIVED, not observed — no fixture exercises these two. The
             // `Unit` row is the emitter's `else` branch, which the flat use
             // table this tree replaced had MISSED.
             (
                 Op::FsWriteFile,
-                vec![
-                    (path(ERR, &[field(0)]), R::FileOperationWrite),
-                    (path(OK, &[]), R::Unit),
-                ],
+                file_error(R::FileOperationWrite)
+                    .into_iter()
+                    .chain(unit())
+                    .collect(),
             ),
             (
                 Op::FsChangeMode,
-                vec![
-                    (path(ERR, &[field(0)]), R::FileOperationChangeMode),
-                    (path(OK, &[]), R::Unit),
-                ],
+                file_error(R::FileOperationChangeMode)
+                    .into_iter()
+                    .chain(unit())
+                    .collect(),
             ),
             (
                 Op::BufferAllocate,
-                vec![(
-                    path(ERR, &[alt(4), field(1)]),
-                    R::ResourceTraceIdentity,
-                )],
+                surface.iter().cloned().chain(surface_io.clone()).collect(),
             ),
             (
                 Op::BufferFreeze,
-                vec![(
-                    path(ERR, &[alt(4), field(1)]),
-                    R::ResourceTraceIdentity,
-                )],
+                surface.iter().cloned().chain(surface_io.clone()).collect(),
             ),
             (
                 Op::FsHandleMetadata,
-                vec![(
-                    path(ERR, &[alt(4), field(1)]),
-                    R::ResourceTraceIdentity,
-                )],
+                surface.iter().cloned().chain(surface_io.clone()).collect(),
             ),
             (
                 Op::ResourceRelease,
-                vec![
-                    (path(ERR, &[alt(4), field(1)]), R::ResourceTraceIdentity),
-                    (path(OK, &[]), R::Unit),
-                ],
+                surface
+                    .iter()
+                    .cloned()
+                    .chain(surface_io.clone())
+                    .chain(unit())
+                    .collect(),
             ),
             (
                 Op::FsReadAt,
-                vec![
-                    (path(ERR, &[alt(4), field(1)]), R::ResourceTraceIdentity),
-                    // `PrivateBufferSpan` is absent: its first child is the
-                    // site's `ResourceToken`, a handle rather than a scalar.
-                    (
-                        path(OK, &[alt(1), field(1)]),
-                        R::PrivateTransferCount,
-                    ),
-                ],
+                surface
+                    .iter()
+                    .cloned()
+                    .chain(surface_io.clone())
+                    .chain([
+                        (path(OK, &[alt(0)]), Fixed(R::ReadEof)),
+                        (path(OK, &[alt(1)]), Fixed(R::ReadSome)),
+                        (path(OK, &[alt(1), field(0)]), Fixed(R::PrivateBufferSpan)),
+                        (
+                            path(OK, &[alt(1), field(1)]),
+                            Fixed(R::PrivateTransferCount),
+                        ),
+                    ])
+                    .collect(),
             ),
             (
                 Op::FsWriteAt,
-                vec![
-                    (path(ERR, &[alt(4), field(1)]), R::ResourceTraceIdentity),
-                    (path(OK, &[]), R::Wrote),
-                    (path(OK, &[field(0)]), R::PrivateTransferCount),
-                ],
+                surface
+                    .iter()
+                    .cloned()
+                    .chain(surface_io.clone())
+                    .chain([
+                        (path(OK, &[]), Fixed(R::Wrote)),
+                        (path(OK, &[field(0)]), Fixed(R::PrivateTransferCount)),
+                    ])
+                    .collect(),
             ),
         ];
 
         for (operation, rows) in &expected {
-            let flattened = flatten_allocation_reachable_uses(*operation)
+            let flattened = flatten_allocation_reachable_uses(&plan, *operation)
                 .into_iter()
-                .filter(|semantic_use| {
-                    // The population `P` is the DERIVABLE half; a use with a
-                    // site-dependent child gets no record.
-                    semantic_use
-                        .children
-                        .iter()
-                        .all(|child| node_referent_owners(*child).is_some())
-                })
                 .map(|semantic_use| (semantic_use.path, semantic_use.role))
                 .collect::<BTreeSet<_>>();
             let wanted = rows.iter().cloned().collect::<BTreeSet<_>>();
@@ -15936,80 +16395,93 @@ mod tests {
         }
     }
 
-    /// **A repeated role at ONE seat is separated by its PATH.**
+    /// **A repeated role at ONE seat gets DISTINCT REAL RECORDS.**
     ///
-    /// MEASURED: `ResourceKind` occurs three times in the resource-surface tree
-    /// (`ResourceReleaseFailed` field 0, `ResourceKindMismatch` fields 0 and 1)
-    /// and the `IOError` set three times (`ResourceHostIo` field 0,
-    /// `ResourceReleaseFailed` field 2, `FileError` field 2). Every one of the
-    /// six sits at a distinct path.
+    /// MEASURED: at one `FsWriteAt` seat, `ResourceKindFsHandle` has three
+    /// records — under `ResourceReleaseFailed` field 0 and `ResourceKindMismatch`
+    /// fields 0 and 1 — with three distinct occurrence identities. The `IOError`
+    /// set likewise has two reachable positions on that tree, each with a full
+    /// set of per-role records.
     ///
-    /// CLAIMED: `(owner, seat, path, role)` is injective over the tree where
-    /// `(owner, seat, role)` is not — so no ordinal is needed, and the
-    /// non-aliasing law can hold without one.
+    /// CLAIMED: `(owner, seat, path, role)` is injective where
+    /// `(owner, seat, role)` is not, and the separation now produces **records**
+    /// rather than only distinguishable keys.
     ///
-    /// THE GAP: none of the six is allocation-reachable today (they are dynamic
-    /// sets, which take their lane from the value-shape disposition), so this
-    /// row is about the KEY's separating power, not about six records. It is
-    /// asserted because the key is what a future reachable use would rely on,
-    /// and because the flattening walks through exactly these positions.
+    /// THE GAP: the previous spelling of this row asserted only that the six
+    /// sites had distinct *paths*, and said so — because under the fixed-only
+    /// population none of them had a record. That is exactly what the Architect
+    /// rejected. This row now reads the real population.
     #[test]
-    fn a_repeated_role_at_one_seat_is_separated_by_its_path() {
-        use SynthesizedAggregateNode as N;
+    fn a_repeated_role_at_one_seat_gets_distinct_real_records() {
         use SynthesizedAggregateRoot::HostResultError as ERR;
+        use SynthesizedConstructorRole::Fixed;
+        use SynthesizedFixedConstructorRole as R;
 
-        let tree = host_effect_recipe_tree(ken_host::HostOpV1::FsWriteAt);
-        let mut kind_paths = BTreeSet::new();
-        let mut io_paths = BTreeSet::new();
-        walk_tree_with_paths(
-            tree.node(ERR),
-            &SynthesizedAggregatePath::root(ERR),
-            &mut |node, path| match node {
-                N::Dynamic(SynthesizedDynamicSet::Alternatives(alternatives))
-                    if alternatives.len() == 2 =>
-                {
-                    kind_paths.insert(path.clone());
-                }
-                N::Dynamic(SynthesizedDynamicSet::IoErrors) => {
-                    io_paths.insert(path.clone());
-                }
-                _ => {}
-            },
+        let (plan, seat, owner) =
+            d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
+        let err = SynthesizedAggregatePath::root(ERR);
+
+        // The three `ResourceKind` parent paths, each interning its own two
+        // alternatives.
+        let kind_parents = [
+            err.alternative(4).field(0),
+            err.alternative(5).field(0),
+            err.alternative(5).field(1),
+        ];
+        let mut identities = BTreeSet::new();
+        for parent in &kind_parents {
+            for (position, role) in
+                [R::ResourceKindFsHandle, R::ResourceKindBuffer].iter().enumerate()
+            {
+                let occurrence = plan
+                    .synthesized_aggregate_occurrence(
+                        owner,
+                        seat,
+                        &parent.alternative(position as u32),
+                        Fixed(*role),
+                    )
+                    .unwrap_or_else(|error| {
+                        panic!("{role:?} under {parent:?} must have a REAL record: {error:?}")
+                    });
+                assert!(
+                    identities.insert(occurrence),
+                    "{role:?} under {parent:?} reused an identity, so one record \
+                     is authorizing two allocations"
+                );
+            }
+        }
+        assert_eq!(
+            identities.len(),
+            6,
+            "three parent paths x two alternatives is six non-aliasing records"
         );
 
+        // Each reachable `IOError` set produces path-keyed `IoError(role)`
+        // records, and the two sets do not share one.
+        let roles = plan.semantic.synthesized_io_error_roles().to_vec();
+        let mut io_identities = BTreeSet::new();
+        for parent in [err.alternative(0).field(0), err.alternative(4).field(2)] {
+            for (position, role) in roles.iter().enumerate() {
+                let occurrence = plan
+                    .synthesized_aggregate_occurrence(
+                        owner,
+                        seat,
+                        &parent.alternative(position as u32),
+                        SynthesizedConstructorRole::IoError(*role),
+                    )
+                    .unwrap_or_else(|error| {
+                        panic!("IOError {position} under {parent:?} must have a record: {error:?}")
+                    });
+                assert!(
+                    io_identities.insert(occurrence),
+                    "IOError {position} under {parent:?} reused an identity"
+                );
+            }
+        }
         assert_eq!(
-            kind_paths.len(),
-            3,
-            "the three `ResourceKind` uses must be three DISTINCT paths, or one \
-             record would have to serve three allocations: {kind_paths:?}"
-        );
-        assert_eq!(
-            io_paths.len(),
-            2,
-            "the resource surface uses the `IOError` set twice — under \
-             `ResourceHostIo` and `ResourceReleaseFailed`; the third measured \
-             use is `FileError` field 2, on the file operations' tree: \
-             {io_paths:?}"
-        );
-
-        // The third `IOError` position, on the other tree. Counted separately
-        // because it belongs to a different operation, which is itself the
-        // point: paths are per-operation.
-        let file_tree = host_effect_recipe_tree(ken_host::HostOpV1::FsReadFile);
-        let mut file_io = BTreeSet::new();
-        walk_tree_with_paths(
-            file_tree.node(ERR),
-            &SynthesizedAggregatePath::root(ERR),
-            &mut |node, path| {
-                if matches!(node, N::Dynamic(SynthesizedDynamicSet::IoErrors)) {
-                    file_io.insert(path.clone());
-                }
-            },
-        );
-        assert_eq!(
-            file_io,
-            BTreeSet::from([SynthesizedAggregatePath::root(ERR).field(2)]),
-            "`FileError` field 2 is the third measured `IOError` position"
+            io_identities.len(),
+            roles.len() * 2,
+            "two reachable IOError sets x the closed inventory is that many records"
         );
     }
 
@@ -16018,7 +16490,8 @@ mod tests {
     /// MEASURED: taking a `Field` step where the tree has a dynamic set, or an
     /// `Alternative` step where it has a fixed constructor, is refused — even
     /// when the position is in range. Collapsing, dropping or swapping a step
-    /// likewise resolves to a different node or to nothing.
+    /// resolves to a different node or to nothing. A path continuing past an
+    /// `IOError` alternative is refused.
     ///
     /// CLAIMED: `SynthesizedAggregatePath` names at most one node, and the
     /// mutations a hand-written path in `core.rs` could plausibly contain are
@@ -16030,23 +16503,10 @@ mod tests {
     #[test]
     fn a_path_step_kind_is_load_bearing_not_an_index() {
         use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+        use SynthesizedConstructorRole::Fixed;
         use SynthesizedFixedConstructorRole as R;
 
-        let expr = RuntimeExpr::Effect {
-            family: "FS".to_string(),
-            operation: ken_host::HostOpV1::FsWriteAt,
-            capability: None,
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
-        };
-        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).expect("plans");
-        let seat = plan
-            .source_occurrences
-            .iter()
-            .flatten()
-            .find(|occurrence| matches!(occurrence.expr, RuntimeExpr::Effect { .. }))
-            .expect("the fixture has an effect seat")
-            .static_origin;
-
+        let (plan, seat, _) = d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
         let err = SynthesizedAggregatePath::root(ERR);
         let ok = SynthesizedAggregatePath::root(OK);
 
@@ -16055,7 +16515,7 @@ mod tests {
             plan.synthesized_tree_node(seat, &err.alternative(4).field(1))
                 .expect("the measured path resolves")
                 .0,
-            R::ResourceTraceIdentity
+            Fixed(R::ResourceTraceIdentity)
         );
 
         // COLLAPSE — the same two positions with the alternative step dropped.
@@ -16064,23 +16524,22 @@ mod tests {
             .expect_err("a field step into a dynamic set must refuse");
 
         // REMOVE — one step short lands on the alternative itself, which is a
-        // constructor, so this one resolves to a DIFFERENT role rather than
+        // constructor, so this resolves to a DIFFERENT role rather than
         // failing. That is exactly why the role is compared too.
         assert_eq!(
             plan.synthesized_tree_node(seat, &err.alternative(4))
                 .expect("the alternative itself is a node")
                 .0,
-            R::ResourceReleaseFailed,
+            Fixed(R::ResourceReleaseFailed),
             "a dropped step must not silently keep the same role"
         );
 
-        // SWAP — the two step kinds exchanged. An alternative step into a fixed
-        // constructor is not a step it can take.
+        // SWAP — the two step kinds exchanged.
         plan.synthesized_tree_node(seat, &err.field(4).alternative(1))
             .expect_err("an alternative step into a constructor must refuse");
 
         // A sibling FIELD is a different node: field 0 of that alternative is
-        // the `ResourceKind` dynamic set, which is not a constructor at all.
+        // the `ResourceKind` dynamic set, which is not a constructor itself.
         plan.synthesized_tree_node(seat, &err.alternative(4).field(0))
             .expect_err("a dynamic set is not a constructor node");
 
@@ -16088,44 +16547,58 @@ mod tests {
         plan.synthesized_tree_node(seat, &err.alternative(10))
             .expect_err("the resource surface has ten alternatives, 0 through 9");
 
-        // The two ROOTS are not interchangeable: the same steps on the other
-        // arm name a different tree entirely.
+        // An `IOError` alternative is terminal: nothing below it is a
+        // constructor, so a path continuing past one names no node.
+        let io = err.alternative(0).field(0);
+        plan.synthesized_tree_node(seat, &io.alternative(0))
+            .expect("an IOError alternative is a node");
+        plan.synthesized_tree_node(seat, &io.alternative(0).field(0))
+            .expect_err("a path may not continue past an IOError alternative");
+        plan.synthesized_tree_node(
+            seat,
+            &io.alternative(u32::try_from(plan.semantic.synthesized_io_error_roles().len())
+                .expect("the inventory fits")),
+        )
+        .expect_err("a position past the closed IOError inventory must refuse");
+
+        // The two ROOTS are not interchangeable.
         assert_eq!(
             plan.synthesized_tree_node(seat, &ok)
                 .expect("the ok root of `FsWriteAt` is `Wrote`")
                 .0,
-            R::Wrote
+            Fixed(R::Wrote)
         );
         assert_ne!(
             plan.synthesized_tree_node(seat, &ok).map(|node| node.0).ok(),
             plan.synthesized_tree_node(seat, &err).map(|node| node.0).ok(),
-            "the two arms must not resolve to the same node, or the root is \
-             not carrying its weight"
+            "the two arms must not resolve to the same node"
         );
     }
 
-    /// **The ABANDONED eager `IOError` template gets no record.**
+    /// **The ABANDONED eager `IOError` template contributes neither `P` nor an
+    /// allocation — because it is no longer built.**
     ///
-    /// MEASURED: `lower_process_host_effect` builds one `IOError` dynamic
-    /// constructor before it knows which branch it is in. For the six
-    /// resource-surface operations that template is never referenced — they
-    /// build their own `surface_io_error` — and no path in those operations'
-    /// trees names an `IOError` set at the error root.
+    /// MEASURED: no operation's tree names an `IOError` set at the bare error
+    /// root except the console operations, whose whole error value IS that set.
+    /// For the six resource-surface operations, `P` contains no record at the
+    /// error root, and `lower_process_host_effect` constructs the generic
+    /// template only inside the two branches that use it.
     ///
-    /// CLAIMED: `P` contains no record for an abandoned template, so nothing
-    /// plans a lane for an allocation that never happens.
+    /// CLAIMED: the template contributes no record and no event, and does so by
+    /// **not existing** rather than by being planned and proven unreachable.
     ///
-    /// THE GAP: this is a statement about the TREE, which is what `P` is
-    /// derived from. It does not prove the emitter abandons the template — that
-    /// is the measured fact the tree encodes, and the reconciliation is what
-    /// would catch the emitter using it after all, because the use would have
-    /// no planned node at the root.
+    /// THE GAP: this is a statement about the tree and about `P`. That the
+    /// emitter no longer builds it eagerly is a source fact the reconciliation
+    /// enforces indirectly — an eagerly-built template would have to be given
+    /// some path, and the resource operations' trees have no `IOError` node at
+    /// the root to give it.
     #[test]
-    fn an_abandoned_eager_template_gets_no_record_and_no_path() {
+    fn an_abandoned_eager_template_contributes_neither_records_nor_allocation() {
         use ken_host::HostOpV1 as Op;
         use SynthesizedAggregateNode as N;
         use SynthesizedAggregateRoot::HostResultError as ERR;
 
+        let (plan, _, _) = d7_seat_fixture(Op::FsWriteAt, d7_three_operands());
         for operation in [
             Op::FsHandleMetadata,
             Op::ResourceRelease,
@@ -16140,11 +16613,8 @@ mod tests {
                 "{operation:?} builds its own surface error, so the eager \
                  template is abandoned and must not be at its error root"
             );
-            // And no record anywhere in that operation's population sits at
-            // the bare error root, which is where the abandoned template would
-            // have to be.
             assert!(
-                flatten_allocation_reachable_uses(operation)
+                flatten_allocation_reachable_uses(&plan, operation)
                     .iter()
                     .all(|semantic_use| {
                         semantic_use.path != SynthesizedAggregatePath::root(ERR)
@@ -16154,17 +16624,16 @@ mod tests {
             );
         }
 
-        // The positive control: the operations that DO use the eager template
-        // have it exactly where the measurement put it — the whole error value
-        // for the console operations, and `FileError` field 2 for the file
-        // operations. Without this, the rows above would pass for an
-        // implementation that simply never emits an `IOError` set.
+        // The positive control: the operations that DO use the generic template
+        // have it exactly where the measurement put it. Without this, the rows
+        // above would pass for an implementation that never emits an `IOError`
+        // set at all.
         assert!(
             matches!(
                 host_effect_recipe_tree(Op::ConsoleWrite).node(ERR),
                 N::Dynamic(SynthesizedDynamicSet::IoErrors)
             ),
-            "`ConsoleWrite`'s whole error value IS the eager template"
+            "`ConsoleWrite`'s whole error value IS the generic template"
         );
         let file_children = match host_effect_recipe_tree(Op::FsReadFile).node(ERR) {
             N::Fixed { children, .. } => children,
@@ -16175,67 +16644,65 @@ mod tests {
                 file_children[2],
                 N::Dynamic(SynthesizedDynamicSet::IoErrors)
             ),
-            "`FileError` field 2 IS the eager template"
+            "`FileError` field 2 IS the generic template"
         );
     }
 
     /// **A record's lookup key includes its PATH, not only its role.**
     ///
-    /// MEASURED: at a real `FsWriteAt` seat, `ResourceTraceIdentity` resolves
-    /// at `error.alternative(4).field(1)` and refuses at every other path,
-    /// including the sibling alternative and the other root — with the owner,
-    /// seat and role held identical across all three.
+    /// MEASURED: at a real `FsWriteAt` seat, `ResourceKindFsHandle` resolves at
+    /// `error.alternative(4).field(0).alternative(0)` and refuses at every
+    /// other path — with the owner, seat and role held identical. The
+    /// population now genuinely COLLIDES on `(owner, seat, role)`: that role
+    /// has three records at one seat.
     ///
     /// CLAIMED: `synthesized_aggregate_record` matches on all four key parts,
     /// so a path-keyed population cannot silently degrade to a role-keyed one.
     ///
-    /// THE GAP — and it is the reason this row exists at all. **On today's
-    /// population the path is not NEEDED to disambiguate two records**: no two
-    /// allocation-reachable records share `(owner, seat, role)`, because the
-    /// six measured repeated-role sites are all dynamic sets and take no
-    /// record. Measured directly: dropping `record_path == path` from the
-    /// lookup left the whole suite green, and left an emitter path swap that
-    /// otherwise reddens seventeen tests **completely undetected**. So the
-    /// path's discriminating power over records is carried by *this* assertion
-    /// and by the emitter's own occurrence comparison, not by any collision in
-    /// the current tree. A reader should not take the seventeen reds as
-    /// evidence that the population needs the path today; they are evidence
-    /// that the emitter's path is checked against the planner's.
+    /// THE GAP — worth recording because it changed under the correction. Under
+    /// the earlier fixed-only population this row had to be driven by a
+    /// hand-built key, because no two records shared `(owner, seat, role)` and
+    /// dropping the path from the lookup left the suite green. With every
+    /// alternative interned, the collision is real and the production
+    /// population itself discriminates.
     #[test]
     fn a_records_lookup_key_includes_its_path_not_only_its_role() {
         use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+        use SynthesizedConstructorRole::Fixed;
         use SynthesizedFixedConstructorRole as R;
 
-        let expr = RuntimeExpr::Effect {
-            family: "FS".to_string(),
-            operation: ken_host::HostOpV1::FsWriteAt,
-            capability: None,
-            args: vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
-        };
-        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).expect("plans");
-        let seat = plan
-            .source_occurrences
-            .iter()
-            .flatten()
-            .find(|occurrence| matches!(occurrence.expr, RuntimeExpr::Effect { .. }))
-            .expect("the fixture has an effect seat")
-            .static_origin;
-        let owner = *synthesized_seat_emission_owners(&plan, seat)
-            .expect("the seat has emission owners")
-            .first()
-            .expect("a seat is emitted by at least its own predeclared unit");
-
+        let (plan, seat, owner) =
+            d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
         let err = SynthesizedAggregatePath::root(ERR);
-        let truth = err.alternative(4).field(1);
-        plan.synthesized_aggregate_occurrence(owner, seat, &truth, R::ResourceTraceIdentity)
-            .expect("the measured path resolves to its own record");
 
-        // Same owner, same seat, same ROLE — only the path differs. Each of
-        // these must refuse, or the key has degraded to `(owner, seat, role)`.
+        // The real collision: one role, one seat, three records.
+        let colliding = [
+            err.alternative(4).field(0).alternative(0),
+            err.alternative(5).field(0).alternative(0),
+            err.alternative(5).field(1).alternative(0),
+        ];
+        let resolved = colliding
+            .iter()
+            .map(|path| {
+                plan.synthesized_aggregate_occurrence(
+                    owner,
+                    seat,
+                    path,
+                    Fixed(R::ResourceKindFsHandle),
+                )
+                .expect("each of the three uses has its own record")
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            resolved.len(),
+            3,
+            "one role at one seat resolves to three DIFFERENT occurrences, which \
+             is only possible if the path is in the key"
+        );
+
+        // And paths that name no node refuse rather than falling back.
         for wrong in [
-            err.alternative(5).field(1),
-            err.alternative(4).field(0),
-            err.alternative(4),
+            err.alternative(4).field(0).alternative(7),
             err.clone(),
             SynthesizedAggregatePath::root(OK),
         ] {
@@ -16244,11 +16711,11 @@ mod tests {
                     owner,
                     seat,
                     &wrong,
-                    R::ResourceTraceIdentity
+                    Fixed(R::ResourceKindFsHandle)
                 )
                 .is_err(),
-                "{wrong:?} must not resolve to the record planned at {truth:?}; \
-                 owner, seat and role are identical, so only the path can refuse it"
+                "{wrong:?} must not resolve; owner, seat and role are identical, \
+                 so only the path can refuse it"
             );
         }
 
@@ -16256,7 +16723,7 @@ mod tests {
         // role refuses. Without this, the rows above would pass for a lookup
         // that matched on the path alone.
         assert!(
-            plan.synthesized_aggregate_occurrence(owner, seat, &truth, R::Wrote)
+            plan.synthesized_aggregate_occurrence(owner, seat, &colliding[0], Fixed(R::Wrote))
                 .is_err(),
             "the right path with the wrong role must refuse"
         );
@@ -16325,7 +16792,8 @@ mod tests {
             }
             SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::IoErrors)
             | SynthesizedAggregateNode::Scalar { .. }
-            | SynthesizedAggregateNode::SiteDependent => {}
+            | SynthesizedAggregateNode::SiteOperand(_)
+            | SynthesizedAggregateNode::Absent => {}
         }
     }
 
