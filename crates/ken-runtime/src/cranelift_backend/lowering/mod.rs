@@ -632,6 +632,32 @@ impl OwnedSourceOccurrence {
     }
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D7` — one evaluated source-call argument, with the
+/// caller-side occurrence it was evaluated FROM.**
+///
+/// ⭐ **One value, not two vectors.** The source machine evaluates a call's
+/// arguments one at a time and pushes each result onto a list; the occurrence
+/// it came from was known at push time and was thrown away. An aggregate
+/// argument then reached the callee frame still specialized, and
+/// `call_declared_unit_target` resolved its planned ownership record at
+/// `target.origin` — the callee's scheduling entry — rather than at the
+/// occurrence that produced it.
+///
+/// ⛔ A parallel `Vec<StaticOriginId>` beside the operands is the obvious
+/// alternative and is worse for the reason `MatchScrutinee` already records:
+/// two vectors can desync, and a desync here is undetectable — the wrong
+/// origin still resolves a real record and still allocates. Pairing them makes
+/// the desync unspellable.
+///
+/// ⛔ And not `Option<StaticOriginId>`. A nullable origin would need a fallback
+/// at every use, and the only fallback available is the callee's — which is the
+/// defect. There is no argument without an occurrence, so the type says so.
+#[derive(Clone)]
+struct SourceCallInput {
+    occurrence: OwnedSourceOccurrence,
+    value: LoweringOperand,
+}
+
 /// **Everything that is resolved into ONE generated `Function` and is
 /// meaningless in any other.**
 ///
@@ -3211,6 +3237,71 @@ impl<'a> Lowering<'a> {
                 self.transfer_into_carrier(builder, origin, &value)?,
             )),
         }
+    }
+
+    /// Unwrap source-call inputs for **continued source evaluation**.
+    ///
+    /// ⛔ No carrier crossing happens here and none may: the values stay exactly
+    /// as they were lowered, and the occurrences are simply no longer needed
+    /// because no planned record is about to be resolved. Carrying them would
+    /// be a behaviour change dressed as a repair.
+    fn source_call_operands(inputs: Vec<SourceCallInput>) -> Vec<LoweringOperand> {
+        inputs.into_iter().map(|input| input.value).collect()
+    }
+
+    /// Carry source-call inputs across a **declared generated unit** boundary,
+    /// each at its OWN paired caller-side occurrence.
+    ///
+    /// ⭐ A `Carried` input is already across and is returned untouched. A
+    /// `Specialized` one crosses here, at the occurrence it was evaluated from
+    /// — which is the whole point: if it crosses later inside
+    /// `call_declared_unit_target` instead, the only origin in scope there is
+    /// the callee's.
+    fn carry_source_call_inputs(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        inputs: Vec<SourceCallInput>,
+    ) -> Result<Vec<LoweringOperand>, CraneliftBackendError> {
+        // ⭐ **`D7` — the A/B call-input authority discriminator's ONLY
+        // seam.** Under the mutation one argument keeps its value, its callee,
+        // its parameter slot, its shape and its lane, and takes a SIBLING
+        // argument's retained occurrence. Everything else about the call is
+        // unchanged, so a refusal is attributable to the coordinate alone.
+        #[cfg(test)]
+        let inputs = Self::substitute_sibling_call_input_origin(inputs);
+        let mut carried = Vec::with_capacity(inputs.len());
+        for input in inputs {
+            let origin = input.occurrence.static_origin;
+            carried.push(self.carry_call_input(builder, origin, input.value)?);
+        }
+        Ok(carried)
+    }
+
+    /// Replace the FIRST input's retained occurrence with the second's, under
+    /// the A/B mutation only.
+    ///
+    /// ⚠ Returns the list unchanged when there are fewer than two inputs, so a
+    /// control must assert the HIT COUNT: without it, "this call had one
+    /// argument so nothing was substituted" and "the substitution happened and
+    /// was caught" are the same green.
+    ///
+    /// ⛔ Only the OCCURRENCE moves. The value stays, so the emitter builds
+    /// exactly what it built before and only the coordinate its planned record
+    /// is resolved at differs.
+    #[cfg(test)]
+    fn substitute_sibling_call_input_origin(
+        mut inputs: Vec<SourceCallInput>,
+    ) -> Vec<SourceCallInput> {
+        if GOVERNED_ALLOCATION_MUTATION.with(std::cell::Cell::get)
+            != GovernedAllocationMutation::SiblingCallInputOrigin
+        {
+            return inputs;
+        }
+        if inputs.len() >= 2 {
+            governed_allocation_hit();
+            inputs[0].occurrence = inputs[1].occurrence.clone();
+        }
+        inputs
     }
 
     pub(super) fn call_declared_unit(
@@ -6675,6 +6766,10 @@ pub(crate) enum GovernedAllocationMutation {
     /// running the same host operation, retaining this seat's construction and
     /// operands. The A/B seat discriminator.
     SiblingEffectSeat,
+    /// Give one source-call argument a SIBLING argument's retained caller-side
+    /// occurrence, keeping its own value, callee, parameter slot, shape and
+    /// lane. The A/B call-input authority discriminator.
+    SiblingCallInputOrigin,
 }
 
 #[cfg(test)]
@@ -9351,8 +9446,13 @@ enum SourceContinuation<'a> {
     },
     CallArgument {
         callee: LoweringOperand,
+        /// ⭐ The argument **currently being evaluated**, retained before the
+        /// evaluation rather than recovered after it. The machine returns a
+        /// bare value, so the only moment this occurrence is in hand is the
+        /// moment the frame is pushed.
+        pending: OwnedSourceOccurrence,
         remaining: Vec<OwnedSourceOccurrence>,
-        lowered: Vec<LoweringOperand>,
+        lowered: Vec<SourceCallInput>,
         env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourceContinuation<'a>>,
     },
@@ -9471,8 +9571,14 @@ enum SourcePrefixTemplate {
     },
     CallArgument {
         callee: LoweringOperand,
+        /// Mirrors the continuation frame exactly. ⛔ A template that carried
+        /// the evaluated pairs but dropped the pending occurrence would
+        /// reintroduce the vacancy on every branch fan-out, and only on the
+        /// arms that were materialized from a template — which is the hardest
+        /// possible place to notice it.
+        pending: OwnedSourceOccurrence,
         remaining: Vec<OwnedSourceOccurrence>,
-        lowered: Vec<LoweringOperand>,
+        lowered: Vec<SourceCallInput>,
         env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourcePrefixTemplate>,
     },
@@ -11762,12 +11868,14 @@ impl<'a> Lowering<'a> {
             },
             SourceContinuation::CallArgument {
                 callee,
+                pending,
                 remaining: arguments,
                 lowered,
                 env,
                 next,
             } => SourceContinuation::CallArgument {
                 callee,
+                pending,
                 remaining: arguments,
                 lowered,
                 env,
@@ -12089,6 +12197,7 @@ impl<'a> Lowering<'a> {
             }
             SourceContinuation::CallArgument {
                 callee,
+                pending,
                 remaining,
                 lowered,
                 env,
@@ -12098,6 +12207,7 @@ impl<'a> Lowering<'a> {
                 (
                     SourcePrefixTemplate::CallArgument {
                         callee,
+                        pending,
                         remaining,
                         lowered,
                         env,
@@ -12238,12 +12348,14 @@ impl<'a> Lowering<'a> {
             }
             SourcePrefixTemplate::CallArgument {
                 callee,
+                pending,
                 remaining,
                 lowered,
                 env,
                 next,
             } => SourceContinuation::CallArgument {
                 callee: callee.clone(),
+                pending: pending.clone(),
                 remaining: remaining.clone(),
                 lowered: lowered.clone(),
                 env: env.clone(),

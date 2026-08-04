@@ -4733,6 +4733,11 @@ impl<'a> Lowering<'a> {
                                 let first = args.remove(0);
                                 control.continuation = SourceContinuation::CallArgument {
                                     callee: value,
+                                    // ⭐ Retained BEFORE the evaluation. The
+                                    // machine hands back a bare value, so this
+                                    // is the only moment the occurrence it came
+                                    // from is in hand.
+                                    pending: first.clone(),
                                     remaining: args,
                                     lowered: Vec::new(),
                                     env: env.clone(),
@@ -4747,12 +4752,19 @@ impl<'a> Lowering<'a> {
                         }
                         SourceContinuation::CallArgument {
                             callee,
+                            pending,
                             mut remaining,
                             mut lowered,
                             env,
                             next,
                         } => {
-                            lowered.push(value);
+                            // ⭐ The returned value is paired with the
+                            // occurrence retained when this frame was pushed —
+                            // appended together, never as a second vector.
+                            lowered.push(SourceCallInput {
+                                occurrence: pending,
+                                value,
+                            });
                             control.continuation = *next;
                             if remaining.is_empty() {
                                 match self
@@ -4765,6 +4777,7 @@ impl<'a> Lowering<'a> {
                                 let first = remaining.remove(0);
                                 control.continuation = SourceContinuation::CallArgument {
                                     callee,
+                                    pending: first.clone(),
                                     remaining,
                                     lowered,
                                     env: env.clone(),
@@ -5517,7 +5530,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         callee: LoweringOperand,
-        args: Vec<LoweringOperand>,
+        args: Vec<SourceCallInput>,
         env: Vec<LoweringEnvironmentBinding>,
         control: SourceControl<'b>,
     ) -> Result<SourceCallOutcome<'b>, CraneliftBackendError> {
@@ -5542,7 +5555,8 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
-                let mut call_env = bound_values(args);
+                // Continued source evaluation: unwrap only, no crossing.
+                let mut call_env = bound_values(Self::source_call_operands(args));
                 extend_specialized(&mut call_env, captures);
                 call_env.extend(env);
                 Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
@@ -5563,6 +5577,10 @@ impl<'a> Lowering<'a> {
                 // it hands them to the shared ordering directly; the arity
                 // check lives there for every consumer rather than once here.
                 if self.body_emission_authority == BodyEmissionAuthority::FunctionizedUnits {
+                    // ⭐ Crossing into a declared generated unit: each
+                    // argument crosses at its OWN paired occurrence, here,
+                    // rather than at the callee's origin later.
+                    let args = self.carry_source_call_inputs(builder, args)?;
                     let called = self.call_declaration_closure_unit(
                         builder, reference, &symbol, &params, captures, args,
                     )?;
@@ -5580,7 +5598,13 @@ impl<'a> Lowering<'a> {
                 }
                 let body = self.machine_body_occurrence(body)?;
                 self.lower_source_declaration_call(
-                    builder, symbol, captures, body, args, env, control,
+                    builder,
+                    symbol,
+                    captures,
+                    body,
+                    Self::source_call_operands(args),
+                    env,
+                    control,
                 )
             }
             mut recursor @ Lowered::ComputationalRecursorClosure { .. } => {
@@ -5689,6 +5713,7 @@ impl<'a> Lowering<'a> {
                         )
                     }) {
                         let coordinates = carried_coordinates;
+                        let args = self.carry_source_call_inputs(builder, args)?;
                         let value = self.call_declared_recursive_position_unit(
                             builder,
                             body,
@@ -5754,7 +5779,23 @@ impl<'a> Lowering<'a> {
                     }
                     // Two roles, as elsewhere on this path: ordered unit-call
                     // inputs, or an environment prefix. Only the second binds.
-                    let mut call_inputs = args;
+                    // ⚠ The ARGUMENTS cross at their own occurrences; the
+                    // CAPTURES do not, and that is a stated boundary rather
+                    // than an oversight. A capture arrives inside an
+                    // already-lowered `Lowered::Closure` and carries no
+                    // occurrence of its own, so there is nothing here to pair
+                    // it with — and reusing an argument's authority for it
+                    // would be exactly the substitution this whole subclosure
+                    // exists to prevent. A specialized capture therefore still
+                    // reaches `call_declared_unit_target`'s fallback.
+                    let mut call_inputs = if matches!(
+                        self.body_emission_authority,
+                        BodyEmissionAuthority::FunctionizedUnits
+                    ) {
+                        self.carry_source_call_inputs(builder, args)?
+                    } else {
+                        Self::source_call_operands(args)
+                    };
                     call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
                     let mut suspended = armed.suspended;
                     suspended.continuation = self.install_recursor_invocation(
