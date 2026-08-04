@@ -3193,6 +3193,17 @@ impl SynthesizedHostResultTree {
     }
 }
 
+/// What a path walk arrived at.
+///
+/// The `IOError` alternatives are not nodes in the static tree — they are
+/// minted from the process symbol inventory — so a walk that reaches one
+/// reports its position rather than a node it cannot produce.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SynthesizedTreeResolution {
+    Node(SynthesizedAggregateNode),
+    IoErrorAlternative(u32),
+}
+
 /// One semantic use the flattening found: a node, and where it sits.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct FlattenedSynthesizedUse {
@@ -7088,6 +7099,40 @@ impl<'src> StaticTransitionPlan<'src> {
     {
         let operation = self.host_effect_operation(seat)?;
         let roles = self.semantic.synthesized_io_error_roles();
+        match self.synthesized_tree_walk(operation, path)? {
+            SynthesizedTreeResolution::Node(SynthesizedAggregateNode::Fixed {
+                role,
+                children,
+            }) => Ok((SynthesizedConstructorRole::Fixed(role), children)),
+            SynthesizedTreeResolution::IoErrorAlternative(position) => {
+                let role = roles.get(position as usize).copied().ok_or_else(|| {
+                    planner_error(
+                        "synthesized aggregate path names an IOError alternative the closed \
+                         inventory does not have",
+                    )
+                })?;
+                Ok((
+                    SynthesizedConstructorRole::IoError(role),
+                    io_error_alternative_children(position as usize, roles.len()),
+                ))
+            }
+            SynthesizedTreeResolution::Node(_) => Err(planner_error(
+                "synthesized aggregate path does not name a constructor node",
+            )),
+        }
+    }
+
+    /// Walk one path from an operation's tree root to the node it names.
+    ///
+    /// Split out from [`Self::synthesized_tree_node`] because two callers need
+    /// different things at the end of the same walk: one wants the constructor
+    /// at the path, the other wants the alternative POPULATION at it. Sharing
+    /// the walk is what keeps the step-kind law stated once.
+    fn synthesized_tree_walk(
+        &self,
+        operation: ken_host::HostOpV1,
+        path: &SynthesizedAggregatePath,
+    ) -> Result<SynthesizedTreeResolution, CraneliftBackendError> {
         let mut node = host_effect_recipe_tree(operation).node(path.root);
         for (depth, step) in path.steps.iter().enumerate() {
             // The `IOError` set's alternatives are minted by the planner, so
@@ -7107,16 +7152,7 @@ impl<'src> StaticTransitionPlan<'src> {
                          which has no constructor-valued child",
                     ));
                 }
-                let role = roles.get(*position as usize).copied().ok_or_else(|| {
-                    planner_error(
-                        "synthesized aggregate path names an IOError alternative the closed \
-                         inventory does not have",
-                    )
-                })?;
-                return Ok((
-                    SynthesizedConstructorRole::IoError(role),
-                    io_error_alternative_children(*position as usize, roles.len()),
-                ));
+                return Ok(SynthesizedTreeResolution::IoErrorAlternative(*position));
             }
             node = match (node, step) {
                 (
@@ -7146,12 +7182,59 @@ impl<'src> StaticTransitionPlan<'src> {
                 }
             };
         }
-        match node {
-            SynthesizedAggregateNode::Fixed { role, children } => {
-                Ok((SynthesizedConstructorRole::Fixed(role), children))
-            }
-            _ => Err(planner_error(
-                "synthesized aggregate path does not name a constructor node",
+        Ok(SynthesizedTreeResolution::Node(node))
+    }
+
+    /// **The planner's closed, ordered alternative population at one path.**
+    ///
+    /// ⭐ This exists so the emitter can be checked for **equality** rather than
+    /// for prefix agreement. Iterating the emitter's own alternative vector and
+    /// resolving each position proves only that the alternatives it *did* build
+    /// are the right ones; a vector missing its last alternative — or empty —
+    /// agrees with every prefix of the planned population and passes. A planner
+    /// tree with two `ResourceKind` alternatives then accepts an emitter
+    /// carrying only alternative 0, and the missing allocation is invisible
+    /// until a whole-pass `image(R) = P` closeout that does not exist yet.
+    ///
+    /// ⛔ So the count comes from HERE and never from the emitter.
+    ///
+    /// The path must name a dynamic node; anything else is a shape
+    /// disagreement rather than a population one and is refused as such.
+    pub(in crate::cranelift_backend) fn synthesized_dynamic_alternatives(
+        &self,
+        seat: StaticOriginId,
+        path: &SynthesizedAggregatePath,
+    ) -> Result<Vec<SynthesizedConstructorRole>, CraneliftBackendError> {
+        let operation = self.host_effect_operation(seat)?;
+        match self.synthesized_tree_walk(operation, path)? {
+            SynthesizedTreeResolution::Node(node) => match node {
+            SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::Alternatives(
+                alternatives,
+            )) => alternatives
+                .iter()
+                .map(|alternative| match alternative {
+                    SynthesizedAggregateNode::Fixed { role, .. } => {
+                        Ok(SynthesizedConstructorRole::Fixed(*role))
+                    }
+                    _ => Err(planner_error(
+                        "a dynamic aggregate alternative is not a constructor, so it allocates \
+                         nothing",
+                    )),
+                })
+                .collect(),
+            SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::IoErrors) => Ok(self
+                .semantic
+                .synthesized_io_error_roles()
+                .iter()
+                .map(|role| SynthesizedConstructorRole::IoError(*role))
+                .collect()),
+                _ => Err(planner_error(
+                    "synthesized aggregate path does not name a dynamic alternative set",
+                )),
+            },
+            // An alternative is a member of a set, not a set.
+            SynthesizedTreeResolution::IoErrorAlternative(_) => Err(planner_error(
+                "synthesized aggregate path names an IOError alternative, not a set",
             )),
         }
     }

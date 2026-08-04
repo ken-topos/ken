@@ -10347,6 +10347,11 @@ impl<'a> Lowering<'a> {
             // one of them explicitly; nothing is rebound as the walk descends,
             // so a path in this file names exactly one node in the planner's
             // tree and the two can be compared.
+            // The seat's own lowered operands. A site-bound synthesized child
+            // is PROJECTED from this list rather than handed in, so the emitter
+            // states which operand it means and cannot substitute a look-alike.
+            let seat_operands: &[Lowered] =
+                specialized_lowered.as_deref().unwrap_or(&[]);
             let error_root =
                 SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultError);
             let ok_root = SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk);
@@ -10373,6 +10378,7 @@ impl<'a> Lowering<'a> {
                                 static_origin,
                                 node,
                                 payload,
+                                seat_operands,
                             )?,
                         },
                     ))
@@ -10390,6 +10396,7 @@ impl<'a> Lowering<'a> {
                     .first()
                     .cloned()
                     .expect("validated FS operation has a path");
+                let _ = &path;
                 let (operation_role, operation_symbol) = match operation {
                     ken_host::HostOpV1::FsReadFile | ken_host::HostOpV1::FsOpen => (
                         SynthesizedFixedConstructorRole::FileOperationRead,
@@ -10411,13 +10418,16 @@ impl<'a> Lowering<'a> {
                     operation_role,
                     operation_symbol,
                     Vec::new(),
+                    seat_operands,
                 )?;
                 let path = self.synthesized_constructor(
                     static_origin,
                     &error_root.field(1),
                     SynthesizedFixedConstructorRole::OptionSome,
                     self.process_symbols.option_some.clone(),
-                    vec![path],
+                    // The seat's operand 0 — projected, not passed.
+                    vec![self.site_operand_argument(static_origin, 0, seat_operands)?],
+                    seat_operands,
                 )?;
                 let io_error =
                     generic_io_error(self, builder, payload_int, &error_root.field(2))?;
@@ -10426,7 +10436,12 @@ impl<'a> Lowering<'a> {
                     &error_root,
                     SynthesizedFixedConstructorRole::FileError,
                     self.process_symbols.file_error.clone(),
-                    vec![operation, path, io_error],
+                    vec![
+                        SynthesizedArgument::Nested(operation),
+                        SynthesizedArgument::Nested(path),
+                        SynthesizedArgument::Dynamic(io_error),
+                    ],
+                    seat_operands,
                 )?
             } else if matches!(
                 operation,
@@ -10467,6 +10482,7 @@ impl<'a> Lowering<'a> {
                                 static_origin,
                                 node,
                                 surface_io_payload_int.clone(),
+                                seat_operands,
                             )?,
                         },
                     ))
@@ -10495,6 +10511,7 @@ impl<'a> Lowering<'a> {
                                     SynthesizedFixedConstructorRole::ResourceKindFsHandle,
                                     this.process_symbols.resource_kind_fs_handle.clone(),
                                     Vec::new(),
+                                    seat_operands,
                                 )?,
                                 this.synthesized_dynamic_alternative(
                                     static_origin,
@@ -10504,6 +10521,7 @@ impl<'a> Lowering<'a> {
                                     SynthesizedFixedConstructorRole::ResourceKindBuffer,
                                     this.process_symbols.resource_kind_buffer.clone(),
                                     Vec::new(),
+                                    seat_operands,
                                 )?,
                             ],
                         },
@@ -10516,7 +10534,11 @@ impl<'a> Lowering<'a> {
                     &error_root.alternative(4).field(1),
                     SynthesizedFixedConstructorRole::ResourceTraceIdentity,
                     self.process_symbols.resource_trace_identity.clone(),
-                    vec![identity_low_int, identity_high_int],
+                    vec![
+                        SynthesizedArgument::Scalar(identity_low_int),
+                        SynthesizedArgument::Scalar(identity_high_int),
+                    ],
+                    seat_operands,
                 )?;
                 Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: surface_tag,
@@ -10528,11 +10550,12 @@ impl<'a> Lowering<'a> {
                             0,
                             SynthesizedFixedConstructorRole::ResourceHostIo,
                             self.process_symbols.resource_host_io.clone(),
-                            vec![surface_io_error(
+                            vec![SynthesizedArgument::Dynamic(surface_io_error(
                                 self,
                                 builder,
                                 &error_root.alternative(0).field(0),
-                            )?],
+                            )?)],
+                            seat_operands,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10542,6 +10565,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceClosed,
                             self.process_symbols.resource_closed.clone(),
                             Vec::new(),
+                            seat_operands,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10551,6 +10575,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceMalformed,
                             self.process_symbols.resource_malformed.clone(),
                             Vec::new(),
+                            seat_operands,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10559,7 +10584,11 @@ impl<'a> Lowering<'a> {
                             3,
                             SynthesizedFixedConstructorRole::ResourceRightNotHeld,
                             self.process_symbols.resource_right_not_held.clone(),
-                            vec![resource_required_int, resource_held_int],
+                            vec![
+                                SynthesizedArgument::Scalar(resource_required_int),
+                                SynthesizedArgument::Scalar(resource_held_int),
+                            ],
+                            seat_operands,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10569,18 +10598,19 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceReleaseFailed,
                             self.process_symbols.resource_release_failed.clone(),
                             vec![
-                                resource_kind_value(
+                                SynthesizedArgument::Dynamic(resource_kind_value(
                                     self,
                                     resource_kind,
                                     &error_root.alternative(4).field(0),
-                                )?,
-                                trace_identity,
-                                surface_io_error(
+                                )?),
+                                SynthesizedArgument::Nested(trace_identity),
+                                SynthesizedArgument::Dynamic(surface_io_error(
                                     self,
                                     builder,
                                     &error_root.alternative(4).field(2),
-                                )?,
+                                )?),
                             ],
+                            seat_operands,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10590,17 +10620,18 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceKindMismatch,
                             self.process_symbols.resource_kind_mismatch.clone(),
                             vec![
-                                resource_kind_value(
+                                SynthesizedArgument::Dynamic(resource_kind_value(
                                     self,
                                     resource_expected_kind,
                                     &error_root.alternative(5).field(0),
-                                )?,
-                                resource_kind_value(
+                                )?),
+                                SynthesizedArgument::Dynamic(resource_kind_value(
                                     self,
                                     resource_actual_kind,
                                     &error_root.alternative(5).field(1),
-                                )?,
+                                )?),
                             ],
+                            seat_operands,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10610,6 +10641,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceBufferLimit,
                             self.process_symbols.resource_buffer_limit.clone(),
                             Vec::new(),
+                            seat_operands,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10619,6 +10651,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceInvalidOffset,
                             self.process_symbols.resource_invalid_offset.clone(),
                             Vec::new(),
+                            seat_operands,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10628,6 +10661,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceInvalidBounds,
                             self.process_symbols.resource_invalid_bounds.clone(),
                             Vec::new(),
+                            seat_operands,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10637,6 +10671,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceNoProgress,
                             self.process_symbols.resource_no_progress.clone(),
                             Vec::new(),
+                            seat_operands,
                         )?,
                     ],
                 })
@@ -10757,10 +10792,14 @@ impl<'a> Lowering<'a> {
                     SynthesizedFixedConstructorRole::PrivateBufferSpan,
                     self.process_symbols.private_buffer_span.clone(),
                     vec![
-                        Lowered::ResourceToken { value: span_origin },
-                        reply_start_int,
-                        Lowered::BoundedNat(count),
+                        // The seat's operand 2 — the buffer this span is bound
+                        // to (`PX8-SPAN-PROV`), projected from the operand list
+                        // rather than rebuilt from its destructured payload.
+                        self.site_operand_argument(static_origin, 2, seat_operands)?,
+                        SynthesizedArgument::Scalar(reply_start_int),
+                        SynthesizedArgument::Scalar(Lowered::BoundedNat(count)),
                     ],
+                    seat_operands,
                 )?;
                 let transferred = self.synthesized_constructor(
                     static_origin,
@@ -10768,9 +10807,10 @@ impl<'a> Lowering<'a> {
                     SynthesizedFixedConstructorRole::PrivateTransferCount,
                     self.process_symbols.private_transfer_count.clone(),
                     vec![
-                        Lowered::BoundedNat(predecessor),
-                        Lowered::BoundedNat(remaining),
+                        SynthesizedArgument::Scalar(Lowered::BoundedNat(predecessor)),
+                        SynthesizedArgument::Scalar(Lowered::BoundedNat(remaining)),
                     ],
+                    seat_operands,
                 )?;
                 Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: builder.ins().uextend(types::I64, nonzero),
@@ -10783,6 +10823,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ReadEof,
                             self.process_symbols.read_eof.clone(),
                             Vec::new(),
+                            seat_operands,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10791,7 +10832,11 @@ impl<'a> Lowering<'a> {
                             1,
                             SynthesizedFixedConstructorRole::ReadSome,
                             self.process_symbols.read_some.clone(),
-                            vec![span, transferred],
+                            vec![
+                                SynthesizedArgument::Nested(span),
+                                SynthesizedArgument::Nested(transferred),
+                            ],
+                            seat_operands,
                         )?,
                     ],
                 })
@@ -10819,16 +10864,18 @@ impl<'a> Lowering<'a> {
                     SynthesizedFixedConstructorRole::PrivateTransferCount,
                     self.process_symbols.private_transfer_count.clone(),
                     vec![
-                        Lowered::BoundedNat(predecessor),
-                        Lowered::BoundedNat(remaining),
+                        SynthesizedArgument::Scalar(Lowered::BoundedNat(predecessor)),
+                        SynthesizedArgument::Scalar(Lowered::BoundedNat(remaining)),
                     ],
+                    seat_operands,
                 )?;
                 self.synthesized_constructor(
                     static_origin,
                     &ok_root,
                     SynthesizedFixedConstructorRole::Wrote,
                     self.process_symbols.wrote.clone(),
-                    vec![transferred],
+                    vec![SynthesizedArgument::Nested(transferred)],
+                    seat_operands,
                 )?
             } else if operation == ken_host::HostOpV1::FsHandleMetadata {
                 self.lower_unsigned_u64_int(builder, detail)?
@@ -10839,6 +10886,7 @@ impl<'a> Lowering<'a> {
                     SynthesizedFixedConstructorRole::Unit,
                     self.process_symbols.unit.clone(),
                     Vec::new(),
+                    seat_operands,
                 )?
             };
             Ok(LoweringOperand::Specialized(Lowered::HostResult {

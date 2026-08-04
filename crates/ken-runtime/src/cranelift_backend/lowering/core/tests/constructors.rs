@@ -2643,10 +2643,11 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
                 &SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk),
                 SynthesizedFixedConstructorRole::Wrote,
                 producer_symbols.wrote.clone(),
-                vec![Lowered::Bool {
+                vec![SynthesizedArgument::Scalar(Lowered::Bool {
                     value: false_word,
                     known: Some(false),
-                }],
+                })],
+                &[],
             )?;
             let host_result = Lowered::HostResult {
                 success,

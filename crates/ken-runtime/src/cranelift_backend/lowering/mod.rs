@@ -6343,7 +6343,120 @@ struct DynamicConstructorAlternativeV1 {
     fields: Vec<Lowered>,
 }
 
+/// One argument to a compiler-synthesized constructor, in the FORM the tree
+/// declares it.
+///
+/// ⭐ **The four forms are disjoint and the reconciliation matches on the pair
+/// `(declared node, argument form)`.** A bare `Vec<Lowered>` cannot state which
+/// form an operand is meant to be, so a site-bound child could only be checked
+/// for position — and `SynthesizedAggregateNode::SiteOperand(_) => true` was
+/// exactly that: arity proved the parent field position and nothing proved the
+/// value in it was the operand whose lifetime justified the record. A different
+/// value of the same shape and the same boundary disposition could inherit
+/// operand `i`'s owner proof, which is the authority substitution `D7` exists
+/// to prevent.
+///
+/// ⛔ Private to synthesized construction. Not a `Lowered` variant, not a
+/// runtime tag, and nothing downstream sees it: the provenance is consumed by
+/// the reconciliation and discarded, and the ordinary `Lowered` child is what
+/// reaches the template.
+enum SynthesizedArgument {
+    /// A scalar the emitter materialized, for a `Scalar` node.
+    Scalar(Lowered),
+    /// A nested synthesized constructor, for a `Fixed` node.
+    Nested(Lowered),
+    /// A dynamic constructor, for a `Dynamic` node.
+    Dynamic(Lowered),
+    /// A value **projected from the seat's indexed operand**, for a
+    /// `SiteOperand` node.
+    ///
+    /// All three axes are carried because all three are reconciled: the seat
+    /// must be the one being lowered, the index must be the one the tree
+    /// declares, and the value must still witness as the operand at that index.
+    SiteOperand {
+        seat: StaticOriginId,
+        index: u32,
+        value: Lowered,
+    },
+}
+
+impl SynthesizedArgument {
+    /// The `Lowered` child this argument becomes once its provenance has been
+    /// reconciled and discarded.
+    fn into_lowered(self) -> Lowered {
+        match self {
+            Self::Scalar(value) | Self::Nested(value) | Self::Dynamic(value) => value,
+            Self::SiteOperand { value, .. } => value,
+        }
+    }
+
+    fn lowered(&self) -> &Lowered {
+        match self {
+            Self::Scalar(value) | Self::Nested(value) | Self::Dynamic(value) => value,
+            Self::SiteOperand { value, .. } => value,
+        }
+    }
+}
+
+/// What makes one lowered value distinguishable from another at a site.
+///
+/// ⛔ **`None` is a refusal.** A value this cannot witness is one whose identity
+/// the reconciliation cannot establish, so a site-bound child holding it fails
+/// rather than being accepted on the strength of its shape. The alternative —
+/// a permissive fallback — would reopen the substitution for exactly the
+/// variants nobody thought about.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum SiteOperandWitness {
+    Values(Vec<cranelift_codegen::ir::Value>),
+    Bytes(Vec<u8>),
+}
+
+/// The witness of one lowered value, or `None` if it has none.
+///
+/// The CLIF `Value` numbering is per function, which is precisely what makes it
+/// a discriminator here: two different operands of one seat, in one function
+/// body, hold different values even when their shapes agree.
+fn site_operand_witness(value: &Lowered) -> Option<SiteOperandWitness> {
+    use SiteOperandWitness::{Bytes, Values};
+    match value {
+        Lowered::ResourceToken { value } | Lowered::CapabilityToken { value } => {
+            Some(Values(vec![*value]))
+        }
+        Lowered::BorrowedNativeValue { pointer } => Some(Values(vec![*pointer])),
+        Lowered::ResponseBytes { pointer, len } => Some(Values(vec![*pointer, *len])),
+        Lowered::Int { value, .. } | Lowered::Bool { value, .. } => Some(Values(vec![*value])),
+        // The nat wrappers carry a validated payload rather than a bare CLIF
+        // value; their inner value is what distinguishes two of them.
+        Lowered::BoundedNat(nat) => Some(Values(vec![nat.value])),
+        Lowered::StructuralNat(nat) => Some(Values(vec![nat.value])),
+        Lowered::Bytes(content) => Some(Bytes(content.clone())),
+        Lowered::String(text) => Some(Bytes(text.as_bytes().to_vec())),
+        _ => None,
+    }
+}
+
 impl<'a> Lowering<'a> {
+    /// Project the seat's operand at `index` into a site-bound argument.
+    ///
+    /// ⭐ The only way to build a [`SynthesizedArgument::SiteOperand`] in
+    /// ordinary lowering, and it reads the operand list rather than accepting a
+    /// value — so the emitter states *which operand* it means and cannot hand
+    /// over a substitute by mistake.
+    fn site_operand_argument(
+        &self,
+        seat: StaticOriginId,
+        index: u32,
+        operands: &[Lowered],
+    ) -> Result<SynthesizedArgument, CraneliftBackendError> {
+        let value = operands.get(index as usize).cloned().ok_or_else(|| {
+            unsupported(
+                "Constructor",
+                format!("the effect seat has no operand {index} to bind a site-bound child to"),
+            )
+        })?;
+        Ok(SynthesizedArgument::SiteOperand { seat, index, value })
+    }
+
     fn synthesized_fixed_identity(
         &self,
         role: SynthesizedFixedConstructorRole,
@@ -6365,16 +6478,13 @@ impl<'a> Lowering<'a> {
         path: &SynthesizedAggregatePath,
         role: SynthesizedFixedConstructorRole,
         constructor: RuntimeSymbol,
-        args: Vec<Lowered>,
+        args: Vec<SynthesizedArgument>,
+        operands: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
-        // An unmodelled role carries no occurrence and is NOT refused here.
-        //
-        // The refusal belongs at the seat that needs the answer, not at the one
-        // that builds the template. Most of these roles are consumed as
-        // `DynamicConstructor` alternatives and never ask for an allocation
-        // lane at all; failing at construction would refuse them for a question
-        // they never pose. Carrying `None` leaves the loud failure exactly where
-        // it was — at the allocation, if one is ever reached.
+        // ⚠ Every allocation-reachable role in an operation's tree now has a
+        // record, including the site-bound ones -- `OptionSome`, `FileError`,
+        // `PrivateBufferSpan`, `ReadSome`. So `None` below is NOT the ordinary
+        // case for those; it is reached only when no context is being defined.
         // The exact `D5a` emission owner of the context doing the lowering.
         // Absent means no context is being defined, which is not an emission
         // this population covers -- so no occurrence, and the loud refusal at
@@ -6384,7 +6494,7 @@ impl<'a> Lowering<'a> {
                 constructor,
                 synthesized_identity: Some(self.synthesized_fixed_identity(role)?),
                 occurrence: None,
-                args,
+                args: args.into_iter().map(SynthesizedArgument::into_lowered).collect(),
             });
         };
         let occurrence = self
@@ -6410,7 +6520,7 @@ impl<'a> Lowering<'a> {
                     path,
                     SynthesizedConstructorRole::Fixed(role),
                 )?;
-            self.reconcile_declared_children(owner, seat, path, declared, &args)?;
+            self.reconcile_declared_children(owner, seat, path, declared, &args, operands)?;
         }
         Ok(Lowered::Constructor {
             constructor,
@@ -6418,7 +6528,9 @@ impl<'a> Lowering<'a> {
             // `D7` — the planner's occurrence for this role, resolved here and
             // carried, exactly as a source constructor's is.
             occurrence,
-            args,
+            // The provenance has done its work; what the template holds is the
+            // ordinary child, so nothing downstream sees a second carrier.
+            args: args.into_iter().map(SynthesizedArgument::into_lowered).collect(),
         })
     }
 
@@ -6435,7 +6547,8 @@ impl<'a> Lowering<'a> {
         seat: StaticOriginId,
         path: &SynthesizedAggregatePath,
         declared: &'static [SynthesizedAggregateNode],
-        args: &[Lowered],
+        args: &[SynthesizedArgument],
+        operands: &[Lowered],
     ) -> Result<(), CraneliftBackendError> {
         if declared.len() != args.len() {
             return Err(unsupported(
@@ -6455,7 +6568,7 @@ impl<'a> Lowering<'a> {
                     "synthesized aggregate arity exceeds the path step space",
                 )
             })?;
-            let agrees = match child {
+            let agrees = match (child, argument) {
                 // The EXACT planned disposition, spill class and presence
                 // included -- not the broad `RepresentedImmediate` family.
                 //
@@ -6465,8 +6578,11 @@ impl<'a> Lowering<'a> {
                 // becomes a persistent-store handle at wide ones. Accepting any
                 // immediate here would let a record justified by one of those
                 // govern an operand that is the other.
-                SynthesizedAggregateNode::Scalar { tag, spill } => matches!(
-                    argument.boundary_disposition(),
+                (
+                    SynthesizedAggregateNode::Scalar { tag, spill },
+                    SynthesizedArgument::Scalar(value),
+                ) => matches!(
+                    value.boundary_disposition(),
                     BoundaryDisposition::RepresentedImmediate {
                         tag: emitted_tag,
                         spill: emitted_spill,
@@ -6491,7 +6607,10 @@ impl<'a> Lowering<'a> {
                 // lawful `ReadSome`; treating it as "unchecked" would let the
                 // emitter carry SOME other occurrence into that slot. Comparing
                 // the options does neither.
-                SynthesizedAggregateNode::Fixed { role: inner, .. } => {
+                (
+                    SynthesizedAggregateNode::Fixed { role: inner, .. },
+                    SynthesizedArgument::Nested(value),
+                ) => {
                     let expected = self
                         .static_transition_plan
                         .synthesized_aggregate_occurrence(
@@ -6502,7 +6621,7 @@ impl<'a> Lowering<'a> {
                         )
                         .ok();
                     matches!(
-                        argument,
+                        value,
                         Lowered::Constructor { occurrence, .. } if *occurrence == expected
                     )
                 }
@@ -6521,34 +6640,50 @@ impl<'a> Lowering<'a> {
                 // each sits at `child_path.alternative(index)`. Comparing those
                 // is what makes the parent-to-child path law hold through a
                 // dynamic position as it already does through a fixed one.
-                SynthesizedAggregateNode::Dynamic(_) => match argument {
-                    Lowered::DynamicConstructor(dynamic) => self
-                        .dynamic_child_alternatives_agree(
-                            owner,
-                            seat,
-                            &path.field(position),
-                            dynamic,
-                        )?,
-                    _ => false,
-                },
-                // The seat's own operand. The planner derived this child's
-                // owners from the seat's operand authority, so the record IS
-                // exact -- but what arrives here is whatever the caller wrote,
-                // and no static kind is predictable. The position is checked
-                // (the arity comparison above) and the evidence is the
-                // planner's; there is nothing further to compare.
-                SynthesizedAggregateNode::SiteOperand(_) => true,
-                // ⛔ Unreachable: `Absent` marks a host-result arm that builds
-                // no aggregate, so it is never a child of a planned record.
-                // Spelled rather than swallowed by a `_` so a further node kind
-                // is a compile error here.
-                SynthesizedAggregateNode::Absent => {
+                (
+                    SynthesizedAggregateNode::Dynamic(_),
+                    SynthesizedArgument::Dynamic(Lowered::DynamicConstructor(dynamic)),
+                ) => self.dynamic_child_alternatives_agree(
+                    owner,
+                    seat,
+                    &path.field(position),
+                    dynamic,
+                )?,
+                // ⭐ **All three provenance axes, against the operand list.**
+                //
+                // The planner derived this child's owners from the seat's
+                // operand `index`. So the value here must BE that operand:
+                // the seat must match, the index must be the declared one, and
+                // the value must still witness as `operands[index]`. Arity
+                // alone proves only the parent field position, and a value of
+                // the same shape and the same boundary disposition would
+                // otherwise inherit that operand's owner proof.
+                (
+                    SynthesizedAggregateNode::SiteOperand(declared_index),
+                    SynthesizedArgument::SiteOperand { seat: bound, index, value },
+                ) => {
+                    let projected = operands.get(*index as usize);
+                    *bound == seat
+                        && index == declared_index
+                        && projected.is_some()
+                        && site_operand_witness(value).is_some()
+                        && site_operand_witness(value)
+                            == projected.and_then(site_operand_witness)
+                }
+                // ⛔ `Absent` marks a host-result arm that builds no aggregate,
+                // so it is never a child of a planned record.
+                (SynthesizedAggregateNode::Absent, _) => {
                     return Err(unsupported(
                         "Constructor",
                         "a synthesized aggregate is planned with an absent child, so the \
                          tree describes an allocation whose operand is not built",
                     ));
                 }
+                // ⛔ The FORMS ARE DISJOINT. A mismatched pair is a refusal, not
+                // a fallthrough to a weaker check: passing a bare scalar where
+                // the tree declares a site-bound operand is precisely the
+                // substitution this typing exists to make unstateable.
+                _ => false,
             };
             if !agrees {
                 return Err(unsupported(
@@ -6557,7 +6692,7 @@ impl<'a> Lowering<'a> {
                         "synthesized aggregate child {position} is planned as {child:?} but the \
                          emitter built a {}, so the meet was taken over a different node than \
                          the one being allocated",
-                        lowered_value_kind(argument)
+                        lowered_value_kind(argument.lowered())
                     ),
                 ));
             }
@@ -6567,13 +6702,12 @@ impl<'a> Lowering<'a> {
 
     /// Build one alternative of a compiler-synthesized dynamic constructor.
     ///
-    /// ⭐ An alternative gets no ownership record -- it is allocated through
-    /// the value-shape disposition inside `emit_carrier_dynamic_constructor`,
-    /// which never consults a planned lane. But its ordered fields are as much
-    /// a measured fact as a fixed constructor's, and its children DO carry
-    /// occurrences. So it reconciles against the tree directly: the node at
-    /// `parent.alternative(position)` must be this exact role with this exact
-    /// ordered child model.
+    /// ⭐ An alternative IS an allocation and has its own path-keyed ownership
+    /// record; `emit_carrier_dynamic_constructor` takes its lane from that
+    /// record rather than from the value-shape disposition. So this reconciles
+    /// against the tree AND resolves the occurrence the emitter will carry: the
+    /// node at `parent.alternative(position)` must be this exact role with this
+    /// exact ordered child model.
     fn synthesized_dynamic_alternative(
         &self,
         seat: StaticOriginId,
@@ -6582,7 +6716,8 @@ impl<'a> Lowering<'a> {
         tag: i64,
         role: SynthesizedFixedConstructorRole,
         constructor: RuntimeSymbol,
-        fields: Vec<Lowered>,
+        fields: Vec<SynthesizedArgument>,
+        operands: &[Lowered],
     ) -> Result<DynamicConstructorAlternativeV1, CraneliftBackendError> {
         // Absent means no context is being defined, which is not an emission
         // this population covers -- the same boundary `synthesized_constructor`
@@ -6594,22 +6729,36 @@ impl<'a> Lowering<'a> {
             position,
             role,
             &fields,
+            operands,
         )?;
         Ok(DynamicConstructorAlternativeV1 {
             tag,
             constructor,
             identity: self.static_transition_plan.synthesized_constructor_identity(role)?,
             occurrence,
-            fields,
+            fields: fields.into_iter().map(SynthesizedArgument::into_lowered).collect(),
         })
     }
 
-    /// Whether every alternative of a dynamic child carries the occurrence
-    /// planned at its own position under `child_path`.
+    /// Whether a dynamic child's alternative population EQUALS the planner's.
+    ///
+    /// ⭐ **Equality, not prefix agreement.** The expected population comes from
+    /// `synthesized_dynamic_alternatives` — the planner's own ordered roles at
+    /// this exact `seat + child_path` — and the emitter's cardinality is
+    /// compared to it before anything else.
+    ///
+    /// ⛔ **The count is never inferred from the emitter's vector.** An earlier
+    /// spelling iterated `dynamic.alternatives` and resolved each position. That
+    /// rejects an EXTRA alternative, because its path does not exist — but a
+    /// vector missing its last alternative, or an empty one, agrees with every
+    /// prefix and returns true. A planner tree with two `ResourceKind`
+    /// alternatives then accepted an emitter carrying only alternative 0, and
+    /// the missing allocation would not surface until a whole-pass
+    /// `image(R) = P` closeout that does not exist yet. A construction boundary
+    /// cannot lean on a later pass for the equality it claims to establish.
     ///
     /// The set itself has no record — it is not an allocation. Its alternatives
-    /// are, and each one's identity is the check that the emitter put this
-    /// dynamic value at the path the planner planned it at.
+    /// are, and each one's role and identity are checked at its own position.
     fn dynamic_child_alternatives_agree(
         &self,
         owner: ContinuationEmissionOwner,
@@ -6617,7 +6766,15 @@ impl<'a> Lowering<'a> {
         child_path: &SynthesizedAggregatePath,
         dynamic: &DynamicConstructorV1,
     ) -> Result<bool, CraneliftBackendError> {
-        for (index, alternative) in dynamic.alternatives.iter().enumerate() {
+        let planned = self
+            .static_transition_plan
+            .synthesized_dynamic_alternatives(seat, child_path)?;
+        if planned.len() != dynamic.alternatives.len() {
+            return Ok(false);
+        }
+        for (index, (role, alternative)) in
+            planned.iter().zip(&dynamic.alternatives).enumerate()
+        {
             let index = u32::try_from(index).map_err(|_| {
                 unsupported(
                     "DynamicConstructor",
@@ -6625,16 +6782,9 @@ impl<'a> Lowering<'a> {
                 )
             })?;
             let position = child_path.alternative(index);
-            // A path the tree does not have means the emitter built a set with
-            // more alternatives than the planner planned, which is a shape
-            // disagreement rather than an identity one.
-            let Ok((role, _)) = self.static_transition_plan.synthesized_tree_node(seat, &position)
-            else {
-                return Ok(false);
-            };
             let expected = self
                 .static_transition_plan
-                .synthesized_aggregate_occurrence(owner, seat, &position, role)
+                .synthesized_aggregate_occurrence(owner, seat, &position, *role)
                 .ok();
             if alternative.occurrence != expected {
                 return Ok(false);
@@ -6662,7 +6812,8 @@ impl<'a> Lowering<'a> {
         parent: &SynthesizedAggregatePath,
         position: u32,
         role: SynthesizedConstructorRole,
-        fields: &[Lowered],
+        fields: &[SynthesizedArgument],
+        operands: &[Lowered],
     ) -> Result<Option<AggregateOccurrenceId>, CraneliftBackendError> {
         let Some(owner) = self.defining_emission_owner else {
             return Ok(None);
@@ -6680,7 +6831,7 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
-        self.reconcile_declared_children(owner, seat, &path, declared, fields)?;
+        self.reconcile_declared_children(owner, seat, &path, declared, fields, operands)?;
         Ok(Some(self.static_transition_plan.synthesized_aggregate_occurrence(
             owner,
             seat,
@@ -6702,6 +6853,7 @@ impl<'a> Lowering<'a> {
         seat: StaticOriginId,
         parent: &SynthesizedAggregatePath,
         payload: Lowered,
+        operands: &[Lowered],
     ) -> Result<Vec<DynamicConstructorAlternativeV1>, CraneliftBackendError> {
         let roles = self.static_transition_plan.synthesized_io_error_roles();
         if roles.len() != self.process_symbols.io_errors.len() {
@@ -6719,7 +6871,7 @@ impl<'a> Lowering<'a> {
             .map(|(position, (constructor, role))| {
                 let role = SynthesizedConstructorRole::IoError(*role);
                 let fields = (position == last)
-                    .then(|| vec![payload.clone()])
+                    .then(|| vec![SynthesizedArgument::Scalar(payload.clone())])
                     .unwrap_or_default();
                 let occurrence = self.reconcile_dynamic_alternative(
                     seat,
@@ -6732,6 +6884,7 @@ impl<'a> Lowering<'a> {
                     })?,
                     role,
                     &fields,
+                    operands,
                 )?;
                 Ok(DynamicConstructorAlternativeV1 {
                     tag: i64::try_from(position).map_err(|_| {
@@ -6745,7 +6898,7 @@ impl<'a> Lowering<'a> {
                         .static_transition_plan
                         .synthesized_constructor_identity(role)?,
                     occurrence,
-                    fields,
+                    fields: fields.into_iter().map(SynthesizedArgument::into_lowered).collect(),
                 })
             })
             .collect()
