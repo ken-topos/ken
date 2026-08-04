@@ -6047,11 +6047,13 @@ fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
     let depth_1 = Lowered::Constructor {
         constructor: "ctor:fixture::Box::MkBox".to_string(),
         synthesized_identity: None,
+        occurrence: None,
         args: vec![c1_closure(origin)],
     };
     let depth_2 = Lowered::Constructor {
         constructor: "ctor:fixture::Box::MkBox".to_string(),
         synthesized_identity: None,
+        occurrence: None,
         args: vec![Lowered::Record {
             fields: vec![("field:held".to_string(), c1_closure(origin))],
         }],
@@ -6107,6 +6109,7 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
     let closure_free = Lowered::Constructor {
         constructor: "ctor:fixture::Pair::MkPair".to_string(),
         synthesized_identity: None,
+        occurrence: None,
         args: vec![
             Lowered::String("left".to_string()),
             Lowered::Record {
@@ -6127,6 +6130,7 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
     let closure_bearing = Lowered::Constructor {
         constructor: "ctor:fixture::Pair::MkPair".to_string(),
         synthesized_identity: None,
+        occurrence: None,
         args: vec![
             Lowered::String("left".to_string()),
             Lowered::Record {

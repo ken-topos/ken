@@ -1897,6 +1897,12 @@ impl<'a> Lowering<'a> {
                             self.static_transition_plan
                                 .constructor_symbol_identity(static_origin)?,
                         ),
+                        // `D7` -- the allocation lane is the second fact resolved
+                        // at the producer and carried with the template.
+                        occurrence: Some(self.static_transition_plan.source_aggregate_occurrence(
+                            static_origin,
+                            PlannedAggregateShape::Constructor,
+                        )?),
                         args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                     }));
                 }
@@ -2191,6 +2197,12 @@ impl<'a> Lowering<'a> {
                             self.static_transition_plan
                                 .constructor_symbol_identity(static_origin)?,
                         ),
+                        // `D7` -- the allocation lane is the second fact resolved
+                        // at the producer and carried with the template.
+                        occurrence: Some(self.static_transition_plan.source_aggregate_occurrence(
+                            static_origin,
+                            PlannedAggregateShape::Constructor,
+                        )?),
                         args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                     })
                 };
@@ -2705,6 +2717,7 @@ impl<'a> Lowering<'a> {
         let Lowered::Constructor {
             constructor,
             synthesized_identity,
+            occurrence,
             args,
         } = scrutinee
         else {
@@ -2716,6 +2729,10 @@ impl<'a> Lowering<'a> {
         let retained_scrutinee = Lowered::Constructor {
             constructor: constructor.clone(),
             synthesized_identity,
+            // Retaining a scrutinee re-presents the SAME producer, so it keeps
+            // the same occurrence. Dropping it here would make the retained
+            // copy refuse where the original emitted.
+            occurrence,
             args: args.clone(),
         };
         let remaining_eliminators = &eliminators[1..];
@@ -3314,6 +3331,12 @@ impl<'a> Lowering<'a> {
                 self.static_transition_plan
                     .constructor_symbol_identity(deferred.construct_origin)?,
             ),
+            // `D7` -- the allocation lane is the second fact resolved
+            // at the producer and carried with the template.
+            occurrence: Some(self.static_transition_plan.source_aggregate_occurrence(
+                deferred.construct_origin,
+                PlannedAggregateShape::Constructor,
+            )?),
             args: constructor_args.clone(),
         };
         let outer_tail = match self.materialize_eliminator_frame_env(
@@ -6439,10 +6462,17 @@ impl<'a> Lowering<'a> {
                 LoweringOperand::Specialized(Lowered::Constructor {
                     constructor,
                     synthesized_identity: _,
+                    occurrence,
                     args,
                 }) => LoweringOperand::Specialized(Lowered::Constructor {
                     constructor,
                     synthesized_identity: None,
+                    // `D7` — carried through UNCHANGED, because this mutation's
+                    // whole claim is that it withdraws the identity and nothing
+                    // else. Withdrawing the occurrence as well would make the
+                    // guard's refusal attributable to either field, and the row
+                    // would stop measuring the identity comparison it names.
+                    occurrence,
                     args,
                 }),
                 other => other,
@@ -7339,6 +7369,7 @@ impl<'a> Lowering<'a> {
             &Lowered::Constructor {
                 constructor: RuntimeSymbol::from(constructor),
                 synthesized_identity: None,
+                occurrence: None,
                 args: Vec::new(),
             },
             PlannedAggregateShape::Constructor,
@@ -8900,6 +8931,12 @@ impl<'a> Lowering<'a> {
                         self.static_transition_plan
                             .constructor_symbol_identity(static_origin)?,
                     ),
+                    // `D7` -- the allocation lane is the second fact resolved
+                    // at the producer and carried with the template.
+                    occurrence: Some(self.static_transition_plan.source_aggregate_occurrence(
+                        static_origin,
+                        PlannedAggregateShape::Constructor,
+                    )?),
                     args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                 }))
             }

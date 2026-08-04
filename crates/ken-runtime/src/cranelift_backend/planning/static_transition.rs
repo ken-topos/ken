@@ -2581,6 +2581,33 @@ fn validate_occurrence_authority_plan(
     Ok(())
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the opaque identity of one aggregate
+/// emission occurrence.**
+///
+/// Issued by the planner and only by the planner. The field is private to this
+/// module, so lowering **cannot construct one** — it can only receive an
+/// identity from an accessor that already interned it. That is the mechanical
+/// form of "lowering does not construct identities"; a doc comment saying so
+/// would be advisory, and this is not.
+///
+/// ## Why an identity rather than the emission origin
+///
+/// A `Lowered::Constructor` template outlives the occurrence that produced it.
+/// Lowering builds the template at the `Construct` occurrence and may transfer
+/// it into the carrier much later, at a `Let`, `Match`, `Call` or `Effect`
+/// origin reached through nested producer traversal. The identity the emitter
+/// needs is the **producer's**, and by then the emission origin is a different
+/// occurrence entirely.
+///
+/// That is not a hypothesis: the sibling `synthesized_identity` field on the
+/// template exists for exactly this reason and says so in its own comment —
+/// *"the caller occurrence is not the constructor occurrence and therefore
+/// cannot lawfully re-query its atom."* The allocation lane is the second fact
+/// with that property, and it travels the same way.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub(in crate::cranelift_backend) struct AggregateOccurrenceId(u32);
+
 /// Which aggregate shape one producer occurrence builds.
 ///
 /// ⛔ Deliberately its own two-member enum rather than a reuse of
@@ -2636,6 +2663,9 @@ pub(in crate::cranelift_backend) struct PlannedAggregateChild {
 /// meet, inspect a runtime tag, or search lifetimes in lowering.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) struct PlannedAggregateOwnership {
+    /// The opaque identity lowering carries on the template and hands back at
+    /// emission. Dense, and equal to this record's index in the population.
+    pub(in crate::cranelift_backend) id: AggregateOccurrenceId,
     pub(in crate::cranelift_backend) origin: StaticOriginId,
     pub(in crate::cranelift_backend) owner: PredeclaredFunctionId,
     pub(in crate::cranelift_backend) shape: PlannedAggregateShape,
@@ -2644,6 +2674,54 @@ pub(in crate::cranelift_backend) struct PlannedAggregateOwnership {
     /// see the derivation rather than only its verdict.
     pub(in crate::cranelift_backend) meet: PlannedReferentLifetime,
     pub(in crate::cranelift_backend) allocation: PlannedAggregateAllocation,
+}
+
+/// The **possible** referent owners of one aggregate child.
+///
+/// Two authorities bound this set and the answer is their intersection:
+///
+/// - **Lifetime** ([`lifetime_referent_affinity`]) — how long the referent may
+///   live. `ActivationOwned` admits the invocation arena; `Persistent` does not.
+/// - **Representation** ([`JoinResultRepresentation`]) — whether there is a
+///   referent to own at all. A child the emitter materializes as a
+///   `NativeScalarPair` is an immediate: it has no heap node, so no owner but
+///   [`BoundaryReferentOwner::NoReferent`] is possible for it.
+///
+/// Reading only the first is what makes every call-shaped child look
+/// arena-owned. `derive_occurrence_lifetime` answers `ActivationOwned` for
+/// every `Call`, `Effect` and `PrimitiveCall` unconditionally — not because
+/// their results are arena-owned, but because it does not look through them.
+/// That is a sound floor on the LIFETIME axis and says nothing about the
+/// REFERENT axis, and treating it as if it did forces an aggregate over two
+/// integer-returning calls into the invocation lane. Such an aggregate is then
+/// refused at the process root, which cannot accept an arena-owned answer — so
+/// the over-approximation does not merely cost a lane, it rejects a program
+/// that is sound and that ran before the lane existed.
+///
+/// This is a narrowing of "possible", not a relaxation of the escape rule. A
+/// child with no referent cannot dangle, so it cannot be the reason a parent
+/// must die with the invocation. Where the representation is unknown the
+/// lifetime answer stands unnarrowed, which is the conservative direction.
+fn aggregate_child_referent_owners(
+    plan: &StaticTransitionPlan<'_>,
+    child: &PlannedOccurrenceChildAuthority,
+) -> Result<Vec<BoundaryReferentOwner>, CraneliftBackendError> {
+    let by_lifetime = lifetime_referent_affinity(child.lifetime);
+    let representation = plan
+        .join_results
+        .get(child.origin.0 as usize)
+        .and_then(|slot| slot.as_ref())
+        .map(|result| result.representation);
+    match representation {
+        // The emitter will produce a native scalar pair here. There is no
+        // boundary node, so there is nothing for an arena or a store to own.
+        Some(JoinResultRepresentation::NativeScalarPair) => {
+            Ok(vec![BoundaryReferentOwner::NoReferent])
+        }
+        // A carrier word may name a node, and an occurrence with no planned
+        // join result tells us nothing. Both keep the lifetime's own answer.
+        Some(JoinResultRepresentation::CarrierWord) | None => Ok(by_lifetime),
+    }
 }
 
 /// Derive one ownership record for every aggregate producer occurrence.
@@ -2666,7 +2744,7 @@ fn build_aggregate_ownership_plan(
         let authority = occurrence_authority(plan, origin)?;
         let mut children = Vec::with_capacity(authority.children.len());
         for child in &authority.children {
-            let owners = lifetime_referent_affinity(child.lifetime);
+            let owners = aggregate_child_referent_owners(plan, child)?;
             if owners.is_empty() {
                 return Err(planner_error(
                     "aggregate producer child has no derivable referent owner",
@@ -2698,6 +2776,10 @@ fn build_aggregate_ownership_plan(
             )
         };
         records.push(PlannedAggregateOwnership {
+            // Renumbered below. The identity is the record's index in the
+            // sorted population, so it cannot be assigned before the order is
+            // final.
+            id: AggregateOccurrenceId(0),
             origin,
             owner: plan
                 .semantic
@@ -2710,6 +2792,11 @@ fn build_aggregate_ownership_plan(
         });
     }
     records.sort_by_key(|record| record.origin);
+    for (index, record) in records.iter_mut().enumerate() {
+        record.id = AggregateOccurrenceId(u32::try_from(index).map_err(|_| {
+            planner_capacity_error("the aggregate occurrence population exceeds the identity space")
+        })?);
+    }
     Ok(records)
 }
 
@@ -2726,6 +2813,18 @@ fn validate_aggregate_ownership_plan(
     // re-derivation above only proves the builder agrees with itself. This one
     // states the PROPERTY: the persistent lane is issued only where no child
     // has an invocation-owned alternative.
+    // The identity is only opaque to its consumers if it is exact here: a
+    // record whose id is not its own index would resolve to a *different*
+    // record's lane, which is the one failure this domain has to be incapable
+    // of. Stated as its own law rather than left to the rebuild comparison
+    // above, which would agree with a builder that numbered every record zero.
+    for (index, record) in records.iter().enumerate() {
+        if record.id.0 as usize != index {
+            return Err(planner_error(
+                "aggregate occurrence identities are not the dense index of their own population",
+            ));
+        }
+    }
     for record in records {
         let escapes = record
             .children
@@ -5238,11 +5337,6 @@ impl<'src> Planner<'src> {
         validate_case_emission_plan(&self.plan, &self.plan.case_emissions)?;
         self.plan.occurrence_authorities = build_occurrence_authority_plan(&self.plan)?;
         validate_occurrence_authority_plan(&self.plan, &self.plan.occurrence_authorities)?;
-        // ⛔ Strictly after the occurrence authorities: the meet is taken over
-        // their per-child lifetimes, so building it earlier would take a meet
-        // over an empty population and issue the persistent lane to everything.
-        self.plan.aggregate_ownership = build_aggregate_ownership_plan(&self.plan)?;
-        validate_aggregate_ownership_plan(&self.plan, &self.plan.aggregate_ownership)?;
         validate_substrate_preallocation_closure(
             &self.plan,
             &self.plan.case_emissions,
@@ -5295,6 +5389,19 @@ impl<'src> Planner<'src> {
         // there would make one identity domain readable as the other.
         install_continuation_context_abi(&mut self.plan.abi, &self.plan.continuation_contexts)?;
         self.plan.join_results = build_join_result_plan(&self.plan, functionized_units)?;
+        // `D7` — the aggregate occurrence population is built HERE, last, and
+        // deliberately not beside the occurrence authorities it also reads.
+        //
+        // Two inputs make the position load-bearing, and only one of them was
+        // obvious. The meet is taken over the per-child lifetimes in
+        // `occurrence_authorities`, so it cannot precede those. It is ALSO
+        // taken over each child's planned result representation, which is
+        // `join_results` and is not built until this line — a child the
+        // emitter will materialize as a native scalar pair has no referent at
+        // all, and reading the lifetime without the representation makes every
+        // call-shaped child look arena-owned.
+        self.plan.aggregate_ownership = build_aggregate_ownership_plan(&self.plan)?;
+        validate_aggregate_ownership_plan(&self.plan, &self.plan.aggregate_ownership)?;
         self.plan.validate()?;
         Ok(self.plan)
     }
@@ -5904,6 +6011,57 @@ impl<'src> StaticTransitionPlan<'src> {
             .find(|record| record.origin == origin)
             .ok_or_else(|| {
                 planner_error("aggregate producer has no planned ownership record")
+            })?;
+        if record.shape != shape {
+            return Err(planner_error(
+                "aggregate producer disagrees with its planned ownership shape",
+            ));
+        }
+        Ok(record.allocation)
+    }
+
+    /// The occurrence identity of one **source** aggregate producer.
+    ///
+    /// This is the only way lowering obtains an identity for a source
+    /// `Construct`/`Record`, and it is asked at the producer occurrence — where
+    /// the answer is well defined — not at the emission site, where it is not.
+    ///
+    /// Absence is a loud failure for the same reason the lane's absence is: an
+    /// occurrence the planner never interned is one whose meet was never taken.
+    pub(in crate::cranelift_backend) fn source_aggregate_occurrence(
+        &self,
+        origin: StaticOriginId,
+        shape: PlannedAggregateShape,
+    ) -> Result<AggregateOccurrenceId, CraneliftBackendError> {
+        let record = self
+            .aggregate_ownership
+            .iter()
+            .find(|record| record.origin == origin)
+            .ok_or_else(|| planner_error("aggregate producer has no planned ownership record"))?;
+        if record.shape != shape {
+            return Err(planner_error(
+                "aggregate producer disagrees with its planned ownership shape",
+            ));
+        }
+        Ok(record.id)
+    }
+
+    /// The ruled allocation lane of an already-interned aggregate occurrence.
+    ///
+    /// The identity carries the answer from the producer to the emitter across
+    /// a traversal that loses the origin. There is deliberately no fallible
+    /// lookup by emission origin here: an identity this plan issued always
+    /// resolves, and an identity it did not issue cannot be constructed.
+    pub(in crate::cranelift_backend) fn aggregate_allocation_at(
+        &self,
+        occurrence: AggregateOccurrenceId,
+        shape: PlannedAggregateShape,
+    ) -> Result<PlannedAggregateAllocation, CraneliftBackendError> {
+        let record = self
+            .aggregate_ownership
+            .get(occurrence.0 as usize)
+            .ok_or_else(|| {
+                planner_error("aggregate occurrence identity is outside this plan's population")
             })?;
         if record.shape != shape {
             return Err(planner_error(

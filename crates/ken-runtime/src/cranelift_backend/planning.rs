@@ -28,7 +28,9 @@ pub(super) use static_transition::{
 // Namespace re-exports only: no wrapper, no derivation, no second authority.
 // `RT-DECL-CLOSURE-PORT` `D7` — the aggregate ownership lane, read by the
 // carrier producers. Namespace re-export only.
-pub(super) use static_transition::{PlannedAggregateAllocation, PlannedAggregateShape};
+pub(super) use static_transition::{
+    AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,
+};
 pub(super) use static_transition::{
     ContinuationCallIdentity, ContinuationCallView, ContinuationContextId,
     ContinuationContextView, ContinuationEmissionOwner,

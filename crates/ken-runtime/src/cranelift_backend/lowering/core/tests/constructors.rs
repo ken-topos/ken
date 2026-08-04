@@ -2029,6 +2029,7 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
     let inadmissible = Lowered::Constructor {
         constructor: "ctor:fixture::C1::Wrap".to_string(),
         synthesized_identity: None,
+        occurrence: None,
         args: vec![Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
@@ -2054,6 +2055,7 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
     let admissible = Lowered::Constructor {
         constructor: "ctor:fixture::C1::Wrap".to_string(),
         synthesized_identity: None,
+        occurrence: None,
         args: vec![Lowered::Bool {
             value: builder.ins().iconst(types::I64, 1),
             known: Some(true),
@@ -2671,9 +2673,11 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
             let ordinary_result = Lowered::Constructor {
                 constructor: ordinary_symbols.result_ok.clone(),
                 synthesized_identity: None,
+                occurrence: None,
                 args: vec![Lowered::Constructor {
                     constructor: ordinary_symbols.read_some.clone(),
                     synthesized_identity: None,
+                    occurrence: None,
                     args: vec![Lowered::Bool {
                         value: true_word,
                         known: Some(true),
@@ -2868,6 +2872,7 @@ fn ac_c7_lowered_ctor(name: &str) -> Lowered {
     Lowered::Constructor {
         constructor: format!("ctor:fixture::C1::{name}"),
         synthesized_identity: None,
+        occurrence: None,
         args: Vec::new(),
     }
 }
@@ -3053,6 +3058,7 @@ fn ac_c7_lowered_wrap(outer: &str, inner: &str) -> Lowered {
     Lowered::Constructor {
         constructor: format!("ctor:fixture::C1::{outer}"),
         synthesized_identity: None,
+        occurrence: None,
         args: vec![ac_c7_lowered_ctor(inner)],
     }
 }
@@ -3580,6 +3586,7 @@ fn ac_c4_lowered_wrap2(outer: &str, first: &str, second: &str) -> Lowered {
     Lowered::Constructor {
         constructor: format!("ctor:fixture::C1::{outer}"),
         synthesized_identity: None,
+        occurrence: None,
         args: vec![ac_c7_lowered_ctor(first), ac_c7_lowered_ctor(second)],
     }
 }
@@ -4047,6 +4054,7 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
         let inadmissible = Lowered::Constructor {
             constructor: "ctor:fixture::C1::Wrap".to_string(),
             synthesized_identity: None,
+            occurrence: None,
             args: vec![ac_c4_recursor_capsule(residual)],
         };
         let refused = compiler
@@ -4070,6 +4078,7 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
     let admissible = Lowered::Constructor {
         constructor: "ctor:fixture::C1::Wrap".to_string(),
         synthesized_identity: None,
+        occurrence: None,
         args: vec![Lowered::Bool {
             value: builder.ins().iconst(types::I64, 1),
             known: Some(true),

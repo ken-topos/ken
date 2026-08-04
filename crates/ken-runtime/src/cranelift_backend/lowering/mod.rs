@@ -81,7 +81,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     ContinuationInputView, ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge,
     ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, JoinPlanToken,
-    PlannedAggregateAllocation, PlannedAggregateShape,
+    AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
@@ -2004,10 +2004,33 @@ enum Lowered {
     String(String),
     Constructor {
         constructor: String,
+        /// The already-resolved constructor identity, carried with the template.
+        ///
         /// `Some` for a compiler-synthesized constructor whose identity came
-        /// from the semantic plane's closed role capability. Source
-        /// constructors keep `None` and use their planned occurrence.
+        /// from the semantic plane's closed role capability, **and also for a
+        /// source constructor whose template may outlive its own occurrence** --
+        /// which is every source constructor the `Construct` lowering arms
+        /// build. The name is narrower than the population it now has; read the
+        /// field as "identity resolved at the producer", not "this constructor
+        /// is synthesized".
         synthesized_identity: Option<ConstructorIdentity>,
+        /// **`RT-DECL-CLOSURE-PORT` `D7` -- the planner-issued aggregate
+        /// occurrence this template will become.**
+        ///
+        /// Carried for exactly the reason `synthesized_identity` is, stated in
+        /// that field's own words: a later unit boundary may receive this result
+        /// after nested producer traversal, where the caller occurrence is not
+        /// the constructor occurrence and therefore cannot lawfully re-query the
+        /// plan. The allocation lane is the second fact with that property, so
+        /// it travels the same way. Same shape as
+        /// [`Lowered::DeclarationClosure::reference`].
+        ///
+        /// `None` is a REFUSAL, never a default. An emitter reaching an
+        /// aggregate with no interned occurrence must fail as loudly as one
+        /// reaching an origin with no ownership record: answering
+        /// `PersistentGround` would reinstate the unproven persistent lane for
+        /// precisely the producers the population still misses.
+        occurrence: Option<AggregateOccurrenceId>,
         args: Vec<Lowered>,
     },
     Record {
@@ -3774,6 +3797,10 @@ impl<'a> Lowering<'a> {
             Lowered::Constructor {
                 constructor,
                 synthesized_identity,
+                // Read from `value` by the disposition below, which needs the
+                // whole template. Bound explicitly rather than swallowed by a
+                // `..` so a further field is a compile error here.
+                occurrence: _,
                 args,
             } => {
                 let (tag, class) = self.aggregate_carrier_disposition(
@@ -3953,10 +3980,23 @@ impl<'a> Lowering<'a> {
         shape: PlannedAggregateShape,
     ) -> Result<(BoundaryTag, BoundaryClass), CraneliftBackendError> {
         let (_, class) = Self::carrier_handle_disposition(value)?;
-        let tag = match self
-            .static_transition_plan
-            .aggregate_allocation(origin, shape)?
-        {
+        // `D7` -- the carried occurrence is the authority whenever the template
+        // has one, because it names the PRODUCER. `origin` names wherever the
+        // template happened to be transferred, which after nested producer
+        // traversal is a `Let`, `Match`, `Call` or `Effect` occurrence that
+        // never built an aggregate at all.
+        let allocation = match value {
+            Lowered::Constructor {
+                occurrence: Some(occurrence),
+                ..
+            } => self
+                .static_transition_plan
+                .aggregate_allocation_at(*occurrence, shape)?,
+            _ => self
+                .static_transition_plan
+                .aggregate_allocation(origin, shape)?,
+        };
+        let tag = match allocation {
             PlannedAggregateAllocation::PersistentGround => BoundaryTag::PersistentGround,
             PlannedAggregateAllocation::InvocationAggregate => BoundaryTag::InvocationAggregate,
         };
@@ -6270,6 +6310,9 @@ impl<'a> Lowering<'a> {
         Ok(Lowered::Constructor {
             constructor,
             synthesized_identity: Some(self.synthesized_fixed_identity(role)?),
+            // Step B interns one occurrence per (emission origin, role, path).
+            // Until it does this refuses loudly rather than defaulting.
+            occurrence: None,
             args,
         })
     }
@@ -11000,6 +11043,12 @@ impl<'a> Lowering<'a> {
                 self.static_transition_plan
                     .constructor_symbol_identity(static_origin)?,
             ),
+            // `D7` -- the allocation lane is the second fact resolved
+            // at the producer and carried with the template.
+            occurrence: Some(self.static_transition_plan.source_aggregate_occurrence(
+                static_origin,
+                PlannedAggregateShape::Constructor,
+            )?),
             args: lowered_args,
         })
     }
@@ -11483,6 +11532,7 @@ impl<'a> Lowering<'a> {
             RuntimeValue::Constructor { constructor, args } => Ok(Lowered::Constructor {
                 constructor: constructor.clone(),
                 synthesized_identity: None,
+                occurrence: None,
                 args: args
                     .iter()
                     .map(|arg| self.lower_value(builder, arg))
@@ -11605,6 +11655,7 @@ impl<'a> Lowering<'a> {
             RuntimeGroundValue::Constructor { constructor, args } => Ok(Lowered::Constructor {
                 constructor: constructor.clone(),
                 synthesized_identity: None,
+                occurrence: None,
                 args: args
                     .iter()
                     .map(|arg| self.lower_ground_value(builder, arg))
@@ -12113,6 +12164,7 @@ impl<'a> Lowering<'a> {
             Some(byte) => Lowered::Constructor {
                 constructor: some.clone(),
                 synthesized_identity: None,
+                occurrence: None,
                 args: vec![Lowered::Int {
                     value: builder.ins().iconst(types::I64, i64::from(byte)),
                     known: Some(i64::from(byte)),
@@ -12121,6 +12173,7 @@ impl<'a> Lowering<'a> {
             None => Lowered::Constructor {
                 constructor: none.clone(),
                 synthesized_identity: None,
+                occurrence: None,
                 args: Vec::new(),
             },
         })
@@ -12171,11 +12224,13 @@ impl<'a> Lowering<'a> {
             Some(bytes) => Lowered::Constructor {
                 constructor: some.clone(),
                 synthesized_identity: None,
+                occurrence: None,
                 args: vec![Lowered::Bytes(bytes)],
             },
             None => Lowered::Constructor {
                 constructor: none.clone(),
                 synthesized_identity: None,
+                occurrence: None,
                 args: Vec::new(),
             },
         })
@@ -12236,14 +12291,17 @@ impl<'a> Lowering<'a> {
             Ok(value) => Lowered::Constructor {
                 constructor: ok.clone(),
                 synthesized_identity: None,
+                occurrence: None,
                 args: vec![Lowered::String(value)],
             },
             Err(_) => Lowered::Constructor {
                 constructor: err.clone(),
                 synthesized_identity: None,
+                occurrence: None,
                 args: vec![Lowered::Constructor {
                     constructor: error.clone(),
                     synthesized_identity: None,
+                    occurrence: None,
                     args: Vec::new(),
                 }],
             },
@@ -12728,10 +12786,15 @@ fn rebuild_recursive_argument(
         Lowered::Constructor {
             constructor,
             synthesized_identity,
+            occurrence,
             args,
         } => Lowered::Constructor {
             constructor: constructor.clone(),
             synthesized_identity: *synthesized_identity,
+            // A rebuilt recursive argument is the same producer with its
+            // children re-materialized, so the occurrence is preserved rather
+            // than re-derived.
+            occurrence: *occurrence,
             args: args
                 .iter()
                 .map(|arg| rebuild_recursive_argument(arg, values, native_int_tags))
