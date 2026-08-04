@@ -3574,14 +3574,14 @@ impl<'a> Lowering<'a> {
                         }
                     }
                     RuntimeExpr::Value(value) => SourceMachineState::Value {
-                        value: LoweringOperand::Specialized(self.lower_value(builder, &value)?),
+                        value: RoutedAnswer::direct(LoweringOperand::Specialized(self.lower_value(builder, &value)?)),
                         control,
                     },
                     // Same value-producing rule as the direct descent's `Var`:
                     // only `Value` yields a machine value, and a static worker
                     // binding fails closed here rather than entering one.
                     RuntimeExpr::Var(index) => SourceMachineState::Value {
-                        value: env
+                        value: RoutedAnswer::direct(env
                             .get(index as usize)
                             .ok_or_else(|| {
                                 unsupported(
@@ -3590,7 +3590,7 @@ impl<'a> Lowering<'a> {
                                 )
                             })?
                             .value_at("a source-machine Var in value position")?
-                            .clone(),
+                            .clone()),
                         control,
                     },
                     RuntimeExpr::Let { value, body } => {
@@ -3611,14 +3611,14 @@ impl<'a> Lowering<'a> {
                     } => {
                         if args.is_empty() {
                             SourceMachineState::Value {
-                                value: LoweringOperand::Specialized(
+                                value: RoutedAnswer::direct(LoweringOperand::Specialized(
                                     self.finish_source_constructor(
                                         builder,
                                         constructor,
                                         static_origin,
                                         vec![],
                                     )?,
-                                ),
+                                )),
                                 control,
                             }
                         } else {
@@ -3714,18 +3714,28 @@ impl<'a> Lowering<'a> {
                     // origin. This arm is why a "machine-only" subset could never
                     // have been threaded soundly.
                     other => SourceMachineState::Value {
-                        value: self.lower_expr(
+                        value: RoutedAnswer::direct(self.lower_expr(
                             builder,
                             SourceOccurrence {
                                 expr: &other,
                                 static_origin,
                             },
                             &env,
-                        )?,
+                        )?),
                         control,
                     },
                 },
                 SourceMachineState::Value { value, mut control } => {
+                    // ⭐⭐ `D6a` upstream half -- SPLIT THE PAIR ONCE, HERE.
+                    //
+                    // ⛔ `incoming_route` is the route THIS predecessor arrived
+                    // by. Every transition below that forwards the same operand
+                    // carries it forward; only a transition producing a NEW
+                    // value starts at `DirectScrutinee`. Resetting on a forward
+                    // is the erasure this checkpoint exists to prevent, and it
+                    // is SILENT -- the compile stays green and the checked
+                    // answer quietly takes the closed default.
+                    let RoutedAnswer { value, route: incoming_route } = value;
                     if matches!(value, LoweringOperand::Specialized(Lowered::Trap(_))) {
                         control.continuation = Self::discard_source_prefix(control.continuation);
                     }
@@ -3777,7 +3787,7 @@ impl<'a> Lowering<'a> {
                                     },
                                 )),
                             };
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                         }
                         SourceContinuation::Terminal(SourceContinuationTerminal::ResumeOuter {
                             expected,
@@ -3814,7 +3824,7 @@ impl<'a> Lowering<'a> {
                                 let mut prefix = edge.target.terminal_active_prefix;
                                 prefix.push(EliminatorFrame::InvocationReturn);
                                 self.lower_computational_match_value_composed(
-                                    builder, RoutedAnswer::direct(value), &prefix,
+                                    builder, RoutedAnswer { value, route: incoming_route }, &prefix,
                                 )?
                             };
                             match edge.target.join_plan.representation {
@@ -3864,9 +3874,9 @@ impl<'a> Lowering<'a> {
                         SourceContinuation::LetBody { body, env, next } => {
                             control.continuation = *next;
                             if matches!(value, LoweringOperand::Specialized(Lowered::RecursiveBackedge)) {
-                                SourceMachineState::Value { value, control }
+                                SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                             } else if matches!(value, LoweringOperand::Specialized(Lowered::Trap(_))) {
-                                SourceMachineState::Value { value, control }
+                                SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                             } else {
                                 let body_env = env_with_operands([value], &env);
                                 SourceMachineState::Eval {
@@ -3879,7 +3889,7 @@ impl<'a> Lowering<'a> {
                         SourceContinuation::CheckedRecursiveInvocationReturn { instance, next } => {
                             self.leave_checked_recursive_invocation(instance)?;
                             control.continuation = *next;
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                         }
                         SourceContinuation::CheckedComputationalIHInvocationReturn {
                             call_template_id,
@@ -3896,7 +3906,7 @@ impl<'a> Lowering<'a> {
                             }
                             let value = self.finish_checked_computational_ih_marker(value)?;
                             control.continuation = *next;
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                         }
                         SourceContinuation::ReturnFromSelectedCase { delimiter, next } => {
                             let scope =
@@ -3925,7 +3935,7 @@ impl<'a> Lowering<'a> {
                             })?;
                             control.selected = previous;
                             control.continuation = *next;
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                         }
                         SourceContinuation::ApplyRecursorSelection { layer, next } => {
                             #[cfg(test)]
@@ -3958,7 +3968,7 @@ impl<'a> Lowering<'a> {
                                     answer_route,
                                     next,
                                 };
-                            SourceMachineState::Value { value, control }
+                            SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                         }
                         SourceContinuation::UnwindRecursorSegment {
                             mut stack,
@@ -4007,10 +4017,10 @@ impl<'a> Lowering<'a> {
                                             next,
                                         }),
                                     };
-                                SourceMachineState::Value { value, control }
+                                SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                             } else {
                                 control.continuation = *next;
-                                SourceMachineState::Value { value, control }
+                                SourceMachineState::Value { value: RoutedAnswer { value, route: incoming_route }, control }
                             }
                         }
                         SourceContinuation::ConstructArgument {
@@ -4030,12 +4040,12 @@ impl<'a> Lowering<'a> {
                             control.continuation = *next;
                             if remaining.is_empty() {
                                 SourceMachineState::Value {
-                                    value: LoweringOperand::Specialized(self.finish_source_constructor(
+                                    value: RoutedAnswer::direct(LoweringOperand::Specialized(self.finish_source_constructor(
                                         builder,
                                         constructor,
                                         static_origin,
                                         lowered,
-                                    )?),
+                                    )?)),
                                     control,
                                 }
                             } else {
@@ -4278,16 +4288,27 @@ impl<'a> Lowering<'a> {
                                         .active_recursive_invocations
                                         .last()
                                         .map_or(0, |instance| instance.semantic_depth),
-                                    // `D6a` -- THE THREADED FACT. This seat is the source
-                                    // continuation that owns the route, and handing it to the
-                                    // carried eliminator is the entire repair.
-                                    answer_route,
+                                    // ⭐⭐ `D6a` -- THE PREDECESSOR'S ROUTE RAISES THE
+                                    // CONTINUATION'S, and never lowers it.
+                                    //
+                                    // The continuation's own field stays the
+                                    // recursor-layer producer's authority. It is not
+                                    // the sole authority: an exact claimed and emitted
+                                    // continuation-specialization call result arrives
+                                    // here already checked, and letting the
+                                    // continuation's `DirectScrutinee` overwrite that
+                                    // is precisely the drop measured at `ae45e804`.
+                                    answer_route: RoutedAnswer {
+                                        value: LoweringOperand::Carried(word),
+                                        route: incoming_route,
+                                    }
+                                    .raise(answer_route),
                                 };
                                 let eliminated = self
                                     .lower_carried_computational_match(builder, word, frame, &[])?;
                                 control.continuation = *next;
                                 break 'computational_scrutinee SourceMachineState::Value {
-                                    value: eliminated,
+                                    value: RoutedAnswer::direct(eliminated),
                                     control,
                                 };
                             }
@@ -5591,13 +5612,18 @@ impl<'a> Lowering<'a> {
                             Some(coordinates),
                         )?;
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
-                            value,
+                            // ⛔ `D6a`: a declared recursive-position UNIT call is
+                            // not a lawful producer, and its result crosses a
+                            // function boundary besides -- which carries only the
+                            // word. It starts direct; a caller with an exact
+                            // claimed call identity re-attests its own.
+                            value: RoutedAnswer::direct(value),
                             control: suspended,
                         }));
                     }
                     Self::reject_carried_residual_arguments(args.len())?;
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
-                        value: LoweringOperand::Carried(word),
+                        value: RoutedAnswer::direct(LoweringOperand::Carried(word)),
                         control: suspended,
                     }));
                 }
@@ -5617,7 +5643,7 @@ impl<'a> Lowering<'a> {
                         checked_ih_invocation,
                     )?;
                     return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
-                        value: LoweringOperand::Specialized(Lowered::BoundedNat(predecessor)),
+                        value: RoutedAnswer::direct(LoweringOperand::Specialized(Lowered::BoundedNat(predecessor))),
                         control: suspended,
                     }));
                 } else {
@@ -5665,7 +5691,12 @@ impl<'a> Lowering<'a> {
                             Some(coordinates),
                         )?;
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
-                            value,
+                            // ⛔ `D6a`: a declared recursive-position UNIT call is
+                            // not a lawful producer, and its result crosses a
+                            // function boundary besides -- which carries only the
+                            // word. It starts direct; a caller with an exact
+                            // claimed call identity re-attests its own.
+                            value: RoutedAnswer::direct(value),
                             control: suspended,
                         }));
                     }
@@ -5737,7 +5768,7 @@ impl<'a> Lowering<'a> {
             }
             if let Some(induction) = active.induction {
                 return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
-                    value: LoweringOperand::Specialized(induction),
+                    value: RoutedAnswer::direct(LoweringOperand::Specialized(induction)),
                     control,
                 }));
             }
