@@ -11752,34 +11752,33 @@ fn d5_the_closeout_planned_set_comes_from_the_plan_not_from_the_emissions() {
     });
 }
 
-// ── The D6 activation blocker ─────────────────────────────────────────────
+// ── The generic closure-valued-constructor-field NEGATIVE ────────────────
 //
-// ⭐⭐ **`D6`'s one production action — retiring `TransparentDeclarationClosure`
-// — moves every closure-bodied transparent declaration onto the functionized
-// lane, and that lane cannot carry a CLOSURE-VALUED CONSTRUCTOR FIELD.**
+// ⭐⭐ **This row must keep rejecting, and it is not waiting on a capability.**
 //
-// This was measured by performing the retirement and running the suite: the
-// landed end-to-end object-link fixture
-// `nested_post_effect_checked_recursor_reaches_success_and_retains_exact_trap_provenance`
-// went red with *"a closure cannot cross the boundary"*. That fixture is a
-// transparent declaration whose body is a `Closure` and whose
-// `ComputationalMatch` scrutinee is a `Construct` carrying an anonymous
-// `LexicalClosure` as a field — so retiring the residual is exactly what
-// reaches it.
+// ⚠ **I first wrote it as a D6 activation sentinel and that framing was wrong**
+// (Architect `evt_44k5h9z49nf9b`). The fixture returns `Wrap(LexicalClosure)`
+// with **no consuming computational eliminator**, so its closure genuinely is
+// stored constructor data — an escape, permanently forbidden by
+// `CallableCapsuleEscape -> EscapeForbidden`. The landed object fixture that
+// reddened D6 looks similar and is a different thing: there the closure sits at
+// a ruled recursive position of a checked `ComputationalMatch` and is invoked
+// through the checked IH route, which makes it an existing
+// `ContinuationSpecialization` edge rather than observable data. `D5a`
+// eliminates that one; nothing eliminates this one.
 //
-// ⛔ **Not fixable inside `D6`.** Carrying a closure across a unit boundary as a
-// constructor field is capture transport / a durable carrier lane, and `D6` may
-// add no calls, inputs, capture transport, target projections, validators,
-// fields, capsules or fallbacks. So the retirement is NOT landed, and this
-// control stands in its place: it holds the measurement, stays green, and reds
-// if the capability ever arrives.
+// ⛔ **So this control has no sentinel trigger and names no future capability.**
+// A comment saying it "should turn green" would invite exactly the carrier lane
+// the prohibition exists to prevent.
 //
-// ⚠ The pair is what makes it a finding rather than an anecdote. Both fixtures
-// are closure-bodied transparent declarations reaching the SAME lane under the
-// witness; they differ in one field.
+// ⚠ The pair is still what makes it a measurement: both fixtures are
+// closure-bodied transparent declarations reaching the SAME lane under the
+// witness, differing in one field. The plain-field half proves the lane, the
+// witness and the declaration shape are all fine; the closure-field half proves
+// the escape prohibition.
 
 #[test]
-fn d6_the_functionized_lane_cannot_carry_a_closure_valued_constructor_field() {
+fn a_closure_stored_as_constructor_data_cannot_cross_a_unit_boundary() {
     let declaration = |arg: RuntimeExpr| RuntimeDeclaration {
         symbol: "decl:fixture::d6::probe".to_string(),
         kind: RuntimeDeclarationKind::Transparent {
@@ -11846,16 +11845,16 @@ fn d6_the_functionized_lane_cannot_carry_a_closure_valued_constructor_field() {
         );
 
         let refusal = compile(&closure_field).expect_err(
-            "SENTINEL FIRED: the functionized lane now carries a closure-valued \
-             constructor field. That was D6's activation blocker, so re-attempt \
-             the retirement of TransparentDeclarationClosure and rerun the whole \
-             D5 population unhooked",
+            "a closure stored as observable constructor data must be refused. \
+             This is the generic escape prohibition, not a missing capability — \
+             if it ever compiles, a carrier lane has appeared that nothing \
+             authorized",
         );
         assert!(
             refusal.contains("a closure cannot cross the boundary"),
-            "the refusal must still be the closure-boundary one this control \
-             names. A DIFFERENT refusal means the blocker moved, and D6's \
-             re-attempt would be planned against a stale diagnosis: {refusal}"
+            "the refusal must be the closure-boundary one. A DIFFERENT refusal \
+             would mean this row stopped measuring the escape prohibition: \
+             {refusal}"
         );
     });
 }
