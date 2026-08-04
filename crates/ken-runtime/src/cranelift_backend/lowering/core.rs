@@ -5877,6 +5877,30 @@ impl<'a> Lowering<'a> {
         };
         #[cfg(test)]
         d5a_trace(format!("  CLAIM bound identity={identity:?}"));
+        self.claim_and_call_resolved_continuation(builder, &identity, ordinary_inputs, producer_env)
+            .map(Some)
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` — the claim/call machinery, factored to
+    /// run after identity resolution and shared by both consumption seats.**
+    ///
+    /// ⭐ The split is the whole point of `D5a` contract 4. The retained-frame
+    /// seat resolves its identity from the four-field selector because the
+    /// active computational frame still holds alternative and position; the
+    /// detached-result seat resolves the *same kind* of identity from the
+    /// planner's result-edge projection because that frame is gone. ⛔ Neither
+    /// seat is privileged and neither fakes the other's operands: what is
+    /// common — claim once under the defining owner, resolve this Function's
+    /// own declared target, append the projected captures, emit one direct
+    /// call, record the `Inst` — lives here exactly once.
+    fn claim_and_call_resolved_continuation(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        identity: &ContinuationCallIdentity,
+        ordinary_inputs: &[LoweringOperand],
+        producer_env: &[LoweringEnvironmentBinding],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let identity = identity.clone();
         let defining = self.defining_unit.ok_or_else(|| {
             unsupported(
                 "ContinuationSpecialization",
@@ -6010,6 +6034,17 @@ impl<'a> Lowering<'a> {
                 )
             })?;
         let mut inputs = ordinary_inputs.to_vec();
+        #[cfg(test)]
+        d5a_trace(format!(
+            "  CAPTURES defining={defining:?} consumer={:?} producer={:?} env_len={} inputs={:?}",
+            unit.consumer_owner(),
+            unit.producer_owner(),
+            producer_env.len(),
+            unit.continuation_inputs()?
+                .iter()
+                .map(|input| (input.source_owner, input.source_abi_position))
+                .collect::<Vec<_>>()
+        ));
         for input in unit.continuation_inputs()? {
             if input.source_owner != defining {
                 return Err(unsupported(
@@ -6076,7 +6111,168 @@ impl<'a> Lowering<'a> {
         }
         #[cfg(test)]
         d5a_trace("  CLAIM outcome=CallEmitted".to_string());
-        Ok(Some(returned))
+        Ok(returned)
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` — the detached-result consumption seat.**
+    ///
+    /// Where fixed-point discovery detaches a producer as an ordinary unit
+    /// result, the active computational frame is already gone by the time the
+    /// result exists, so the four-field selector's operands do not exist here.
+    /// ⛔ They are not reconstructed and not faked: authority comes from the
+    /// planner's own result-edge projection for the unit being defined, taken
+    /// **before** this function was defined.
+    ///
+    /// This seat sits after the exact retained result is lowered and **before**
+    /// [`Lowering::transfer_unit_result_into_carrier`], allocation, publication
+    /// or join — which is where the landed object fixture was measured to
+    /// refuse (`UNIT-RESULT transfer origin=36` immediately precedes
+    /// `BOUNDARY-REFUSAL`).
+    ///
+    /// ## What each outcome means, because "zero" is the one that reads wrong
+    ///
+    /// - **No residual edge** — this owner has no planner-issued call left to
+    ///   discharge here, either because it never had one or because the
+    ///   retained-frame seat already emitted it. The ordinary path is correct
+    ///   and untouched. ⚠ This is *not* the contract's "zero member is a hard
+    ///   stop": an owner that genuinely owes a call and emits none is caught by
+    ///   the whole-pass `planned = resolved = declared = emitted` equality,
+    ///   which is the global affine closure of contract 5. A local stop here
+    ///   would red every unit in the program that lawfully owns no call.
+    /// - **More than one residual edge** — an unresolved multi-member
+    ///   composition. ⛔ Rejected. One result value cannot discharge two causal
+    ///   calls, and picking one would make lowering the authority for a fact the
+    ///   planner owns.
+    /// - **Exactly one** — the ruled case. The lowered result must *be* the
+    ///   planned constructor at that edge's construct origin, checked against
+    ///   the planner's own identity rather than against its name or shape.
+    ///
+    /// ## ⛔ UNEXERCISED GUARDS — do not read these as tested
+    ///
+    /// The multi-member stop, the non-constructor result stop, the identity
+    /// disagreement stop, the out-of-range position stop and the field-run
+    /// stop are all **written but not yet reachable by any control**, because
+    /// the only fixture that reaches this seat stops further along, at the
+    /// capture projection (see the `D5a` cross-owner hard stop). A mutation
+    /// control written now would compare a red against a red and pass for the
+    /// wrong reason. ⇒ They are pinned when the positive path completes, and
+    /// **not before**.
+    pub(super) fn eliminate_detached_producer_continuation(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        result_edges: &[ContinuationResultEdge],
+        lowered: LoweringOperand,
+        unit_env: &[LoweringEnvironmentBinding],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let residual = result_edges
+            .iter()
+            .filter(|edge| {
+                !self
+                    .function_local
+                    .continuation_emissions
+                    .contains_key(&edge.identity)
+            })
+            .collect::<Vec<_>>();
+        let edge = match residual.as_slice() {
+            [] => return Ok(lowered),
+            [edge] => *edge,
+            _ => {
+                return Err(unsupported(
+                    "ContinuationSpecialization",
+                    format!(
+                        "the detached-result seat projected {} undischarged causal calls onto one \
+                         unit result; a multi-member projection is a hard stop, never a preference \
+                         rule, because one result value cannot discharge two causal calls",
+                        residual.len()
+                    ),
+                ));
+            }
+        };
+        #[cfg(test)]
+        d5a_trace(format!(
+            "  DETACHED-SEAT edge result={:?} construct={:?} pos={} target={:?}",
+            edge.producer_result_origin,
+            edge.producer_construct_origin,
+            edge.recursive_position,
+            edge.identity.target()
+        ));
+        // Contract 4, first clause: validate the specialized result's PLANNED
+        // constructor identity and field run.
+        //
+        // ⛔ The check runs against the planner's identity for the projected
+        // construct origin -- not against the constructor's name, its arity
+        // alone, or the presence of a closure among its fields. Using the
+        // emitted closure shape as the selector is exactly what contract 3
+        // forbids; here the shape is not consulted at all, and a result that is
+        // not the planned constructor rejects instead of being carried.
+        let LoweringOperand::Specialized(Lowered::Constructor {
+            synthesized_identity,
+            args,
+            ..
+        }) = &lowered
+        else {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                "a projected causal call reached the detached-result seat with a unit result that \
+                 is not a specialized constructor, so the planned producer constructor it must \
+                 replace is not present",
+            ));
+        };
+        let planned_identity = self
+            .static_transition_plan
+            .constructor_symbol_identity(edge.producer_construct_origin)?;
+        if *synthesized_identity != Some(planned_identity) {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                "the unit result at a projected causal edge is not the planner's own constructor \
+                 for that edge's producer Construct origin",
+            ));
+        }
+        let position = edge.recursive_position as usize;
+        if position >= args.len() {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                "a projected causal edge names a ruled recursive position outside the planned \
+                 constructor's field run",
+            ));
+        }
+        let unit = self
+            .static_transition_plan
+            .continuation_units()?
+            .into_iter()
+            .find(|unit| unit.id() == edge.identity.target())
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    "the projected target has no continuation unit",
+                )
+            })?;
+        let ordinary_declared = unit.ordinary_parameters() as usize;
+        // The field run: every field but the ruled recursive one becomes an
+        // ordinary operand, so the declared ordinary-parameter count is a
+        // relation to the planned constructor's arity rather than a literal.
+        if args.len() != ordinary_declared + 1 {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "the planned producer constructor has {} fields but its continuation declares \
+                     {ordinary_declared} ordinary parameters; with exactly the ruled recursive \
+                     field omitted these must differ by one",
+                    args.len()
+                ),
+            ));
+        }
+        // Contract 4, second clause: ordinary operands from that exact result,
+        // with ONLY the ruled recursive field omitted. Captures are appended by
+        // the shared machinery from the planner's own ordered projection.
+        let ordinary = args
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| *index != position)
+            .map(|(_, arg)| LoweringOperand::Specialized(arg.clone()))
+            .collect::<Vec<_>>();
+        let identity = edge.identity.clone();
+        self.claim_and_call_resolved_continuation(builder, &identity, &ordinary, unit_env)
     }
 
     /// **`D3` -- the callee-only consumer.**

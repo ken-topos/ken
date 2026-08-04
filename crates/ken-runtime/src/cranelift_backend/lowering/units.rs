@@ -1848,6 +1848,16 @@ fn define_unit_body<M: Module>(
     if let Some(ledger) = compiler.continuation_claims.as_mut() {
         ledger.record_declared(function_local.continuation_calls.keys().cloned())?;
     }
+    // `RT-DECL-CLOSURE-PORT` `D5a` contract 3 — AUTHORITY BEFORE EMISSION.
+    //
+    // Projected here, beside the declaration of this unit's own call refs and
+    // **before the function is defined**. ⛔ It is a projection of authority the
+    // planner already issued, keyed on the owner this pass is about to define;
+    // lowering supplies only that owner and never searches, reverse-derives a
+    // consumer, or reads an owner back off anything it emitted.
+    let result_edges = compiler
+        .static_transition_plan
+        .continuation_result_edges_owned_by(unit.function)?;
     // `D3`: the owner operand for the claim, supplied independently of any
     // token -- this is the ordinary producer unit currently being defined.
     #[cfg(test)]
@@ -2108,6 +2118,24 @@ fn define_unit_body<M: Module>(
                 }
             }
         } else {
+            // `RT-DECL-CLOSURE-PORT` `D5a` — THE DETACHED-RESULT SEAT.
+            //
+            // The exact retained result is lowered; nothing has been
+            // transferred into a carrier, allocated, published or joined. This
+            // is where the landed object fixture was measured to refuse, and it
+            // is the seat for every producer owner the fixed point detached as
+            // an ordinary unit result.
+            //
+            // ⛔ Applied on the non-root path only, because this is the only
+            // result surface that reaches `transfer_unit_result_into_carrier`.
+            // A root that owned an undischarged projected call would be caught
+            // by the whole-pass claim closure, not silently dropped.
+            let lowered = compiler.eliminate_detached_producer_continuation(
+                &mut builder,
+                &result_edges,
+                lowered,
+                &env,
+            )?;
             let word = match lowered {
                 LoweringOperand::Carried(word) => Some(word.word),
                 LoweringOperand::Specialized(Lowered::Trap(trap)) => {

@@ -77,7 +77,8 @@ pub(in crate::cranelift_backend) use super::planning::{
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
     CheckedOrientedMarkerSets, ConstructorIdentity, ContinuationCallIdentity, ContinuationCallView,
     DeclarationCallTargetClass,
-    ContinuationInputView, ContinuationOrdinaryEnvelopeRole, ContinuationSpecializationId,
+    ContinuationInputView, ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge,
+    ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, JoinPlanToken,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
@@ -2029,6 +2030,11 @@ impl<'a> Lowering<'a> {
         origin: StaticOriginId,
         value: &Lowered,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        #[cfg(test)]
+        d5a_trace(format!(
+            "  UNIT-RESULT transfer origin={origin:?} value={}",
+            lowered_value_kind(value)
+        ));
         let process_exit = self.process_object
             && matches!(
                 value,

@@ -11923,12 +11923,48 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
                 )
             })
             .collect::<Vec<_>>();
-        (units, calls)
+        // The capture projection of every planned specialization, taken from
+        // the plan alone. ⭐ Independent of the emission run, so "the projection
+        // does not resolve at its producer owner" is a fact about the planner
+        // and not an artifact of where emission happened to abort.
+        let specializations = plan
+            .continuation_units()
+            .expect("continuation units")
+            .iter()
+            .map(|unit| {
+                format!(
+                    "{:?} producer={:?} consumer={:?} ordinary_params={} inputs={:?}",
+                    unit.id(),
+                    unit.producer_owner(),
+                    unit.consumer_owner(),
+                    unit.ordinary_parameters(),
+                    unit.continuation_inputs()
+                        .expect("continuation inputs")
+                        .iter()
+                        .map(|input| (input.source_owner, input.source_abi_position))
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let envelopes = plan
+            .emittable_units()
+            .expect("units")
+            .into_iter()
+            .map(|unit| {
+                format!(
+                    "{:?} params={} captures={}",
+                    unit.function(),
+                    unit.header().parameters,
+                    unit.header().captures,
+                )
+            })
+            .collect::<Vec<_>>();
+        (units, calls, specializations, envelopes)
     });
     let trace = take_d5a_trace();
     eprintln!("=== D5a PLANNER CENSUS ===");
     match &census {
-        Ok((units, calls)) => {
+        Ok((units, calls, specializations, envelopes)) => {
             eprintln!("units ({}):", units.len());
             for unit in units {
                 eprintln!("  {unit}");
@@ -11936,6 +11972,14 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
             eprintln!("continuation calls ({}):", calls.len());
             for call in calls {
                 eprintln!("  {call}");
+            }
+            eprintln!("specializations ({}):", specializations.len());
+            for specialization in specializations {
+                eprintln!("  {specialization}");
+            }
+            eprintln!("emitting-unit envelopes ({}):", envelopes.len());
+            for envelope in envelopes {
+                eprintln!("  {envelope}");
             }
         }
         Err(error) => eprintln!("  planning failed: {error:?}"),
