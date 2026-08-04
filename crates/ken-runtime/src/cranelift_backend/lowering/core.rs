@@ -1269,6 +1269,7 @@ impl<'a> Lowering<'a> {
                         .last()
                         .map(|instance| instance.source),
                     checked_invocation_depth,
+                    answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                 },
             )],
         )
@@ -2095,6 +2096,7 @@ impl<'a> Lowering<'a> {
                                 checked_invocation_id: None,
                                 checked_invocation_source: None,
                                 checked_invocation_depth: 0,
+                                answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                             })
                         }
                         ImmediateBinderEliminator::Ordinary { cases, default } => {
@@ -2482,6 +2484,7 @@ impl<'a> Lowering<'a> {
                             .last()
                             .map(|instance| instance.source),
                         checked_invocation_depth,
+                        answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                     },
                 ));
                 composed.extend_from_slice(eliminators);
@@ -4262,6 +4265,10 @@ impl<'a> Lowering<'a> {
                                         .active_recursive_invocations
                                         .last()
                                         .map_or(0, |instance| instance.semantic_depth),
+                                    // `D6a` -- THE THREADED FACT. This seat is the source
+                                    // continuation that owns the route, and handing it to the
+                                    // carried eliminator is the entire repair.
+                                    answer_route,
                                 };
                                 let eliminated = self
                                     .lower_carried_computational_match(builder, word, frame, &[])?;
@@ -4438,6 +4445,11 @@ impl<'a> Lowering<'a> {
                                     .active_recursive_invocations
                                     .last()
                                     .map_or(0, |instance| instance.semantic_depth),
+                                // `D6a` -- the same source continuation's fact. The
+                                // specialized arm above already consumed it for its own
+                                // selection; a nested CARRIED resumption of this frame must
+                                // see the same route rather than a weaker one.
+                                answer_route,
                             };
                             let activation = self.mint_continuation_activation();
                             let cursor = self.mint_continuation_cursor();
@@ -8336,12 +8348,123 @@ impl<'a> Lowering<'a> {
             builder.switch_to_block(next);
         }
 
-        let defaulted = LoweringOperand::Specialized(Lowered::Trap(eliminator.default.clone()));
-        if !self.seal_source_trap_branch(builder, &defaulted)? {
-            return Err(unsupported(
-                "ComputationalMatch",
-                "the carried computational match's closed default did not seal its branch",
-            ));
+        // ── ⭐⭐ `RT-DECL-CLOSURE-PORT` `D6a` — THE CHECKED-ANSWER FALLBACK ──
+        //
+        // Reached only after **every** ordinary case's exact planner-issued tag
+        // has been compared and missed. ⛔ That ordering is the mechanism, not a
+        // convenience: an ordinary carried `ITree` constructor still takes its
+        // own case, and this arm can never shadow one.
+        //
+        // The checked recursive worker returns the checked *answer*
+        // (`Result::Ok` on the governed witness), which the **specialized** arm
+        // sends to the unique guarded `ITree::Ret` continuation. The carried arm
+        // used to ask instead whether that answer was literally an `ITree`
+        // constructor — it is not — and seal the closed default. This restores
+        // the same guarded route on the same fact.
+        //
+        // ⛔ **No phase forgery.** The carried word is fed to the return case's
+        // one retained argument **as itself**: nothing is decoded, converted to
+        // `Lowered`, recovered as a template, or selected at runtime, and no
+        // constructor is matched by name. The guard is a compile-time property
+        // of the case *topology*, identical to the specialized arm's, and the
+        // word never participates in it.
+        let checked_answer_fallback = eliminator.answer_route
+            == SourceComputationalAnswerRoute::CheckedSelectedRecursor
+            && px8tr_deforested_answer_route_enabled();
+        let return_case = if checked_answer_fallback {
+            // The strict existing topology, re-derived here exactly as the
+            // specialized arm derives it: one `Ret` case with one binder, one
+            // `Vis` case, two cases total, and no checked control markers in the
+            // return body.
+            let mut returns = eliminator.cases.iter().enumerate().filter(|(_, case)| {
+                case.argument_binders == 1 && case.constructor.ends_with("::ITree::Ret")
+            });
+            let return_case = returns.next();
+            let exact_return = returns.next().is_none();
+            let mut visible = eliminator
+                .cases
+                .iter()
+                .filter(|case| case.constructor.ends_with("::ITree::Vis"));
+            let exact_visible =
+                visible.next().is_some() && visible.next().is_none() && eliminator.cases.len() == 2;
+            return_case.filter(|(_, return_case)| {
+                exact_return
+                    && exact_visible
+                    && source_case_has_no_checked_control_markers(&return_case.body)
+            })
+        } else {
+            None
+        };
+
+        if let Some((return_index, return_case)) = return_case {
+            // ⭐ The EMISSION discriminator for this branch.
+            //
+            // ⚠ Deliberately not `DeforestedAnswerResumed`. That event is
+            // recorded while lowering the **specialized** branch and is
+            // therefore compile-time evidence about a choice the emitted CFG
+            // makes elsewhere — it cannot testify that a *carried* runtime word
+            // took this route, and reusing it here would make a compile-time
+            // fact read as a runtime one. This says only what it knows: the
+            // carried route was emitted, for this frame, into this return case.
+            // The runtime half is the linked artifact's exit status.
+            #[cfg(test)]
+            px8tr_record_trap_provenance(Px8trTrapProvenanceEvent::CarriedAnswerRouteEmitted {
+                checked_frame_id: eliminator
+                    .checked_frame_id
+                    .expect("checked answer routes carry exact frame ids"),
+                return_constructor: return_case.constructor.clone(),
+            });
+            // The one retained argument is the SAME carried word. ⛔ Not a
+            // projected field of it: the checked answer is the value the return
+            // case binds, and projecting would ask the carrier for structure
+            // this route never claimed it has.
+            let mut case_env =
+                vec![LoweringEnvironmentBinding::Value(LoweringOperand::Carried(scrutinee))];
+            case_env.extend(eliminator.env.to_vec());
+            let body =
+                self.case_body_occurrence(eliminator.static_origin, return_index, &return_case.body)?;
+            let body_origin = body.static_origin;
+            // ⭐ Lowered through the ORDINARY continuation of this eliminator,
+            // exactly as a non-recursive case body beside it is. The eliminated
+            // value returns to `SourceContinuation::ComputationalMatchScrutinee`,
+            // which resumes the original source control — so the source
+            // continuation after the return case is observed, and a helper that
+            // returned an isolated value could not stand in for it.
+            let lowered = if remaining_eliminators.is_empty() {
+                self.lower_expr(builder, body, &case_env)?
+            } else {
+                self.lower_computational_producer_expr(
+                    builder,
+                    body,
+                    &case_env,
+                    remaining_eliminators,
+                )?
+            };
+            if !matches!(
+                lowered,
+                LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+            ) {
+                let word = self.carried_join_arm(
+                    builder,
+                    body_origin,
+                    lowered,
+                    None,
+                    "a carried checked-answer arm",
+                )?;
+                builder.ins().jump(merge, &[word.word.into()]);
+            }
+        } else {
+            // ⛔ Every other way of arriving here keeps the existing closed
+            // default, unchanged: `DirectScrutinee`, a disabled fallback,
+            // malformed or ambiguous return topology, and every unmatched
+            // ordinary carried scrutinee.
+            let defaulted = LoweringOperand::Specialized(Lowered::Trap(eliminator.default.clone()));
+            if !self.seal_source_trap_branch(builder, &defaulted)? {
+                return Err(unsupported(
+                    "ComputationalMatch",
+                    "the carried computational match's closed default did not seal its branch",
+                ));
+            }
         }
 
         builder.switch_to_block(merge);
