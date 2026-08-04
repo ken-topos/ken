@@ -6056,18 +6056,31 @@ impl<'src> StaticTransitionPlan<'src> {
     /// conservative direction: the cost of being wrong here is an emitted body
     /// that refuses, not a call to a function that does not exist.
     ///
-    /// ⛔ **Narrowed by the checkpoint-3 release, and the distinction is
-    /// load-bearing.** "Never superseded" was too broad for the completed
-    /// mechanism. What is permanent is that **the source edge and its
-    /// provenance are never deleted**; what may still move is **the exact
-    /// emitted callee**, which `D5a` checkpoint 4 retargets under exact planner
-    /// authority — keyed by the invocation's causal identity and retained
-    /// source coordinates, never by body origin, ABI shape, or "a context
-    /// exists". ⇒ Read this table as *"no edge is superseded yet"*, not as
-    /// *"no edge can ever be"*. When checkpoint 4's binding exists, this census
-    /// is re-run against it: another exact raw call remaining keeps the body in
-    /// branch one, and only a fully retargeted invocation set makes it
-    /// template-only.
+    /// ## ⭐ Checkpoint 4 step 2 — the census re-run, now that the binding exists
+    ///
+    /// The paragraph above was written when nothing retargeted the carried
+    /// invocation, and it said so: *"no edge is superseded yet"*, not *"no edge
+    /// can ever be"*. Step 1 built the binding, so this is the promised re-run.
+    ///
+    /// **What is permanent is that the source edge and its provenance are never
+    /// deleted. What moves is the exact emitted callee.** A `StaticBody` edge
+    /// into `B` has exactly two realizations, and they are now both accounted
+    /// for:
+    ///
+    /// | realization | retargets when |
+    /// |---|---|
+    /// | the specialization's static worker call | a generated context exists for `(S, B)` |
+    /// | the carried source-machine invocation resuming `S`'s match at `S`'s position | [`Self::carried_invocation_context`] binds one |
+    ///
+    /// ⇒ The edge is superseded exactly when **every** specialization selecting
+    /// `B` binds a context through that same method — the one the emission seam
+    /// itself calls, so the census and the emitter cannot drift into two
+    /// derivations that disagree.
+    ///
+    /// ⛔ Still not a global suppression predicate: a `Declaration` edge, or one
+    /// specialization without a context, leaves an unsuperseded route and keeps
+    /// `B` in branch one with its permanent raw closure refusal governing that
+    /// route.
     pub(in crate::cranelift_backend) fn template_only_worker_bodies(
         &self,
     ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
@@ -6110,10 +6123,34 @@ impl<'src> StaticTransitionPlan<'src> {
                 // specialization still calls the raw worker.
                 continue;
             }
-            // Any surviving call edge into this body is a live route, of either
-            // kind. See the doc comment above for the measurement that rules
-            // out superseding a `StaticBody` edge with the worker call.
-            if edges.iter().any(|edge| edge.callee_origin() == body) {
+            // Every selecting specialization must also bind a generated context
+            // for the CARRIED invocation, through the same planner method the
+            // emission seam calls. This is what supersedes the `StaticBody`
+            // edge's second realization -- the one that, before step 1 existed,
+            // was measured to keep this body executable.
+            let mut carried_bound = true;
+            for unit in &selecting {
+                if self
+                    .carried_invocation_context(
+                        unit.continuation_origin(),
+                        unit.recursive_position(),
+                        body,
+                    )?
+                    .is_none()
+                {
+                    carried_bound = false;
+                }
+            }
+            if !carried_bound {
+                continue;
+            }
+            // A `Declaration` edge is an ordinary direct call and no context
+            // stands in for it, so one surviving here keeps the body in branch
+            // one. A `StaticBody` edge is superseded by the two retargets
+            // above.
+            if edges.iter().any(|edge| {
+                edge.callee_origin() == body && edge.kind() == EmittableCallKind::Declaration
+            }) {
                 continue;
             }
             template_only.insert(body);
