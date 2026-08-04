@@ -30,7 +30,8 @@ pub(super) use static_transition::{
 // carrier producers. Namespace re-export only.
 pub(super) use static_transition::{
     AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,
-    SynthesizedAggregateChild,
+    SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot,
+    SynthesizedAggregateStep, SynthesizedDynamicSet,
 };
 pub(super) use static_transition::{
     ContinuationCallIdentity, ContinuationCallView, ContinuationContextId,

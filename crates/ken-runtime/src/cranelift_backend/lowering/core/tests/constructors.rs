@@ -2635,6 +2635,7 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
             // is where it already fails.
             let error = compiler.synthesized_constructor(
                 match_origin,
+                &SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk),
                 SynthesizedFixedConstructorRole::Wrote,
                 producer_symbols.wrote.clone(),
                 vec![Lowered::Bool {

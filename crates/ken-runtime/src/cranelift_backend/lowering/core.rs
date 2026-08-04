@@ -10342,6 +10342,14 @@ impl<'a> Lowering<'a> {
             );
             let payload = builder.ins().sshr_imm(detail, 32);
             let payload_int = self.lower_dynamic_small_int(builder, payload);
+            // `D7` — the two roots of this operation's synthesized aggregate
+            // trees. Every synthesized producer below states its own path from
+            // one of them explicitly; nothing is rebound as the walk descends,
+            // so a path in this file names exactly one node in the planner's
+            // tree and the two can be compared.
+            let error_root =
+                SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultError);
+            let ok_root = SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk);
             let io_error = Lowered::DynamicConstructor(DynamicConstructorV1 {
                 discriminator: builder.ins().band_imm(detail, 0xff),
                 alternatives: self.synthesized_io_error_alternatives(payload_int)?,
@@ -10374,14 +10382,23 @@ impl<'a> Lowering<'a> {
                     ),
                     _ => unreachable!("validated FS result operation"),
                 };
-                let operation =
-                    self.synthesized_constructor(static_origin, operation_role, operation_symbol, Vec::new())?;
-                let path = self.synthesized_constructor(static_origin, 
+                let operation = self.synthesized_constructor(
+                    static_origin,
+                    &error_root.field(0),
+                    operation_role,
+                    operation_symbol,
+                    Vec::new(),
+                )?;
+                let path = self.synthesized_constructor(
+                    static_origin,
+                    &error_root.field(1),
                     SynthesizedFixedConstructorRole::OptionSome,
                     self.process_symbols.option_some.clone(),
                     vec![path],
                 )?;
-                self.synthesized_constructor(static_origin, 
+                self.synthesized_constructor(
+                    static_origin,
+                    &error_root,
                     SynthesizedFixedConstructorRole::FileError,
                     self.process_symbols.file_error.clone(),
                     vec![operation, path, io_error],
@@ -10418,18 +10435,31 @@ impl<'a> Lowering<'a> {
                 let identity_high = builder.ins().ushr_imm(resource_identity, 32);
                 let identity_low_int = self.lower_dynamic_small_int(builder, identity_low);
                 let identity_high_int = self.lower_dynamic_small_int(builder, identity_high);
-                let resource_kind_value = |this: &Self, discriminator| {
+                // ⭐ `ResourceKind` is built THREE times at this one seat, so
+                // the closure takes the path of the node it is building rather
+                // than closing over one. Passing a path in is what makes the
+                // three uses three occurrences; a closure that knew its own
+                // path could only ever describe one of them.
+                let resource_kind_value = |this: &Self,
+                                           discriminator,
+                                           node: &SynthesizedAggregatePath| {
                     Ok::<_, CraneliftBackendError>(Lowered::DynamicConstructor(
                         DynamicConstructorV1 {
                             discriminator,
                             alternatives: vec![
                                 this.synthesized_dynamic_alternative(
+                                    static_origin,
+                                    node,
+                                    0,
                                     wire.resource_kind_fs_handle as i64,
                                     SynthesizedFixedConstructorRole::ResourceKindFsHandle,
                                     this.process_symbols.resource_kind_fs_handle.clone(),
                                     Vec::new(),
                                 )?,
                                 this.synthesized_dynamic_alternative(
+                                    static_origin,
+                                    node,
+                                    1,
                                     wire.resource_kind_buffer as i64,
                                     SynthesizedFixedConstructorRole::ResourceKindBuffer,
                                     this.process_symbols.resource_kind_buffer.clone(),
@@ -10439,7 +10469,11 @@ impl<'a> Lowering<'a> {
                         },
                     ))
                 };
-                let trace_identity = self.synthesized_constructor(static_origin, 
+                // `ResourceReleaseFailed` field 1, alternative 4 of the
+                // resource surface -- measured, not assumed.
+                let trace_identity = self.synthesized_constructor(
+                    static_origin,
+                    &error_root.alternative(4).field(1),
                     SynthesizedFixedConstructorRole::ResourceTraceIdentity,
                     self.process_symbols.resource_trace_identity.clone(),
                     vec![identity_low_int, identity_high_int],
@@ -10448,67 +10482,109 @@ impl<'a> Lowering<'a> {
                     discriminator: surface_tag,
                     alternatives: vec![
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            0,
                             0,
                             SynthesizedFixedConstructorRole::ResourceHostIo,
                             self.process_symbols.resource_host_io.clone(),
                             vec![surface_io_error.clone()],
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            1,
                             1,
                             SynthesizedFixedConstructorRole::ResourceClosed,
                             self.process_symbols.resource_closed.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            2,
                             2,
                             SynthesizedFixedConstructorRole::ResourceMalformed,
                             self.process_symbols.resource_malformed.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            3,
                             3,
                             SynthesizedFixedConstructorRole::ResourceRightNotHeld,
                             self.process_symbols.resource_right_not_held.clone(),
                             vec![resource_required_int, resource_held_int],
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            4,
                             4,
                             SynthesizedFixedConstructorRole::ResourceReleaseFailed,
                             self.process_symbols.resource_release_failed.clone(),
                             vec![
-                                resource_kind_value(self, resource_kind)?,
+                                resource_kind_value(
+                                    self,
+                                    resource_kind,
+                                    &error_root.alternative(4).field(0),
+                                )?,
                                 trace_identity,
                                 surface_io_error,
                             ],
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            5,
                             5,
                             SynthesizedFixedConstructorRole::ResourceKindMismatch,
                             self.process_symbols.resource_kind_mismatch.clone(),
                             vec![
-                                resource_kind_value(self, resource_expected_kind)?,
-                                resource_kind_value(self, resource_actual_kind)?,
+                                resource_kind_value(
+                                    self,
+                                    resource_expected_kind,
+                                    &error_root.alternative(5).field(0),
+                                )?,
+                                resource_kind_value(
+                                    self,
+                                    resource_actual_kind,
+                                    &error_root.alternative(5).field(1),
+                                )?,
                             ],
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            6,
                             6,
                             SynthesizedFixedConstructorRole::ResourceBufferLimit,
                             self.process_symbols.resource_buffer_limit.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            7,
                             7,
                             SynthesizedFixedConstructorRole::ResourceInvalidOffset,
                             self.process_symbols.resource_invalid_offset.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            8,
                             8,
                             SynthesizedFixedConstructorRole::ResourceInvalidBounds,
                             self.process_symbols.resource_invalid_bounds.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &error_root,
+                            9,
                             9,
                             SynthesizedFixedConstructorRole::ResourceNoProgress,
                             self.process_symbols.resource_no_progress.clone(),
@@ -10627,7 +10703,9 @@ impl<'a> Lowering<'a> {
                     ));
                 };
                 let span_origin = *span_origin;
-                let span = self.synthesized_constructor(static_origin, 
+                let span = self.synthesized_constructor(
+                    static_origin,
+                    &ok_root.alternative(1).field(0),
                     SynthesizedFixedConstructorRole::PrivateBufferSpan,
                     self.process_symbols.private_buffer_span.clone(),
                     vec![
@@ -10636,7 +10714,9 @@ impl<'a> Lowering<'a> {
                         Lowered::BoundedNat(count),
                     ],
                 )?;
-                let transferred = self.synthesized_constructor(static_origin, 
+                let transferred = self.synthesized_constructor(
+                    static_origin,
+                    &ok_root.alternative(1).field(1),
                     SynthesizedFixedConstructorRole::PrivateTransferCount,
                     self.process_symbols.private_transfer_count.clone(),
                     vec![
@@ -10648,12 +10728,18 @@ impl<'a> Lowering<'a> {
                     discriminator: builder.ins().uextend(types::I64, nonzero),
                     alternatives: vec![
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &ok_root,
+                            0,
                             0,
                             SynthesizedFixedConstructorRole::ReadEof,
                             self.process_symbols.read_eof.clone(),
                             Vec::new(),
                         )?,
                         self.synthesized_dynamic_alternative(
+                            static_origin,
+                            &ok_root,
+                            1,
                             1,
                             SynthesizedFixedConstructorRole::ReadSome,
                             self.process_symbols.read_some.clone(),
@@ -10679,7 +10765,9 @@ impl<'a> Lowering<'a> {
                     effective_request,
                     None,
                 );
-                let transferred = self.synthesized_constructor(static_origin, 
+                let transferred = self.synthesized_constructor(
+                    static_origin,
+                    &ok_root.field(0),
                     SynthesizedFixedConstructorRole::PrivateTransferCount,
                     self.process_symbols.private_transfer_count.clone(),
                     vec![
@@ -10687,7 +10775,9 @@ impl<'a> Lowering<'a> {
                         Lowered::BoundedNat(remaining),
                     ],
                 )?;
-                self.synthesized_constructor(static_origin, 
+                self.synthesized_constructor(
+                    static_origin,
+                    &ok_root,
                     SynthesizedFixedConstructorRole::Wrote,
                     self.process_symbols.wrote.clone(),
                     vec![transferred],
@@ -10695,7 +10785,9 @@ impl<'a> Lowering<'a> {
             } else if operation == ken_host::HostOpV1::FsHandleMetadata {
                 self.lower_unsigned_u64_int(builder, detail)?
             } else {
-                self.synthesized_constructor(static_origin, 
+                self.synthesized_constructor(
+                    static_origin,
+                    &ok_root,
                     SynthesizedFixedConstructorRole::Unit,
                     self.process_symbols.unit.clone(),
                     Vec::new(),

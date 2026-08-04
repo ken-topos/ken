@@ -82,7 +82,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, JoinPlanToken,
     AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,
-    SynthesizedAggregateChild,
+    SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
@@ -6312,6 +6312,7 @@ impl<'a> Lowering<'a> {
     fn synthesized_constructor(
         &self,
         seat: StaticOriginId,
+        path: &SynthesizedAggregatePath,
         role: SynthesizedFixedConstructorRole,
         constructor: RuntimeSymbol,
         args: Vec<Lowered>,
@@ -6338,7 +6339,7 @@ impl<'a> Lowering<'a> {
         };
         let occurrence = self
             .static_transition_plan
-            .synthesized_aggregate_occurrence(owner, seat, role)
+            .synthesized_aggregate_occurrence(owner, seat, path, role)
             .ok();
         // The recipe and this call site are two statements of one shape, so
         // they are cross-checked rather than trusted to agree. A recipe that
@@ -6348,71 +6349,8 @@ impl<'a> Lowering<'a> {
         if occurrence.is_some() {
             let declared = self
                 .static_transition_plan
-                .synthesized_aggregate_children(owner, seat, role)?;
-            if declared.len() != args.len() {
-                return Err(unsupported(
-                    "Constructor",
-                    format!(
-                        "synthesized aggregate role is planned with {} children but the emitter \
-                         built {}",
-                        declared.len(),
-                        args.len()
-                    ),
-                ));
-            }
-            // Each operand must be the KIND the recipe assumed when it took the
-            // meet. Arity agreement is not sufficient and never was: a recipe
-            // that says `Immediate` where a referent-bearing child is passed has
-            // the right count and the wrong lane, and the aggregate is then
-            // allocated persistent over an operand that can be arena-owned --
-            // which is the dangling parent this whole record exists to prevent.
-            for (position, (child, argument)) in declared.iter().zip(&args).enumerate() {
-                let agrees = match child {
-                    // The EXACT planned disposition, spill class and presence
-                    // included -- not the broad `RepresentedImmediate` family.
-                    //
-                    // The family is not enough because it does not distinguish
-                    // the two owner sets the planner derived from: `spill:
-                    // None` has no boundary node at any magnitude, while
-                    // `spill: Some(_)` becomes a persistent-store handle at
-                    // wide ones. Accepting any immediate here would let a
-                    // record justified by one of those govern an operand that
-                    // is the other.
-                    SynthesizedAggregateChild::Scalar { tag, spill } => matches!(
-                        argument.boundary_disposition(),
-                        BoundaryDisposition::RepresentedImmediate {
-                            tag: emitted_tag,
-                            spill: emitted_spill,
-                        } if emitted_tag == *tag && emitted_spill == *spill
-                    ),
-                    // The named role's own record supplied this child's owners,
-                    // so the operand must be that exact interned occurrence --
-                    // not merely some constructor of the same shape.
-                    SynthesizedAggregateChild::Role(inner) => {
-                        let expected = self
-                            .static_transition_plan
-                            .synthesized_aggregate_occurrence(owner, seat, *inner)?;
-                        matches!(
-                            argument,
-                            Lowered::Constructor {
-                                occurrence: Some(actual),
-                                ..
-                            } if *actual == expected
-                        )
-                    }
-                };
-                if !agrees {
-                    return Err(unsupported(
-                        "Constructor",
-                        format!(
-                            "synthesized aggregate child {position} is planned as {child:?} but \
-                             the emitter built a {}, so the meet was taken over a different node \
-                             than the one being allocated",
-                            lowered_value_kind(argument)
-                        ),
-                    ));
-                }
-            }
+                .synthesized_aggregate_children(owner, seat, path, role)?;
+            self.reconcile_declared_children(owner, seat, path, declared, &args)?;
         }
         Ok(Lowered::Constructor {
             constructor,
@@ -6424,13 +6362,159 @@ impl<'a> Lowering<'a> {
         })
     }
 
+    /// Every operand must be the KIND the tree assumed when it took the meet.
+    ///
+    /// ⛔ Arity agreement is not sufficient and never was: a model that says
+    /// `Scalar` where a referent-bearing child is passed has the right count
+    /// and the wrong lane, and the aggregate is then allocated persistent over
+    /// an operand that can be arena-owned -- the dangling parent this whole
+    /// record exists to prevent.
+    fn reconcile_declared_children(
+        &self,
+        owner: ContinuationEmissionOwner,
+        seat: StaticOriginId,
+        path: &SynthesizedAggregatePath,
+        declared: &'static [SynthesizedAggregateNode],
+        args: &[Lowered],
+    ) -> Result<(), CraneliftBackendError> {
+        if declared.len() != args.len() {
+            return Err(unsupported(
+                "Constructor",
+                format!(
+                    "synthesized aggregate node is planned with {} children but the emitter \
+                     built {}",
+                    declared.len(),
+                    args.len()
+                ),
+            ));
+        }
+        for (position, (child, argument)) in declared.iter().zip(args).enumerate() {
+            let position = u32::try_from(position).map_err(|_| {
+                unsupported(
+                    "Constructor",
+                    "synthesized aggregate arity exceeds the path step space",
+                )
+            })?;
+            let agrees = match child {
+                // The EXACT planned disposition, spill class and presence
+                // included -- not the broad `RepresentedImmediate` family.
+                //
+                // The family is not enough because it does not distinguish the
+                // two owner sets the planner derived from: `spill: None` has no
+                // boundary node at any magnitude, while `spill: Some(_)`
+                // becomes a persistent-store handle at wide ones. Accepting any
+                // immediate here would let a record justified by one of those
+                // govern an operand that is the other.
+                SynthesizedAggregateNode::Scalar { tag, spill } => matches!(
+                    argument.boundary_disposition(),
+                    BoundaryDisposition::RepresentedImmediate {
+                        tag: emitted_tag,
+                        spill: emitted_spill,
+                    } if emitted_tag == *tag && emitted_spill == *spill
+                ),
+                // ⭐ **A nested child's path EXTENDS its parent's.** The operand
+                // must be the exact occurrence interned at
+                // `path.field(position)` -- not merely a constructor of the same
+                // role, and not that same role's occurrence somewhere else in
+                // the tree. This is what makes the path key CHECKED rather than
+                // merely declared: the emitter states where it put the child,
+                // the planner states where it planned it, and the two are
+                // compared. Collapse a step, drop one, or swap two, and the
+                // occurrence resolved here stops matching the operand.
+                //
+                // ⚠ The expected occurrence is an `Option`, and BOTH cases are
+                // checked. A nested child may itself be unmodellable —
+                // `ReadSome`'s `PrivateBufferSpan` carries the site's
+                // `ResourceToken` — in which case the planner issued no record
+                // and the emitter must have carried no occurrence either.
+                // Treating the absent record as an error here would refuse a
+                // lawful `ReadSome`; treating it as "unchecked" would let the
+                // emitter carry SOME other occurrence into that slot. Comparing
+                // the options does neither.
+                SynthesizedAggregateNode::Fixed { role: inner, .. } => {
+                    let expected = self
+                        .static_transition_plan
+                        .synthesized_aggregate_occurrence(
+                            owner,
+                            seat,
+                            &path.field(position),
+                            *inner,
+                        )
+                        .ok();
+                    matches!(
+                        argument,
+                        Lowered::Constructor { occurrence, .. } if *occurrence == expected
+                    )
+                }
+                // A dynamic child is emitted through the value-shape
+                // disposition rather than a planned record, so there is no
+                // occurrence to compare. What IS checkable is that the emitter
+                // put a dynamic constructor at this position at all.
+                SynthesizedAggregateNode::Dynamic(_) => {
+                    matches!(argument, Lowered::DynamicConstructor(_))
+                }
+                // ⛔ Unreachable in a RECORD's declared children: a
+                // site-dependent node makes its parent unmodellable, so the
+                // parent has no record and this loop does not run for it. It IS
+                // reachable for a dynamic alternative, which is reconciled from
+                // the tree rather than from a record -- and there it means
+                // exactly what it says: the tree does not govern this position,
+                // so nothing about the operand is checkable.
+                SynthesizedAggregateNode::SiteDependent => true,
+            };
+            if !agrees {
+                return Err(unsupported(
+                    "Constructor",
+                    format!(
+                        "synthesized aggregate child {position} is planned as {child:?} but the \
+                         emitter built a {}, so the meet was taken over a different node than \
+                         the one being allocated",
+                        lowered_value_kind(argument)
+                    ),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Build one alternative of a compiler-synthesized dynamic constructor.
+    ///
+    /// ⭐ An alternative gets no ownership record -- it is allocated through
+    /// the value-shape disposition inside `emit_carrier_dynamic_constructor`,
+    /// which never consults a planned lane. But its ordered fields are as much
+    /// a measured fact as a fixed constructor's, and its children DO carry
+    /// occurrences. So it reconciles against the tree directly: the node at
+    /// `parent.alternative(position)` must be this exact role with this exact
+    /// ordered child model.
     fn synthesized_dynamic_alternative(
         &self,
+        seat: StaticOriginId,
+        parent: &SynthesizedAggregatePath,
+        position: u32,
         tag: i64,
         role: SynthesizedFixedConstructorRole,
         constructor: RuntimeSymbol,
         fields: Vec<Lowered>,
     ) -> Result<DynamicConstructorAlternativeV1, CraneliftBackendError> {
+        // Absent means no context is being defined, which is not an emission
+        // this population covers -- the same boundary `synthesized_constructor`
+        // draws, and for the same reason.
+        if let Some(owner) = self.defining_emission_owner {
+            let path = parent.alternative(position);
+            let (declared_role, declared) =
+                self.static_transition_plan.synthesized_tree_node(seat, &path)?;
+            if declared_role != role {
+                return Err(unsupported(
+                    "DynamicConstructor",
+                    format!(
+                        "alternative {position} is planned as {declared_role:?} but the emitter \
+                         built {role:?}, so the path names a different node than the one being \
+                         constructed"
+                    ),
+                ));
+            }
+            self.reconcile_declared_children(owner, seat, &path, declared, &fields)?;
+        }
         Ok(DynamicConstructorAlternativeV1 {
             tag,
             constructor,
