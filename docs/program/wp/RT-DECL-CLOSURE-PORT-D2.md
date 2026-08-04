@@ -58,10 +58,29 @@ unless the planner actually planned that declaration. This is not a
 source-origin whitelist and not a syntactic test on the body — both of which
 the frame's §4 prohibitions forbid.
 
-The unit **population is unchanged**: D2 reclassifies, it does not add or remove
-a unit. The existing relational assertion that
-`functions.len() == entries.len() + StaticBody edge count` stays green and is
-the guard on that claim.
+**D2 reclassified without correcting the population, and that was wrong.**
+D2 as landed left a closure-seed transparent declaration contributing **two**
+functions — its `StaticBody` target, newly classified `CallableDeclaration`, and
+its own now-unreachable zero-input `SchedulingEntry` at the closure occurrence.
+The second has no lawful runtime meaning: it cannot call the callable unit
+without the missing parameters and captures, cannot return the closure, and
+cannot become a no-op without changing program meaning. D5 measured it as a
+refusal at `boundary_transfer_admissibility` the first time the functionized
+lane was actually entered.
+
+The population is therefore **corrected by `D2a`**, on this same lineage: a
+transparent `Closure`/`LexicalClosure` declaration contributes exactly one
+declaration-owned `CallableDeclaration`, at its exact forward `StaticBody`
+target, and **no separate `SchedulingEntry` function**. The relational assertion
+is now
+
+```text
+functions.len() == entries.len() + StaticBody edge count - declaration-owned pairs
+```
+
+and the retained `StaticBody` relation of such a pair is a
+**definition/signature relation**, not an emitted cross-unit call. See the
+frame's `D2a` section (Architect ruling `evt_3twrm71vck49d`).
 
 ## 3. Invariants the new arm inherits, and where that was nearly lost
 

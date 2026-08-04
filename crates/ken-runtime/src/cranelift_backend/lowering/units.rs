@@ -6,6 +6,8 @@
 //!
 //! ⛔ **This module does not derive the population and must never be made to.**
 //! The unit set is `plan.entries` ∪ every `EdgeKind::StaticBody` **target**,
+//! MINUS every declaration-owned pair (`RT-DECL-CLOSURE-PORT` `D2a`: a
+//! closure-seed transparent declaration's entry seeds no function of its own),
 //! seeded and validated by `B2O` and given one `AbiDescriptor` apiece by `B2R`.
 //! `StaticTransitionPlan::emittable_units` projects that; this module consumes
 //! the projection. In particular it never consults
