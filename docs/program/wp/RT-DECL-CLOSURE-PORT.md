@@ -829,14 +829,24 @@ controls are green, the governed enumeration is empty and selects
 artifact ran for the first time and trapped.** `D6` is therefore **not closed**,
 and the repair may not be taken under the one-action clause. It is `D6a`.
 
-**Resume base.** The old block named `e5762c5c` at checkpoint 3; superseded.
-The resume point is exact `1e5daa7b`. Every earlier SHA on this lineage —
-`2ed97dd1`, `3e58490e`, `86bdb5cb`, `5758dd93`, `016b786c`, `d65ee15c`,
-`9f12da78`, `b6d13351`, `e5762c5c`, `8e07bab8`, `cbdf9a2a`, `a765b8d3`,
-`c8f3a75e`, `08cb257f`, `bffc7f5b` — is a preservation or evidence checkpoint
-and **never a candidate**; reverting to any discards accepted work. The
-localization trace is discharged: the `D5a` discriminators now bear its claims.
-The candidate and QA routes stay closed until `D6a` is green.
+**Resume base — the single place this frame states it.** The resume point is
+exact `ae45e804`, which carries `D6`'s activation (rebased content-identical as
+`e3891003`) plus `D6a`'s accepted downstream carried consumer. It supersedes
+`1e5daa7b`, which this block named before the predecessor-edge ruling, and
+`e5762c5c` at checkpoint 3 before that.
+
+Every earlier SHA on this lineage — `1e5daa7b`, `2ed97dd1`, `3e58490e`,
+`86bdb5cb`, `5758dd93`, `016b786c`, `d65ee15c`, `9f12da78`, `b6d13351`,
+`e5762c5c`, `8e07bab8`, `cbdf9a2a`, `a765b8d3`, `c8f3a75e`, `08cb257f`,
+`bffc7f5b` — is a preservation or evidence checkpoint and **never a
+candidate**; reverting to any discards accepted work. The localization trace is
+discharged: the `D5a` discriminators now bear its claims. The candidate and QA
+routes stay closed until both halves of `D6a` are green.
+
+⛔ **This block has now been restated three times in one day, and twice a stale
+copy of it outlived the measurement that retired it. If a later ruling moves
+the resume point, edit HERE and grep the whole frame for the old SHA — an
+appended correction elsewhere does not replace this sentence.**
 
 #### `same_recursive_argument_shapes` is obsolete on this lane — no guard was lost
 
@@ -892,8 +902,13 @@ runtime answer.
 The first causal source seat is the `LoweringOperand::Carried` arm of
 `SourceContinuation::ComputationalMatchScrutinee` in `lowering/core.rs`:
 
-- the source continuation still holds the closed fact
-  `answer_route: SourceComputationalAnswerRoute`;
+- the source continuation holds a field
+  `answer_route: SourceComputationalAnswerRoute` — **CORRECTED 2026-08-04 by
+  `evt_4n6anh6431w1p`: this bullet originally said the source continuation
+  "still holds the closed fact", and the section below built on that. It is
+  false for the post-activation path. That seat is one producer of the route,
+  not its owner. See "The route is a predecessor-edge fact" below, which is
+  the operative statement;**
 - its **specialized** arm reads that fact, and on `CheckedSelectedRecursor`
   routes an unmatched constructor through the unique guarded `ITree::Ret`
   answer path, recording `DeforestedAnswerResumed`;
@@ -917,11 +932,16 @@ contained. It is evidence of the phase gap.
 
 #### The complete bounded mechanism, and nothing beyond it
 
-1. **Preserve the existing closed route fact.** Thread the existing
-   `SourceComputationalAnswerRoute` from
-   `SourceContinuation::ComputationalMatchScrutinee` into the carried
-   computational-eliminator operation. Do not infer it from a tag, body,
-   constructor spelling, frame id, or the presence of a continuation unit.
+1. **Preserve the existing closed route fact.** Thread the incoming
+   `SourceComputationalAnswerRoute` into the carried computational-eliminator
+   operation. Do not infer it from a tag, body, constructor spelling, frame id,
+   or the presence of a continuation unit. ⛔ **CORRECTED 2026-08-04 by
+   `evt_4n6anh6431w1p`: this clause originally said to thread the route "from
+   `SourceContinuation::ComputationalMatchScrutinee`", naming that seat as the
+   source. It is one producer, not the authority, and the downstream half built
+   against this clause is accepted and retained. Where the route comes from is
+   ruled in "The route is a predecessor-edge fact" below, and that section
+   governs.**
 2. **Ordinary case matching remains first and unchanged.** A carried value
    whose exact planner-issued tag matches an ordinary computational case takes
    that case.
@@ -968,14 +988,128 @@ a separate emission/runtime discriminator. And prove the disabled trap's
 **planner trap identity at the unit `TrapWord` and root propagation seat**: the
 generic process `-4` string alone is not exact provenance.
 
+#### The route is a predecessor-edge fact — the upstream half
+
+**Added 2026-08-04 by Architect ruling `evt_4n6anh6431w1p`, grounded on exact
+`ae45e80427cead5bcdd16de0b459cf1aa93c8e7f` (tree `e2dbc153`, parent
+`e3891003`). Steward recut. `ae45e804` is preservation-only, never a
+candidate.**
+
+**The downstream half above is ACCEPTED and must be preserved.** Runtime
+implemented it faithfully — ordinary carried case matching first, the narrow
+`CheckedSelectedRecursor` fallback with the exact two-case/one-`Ret`/one-binder/
+no-marker topology, the same carried word passed unchanged, closed defaults, and
+a separate `CarriedAnswerRouteEmitted` event that claims emission rather than
+runtime choice. The stop was also correct: the seam has the exact frame and
+topology but receives `DirectScrutinee`, and deriving otherwise from
+`checked_frame_id.is_some()` is forbidden **and would be unsound**.
+
+**The falsified premise.** The route is **not** a property of the
+`ComputationalMatch` occurrence or of its checked frame. It is a property of
+**the exact predecessor that supplied the answer.** The planner census on this
+witness makes the distinction concrete:
+
+```text
+CSId(0)  continuation origin 10, emitted from predeclared fn3
+CSId(1)  the SAME continuation origin 10, emitted from Specialization(CSId(0))
+         the second causal call is owned by that specialization context and
+         targets CSId(1)
+         both coexist with the ordinary direct scrutinee of origin 10
+```
+
+⇒ Neither `StaticOriginId(10)`, frame 7, "a continuation unit exists", nor the
+current emission owner selects the route. **Any occurrence-global projection
+would mark the ordinary direct predecessor as checked too.**
+
+#### The two lawful producers, and nothing else
+
+1. **The existing checked recursor-layer predecessor.** Its exact
+   `RecursorLayerRole::SelectsOccurrence` path supplies
+   `CheckedSelectedRecursor`; every other layer role and direct descent
+   supplies `DirectScrutinee`.
+2. **An actually emitted, exactly claimed continuation-specialization call.**
+   The authority is the opaque `ContinuationCallIdentity` consumed at
+   `claim_and_call_resolved_continuation`, **after** the owner/affine claim
+   succeeds and **after** the emitted callee has been checked against
+   `identity.target()`. A result from that exact call is a
+   `CheckedSelectedRecursor` answer. ⛔ A static-worker call, a raw unit call,
+   an ordinary expression result, or a merely matching continuation origin is
+   **not**.
+
+This uses existing planner authority. **No planner population, ABI descriptor,
+frame, carrier tag, or runtime selector is added.**
+
+#### The transport contract
+
+Carry a **compiler-only routed answer** on the exact lowering predecessor: the
+existing operand paired with `SourceComputationalAnswerRoute`. It is metadata
+of the compiler path — **not a field in the runtime word and not a new carrier
+lane.**
+
+- Ordinary source evaluation starts `DirectScrutinee`.
+- Applying an exact selecting recursor layer changes the routed answer to
+  `CheckedSelectedRecursor`.
+- Returning from the exact claimed and emitted continuation call changes
+  **that call result** to `CheckedSelectedRecursor`.
+- The source/composed state transports the pair until the computational-match
+  consumer, which threads the incoming route into the already-accepted
+  `ComputationalEliminatorFrame`.
+- **A function boundary carries only the word.** The **caller** re-attests the
+  route from its own exact claimed call identity; the callee never writes a
+  hidden route bit.
+- If control-flow composition would merge `DirectScrutinee` and
+  `CheckedSelectedRecursor` before the consumer, **preserve them as distinct
+  predecessor arms. If the current join cannot do that, hard-stop.** ⛔ Do not
+  collapse them to either scalar and do not add a runtime discriminator.
+
+The existing field on `SourceContinuation::ComputationalMatchScrutinee` may
+remain, for the recursor-layer producer. ⛔ **It is not the sole authority and
+must not overwrite a checked route carried by the incoming exact call result.**
+This also retires the reading that every other construction site should be set
+to `DirectScrutinee` as a default: ordinary evaluation *starts* there, and an
+exact producer *raises* it. A site that hard-codes `DirectScrutinee` on a path
+an exact call result reaches would erase the fact this checkpoint exists to
+transport.
+
+#### Forbidden shortcuts
+
+⛔ Do not derive the route from frame id or presence, match origin, body,
+constructor spelling or tag, the current defining or emission owner,
+continuation-unit or context existence, ABI shape, test name, or "it is the
+only candidate". Do not mark all ordinary descents checked. Do not store the
+route in the boundary word, decode the word, or choose a callable at runtime.
+
+#### The discriminators this upstream half owes
+
+These are **in addition to** the eight downstream evidence obligations above,
+which stand unchanged.
+
+- the exact claimed `CSId(1)` call result reaches origin 10 as
+  `CheckedSelectedRecursor`, emits the carried fallback, and the linked witness
+  exits 0;
+- dropping **only** that call-result route recreates the exact planned default;
+- the **same checked frame** with an ordinary direct predecessor stays
+  `DirectScrutinee` — this is the control that would have caught the
+  occurrence-global projection;
+- a raw or static-worker call **cannot mint** the checked route;
+- the recursor-layer producer stays green **independently** of the call-result
+  producer;
+- a mixed-route predecessor fixture either preserves separate arms correctly or
+  reaches the explicit merge hard stop;
+- planned, claimed and emitted call identity and the routed-consumer evidence
+  agree **on the exact identity, not merely on counts**;
+- every existing `D5`, `D5a`, `D6` and downstream `D6a` control stays green
+  unhooked.
+
 #### Holds
 
-Preserve `1e5daa7b`. Do not revert the residual retirement or reintroduce the
-selector witness — both are directionally correct. Do not tune joins, resume
-behavior, continuation identities, captures, or call operands from this red
-activation checkpoint. Runtime is released from exact `1e5daa7b` by its leader
+Preserve `1e5daa7b` and `ae45e804`. Do not revert the residual retirement,
+reintroduce the selector witness, or undo the accepted downstream carried
+consumer — all three are directionally correct. Do not tune joins, resume
+behavior, continuation identities, captures, or call operands from a red
+evidence checkpoint. Runtime is released from exact `ae45e804` by its leader
 once this recut has published. The candidate route, `D6` closure, and the QA
-route stay closed until `D6a`'s evidence above is green.
+route stay closed until both halves of `D6a` are green.
 
 > ### ⭐⭐ `D7` NOW CARRIES THE EXACT-RECORD RE-DERIVATION, AND IT GATES ANOTHER NODE
 >
