@@ -5778,32 +5778,38 @@ fn ac5_redirecting_the_resolved_worker_target_reds_the_same_shape_witness() {
 
 /// **`D7` — every construction-time occurrence lookup FAILS CLOSED.**
 ///
-/// MEASURED: with a live emission owner, a synthesized construction whose exact
-/// record does not exist refuses; a nested `Fixed` child whose expected record
-/// does not exist refuses rather than comparing two absences equal; and a
-/// host-result root whose authority lookup cannot be answered refuses rather
-/// than reading as a root with no planned set. With NO emission owner, all
-/// three are lawfully permissive.
+/// MEASURED, on the three consumers this row drives:
 ///
-/// CLAIMED: none of the construction-seat consumers converts a failed authority
-/// lookup into an absence. `None` is lawful on exactly one branch — the
-/// explicit no-emission-owner early return — and that branch is what the
-/// positive halves exercise.
+/// | consumer | no emission owner | live owner, unanswerable lookup |
+/// |---|---|---|
+/// | `synthesized_constructor` | accepts | refuses |
+/// | `reconcile_declared_children`, nested `Fixed` child | not exercised | refuses |
+/// | `reconcile_host_result_root` | accepts | refuses |
+///
+/// ⚠ The middle row's permissive cell is deliberately blank rather than
+/// asserted: `reconcile_declared_children` takes its owner as an argument and
+/// has no no-emission-owner branch of its own, so there is nothing there to
+/// exercise. The two consumers that DO draw that boundary are the two asserted.
+///
+/// CLAIMED: none of these converts a failed authority lookup into an absence.
+/// `None` is lawful only on the explicit no-emission-owner early return, which
+/// is what the permissive column exercises.
 ///
 /// THE GAP — and it is why these are driven at the CONSUMER rather than at the
 /// planner API. The planner-side row
 /// `a_lawful_non_dynamic_root_is_not_a_failed_lookup` proves the API types
 /// absence apart from failure, and stays green if a consumer reintroduces
-/// `.ok()`. Each assertion below turns red if its own consumer's `?` is changed
-/// back, which is the property the API row cannot hold.
+/// `.ok()`.
 ///
-/// ⚠ One sibling is NOT covered here: `dynamic_alternatives_agree`'s
-/// per-alternative record lookup. Reaching it needs a path whose alternative
-/// POPULATION resolves while its per-alternative RECORDS do not, which takes a
-/// second, wrong emission owner — and `PredeclaredFunctionId`'s field is
-/// `pub(super)`, so this module cannot mint one. That site carries the same `?`
-/// and is covered by mutation only. Said plainly rather than dressed with a
-/// control that would not actually reach it.
+/// ⚠ Not every assertion below is a single-line discriminator.
+/// `synthesized_constructor`'s repair closed its hole TWICE — with `?` and by
+/// making the child reconciliation unconditional — so reverting either half
+/// alone stays green and only the full predecessor is caught. That is a
+/// redundancy, not a gap, and it is recorded so a green single-line revert is
+/// not misread as an unpinned property.
+///
+/// The fourth consumer, `dynamic_alternatives_agree`, has its own row:
+/// `a_dynamic_alternative_with_no_planned_record_refuses`.
 #[test]
 fn a_construction_time_occurrence_lookup_fails_closed() {
     use crate::cranelift_backend::planning::{
@@ -5934,5 +5940,197 @@ fn a_construction_time_occurrence_lookup_fails_closed() {
             .is_err(),
         "a root whose authority lookup cannot be answered must refuse, even \
          when the emitted root is lawfully non-dynamic"
+    );
+}
+
+/// The first `Effect` occurrence in a planned graph, found by walking the
+/// occurrence tree with the accessors lowering itself uses.
+///
+/// `StaticOriginId` is unmintable here — its field is `pub(super)` — so a seat
+/// has to be *discovered* rather than fabricated, which is also the honest
+/// shape: the control below is about a seat the planner really issued records
+/// for.
+fn first_effect_seat(plan: &StaticTransitionPlan<'_>) -> Option<StaticOriginId> {
+    let mut stack = vec![plan.root_static_origin().ok()?];
+    let mut seen = 0usize;
+    while let Some(origin) = stack.pop() {
+        seen += 1;
+        if seen > 4096 {
+            return None;
+        }
+        if matches!(plan.source_occurrence(origin), Ok(RuntimeExpr::Effect { .. })) {
+            return Some(origin);
+        }
+        let mut position = 0;
+        while let Ok(child) = plan.child_static_origin(origin, position) {
+            stack.push(child);
+            position += 1;
+        }
+    }
+    None
+}
+
+/// **`D7` — the dynamic-alternative consumer fails closed on a missing record.**
+///
+/// MEASURED: at a real `FsWriteAt` seat whose error root is the ten-alternative
+/// resource surface, `dynamic_alternatives_agree` accepts the alternatives
+/// carrying the occurrences the planner issued **under the seat's own emission
+/// owner**, and refuses under a *different* enumerated unit's owner — at which
+/// no per-alternative record exists — even though every emitted alternative
+/// carries `occurrence: None` and the population cardinality still matches.
+///
+/// CLAIMED: the per-alternative record lookup propagates rather than mapping to
+/// `None`, so missing planner authority cannot compare equal to an alternative
+/// that carries no occurrence.
+///
+/// THE GAP: this is the one consumer cell the earlier fail-closed row could not
+/// reach, and I previously reported it as unreachable from a test. That was
+/// wrong in a specific way worth recording — I checked whether a
+/// `PredeclaredFunctionId` could be **minted** (it cannot; the field is
+/// `pub(super)`) and concluded no second owner was obtainable, without checking
+/// whether a fixture could **enumerate** two. `emittable_units()` returns them,
+/// and this fixture has more than one.
+///
+/// ⚠ The negative's discriminating power is exactly the `?`: restoring the
+/// predecessor `.ok()` makes `expected` become `None`, which compares equal to
+/// the emitted `None`, and the negative half passes. Both halves are asserted
+/// because the positive is what stops the row degenerating into "this consumer
+/// refuses everything".
+#[test]
+fn a_dynamic_alternative_with_no_planned_record_refuses() {
+    use crate::cranelift_backend::planning::{
+        SynthesizedAggregatePath, SynthesizedAggregateRoot,
+    };
+
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let write = RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::FsWriteAt,
+        capability: None,
+        args: vec![
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((4).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+        ],
+    };
+    let source = host_result_closure_match(write);
+    let (plan, _) = planned_root_occurrence(&source);
+    let seat = first_effect_seat(&plan).expect("the fixture has an effect seat");
+
+    // Two ENUMERATED units, which is where the alternate owner comes from.
+    let units = plan
+        .emittable_units()
+        .expect("a planned graph enumerates its units");
+    assert!(
+        units.len() > 1,
+        "this control needs two enumerated units to obtain an owner the seat \
+         has no records under; the fixture yielded {}",
+        units.len()
+    );
+    let owners = units
+        .iter()
+        .map(|unit| ContinuationEmissionOwner::Predeclared(unit.function()))
+        .collect::<Vec<_>>();
+
+    let error_root = SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultError);
+    let population = plan
+        .synthesized_dynamic_alternatives(seat, &error_root)
+        .expect("the error root is the resource surface");
+    assert_eq!(population.len(), 10, "the resource surface has ten alternatives");
+
+    let seed_env = NativeSeedEnvironment::empty();
+    let compiler = bare_carrier_test_lowering(&seed_env, plan);
+    let plan = &compiler.static_transition_plan;
+
+    // The owner the seat's records were actually issued under. Found by asking
+    // which enumerated owner resolves alternative 0, rather than assumed.
+    let live = owners
+        .iter()
+        .copied()
+        .find(|owner| {
+            plan.synthesized_aggregate_occurrence(
+                *owner,
+                seat,
+                &error_root.alternative(0),
+                population[0],
+            )
+            .is_ok()
+        })
+        .expect("some enumerated owner holds this seat's records");
+    let absent = owners
+        .iter()
+        .copied()
+        .find(|owner| *owner != live)
+        .expect("a second enumerated unit supplies the alternate owner");
+
+    let alternative = |occurrence| DynamicConstructorAlternativeV1 {
+        tag: 0,
+        constructor: symbols.resource_host_io.clone(),
+        identity: test_synthesized_constructor_identity(),
+        occurrence,
+        fields: Vec::new(),
+    };
+
+    // ── POSITIVE: the real occurrences under the live owner agree ──
+    let carried = population
+        .iter()
+        .enumerate()
+        .map(|(index, role)| {
+            let occurrence = plan
+                .synthesized_aggregate_occurrence(
+                    live,
+                    seat,
+                    &error_root.alternative(index as u32),
+                    *role,
+                )
+                .expect("every planned alternative has a record under the live owner");
+            alternative(Some(occurrence))
+        })
+        .collect::<Vec<_>>();
+    let mut builder_context = FunctionBuilderContext::new();
+    let mut function = Function::new();
+    let mut builder = FunctionBuilder::new(&mut function, &mut builder_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    let discriminator = builder.ins().iconst(types::I64, 0);
+    assert!(
+        compiler
+            .dynamic_alternatives_agree(
+                live,
+                seat,
+                &error_root,
+                &DynamicConstructorV1 {
+                    discriminator,
+                    alternatives: carried,
+                },
+            )
+            .expect("the live owner's lookup is answerable"),
+        "alternatives carrying the planner's own occurrences must agree, or \
+         the negative below is not discriminating"
+    );
+
+    // ── NEGATIVE: an owner with no records here, alternatives carrying None ──
+    //
+    // The population still resolves — it is read from the tree, which has no
+    // owner — and the cardinality still matches, so nothing but the
+    // per-alternative record lookup can catch this. Under the predecessor
+    // `.ok()` the expectation became `None`, compared equal to the emitted
+    // `None`, and all ten alternatives agreed.
+    let refused = compiler.dynamic_alternatives_agree(
+        absent,
+        seat,
+        &error_root,
+        &DynamicConstructorV1 {
+            discriminator,
+            alternatives: (0..population.len()).map(|_| alternative(None)).collect(),
+        },
+    );
+    assert!(
+        refused.is_err(),
+        "a missing per-alternative record must refuse, not compare equal to an \
+         alternative carrying no occurrence"
     );
 }

@@ -6605,15 +6605,14 @@ impl<'a> Lowering<'a> {
                 // compared. Collapse a step, drop one, or swap two, and the
                 // occurrence resolved here stops matching the operand.
                 //
-                // ⚠ The expected occurrence is an `Option`, and BOTH cases are
-                // checked. A nested child may itself be unmodellable —
-                // `ReadSome`'s `PrivateBufferSpan` carries the site's
-                // `ResourceToken` — in which case the planner issued no record
-                // and the emitter must have carried no occurrence either.
-                // Treating the absent record as an error here would refuse a
-                // lawful `ReadSome`; treating it as "unchecked" would let the
-                // emitter carry SOME other occurrence into that slot. Comparing
-                // the options does neither.
+                // ⛔ Every allocation-reachable nested child HAS a record --
+                // `ReadSome`'s `PrivateBufferSpan` included, whose site-bound
+                // `ResourceToken` gets an exact seat-derived one. So a failed
+                // lookup here is missing authority, not a lawful absence, and
+                // it propagates. The comparison is against `Some(expected)`;
+                // under an `.ok()` mapping a missing record compared EQUAL to a
+                // child carrying no occurrence and the pair passed on two
+                // absences agreeing.
                 (
                     SynthesizedAggregateNode::Fixed { role: inner, .. },
                     SynthesizedArgument::Nested(value),
