@@ -306,6 +306,7 @@ fn run_checked_bounded_nat_fixture(
                             checked_invocation_id: None,
                             checked_invocation_source: None,
                             checked_invocation_depth: 0,
+                            answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                         },
                     )];
                     compiler.lower_bounded_nat_computational(&mut builder, nat, false, &frames)?

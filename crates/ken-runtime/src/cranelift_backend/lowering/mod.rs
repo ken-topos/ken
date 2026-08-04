@@ -389,6 +389,24 @@ pub(crate) enum Px8trTrapProvenanceEvent {
         actual_constructor: Option<RuntimeSymbol>,
         return_constructor: RuntimeSymbol,
     },
+    /// **`RT-DECL-CLOSURE-PORT` `D6a` — the CARRIED answer route was emitted.**
+    ///
+    /// ⛔⛔ A separate event from [`Self::DeforestedAnswerResumed`], and the
+    /// separation is the point. That one is recorded while lowering the
+    /// **specialized** branch, where the scrutinee is a compile-time
+    /// `Lowered::Constructor` and `actual_constructor` can name it. On the
+    /// carried branch there is no such name to record and nothing at compile
+    /// time knows which way a runtime word will go — so reusing that event here
+    /// would dress a compile-time fact as runtime evidence.
+    ///
+    /// ⚠ This event says exactly one thing: **the carried route was emitted**
+    /// into this frame's return case. It is an *emission* discriminator. The
+    /// runtime half is the linked artifact's exit status, and the two are
+    /// reported as a pair — neither substitutes for the other.
+    CarriedAnswerRouteEmitted {
+        checked_frame_id: u64,
+        return_constructor: RuntimeSymbol,
+    },
     FinalProcessObjectTrap {
         trap: RuntimeTrap,
     },
@@ -6174,6 +6192,24 @@ struct ComputationalEliminatorFrame<'a> {
     checked_invocation_id: Option<u64>,
     checked_invocation_source: Option<InvocationTemplateRef>,
     checked_invocation_depth: usize,
+    /// **`RT-DECL-CLOSURE-PORT` `D6a` — the closed answer-route fact, carried
+    /// rather than re-derived.**
+    ///
+    /// ⭐⭐ This field is the whole checkpoint. `SourceContinuation::
+    /// ComputationalMatchScrutinee` already holds it, the **specialized** arm
+    /// already reads it, and the **carried** arm used to build this frame
+    /// without it — so a checked recursive answer arriving as a carried word was
+    /// asked only whether its tag matched an ordinary case, and took the closed
+    /// default when it did not. `D6` activation was the first execution of the
+    /// functionized artifact and therefore the first time that drop could be
+    /// observed at all.
+    ///
+    /// ⛔ **Threaded, never inferred.** It is not to be recovered from a tag, a
+    /// body, a constructor spelling, a frame id, or the presence of a
+    /// continuation unit. Every construction site that is not that source
+    /// continuation supplies [`SourceComputationalAnswerRoute::DirectScrutinee`],
+    /// which keeps the existing closed default exactly as it was.
+    answer_route: SourceComputationalAnswerRoute,
 }
 /// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 4 step 1 — one carried
 /// invocation's RETAINED SOURCE COORDINATES.**
@@ -7204,6 +7240,7 @@ fn installed_oriented_eliminator_frames(
                 checked_invocation_id: layer.checked_invocation_id,
                 checked_invocation_source: layer.checked_invocation_source,
                 checked_invocation_depth: layer.checked_invocation_depth,
+                answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
             })
         })
         .collect()

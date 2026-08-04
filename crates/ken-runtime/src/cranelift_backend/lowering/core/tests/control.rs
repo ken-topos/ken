@@ -1630,6 +1630,7 @@ fn nested_computational_inner_missing_selects_exact_inner_default() {
             checked_invocation_id: None,
             checked_invocation_source: None,
             checked_invocation_depth: 0,
+            answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
         },
         ComputationalEliminatorFrame {
             cases: &outer_cases,
@@ -1643,6 +1644,7 @@ fn nested_computational_inner_missing_selects_exact_inner_default() {
             checked_invocation_id: None,
             checked_invocation_source: None,
             checked_invocation_depth: 0,
+            answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
         },
     ];
 
@@ -2058,6 +2060,7 @@ fn nested_computational_outer_missing_selects_exact_outer_default() {
             checked_invocation_id: None,
             checked_invocation_source: None,
             checked_invocation_depth: 0,
+            answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
         },
         ComputationalEliminatorFrame {
             cases: &outer_cases,
@@ -2071,6 +2074,7 @@ fn nested_computational_outer_missing_selects_exact_outer_default() {
             checked_invocation_id: None,
             checked_invocation_source: None,
             checked_invocation_depth: 0,
+            answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
         },
     ];
 
