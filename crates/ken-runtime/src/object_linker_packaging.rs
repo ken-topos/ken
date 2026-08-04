@@ -2949,14 +2949,35 @@ mod tests {
 
         let (success, success_provenance) = run("px8tr-post-effect-success", false);
         assert_eq!(success.status.code(), Some(0));
+        // ⭐⭐ `RT-DECL-CLOSURE-PORT` `D6a` — THE EVIDENCE RULE, APPLIED.
+        //
+        // This row used to assert `DeforestedAnswerResumed`. That event is
+        // recorded while lowering the **specialized** branch, where the
+        // scrutinee is a compile-time `Lowered::Constructor` and
+        // `actual_constructor` can name it. On the activated functionized lane
+        // the checked answer arrives as a **carried** word, and nothing at
+        // compile time knows what a runtime word holds — so keeping that
+        // assertion here would require a compile-time fact as proof of a
+        // runtime one, which is exactly what the frame forbids.
+        //
+        // ⛔ The pair below is the ruled replacement, and neither half
+        // substitutes for the other:
+        //
+        // - **runtime**: `success.status.code() == Some(0)` above. The linked
+        //   artifact ran, took the return case, and exited through the unique
+        //   return-case-dependent success. Only that can testify to a runtime
+        //   choice.
+        // - **emission**: `CarriedAnswerRouteEmitted`, which claims only that
+        //   the carried route was emitted into this frame's return case.
+        //
+        // ⚠ `DeforestedAnswerResumed` is NOT deleted — it remains the
+        // specialized branch's evidence wherever that branch is the one lowered.
         assert!(success_provenance.iter().any(|event| matches!(
             event,
-            crate::cranelift_backend::Px8trTrapProvenanceEvent::DeforestedAnswerResumed {
+            crate::cranelift_backend::Px8trTrapProvenanceEvent::CarriedAnswerRouteEmitted {
                 checked_frame_id: 7,
-                actual_constructor: Some(constructor),
                 return_constructor,
-            } if constructor == "ctor:prelude::Result::Ok"
-                && return_constructor == "ctor:fixture::PX8TR::ITree::Ret"
+            } if return_constructor == "ctor:fixture::PX8TR::ITree::Ret"
         )));
         assert!(!success_provenance.iter().any(|event| matches!(
             event,

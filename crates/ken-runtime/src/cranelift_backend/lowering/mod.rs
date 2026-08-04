@@ -7776,7 +7776,11 @@ enum SourceMachineState<'a> {
         control: SourceControl<'a>,
     },
     Value {
-        value: LoweringOperand,
+        /// **`D6a` upstream half** -- the operand **and the route it arrived
+        /// by**. ⛔ Not two independent facts: the route is a property of this
+        /// exact predecessor, so pairing them here is what stops a later seat
+        /// from having to guess which predecessor a value came from.
+        value: RoutedAnswer,
         control: SourceControl<'a>,
     },
 }
