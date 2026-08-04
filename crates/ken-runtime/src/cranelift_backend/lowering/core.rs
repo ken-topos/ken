@@ -1203,8 +1203,11 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, arg, argument_env)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
+                // ⚠ No invocation segment is in scope on the pending-`Let`
+                // resumption, so no coordinates can be supplied. The callee
+                // fails closed if this body has a generated context.
                 let returned =
-                    self.call_declared_recursive_position_unit(builder, body, &inputs)?;
+                    self.call_declared_recursive_position_unit(builder, body, &inputs, None)?;
                 return self.lower_computational_match_value_composed(
                     builder,
                     returned,
@@ -1703,6 +1706,13 @@ impl<'a> Lowering<'a> {
                         let (activation, invocation) =
                             boundary.expect("recursor closure carries an invocation segment");
                         let recursive_unit_body = invocation.recursive_unit_body;
+                        // `D5a` checkpoint 4 step 1 — read the retained source
+                        // coordinates BEFORE the segment is installed, beside the
+                        // existing pre-move field read. Both are facts of the
+                        // invocation, so both are taken while it is still in hand
+                        // rather than reconstructed afterwards.
+                        let carried_coordinates =
+                            CarriedInvocationCoordinates::of(&invocation)?;
                         let current = active_recursor_frame(eliminators).ok_or_else(|| {
                             unsupported(
                                 "ComputationalRecursor",
@@ -1755,8 +1765,14 @@ impl<'a> Lowering<'a> {
                                     })
                                     .collect::<Result<Vec<_>, _>>()?;
                                 self.enter_oriented_semantic_region(installed.checked);
+                                let coordinates = carried_coordinates;
                                 let returned = self
-                                    .call_declared_recursive_position_unit(builder, body, &inputs)
+                                    .call_declared_recursive_position_unit(
+                                        builder,
+                                        body,
+                                        &inputs,
+                                        Some(coordinates),
+                                    )
                                     .and_then(|value| {
                                         self.lower_computational_match_value_composed(
                                             builder, value, &composed,
@@ -5537,6 +5553,13 @@ impl<'a> Lowering<'a> {
                 let (activation, invocation) =
                     boundary.expect("recursor closure carries an invocation segment");
                 let recursive_unit_body = invocation.recursive_unit_body;
+                        // `D5a` checkpoint 4 step 1 — read the retained source
+                        // coordinates BEFORE the segment is installed, beside the
+                        // existing pre-move field read. Both are facts of the
+                        // invocation, so both are taken while it is still in hand
+                        // rather than reconstructed afterwards.
+                        let carried_coordinates =
+                            CarriedInvocationCoordinates::of(&invocation)?;
                 if source_active_cursor(
                     &control.selected,
                     &control.selected_lineage,
@@ -5586,8 +5609,13 @@ impl<'a> Lowering<'a> {
                             BodyEmissionAuthority::FunctionizedUnits
                         )
                     }) {
-                        let value =
-                            self.call_declared_recursive_position_unit(builder, body, &args)?;
+                        let coordinates = carried_coordinates;
+                        let value = self.call_declared_recursive_position_unit(
+                            builder,
+                            body,
+                            &args,
+                            Some(coordinates),
+                        )?;
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                             value,
                             control: suspended,
@@ -5655,10 +5683,12 @@ impl<'a> Lowering<'a> {
                         self.body_emission_authority,
                         BodyEmissionAuthority::FunctionizedUnits
                     ) {
+                        let coordinates = carried_coordinates;
                         let value = self.call_declared_recursive_position_unit(
                             builder,
                             body,
                             &call_inputs,
+                            Some(coordinates),
                         )?;
                         return Ok(SourceCallOutcome::Continue(SourceMachineState::Value {
                             value,
@@ -7635,17 +7665,105 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         body_origin: StaticOriginId,
         inputs: &[LoweringOperand],
+        coordinates: Option<CarriedInvocationCoordinates>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let result = self.call_declared_unit(
-            builder,
-            body_origin,
-            inputs,
-            #[cfg(test)]
-            None,
-        )?;
+        // `RT-DECL-CLOSURE-PORT` `D5a` checkpoint 4 step 1 — THE CARRIED
+        // INVOCATION BINDING.
+        //
+        // The binding is resolved from the invocation's retained source
+        // coordinates through planner authority. ⛔ Lowering supplies only the
+        // coordinates it already holds; it does not reconstruct the binding
+        // from `body_origin`, from the callee's ABI shape, from the existence
+        // of a context, or by taking a first match — the planner rejects an
+        // ambiguous resolution rather than choosing.
+        let context = match coordinates {
+            Some(coordinates) => self.static_transition_plan.carried_invocation_context(
+                coordinates.continuation_origin,
+                coordinates.recursive_position,
+                body_origin,
+            )?,
+            None => {
+                // ⛔ FAIL CLOSED, and this arm is the reason the parameter is
+                // not simply defaulted. A site that cannot supply the
+                // coordinates cannot be *asked* whether it should retarget, so
+                // silently emitting the raw call here would be a miss that
+                // looks exactly like a lawful ordinary call. It is only safe
+                // when no context exists for this body at all.
+                if self
+                    .static_transition_plan
+                    .continuation_contexts()?
+                    .iter()
+                    .any(|context| context.worker_body_origin() == body_origin)
+                {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a carried recursive-position invocation of body {body_origin:?}                              reached the call seam without its retained source coordinates, and                              that body has a generated execution context; emitting the raw target                              here would drop the retarget silently rather than refuse it"
+                        ),
+                    ));
+                }
+                None
+            }
+        };
+        #[cfg(test)]
+        d5a_trace(format!(
+            "  CARRIED-INVOCATION body={body_origin:?} coords={:?} -> {}",
+            coordinates.map(|c| (c.continuation_origin, c.recursive_position)),
+            match context {
+                Some(context) => format!("context {context:?}"),
+                None => "raw target".to_string(),
+            }
+        ));
+        let result = match context {
+            Some(context) => self.call_declared_context(builder, context, body_origin, inputs)?,
+            None => self.call_declared_unit(
+                builder,
+                body_origin,
+                inputs,
+                #[cfg(test)]
+                None,
+            )?,
+        };
         #[cfg(test)]
         RECURSIVE_POSITION_UNIT_CALLS.with(|calls| calls.set(calls.get() + 1));
         Ok(result)
+    }
+
+    /// Emit the one exact retargeted callee for a carried invocation.
+    ///
+    /// ⭐ Only the **callee** moves. The call is the same already-planned
+    /// emitted call, at the same site, with the same operand prefix and the
+    /// same causal ancestry; its source edge, its predecessor and its
+    /// provenance are untouched. That is what makes this a retarget rather than
+    /// a deletion.
+    fn call_declared_context(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        context: ContinuationContextId,
+        body_origin: StaticOriginId,
+        inputs: &[LoweringOperand],
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let target = self
+            .function_local
+            .context_calls
+            .get(&context)
+            .cloned()
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    format!(
+                        "the generated execution context bound to body {body_origin:?} was not                          declared into this function"
+                    ),
+                )
+            })?;
+        self.call_declared_unit_target(
+            builder,
+            target,
+            inputs,
+            #[cfg(test)]
+            None,
+        )
+        .map(|(operand, _inst)| operand)
     }
 
     /// Resolve the declared body unit of a callable recursive position in the
@@ -8951,6 +9069,13 @@ impl<'a> Lowering<'a> {
                             "recursor closure carries an invocation segment",
                         );
                         let recursive_unit_body = invocation.recursive_unit_body;
+                        // `D5a` checkpoint 4 step 1 — read the retained source
+                        // coordinates BEFORE the segment is installed, beside the
+                        // existing pre-move field read. Both are facts of the
+                        // invocation, so both are taken while it is still in hand
+                        // rather than reconstructed afterwards.
+                        let carried_coordinates =
+                            CarriedInvocationCoordinates::of(&invocation)?;
                         if !recursor_invocation_is_checked(&invocation) {
                             validate_recursor_invocation_segment(&invocation)?;
                         }
@@ -8988,11 +9113,13 @@ impl<'a> Lowering<'a> {
                                     })
                                     .collect::<Result<Vec<_>, _>>()?;
                                 self.enter_oriented_semantic_region(installed.checked);
+                                let coordinates = carried_coordinates;
                                 let result = self
                                     .call_declared_recursive_position_unit(
                                         builder,
                                         body,
                                         &inputs,
+                                        Some(coordinates),
                                     )
                                     .and_then(|value| {
                                         self.lower_computational_match_value_composed(
@@ -9071,11 +9198,13 @@ impl<'a> Lowering<'a> {
                             BodyEmissionAuthority::FunctionizedUnits
                         ) {
                             self.enter_oriented_semantic_region(installed.checked);
+                            let coordinates = carried_coordinates;
                             let result = self
                                 .call_declared_recursive_position_unit(
                                     builder,
                                     body,
                                     &call_inputs,
+                                    Some(coordinates),
                                 )
                                 .and_then(|value| {
                                     self.lower_computational_match_value_composed(

@@ -6188,6 +6188,74 @@ impl<'src> StaticTransitionPlan<'src> {
             .collect())
     }
 
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 4 step 1 — the generated
+    /// context one carried source-machine invocation must call.**
+    ///
+    /// Selected by the invocation's **retained source coordinates**: the exact
+    /// computational-match origin it resumes, the ruled recursive position it
+    /// occupies, and the worker body it names. ⛔ **Not** by body origin alone,
+    /// not by ABI shape, not by "a context exists", and never by first match —
+    /// the resolution below requires the candidate set to be a singleton and
+    /// rejects otherwise.
+    ///
+    /// ## The four outcomes, because two of them look alike
+    ///
+    /// | candidates | contexts among them | result |
+    /// |---|---|---|
+    /// | none | — | `None` — an ordinary invocation. This is every pre-`D5a` program, and the raw target is correct |
+    /// | some | none | `None` — the mixed population: this worker is still called raw here |
+    /// | some | exactly one | `Some(context)` — the ruled retarget |
+    /// | some | more than one | ⛔ hard stop |
+    ///
+    /// ⚠ The two `None`s are deliberately the same answer, because the caller's
+    /// action is the same: emit the raw target. They differ in *why*, and the
+    /// difference matters only to a reader, so it is documented rather than
+    /// encoded as a variant a consumer could branch on and get wrong.
+    ///
+    /// ⛔ **A source edge, predecessor or provenance is never deleted by this.**
+    /// It answers which `Function` one already-planned emitted call transfers
+    /// to; the call, its edge and its causal ancestry are untouched.
+    pub(in crate::cranelift_backend) fn carried_invocation_context(
+        &self,
+        continuation_origin: StaticOriginId,
+        recursive_position: u32,
+        worker_body_origin: StaticOriginId,
+    ) -> Result<Option<ContinuationContextId>, CraneliftBackendError> {
+        let units = self.continuation_units()?;
+        let candidates = units
+            .iter()
+            .filter(|unit| {
+                unit.continuation_origin() == continuation_origin
+                    && unit.recursive_position() == recursive_position
+                    && unit.worker_body_origin() == worker_body_origin
+            })
+            .collect::<Vec<_>>();
+        if candidates.is_empty() {
+            return Ok(None);
+        }
+        let contexts = self.continuation_contexts()?;
+        let mut bound = BTreeSet::new();
+        for candidate in &candidates {
+            for context in &contexts {
+                if context.enclosing_specialization() == candidate.id()
+                    && context.worker_body_origin() == worker_body_origin
+                {
+                    bound.insert(context.id());
+                }
+            }
+        }
+        let mut bound = bound.into_iter();
+        let first = bound.next();
+        if bound.next().is_some() {
+            return Err(planner_error(
+                "a carried source-machine invocation's retained source coordinates bind more than \
+                 one generated context; one emitted call cannot transfer to two functions, and \
+                 choosing either would make lowering the authority for a fact planning owns",
+            ));
+        }
+        Ok(first)
+    }
+
     pub(in crate::cranelift_backend) fn root_emittable_unit(
         &self,
     ) -> Result<EmittableUnit<'_>, CraneliftBackendError> {

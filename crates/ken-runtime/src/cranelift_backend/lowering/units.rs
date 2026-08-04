@@ -1164,6 +1164,12 @@ pub(super) fn define_continuation_bodies<M: Module>(
         }
         function_local.unit_calls = declared_workers.clone();
         function_local.worker_templates = worker_targets.templates().clone();
+        function_local.context_calls = declare_context_calls_in_func(
+            module,
+            &mut func,
+            &compiler.static_transition_plan,
+            bundle,
+        )?;
         // `RT-DECL-CLOSURE-PORT` `D5a` -- THE RETARGET.
         //
         // If this specialization's worker body has a generated execution
@@ -1506,6 +1512,12 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
         function_local.declaration_calls = declared_calls.declarations;
         function_local.worker_calls = worker_targets.declare_in_func(module, &mut func);
         function_local.worker_templates = worker_targets.templates().clone();
+        function_local.context_calls = declare_context_calls_in_func(
+            module,
+            &mut func,
+            &compiler.static_transition_plan,
+            bundle,
+        )?;
         // `D5a`: this context's own causal call refs, selected by the EMISSION
         // owner. ⛔ Not by `raw_owner` -- that is the filter that would hand this
         // function the raw unit's tokens and leave its own undeclared.
@@ -2170,6 +2182,45 @@ pub(super) fn close_continuation_claim_ledger(
         .close()
 }
 
+/// **`D5a` checkpoint 4 step 1 — declare every generated context into ONE
+/// generated function.**
+///
+/// Same per-function discipline as `WorkerTargets::declare_in_func`: the
+/// `FuncRef`s belong to `func` alone and are never copied between functions.
+/// ⛔ Keyed by the planner's `ContinuationContextId`, never by the body origin
+/// the context executes -- that key is what would let a consumer resolve a
+/// context from a body origin, which is the reconstruction the ruling forbids.
+pub(in crate::cranelift_backend) fn declare_context_calls_in_func<M: Module>(
+    module: &mut M,
+    func: &mut Function,
+    plan: &StaticTransitionPlan<'_>,
+    bundle: &UnitBundle,
+) -> Result<BTreeMap<ContinuationContextId, DeclaredUnitCall>, CraneliftBackendError> {
+    let mut calls = BTreeMap::new();
+    for context in plan.continuation_contexts()? {
+        let target = bundle.context(context.id()).ok_or_else(|| {
+            backend_module(
+                "a planned generated context was never forward-declared".to_string(),
+            )
+        })?;
+        let (offsets, _frame_bytes) = context.slot_offsets()?;
+        calls.insert(
+            context.id(),
+            DeclaredUnitCall {
+                function: module.declare_func_in_func(target, func),
+                // The context EXECUTES this body, so the origin it answers for
+                // is unchanged and the source edge it serves is untouched.
+                origin: context.worker_body_origin(),
+                call_site_origin: context.worker_body_origin(),
+                header: context.header(),
+                slots: context.slots().to_vec(),
+                offsets,
+            },
+        );
+    }
+    Ok(calls)
+}
+
 pub(super) fn define_unit_bodies<M: Module>(
     module: &mut M,
     compiler: &mut Lowering<'_>,
@@ -2384,6 +2435,13 @@ fn define_unit_body<M: Module>(
     // `D5a` checkpoint 1: the raw template contracts, beside the call targets
     // and deliberately not derived from them.
     function_local.worker_templates = worker_targets.templates().clone();
+    // `D5a` checkpoint 4 step 1: this function's own context call targets.
+    function_local.context_calls = declare_context_calls_in_func(
+        module,
+        &mut func,
+        &compiler.static_transition_plan,
+        bundle,
+    )?;
     let mut func_ctx = FunctionBuilderContext::new();
     let root_outcome;
     {

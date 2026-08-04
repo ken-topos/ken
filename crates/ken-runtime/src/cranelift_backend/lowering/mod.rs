@@ -664,6 +664,7 @@ impl ArtifactHelpers<'_> {
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
             worker_templates: BTreeMap::new(),
+            context_calls: BTreeMap::new(),
             generated_context_captures: None,
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
@@ -797,6 +798,16 @@ struct FunctionLocalRefs {
     /// check; validating against the raw template is what "unchanged ordinary
     /// `fn2` ABI" actually means.
     worker_templates: BTreeMap<StaticOriginId, units::WorkerTemplate>,
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 4 step 1** -- this function's
+    /// own call targets for the generated execution contexts, keyed by the
+    /// planner's context identity.
+    ///
+    /// ⛔ A fourth map rather than an entry in `worker_calls` or `unit_calls`:
+    /// a `ContinuationContextId` is its own identity domain, and keying a
+    /// context by the body origin it executes is precisely the "reconstruct the
+    /// binding from body origin" the ruling forbids. Minted per function; no
+    /// `FuncRef` crosses a function.
+    context_calls: BTreeMap<ContinuationContextId, units::DeclaredUnitCall>,
     /// **`RT-DECL-CLOSURE-PORT` `D5a`** -- the operand suffix a **retargeted**
     /// worker call must append, and the one body origin it applies to.
     ///
@@ -5912,6 +5923,42 @@ struct ComputationalEliminatorFrame<'a> {
     checked_invocation_source: Option<InvocationTemplateRef>,
     checked_invocation_depth: usize,
 }
+/// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 4 step 1 — one carried
+/// invocation's RETAINED SOURCE COORDINATES.**
+///
+/// The exact computational-match occurrence the invocation resumes and the
+/// ruled recursive position it occupies, both read straight off the invocation
+/// segment that is already in scope at the call seam.
+///
+/// ⛔ Deliberately carries no body origin, no ABI shape and no context id.
+/// Those are what the binding must NOT be keyed on, and a coordinate record
+/// that cannot hold them is a stronger guarantee than a rule saying not to use
+/// them.
+#[derive(Clone, Copy)]
+struct CarriedInvocationCoordinates {
+    continuation_origin: StaticOriginId,
+    recursive_position: u32,
+}
+
+impl CarriedInvocationCoordinates {
+    /// Read the coordinates off the invocation segment.
+    ///
+    /// ⛔ Fails closed on a sibling position that does not fit the planner's
+    /// width rather than truncating: a truncated position would silently select
+    /// a different recursive field's binding.
+    fn of(segment: &RecursorInvocationSegment) -> Result<Self, CraneliftBackendError> {
+        Ok(Self {
+            continuation_origin: segment.selection.static_origin,
+            recursive_position: u32::try_from(segment.sibling_position).map_err(|_| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    "a carried invocation's sibling position exceeds the planner's recursive                      position width",
+                )
+            })?,
+        })
+    }
+}
+
 #[derive(Clone, Copy)]
 struct OrdinaryEliminatorFrame<'a> {
     cases: &'a [crate::RuntimeMatchCase],
