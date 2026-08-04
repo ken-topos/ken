@@ -76,6 +76,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            context_calls: BTreeMap::new(),
             worker_templates: BTreeMap::new(),
             generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
@@ -231,6 +232,7 @@ fn run_px8j_malformed_recursor_consumer(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            context_calls: BTreeMap::new(),
             worker_templates: BTreeMap::new(),
             generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
@@ -2131,6 +2133,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            context_calls: BTreeMap::new(),
             worker_templates: BTreeMap::new(),
             generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
