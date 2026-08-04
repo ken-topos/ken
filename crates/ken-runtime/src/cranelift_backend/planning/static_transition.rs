@@ -18,7 +18,10 @@ use super::{
 };
 use crate::boundary_value::BoundaryReferentOwner;
 use crate::{RuntimeExpr, RuntimePartiality, RuntimeTrap, RuntimeTrapCode};
-use abi::{build_abi_plane, install_continuation_specialization_abi, AbiPlane};
+use abi::{
+    build_abi_plane, install_continuation_context_abi, install_continuation_specialization_abi,
+    AbiPlane,
+};
 use semantic_ir::{
     build_semantic_plane, build_synthesized_constructor_inventory, SemanticMaterialArena,
     SemanticPlane, SemanticSourceKind, SemanticSourceSeed,
@@ -495,6 +498,183 @@ pub(in crate::cranelift_backend) enum ContinuationEmissionOwner {
     Specialization(ContinuationSpecializationId),
 }
 
+/// Dense identity of one planner-interned generated producer execution context.
+///
+/// ⛔ **A third ID domain, and it is never cast into either of the other two.**
+/// A context is not a `PredeclaredFunctionId` (it has no source occurrence of
+/// its own) and it is not a `ContinuationSpecializationId` (it is not a
+/// continuation callee — it is the *caller* side, the execution in which one
+/// specialization's selected worker body runs with that specialization's
+/// continuation inputs still live).
+///
+/// ⚠ [`ContinuationEmissionOwner`] deliberately does **not** gain a variant for
+/// this. `Specialization(id)` already names the emitting context uniquely: a
+/// specialization has exactly one selected worker body, so
+/// `(specialization, worker_body_origin)` — the context key — is determined by
+/// the specialization alone. Adding a fourth owner class would give the same
+/// context two names, and the claim ledger's affinity is keyed on the owner.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
+pub(in crate::cranelift_backend) struct ContinuationContextId(u32);
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — one planner-interned generated producer
+/// execution context.**
+///
+/// Architect ruling `evt_609am4v7cdt5b`: *"Materialize this as an explicit
+/// planner-interned, continuation-specialized producer execution context."*
+///
+/// ## Where these come from, and why not at descent
+///
+/// Derived **after** the fixed point, from the calls whose `emission_owner` is a
+/// `Specialization`. ⛔ Interning at descent instead would mint a context for
+/// every worker body the fixed point walks into, including the ones whose bodies
+/// contain no nested producer at all — dead definitions the emitter would then
+/// have to declare and define. The post-hoc derivation mints exactly the
+/// contexts something actually emits from.
+///
+/// ## Its ABI, and what it must not do to the raw body
+///
+/// - **Parameters** = the raw worker's declared arity plus its capture count, in
+///   that order. That is exactly the operand run the enclosing specialization
+///   already passes when it calls the worker, so the call **keeps its shape**
+///   and only grows a suffix.
+/// - **Captures** = the enclosing specialization's continuation inputs, in
+///   ordinal order. These are the values raw `fn2` provably never receives.
+///
+/// ⛔ The raw `ClosureBody`'s own descriptor is **untouched** — not mutated, not
+/// unioned, and no runtime suffix is fused into it. The raw unit keeps its
+/// ordinary ABI and simply loses this one caller.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct PlannedContinuationContext {
+    id: ContinuationContextId,
+    /// The specialization whose selected worker body this context executes, and
+    /// whose continuation inputs it keeps live across that execution.
+    enclosing_specialization: ContinuationSpecializationId,
+    /// The raw worker body lowered inside this context.
+    worker_body_origin: StaticOriginId,
+    /// ⚠ **PROVENANCE ONLY.** The predeclared unit the worker body textually
+    /// belongs to. Retained so a reader can see which raw body this context
+    /// executes; it confers no emission authority — that is the whole point.
+    raw_owner: PredeclaredFunctionId,
+    /// Raw declared arity + raw capture count: the context's `Parameter` run.
+    parameters: u32,
+    /// The enclosing specialization's continuation inputs: the `Capture` run.
+    captures: Vec<ContinuationInputProjection>,
+}
+
+impl ContinuationContextId {
+    fn from_position(position: usize) -> Result<Self, CraneliftBackendError> {
+        Ok(Self(u32::try_from(position).map_err(|_| {
+            planner_capacity_error("generated context identity exhausted")
+        })?))
+    }
+}
+
+impl PlannedContinuationContext {
+    pub(in crate::cranelift_backend) fn id(&self) -> ContinuationContextId {
+        self.id
+    }
+    /// The specialization whose worker body this context executes.
+    ///
+    /// ⭐ This is also the **emission owner** every call emitted from inside
+    /// this context carries: `ContinuationEmissionOwner::Specialization(_)` of
+    /// exactly this id. The two are the same fact seen from the two sides, which
+    /// is why the owner enum needs no context variant.
+    pub(in crate::cranelift_backend) fn enclosing_specialization(
+        &self,
+    ) -> ContinuationSpecializationId {
+        self.enclosing_specialization
+    }
+    pub(in crate::cranelift_backend) fn worker_body_origin(&self) -> StaticOriginId {
+        self.worker_body_origin
+    }
+    /// ⚠ Provenance only — the raw predeclared unit this body textually is.
+    pub(in crate::cranelift_backend) fn raw_owner(&self) -> PredeclaredFunctionId {
+        self.raw_owner
+    }
+    pub(in crate::cranelift_backend) fn parameters(&self) -> u32 {
+        self.parameters
+    }
+    pub(super) fn captures(&self) -> &[ContinuationInputProjection] {
+        &self.captures
+    }
+}
+
+/// A read-only view of one already-validated generated producer execution
+/// context: its identity, the specialization it belongs to, and its validated
+/// ABI descriptor, slots and input authority.
+pub(in crate::cranelift_backend) struct ContinuationContextView<'plan> {
+    planned: &'plan PlannedContinuationContext,
+    header: AbiFrameHeader,
+    slots: &'plan [AbiSlot],
+    inputs: &'plan [abi::AbiContinuationInputAuthority],
+}
+
+impl<'plan> ContinuationContextView<'plan> {
+    pub(in crate::cranelift_backend) fn id(&self) -> ContinuationContextId {
+        self.planned.id
+    }
+    pub(in crate::cranelift_backend) fn enclosing_specialization(
+        &self,
+    ) -> ContinuationSpecializationId {
+        self.planned.enclosing_specialization
+    }
+    pub(in crate::cranelift_backend) fn worker_body_origin(&self) -> StaticOriginId {
+        self.planned.worker_body_origin
+    }
+    pub(in crate::cranelift_backend) fn raw_owner(&self) -> PredeclaredFunctionId {
+        self.planned.raw_owner
+    }
+    pub(in crate::cranelift_backend) fn header(&self) -> AbiFrameHeader {
+        self.header
+    }
+    pub(in crate::cranelift_backend) fn slots(&self) -> &'plan [AbiSlot] {
+        self.slots
+    }
+
+    /// This context's own capture run, as continuation-input views.
+    ///
+    /// Each view's `source_owner`/`source_abi_position` is **root** provenance
+    /// naming the enclosing specialization's own root owner, and its
+    /// `immediate_slot` is that value's position in the *enclosing* environment.
+    /// ⛔ Neither is this context's own slot position — for that, use the
+    /// capture's `ordinal` against this descriptor's `Capture` run. Keeping the
+    /// two apart is the whole reason the record carries both.
+    pub(in crate::cranelift_backend) fn captures(
+        &self,
+    ) -> Result<Vec<ContinuationInputView>, CraneliftBackendError> {
+        self.planned
+            .captures
+            .iter()
+            .zip(self.inputs)
+            .map(|(projection, authority)| {
+                if projection.ordinal != authority.ordinal
+                    || projection.source_owner != authority.source_owner
+                {
+                    return Err(planner_error(
+                        "a generated context capture disagrees with its validated ABI input \
+                         authority",
+                    ));
+                }
+                Ok(continuation_input_view(projection))
+            })
+            .collect()
+    }
+
+    /// Byte offsets for this context's slot run, from the one offset walk.
+    pub(in crate::cranelift_backend) fn slot_offsets(
+        &self,
+    ) -> Result<(Vec<u32>, u32), CraneliftBackendError> {
+        let (offsets, frame_bytes) = abi::slot_offsets(self.slots)?;
+        if frame_bytes != self.header.frame_bytes {
+            return Err(planner_error(
+                "a generated context descriptor's frame size disagrees with its own slot run",
+            ));
+        }
+        Ok((offsets, frame_bytes))
+    }
+}
+
 /// The source ABI provenance class of one continuation input.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 enum ContinuationInputSource {
@@ -553,6 +733,47 @@ struct ContinuationInputProjection {
     boundary_avail: BoundaryUseAvail,
     referent_affinity: Vec<BoundaryReferentOwner>,
     ordinary_abi_position: u32,
+    /// **`D5a` — where this value is IMMEDIATELY available to the emitter.**
+    ///
+    /// `source_owner`/`source_abi_position` above are **root provenance**: the
+    /// predeclared unit whose parameter or capture originally supplied this
+    /// value. That is retained and never substituted for. But the function that
+    /// actually emits the call is the key's `emission_owner`, and for a
+    /// generated specialization context that is **not** the root owner — raw
+    /// `fn2` never receives `fn3`'s parameters.
+    ///
+    /// This field is the position in the **emitting context's own environment**
+    /// where the value sits. For a `Predeclared` emission owner the emitter *is*
+    /// the root owner, so it equals `source_abi_position` and that equality is
+    /// checked at the emission seam rather than assumed. For a `Specialization`
+    /// emission owner it names one of the generated context's own capture
+    /// positions.
+    ///
+    /// ⛔ A root position used as an immediate one is exactly the reverse-map
+    /// `evt_609am4v7cdt5b` forbids; the two are kept apart here so no consumer
+    /// has to know which it holds.
+    immediate_slot: u32,
+}
+
+/// How one emission context resolves a continuation input's root provenance to
+/// the slot where that value is immediately available to it.
+///
+/// ⛔ Deliberately an enum over the two emission-owner classes rather than an
+/// `Option<..>` with a defaulting arm: a generated context that cannot find a
+/// root value among its own captures must **reject**, and a default would
+/// silently emit a call reading whatever sat at the root position.
+enum ContinuationImmediateResolution<'plan> {
+    /// The emitting function is itself the root provenance owner. Immediate and
+    /// root are the same position; this is the entire pre-`D5a` population.
+    RootIsImmediate,
+    /// The emitting function is the generated execution context of an enclosing
+    /// specialization. The value is reachable only as one of that context's own
+    /// captures, which are exactly the enclosing specialization's continuation
+    /// inputs, laid out after the context's parameter run.
+    GeneratedContext {
+        context_parameters: u32,
+        enclosing_inputs: &'plan [ContinuationInputProjection],
+    },
 }
 
 /// One exact source-slot value in the environment carried by a producer edge
@@ -914,21 +1135,7 @@ impl<'plan> ContinuationUnitView<'plan> {
                          authority",
                     ));
                 }
-                Ok(ContinuationInputView {
-                    ordinal: projection.ordinal,
-                    source_owner: projection.source_owner,
-                    source_abi_position: projection.source_abi_position,
-                    source: projection.source,
-                    carrier: projection.carrier,
-                    ownership: projection.ownership,
-                    storage_owner: projection.storage_owner,
-                    boundary_phase: projection.boundary_phase,
-                    boundary_operation: projection.boundary_operation,
-                    boundary_need: projection.boundary_need,
-                    boundary_avail: projection.boundary_avail,
-                    referent_affinity: projection.referent_affinity.clone(),
-                    ordinary_abi_position: projection.ordinary_abi_position,
-                })
+                Ok(continuation_input_view(projection))
             })
             .collect()
     }
@@ -1004,6 +1211,31 @@ pub(in crate::cranelift_backend) enum ContinuationOrdinaryEnvelopeRole {
     },
 }
 
+/// Re-expose one immutable input projection as a view.
+///
+/// ⭐ One constructor for both the specialization and the generated-context
+/// callers: the two populations hold the *same* projection records (a context's
+/// captures literally are its enclosing specialization's continuation inputs),
+/// so a second hand-written copy would be the place the two drift apart.
+fn continuation_input_view(projection: &ContinuationInputProjection) -> ContinuationInputView {
+    ContinuationInputView {
+        ordinal: projection.ordinal,
+        source_owner: projection.source_owner,
+        source_abi_position: projection.source_abi_position,
+        source: projection.source,
+        carrier: projection.carrier,
+        ownership: projection.ownership,
+        storage_owner: projection.storage_owner,
+        boundary_phase: projection.boundary_phase,
+        boundary_operation: projection.boundary_operation,
+        boundary_need: projection.boundary_need,
+        boundary_avail: projection.boundary_avail,
+        referent_affinity: projection.referent_affinity.clone(),
+        ordinary_abi_position: projection.ordinary_abi_position,
+        immediate_slot: projection.immediate_slot,
+    }
+}
+
 /// A read-only view of one already-validated continuation input.
 ///
 /// Every field is existing immutable `ContinuationInputProjection` material,
@@ -1023,6 +1255,11 @@ pub(in crate::cranelift_backend) struct ContinuationInputView {
     pub(in crate::cranelift_backend) boundary_avail: BoundaryUseAvail,
     pub(in crate::cranelift_backend) referent_affinity: Vec<BoundaryReferentOwner>,
     pub(in crate::cranelift_backend) ordinary_abi_position: u32,
+    /// **`D5a`** — where the emitting context finds this value. See
+    /// [`ContinuationInputProjection::immediate_slot`]; ⛔ this is not
+    /// `source_abi_position` unless the emitter is the root owner, and the
+    /// emission seam checks that equality rather than assuming it.
+    pub(in crate::cranelift_backend) immediate_slot: u32,
 }
 
 /// `D1` — a read-only view of one already-validated continuation call token,
@@ -1214,6 +1451,9 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// facts, but no lowering accessor exists until the activation slice.
     continuation_specializations: Vec<PlannedContinuationSpecialization>,
     continuation_specialization_calls: Vec<PlannedContinuationSpecializationCall>,
+    /// `RT-DECL-CLOSURE-PORT` `D5a`. The generated producer execution contexts,
+    /// derived after the specialization fixed point closes.
+    continuation_contexts: Vec<PlannedContinuationContext>,
 }
 
 #[cfg(test)]
@@ -3296,6 +3536,7 @@ fn exact_continuation_source_environment(
 fn exact_continuation_projection(
     environment: &ContinuationProducerEnvironment,
     ordinary_parameters: u32,
+    immediate: &ContinuationImmediateResolution<'_>,
 ) -> Result<Vec<ContinuationInputProjection>, CraneliftBackendError> {
     environment
         .inputs
@@ -3305,7 +3546,42 @@ fn exact_continuation_projection(
             let ordinal = u32::try_from(ordinal).map_err(|_| {
                 planner_capacity_error("continuation projection ordinal exhausted")
             })?;
+            let immediate_slot = match immediate {
+                ContinuationImmediateResolution::RootIsImmediate => input.source_abi_position,
+                ContinuationImmediateResolution::GeneratedContext {
+                    context_parameters,
+                    enclosing_inputs,
+                } => {
+                    // The generated context's captures ARE the enclosing
+                    // specialization's continuation inputs, in ordinal order,
+                    // laid out immediately after its parameter run. Matching on
+                    // full root provenance -- owner AND position -- is what
+                    // makes this a lookup rather than a coincidence of index.
+                    let position = enclosing_inputs
+                        .iter()
+                        .position(|enclosing| {
+                            enclosing.source_owner == input.source_owner
+                                && enclosing.source_abi_position == input.source_abi_position
+                        })
+                        .ok_or_else(|| {
+                            planner_error(
+                                "a continuation input's root provenance is not among the \
+                                 enclosing specialization's continuation inputs, so the generated \
+                                 emission context cannot make that value available; this fails \
+                                 closed rather than falling back to the root position, which \
+                                 would read whatever the raw body happened to hold there",
+                            )
+                        })?;
+                    let position = u32::try_from(position).map_err(|_| {
+                        planner_capacity_error("continuation immediate slot exhausted")
+                    })?;
+                    context_parameters.checked_add(position).ok_or_else(|| {
+                        planner_capacity_error("continuation immediate slot position exhausted")
+                    })?
+                }
+            };
             Ok(ContinuationInputProjection {
+                immediate_slot,
                 producer_owner: environment.producer_owner,
                 consumer_owner: environment.consumer_owner,
                 source_owner: input.source_owner,
@@ -3523,6 +3799,7 @@ fn build_continuation_specialization_plan(
     (
         Vec<PlannedContinuationSpecialization>,
         Vec<PlannedContinuationSpecializationCall>,
+        Vec<PlannedContinuationContext>,
     ),
     CraneliftBackendError,
 > {
@@ -3549,7 +3826,7 @@ fn build_continuation_specialization_plan(
     let mut steps = 0usize;
     let mut visited = BTreeSet::new();
     let mut interned = BTreeMap::new();
-    let mut units = Vec::new();
+    let mut units: Vec<PlannedContinuationSpecialization> = Vec::new();
     let mut calls = BTreeSet::new();
     let mut sequences = BTreeMap::<
         (PredeclaredFunctionId, StaticOriginId, StaticOriginId),
@@ -3647,6 +3924,37 @@ fn build_continuation_specialization_plan(
                             producer_environment.producer_owner,
                         ),
                     };
+                    // The immediate-availability resolution, taken from the
+                    // SAME enclosing specialization that settled the emission
+                    // owner above. ⛔ Owned before the key is built: the
+                    // enclosing unit is read out of `units` here so the
+                    // immutable borrow ends before `intern_specialization`
+                    // takes it mutably.
+                    let enclosing_context = match discovery.enclosing_specialization {
+                        None => None,
+                        Some(enclosing) => {
+                            let enclosing_unit =
+                                units.get(enclosing.0 as usize).ok_or_else(|| {
+                                    planner_error(
+                                        "a descent names an enclosing specialization that was \
+                                         never interned",
+                                    )
+                                })?;
+                            Some((
+                                generated_context_parameters(&enclosing_unit.key.worker)?,
+                                enclosing_unit.key.continuation_inputs.clone(),
+                            ))
+                        }
+                    };
+                    let immediate = match &enclosing_context {
+                        None => ContinuationImmediateResolution::RootIsImmediate,
+                        Some((context_parameters, enclosing_inputs)) => {
+                            ContinuationImmediateResolution::GeneratedContext {
+                                context_parameters: *context_parameters,
+                                enclosing_inputs,
+                            }
+                        }
+                    };
                     let key = ContinuationSpecializationKey {
                         producer_owner: producer_environment.producer_owner,
                         emission_owner,
@@ -3665,6 +3973,7 @@ fn build_continuation_specialization_plan(
                         continuation_inputs: exact_continuation_projection(
                             &producer_environment,
                             ordinary_parameters,
+                            &immediate,
                         )?,
                     };
                     let (target, inserted) =
@@ -3716,7 +4025,86 @@ fn build_continuation_specialization_plan(
     }
     let calls = calls.into_iter().collect::<Vec<_>>();
     validate_continuation_specialization_closure(&interned, &units, &calls)?;
-    Ok((units, calls))
+    let contexts = intern_generated_contexts(&units, &calls)?;
+    Ok((units, calls, contexts))
+}
+
+/// The `Parameter` run of the generated context that executes one specialization
+/// worker: the raw worker's declared arity plus its capture count.
+///
+/// ⭐ Read off the **worker provenance**, not off the raw unit's ABI descriptor.
+/// That is deliberate and it is the same pair the caller already supplies:
+/// `call_static_worker` builds its operands as `declared_arity` explicit
+/// arguments followed by the stored captures, so a context whose parameter run
+/// is derived from the same two numbers accepts that exact operand prefix by
+/// construction. Deriving it from the raw descriptor instead would make the
+/// context's shape depend on a second authority that the call site never reads.
+fn generated_context_parameters(
+    worker: &ContinuationWorkerProvenance,
+) -> Result<u32, CraneliftBackendError> {
+    let captures = u32::try_from(worker.captures.len())
+        .map_err(|_| planner_capacity_error("continuation worker capture count exhausted"))?;
+    worker
+        .declared_arity
+        .checked_add(captures)
+        .ok_or_else(|| planner_capacity_error("generated context parameter run exhausted"))
+}
+
+/// **`D5a` — intern the generated producer execution contexts, AFTER the fixed
+/// point.**
+///
+/// One context per `(enclosing_specialization, worker_body_origin)` reached by a
+/// call whose emission owner is a `Specialization`. ⛔ Not one per descent: a
+/// worker body the fixed point walked into but that emits nothing gets no
+/// context, because nothing would ever call it.
+///
+/// **The same raw worker reached under two continuation identities yields two
+/// distinct contexts** — the key leads with the enclosing specialization, so two
+/// identities cannot collapse onto one widened definition. That is the ruling's
+/// requirement stated as a key, not as a check.
+fn intern_generated_contexts(
+    units: &[PlannedContinuationSpecialization],
+    calls: &[PlannedContinuationSpecializationCall],
+) -> Result<Vec<PlannedContinuationContext>, CraneliftBackendError> {
+    let mut contexts: Vec<PlannedContinuationContext> = Vec::new();
+    let mut interned = BTreeMap::new();
+    for call in calls {
+        let ContinuationEmissionOwner::Specialization(enclosing) = call.token.emission_owner
+        else {
+            continue;
+        };
+        let worker_body_origin = call.token.producer_result_origin;
+        if interned.contains_key(&(enclosing, worker_body_origin)) {
+            continue;
+        }
+        let enclosing_unit = units.get(enclosing.0 as usize).ok_or_else(|| {
+            planner_error("a causal call names an emission owner that was never interned")
+        })?;
+        // The context executes the enclosing specialization's OWN selected
+        // worker body. A call claiming otherwise would be asking a context to
+        // supply captures for a body it does not run, so this rejects rather
+        // than interning a context nothing can lawfully call.
+        if enclosing_unit.key.worker.body_origin != worker_body_origin {
+            return Err(planner_error(
+                "a causal call's producer result origin is not the enclosing specialization's \
+                 selected worker body",
+            ));
+        }
+        let id = ContinuationContextId(
+            u32::try_from(contexts.len())
+                .map_err(|_| planner_capacity_error("generated context identity exhausted"))?,
+        );
+        contexts.push(PlannedContinuationContext {
+            id,
+            enclosing_specialization: enclosing,
+            worker_body_origin,
+            raw_owner: call.token.producer_owner,
+            parameters: generated_context_parameters(&enclosing_unit.key.worker)?,
+            captures: enclosing_unit.key.continuation_inputs.clone(),
+        });
+        interned.insert((enclosing, worker_body_origin), id);
+    }
+    Ok(contexts)
 }
 
 fn validate_continuation_specialization_closure(
@@ -3771,9 +4159,11 @@ fn validate_continuation_specialization_closure(
 fn validate_continuation_specialization_plan(
     plan: &StaticTransitionPlan<'_>,
 ) -> Result<(), CraneliftBackendError> {
-    let (expected_units, expected_calls) = build_continuation_specialization_plan(plan)?;
+    let (expected_units, expected_calls, expected_contexts) =
+        build_continuation_specialization_plan(plan)?;
     if plan.continuation_specializations != expected_units
         || plan.continuation_specialization_calls != expected_calls
+        || plan.continuation_contexts != expected_contexts
     {
         return Err(planner_error(
             "continuation specialization plan is not the exact closed derivation",
@@ -3820,6 +4210,7 @@ impl<'src> Planner<'src> {
                 occurrence_authorities: Vec::new(),
                 continuation_specializations: Vec::new(),
                 continuation_specialization_calls: Vec::new(),
+                continuation_contexts: Vec::new(),
             },
             store_interner: BTreeMap::new(),
             next_source: 0,
@@ -4694,15 +5085,25 @@ impl<'src> Planner<'src> {
             root_entry,
             root_ingress,
         )?;
-        let (continuation_specializations, continuation_specialization_calls) =
-            build_continuation_specialization_plan(&self.plan)?;
+        let (
+            continuation_specializations,
+            continuation_specialization_calls,
+            continuation_contexts,
+        ) = build_continuation_specialization_plan(&self.plan)?;
         self.plan.continuation_specializations = continuation_specializations;
         self.plan.continuation_specialization_calls = continuation_specialization_calls;
+        self.plan.continuation_contexts = continuation_contexts;
         validate_continuation_specialization_plan(&self.plan)?;
         install_continuation_specialization_abi(
             &mut self.plan.abi,
             &self.plan.continuation_specializations,
         )?;
+        // `D5a`: the generated contexts' own ABI, in its own arenas. ⛔ Installed
+        // AFTER the specialization ABI and into separate vectors, never appended
+        // to `continuation_descriptors` -- that population is exactly the
+        // continuation-callee partition, and admitting a caller-side context
+        // there would make one identity domain readable as the other.
+        install_continuation_context_abi(&mut self.plan.abi, &self.plan.continuation_contexts)?;
         self.plan.join_results = build_join_result_plan(&self.plan, functionized_units)?;
         self.plan.validate()?;
         Ok(self.plan)
@@ -5698,6 +6099,92 @@ impl<'src> StaticTransitionPlan<'src> {
                 })
             })
             .collect()
+    }
+
+    /// **`D5a` — every planner-interned generated producer execution context.**
+    ///
+    /// Revalidates plan/ABI agreement the same way [`Self::continuation_units`]
+    /// does, and by the same argument: the join is **by identity**, indexing the
+    /// descriptors by the id they declare, so an identical reordering of both
+    /// sides does not pass.
+    pub(in crate::cranelift_backend) fn continuation_contexts(
+        &self,
+    ) -> Result<Vec<ContinuationContextView<'_>>, CraneliftBackendError> {
+        if self.abi.context_descriptors.len() != self.continuation_contexts.len() {
+            return Err(planner_error(
+                "generated context ABI descriptor count disagrees with the planned context \
+                 population",
+            ));
+        }
+        let mut by_id: BTreeMap<
+            ContinuationContextId,
+            &abi::AbiContinuationContextDescriptor,
+        > = BTreeMap::new();
+        for descriptor in &self.abi.context_descriptors {
+            if by_id.insert(descriptor.context, descriptor).is_some() {
+                return Err(planner_error(
+                    "two generated context ABI descriptors declare the same context identity",
+                ));
+            }
+        }
+        self.continuation_contexts
+            .iter()
+            .map(|planned| {
+                let descriptor = *by_id.get(&planned.id).ok_or_else(|| {
+                    planner_error(
+                        "a planned generated context has no ABI descriptor declaring its identity",
+                    )
+                })?;
+                let slots = dense_slice(&self.abi.context_slots, descriptor.slots)
+                    .ok_or_else(|| {
+                        planner_error("generated context slot range is outside the plane")
+                    })?;
+                let inputs = dense_slice(&self.abi.context_inputs, descriptor.inputs)
+                    .ok_or_else(|| {
+                        planner_error("generated context input range is outside the plane")
+                    })?;
+                if inputs.len() != planned.captures.len() {
+                    return Err(planner_error(
+                        "generated context input authority count disagrees with the planner's \
+                         ordered capture projection",
+                    ));
+                }
+                Ok(ContinuationContextView {
+                    planned,
+                    header: descriptor.header,
+                    slots,
+                    inputs,
+                })
+            })
+            .collect()
+    }
+
+    /// The generated context that emits on behalf of one specialization, if that
+    /// specialization's worker body has one.
+    ///
+    /// ⛔ Selected by the **enclosing specialization and the exact body origin**,
+    /// both supplied by the caller. Nothing here searches for a plausible
+    /// context, and `None` means the ordinary raw-worker target is correct — it
+    /// is not a licence to pick one.
+    pub(in crate::cranelift_backend) fn continuation_context_for(
+        &self,
+        enclosing: ContinuationSpecializationId,
+        worker_body_origin: StaticOriginId,
+    ) -> Result<Option<ContinuationContextView<'_>>, CraneliftBackendError> {
+        let mut found = None;
+        for context in self.continuation_contexts()? {
+            if context.enclosing_specialization() == enclosing
+                && context.worker_body_origin() == worker_body_origin
+            {
+                if found.is_some() {
+                    return Err(planner_error(
+                        "two generated contexts claim one specialization and worker body",
+                    ));
+                }
+                found = Some(context);
+            }
+        }
+        Ok(found)
     }
 
     /// Every already-validated continuation call token, with the full producer

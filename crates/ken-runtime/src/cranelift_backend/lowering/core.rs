@@ -897,6 +897,17 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 helpers,
                 unit_bundle,
             )?;
+            // `RT-DECL-CLOSURE-PORT` `D5a` — define each generated producer
+            // execution context, after the specializations that call them.
+            // Declaration already happened in the one up-front bundle pass, so
+            // this ordering is a readability choice, not a linking constraint.
+            super::units::define_continuation_context_bodies(
+                &mut module,
+                &mut compiler,
+                helpers,
+                unit_bundle,
+                call_edges,
+            )?;
             compiler.require_complete_join_plan_consumption()?;
             compiler.require_complete_dynamic_splice_edge_consumption()?;
             super::units::define_root_adapter(
@@ -6059,23 +6070,64 @@ impl<'a> Lowering<'a> {
                 .collect::<Vec<_>>()
         ));
         for input in unit.continuation_inputs()? {
-            if input.source_owner != defining {
-                return Err(unsupported(
-                    "ContinuationSpecialization",
-                    format!(
-                        "a continuation input names source owner {:?}, which is not the unit \
-                         currently being defined",
-                        input.source_owner
-                    ),
-                ));
+            // `D5a` -- ROOT provenance versus IMMEDIATE availability.
+            //
+            // ⛔ Exhaustive over the emission-owner classes with no catch-all:
+            // the two answer the question "does this environment hold the value,
+            // and at which index" differently, and a default arm here would be
+            // the reverse-map `evt_609am4v7cdt5b` forbids.
+            match defining_owner {
+                ContinuationEmissionOwner::Predeclared(owner) => {
+                    // The emitting function IS the root provenance owner, so
+                    // root and immediate must coincide. Both halves are checked:
+                    // the owner because it always was, and the equality because
+                    // it is the consistency law that lets this arm read either
+                    // field and get the same answer.
+                    if input.source_owner != owner {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "a continuation input names source owner {:?}, which is not the \
+                                 unit currently being defined ({defining:?})",
+                                input.source_owner
+                            ),
+                        ));
+                    }
+                    if input.immediate_slot != input.source_abi_position {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            "a continuation input emitted from its own root owner has an \
+                             immediate slot that disagrees with its root ABI position; for a \
+                             predeclared emitter the two are the same environment, so a \
+                             disagreement means the projection was built against a different \
+                             owner than the one now emitting",
+                        ));
+                    }
+                }
+                ContinuationEmissionOwner::Specialization(_) => {
+                    // The emitting function is a generated context. Root
+                    // provenance is deliberately NOT compared against it: the
+                    // whole reason this context exists is that the root owner's
+                    // parameters are not reachable from the raw body, and
+                    // `fn3[0]` is not an index into `fn2`'s environment. The
+                    // planner resolved the root value to this context's own
+                    // capture position when it built the projection; the bounds
+                    // check below is what makes that resolution answerable here.
+                }
             }
             let binding = producer_env
-                .get(input.source_abi_position as usize)
+                .get(input.immediate_slot as usize)
                 .ok_or_else(|| {
                     unsupported(
                         "ContinuationSpecialization",
-                        "a continuation input names a source ABI position outside the exact \
-                         producer environment",
+                        format!(
+                            "a continuation input names immediate slot {} outside the emitting \
+                             context's environment of {} bindings; note this is the IMMEDIATE \
+                             slot, not the root ABI position {} beside it",
+                            input.immediate_slot,
+                            producer_env.len(),
+                            input.source_abi_position,
+                        ),
                     )
                 })?;
             inputs.push(
@@ -6339,6 +6391,23 @@ impl<'a> Lowering<'a> {
         // there is deliberately no conversion on this edge, which is the whole
         // reason the binding holds operands rather than templates.
         inputs.extend(worker.captures.iter().cloned());
+
+        // `RT-DECL-CLOSURE-PORT` `D5a` -- the generated-context capture suffix.
+        //
+        // ⭐ The prefix above is untouched, which is the point: the raw worker's
+        // operand run is exactly what it always was, and a context call is that
+        // run plus the enclosing specialization's continuation inputs. That is
+        // why "keep raw fn2's ABI unchanged" and "carry the inputs across the
+        // worker execution" are not in tension -- one is a prefix of the other.
+        //
+        // ⛔ Guarded on the exact body origin. A suffix appended to some other
+        // worker call would be an arity error against a frame that might be
+        // large enough to absorb it silently.
+        if let Some(extra) = self.function_local.generated_context_captures.as_ref() {
+            if extra.worker_body_origin == worker.body_origin {
+                inputs.extend(extra.operands.iter().cloned());
+            }
+        }
 
         // Resolve the exact target FIRST. The mutation below perturbs only what
         // the consumer is handed, never what the binding named.

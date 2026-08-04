@@ -76,6 +76,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
             host_dispatch_context: None,
@@ -229,6 +230,7 @@ fn run_px8j_malformed_recursor_consumer(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
             host_dispatch_context: None,
@@ -2127,6 +2129,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
             host_dispatch_context: None,
@@ -3667,16 +3670,23 @@ fn correspondence_adds_no_emitted_unit_to_the_production_census() {
             file: "lowering/units.rs",
             source: include_str!("../../units.rs"),
             // One builder/definition for the public root adapter, one for the
-            // loop-defined internal units, and one for
-            // `RT-CONTSPEC-ACTIVATE` `D2`'s continuation bodies, which is
-            // present but not yet wired into the emission path.
-            builders: 3,
-            definitions: 3,
-            // Two declaration sites: the emittable unit bundle, and
+            // loop-defined internal units, one for `RT-CONTSPEC-ACTIVATE`
+            // `D2`'s continuation bodies, and one for `RT-DECL-CLOSURE-PORT`
+            // `D5a`'s generated producer execution contexts.
+            //
+            // ⭐ The `D5a` row moved 3 -> 4 deliberately. That is the sentinel
+            // working: a new *emitting* function class in this file is exactly
+            // the event this row exists to force a reader to look at, and it is
+            // the fourth such class rather than a fourth copy of an existing
+            // one.
+            builders: 4,
+            definitions: 4,
+            // Three declaration sites: the emittable unit bundle,
             // `RT-CONTSPEC-ACTIVATE` `D2`'s forward declaration of one target
-            // per planned continuation specialization. The second is a
-            // deliberate addition and this row is the record of it.
-            declarations: 2,
+            // per planned continuation specialization, and `D5a`'s forward
+            // declaration of one target per planned generated context. Each is a
+            // deliberate addition and this row is the record of them.
+            declarations: 3,
             data_declarations: 0,
             data_definitions: 0,
         },
@@ -11952,6 +11962,44 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
                     unit.continuation_inputs()
                         .expect("continuation inputs")
                         .iter()
+                        // ⭐ ROOT provenance and IMMEDIATE slot side by side.
+                        // Printing only the root pair would leave the whole
+                        // point of `D5a` -- that the two differ for a
+                        // specialization-owned edge -- invisible, and a reader
+                        // would have to infer it from the emission not failing.
+                        .map(|input| {
+                            (
+                                input.source_owner,
+                                input.source_abi_position,
+                                input.immediate_slot,
+                            )
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .collect::<Vec<_>>();
+        // `D5a`: the generated producer execution contexts. ⭐ Printed from the
+        // plan alone, so their existence, their enclosing specialization and
+        // their ABI shape are POSITIVELY measured -- not inferred from the raw
+        // worker's seat going quiet, which is a negative check with no control.
+        let contexts = plan
+            .continuation_contexts()
+            .expect("continuation contexts")
+            .iter()
+            .map(|context| {
+                format!(
+                    "{:?} enclosing={:?} worker_body={:?} raw_owner={:?} params={} captures={} \
+                     roots={:?}",
+                    context.id(),
+                    context.enclosing_specialization(),
+                    context.worker_body_origin(),
+                    context.raw_owner(),
+                    context.header().parameters,
+                    context.header().captures,
+                    context
+                        .captures()
+                        .expect("context captures")
+                        .iter()
                         .map(|input| (input.source_owner, input.source_abi_position))
                         .collect::<Vec<_>>(),
                 )
@@ -11970,12 +12018,12 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
                 )
             })
             .collect::<Vec<_>>();
-        (units, calls, specializations, envelopes)
+        (units, calls, specializations, contexts, envelopes)
     });
     let trace = take_d5a_trace();
     eprintln!("=== D5a PLANNER CENSUS ===");
     match &census {
-        Ok((units, calls, specializations, envelopes)) => {
+        Ok((units, calls, specializations, contexts, envelopes)) => {
             eprintln!("units ({}):", units.len());
             for unit in units {
                 eprintln!("  {unit}");
@@ -11987,6 +12035,10 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
             eprintln!("specializations ({}):", specializations.len());
             for specialization in specializations {
                 eprintln!("  {specialization}");
+            }
+            eprintln!("generated contexts ({}):", contexts.len());
+            for context in contexts {
+                eprintln!("  {context}");
             }
             eprintln!("emitting-unit envelopes ({}):", envelopes.len());
             for envelope in envelopes {

@@ -27,7 +27,8 @@ pub(super) use static_transition::{
 // `RT-CONTSPEC-ACTIVATE` `D1` — the activation projection's facade route.
 // Namespace re-exports only: no wrapper, no derivation, no second authority.
 pub(super) use static_transition::{
-    ContinuationCallIdentity, ContinuationCallView, ContinuationEmissionOwner,
+    ContinuationCallIdentity, ContinuationCallView, ContinuationContextId,
+    ContinuationContextView, ContinuationEmissionOwner,
     ContinuationInputView,
     ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge, ContinuationSpecializationId,
     ContinuationUnitView,

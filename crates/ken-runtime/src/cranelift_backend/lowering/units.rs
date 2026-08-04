@@ -148,6 +148,14 @@ pub(in crate::cranelift_backend) struct UnitBundle {
     /// admitting one there would alias two identities that the planner keeps
     /// apart. Nothing resolves a continuation by ordinal or by symbol name.
     continuations: BTreeMap<ContinuationSpecializationId, FuncId>,
+    /// **`RT-DECL-CLOSURE-PORT` `D5a`** -- one declared target per planned
+    /// generated producer execution context.
+    ///
+    /// A third map for the same reason there is a second: a
+    /// `ContinuationContextId` is neither of the other two identities, and the
+    /// ruling's "do not cast or alias one ID domain into the other" is enforced
+    /// here by there being no map a caller could reach with the wrong key type.
+    contexts: BTreeMap<ContinuationContextId, FuncId>,
 }
 
 impl UnitBundle {
@@ -175,6 +183,16 @@ impl UnitBundle {
         specialization: ContinuationSpecializationId,
     ) -> Option<FuncId> {
         self.continuations.get(&specialization).copied()
+    }
+
+    /// The declared target for one generated producer execution context.
+    ///
+    /// `None` is a real answer, exactly as for the two maps above.
+    pub(in crate::cranelift_backend) fn context(
+        &self,
+        context: ContinuationContextId,
+    ) -> Option<FuncId> {
+        self.contexts.get(&context).copied()
     }
 
     /// How many continuation targets this bundle declares.
@@ -821,11 +839,28 @@ pub(in crate::cranelift_backend) fn declare_unit_bundle<M: Module>(
             ));
         }
     }
+    // `RT-DECL-CLOSURE-PORT` `D5a` -- forward-declare one target per planned
+    // generated producer execution context, in the same pre-definition pass and
+    // for the same reason: a context is called from the enclosing
+    // specialization's body, which is defined below.
+    let mut contexts = BTreeMap::new();
+    for (ordinal, context) in plan.continuation_contexts()?.into_iter().enumerate() {
+        let name = format!("ken_continuation_context_{ordinal}");
+        let id = module
+            .declare_function(&name, Linkage::Local, &sig)
+            .map_err(|err| backend_module(err.to_string()))?;
+        if contexts.insert(context.id(), id).is_some() {
+            return Err(backend_module(
+                "two generated context descriptors claim one planned context".to_string(),
+            ));
+        }
+    }
     #[cfg(test)]
     B2F_UNIT_EMISSION.with(|cell| cell.set((functions.len(), 0)));
     Ok(UnitBundle {
         functions,
         continuations,
+        contexts,
     })
 }
 
@@ -1014,6 +1049,9 @@ pub(super) fn define_continuation_bodies<M: Module>(
         let sig = unit_signature(module);
         let mut func =
             Function::with_name_signature(UserFuncName::user(0, id.as_u32()), sig);
+        // Set by the retarget below; `None` means this specialization calls the
+        // raw worker unit directly, which is every pre-`D5a` case.
+        let mut retargeted_worker_body: Option<StaticOriginId> = None;
         let result_offset = slots
             .iter()
             .zip(offsets)
@@ -1047,7 +1085,50 @@ pub(super) fn define_continuation_bodies<M: Module>(
             ));
         }
         function_local.unit_calls = declared_workers.clone();
-        function_local.worker_calls = declared_workers;
+        // `RT-DECL-CLOSURE-PORT` `D5a` -- THE RETARGET.
+        //
+        // If this specialization's worker body has a generated execution
+        // context, the worker call resolves to that context instead of to the
+        // raw unit. ⛔ Only `worker_calls` moves: `unit_calls` above keeps the
+        // raw target, because the static-worker CONSTRUCTOR validates against
+        // the raw body's own contract and this retarget does not change what
+        // that body is.
+        //
+        // ⭐ Why this is what makes the whole thing work: the continuation
+        // inputs live in THIS frame's Capture slots. The raw unit's ABI has
+        // nowhere to put them, so calling the raw unit drops them before the
+        // nested producer is reached -- which is exactly the measured defect.
+        // The context's ABI has a capture run for them, so the call carries
+        // them across the checked-IH worker execution.
+        let mut worker_calls = declared_workers;
+        if let Some(context) = compiler
+            .static_transition_plan
+            .continuation_context_for(unit.id, unit.worker_body_origin)?
+        {
+            let target = bundle.context(context.id()).ok_or_else(|| {
+                backend_module(
+                    "a planned generated context was never forward-declared".to_string(),
+                )
+            })?;
+            let (context_offsets, _frame_bytes) = context.slot_offsets()?;
+            worker_calls.insert(
+                unit.worker_body_origin,
+                DeclaredUnitCall {
+                    function: module.declare_func_in_func(target, &mut func),
+                    // The context EXECUTES that body, so the origin it answers
+                    // for is unchanged. `call_static_worker`'s
+                    // `target.origin != worker.body_origin` check therefore
+                    // still measures what it always did.
+                    origin: unit.worker_body_origin,
+                    call_site_origin: unit.worker_body_origin,
+                    header: context.header(),
+                    slots: context.slots().to_vec(),
+                    offsets: context_offsets,
+                },
+            );
+            retargeted_worker_body = Some(unit.worker_body_origin);
+        }
+        function_local.worker_calls = worker_calls;
         let mut func_ctx = FunctionBuilderContext::new();
         {
             let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
@@ -1119,6 +1200,22 @@ pub(super) fn define_continuation_bodies<M: Module>(
             let mut carried_inputs = Vec::with_capacity(capture_slots.len());
             for (_, offset) in &capture_slots {
                 carried_inputs.push(load_at(&mut builder, **offset)?);
+            }
+
+            // `D5a` -- the operand suffix the retargeted worker call appends.
+            //
+            // These are THIS frame's own continuation inputs, in ordinal order,
+            // which is exactly the capture run the generated context declares.
+            // ⛔ Stashed rather than threaded through `construct_static_worker_
+            // binding`: the worker binding is the raw body's contract and adding
+            // a context's captures to it would make the raw contract vary with
+            // its caller.
+            if let Some(worker_body_origin) = retargeted_worker_body {
+                compiler.function_local.generated_context_captures =
+                    Some(GeneratedContextCaptures {
+                        worker_body_origin,
+                        operands: carried_inputs.clone(),
+                    });
             }
 
             // The ordered capture segment for the selected worker: the
@@ -1199,6 +1296,282 @@ pub(super) fn define_continuation_bodies<M: Module>(
         }
         // Verify, then define THIS function -- a fresh context here would
         // define an empty body and silently discard everything emitted above.
+        verify_cranelift_function(&func, module.isa())?;
+        let mut ctx = module.make_context();
+        std::mem::swap(&mut ctx.func, &mut func);
+        module
+            .define_function(id, &mut ctx)
+            .map_err(|error| backend_module(error.to_string()))?;
+        defined += 1;
+    }
+    Ok(defined)
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — define each generated producer execution
+/// context.**
+///
+/// The body lowered here is the **raw worker body**, unchanged. What differs
+/// from that body's own ordinary unit is only the environment it runs in: the
+/// context's frame carries the raw parameter run *and* the enclosing
+/// specialization's continuation inputs, so a nested producer inside that body
+/// can reach operands raw `fn2` provably never receives.
+///
+/// ⛔ **The raw unit is still emitted and is not retired.** It keeps its own
+/// descriptor, its own body and every other caller; it loses exactly one caller
+/// — the enclosing specialization's worker call, which retargets here. "A new
+/// owner for a body does not retire the old owner's unit."
+///
+/// ⛔ The emission owner bound here is `Specialization(enclosing)`, and
+/// `defining_unit` stays the **raw** owner. Deriving one from the other is the
+/// conflation `evt_609am4v7cdt5b` ruled against, and it is precisely because
+/// this function lowers someone else's body that the two must be supplied
+/// independently.
+pub(super) fn define_continuation_context_bodies<M: Module>(
+    module: &mut M,
+    compiler: &mut Lowering<'_>,
+    helpers: ArtifactHelpers<'_>,
+    bundle: &UnitBundle,
+    call_edges: &CallEdgeTargets,
+) -> Result<usize, CraneliftBackendError> {
+    struct OwnedContext {
+        id: ContinuationContextId,
+        enclosing: ContinuationSpecializationId,
+        worker_body_origin: StaticOriginId,
+        raw_owner: PredeclaredFunctionId,
+        slots: Vec<AbiSlot>,
+        offsets: Vec<u32>,
+        header_parameters: u32,
+        header_captures: u32,
+    }
+    // Own every projected fact before the loop: the projection borrows the plan
+    // and definition below needs the compiler mutably.
+    let contexts = compiler
+        .static_transition_plan
+        .continuation_contexts()?
+        .into_iter()
+        .map(|context| {
+            let (offsets, _frame_bytes) = context.slot_offsets()?;
+            Ok(OwnedContext {
+                id: context.id(),
+                enclosing: context.enclosing_specialization(),
+                worker_body_origin: context.worker_body_origin(),
+                raw_owner: context.raw_owner(),
+                slots: context.slots().to_vec(),
+                offsets,
+                header_parameters: context.header().parameters,
+                header_captures: context.header().captures,
+            })
+        })
+        .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
+
+    let worker_targets = resolve_worker_targets(&compiler.static_transition_plan, bundle)?;
+    let mut defined = 0usize;
+    for context in contexts {
+        let id = bundle.context(context.id).ok_or_else(|| {
+            backend_module(
+                "a planned generated context was never forward-declared".to_string(),
+            )
+        })?;
+        let slots = context.slots.as_slice();
+        let offsets = context.offsets.as_slice();
+        if slots.len() != offsets.len() {
+            return Err(backend_module(
+                "a generated context slot run disagrees with its own offset walk".to_string(),
+            ));
+        }
+        let parameter_count = slots
+            .iter()
+            .filter(|slot| slot.kind == AbiSlotKind::Parameter)
+            .count();
+        let capture_count = slots
+            .iter()
+            .filter(|slot| slot.kind == AbiSlotKind::Capture)
+            .count();
+        // The header is the declared contract and the slot run is what the body
+        // will actually walk; a disagreement here means the environment this
+        // body binds is not the one its caller passes operands for.
+        if u32::try_from(parameter_count).ok() != Some(context.header_parameters)
+            || u32::try_from(capture_count).ok() != Some(context.header_captures)
+        {
+            return Err(backend_module(
+                "a generated context's slot run disagrees with its declared frame header"
+                    .to_string(),
+            ));
+        }
+        let result_offset = slots
+            .iter()
+            .zip(offsets)
+            .find(|(slot, _)| slot.kind == AbiSlotKind::Result)
+            .map(|(_, offset)| *offset)
+            .ok_or_else(|| {
+                backend_module("generated context frame declares no result slot".to_string())
+            })?;
+        let trap_offset = slots
+            .iter()
+            .zip(offsets)
+            .find(|(slot, _)| slot.kind == AbiSlotKind::Trap)
+            .map(|(_, offset)| *offset)
+            .ok_or_else(|| {
+                backend_module("generated context frame declares no trap slot".to_string())
+            })?;
+
+        let sig = unit_signature(module);
+        let mut func = Function::with_name_signature(UserFuncName::user(3, id.as_u32()), sig);
+        let mut function_local = helpers.declare_in_func(module, &mut func, None);
+        // The raw body's OWN call edges, declared into this function. They are
+        // the raw owner's edges because the body is the raw owner's body; what
+        // this context changes is the environment, never which callees the
+        // source names.
+        let declared_calls = call_edges.declare_in_func(context.raw_owner, module, &mut func)?;
+        function_local.unit_calls = declared_calls.static_bodies;
+        function_local.declaration_calls = declared_calls.declarations;
+        function_local.worker_calls = worker_targets.declare_in_func(module, &mut func);
+        // `D5a`: this context's own causal call refs, selected by the EMISSION
+        // owner. ⛔ Not by `raw_owner` -- that is the filter that would hand this
+        // function the raw unit's tokens and leave its own undeclared.
+        let emission_owner = ContinuationEmissionOwner::Specialization(context.enclosing);
+        function_local.continuation_calls = match compiler.continuation_claims.as_ref() {
+            Some(ledger) => ledger.declare_owned_in_func(
+                emission_owner,
+                module,
+                &mut func,
+                &compiler.static_transition_plan,
+            )?,
+            None => BTreeMap::new(),
+        };
+        if let Some(ledger) = compiler.continuation_claims.as_mut() {
+            ledger.record_declared(function_local.continuation_calls.keys().cloned())?;
+        }
+        // Contract 3, on this context: the projection is taken before the
+        // function is defined and keyed on the emission owner this pass is about
+        // to bind.
+        let result_edges = compiler
+            .static_transition_plan
+            .continuation_result_edges_owned_by(emission_owner)?;
+
+        let mut func_ctx = FunctionBuilderContext::new();
+        {
+            let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
+            let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
+            builder.switch_to_block(entry);
+            let envelope_pointer = builder.block_params(entry)[0];
+            let frame = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                envelope_pointer,
+                crate::activation_services::UNIT_CALL_FRAME_SLOTS,
+            );
+            let host_dispatch_context = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                envelope_pointer,
+                crate::activation_services::UNIT_CALL_FRAME_HOST_DISPATCH_CONTEXT,
+            );
+            let services = builder.block_params(entry)[1];
+            let native_int_arena = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                services,
+                crate::activation_services::SERVICES_NATIVE_INT_ARENA,
+            );
+            Lowering::require_nonzero(&mut builder, native_int_arena);
+            let boundary_arena = builder.ins().load(
+                module.target_config().pointer_type(),
+                MemFlags::trusted(),
+                services,
+                crate::activation_services::SERVICES_BOUNDARY_ARENA,
+            );
+            Lowering::require_nonzero(&mut builder, boundary_arena);
+            function_local.host_dispatch_context = Some(host_dispatch_context);
+            function_local.native_int_arena = Some(native_int_arena);
+            function_local.boundary_arena = Some(boundary_arena);
+            function_local.services_pointer = Some(services);
+            function_local.bind_unit_trap_frame(
+                frame,
+                i32::try_from(trap_offset).map_err(|_| {
+                    backend_module("generated context trap slot offset exceeds range".to_string())
+                })?,
+            )?;
+            compiler.function_local = function_local;
+            compiler.defining_unit = Some(context.raw_owner);
+            compiler.defining_emission_owner = Some(emission_owner);
+
+            // The environment: Parameter slots then Capture slots, in slot
+            // order. ⭐ This is the SAME walk `define_unit_body` uses, which is
+            // why the raw body's binder positions resolve identically here --
+            // the parameter prefix is byte-for-byte the run its own unit binds,
+            // and the continuation inputs sit strictly after it.
+            let mut env = Vec::new();
+            for (slot, offset) in slots.iter().zip(offsets) {
+                if !matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
+                    continue;
+                }
+                let offset = i32::try_from(*offset).map_err(|_| {
+                    backend_module(
+                        "generated context slot offset exceeds addressable range".to_string(),
+                    )
+                })?;
+                let word = builder
+                    .ins()
+                    .load(types::I64, MemFlags::trusted(), frame, offset);
+                env.push(LoweringEnvironmentBinding::Value(LoweringOperand::Carried(
+                    CarriedBoundaryWord { word },
+                )));
+            }
+
+            let body = compiler.retained_body_occurrence(context.worker_body_origin)?;
+            let lowered = compiler.lower_expr(&mut builder, body, &env)?;
+            // The detached-result seat, live in this context. Every operand its
+            // capture projection names is reachable from `env` above.
+            let lowered = compiler.eliminate_detached_producer_continuation(
+                &mut builder,
+                &result_edges,
+                lowered,
+                &env,
+            )?;
+            let word = match lowered {
+                LoweringOperand::Carried(word) => Some(word.word),
+                LoweringOperand::Specialized(Lowered::Trap(trap)) => {
+                    compiler.emit_current_trap(&mut builder, &trap)?;
+                    None
+                }
+                LoweringOperand::Specialized(value) => Some(
+                    compiler
+                        .transfer_unit_result_into_carrier(
+                            &mut builder,
+                            context.worker_body_origin,
+                            &value,
+                        )?
+                        .word,
+                ),
+            };
+            if let Some(word) = word {
+                builder.ins().store(
+                    MemFlags::trusted(),
+                    word,
+                    frame,
+                    i32::try_from(result_offset).map_err(|_| {
+                        backend_module(
+                            "generated context result slot offset exceeds range".to_string(),
+                        )
+                    })?,
+                );
+            }
+            let status = builder.ins().iconst(types::I64, 0);
+            builder.ins().return_(&[status]);
+            builder.seal_all_blocks();
+            builder.finalize();
+        }
+        // The same emission-seam gate every other generated function passes: the
+        // callee of each recorded causal emission is decoded back out of THIS
+        // finished CLIF and compared with the planner-issued target.
+        compiler.verify_emitted_continuation_calls(&func, bundle)?;
+        if let Some(ledger) = compiler.continuation_claims.as_mut() {
+            ledger.record_emitted(
+                compiler.function_local.continuation_emissions.keys().cloned(),
+            )?;
+        }
         verify_cranelift_function(&func, module.isa())?;
         let mut ctx = module.make_context();
         std::mem::swap(&mut ctx.func, &mut func);
