@@ -2669,7 +2669,133 @@ impl<'a> Lowering<'a> {
         value: &Lowered,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
         value.boundary_transfer_admissibility()?;
+        self.source_aggregate_preflight(value)?;
         self.emit_carrier_transfer(builder, origin, value)
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D7` — reconcile every aggregate in a template
+    /// against its OWN producer's planned ownership record, before anything is
+    /// allocated.**
+    ///
+    /// ⭐ **It takes no origin, and that absence is the mechanism.** Every other
+    /// reconciliation on this path is handed a coordinate and is therefore only
+    /// as right as the coordinate it was handed — which is precisely the defect
+    /// class this subclosure exists to close. Here there is no coordinate to
+    /// pass, so there is no wrong one to pass: each node is checked against the
+    /// record its own producer occurrence names, and a template can only be
+    /// admitted by agreeing with the plan about itself.
+    ///
+    /// ⛔ **A missing producer is a REFUSAL, never a fallback.** An aggregate
+    /// with no interned occurrence has no lifetime meet, so "resolve it at
+    /// wherever it is being transferred" would reinstate exactly the
+    /// use-coordinate authority the `occurrence` fields were added to retire.
+    /// The fallback in [`Self::aggregate_carrier_authority`] survives only for
+    /// values this preflight never sees.
+    ///
+    /// ⚠ **Whole-graph, and it runs BEFORE `emit_carrier_transfer`.** A nested
+    /// child is allocated during its parent's transfer, so a check that fired
+    /// only at each node's own allocation would already have allocated the
+    /// parent by the time a child was refused. Walking the spine up front is
+    /// what makes "refuses before any allocation" true of the whole tree rather
+    /// than of its root.
+    fn source_aggregate_preflight(&self, value: &Lowered) -> Result<(), CraneliftBackendError> {
+        let (shape, children): (PlannedAggregateShape, Vec<&Lowered>) = match value {
+            Lowered::Constructor { args, .. } => {
+                (PlannedAggregateShape::Constructor, args.iter().collect())
+            }
+            Lowered::Record { fields, .. } => (
+                PlannedAggregateShape::Record,
+                fields.iter().map(|(_, field)| field).collect(),
+            ),
+            // Not an aggregate: nothing here names an ownership record, and
+            // nothing below it is reached through an aggregate edge.
+            _ => return Ok(()),
+        };
+        let Some(occurrence) = value.source_aggregate_producer() else {
+            return Err(unsupported(
+                lowered_value_kind(value),
+                "a source aggregate reached the carrier with no planner-issued producer \
+                 occurrence, so it would name no ownership record and could only be given \
+                 the authority of wherever it happened to be transferred",
+            ));
+        };
+        let planned = self
+            .static_transition_plan
+            .aggregate_record_view(occurrence)?;
+        if planned.shape() != shape {
+            return Err(unsupported(
+                lowered_value_kind(value),
+                format!(
+                    "the template is a {shape:?} but its own producer occurrence names a \
+                     {:?} ownership record",
+                    planned.shape()
+                ),
+            ));
+        }
+        if planned.children().len() != children.len() {
+            return Err(unsupported(
+                lowered_value_kind(value),
+                format!(
+                    "the template has {} children but its own producer occurrence names an \
+                     ownership record planned with {}",
+                    children.len(),
+                    planned.children().len()
+                ),
+            ));
+        }
+        // ⚠ Gated to a SOURCE producer. A compiler-synthesized aggregate's
+        // children have no occurrence in the program, and their agreement with
+        // the plan is already established -- by path, role and disposition -- in
+        // [`Self::reconcile_declared_children`]. Re-deriving it here from source
+        // origins the planner deliberately recorded as absent would be a second,
+        // weaker authority for a question that already has one.
+        if planned.producer_origin().is_some() {
+            for (child, planned_child) in children.iter().zip(planned.children()) {
+                let Some(child_shape) = Self::lowered_aggregate_shape(child) else {
+                    continue;
+                };
+                let Some(child_origin) = planned_child.origin else {
+                    return Err(unsupported(
+                        lowered_value_kind(child),
+                        "a source aggregate's child is an aggregate, but the planner recorded \
+                         no source occurrence for it at that position",
+                    ));
+                };
+                let expected = self
+                    .static_transition_plan
+                    .source_aggregate_occurrence(child_origin, child_shape)?;
+                // ⭐ The child must carry the occurrence the planner planned AT
+                // THAT POSITION -- not merely some record of the same shape, and
+                // not the same producer's record reached from elsewhere in the
+                // tree. Swap two children, graft a sibling's subtree in, or hand
+                // a forwarded aggregate a neighbour's certificate, and the
+                // carried occurrence stops matching the position it sits at.
+                if child.source_aggregate_producer() != Some(expected) {
+                    return Err(unsupported(
+                        lowered_value_kind(child),
+                        format!(
+                            "child {} carries producer occurrence {:?} but the planner planned \
+                             {expected:?} at that position",
+                            planned_child.position,
+                            child.source_aggregate_producer(),
+                        ),
+                    ));
+                }
+            }
+        }
+        for child in children {
+            self.source_aggregate_preflight(child)?;
+        }
+        Ok(())
+    }
+
+    /// The planned aggregate shape a template is, if it is an aggregate at all.
+    fn lowered_aggregate_shape(value: &Lowered) -> Option<PlannedAggregateShape> {
+        match value {
+            Lowered::Constructor { .. } => Some(PlannedAggregateShape::Constructor),
+            Lowered::Record { .. } => Some(PlannedAggregateShape::Record),
+            _ => None,
+        }
     }
 
     /// Transfer the terminal value returned by one declared generated unit.

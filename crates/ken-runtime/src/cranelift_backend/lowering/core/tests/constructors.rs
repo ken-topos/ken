@@ -2020,6 +2020,15 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
         args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
     };
     let (plan, construct_origin) = planned_root_occurrence(&construct);
+    // ⭐ `D7` — resolved BEFORE the plan is moved into the compiler, because a
+    // hand-built source aggregate owes its own producer occurrence exactly as
+    // the `Construct` arm's does. ⛔ Both graphs below get it: the ordering
+    // claim under test is about the ADMISSIBILITY walk beating the carrier
+    // step, so neither arm may be decided by a missing-producer refusal that is
+    // an artifact of the rig.
+    let wrap_occurrence = plan
+        .source_aggregate_occurrence(construct_origin, PlannedAggregateShape::Constructor)
+        .expect("the planned `Construct` has an ownership record at its own origin");
     let closure_body = inert_test_static_origin();
     let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
 
@@ -2037,7 +2046,7 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
     let inadmissible = Lowered::Constructor {
         constructor: "ctor:fixture::C1::Wrap".to_string(),
         synthesized_identity: None,
-        occurrence: None,
+        occurrence: Some(wrap_occurrence),
         args: vec![Lowered::Closure {
             captures: Vec::new(),
             params: Vec::new(),
@@ -2063,7 +2072,7 @@ fn c1_d3_producer_screens_admissibility_before_it_touches_the_carrier() {
     let admissible = Lowered::Constructor {
         constructor: "ctor:fixture::C1::Wrap".to_string(),
         synthesized_identity: None,
-        occurrence: None,
+        occurrence: Some(wrap_occurrence),
         args: vec![Lowered::Bool {
             value: builder.ins().iconst(types::I64, 1),
             known: Some(true),
@@ -2885,11 +2894,27 @@ fn ac_c7_ctor(name: &str) -> RuntimeExpr {
     }
 }
 
-fn ac_c7_lowered_ctor(name: &str) -> Lowered {
+/// ⭐ **`D7` — a hand-built source aggregate owes the producer occurrence the
+/// planner issued AT ITS OWN ORIGIN**, and takes that origin as an argument
+/// rather than inheriting whatever coordinate its eventual transfer uses.
+///
+/// This rig stands in for the `Construct` lowering arm, so it owes exactly what
+/// that arm resolves. ⛔ Leaving it absent is not a shortcut that happens to
+/// work: it is the fail-closed hole the subclosure exists to close, and it read
+/// as harmless only because these rigs transfer at the producer origin, where
+/// the two coordinates coincide.
+fn ac_c7_lowered_ctor(
+    plan: &StaticTransitionPlan<'_>,
+    origin: StaticOriginId,
+    name: &str,
+) -> Lowered {
     Lowered::Constructor {
         constructor: format!("ctor:fixture::C1::{name}"),
         synthesized_identity: None,
-        occurrence: None,
+        occurrence: Some(
+            plan.source_aggregate_occurrence(origin, PlannedAggregateShape::Constructor)
+                .expect("a planned `Construct` has an ownership record at its own origin"),
+        ),
         args: Vec::new(),
     }
 }
@@ -2948,9 +2973,19 @@ fn ac_c7_project_edge(fields: [(&str, &str); 2], project: &str) -> (i64, u64, u6
     let first_identity = identity(0);
     let second_identity = identity(1);
 
+    let field_origin = |position| {
+        plan.child_static_origin(record_origin, position)
+            .expect("a record field has a planned child origin")
+    };
     let lowered_fields = vec![
-        (fields[0].0.to_string(), ac_c7_lowered_ctor(fields[0].1)),
-        (fields[1].0.to_string(), ac_c7_lowered_ctor(fields[1].1)),
+        (
+            fields[0].0.to_string(),
+            ac_c7_lowered_ctor(&plan, field_origin(0), fields[0].1),
+        ),
+        (
+            fields[1].0.to_string(),
+            ac_c7_lowered_ctor(&plan, field_origin(1), fields[1].1),
+        ),
     ];
     // ⭐ `D7` — the record's PRODUCER occurrence, resolved here because this
     // rig hand-builds the template that the `Record` lowering arm would
@@ -3080,12 +3115,29 @@ fn ac_c7_wrap(outer: &str, inner: &str) -> RuntimeExpr {
     }
 }
 
-fn ac_c7_lowered_wrap(outer: &str, inner: &str) -> Lowered {
+/// ⭐ **The child's origin is derived from the parent's, not passed in.** The
+/// preflight checks each child against the record the planner planned at THAT
+/// POSITION, so a rig that took two independent origins could satisfy it with
+/// two unrelated ones. Reading child 0 off the parent is the same derivation the
+/// producer arm performs, which is what makes the agreement a property under
+/// test rather than a coincidence the caller arranged.
+fn ac_c7_lowered_wrap(
+    plan: &StaticTransitionPlan<'_>,
+    origin: StaticOriginId,
+    outer: &str,
+    inner: &str,
+) -> Lowered {
+    let inner_origin = plan
+        .child_static_origin(origin, 0)
+        .expect("the wrapper's only argument has a planned origin");
     Lowered::Constructor {
         constructor: format!("ctor:fixture::C1::{outer}"),
         synthesized_identity: None,
-        occurrence: None,
-        args: vec![ac_c7_lowered_ctor(inner)],
+        occurrence: Some(
+            plan.source_aggregate_occurrence(origin, PlannedAggregateShape::Constructor)
+                .expect("the planned wrapper has an ownership record at its own origin"),
+        ),
+        args: vec![ac_c7_lowered_ctor(plan, inner_origin, inner)],
     }
 }
 
@@ -3196,7 +3248,7 @@ fn ac_c7_match_edge(scrutinee: &str, inner: &str) -> (i64, u64, u64) {
             .expect("case 1's body has a planned origin"),
     );
 
-    let lowered = ac_c7_lowered_wrap(scrutinee, inner);
+    let lowered = ac_c7_lowered_wrap(&plan, scrutinee_origin, scrutinee, inner);
     let seed_env = NativeSeedEnvironment::empty();
     let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
         let word = compiler.transfer_into_carrier(builder, scrutinee_origin, &lowered)?;
@@ -3356,7 +3408,7 @@ fn ac_c7_computational_match_edge(scrutinee: &str, inner: &str) -> (i64, u64, u6
             .expect("case 1's body has a planned origin"),
     );
 
-    let lowered = ac_c7_lowered_wrap(scrutinee, inner);
+    let lowered = ac_c7_lowered_wrap(&plan, scrutinee_origin, scrutinee, inner);
     let seed_env = NativeSeedEnvironment::empty();
     let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
         let word = compiler.transfer_into_carrier(builder, scrutinee_origin, &lowered)?;
@@ -3489,7 +3541,7 @@ fn ac_c4_recursive_edge(
             .expect("case 1's body has a planned origin"),
     );
 
-    let lowered = ac_c7_lowered_wrap("Wrap", "Leaf");
+    let lowered = ac_c7_lowered_wrap(&plan, scrutinee_origin, "Wrap", "Leaf");
     let seed_env = NativeSeedEnvironment::empty();
     let (_module, code) = ac_c7_try_compile_edge(&seed_env, plan, move |compiler, builder| {
         let word = compiler.transfer_into_carrier(builder, scrutinee_origin, &lowered)?;
@@ -3608,12 +3660,30 @@ fn ac_c4_wrap2(outer: &str, first: &str, second: &str) -> RuntimeExpr {
     }
 }
 
-fn ac_c4_lowered_wrap2(outer: &str, first: &str, second: &str) -> Lowered {
+/// The two-argument sibling of [`ac_c7_lowered_wrap`], with each child's origin
+/// derived from its own position for the reason stated there.
+fn ac_c4_lowered_wrap2(
+    plan: &StaticTransitionPlan<'_>,
+    origin: StaticOriginId,
+    outer: &str,
+    first: &str,
+    second: &str,
+) -> Lowered {
+    let child_origin = |position| {
+        plan.child_static_origin(origin, position)
+            .expect("the wrapper's argument has a planned origin")
+    };
     Lowered::Constructor {
         constructor: format!("ctor:fixture::C1::{outer}"),
         synthesized_identity: None,
-        occurrence: None,
-        args: vec![ac_c7_lowered_ctor(first), ac_c7_lowered_ctor(second)],
+        occurrence: Some(
+            plan.source_aggregate_occurrence(origin, PlannedAggregateShape::Constructor)
+                .expect("the planned wrapper has an ownership record at its own origin"),
+        ),
+        args: vec![
+            ac_c7_lowered_ctor(plan, child_origin(0), first),
+            ac_c7_lowered_ctor(plan, child_origin(1), second),
+        ],
     }
 }
 
@@ -3695,7 +3765,7 @@ fn ac_c4_ownership_edge_with_case_body(
             .expect("the wrapper's second argument has a planned origin"),
     );
 
-    let lowered = ac_c4_lowered_wrap2("Wrap2", "Alpha", "Leaf");
+    let lowered = ac_c4_lowered_wrap2(&plan, scrutinee_origin, "Wrap2", "Alpha", "Leaf");
     let seed_env = NativeSeedEnvironment::empty();
 
     struct Reset;
@@ -4049,6 +4119,12 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
         args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
     };
     let (plan, construct_origin) = planned_root_occurrence(&construct);
+    // ⭐ `D7` — as in the admissibility-ordering row: both graphs carry the
+    // producer occurrence, so the refusal each one earns is the one the row is
+    // about rather than a rig artifact.
+    let wrap_occurrence = plan
+        .source_aggregate_occurrence(construct_origin, PlannedAggregateShape::Constructor)
+        .expect("the planned `Construct` has an ownership record at its own origin");
     let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
 
     let mut function_context = FunctionBuilderContext::new();
@@ -4080,7 +4156,7 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
         let inadmissible = Lowered::Constructor {
             constructor: "ctor:fixture::C1::Wrap".to_string(),
             synthesized_identity: None,
-            occurrence: None,
+            occurrence: Some(wrap_occurrence),
             args: vec![ac_c4_recursor_capsule(residual)],
         };
         let refused = compiler
@@ -4104,7 +4180,7 @@ fn c1_d3_ac_c4_the_recursor_capsule_is_refused_before_its_residual_is_read() {
     let admissible = Lowered::Constructor {
         constructor: "ctor:fixture::C1::Wrap".to_string(),
         synthesized_identity: None,
-        occurrence: None,
+        occurrence: Some(wrap_occurrence),
         args: vec![Lowered::Bool {
             value: builder.ins().iconst(types::I64, 1),
             known: Some(true),
