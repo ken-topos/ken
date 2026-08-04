@@ -65,6 +65,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         continuation_claims: None,
+        checked_call_ledger: None,
         defining_unit: None,
         process_object: true,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
@@ -216,6 +217,7 @@ fn run_px8j_malformed_recursor_consumer(
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         continuation_claims: None,
+        checked_call_ledger: None,
         defining_unit: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
@@ -2112,6 +2114,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         unsupported: Vec::new(),
         body_emission_authority: BodyEmissionAuthority::FunctionizedUnits,
         continuation_claims: None,
+        checked_call_ledger: None,
         defining_unit: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
@@ -11632,6 +11635,119 @@ fn d5_c4_a_duplicated_checked_occurrence_is_refused_after_its_lawful_first() {
             "D5: at most the entry's unchecked call and the first, LAWFUL \
              checked occurrence may be emitted before the repeat is refused: \
              {emitted:?}"
+        );
+    });
+}
+
+// ── The D5 checked-call CLOSEOUT ──────────────────────────────────────────
+//
+// ⭐⭐ **The closeout is the only check that can see a call nobody accounted
+// for.** Every other D5 control is local to one call site: it can prove that
+// site refused, or emitted the right target. None of them can see a lawful
+// emission whose record went missing, a template that recorded twice, or a
+// record whose callee is not what the instruction calls — because each of those
+// is consistent with every per-site check passing.
+//
+// ⛔ Each row defeats exactly ONE of the closeout's three claims, so a green row
+// names a specific property rather than "the closeout is on".
+
+#[test]
+fn d5_the_checked_call_closeout_rejects_omission_duplication_and_a_substituted_callee() {
+    let rows: [(&str, D5CloseoutMutation, &str); 4] = [
+        (
+            "a lawful call whose ledger entry is suppressed",
+            D5CloseoutMutation::SuppressLedgerEntry,
+            "does not equal the planned one",
+        ),
+        (
+            "one template recording two entries",
+            D5CloseoutMutation::DuplicateLedgerEntry,
+            "emitted more than one declaration-unit call",
+        ),
+        (
+            "an entry under a template the plan never issued",
+            D5CloseoutMutation::ExtraLedgerEntry,
+            "does not equal the planned one",
+        ),
+        (
+            "a recorded callee that is not the emitted one",
+            D5CloseoutMutation::SubstituteEmittedCallee,
+            "emitted a call to",
+        ),
+    ];
+    for (label, mutation, fragment) in rows {
+        with_transparent_declaration_closure_witness(|| {
+            with_d5_closeout_mutation(mutation, || {
+                let (outcome, _emitted) =
+                    d5_mutual_compile(d5_mutual_plan_with(|_, _| {}, true));
+                let refusal = outcome.unwrap_err_or_panic(label);
+                assert!(
+                    refusal.contains(fragment),
+                    "D5 closeout [{label}]: the refusal must be the closeout's \
+                     own. Any other one means this row never reached it and the \
+                     claim it names stays unpinned: {refusal}"
+                );
+            });
+        });
+    }
+
+    // ⛔ The positive, in the same shape. Without it every row above is equally
+    // consistent with the mutual fixture failing for an unrelated reason
+    // ([[a-negative-check-passes-for-any-reason-so-it-needs-a-positive-control]]).
+    with_transparent_declaration_closure_witness(|| {
+        let (outcome, emitted) = d5_mutual_compile(d5_mutual_plan_with(|_, _| {}, true));
+        assert!(
+            outcome.is_ok() && emitted.len() == 3,
+            "D5 closeout: unmutated, planned = consumed = emitted holds and the \
+             fixture compiles: {outcome:?} {emitted:?}"
+        );
+    });
+}
+
+/// **The closeout's `planned` set is the plan's own, and this proves it is not
+/// derived from what happened to be emitted.**
+///
+/// ⚠ A set-equality gate whose "expected" side is computed from the observed
+/// side is an identity. Here `planned` comes from `plan.recursive_calls` and
+/// nothing else, so adding a template the program cannot possibly emit must
+/// red — and does.
+#[test]
+fn d5_the_closeout_planned_set_comes_from_the_plan_not_from_the_emissions() {
+    with_transparent_declaration_closure_witness(|| {
+        let mut plan = d5_mutual_plan_with(|_, _| {}, true);
+        // A third template, well-formed and bound to a real frame, for a
+        // declaration whose body carries no marker for it.
+        let mut orphan = d5_mutual_template(
+            912,
+            D5_MUTUAL_B,
+            D5_MUTUAL_A,
+            D5_MUTUAL_A_FRAME,
+            10,
+        );
+        orphan.checked_occurrence_path = vec![6];
+        orphan.runtime_marker_locations = vec![crate::CheckedRuntimeMarkerLocationV1 {
+            declaration: D5_MUTUAL_B.to_string(),
+            runtime_path: vec![3],
+        }];
+        orphan.occurrence_binding_fingerprint =
+            crate::compiler_private_recursive_call_binding_fingerprint(&orphan);
+        plan.recursive_calls.push(orphan);
+        let (outcome, _emitted) = d5_mutual_compile(plan);
+        let refusal = outcome.expect_err(
+            "a planned template the program never emits must be caught — if this \
+             compiles, `planned` is being read off the emissions and the whole \
+             set equality is an identity",
+        );
+        // ⚠ Attribution stated, not assumed: the marker-location reconciliation
+        // upstream sees this first, because the extra template declares an
+        // occurrence `mutual_b`'s body does not have. That is the correct owner
+        // for THIS shape; the closeout owns the shapes above, where the plan and
+        // the IR agree and only the ledger diverges.
+        assert!(
+            refusal.contains("Runtime occurrences differ")
+                || refusal.contains("does not equal the planned one"),
+            "the refusal must come from the marker reconciliation or the \
+             closeout, not from somewhere incidental: {refusal}"
         );
     });
 }

@@ -830,6 +830,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
     let mut func_ctx = FunctionBuilderContext::new();
     let mut compiler = Lowering {
         continuation_claims: None,
+        checked_call_ledger: None,
         defining_unit: None,
         seed_env,
         declarations,
@@ -10262,7 +10263,7 @@ impl<'a> Lowering<'a> {
                      targets a declaration-owned callable unit"
                 ))));
             }
-            return self.call_declared_declaration_unit(builder, reference_origin, &[]);
+            return self.call_declared_declaration_unit(builder, reference_origin, &[], None);
         }
         if self.declaration_stack.contains(symbol) {
             return Err(unsupported(
@@ -10337,9 +10338,21 @@ impl<'a> Lowering<'a> {
             ));
         }
         self.validate_declaration_unit_call(reference, symbol, checked, params.len(), captures.len())?;
+        // ⭐ The consumed template id is carried from the validation that
+        // accepted it to the emission that realizes it — one value, one path.
+        // ⛔ Re-deriving it at the emission site would be a second authority on
+        // "which template is this call", and the two could disagree silently.
+        let checked_template = match checked.map(|instance| instance.source) {
+            Some(InvocationTemplateRef::SameSccCall(id)) => Some(id),
+            // `validate_declaration_unit_call` already refused every other
+            // source, so this arm is unreachable-by-validation rather than a
+            // fallback. Spelled, not wildcarded.
+            Some(InvocationTemplateRef::ComputationalIHCall(_)) => None,
+            None => None,
+        };
         let mut inputs = args;
         inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
-        self.call_declared_declaration_unit(builder, reference, &inputs)
+        self.call_declared_declaration_unit(builder, reference, &inputs, checked_template)
     }
 
     /// **`RT-DECL-CLOSURE-PORT` `D5` — the split-domain validation that stands
