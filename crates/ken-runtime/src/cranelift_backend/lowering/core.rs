@@ -772,6 +772,8 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
         checked_call_ledger: None,
         defining_unit: None,
         defining_emission_owner: None,
+        defining_function_id: None,
+        aggregate_allocations: None,
         seed_env,
         declarations,
         static_transition_plan,
@@ -856,6 +858,20 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
             if d5a_route_mutation() == D5aRouteMutation::CloseLedgerAfterTheFirstPass {
                 record_d5a_route_application();
                 super::units::close_continuation_claim_ledger(&mut compiler)?;
+                // `D7` — the relation's enforced laws close here: every event
+                // maps to exactly one record, every committed pair is unique,
+                // every related record is in `P`, no body is built twice, and
+                // no event set is left open.
+                //
+                // ⚠ `image(R) = P` is MEASURED and deliberately NOT enforced.
+                // It does not hold, and the reason is structural rather than a
+                // defect in this ledger — see the handoff. `P` plans a record
+                // for every allocation-reachable node of every seat's tree
+                // under every emission owner the seat may be lowered by, while
+                // one compilation emits only the bodies it has. Enforcing the
+                // equality here would refuse ordinary programs.
+                let _aggregate_relation =
+                    super::units::close_aggregate_allocation_ledger(&mut compiler)?;
             }
             // `RT-CONTSPEC-ACTIVATE` `D2` — define each declared continuation
             // target from its own projected contract, after the ordinary
@@ -900,6 +916,20 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
             // none today — that is a fact about the adapter, not a reason to
             // narrow the window.
             super::units::close_continuation_claim_ledger(&mut compiler)?;
+                // `D7` — the relation's enforced laws close here: every event
+                // maps to exactly one record, every committed pair is unique,
+                // every related record is in `P`, no body is built twice, and
+                // no event set is left open.
+                //
+                // ⚠ `image(R) = P` is MEASURED and deliberately NOT enforced.
+                // It does not hold, and the reason is structural rather than a
+                // defect in this ledger — see the handoff. `P` plans a record
+                // for every allocation-reachable node of every seat's tree
+                // under every emission owner the seat may be lowered by, while
+                // one compilation emits only the bodies it has. Enforcing the
+                // equality here would refuse ordinary programs.
+                let _aggregate_relation =
+                    super::units::close_aggregate_allocation_ledger(&mut compiler)?;
             root_result
         }
         BodyEmissionAuthority::RecursiveDescent => {
@@ -7364,7 +7394,7 @@ impl<'a> Lowering<'a> {
         // naming storage that dies first — the dangling relation `store_field`
         // refuses, surfacing at runtime as `BOUNDARY_ERR_ESCAPE` rather than at
         // the producer that created it.
-        let (tag, class) = self.aggregate_carrier_disposition(
+        let (occurrence, class) = self.aggregate_carrier_authority(
             origin,
             &Lowered::Constructor {
                 constructor: RuntimeSymbol::from(constructor),
@@ -7374,7 +7404,13 @@ impl<'a> Lowering<'a> {
             },
             PlannedAggregateShape::Constructor,
         )?;
-        let word = self.emit_carrier_alloc(builder, tag, class, args.len())?;
+        let word = self.emit_checked_aggregate_alloc(
+            builder,
+            occurrence,
+            PlannedAggregateShape::Constructor,
+            class,
+            args.len(),
+        )?;
         self.emit_carrier_store_tag_id(builder, word, identity)?;
         for (position, argument) in args.iter().enumerate() {
             let child_origin = self

@@ -1289,6 +1289,7 @@ pub(super) fn define_continuation_bodies<M: Module>(
             }
         }
 
+        compiler.open_aggregate_events(id)?;
         let sig = unit_signature(module);
         let mut func =
             Function::with_name_signature(UserFuncName::user(0, id.as_u32()), sig);
@@ -1683,6 +1684,7 @@ pub(super) fn define_continuation_bodies<M: Module>(
         // Verify, then define THIS function -- a fresh context here would
         // define an empty body and silently discard everything emitted above.
         verify_cranelift_function(&func, module.isa())?;
+        compiler.commit_aggregate_events()?;
         let mut ctx = module.make_context();
         std::mem::swap(&mut ctx.func, &mut func);
         module
@@ -1909,6 +1911,7 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
             compiler.function_local = function_local;
             compiler.defining_unit = Some(context.raw_owner);
             compiler.defining_emission_owner = Some(emission_owner);
+            compiler.open_aggregate_events(id)?;
 
             // The environment: Parameter slots then Capture slots, in slot
             // order. ⭐ This is the SAME walk `define_unit_body` uses, which is
@@ -1986,6 +1989,7 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
             )?;
         }
         verify_cranelift_function(&func, module.isa())?;
+        compiler.commit_aggregate_events()?;
         let mut ctx = module.make_context();
         std::mem::swap(&mut ctx.func, &mut func);
         module
@@ -2005,6 +2009,7 @@ pub(super) fn define_root_adapter<M: Module>(
     process_mode: bool,
     project_public_scalar_root: bool,
 ) -> Result<(), CraneliftBackendError> {
+    compiler.open_aggregate_events(adapter_id)?;
     let root = compiler.static_transition_plan.root_emittable_unit()?;
     let root_id = bundle.function(root.function()).ok_or_else(|| {
         backend_module("the recorded root unit was never forward-declared".to_string())
@@ -2153,6 +2158,7 @@ pub(super) fn define_root_adapter<M: Module>(
         builder.finalize();
     }
     verify_cranelift_function(&func, module.isa())?;
+    compiler.commit_aggregate_events()?;
     #[cfg(test)]
     scale_b_record_functionized_root_adapter(&func);
     let mut ctx = module.make_context();
@@ -2484,6 +2490,10 @@ pub(super) fn open_continuation_claim_ledger(
         &compiler.static_transition_plan,
         bundle,
     )?);
+    // `D7` — the aggregate allocation relation opens on the same boundary and
+    // for the same reason: one artifact has exactly one relation, and every
+    // body's events commit into it.
+    compiler.aggregate_allocations = Some(AggregateAllocationLedger::default());
     Ok(())
 }
 
@@ -2501,6 +2511,28 @@ pub(super) fn close_continuation_claim_ledger(
         .take()
         .ok_or_else(|| backend_module("the continuation claim ledger went missing".to_string()))?
         .close()
+}
+
+/// **`D7` — close the aggregate allocation relation once, over the whole
+/// compilation.**
+///
+/// ⛔ Not a per-body partial. One planner record may govern events in several
+/// bodies -- a synthesized role at a seat reached under both a predeclared unit
+/// and a generated specialization allocates in both -- so `image(R_f) = P` is
+/// false for every individual body and imposing it would refuse lawful
+/// programs. Only the whole-artifact relation answers whether every planned
+/// record was allocated and every event was planned.
+pub(super) fn close_aggregate_allocation_ledger(
+    compiler: &mut Lowering<'_>,
+) -> Result<AggregateRelationClosure, CraneliftBackendError> {
+    let planned = compiler.static_transition_plan.aggregate_ownership_records();
+    compiler
+        .aggregate_allocations
+        .take()
+        .ok_or_else(|| {
+            backend_module("the aggregate allocation ledger went missing".to_string())
+        })?
+        .close(planned)
 }
 
 /// **`D5a` checkpoint 4 step 1 — declare every generated context into ONE
@@ -2738,6 +2770,7 @@ fn define_unit_body<M: Module>(
     // `D5a`: an ordinary predeclared unit body emits as itself.
     compiler.defining_emission_owner =
         Some(ContinuationEmissionOwner::Predeclared(unit.function));
+    compiler.open_aggregate_events(id)?;
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
     // `RT-DECL-CLOSURE-PORT` `D5` — the causal control on the ABI half.
@@ -3080,6 +3113,7 @@ fn define_unit_body<M: Module>(
         }
     }
     verify_cranelift_function(&func, module.isa())?;
+    compiler.commit_aggregate_events()?;
     #[cfg(test)]
     scale_b_record_unit_body(&func);
     let mut ctx = module.make_context();

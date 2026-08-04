@@ -214,6 +214,8 @@ fn run_dynamic_constructor_dispatch_fixture(
         checked_call_ledger: None,
         defining_unit: None,
         defining_emission_owner: None,
+        defining_function_id: None,
+        aggregate_allocations: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -1917,6 +1919,8 @@ fn bare_carrier_test_lowering<'src>(
         checked_call_ledger: None,
         defining_unit: None,
         defining_emission_owner: None,
+        defining_function_id: None,
+        aggregate_allocations: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         native_int_mutation: NativeIntLoweringMutation::Exact,

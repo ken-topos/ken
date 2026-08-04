@@ -82,7 +82,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, JoinPlanToken,
     AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,
-    SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot,
+    SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot, PlannedAggregateOwnership,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
@@ -1861,6 +1861,21 @@ struct Lowering<'a> {
     /// stand in for the generated context — the exact conflation
     /// `evt_609am4v7cdt5b` ruled against.
     defining_emission_owner: Option<ContinuationEmissionOwner>,
+    /// **`RT-DECL-CLOSURE-PORT` `D7`** — the exact declared function whose body
+    /// is being emitted, which scopes this body's allocation EVENTS.
+    ///
+    /// ⛔ Evidence scope only, never planner authority. It is a separate field
+    /// from `defining_unit` and `defining_emission_owner` because it answers a
+    /// different question: those name who the planner says owns the emission,
+    /// this names the module definition the events belong to. One
+    /// `PredeclaredFunctionId` can be built as more than one `FuncId` body.
+    defining_function_id: Option<u32>,
+    /// **`RT-DECL-CLOSURE-PORT` `D7`** — the aggregate-allocation event ledger,
+    /// held across the whole emission pass.
+    ///
+    /// `None` outside that pass, which is the only place an aggregate
+    /// allocation can be attributed to a declared function.
+    aggregate_allocations: Option<AggregateAllocationLedger>,
     /// **`RT-DECL-CLOSURE-PORT` `D5`** — the checked-call closeout ledger.
     /// `None` outside the functionized unit-bundle pass, which is the only
     /// place a checked call can reach a declaration-owned unit.
@@ -3804,7 +3819,7 @@ impl<'a> Lowering<'a> {
                 occurrence: _,
                 args,
             } => {
-                let (tag, class) = self.aggregate_carrier_disposition(
+                let (occurrence, class) = self.aggregate_carrier_authority(
                     origin,
                     value,
                     PlannedAggregateShape::Constructor,
@@ -3827,7 +3842,13 @@ impl<'a> Lowering<'a> {
                         })?,
                 }
                 .tag_abi_word()?;
-                let word = self.emit_carrier_alloc(builder, tag, class, args.len())?;
+                let word = self.emit_checked_aggregate_alloc(
+                    builder,
+                    occurrence,
+                    PlannedAggregateShape::Constructor,
+                    class,
+                    args.len(),
+                )?;
                 self.emit_carrier_store_tag_id(builder, word, identity)?;
                 for (position, argument) in args.iter().enumerate() {
                     let child_origin = if synthesized_identity.is_some() {
@@ -3842,12 +3863,18 @@ impl<'a> Lowering<'a> {
                 Ok(word)
             }
             Lowered::Record { fields } => {
-                let (tag, class) = self.aggregate_carrier_disposition(
+                let (occurrence, class) = self.aggregate_carrier_authority(
                     origin,
                     value,
                     PlannedAggregateShape::Record,
                 )?;
-                let word = self.emit_carrier_alloc(builder, tag, class, fields.len())?;
+                let word = self.emit_checked_aggregate_alloc(
+                    builder,
+                    occurrence,
+                    PlannedAggregateShape::Record,
+                    class,
+                    fields.len(),
+                )?;
                 for (position, (_, field)) in fields.iter().enumerate() {
                     // ⭐ `D2` at the field-identity namespace: the name written
                     // here and the name `Project` looks up are the same word
@@ -3974,34 +4001,34 @@ impl<'a> Lowering<'a> {
     /// ⚠ So this deliberately keeps the disposition's CLASS and replaces only
     /// its TAG. The class is a fact about the shape and the disposition is its
     /// authority; the lane is a fact about the meet and the planner is its.
-    fn aggregate_carrier_disposition(
+    /// The record identity and class of one aggregate about to be allocated.
+    ///
+    /// ⭐ Returns the OCCURRENCE, not a lane. The lane is the checked wrapper's
+    /// to read, so there is exactly one place a planned record becomes a
+    /// `BoundaryTag` and exactly one place an event is recorded — a caller
+    /// cannot obtain the lane and then allocate without leaving a pair.
+    fn aggregate_carrier_authority(
         &self,
         origin: StaticOriginId,
         value: &Lowered,
         shape: PlannedAggregateShape,
-    ) -> Result<(BoundaryTag, BoundaryClass), CraneliftBackendError> {
+    ) -> Result<(AggregateOccurrenceId, BoundaryClass), CraneliftBackendError> {
         let (_, class) = Self::carrier_handle_disposition(value)?;
         // `D7` -- the carried occurrence is the authority whenever the template
         // has one, because it names the PRODUCER. `origin` names wherever the
         // template happened to be transferred, which after nested producer
         // traversal is a `Let`, `Match`, `Call` or `Effect` occurrence that
         // never built an aggregate at all.
-        let allocation = match value {
+        let occurrence = match value {
             Lowered::Constructor {
                 occurrence: Some(occurrence),
                 ..
-            } => self
-                .static_transition_plan
-                .aggregate_allocation_at(*occurrence, shape)?,
+            } => *occurrence,
             _ => self
                 .static_transition_plan
-                .aggregate_allocation(origin, shape)?,
+                .source_aggregate_occurrence(origin, shape)?,
         };
-        let tag = match allocation {
-            PlannedAggregateAllocation::PersistentGround => BoundaryTag::PersistentGround,
-            PlannedAggregateAllocation::InvocationAggregate => BoundaryTag::InvocationAggregate,
-        };
-        Ok((tag, class))
+        Ok((occurrence, class))
     }
 
     fn carrier_handle_disposition(
@@ -4171,6 +4198,83 @@ impl<'a> Lowering<'a> {
     }
 
     /// `alloc(arena, tag, class, field_count, out) -> status`.
+    /// Open a fresh local event set for the body about to be emitted.
+    ///
+    /// ⛔ Called at the START of a body, before any allocation, so an
+    /// allocation cannot be attributed to whichever body happened to be open
+    /// last. A missing open is a loud failure at the first allocation, not a
+    /// silently unattributed event.
+    fn open_aggregate_events(
+        &mut self,
+        function: cranelift_module::FuncId,
+    ) -> Result<(), CraneliftBackendError> {
+        let function = function.as_u32();
+        self.defining_function_id = Some(function);
+        match self.aggregate_allocations.as_mut() {
+            Some(ledger) => ledger.open(function),
+            // Outside the emission pass there is no relation to open into.
+            None => Ok(()),
+        }
+    }
+
+    /// Commit the open body's pairs, after finalization and verification and
+    /// **before** `define_function`.
+    fn commit_aggregate_events(&mut self) -> Result<(), CraneliftBackendError> {
+        self.defining_function_id = None;
+        match self.aggregate_allocations.as_mut() {
+            Some(ledger) => ledger.commit(),
+            None => Ok(()),
+        }
+    }
+
+    /// **`D7` — the SOLE checked aggregate-allocation wrapper.**
+    ///
+    /// Every allocation governed by a planned record goes through here, and
+    /// nothing else may call [`Self::emit_carrier_alloc`] for one. The wrapper
+    /// finishes the reconciliation the construction seats began — it resolves
+    /// the record by the occurrence the template carries, cross-checks the
+    /// shape, and takes the LANE from that record rather than from the value in
+    /// hand — then performs the raw allocation and records the event exactly
+    /// once.
+    ///
+    /// ⛔ The event is recorded AFTER the raw allocation, because the result
+    /// `Value` is half the event's identity and does not exist before it. That
+    /// ordering is what makes "one allocation, one pair" checkable at all.
+    fn emit_checked_aggregate_alloc(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        occurrence: AggregateOccurrenceId,
+        shape: PlannedAggregateShape,
+        class: BoundaryClass,
+        field_count: usize,
+    ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        let tag = match self
+            .static_transition_plan
+            .aggregate_allocation_at(occurrence, shape)?
+        {
+            PlannedAggregateAllocation::PersistentGround => BoundaryTag::PersistentGround,
+            PlannedAggregateAllocation::InvocationAggregate => BoundaryTag::InvocationAggregate,
+        };
+        let word = self.emit_carrier_alloc(builder, tag, class, field_count)?;
+        // ⚠ Outside the emission pass there is no relation and no declared
+        // function, so there is no event to record. That is not a bypass: a
+        // bare rig emits no artifact, and the relation's laws are about an
+        // artifact's bodies. Inside the pass the FuncId is REQUIRED, and its
+        // absence is a loud failure rather than an unattributed event.
+        let function = self.defining_function_id;
+        if let Some(ledger) = self.aggregate_allocations.as_mut() {
+            let function = function.ok_or_else(|| {
+                backend_module(
+                    "a checked aggregate allocation ran inside the emission pass with no \
+                     declared function open, so its event has no FuncId to be scoped by"
+                        .to_string(),
+                )
+            })?;
+            ledger.record(function, word.word.as_u32(), occurrence)?;
+        }
+        Ok(word)
+    }
+
     fn emit_carrier_alloc(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -4720,16 +4824,8 @@ impl<'a> Lowering<'a> {
             // disposition is its authority; the lane is a fact about the meet
             // and the planner is its.
             let (_, class) = Self::carrier_handle_disposition(&disposition)?;
-            let tag = match alternative.occurrence {
-                Some(occurrence) => match self
-                    .static_transition_plan
-                    .aggregate_allocation_at(occurrence, PlannedAggregateShape::Constructor)?
-                {
-                    PlannedAggregateAllocation::PersistentGround => BoundaryTag::PersistentGround,
-                    PlannedAggregateAllocation::InvocationAggregate => {
-                        BoundaryTag::InvocationAggregate
-                    }
-                },
+            let occurrence = match alternative.occurrence {
+                Some(occurrence) => occurrence,
                 // ⛔ A refusal, not a default. An alternative with no carried
                 // occurrence is one whose lifetime meet was never taken, and
                 // answering `PersistentGround` for it would reinstate exactly
@@ -4747,7 +4843,13 @@ impl<'a> Lowering<'a> {
                     ));
                 }
             };
-            let word = self.emit_carrier_alloc(builder, tag, class, alternative.fields.len())?;
+            let word = self.emit_checked_aggregate_alloc(
+                builder,
+                occurrence,
+                PlannedAggregateShape::Constructor,
+                class,
+                alternative.fields.len(),
+            )?;
             self.emit_carrier_store_tag_id(builder, word, alternative.identity.tag_abi_word()?)?;
             for (position, field) in alternative.fields.iter().enumerate() {
                 let field = self.emit_carrier_transfer(builder, origin, field)?;
@@ -6341,6 +6443,198 @@ struct DynamicConstructorAlternativeV1 {
     /// defined, and the allocation fails loudly rather than borrowing a lane.
     occurrence: Option<AggregateOccurrenceId>,
     fields: Vec<Lowered>,
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the identity of one aggregate allocation
+/// EVENT within one compilation.**
+///
+/// ⭐ `FuncId` is the exact declared function handed to `define_function`, and
+/// it scopes **event evidence only** — never planner authority. The planner
+/// keys records by `owner + seat + path + role`; this keys the *emissions* of
+/// those records, which is a different question with a different answer.
+///
+/// ## Why the result `Value` alone is not an identity
+///
+/// A CLIF `Value` is numbered **per function**, so two bodies allocate at
+/// `v12` routinely. A first prototype keyed on the value alone and refused six
+/// lawful allocations. Adding the emission owner and the raw defining unit did
+/// not fix it either — the same function is *built more than once*, so those
+/// two coordinates still aliased. `FuncId` is the coordinate that actually
+/// separates them, because it is what the module identifies a definition by.
+///
+/// ⛔ Not a build counter. A counter would make the identity depend on the
+/// order bodies happen to be emitted in, which is exactly the row-driven
+/// discovery this domain refuses.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct AggregateAllocationEvent {
+    function: u32,
+    result: u32,
+}
+
+/// The events of one body, open while that body is being emitted.
+#[derive(Clone, Debug)]
+struct LocalAggregateEvents {
+    function: u32,
+    pairs: BTreeMap<u32, AggregateOccurrenceId>,
+}
+
+/// **The compilation's event-to-record relation `R`.**
+///
+/// Each emitted body opens a fresh local set bound to its `FuncId`; the checked
+/// wrapper records one pair per allocation; the set is committed after the
+/// function is finalized and verified and **before** `define_function`. The
+/// whole-pass closeout then states the relation's laws once.
+#[derive(Clone, Debug, Default)]
+pub(in crate::cranelift_backend) struct AggregateAllocationLedger {
+    local: Option<LocalAggregateEvents>,
+    committed: BTreeMap<AggregateAllocationEvent, AggregateOccurrenceId>,
+    committed_functions: BTreeSet<u32>,
+}
+
+impl AggregateAllocationLedger {
+    /// Open a fresh local set for one body.
+    ///
+    /// ⛔ A second build of one `FuncId` rejects. There is no
+    /// rollback-and-continue: a body that is built twice has emitted its
+    /// allocations twice, and the relation cannot say which emission the
+    /// records govern.
+    fn open(&mut self, function: u32) -> Result<(), CraneliftBackendError> {
+        if self.committed_functions.contains(&function) {
+            return Err(backend_module(format!(
+                "aggregate allocation ledger: function {function} is built a second time, so \
+                 its events would be recorded twice"
+            )));
+        }
+        if let Some(open) = &self.local {
+            return Err(backend_module(format!(
+                "aggregate allocation ledger: function {} is still open while {function} \
+                 starts, so an allocation could be attributed to the wrong body",
+                open.function
+            )));
+        }
+        self.local = Some(LocalAggregateEvents {
+            function,
+            pairs: BTreeMap::new(),
+        });
+        Ok(())
+    }
+
+    /// Record one allocation's `((FuncId, Value), occurrence)` pair.
+    fn record(
+        &mut self,
+        function: u32,
+        result: u32,
+        occurrence: AggregateOccurrenceId,
+    ) -> Result<(), CraneliftBackendError> {
+        let local = self.local.as_mut().ok_or_else(|| {
+            backend_module(
+                "aggregate allocation ledger: an allocation was emitted with no open body, so \
+                 it belongs to no function's event set"
+                    .to_string(),
+            )
+        })?;
+        if local.function != function {
+            return Err(backend_module(format!(
+                "aggregate allocation ledger: an allocation in function {function} was recorded \
+                 while {} is open",
+                local.function
+            )));
+        }
+        match local.pairs.insert(result, occurrence) {
+            // ⛔ Both a duplicate and a conflict reject. One raw allocation
+            // yields one result value, so a second pair at that value means
+            // either the wrapper ran twice for one allocation or two
+            // allocations share a result -- and neither can be reconciled.
+            Some(previous) => Err(backend_module(format!(
+                "aggregate allocation ledger: function {function} value {result} already maps to \
+                 {previous:?}, so a second pair to {occurrence:?} is a duplicate or a conflict"
+            ))),
+            None => Ok(()),
+        }
+    }
+
+    /// Commit the open body's pairs into the compilation relation.
+    fn commit(&mut self) -> Result<(), CraneliftBackendError> {
+        let local = self.local.take().ok_or_else(|| {
+            backend_module(
+                "aggregate allocation ledger: a body commit ran with no open event set"
+                    .to_string(),
+            )
+        })?;
+        if !self.committed_functions.insert(local.function) {
+            return Err(backend_module(format!(
+                "aggregate allocation ledger: function {} commits a second time",
+                local.function
+            )));
+        }
+        for (result, occurrence) in local.pairs {
+            let event = AggregateAllocationEvent {
+                function: local.function,
+                result,
+            };
+            if let Some(previous) = self.committed.insert(event, occurrence) {
+                return Err(backend_module(format!(
+                    "aggregate allocation ledger: {event:?} already maps to {previous:?}, so a \
+                     committed pair is not unique"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// **Close the relation once, after every body is emitted.**
+    ///
+    /// ⛔ The laws are stated over the WHOLE compilation, never per function.
+    /// One record may govern many function-local events — a synthesized role at
+    /// a seat reached under both a predeclared unit and a generated
+    /// specialization allocates in both bodies — so `image(R_f) = P` is false
+    /// for every individual `f` and imposing it would refuse lawful programs.
+    fn close(
+        &mut self,
+        planned: &[PlannedAggregateOwnership],
+    ) -> Result<AggregateRelationClosure, CraneliftBackendError> {
+        if let Some(open) = &self.local {
+            return Err(backend_module(format!(
+                "aggregate allocation ledger: function {} is still open at the whole-pass \
+                 closeout, so its events were never committed",
+                open.function
+            )));
+        }
+        let population = planned
+            .iter()
+            .map(|record| record.id)
+            .collect::<BTreeSet<_>>();
+        let image = self
+            .committed
+            .values()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        // Every related record belongs to the closed planner population.
+        for occurrence in &image {
+            if !population.contains(occurrence) {
+                return Err(backend_module(format!(
+                    "aggregate allocation ledger: {occurrence:?} is related by an event but is \
+                     not in the planned population"
+                )));
+            }
+        }
+        Ok(AggregateRelationClosure {
+            events: self.committed.len(),
+            image: image.len(),
+            population: population.len(),
+            unallocated: population.difference(&image).copied().collect(),
+        })
+    }
+}
+
+/// What the whole-pass closeout measured.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct AggregateRelationClosure {
+    pub(in crate::cranelift_backend) events: usize,
+    pub(in crate::cranelift_backend) image: usize,
+    pub(in crate::cranelift_backend) population: usize,
+    /// Planned records no event related. `image(R) = P` iff this is empty.
+    pub(in crate::cranelift_backend) unallocated: Vec<AggregateOccurrenceId>,
 }
 
 /// One argument to a compiler-synthesized constructor, in the FORM the tree

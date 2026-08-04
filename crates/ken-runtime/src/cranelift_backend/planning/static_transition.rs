@@ -7194,6 +7194,13 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(SynthesizedTreeResolution::Node(node))
     }
 
+    /// The closed planner population `P`, for the whole-pass relation closeout.
+    pub(in crate::cranelift_backend) fn aggregate_ownership_records(
+        &self,
+    ) -> &[PlannedAggregateOwnership] {
+        &self.aggregate_ownership
+    }
+
     /// **The planner's closed, ordered alternative population at one path.**
     ///
     /// ⭐ This exists so the emitter can be checked for **equality** rather than
