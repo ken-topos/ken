@@ -6132,6 +6132,39 @@ impl<'a> Lowering<'a> {
                 .collect::<Vec<_>>()
         ));
         for input in unit.continuation_inputs()? {
+            // `D5a` checkpoint 4 step 3 -- the capture projection's three
+            // reaching mutations. ⛔ Each perturbs one COORDINATE the projection
+            // supplies; the two guards below are untouched.
+            #[cfg(test)]
+            let input = {
+                let mut input = input;
+                match d5a_route_mutation() {
+                    D5aRouteMutation::ReadRootPositionAsImmediateSlot => {
+                        record_d5a_route_application();
+                        input.immediate_slot = input.source_abi_position;
+                    }
+                    // ⛔ Scoped to the SPECIALIZATION arm. Applied to a
+                    // predeclared emitter it is caught by that arm's equality
+                    // law first, and the row would name the bounds guard while
+                    // measuring the consistency one -- which is exactly what
+                    // the first draft did.
+                    D5aRouteMutation::PerturbImmediateSlotOutOfRange => {
+                        if matches!(defining_owner, ContinuationEmissionOwner::Specialization(_)) {
+                            record_d5a_route_application();
+                            input.immediate_slot =
+                                u32::try_from(producer_env.len()).unwrap_or(u32::MAX);
+                        }
+                    }
+                    D5aRouteMutation::PerturbPredeclaredImmediateSlot => {
+                        if matches!(defining_owner, ContinuationEmissionOwner::Predeclared(_)) {
+                            record_d5a_route_application();
+                            input.immediate_slot = input.immediate_slot.wrapping_add(1);
+                        }
+                    }
+                    _ => {}
+                }
+                input
+            };
             // `D5a` -- ROOT provenance versus IMMEDIATE availability.
             //
             // ⛔ Exhaustive over the emission-owner classes with no catch-all:
@@ -6551,6 +6584,12 @@ impl<'a> Lowering<'a> {
         // ⛔ Guarded on the exact body origin. A suffix appended to some other
         // worker call would be an arity error against a frame that might be
         // large enough to absorb it silently.
+        // `D5a` checkpoint 4 step 3 -- the raw run, captured before the suffix
+        // so the two are separable in the event log below. ⭐ "No suffix" and
+        // "a suffix of length zero" are different facts and one total cannot
+        // tell them apart.
+        #[cfg(test)]
+        let raw_operands = inputs.len();
         if let Some(extra) = self.function_local.generated_context_captures.as_ref() {
             if extra.worker_body_origin == worker.body_origin {
                 inputs.extend(extra.operands.iter().cloned());
@@ -6640,6 +6679,8 @@ impl<'a> Lowering<'a> {
         #[cfg(test)]
         record_d5a_marker_event(D5aMarkerEvent::WorkerCallEmitted {
             body_origin: worker.body_origin,
+            raw_operands,
+            supplied_operands: inputs.len(),
         });
         Ok(emitted.0)
     }
@@ -7769,35 +7810,60 @@ impl<'a> Lowering<'a> {
         // from `body_origin`, from the callee's ABI shape, from the existence
         // of a context, or by taking a first match — the planner rejects an
         // ambiguous resolution rather than choosing.
+        // `D5a` checkpoint 4 step 3 -- perturb the RETAINED SOURCE COORDINATES
+        // the invocation presents, so the lookup is asked for a coordinate the
+        // planner never issued. ⛔ The lookup is untouched: what moves is the
+        // key, which is the thing the ruling says the binding must be resolved
+        // by.
+        #[cfg(test)]
+        let coordinates = coordinates.map(|mut coordinates| {
+            if d5a_route_mutation() == D5aRouteMutation::PerturbCarriedInvocationCoordinates {
+                record_d5a_route_application();
+                coordinates.recursive_position = coordinates.recursive_position.wrapping_add(1);
+            }
+            coordinates
+        });
         let context = match coordinates {
             Some(coordinates) => self.static_transition_plan.carried_invocation_context(
                 coordinates.continuation_origin,
                 coordinates.recursive_position,
                 body_origin,
             )?,
-            None => {
-                // ⛔ FAIL CLOSED, and this arm is the reason the parameter is
-                // not simply defaulted. A site that cannot supply the
-                // coordinates cannot be *asked* whether it should retarget, so
-                // silently emitting the raw call here would be a miss that
-                // looks exactly like a lawful ordinary call. It is only safe
-                // when no context exists for this body at all.
-                if self
-                    .static_transition_plan
-                    .continuation_contexts()?
-                    .iter()
-                    .any(|context| context.worker_body_origin() == body_origin)
-                {
-                    return Err(unsupported(
-                        "ContinuationSpecialization",
-                        format!(
-                            "a carried recursive-position invocation of body {body_origin:?}                              reached the call seam without its retained source coordinates, and                              that body has a generated execution context; emitting the raw target                              here would drop the retarget silently rather than refuse it"
-                        ),
-                    ));
-                }
-                None
-            }
+            None => None,
         };
+        // ⛔ FAIL CLOSED, over BOTH ways of arriving at "no context".
+        //
+        // A site that cannot supply the coordinates cannot be *asked* whether
+        // it should retarget; a site whose coordinates resolve to nothing was
+        // asked and got no answer. Either way, emitting the raw call is a miss
+        // that looks exactly like a lawful ordinary call. It is only safe when
+        // no context exists for this body at all.
+        //
+        // ⭐⭐ The second half is new. This test used to guard the missing-
+        // coordinates arm ALONE, so perturbed-but-present coordinates fell
+        // straight through to the raw target. On this witness that still
+        // refused — but only incidentally, because the superseded body has no
+        // `Function` left to call. Had it remained executable, the retarget
+        // would have been dropped in silence. ⇒ The guard belongs to the
+        // outcome, not to one of the two routes into it.
+        if context.is_none()
+            && self
+                .static_transition_plan
+                .continuation_contexts()?
+                .iter()
+                .any(|context| context.worker_body_origin() == body_origin)
+        {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "a carried recursive-position invocation of body {body_origin:?} resolved no \
+                     generated execution context, and that body has one; emitting the raw target \
+                     here would drop the retarget silently rather than refuse it. Retained source \
+                     coordinates presented: {:?}",
+                    coordinates.map(|c| (c.continuation_origin, c.recursive_position)),
+                ),
+            ));
+        }
         #[cfg(test)]
         d5a_trace(format!(
             "  CARRIED-INVOCATION body={body_origin:?} coords={:?} -> {}",

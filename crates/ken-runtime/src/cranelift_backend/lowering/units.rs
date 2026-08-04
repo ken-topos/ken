@@ -452,7 +452,25 @@ pub(in crate::cranelift_backend) fn resolve_worker_targets(
     // The TEMPLATE population is every emittable unit -- `D5a` checkpoint 1
     // keeps the raw worker's descriptor and source binding whether or not it
     // still receives a `Function`.
-    for unit in plan.emittable_units()? {
+    // `D5a` checkpoint 4 step 3 -- the reaching mutation for "unchanged raw
+    // worker ABI". Reading the EXECUTABLE population here instead of the
+    // emittable one is the "template-only means deleted" mistake: it drops the
+    // superseded body's descriptor while every consumer of that descriptor
+    // remains. ⛔ The two populations are otherwise identical on a program with
+    // no retarget, which is why this only became measurable at checkpoint 4.
+    #[cfg(test)]
+    let template_population =
+        if crate::cranelift_backend::lowering::d5a_route_mutation()
+            == crate::cranelift_backend::lowering::D5aRouteMutation::DropSupersededWorkerTemplates
+        {
+            crate::cranelift_backend::lowering::record_d5a_route_application();
+            plan.executable_units()?
+        } else {
+            plan.emittable_units()?
+        };
+    #[cfg(not(test))]
+    let template_population = plan.emittable_units()?;
+    for unit in template_population {
         let (offsets, frame_bytes) = unit.slot_offsets()?;
         if frame_bytes != unit.header().frame_bytes {
             return Err(backend_module(

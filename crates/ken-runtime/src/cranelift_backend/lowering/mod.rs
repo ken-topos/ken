@@ -1250,7 +1250,19 @@ pub(in crate::cranelift_backend) enum D5aMarkerEvent {
         arity: u64,
     },
     /// A static worker call instruction was actually written.
-    WorkerCallEmitted { body_origin: StaticOriginId },
+    ///
+    /// `raw_operands` is the run the raw worker's own contract accounts for —
+    /// source arguments plus stored captures — and `supplied_operands` is what
+    /// the call actually carried. ⭐ Recording both separately is what makes the
+    /// generated-context capture suffix a **measurable prefix relation** rather
+    /// than a claim: a retargeted call is the raw run plus the enclosing
+    /// frame's continuation inputs, and an unretargeted one is the raw run
+    /// exactly. One total would conflate "no suffix" with "a suffix of zero".
+    WorkerCallEmitted {
+        body_origin: StaticOriginId,
+        raw_operands: usize,
+        supplied_operands: usize,
+    },
 }
 
 #[cfg(test)]
@@ -1358,11 +1370,19 @@ pub(in crate::cranelift_backend) enum D5aRouteMutation {
     /// immediate slot. ⭐ On a specialization-owned edge those are different
     /// environments, which is the whole reason the two coordinates are kept
     /// apart.
+    ///
+    /// ⚠ Read the row that uses this before trusting it: on the witness both
+    /// coordinates are IN RANGE, so the swap binds different operands without
+    /// any refusal. That is a measured limit of the evidence, not a defence.
     ReadRootPositionAsImmediateSlot,
+    /// Push the immediate slot one past the emitting environment, so the bounds
+    /// guard that makes the planner's resolution *answerable here* has to fire.
+    PerturbImmediateSlotOutOfRange,
+    /// Break the predeclared emitter's consistency law: for an owner that IS
+    /// its inputs' root provenance, move the immediate slot off the root ABI
+    /// position it must equal.
+    PerturbPredeclaredImmediateSlot,
     // ── the generated-context capture suffix ──────────────────────────────
-    /// Append the enclosing frame's continuation inputs to EVERY static-worker
-    /// call rather than to the one whose body origin was retargeted.
-    AppendCaptureSuffixToEveryWorkerCall,
     // ── the carried-invocation binding's retained source coordinates ───────
     /// Perturb the recursive position the carried invocation presents, so the
     /// lookup is asked for a coordinate the planner never issued.

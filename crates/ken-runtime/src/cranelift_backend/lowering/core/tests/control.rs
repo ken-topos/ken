@@ -13068,3 +13068,281 @@ fn d5a_a_transplanted_generated_context_binding_refuses_at_the_retarget() {
          requires it fired"
     );
 }
+
+/// **`D5a` — the retargeted worker call is the raw operand run PLUS the
+/// generated context's capture suffix, and no other call gets one.**
+///
+/// ⭐ The mechanism's own claim is that *"keep the raw worker's ABI unchanged"*
+/// and *"carry the continuation inputs across the worker execution"* are not in
+/// tension because **one is a prefix of the other**. That is a relation between
+/// two operand runs, so it is measured as one: the emission log records the raw
+/// run and the supplied run separately, and the suffix length is compared
+/// against the planner's own capture count for the context executing that body.
+/// ⛔ One total would conflate "no suffix" with "a suffix of length zero" —
+/// exactly the two cases this witness contains.
+///
+/// The witness is a **mixed** population, which is what makes the row
+/// discriminating: one worker body is retargeted through a context and gets the
+/// suffix, the other is a raw executable unit and must not.
+///
+/// ⚠ **MEASURED**: the suffix is appended to the retargeted call and to no
+/// other. **CLAIMED**: the origin guard is what confines it. **THE GAP**: the
+/// guard's false branch is **not reachable on this fixture** — the capture
+/// stash is per-function and set only in the specialization whose worker body
+/// was retargeted, and that function makes exactly one static-worker call, to
+/// that body. A mutation dropping the guard therefore never fires (measured:
+/// zero applications, green compile), so it was removed rather than committed
+/// as a control that cannot red. The guard stays; it is defensive against a
+/// function holding two worker calls, which no fixture yet produces.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_the_retargeted_worker_call_carries_the_raw_run_plus_the_context_capture_suffix() {
+    reset_d5a_marker_events();
+    with_transparent_declaration_closure_witness(|| {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "d5a_capture_suffix",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+    })
+    .expect("the witness compiles");
+    let events = d5a_marker_events();
+    let calls = events
+        .iter()
+        .filter_map(|event| match event {
+            D5aMarkerEvent::WorkerCallEmitted {
+                body_origin,
+                raw_operands,
+                supplied_operands,
+            } => Some((*body_origin, *raw_operands, *supplied_operands)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        !calls.is_empty(),
+        "no static-worker call was emitted, so every claim below is vacuous: {events:?}"
+    );
+
+    with_d5a_witness_plan(|plan| {
+        let contexts = plan.continuation_contexts().expect("contexts");
+        let mut suffixed = 0usize;
+        let mut plain = 0usize;
+        for (body, raw, supplied) in &calls {
+            let context = contexts
+                .iter()
+                .find(|context| context.worker_body_origin() == *body);
+            match context {
+                Some(context) => {
+                    let captures = context.header().captures as usize;
+                    assert_eq!(
+                        supplied - raw,
+                        captures,
+                        "the call to retargeted body {body:?} must carry the raw run followed by \
+                         EXACTLY the enclosing frame's continuation inputs — the capture run its \
+                         generated context declares. A shorter suffix drops inputs; a longer one \
+                         is an arity error against a frame that might be large enough to absorb \
+                         it silently"
+                    );
+                    assert!(
+                        captures > 0,
+                        "a context declaring zero captures would make the prefix relation hold \
+                         trivially and this row would stop discriminating"
+                    );
+                    suffixed += 1;
+                }
+                None => {
+                    assert_eq!(
+                        supplied, raw,
+                        "body {body:?} has no generated context, so its call is the raw operand \
+                         run and nothing else. A suffix here would be appended to a frame with \
+                         no capture run to hold it"
+                    );
+                    plain += 1;
+                }
+            }
+        }
+        assert!(
+            suffixed > 0 && plain > 0,
+            "the witness must emit BOTH a retargeted and an unretargeted static-worker call \
+             ({suffixed} suffixed, {plain} plain). With only one kind, the row cannot tell \
+             'the suffix is confined to the retargeted call' from 'a suffix is appended \
+             everywhere' or from 'no suffix is ever appended'"
+        );
+    });
+}
+
+/// **`D5a` — the capture projection indexes the emitting environment with the
+/// IMMEDIATE slot, and both of its guards are reachable.**
+///
+/// Two reaching mutations, each scoped to the emission-owner class whose guard
+/// it is written for:
+///
+/// - a **predeclared** emitter is its own inputs' root provenance, so the two
+///   coordinates index one environment and must agree. Moving the immediate
+///   slot off the root ABI position reds that consistency law.
+/// - a **specialization** emitter's coordinates index different environments,
+///   so nothing may compare them — what makes the planner's resolution
+///   answerable here is the bounds test. Pushing the immediate slot one past
+///   the environment reds it, with a message naming both numbers.
+///
+/// ⛔ The out-of-range mutation is scoped to the specialization arm on purpose.
+/// Applied to a predeclared emitter it is caught by the equality law first, and
+/// the row would name the bounds guard while measuring the consistency one —
+/// which is what the first draft did, measured before it was committed.
+///
+/// ⚠ **MEASURED**: both guards red under their own mutations. **CLAIMED**:
+/// lowering reads the immediate slot rather than the root ABI position.
+/// **THE GAP, stated because it is real**: swapping the two — indexing with
+/// `source_abi_position` — **COMPILES on this witness**, measured, `Ok(())`
+/// with the perturbation confirmed applied four times. Both coordinates are in
+/// range, and the operands they select are untyped boundary words, so the swap
+/// binds different values with nothing to notice. No independent oracle exists
+/// at this seat: the immediate slot *is* the planner's answer to "where does
+/// this environment hold it", so there is nothing else to check it against
+/// without inventing planner semantics this checkpoint forbids. ⇒ What pins the
+/// split is
+/// `d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_slot`
+/// on the plan, plus the fact that exactly one field is read at exactly one
+/// site. **A reader must not take this row as evidence that a swapped read
+/// would be caught. It would not be.**
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_the_capture_projection_reads_the_immediate_slot_and_bounds_it() {
+    let rows = [
+        (
+            "the predeclared emitter's consistency law",
+            D5aRouteMutation::PerturbPredeclaredImmediateSlot,
+            "immediate slot that disagrees with its root ABI position",
+        ),
+        (
+            "the specialization emitter's bounds test",
+            D5aRouteMutation::PerturbImmediateSlotOutOfRange,
+            "outside the emitting context's environment",
+        ),
+    ];
+    for (label, mutation, expected) in rows {
+        let refusal = with_transparent_declaration_closure_witness(|| {
+            with_d5a_route_mutation(mutation, || {
+                let refusal =
+                    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                        "d5a_capture_projection",
+                        false,
+                    )
+                    .map(|_| ())
+                    .map_err(|error| format!("{error:?}"))
+                    .expect_err(&format!(
+                        "{label} must refuse under {mutation:?}; a compile means the guard is \
+                         inert on the route that reaches it"
+                    ));
+                assert!(
+                    d5a_route_applications() > 0,
+                    "{label}: the mutation is scoped to one emission-owner class and declines \
+                     for the other, so a refusal reached without it firing would be measuring \
+                     the unmutated route"
+                );
+                refusal
+            })
+        });
+        assert!(
+            refusal.contains(expected),
+            "{label} must refuse with its OWN message, or this row is measuring the other \
+             guard: {refusal}"
+        );
+    }
+}
+
+/// **`D5a` checkpoint 4 step 1 — the carried invocation's retained source
+/// coordinates are the key, and losing the binding fails closed.**
+///
+/// The binding must be resolved from the invocation's causal identity and
+/// retained source coordinates — never from the body origin, the callee's ABI
+/// shape, the existence of a context, or a first match. Perturbing the
+/// coordinate the invocation presents is therefore the direct question: does
+/// the retarget actually depend on it?
+///
+/// ⭐⭐ **This row forced a production repair.** The fail-closed test — *a body
+/// with a generated context may not be called raw* — used to guard only the
+/// **missing-coordinates** arm. Coordinates that were present but resolved to
+/// nothing fell straight through to the raw target. On this witness that still
+/// refused, but **only incidentally**, because the superseded body has no
+/// `Function` left to call; had it remained executable the retarget would have
+/// been dropped in silence. The guard now belongs to the *outcome* rather than
+/// to one of the two routes into it, and the refusal names the coordinates that
+/// were presented.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_perturbing_the_retained_source_coordinates_fails_closed_rather_than_calling_raw() {
+    let refusal = with_transparent_declaration_closure_witness(|| {
+        with_d5a_route_mutation(D5aRouteMutation::PerturbCarriedInvocationCoordinates, || {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                "d5a_carried_coordinates",
+                false,
+            )
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"))
+            .expect_err(
+                "a coordinate the planner never issued must resolve no context, and a body that \
+                 HAS a context may not then be called raw. A compile here means the retarget \
+                 does not depend on the coordinates it claims to be keyed by",
+            )
+        })
+    });
+    assert!(
+        refusal.contains("resolved no generated execution context, and that body has one"),
+        "the refusal must be the fail-closed stop, not an incidental failure further along — \
+         which is exactly what this route produced before the guard covered both arms: {refusal}"
+    );
+    assert!(
+        d5a_route_applications() > 0,
+        "the coordinate perturbation must have fired"
+    );
+}
+
+/// **`D5a` checkpoint 1 — a superseded worker body keeps its raw descriptor
+/// authority.**
+///
+/// "Unchanged ordinary `fn2` ABI" means the raw worker's **descriptor and
+/// source binding** survive so a generated context can validate and lower the
+/// same body. It does **not** mean the body still receives a `Function` — the
+/// measured census puts it in the template-only set. Those two facts are only
+/// separable now that the retarget has landed: on a program with no retarget
+/// the emittable and executable populations are identical and reading either
+/// gives the same templates.
+///
+/// The mutation builds the raw template population from the **executable** set
+/// instead of the **emittable** one — the "template-only means deleted"
+/// reading. The static-worker constructor, which validates against that
+/// descriptor and holds no `FuncRef` at all, then has nothing to validate
+/// against.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_a_superseded_worker_body_keeps_its_raw_descriptor_authority() {
+    let refusal = with_transparent_declaration_closure_witness(|| {
+        with_d5a_route_mutation(D5aRouteMutation::DropSupersededWorkerTemplates, || {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                "d5a_raw_descriptor",
+                false,
+            )
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"))
+            .expect_err(
+                "dropping the superseded body's descriptor must refuse. A compile would mean \
+                 nothing consumes the raw contract any more, and the checkpoint-1 separation \
+                 between descriptor authority and executable membership would be decorative",
+            )
+        })
+    });
+    assert!(
+        refusal.contains("no raw worker template for body origin"),
+        "the refusal must come from the constructor that reads the raw descriptor: {refusal}"
+    );
+    assert!(
+        d5a_route_applications() > 0,
+        "the template population must actually have been narrowed"
+    );
+}
