@@ -7057,7 +7057,7 @@ fn d7_record_arguments() -> RuntimeExpr {
     ])
 }
 
-/// The same two records, bound by nested `Let`s and reached as `Var`s — so each
+/// Two aggregates bound by nested `Let`s and reached as `Var`s — so each
 /// arrives at the call already lowered and FORWARDED rather than written in
 /// argument position.
 ///
@@ -7066,9 +7066,17 @@ fn d7_record_arguments() -> RuntimeExpr {
 /// so a use-coordinate lookup gets the right answer by accident. Forwarded
 /// through a binder it does not, and the ownership record has to come from the
 /// template or not at all.
-fn d7_forwarded_record_arguments() -> RuntimeExpr {
-    // The call sits under two binders, so `Var(0)` is the inner record and
-    // `Var(1)` the outer one.
+/// The literal-constructor row's exact fixture, differing ONLY in that each
+/// argument is bound and reached as a `Var`. A pair that differs in one thing
+/// is what makes forwarding the attributable difference.
+fn d7_forwarded_constructor_arguments() -> RuntimeExpr {
+    d7_forwarded_pair(
+        d7_wrap("ctor:fixture::CallInput::Alpha"),
+        d7_wrap("ctor:fixture::CallInput::Beta"),
+    )
+}
+
+fn d7_forwarded_pair(first: RuntimeExpr, second: RuntimeExpr) -> RuntimeExpr {
     let call = RuntimeExpr::Call {
         callee: Box::new(RuntimeExpr::DeclarationRef {
             symbol: D7_PAIR_CALLEE.to_string(),
@@ -7076,15 +7084,9 @@ fn d7_forwarded_record_arguments() -> RuntimeExpr {
         args: vec![RuntimeExpr::Var(1), RuntimeExpr::Var(0)],
     };
     let body = RuntimeExpr::Let {
-        value: Box::new(d7_pair_record(
-            "ctor:fixture::CallInput::Alpha",
-            "ctor:fixture::CallInput::Beta",
-        )),
+        value: Box::new(first),
         body: Box::new(RuntimeExpr::Let {
-            value: Box::new(d7_pair_record(
-                "ctor:fixture::CallInput::Gamma",
-                "ctor:fixture::CallInput::Delta",
-            )),
+            value: Box::new(second),
             body: Box::new(call),
         }),
     };
@@ -7112,6 +7114,19 @@ fn d7_forwarded_record_arguments() -> RuntimeExpr {
             default: ac_c7_trap(),
         }),
     }
+}
+
+fn d7_forwarded_record_arguments() -> RuntimeExpr {
+    d7_forwarded_pair(
+        d7_pair_record(
+            "ctor:fixture::CallInput::Alpha",
+            "ctor:fixture::CallInput::Beta",
+        ),
+        d7_pair_record(
+            "ctor:fixture::CallInput::Gamma",
+            "ctor:fixture::CallInput::Delta",
+        ),
+    )
 }
 
 fn d7_compile_ownership(program: &RuntimeExpr) -> Result<(), CraneliftBackendError> {
@@ -7454,6 +7469,7 @@ fn a_sibling_aggregates_producer_certificate_is_refused_before_any_allocation() 
     for (label, program) in [
         ("two constructors", d7_constructor_arguments()),
         ("two records", d7_record_arguments()),
+        ("two forwarded constructors", d7_forwarded_constructor_arguments()),
         ("two forwarded records", d7_forwarded_record_arguments()),
     ] {
         let (baseline, baseline_hits, baseline_allocations, _) =
