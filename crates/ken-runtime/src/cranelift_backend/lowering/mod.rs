@@ -81,6 +81,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     ContinuationInputView, ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge,
     ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, JoinPlanToken,
+    PlannedAggregateAllocation, PlannedAggregateShape,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
@@ -3775,7 +3776,11 @@ impl<'a> Lowering<'a> {
                 synthesized_identity,
                 args,
             } => {
-                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                let (tag, class) = self.aggregate_carrier_disposition(
+                    origin,
+                    value,
+                    PlannedAggregateShape::Constructor,
+                )?;
                 // ⭐ `D2` — the identity comes from the ONE artifact-static
                 // authority, via the typed newtype's own ABI-word method. ⛔ Not
                 // `intern_symbol`, which is dense insertion-order numbering over
@@ -3809,7 +3814,11 @@ impl<'a> Lowering<'a> {
                 Ok(word)
             }
             Lowered::Record { fields } => {
-                let (tag, class) = Self::carrier_handle_disposition(value)?;
+                let (tag, class) = self.aggregate_carrier_disposition(
+                    origin,
+                    value,
+                    PlannedAggregateShape::Record,
+                )?;
                 let word = self.emit_carrier_alloc(builder, tag, class, fields.len())?;
                 for (position, (_, field)) in fields.iter().enumerate() {
                     // ⭐ `D2` at the field-identity namespace: the name written
@@ -3925,6 +3934,35 @@ impl<'a> Lowering<'a> {
     /// is wildcard-free over [`BoundaryDisposition`] on purpose: a fifth
     /// disposition would break compilation here rather than silently taking
     /// whichever arm a `_` had swallowed.
+    /// **`D7` — the aggregate allocation tag, taken from the planner record.**
+    ///
+    /// ⛔ The value-shape disposition answers a DIFFERENT question. It reports
+    /// the lane a `Constructor`/`Record` takes *considered alone*, which is
+    /// always the persistent one — the shape is persistable. Whether this
+    /// particular aggregate may take it depends on its children's lifetimes,
+    /// which the value in hand does not carry and this producer may not go
+    /// looking for.
+    ///
+    /// ⚠ So this deliberately keeps the disposition's CLASS and replaces only
+    /// its TAG. The class is a fact about the shape and the disposition is its
+    /// authority; the lane is a fact about the meet and the planner is its.
+    fn aggregate_carrier_disposition(
+        &self,
+        origin: StaticOriginId,
+        value: &Lowered,
+        shape: PlannedAggregateShape,
+    ) -> Result<(BoundaryTag, BoundaryClass), CraneliftBackendError> {
+        let (_, class) = Self::carrier_handle_disposition(value)?;
+        let tag = match self
+            .static_transition_plan
+            .aggregate_allocation(origin, shape)?
+        {
+            PlannedAggregateAllocation::PersistentGround => BoundaryTag::PersistentGround,
+            PlannedAggregateAllocation::InvocationAggregate => BoundaryTag::InvocationAggregate,
+        };
+        Ok((tag, class))
+    }
+
     fn carrier_handle_disposition(
         value: &Lowered,
     ) -> Result<(BoundaryTag, BoundaryClass), CraneliftBackendError> {

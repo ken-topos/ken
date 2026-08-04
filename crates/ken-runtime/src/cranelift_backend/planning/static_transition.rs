@@ -1469,6 +1469,11 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// `RT-DECL-CLOSURE-PORT` `D5a`. The generated producer execution contexts,
     /// derived after the specialization fixed point closes.
     continuation_contexts: Vec<PlannedContinuationContext>,
+    /// `RT-DECL-CLOSURE-PORT` `D7`. One ownership record per aggregate producer
+    /// occurrence. ⭐ Unlike its two dormant siblings above, this population
+    /// HAS a lowering accessor — the allocation lane is unreadable at the
+    /// producer without it.
+    aggregate_ownership: Vec<PlannedAggregateOwnership>,
 }
 
 #[cfg(test)]
@@ -2572,6 +2577,170 @@ fn validate_occurrence_authority_plan(
         return Err(planner_error(
             "dormant occurrence authority is not exact for origin, owner and lifetime",
         ));
+    }
+    Ok(())
+}
+
+/// Which aggregate shape one producer occurrence builds.
+///
+/// ⛔ Deliberately its own two-member enum rather than a reuse of
+/// [`crate::boundary_value::BoundaryClass`]. That type is the *node* class and
+/// admits five ground shapes; the population here is exactly the shapes that
+/// **have children to take a lifetime meet over**, and spelling it as its own
+/// type is what makes a `Bytes` occurrence a type error here instead of a
+/// record nothing ever consumes.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum PlannedAggregateShape {
+    Constructor,
+    Record,
+}
+
+/// The allocation lane the ruled lifetime meet selects for one aggregate.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum PlannedAggregateAllocation {
+    /// Every child's possible-owner set excludes the invocation arena.
+    PersistentGround,
+    /// At least one child has an invocation-owned alternative, so the
+    /// aggregate's own lifetime is the invocation.
+    InvocationAggregate,
+}
+
+/// One child of an aggregate producer, with the exact facts the meet is taken
+/// over.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct PlannedAggregateChild {
+    pub(in crate::cranelift_backend) position: u32,
+    pub(in crate::cranelift_backend) origin: StaticOriginId,
+    pub(in crate::cranelift_backend) lifetime: PlannedReferentLifetime,
+    /// The **possible** referent owners of this child, never a determination.
+    ///
+    /// ⚠ Read the emptiness rule before the membership rule: a child whose set
+    /// is empty is not a child that owns nothing, it is a child whose
+    /// representation the planner could not derive, and the builder refuses it
+    /// rather than letting an empty set satisfy "contains no invocation owner"
+    /// vacuously.
+    pub(in crate::cranelift_backend) owners: Vec<BoundaryReferentOwner>,
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — one exact ownership record per aggregate
+/// producer occurrence.**
+///
+/// ⭐ **The lifetime of an aggregate is a MEET over its children, and no
+/// per-value shape can compute it.** `Construct` and `Record` are persistable
+/// shapes, so the value-shape disposition reaches for a persistent lane for
+/// every one of them. That is right exactly when every child outlives the
+/// parent, and it is the dangling edge otherwise — which is why the tag may not
+/// be chosen at the allocation site from the value in hand.
+///
+/// ⛔ The consumer reads `allocation` and nothing else. It may not re-derive the
+/// meet, inspect a runtime tag, or search lifetimes in lowering.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct PlannedAggregateOwnership {
+    pub(in crate::cranelift_backend) origin: StaticOriginId,
+    pub(in crate::cranelift_backend) owner: PredeclaredFunctionId,
+    pub(in crate::cranelift_backend) shape: PlannedAggregateShape,
+    pub(in crate::cranelift_backend) children: Vec<PlannedAggregateChild>,
+    /// The meet itself, retained beside the lane it selects so a reader can
+    /// see the derivation rather than only its verdict.
+    pub(in crate::cranelift_backend) meet: PlannedReferentLifetime,
+    pub(in crate::cranelift_backend) allocation: PlannedAggregateAllocation,
+}
+
+/// Derive one ownership record for every aggregate producer occurrence.
+///
+/// ⛔ **The population is every `Construct`/`Record` source occurrence, not the
+/// ones some reached trace visited.** A lane chosen from the branch this
+/// execution happened to take is exactly the row-driven discovery the frame
+/// forbids.
+fn build_aggregate_ownership_plan(
+    plan: &StaticTransitionPlan<'_>,
+) -> Result<Vec<PlannedAggregateOwnership>, CraneliftBackendError> {
+    let mut records = Vec::new();
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        let shape = match occurrence.expr {
+            RuntimeExpr::Construct { .. } => PlannedAggregateShape::Constructor,
+            RuntimeExpr::Record { .. } => PlannedAggregateShape::Record,
+            _ => continue,
+        };
+        let origin = occurrence.static_origin;
+        let authority = occurrence_authority(plan, origin)?;
+        let mut children = Vec::with_capacity(authority.children.len());
+        for child in &authority.children {
+            let owners = lifetime_referent_affinity(child.lifetime);
+            if owners.is_empty() {
+                return Err(planner_error(
+                    "aggregate producer child has no derivable referent owner",
+                ));
+            }
+            children.push(PlannedAggregateChild {
+                position: child.position,
+                origin: child.origin,
+                lifetime: child.lifetime,
+                owners,
+            });
+        }
+        // ⭐ The ruled meet, stated once. "Any invocation-owned ALTERNATIVE"
+        // is membership in the possible set, not a proof that the child *is*
+        // invocation-owned — an aggregate is only persistable when no child
+        // could be shorter-lived than it.
+        let escapes = children
+            .iter()
+            .any(|child| child.owners.contains(&BoundaryReferentOwner::InvocationArena));
+        let (meet, allocation) = if escapes {
+            (
+                PlannedReferentLifetime::ActivationOwned,
+                PlannedAggregateAllocation::InvocationAggregate,
+            )
+        } else {
+            (
+                PlannedReferentLifetime::Persistent,
+                PlannedAggregateAllocation::PersistentGround,
+            )
+        };
+        records.push(PlannedAggregateOwnership {
+            origin,
+            owner: plan
+                .semantic
+                .function_owner(origin)?
+                .ok_or_else(|| planner_error("aggregate producer has no function owner"))?,
+            shape,
+            children,
+            meet,
+            allocation,
+        });
+    }
+    records.sort_by_key(|record| record.origin);
+    Ok(records)
+}
+
+fn validate_aggregate_ownership_plan(
+    plan: &StaticTransitionPlan<'_>,
+    records: &[PlannedAggregateOwnership],
+) -> Result<(), CraneliftBackendError> {
+    if records != build_aggregate_ownership_plan(plan)? {
+        return Err(planner_error(
+            "aggregate ownership is not the exact closed lifetime-meet derivation",
+        ));
+    }
+    // ⛔ A second, independent check on the same records, because the
+    // re-derivation above only proves the builder agrees with itself. This one
+    // states the PROPERTY: the persistent lane is issued only where no child
+    // has an invocation-owned alternative.
+    for record in records {
+        let escapes = record
+            .children
+            .iter()
+            .any(|child| child.owners.contains(&BoundaryReferentOwner::InvocationArena));
+        let expected = if escapes {
+            PlannedAggregateAllocation::InvocationAggregate
+        } else {
+            PlannedAggregateAllocation::PersistentGround
+        };
+        if record.allocation != expected {
+            return Err(planner_error(
+                "aggregate allocation lane disagrees with its own children's owner sets",
+            ));
+        }
     }
     Ok(())
 }
@@ -4222,6 +4391,7 @@ impl<'src> Planner<'src> {
                 source_occurrences: Vec::new(),
                 join_results: Vec::new(),
                 case_emissions: Vec::new(),
+                aggregate_ownership: Vec::new(),
                 occurrence_authorities: Vec::new(),
                 continuation_specializations: Vec::new(),
                 continuation_specialization_calls: Vec::new(),
@@ -5068,6 +5238,11 @@ impl<'src> Planner<'src> {
         validate_case_emission_plan(&self.plan, &self.plan.case_emissions)?;
         self.plan.occurrence_authorities = build_occurrence_authority_plan(&self.plan)?;
         validate_occurrence_authority_plan(&self.plan, &self.plan.occurrence_authorities)?;
+        // ⛔ Strictly after the occurrence authorities: the meet is taken over
+        // their per-child lifetimes, so building it earlier would take a meet
+        // over an empty population and issue the persistent lane to everything.
+        self.plan.aggregate_ownership = build_aggregate_ownership_plan(&self.plan)?;
+        validate_aggregate_ownership_plan(&self.plan, &self.plan.aggregate_ownership)?;
         validate_substrate_preallocation_closure(
             &self.plan,
             &self.plan.case_emissions,
@@ -5704,6 +5879,38 @@ impl<'src> StaticTransitionPlan<'src> {
         case_index: usize,
     ) -> Result<ConstructorIdentity, CraneliftBackendError> {
         self.semantic.case_constructor_identity(origin, case_index)
+    }
+
+    /// **`D7` — the ruled allocation lane for one aggregate producer.**
+    ///
+    /// ⛔ **Absence is a loud failure, never a default.** An aggregate the
+    /// planner never issued a record for is one whose lifetime meet was never
+    /// taken, and answering `PersistentGround` for it would reinstate exactly
+    /// the unproven persistent lane this record exists to replace — silently,
+    /// and only for the occurrences the population happened to miss.
+    ///
+    /// ⚠ The `shape` argument is a cross-check, not a lookup key. The caller
+    /// knows which aggregate it is emitting; if that disagrees with the record
+    /// at this origin, one of the two is reading the wrong occurrence and the
+    /// lane is meaningless either way.
+    pub(in crate::cranelift_backend) fn aggregate_allocation(
+        &self,
+        origin: StaticOriginId,
+        shape: PlannedAggregateShape,
+    ) -> Result<PlannedAggregateAllocation, CraneliftBackendError> {
+        let record = self
+            .aggregate_ownership
+            .iter()
+            .find(|record| record.origin == origin)
+            .ok_or_else(|| {
+                planner_error("aggregate producer has no planned ownership record")
+            })?;
+        if record.shape != shape {
+            return Err(planner_error(
+                "aggregate producer disagrees with its planned ownership shape",
+            ));
+        }
+        Ok(record.allocation)
     }
 
     /// The artifact-static constructor identity of a `Construct` occurrence —
@@ -6920,6 +7127,7 @@ impl<'src> StaticTransitionPlan<'src> {
         self.validate_source_occurrence_table()?;
         validate_case_emission_plan(self, &self.case_emissions)?;
         validate_occurrence_authority_plan(self, &self.occurrence_authorities)?;
+        validate_aggregate_ownership_plan(self, &self.aggregate_ownership)?;
         validate_substrate_preallocation_closure(
             self,
             &self.case_emissions,

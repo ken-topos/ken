@@ -7327,12 +7327,23 @@ impl<'a> Lowering<'a> {
             .static_transition_plan
             .constructor_symbol_identity(origin)?
             .tag_abi_word()?;
-        let word = self.emit_carrier_alloc(
-            builder,
-            BoundaryTag::PersistentGround,
-            BoundaryClass::Constructor,
-            args.len(),
+        // ⛔ **This was an unconditional `PersistentGround`, and it is the
+        // defect `D7`'s aggregate subclosure exists to remove.** Every carried
+        // aggregate was allocated persistent regardless of its children, so a
+        // constructor over an invocation-owned child became a persistent parent
+        // naming storage that dies first — the dangling relation `store_field`
+        // refuses, surfacing at runtime as `BOUNDARY_ERR_ESCAPE` rather than at
+        // the producer that created it.
+        let (tag, class) = self.aggregate_carrier_disposition(
+            origin,
+            &Lowered::Constructor {
+                constructor: RuntimeSymbol::from(constructor),
+                synthesized_identity: None,
+                args: Vec::new(),
+            },
+            PlannedAggregateShape::Constructor,
         )?;
+        let word = self.emit_carrier_alloc(builder, tag, class, args.len())?;
         self.emit_carrier_store_tag_id(builder, word, identity)?;
         for (position, argument) in args.iter().enumerate() {
             let child_origin = self
