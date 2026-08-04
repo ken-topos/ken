@@ -237,6 +237,49 @@ fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResi
     }
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5` — the selector witness's two modes.**
+///
+/// ⛔ Observability only. `Exact` is the default and is what every test that
+/// does not name the witness sees; production never reads this at all.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SelectorWitness {
+    Exact,
+    /// Suppress the declaration-head `TransparentDeclarationClosure` result —
+    /// and nothing else — so the `FunctionizedUnits` call seam becomes
+    /// reachable for the `D5` controls.
+    SkipTransparentDeclarationClosure,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SELECTOR_WITNESS: std::cell::Cell<SelectorWitness> =
+        const { std::cell::Cell::new(SelectorWitness::Exact) };
+}
+
+/// Run `body` with the `D5` selector witness engaged, restoring `Exact`
+/// afterwards **including on panic**.
+///
+/// ⚠ The restore is a `Drop` and not a trailing `set`: a control that asserts
+/// inside the closure panics on failure, and a trailing restore would leak the
+/// witness into every later test on this thread. That leak reads as the witness
+/// being unnecessary — the very thing control 5 exists to disprove.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn with_transparent_declaration_closure_witness<T>(
+    body: impl FnOnce() -> T,
+) -> T {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            SELECTOR_WITNESS.with(|witness| witness.set(SelectorWitness::Exact));
+        }
+    }
+    SELECTOR_WITNESS
+        .with(|witness| witness.set(SelectorWitness::SkipTransparentDeclarationClosure));
+    let _restore = Restore;
+    body()
+}
+
 /// **`RT-DECL-CLOSURE-PORT` `D1` -- report EVERY residual variant present, not
 /// the first.**
 ///
@@ -426,12 +469,47 @@ fn declaration_recursive_descent_residual(
     declaration: &RuntimeDeclaration,
 ) -> Option<RecursiveDescentResidual> {
     match &declaration.kind {
-        RuntimeDeclarationKind::Transparent { body } => matches!(
-            body,
-            RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
-        )
-        .then_some(RecursiveDescentResidual::TransparentDeclarationClosure)
-        .or_else(|| recursive_descent_residual(body)),
+        RuntimeDeclarationKind::Transparent { body } => {
+            let head = matches!(
+                body,
+                RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
+            )
+            .then_some(RecursiveDescentResidual::TransparentDeclarationClosure);
+            // ⭐⭐ **`RT-DECL-CLOSURE-PORT` `D5` — the `cfg(test)`-only selector
+            // WITNESS, and the only place it acts.**
+            //
+            // ⚠ It exists because of a measured circularity, not for
+            // convenience. `D5` must demonstrate its validator fail-closed on
+            // an *accepted* input, and a checked recursive declaration call
+            // requires a closure-seed body — which is exactly what this arm
+            // retains `RecursiveDescent` for. ⇒ Without a witness no accepted
+            // input can reach the seam, the validator is only *vacuously*
+            // fail-closed, and `D6` would both activate the route and first
+            // prove acceptance, collapsing the ordering the frame requires.
+            //
+            // ⛔⛔ **It masks one variant; it does not force an answer.** The
+            // derivation is preserved: the head result is computed exactly as
+            // production computes it, and only then filtered — and only when it
+            // is *exactly* `TransparentDeclarationClosure`, so a head result of
+            // some future variant passes through untouched. The body's ordinary
+            // residual walk below still runs, `find_map` still continues
+            // through every remaining declaration, the source-expression
+            // classifier is untouched, and
+            // `enumerate_recursive_descent_residuals` still reports this
+            // variant. A fixture carrying any second residual therefore stays
+            // on `RecursiveDescent` under the witness — which is the control
+            // that tells masking apart from forcing.
+            //
+            // ⛔ Production selection is unchanged: outside `cfg(test)` this is
+            // the identical expression it was before `D5`.
+            #[cfg(test)]
+            let head = head.filter(|found| {
+                !(SELECTOR_WITNESS.with(std::cell::Cell::get)
+                    == SelectorWitness::SkipTransparentDeclarationClosure
+                    && *found == RecursiveDescentResidual::TransparentDeclarationClosure)
+            });
+            head.or_else(|| recursive_descent_residual(body))
+        }
         RuntimeDeclarationKind::Primitive { .. }
         | RuntimeDeclarationKind::Data { .. }
         | RuntimeDeclarationKind::Record { .. }

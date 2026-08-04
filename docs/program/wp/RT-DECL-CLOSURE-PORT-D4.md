@@ -61,11 +61,22 @@ the first half, because before `D4` no declaration call could reach the second.
 It now admits the full head set and nothing wider — the target must still be its
 unit's *seed*, and that check now runs on both classes rather than on neither.
 
+⚠ **Correction to this document's first version, and to the comment it
+described.** The semantic-plane predicate is "is a static-body unit head" — the
+whole such population, anonymous `ClosureBody` included. It is **not** the
+callable-declaration discriminator, and the original wording presented it as
+one. The exact class is decided by `AbiPlane::validate_declaration_call_targets`
+reading the `AbiUnitDefinition`; the plan is fail-closed across the two layers
+together, never by the semantic predicate alone. The predicate is now named
+`static_body_head` for what it measures.
+
 **A declaration call may target the caller's own unit — for one class only.** A
 closure-seed declaration that refers to itself does so from inside its own body,
 which after the retarget *is* the unit being called. That edge is direct
 recursion. The distinctness ban is kept intact for the scheduling-entry class,
-where it still means what it always meant.
+where it still means what it always meant. The self-loop admitted here is a
+*structural* permission; that the target is the exact declaration-owned
+`CallableDeclaration` of the referenced symbol is the ABI plane's to certify.
 
 ⚠ This second change was **not anticipated in the D4 scope** and was found by
 the suite: `recursive_declaration_shape_change_hits_typed_boundary` went red
