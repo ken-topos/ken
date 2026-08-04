@@ -2758,7 +2758,7 @@ fn aggregate_child_referent_owners(
 /// The three cases are the three things the planner can know about a child it
 /// never sees a source occurrence for.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SynthesizedAggregateChild {
+pub(in crate::cranelift_backend) enum SynthesizedAggregateChild {
     /// An immediate the emitter materializes inline -- a native int, a bounded
     /// nat, a scalar read out of the host reply. It has no boundary node, so
     /// no owner but `NoReferent` is possible for it at any site.
@@ -6268,24 +6268,33 @@ impl<'src> StaticTransitionPlan<'src> {
             })
     }
 
-    /// The declared arity of one modelled synthesized role, for the emitter's
-    /// consistency cross-check.
+    /// The declared child model of one modelled synthesized role.
     ///
     /// The recipe and the lowering code that builds these aggregates are two
-    /// statements of one shape. This is what lets the emitter catch them
-    /// disagreeing instead of silently allocating a node the recipe describes
-    /// differently.
-    pub(in crate::cranelift_backend) fn synthesized_aggregate_arity(
+    /// statements of one shape. Handing the emitter the model -- rather than
+    /// only its length -- is what lets it check that each operand it actually
+    /// holds is the KIND the recipe assumed when it took the meet.
+    ///
+    /// Arity alone is not sufficient and was not claimed to be: a recipe that
+    /// says `Immediate` where the emitter passes a referent-bearing child has
+    /// the right count and the wrong lane, and the aggregate is allocated
+    /// persistent over an operand that can be arena-owned.
+    pub(in crate::cranelift_backend) fn synthesized_aggregate_children(
         &self,
         role: SynthesizedFixedConstructorRole,
-    ) -> Result<usize, CraneliftBackendError> {
-        self.aggregate_ownership
+    ) -> Result<&'static [SynthesizedAggregateChild], CraneliftBackendError> {
+        if !self
+            .aggregate_ownership
             .iter()
-            .find(|record| record.producer == AggregateOccurrenceProducer::Synthesized(role))
-            .map(|record| record.children.len())
-            .ok_or_else(|| {
-                planner_error("synthesized aggregate role has no planned ownership record")
-            })
+            .any(|record| record.producer == AggregateOccurrenceProducer::Synthesized(role))
+        {
+            return Err(planner_error(
+                "synthesized aggregate role has no planned ownership record",
+            ));
+        }
+        synthesized_aggregate_recipe(role).ok_or_else(|| {
+            planner_error("synthesized aggregate role has a record but no child model")
+        })
     }
 
     /// The ruled allocation lane of an already-interned aggregate occurrence.

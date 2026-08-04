@@ -82,6 +82,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, JoinPlanToken,
     AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,
+    SynthesizedAggregateChild,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
@@ -6327,16 +6328,59 @@ impl<'a> Lowering<'a> {
         if occurrence.is_some() {
             let declared = self
                 .static_transition_plan
-                .synthesized_aggregate_arity(role)?;
-            if declared != args.len() {
+                .synthesized_aggregate_children(role)?;
+            if declared.len() != args.len() {
                 return Err(unsupported(
                     "Constructor",
                     format!(
-                        "synthesized aggregate role is planned with {declared} children but the \
-                         emitter built {}",
+                        "synthesized aggregate role is planned with {} children but the emitter \
+                         built {}",
+                        declared.len(),
                         args.len()
                     ),
                 ));
+            }
+            // Each operand must be the KIND the recipe assumed when it took the
+            // meet. Arity agreement is not sufficient and never was: a recipe
+            // that says `Immediate` where a referent-bearing child is passed has
+            // the right count and the wrong lane, and the aggregate is then
+            // allocated persistent over an operand that can be arena-owned --
+            // which is the dangling parent this whole record exists to prevent.
+            for (position, (child, argument)) in declared.iter().zip(&args).enumerate() {
+                let agrees = match child {
+                    // No boundary node, so nothing for an arena to own. Read
+                    // from the sole disposition authority, not from the variant.
+                    SynthesizedAggregateChild::Immediate => matches!(
+                        argument.boundary_disposition(),
+                        BoundaryDisposition::RepresentedImmediate { .. }
+                    ),
+                    // The named role's own record supplied this child's owners,
+                    // so the operand must be that exact interned occurrence --
+                    // not merely some constructor of the same shape.
+                    SynthesizedAggregateChild::Role(inner) => {
+                        let expected = self
+                            .static_transition_plan
+                            .synthesized_aggregate_occurrence(*inner)?;
+                        matches!(
+                            argument,
+                            Lowered::Constructor {
+                                occurrence: Some(actual),
+                                ..
+                            } if *actual == expected
+                        )
+                    }
+                };
+                if !agrees {
+                    return Err(unsupported(
+                        "Constructor",
+                        format!(
+                            "synthesized aggregate child {position} is planned as {child:?} but \
+                             the emitter built a {}, so the meet was taken over a different node \
+                             than the one being allocated",
+                            lowered_value_kind(argument)
+                        ),
+                    ));
+                }
             }
         }
         Ok(Lowered::Constructor {
