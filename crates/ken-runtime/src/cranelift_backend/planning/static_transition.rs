@@ -16179,6 +16179,89 @@ mod tests {
         );
     }
 
+    /// **A record's lookup key includes its PATH, not only its role.**
+    ///
+    /// MEASURED: at a real `FsWriteAt` seat, `ResourceTraceIdentity` resolves
+    /// at `error.alternative(4).field(1)` and refuses at every other path,
+    /// including the sibling alternative and the other root — with the owner,
+    /// seat and role held identical across all three.
+    ///
+    /// CLAIMED: `synthesized_aggregate_record` matches on all four key parts,
+    /// so a path-keyed population cannot silently degrade to a role-keyed one.
+    ///
+    /// THE GAP — and it is the reason this row exists at all. **On today's
+    /// population the path is not NEEDED to disambiguate two records**: no two
+    /// allocation-reachable records share `(owner, seat, role)`, because the
+    /// six measured repeated-role sites are all dynamic sets and take no
+    /// record. Measured directly: dropping `record_path == path` from the
+    /// lookup left the whole suite green, and left an emitter path swap that
+    /// otherwise reddens seventeen tests **completely undetected**. So the
+    /// path's discriminating power over records is carried by *this* assertion
+    /// and by the emitter's own occurrence comparison, not by any collision in
+    /// the current tree. A reader should not take the seventeen reds as
+    /// evidence that the population needs the path today; they are evidence
+    /// that the emitter's path is checked against the planner's.
+    #[test]
+    fn a_records_lookup_key_includes_its_path_not_only_its_role() {
+        use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+        use SynthesizedFixedConstructorRole as R;
+
+        let expr = RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::FsWriteAt,
+            capability: None,
+            args: vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+        };
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new()).expect("plans");
+        let seat = plan
+            .source_occurrences
+            .iter()
+            .flatten()
+            .find(|occurrence| matches!(occurrence.expr, RuntimeExpr::Effect { .. }))
+            .expect("the fixture has an effect seat")
+            .static_origin;
+        let owner = *synthesized_seat_emission_owners(&plan, seat)
+            .expect("the seat has emission owners")
+            .first()
+            .expect("a seat is emitted by at least its own predeclared unit");
+
+        let err = SynthesizedAggregatePath::root(ERR);
+        let truth = err.alternative(4).field(1);
+        plan.synthesized_aggregate_occurrence(owner, seat, &truth, R::ResourceTraceIdentity)
+            .expect("the measured path resolves to its own record");
+
+        // Same owner, same seat, same ROLE — only the path differs. Each of
+        // these must refuse, or the key has degraded to `(owner, seat, role)`.
+        for wrong in [
+            err.alternative(5).field(1),
+            err.alternative(4).field(0),
+            err.alternative(4),
+            err.clone(),
+            SynthesizedAggregatePath::root(OK),
+        ] {
+            assert!(
+                plan.synthesized_aggregate_occurrence(
+                    owner,
+                    seat,
+                    &wrong,
+                    R::ResourceTraceIdentity
+                )
+                .is_err(),
+                "{wrong:?} must not resolve to the record planned at {truth:?}; \
+                 owner, seat and role are identical, so only the path can refuse it"
+            );
+        }
+
+        // The role is still part of the key too: the right path with the wrong
+        // role refuses. Without this, the rows above would pass for a lookup
+        // that matched on the path alone.
+        assert!(
+            plan.synthesized_aggregate_occurrence(owner, seat, &truth, R::Wrote)
+                .is_err(),
+            "the right path with the wrong role must refuse"
+        );
+    }
+
     /// Every operation whose tree this module states.
     fn measured_tree_operations() -> Vec<ken_host::HostOpV1> {
         use ken_host::HostOpV1 as Op;
