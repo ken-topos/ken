@@ -6506,13 +6506,31 @@ impl<'a> Lowering<'a> {
                         Lowered::Constructor { occurrence, .. } if *occurrence == expected
                     )
                 }
-                // A dynamic child is emitted through the value-shape
-                // disposition rather than a planned record, so there is no
-                // occurrence to compare. What IS checkable is that the emitter
-                // put a dynamic constructor at this position at all.
-                SynthesizedAggregateNode::Dynamic(_) => {
-                    matches!(argument, Lowered::DynamicConstructor(_))
-                }
+                // ⭐ **A dynamic child is checked ALTERNATIVE BY ALTERNATIVE.**
+                //
+                // ⛔ Not merely "is it a dynamic constructor". That weaker
+                // check is what let the three `ResourceKind` uses be built at
+                // ONE path with no complaint: the parent's own reconciliation
+                // passed on shape, and because a `Lowered::DynamicConstructor`
+                // carries no single occurrence, nothing compared the identities
+                // its alternatives were holding. Three distinct allocations
+                // then shared one record — exactly the aliasing the path key
+                // exists to prevent, and invisible.
+                //
+                // The set has no occurrence, but each alternative does, and
+                // each sits at `child_path.alternative(index)`. Comparing those
+                // is what makes the parent-to-child path law hold through a
+                // dynamic position as it already does through a fixed one.
+                SynthesizedAggregateNode::Dynamic(_) => match argument {
+                    Lowered::DynamicConstructor(dynamic) => self
+                        .dynamic_child_alternatives_agree(
+                            owner,
+                            seat,
+                            &path.field(position),
+                            dynamic,
+                        )?,
+                    _ => false,
+                },
                 // The seat's own operand. The planner derived this child's
                 // owners from the seat's operand authority, so the record IS
                 // exact -- but what arrives here is whatever the caller wrote,
@@ -6584,6 +6602,45 @@ impl<'a> Lowering<'a> {
             occurrence,
             fields,
         })
+    }
+
+    /// Whether every alternative of a dynamic child carries the occurrence
+    /// planned at its own position under `child_path`.
+    ///
+    /// The set itself has no record — it is not an allocation. Its alternatives
+    /// are, and each one's identity is the check that the emitter put this
+    /// dynamic value at the path the planner planned it at.
+    fn dynamic_child_alternatives_agree(
+        &self,
+        owner: ContinuationEmissionOwner,
+        seat: StaticOriginId,
+        child_path: &SynthesizedAggregatePath,
+        dynamic: &DynamicConstructorV1,
+    ) -> Result<bool, CraneliftBackendError> {
+        for (index, alternative) in dynamic.alternatives.iter().enumerate() {
+            let index = u32::try_from(index).map_err(|_| {
+                unsupported(
+                    "DynamicConstructor",
+                    "the alternative population exceeds the path step space",
+                )
+            })?;
+            let position = child_path.alternative(index);
+            // A path the tree does not have means the emitter built a set with
+            // more alternatives than the planner planned, which is a shape
+            // disagreement rather than an identity one.
+            let Ok((role, _)) = self.static_transition_plan.synthesized_tree_node(seat, &position)
+            else {
+                return Ok(false);
+            };
+            let expected = self
+                .static_transition_plan
+                .synthesized_aggregate_occurrence(owner, seat, &position, role)
+                .ok();
+            if alternative.occurrence != expected {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     /// Reconcile one dynamic alternative against the tree and return its exact
