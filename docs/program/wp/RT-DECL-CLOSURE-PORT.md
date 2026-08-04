@@ -352,22 +352,85 @@ not observable constructor data.**
 
 #### The binding mechanism — eliminate the callable before the boundary
 
-Resolve and claim the **existing planner-issued causal identity** in the
-declaration-owned `CallableDeclaration` function. Emit the direct declared
-continuation call **at the producer occurrence** — before
-`transfer_constructor_operands`, before boundary publication, and before any
-join can erase identity. Pass only the ordinary inputs and ordered captures
-through the existing typed input ABI. Use the direct call's result in place of
-the producer constructor.
+**⛔ CORRECTED 2026-08-04, Architect disposition `evt_c29j2reptyd2`, grounded on
+exact localization checkpoint `c8f3a75ef5da6f8dddffb1eca05d389bb590502c` (the
+Architect independently re-ran the localization test: 1/1, same six-entry
+chronology and census). The mechanism family below was right; this section's
+original singular owner/seat premise was wrong, and the corrected contract
+replaces it rather than qualifying it.**
 
-⛔ **No closure word, handle, tag, capsule, durable store, indirect call,
-runtime selector, or new carrier lane is lawful.** The generic
-`CallableCapsuleEscape -> EscapeForbidden` rule is unchanged.
+**What the localization proved.** `fn2 @36` is a planned `ClosureBody`; it
+enters, lowers its result, and is **the first unit to refuse** during boundary
+transfer. Its source result and producer are one exact occurrence
+(`result_root=36`, `construct=36`), and the planner has **already issued** that
+edge's causal identity — `owner=fn2`, `continuation=10`, `alternative=1`,
+`recursive_position=1`, `target=CSId(1)`. `claim_and_call_continuation` has
+**zero** entries with entry traced ahead of every branch. `fn3 @40`, the
+`CallableDeclaration`, never enters, because ordinary-unit emission aborts at
+`fn2` first — and the census separately carries the distinct `fn3` token.
 
-**The plan must contain the exact causal identity before function definition.**
-If it does not, lowering **stops** and routes the missing planner authority; it
-may not mint a token from the reached syntax. ⛔ Do not absorb
-[[RT-CONTSPEC-LEDGER]]'s general four-axis mapping work here.
+⇒ **This is a two-owner planned population**, not a missing token and not one
+token observed at the wrong owner. The fixed-point planner issues causal calls
+to **every producer owner it discovers**, including a recursively discovered
+`ClosureBody` result root; ordinary unit bodies are defined **before** the later
+`CallableDeclaration`, so the first such owner must discharge its own token or
+it fails before the declaration-owned seat can exist.
+
+##### The contract
+
+1. **Owner population.** Every planner-issued continuation call is owned and
+   emitted by its exact `producer_owner`. `CallableDeclaration` and recursively
+   discovered `ClosureBody` owners are members of **one closed causal-call
+   population; neither is privileged.**
+
+2. **Two consumption seats, one mechanism.**
+   - Where lowering **retains** the active computational frame and the exact
+     Construct/alternative/position facts, the existing in-context producer seat
+     remains lawful.
+   - Where fixed-point discovery **detaches** a producer as an ordinary unit
+     result, the lawful seat is after lowering that exact retained result and
+     **before** `transfer_unit_result_into_carrier`, allocation, publication, or
+     join. The direct call's result replaces the producer constructor there.
+
+3. **Authority before emission.** Planning must **project** the already-issued
+   identity, or exact ordered identity set, onto the exact
+   `(producer_owner, producer_result_origin, producer_construct_origin)` result
+   edge **before function definition.** This is exposure of existing planner
+   authority, not new discovery. ⛔ Lowering may not search globally,
+   reverse-derive a consumer, mint from reached syntax, choose the first token,
+   or use the emitted closure shape as a selector. For this measured edge the
+   projection has **exactly one** member; a zero member, a duplicate, or an
+   unresolved multi-member composition is a **hard stop, never a preference
+   rule.**
+
+4. **Exact call construction.** At the detached-result seat: validate the
+   specialized result's planned constructor identity and field run; take
+   ordinary operands from that exact result with the ruled recursive field
+   omitted; append only the planner-projected ordered captures from the exact
+   unit environment; claim the opaque identity under the current defining owner;
+   call the target already declared into that `Function`; and substitute the
+   returned value before transfer. **Factor the existing direct-call/claim
+   machinery after identity resolution** rather than pretending the unavailable
+   active-frame selector exists at this seat.
+
+5. **Closure remains global and affine.** The existing
+   planned/resolved/declared/claimed/emitted equality must close over **both**
+   owners. The `fn2` and `fn3` calls must each be emitted **exactly once**,
+   against their own decoded target. Omission, owner transplant, redirect,
+   duplicate claim or emission, result-edge disagreement, and capture
+   disagreement all remain fail-closed.
+
+6. **Negative boundary.** `Wrap(LexicalClosure)` without a consuming eliminator
+   remains a **permanent** escape refusal. ⛔ No closure word, handle, tag,
+   capsule, durable store, indirect call, runtime selector, new carrier lane, or
+   `same_recursive_argument_shapes` transplant is authorized. The generic
+   `CallableCapsuleEscape -> EscapeForbidden` rule is unchanged, and
+   [[RT-CONTSPEC-LEDGER]]'s general four-axis mapping work is not absorbed here.
+
+**Still not a new node.** This is the distinct-owner-with-an-exact-token branch
+of the published decision table — a same-WP `D5a` frame recut, not a new
+disposition, carrier lane, planner-semantic expansion, or third atomic
+participant.
 
 #### The `08cb257f` probe must keep rejecting — it is not the positive
 
@@ -391,14 +454,24 @@ The load-bearing discriminator is instead:
 #### The checkpoint, and what it gates
 
 - under the existing selector witness, the landed object fixture reaches the
-  exact direct continuation call inside the declaration-owned unit;
-- that unit receives its exact declared continuation target, and the existing
-  whole-pass closure closes;
+  exact direct continuation call **at each producer owner's own seat** — `fn2`
+  at the detached-result seat, `fn3` at its own — with neither privileged;
+- each owner receives its exact declared continuation target, and the existing
+  whole-pass planned/resolved/declared/claimed/emitted closure closes **over
+  both**, each call emitted exactly once;
 - the generic closure-valued constructor negative is preserved.
 
 **Only after this checkpoint is green is `D6` retried unchanged** — one
 production action: retire `TransparentDeclarationClosure`, remove the selector
 witness, re-run the closed evidence unhooked.
+
+**Resume base and scaffolding.** Runtime resumes from exact
+`c8f3a75ef5da6f8dddffb1eca05d389bb590502c`, which is a preservation and
+localization checkpoint only, **never a candidate** — as `08cb257f` remains.
+⛔ **The localization trace is scaffolding, not acceptance evidence.** Retain it
+while implementing the two-owner closure, then remove it or replace it with
+load-bearing discriminator controls **before** candidate routing. `D6`, the
+candidate route, and the QA route stay closed until then.
 
 #### `same_recursive_argument_shapes` is obsolete on this lane — no guard was lost
 
