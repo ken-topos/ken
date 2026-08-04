@@ -6139,6 +6139,302 @@ fn a_dynamic_alternative_with_no_planned_record_refuses() {
     );
 }
 
+/// A program that reaches all four governed allocation sites, and that carries
+/// TWO live effect seats of the same operation for the A/B row.
+///
+/// ⚠ One fixture rather than four, deliberately. Four fixtures would let a row
+/// pass because its own fixture happened to avoid the other three sites, and
+/// the hit counter could not tell the difference. With one program every row
+/// runs against the same emission and the counter is the only thing that
+/// distinguishes them.
+///
+/// ⭐ Built on the shape `d7_fs_write_at_carrier_fixture` already established:
+/// a host effect only reaches the aggregate arm when it is CARRIED, which means
+/// crossing a generated-unit boundary as a call argument. Matching a host
+/// result directly keeps it specialized and it never reaches the carrier at
+/// all.
+fn d7_governed_sites_program(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    let exit_success = || RuntimeExpr::Construct {
+        constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+        args: Vec::new(),
+    };
+    let trap = || RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "D7 governed-sites default".to_string(),
+    };
+    let allocate = || RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::BufferAllocate,
+        capability: None,
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
+    };
+    // `origin` and `target` are the two bound buffer resources, named at
+    // whatever de Bruijn depth the caller sits at.
+    let write = |origin: u32, target: u32| RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::FsWriteAt,
+        capability: None,
+        args: vec![
+            RuntimeExpr::Var(origin),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Var(target),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((4).into())),
+            RuntimeExpr::Var(origin),
+        ],
+    };
+    let bind = |body: RuntimeExpr| RuntimeExpr::Match {
+        scrutinee: Box::new(allocate()),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: exit_success(),
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body,
+            },
+        ],
+        default: trap(),
+    };
+    // Depth bookkeeping, stated because a wrong index is a silently different
+    // fixture rather than an error: inside `bind(bind(_))` the inner buffer is
+    // `Var(0)` and the outer is `Var(1)`; each enclosing `Let` shifts both.
+    bind(bind(RuntimeExpr::Let {
+        value: Box::new(host_result_closure_match(write(1, 0))),
+        body: Box::new(host_result_closure_match(write(2, 1))),
+    }))
+}
+
+/// The source-`Record` site, driven at the carrier edge.
+///
+/// ⛔ **A separate driver, and the reason is a finding rather than a
+/// convenience.** No ordinary source program in this suite reaches
+/// `emit_carrier_transfer`'s `Lowered::Record` arm: a record handed across a
+/// generated-unit boundary as a call argument arrives with an origin whose
+/// planned ownership record is `Constructor`-shaped, and the producer refuses
+/// on the shape cross-check before the allocation. The only reaching path is
+/// the one the landed `c1_d4_ac_c7` rows already drive — a `Lowered::Record`
+/// handed to `transfer_into_carrier` directly. That is a real emitter seam,
+/// not a stub, and it is the same `emit_carrier_transfer` arm; what differs is
+/// how it is entered.
+fn d7_transfer_a_carried_record() -> Result<(), CraneliftBackendError> {
+    let fixture = RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::Record {
+            fields: vec![
+                ("first".to_string(), ac_c7_ctor("SitesInner")),
+                ("second".to_string(), ac_c7_ctor("SitesOther")),
+            ],
+        }),
+        body: Box::new(RuntimeExpr::Project {
+            record: Box::new(RuntimeExpr::Var(0)),
+            field: "first".to_string(),
+        }),
+    };
+    let (plan, root) = planned_root_occurrence(&fixture);
+    let record_origin = plan
+        .child_static_origin(root, 0)
+        .expect("a `Let`'s value is child 0");
+    let seed_env = NativeSeedEnvironment::empty();
+    ac_c7_try_compile_edge(&seed_env, plan, move |compiler, builder| {
+        let record = Lowered::Record {
+            fields: vec![
+                ("first".to_string(), ac_c7_lowered_ctor("SitesInner")),
+                ("second".to_string(), ac_c7_lowered_ctor("SitesOther")),
+            ],
+        };
+        let word = compiler.transfer_into_carrier(builder, record_origin, &record)?;
+        compiler.emit_carrier_tag(builder, word)
+    })
+    .map(|_| ())
+}
+
+/// ⚠ The artifact is DISCARDED. These rows only ever ask whether one was
+/// defined at all, and keeping it would leak a backend type into the fixture
+/// for nothing.
+fn d7_compile_governed_sites(program: &RuntimeExpr) -> Result<(), CraneliftBackendError> {
+    emit_process_entrypoint_object_with_cranelift(program, "ken_d7_governed_sites").map(|_| ())
+}
+
+/// The carried-constructor site, driven by the heterogeneous eliminator.
+///
+/// ⚠ A third driver, and measured for the same reason as the second.
+/// `transfer_constructor_operands` builds a constructor from ALREADY-LOWERED
+/// operands; the host-effect fixture never does, because its constructors are
+/// built from source. The heterogeneous eliminator composes a dynamic producer
+/// through two ordinary frames, which is the shape that carries operands into
+/// a constructor at the process boundary.
+fn d7_transfer_carried_constructor_operands() -> Result<(), CraneliftBackendError> {
+    emit_process_entrypoint_object_with_cranelift(
+        &heterogeneous_eliminator_fixture(
+            "ctor:fixture::Inner::Hit",
+            "ctor:fixture::Inner::Hit",
+            "ctor:fixture::Outer::Hit",
+            "ctor:fixture::Outer::Hit",
+            1,
+            1,
+            true,
+            false,
+        ),
+        "ken_d7_carried_constructor_operands",
+    )
+    .map(|_| ())
+}
+
+/// **`D7` — each of the four governed sites reaches the choke, and cannot
+/// bypass it.**
+///
+/// MEASURED, one fixture, one variant installed at a time:
+///
+/// | site | driver | hits | outcome |
+/// |---|---|---|---|
+/// | source `Constructor` | process object | > 0 | refused at the choke's non-aggregate check |
+/// | source `Record` | carrier edge | > 0 | refused at the choke's non-aggregate check |
+/// | selected dynamic alternative | host-effect object | > 0 | refused at the choke's non-aggregate check |
+/// | carried `transfer_constructor_operands` | heterogeneous eliminator | > 0 | refused at the choke's non-aggregate check |
+///
+/// ⚠ **Three drivers, not one, and that is measured rather than chosen.** I
+/// wrote this as a single fixture first, on the argument that one emission
+/// makes the counter the only thing separating the rows. The counter then
+/// falsified the argument twice: no ordinary program here reaches the
+/// source-`Record` arm at all (see [`d7_transfer_a_carried_record`]), and
+/// nothing in a host-effect program builds a constructor from already-lowered
+/// operands (see [`d7_transfer_carried_constructor_operands`]). Each row now
+/// names the driver that actually reaches it.
+///
+/// ⭐ **The hit count is not decoration.** Without it a row is green whenever
+/// its driver fails to reach the site — a vacuous pass that looks exactly like
+/// a caught bypass, because the assertion it satisfies is "this did not
+/// compile". The counter is what makes each row a statement about ITS site,
+/// and it is what caught the first spelling of this fixture, which reached
+/// three sites and silently skipped the fourth.
+///
+/// ⭐ Each unmutated baseline runs first for the same reason in the other
+/// direction: without it, four refusals could all be some unrelated defect in
+/// the driver rather than the perturbation.
+///
+/// CLAIMED: the emitter's four governed allocation sites all arrive at
+/// `emit_carrier_alloc` carrying a `PlannedAggregate` request, and a
+/// `NonAggregate` one substituted at any of them is refused **before the raw
+/// allocation and before any artifact is defined** — the compile returns `Err`,
+/// so there is no module.
+///
+/// THE GAP: this says nothing about the ORDER of the refusal within the choke.
+/// That is
+/// `the_carrier_allocation_choke_refuses_both_ungoverned_requests`'s positive
+/// control, which reaches the allocation on a rig that has none.
+#[test]
+fn each_governed_site_reaches_the_choke_and_cannot_bypass_it() {
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let program = d7_governed_sites_program(&symbols);
+    let drive = |site| match site {
+        GovernedAllocationSite::SourceRecord => d7_transfer_a_carried_record(),
+        GovernedAllocationSite::CarriedConstructor => d7_transfer_carried_constructor_operands(),
+        _ => d7_compile_governed_sites(&program),
+    };
+
+    for site in [
+        GovernedAllocationSite::SourceConstructor,
+        GovernedAllocationSite::SourceRecord,
+        GovernedAllocationSite::DynamicAlternative,
+        GovernedAllocationSite::CarriedConstructor,
+    ] {
+        drive(site).unwrap_or_else(|error| {
+            panic!("{site:?}: this row's driver must compile unmutated, got {error:?}")
+        });
+
+        let guard =
+            GovernedAllocationMutationGuard::install(GovernedAllocationMutation::Bypass(site));
+        let result = drive(site);
+        let hits = guard.hits();
+        drop(guard);
+
+        assert!(
+            hits > 0,
+            "{site:?}: the fixture never reached this site, so its row is vacuous"
+        );
+        let Err(error) = result else {
+            panic!("{site:?}: a bypassed request must refuse, and no artifact may be defined");
+        };
+        assert!(
+            format!("{error:?}").contains("was allocated as non-aggregate"),
+            "{site:?}: must refuse at the choke's own pre-allocation check, got {error:?}"
+        );
+    }
+}
+
+/// **`D7` — a SIBLING effect seat's coordinate is rejected at construction.**
+///
+/// MEASURED: the fixture carries two live `FsWriteAt` seats. Because they run
+/// the same operation they share every synthesized role, path and shape, so the
+/// only thing that differs between them is which occurrence is being lowered.
+/// With the emitted construction and the seat's own operands retained
+/// unchanged, selecting the planned occurrence and record at the SIBLING is
+/// refused before `emit_carrier_alloc`.
+///
+/// ⭐ **B is a live effect seat, never an invalid or non-`Effect` origin.** A
+/// refusal driven by an unusable seat would be a claim about seat VALIDITY —
+/// much weaker, and satisfiable by a check that merely resolves the origin. The
+/// claim here is that the seat coordinate is *load-bearing between two seats
+/// that are equally real and structurally identical*.
+///
+/// ⭐ The hit count is asserted because `sibling_effect_seat` returns the seat
+/// unchanged when no sibling exists. Without it, "this fixture has one seat so
+/// nothing was swapped" and "the swap happened and was caught" are the same
+/// green.
+///
+/// CLAIMED: the seat is a real coordinate of the record lookup, not a
+/// pass-through. This retires the row-12 seat cell from residual to held.
+#[test]
+fn a_sibling_effect_seats_coordinate_is_rejected_at_construction() {
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let program = d7_governed_sites_program(&symbols);
+    let (plan, _) = planned_root_occurrence(&program);
+    let seat = first_effect_seat(&plan).expect("the fixture has an effect seat");
+    let sibling = plan
+        .sibling_effect_seat(seat)
+        .expect("the fixture has a SECOND live effect seat of the same operation");
+    assert_ne!(seat, sibling, "an A/B discriminator needs two distinct seats");
+
+    d7_compile_governed_sites(&program).expect("the fixture compiles at its own seats");
+
+    let guard =
+        GovernedAllocationMutationGuard::install(GovernedAllocationMutation::SiblingEffectSeat);
+    let result = d7_compile_governed_sites(&program);
+    let hits = guard.hits();
+    drop(guard);
+
+    assert!(
+        hits > 0,
+        "the sibling swap never fired, so this row says nothing about the seat"
+    );
+    let Err(error) = result else {
+        panic!(
+            "a sibling seat's coordinate was ACCEPTED after {hits} swaps. Stated as measured: \
+             the seat is not load-bearing at the sites this fixture reaches, and row 12's seat \
+             cell stays a residual"
+        );
+    };
+    // MEASURED: it refuses at `reconcile_declared_children`'s nested-`Fixed`
+    // comparison — the child carries the occurrence the planner issued at seat
+    // A and the expected one is B's, so the two disagree. That is a
+    // CONSTRUCTION refusal, reached before any request is built and therefore
+    // before `emit_carrier_alloc`; the choke's own message would mean the seat
+    // had been carried all the way to the allocation.
+    let reason = format!("{error:?}");
+    assert!(
+        !reason.contains("was allocated as non-aggregate"),
+        "the refusal must come from CONSTRUCTION, before emit_carrier_alloc: {reason}"
+    );
+    assert!(
+        reason.contains("the meet was taken over a different node than the one being allocated"),
+        "the refusal must be the parent-to-child record disagreement the seat \
+         coordinate produces: {reason}"
+    );
+}
+
 /// **`D7` — the deepest carrier allocator refuses BOTH ungoverned requests, and
 /// refuses them before it emits anything.**
 ///
@@ -6164,10 +6460,11 @@ fn a_dynamic_alternative_with_no_planned_record_refuses() {
 /// record, and a planned record cannot be allocated at a class its shape does
 /// not authorize. Neither refusal can be reached after the arena has moved.
 ///
-/// THE GAP: this row is about the CHOKE. That each construction seat actually
-/// ARRIVES here carrying a `PlannedAggregate` request is a different claim,
-/// held by the four-site bypass mutations recorded on this commit and not by
-/// anything asserted below.
+/// THE GAP: this row is about the CHOKE, on hand-built requests. That the
+/// emitter's four governed sites actually ARRIVE here carrying a
+/// `PlannedAggregate` request is a different claim, and nothing below asserts
+/// it — it is held by
+/// `each_governed_site_reaches_the_choke_and_cannot_bypass_it`.
 #[test]
 fn the_carrier_allocation_choke_refuses_both_ungoverned_requests() {
     let source = RuntimeExpr::Construct {
@@ -6277,43 +6574,45 @@ fn the_carrier_allocation_choke_refuses_both_ungoverned_requests() {
 /// event set and the relation are separate evidence.
 ///
 /// **Row 12 — wrong owner/seat/path/role/shape/lane/child — is inherited only
-/// through this explicit axis mapping, and one axis is a residual:**
+/// through this explicit axis mapping:**
 ///
 /// | axis | held by | where |
 /// |---|---|---|
 /// | owner | `a_dynamic_alternative_with_no_planned_record_refuses` | a second ENUMERATED unit's owner, at which the seat has no records |
-/// | seat | **nothing** | residual, stated below |
+/// | seat | `a_sibling_effect_seats_coordinate_is_rejected_at_construction` | a second LIVE effect seat of the same operation |
 /// | path | `a_records_lookup_key_includes_its_path_not_only_its_role`, `a_path_step_kind_is_load_bearing_not_an_index` | planner-side, both directions of the key |
 /// | role | `a_repeated_role_at_one_seat_gets_distinct_real_records` | one role twice at one seat gets two records |
 /// | shape | `the_carrier_allocation_choke_refuses_both_ungoverned_requests` | class-vs-shape at the choke; `aggregate_allocation_at` cross-checks the record's own shape beneath it |
-/// | lane | the choke reads the lane from the record, so there is no caller input to disagree with | structural, not asserted |
+/// | lane | structural — see below | no test, and none is possible |
 /// | child | `a_construction_time_occurrence_lookup_fails_closed`, nested `Fixed` row | the child's own path is resolved, not the parent's |
 ///
-/// ⛔ **The SEAT axis is a residual and is stated as one.** A wrong seat is not
-/// falsifiable from production here: the seat a construction site passes is the
-/// `StaticOriginId` it is lowering, so producing a *different* one would mean
-/// lowering a different expression, and every consumer would then agree with it
-/// consistently. Nothing below or in the mapping above closes that, and the
-/// lane row is likewise structural rather than asserted — it is closed by the
-/// caller having no lane to supply, not by a test that catches a wrong one.
+/// ⭐ **The SEAT cell was a residual and is not one any more.** I had recorded
+/// that a wrong seat was not falsifiable, reasoning that producing a different
+/// seat would mean lowering a different expression and every consumer would
+/// then agree with it consistently. That was wrong in a specific way: it
+/// treated the seat as travelling with the whole construction, when the
+/// construction and its operands can be RETAINED while only the coordinate used
+/// to select the planned record moves. Two live effect seats of the same
+/// operation share every role, path and shape, so the swap is an A/B in which
+/// nothing else differs — and it is refused at
+/// `reconcile_declared_children`, before any allocation request exists.
 ///
-/// **Row 13 is the four-site bypass matrix**, and it is new rather than
-/// inherited. `emit_carrier_alloc` now takes a closed request, so each governed
-/// site was mutated to hand the choke a `NonAggregate` request instead, against
-/// a baseline of 2 standing reds:
+/// ⛔ **The LANE cell is a type-and-API property, not an unattainable test.**
+/// `CarrierAllocationRequest::PlannedAggregate` carries no lane and offers no
+/// field for one; the lane is derived inside the choke from
+/// `aggregate_allocation_at(occurrence, shape)`. There is no caller input that
+/// could be wrong, so "a wrong lane" is not a state the emitter can express —
+/// which is a stronger guarantee than a test, not a weaker one. A test would
+/// have to construct the unconstructible to fail.
 ///
-/// | site | reds | refusal |
-/// |---|---|---|
-/// | source `Constructor` | 57 | names the ungoverned request |
-/// | source `Record` | 5 | names the ungoverned request |
-/// | selected dynamic alternative | 6 | names the ungoverned request |
-/// | carried `transfer_constructor_operands` | 9 | names the ungoverned request |
-///
-/// ⭐ Each was checked for the CHOKE's own message rather than for a count, so
-/// a red arriving from some unrelated consequence of the edit could not pass as
-/// the bypass being caught. The choke's two refusals are asserted in
-/// `the_carrier_allocation_choke_refuses_both_ungoverned_requests`; these
-/// mutations are what show the four sites positively reach it.
+/// **Row 13 is the four-site bypass matrix**, and it is committed rather than
+/// recorded in a commit message:
+/// `each_governed_site_reaches_the_choke_and_cannot_bypass_it` installs a
+/// closed `#[cfg(test)]` mutation at one governed site's request construction
+/// at a time, proves the site was actually reached with a hit counter, and
+/// asserts the choke's own pre-allocation refusal. The choke's two refusals are
+/// asserted separately in
+/// `the_carrier_allocation_choke_refuses_both_ungoverned_requests`.
 #[test]
 fn the_aggregate_allocation_relation_holds_its_laws() {
     // Two nested constructors, so the population has two records: one is used

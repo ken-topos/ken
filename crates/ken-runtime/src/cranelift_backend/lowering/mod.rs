@@ -3844,6 +3844,7 @@ impl<'a> Lowering<'a> {
                 .tag_abi_word()?;
                 let word = self.emit_checked_aggregate_alloc(
                     builder,
+                    GovernedAllocationSite::SourceConstructor,
                     occurrence,
                     PlannedAggregateShape::Constructor,
                     class,
@@ -3870,6 +3871,7 @@ impl<'a> Lowering<'a> {
                 )?;
                 let word = self.emit_checked_aggregate_alloc(
                     builder,
+                    GovernedAllocationSite::SourceRecord,
                     occurrence,
                     PlannedAggregateShape::Record,
                     class,
@@ -4263,17 +4265,40 @@ impl<'a> Lowering<'a> {
     fn emit_checked_aggregate_alloc(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
+        site: GovernedAllocationSite,
         occurrence: AggregateOccurrenceId,
         shape: PlannedAggregateShape,
         class: BoundaryClass,
         field_count: usize,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
-        self.emit_carrier_alloc(
-            builder,
-            CarrierAllocationRequest::PlannedAggregate { occurrence, shape },
-            class,
-            field_count,
-        )
+        let request = Self::governed_request(site, occurrence, shape);
+        self.emit_carrier_alloc(builder, request, class, field_count)
+    }
+
+    /// The request one governed site hands the choke.
+    ///
+    /// ⛔ In a shipped compiler this is the `PlannedAggregate` construction and
+    /// nothing else — the `#[cfg(test)]` arm compiles out entirely. It exists
+    /// so a control can perturb ONE named site's request, which is the only way
+    /// to show that site reaches the choke GOVERNED. Asserting the choke's
+    /// refusal on a hand-built request proves the choke; it says nothing about
+    /// whether the emitter's four real sites arrive there.
+    fn governed_request(
+        site: GovernedAllocationSite,
+        occurrence: AggregateOccurrenceId,
+        shape: PlannedAggregateShape,
+    ) -> CarrierAllocationRequest {
+        #[cfg(test)]
+        if GOVERNED_ALLOCATION_MUTATION.with(std::cell::Cell::get)
+            == GovernedAllocationMutation::Bypass(site)
+        {
+            governed_allocation_hit();
+            return CarrierAllocationRequest::NonAggregate {
+                tag: BoundaryTag::PersistentGround,
+            };
+        }
+        let _ = site;
+        CarrierAllocationRequest::PlannedAggregate { occurrence, shape }
     }
 
     /// Enter one governed allocation into `E`, then into `R`.
@@ -4806,11 +4831,11 @@ impl<'a> Lowering<'a> {
         let arena = self.carrier_arena()?;
         let pointer_type = builder.func.dfg.value_type(arena);
         let word = self.emit_carrier_alloc(
-                    builder,
-                    CarrierAllocationRequest::NonAggregate { tag },
-                    class,
-                    0,
-                )?;
+            builder,
+            CarrierAllocationRequest::NonAggregate { tag },
+            class,
+            0,
+        )?;
         let (_span_slot, span) = Self::carrier_out_slot(builder, pointer_type);
         let length = builder.ins().iconst(
             types::I64,
@@ -4949,6 +4974,7 @@ impl<'a> Lowering<'a> {
             };
             let word = self.emit_checked_aggregate_alloc(
                 builder,
+                GovernedAllocationSite::DynamicAlternative,
                 occurrence,
                 PlannedAggregateShape::Constructor,
                 class,
@@ -6549,6 +6575,104 @@ struct DynamicConstructorAlternativeV1 {
     fields: Vec<Lowered>,
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the four sites that construct a governed
+/// allocation request.**
+///
+/// ⭐ Named in production, not only under test. The domain is a real fact about
+/// the emitter — these four are exactly the places an aggregate governed by a
+/// planned record is allocated — and naming them is what lets a control act at
+/// ONE of them while the other three stay honest.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GovernedAllocationSite {
+    /// A source `Construct`, carried through `emit_carrier_transfer`.
+    SourceConstructor,
+    /// A source `Record`, likewise.
+    SourceRecord,
+    /// The SELECTED alternative of a compiler-synthesized dynamic constructor.
+    /// The set is not an allocation; the alternative is.
+    DynamicAlternative,
+    /// A constructor built from already-lowered operands at the process
+    /// boundary (`transfer_constructor_operands`).
+    CarriedConstructor,
+}
+
+/// **`D7` — the closed mutation surface for the governed-allocation controls.**
+///
+/// ⛔ `#[cfg(test)]`, so none of it exists in a shipped compiler. It is a
+/// closed sum rather than a set of booleans for the same reason
+/// [`CarrierAllocationRequest`] is: at most one perturbation can be installed
+/// at a time, and "two bypasses at once" is not a state a control should be
+/// able to reach by accident.
+///
+/// ⭐ Each variant acts at exactly ONE seam and increments the hit counter when
+/// it does. A control that asserts only the refusal cannot tell "the site
+/// bypassed and the choke caught it" from "the fixture never reached the site
+/// and something else failed" — the hit count is what separates those, and it
+/// is why every variant is required to prove it fired.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum GovernedAllocationMutation {
+    None,
+    /// Hand the choke a `NonAggregate` request at the named site.
+    Bypass(GovernedAllocationSite),
+    /// Select the planned occurrence and record at a DIFFERENT live effect seat
+    /// running the same host operation, retaining this seat's construction and
+    /// operands. The A/B seat discriminator.
+    SiblingEffectSeat,
+}
+
+#[cfg(test)]
+thread_local! {
+    static GOVERNED_ALLOCATION_MUTATION: std::cell::Cell<GovernedAllocationMutation> =
+        const { std::cell::Cell::new(GovernedAllocationMutation::None) };
+    static GOVERNED_ALLOCATION_HITS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// RAII installation of one mutation.
+///
+/// ⛔ The restore is in `Drop` rather than at the end of the control, because a
+/// control that asserts a refusal is a control whose happy path can `panic!`
+/// mid-way. A hand-written reset after the assertion would be skipped exactly
+/// when the assertion fails, leaving the mutation installed for every test that
+/// runs afterwards on this thread — a whole-suite corruption produced by the
+/// one failure you were trying to diagnose.
+#[cfg(test)]
+pub(crate) struct GovernedAllocationMutationGuard {
+    previous: GovernedAllocationMutation,
+    previous_hits: u32,
+}
+
+#[cfg(test)]
+impl GovernedAllocationMutationGuard {
+    pub(crate) fn install(mutation: GovernedAllocationMutation) -> Self {
+        let guard = Self {
+            previous: GOVERNED_ALLOCATION_MUTATION.with(std::cell::Cell::get),
+            previous_hits: GOVERNED_ALLOCATION_HITS.with(std::cell::Cell::get),
+        };
+        GOVERNED_ALLOCATION_MUTATION.with(|cell| cell.set(mutation));
+        GOVERNED_ALLOCATION_HITS.with(|cell| cell.set(0));
+        guard
+    }
+
+    /// How many times this mutation's seam actually fired.
+    pub(crate) fn hits(&self) -> u32 {
+        GOVERNED_ALLOCATION_HITS.with(std::cell::Cell::get)
+    }
+}
+
+#[cfg(test)]
+impl Drop for GovernedAllocationMutationGuard {
+    fn drop(&mut self) {
+        GOVERNED_ALLOCATION_MUTATION.with(|cell| cell.set(self.previous));
+        GOVERNED_ALLOCATION_HITS.with(|cell| cell.set(self.previous_hits));
+    }
+}
+
+#[cfg(test)]
+fn governed_allocation_hit() {
+    GOVERNED_ALLOCATION_HITS.with(|hits| hits.set(hits.get().saturating_add(1)));
+}
+
 /// **`RT-DECL-CLOSURE-PORT` `D7` — the CLOSED request the deepest carrier
 /// allocator accepts.**
 ///
@@ -7076,6 +7200,14 @@ impl<'a> Lowering<'a> {
         //
         // `None` survives on exactly one branch: the explicit
         // no-emission-owner early return above.
+        // ⭐ **`D7` — the A/B seat discriminator's ONLY seam.** Under the
+        // `SiblingEffectSeat` mutation this becomes a DIFFERENT live effect
+        // seat running the same host operation, while the arguments and
+        // operands already built for the real seat are retained unchanged. So
+        // a refusal below is attributable to the seat coordinate and to
+        // nothing else — not to an invalid seat, not to a different program.
+        #[cfg(test)]
+        let seat = self.sibling_effect_seat_under_mutation(seat);
         let occurrence = Some(self.static_transition_plan.synthesized_aggregate_occurrence(
             owner,
             seat,
@@ -7108,6 +7240,28 @@ impl<'a> Lowering<'a> {
             // ordinary child, so nothing downstream sees a second carrier.
             args: args.into_iter().map(SynthesizedArgument::into_lowered).collect(),
         })
+    }
+
+    /// Swap in a sibling effect seat, under the A/B mutation only.
+    ///
+    /// ⚠ Returns the seat unchanged when no sibling exists. A control must
+    /// therefore assert the HIT COUNT rather than the refusal alone: without
+    /// it, "the fixture has no sibling seat so nothing was swapped" and "the
+    /// swap happened and was caught" are the same green.
+    #[cfg(test)]
+    fn sibling_effect_seat_under_mutation(&self, seat: StaticOriginId) -> StaticOriginId {
+        if GOVERNED_ALLOCATION_MUTATION.with(std::cell::Cell::get)
+            != GovernedAllocationMutation::SiblingEffectSeat
+        {
+            return seat;
+        }
+        match self.static_transition_plan.sibling_effect_seat(seat) {
+            Some(sibling) => {
+                governed_allocation_hit();
+                sibling
+            }
+            None => seat,
+        }
     }
 
     /// Every operand must be the KIND the tree assumed when it took the meet.

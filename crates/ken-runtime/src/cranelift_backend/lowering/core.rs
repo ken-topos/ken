@@ -7406,6 +7406,7 @@ impl<'a> Lowering<'a> {
         )?;
         let word = self.emit_checked_aggregate_alloc(
             builder,
+            GovernedAllocationSite::CarriedConstructor,
             occurrence,
             PlannedAggregateShape::Constructor,
             class,

@@ -7194,6 +7194,50 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(SynthesizedTreeResolution::Node(node))
     }
 
+    /// **A DIFFERENT live effect seat running the SAME host operation.**
+    ///
+    /// ⭐ Same operation means the same synthesized recipe tree, so the sibling
+    /// shares this seat's roles, paths and shapes exactly. That is what makes
+    /// an A/B out of it: the only coordinate that differs between the two is
+    /// which occurrence in the program is being lowered, and every other input
+    /// to the record lookup is identical by construction.
+    ///
+    /// ⛔ Never an invalid or non-`Effect` origin. A refusal driven by one of
+    /// those would be a refusal about seat VALIDITY, which is a different and
+    /// much weaker claim than the one the discriminator makes.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn sibling_effect_seat(
+        &self,
+        seat: StaticOriginId,
+    ) -> Option<StaticOriginId> {
+        let operation = match self.source_occurrence(seat) {
+            Ok(RuntimeExpr::Effect { operation, .. }) => operation.clone(),
+            _ => return None,
+        };
+        let mut stack = vec![self.root_static_origin().ok()?];
+        let mut seen = 0usize;
+        while let Some(origin) = stack.pop() {
+            seen += 1;
+            if seen > 4096 {
+                return None;
+            }
+            if origin != seat
+                && matches!(
+                    self.source_occurrence(origin),
+                    Ok(RuntimeExpr::Effect { operation: other, .. }) if *other == operation
+                )
+            {
+                return Some(origin);
+            }
+            let mut position = 0;
+            while let Ok(child) = self.child_static_origin(origin, position) {
+                stack.push(child);
+                position += 1;
+            }
+        }
+        None
+    }
+
     /// The closed planner population `P`, for the whole-pass relation closeout.
     pub(in crate::cranelift_backend) fn aggregate_ownership_records(
         &self,
