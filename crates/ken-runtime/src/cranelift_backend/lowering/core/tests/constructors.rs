@@ -7202,11 +7202,22 @@ fn an_aggregate_at_the_callee_scheduling_fallback_authorizes_itself() {
     let result = compile();
     let hits = guard.hits();
     let reaches = guard.self_authorized_fallback_reaches();
+    let guard_origin_used = guard.callee_scheduling_origin_used();
     drop(guard);
     assert!(
         hits > 0,
         "the coordinate substitution never fired, so this row says nothing about \
          whether the coordinate matters"
+    );
+    // ⛔ The hit count proves the seam DECIDED to substitute; this proves it
+    // substituted. Measured: with the seam's return value reverted to its
+    // argument while the counter still fired, everything below stayed green.
+    let (passed_in, used) = guard_origin_used
+        .expect("a fired coordinate substitution records the pair it returned");
+    assert_ne!(
+        passed_in, used,
+        "the substitution returned the coordinate it was given, so this row is a \
+         no-op wearing a hit count"
     );
     assert_eq!(
         reaches, baseline_reaches,

@@ -7141,6 +7141,17 @@ thread_local! {
     /// fallback -- the one call-input site with no caller-side occurrence.
     static SELF_AUTHORIZED_FALLBACK_REACHES: std::cell::Cell<u32> =
         const { std::cell::Cell::new(0) };
+    /// The last `(passed in, actually used)` coordinate pair the self-authority
+    /// probe returned.
+    ///
+    /// ⛔ Recorded at the RETURN, not at the decision. A hit counter proves the
+    /// seam decided to substitute; only this proves it substituted. Measured:
+    /// with the seam's return value reverted to its argument while the counter
+    /// still fired, the control stayed green -- a no-op substitution is
+    /// otherwise indistinguishable from a well-defended one.
+    static CALLEE_SCHEDULING_ORIGIN_USED: std::cell::Cell<
+        Option<(StaticOriginId, StaticOriginId)>,
+    > = const { std::cell::Cell::new(None) };
 }
 
 /// The exact ownership substitution one A/B run performed.
@@ -7172,6 +7183,7 @@ pub(crate) struct GovernedAllocationMutationGuard {
     previous_allocations: u32,
     previous_substitution: Option<SiblingProducerSubstitution>,
     previous_reaches: u32,
+    previous_origin_used: Option<(StaticOriginId, StaticOriginId)>,
 }
 
 #[cfg(test)]
@@ -7183,12 +7195,14 @@ impl GovernedAllocationMutationGuard {
             previous_allocations: CARRIER_RAW_ALLOCATIONS.with(std::cell::Cell::get),
             previous_substitution: SIBLING_PRODUCER_SUBSTITUTION.with(std::cell::Cell::get),
             previous_reaches: SELF_AUTHORIZED_FALLBACK_REACHES.with(std::cell::Cell::get),
+            previous_origin_used: CALLEE_SCHEDULING_ORIGIN_USED.with(std::cell::Cell::get),
         };
         GOVERNED_ALLOCATION_MUTATION.with(|cell| cell.set(mutation));
         GOVERNED_ALLOCATION_HITS.with(|cell| cell.set(0));
         CARRIER_RAW_ALLOCATIONS.with(|cell| cell.set(0));
         SIBLING_PRODUCER_SUBSTITUTION.with(|cell| cell.set(None));
         SELF_AUTHORIZED_FALLBACK_REACHES.with(|cell| cell.set(0));
+        CALLEE_SCHEDULING_ORIGIN_USED.with(|cell| cell.set(None));
         guard
     }
 
@@ -7201,6 +7215,14 @@ impl GovernedAllocationMutationGuard {
     /// fallback.
     pub(crate) fn self_authorized_fallback_reaches(&self) -> u32 {
         SELF_AUTHORIZED_FALLBACK_REACHES.with(std::cell::Cell::get)
+    }
+
+    /// The `(passed in, actually used)` coordinate pair the self-authority probe
+    /// last returned.
+    pub(in crate::cranelift_backend) fn callee_scheduling_origin_used(
+        &self,
+    ) -> Option<(StaticOriginId, StaticOriginId)> {
+        CALLEE_SCHEDULING_ORIGIN_USED.with(std::cell::Cell::get)
     }
 
     /// How many times this mutation's seam actually fired.
@@ -7226,6 +7248,7 @@ impl Drop for GovernedAllocationMutationGuard {
         CARRIER_RAW_ALLOCATIONS.with(|cell| cell.set(self.previous_allocations));
         SIBLING_PRODUCER_SUBSTITUTION.with(|cell| cell.set(self.previous_substitution));
         SELF_AUTHORIZED_FALLBACK_REACHES.with(|cell| cell.set(self.previous_reaches));
+        CALLEE_SCHEDULING_ORIGIN_USED.with(|cell| cell.set(self.previous_origin_used));
     }
 }
 
@@ -7830,7 +7853,9 @@ impl<'a> Lowering<'a> {
             return origin;
         }
         governed_allocation_hit();
-        root
+        let used = root;
+        CALLEE_SCHEDULING_ORIGIN_USED.with(|cell| cell.set(Some((origin, used))));
+        used
     }
 
     #[cfg(not(test))]
