@@ -2670,6 +2670,60 @@ pub(in crate::cranelift_backend) enum PlannedAggregateShape {
     Record,
 }
 
+/// A read-only view of one planned aggregate ownership record.
+///
+/// ⭐ Every accessor answers from the ONE record the occurrence names. Nothing
+/// here searches, and nothing takes a coordinate — a consumer that could pass a
+/// coordinate could pass the wrong one, which is the defect this projection
+/// exists to make unspellable.
+pub(in crate::cranelift_backend) struct PlannedAggregateView<'plan> {
+    record: &'plan PlannedAggregateOwnership,
+}
+
+impl<'plan> PlannedAggregateView<'plan> {
+    pub(in crate::cranelift_backend) fn id(&self) -> AggregateOccurrenceId {
+        self.record.id
+    }
+
+    pub(in crate::cranelift_backend) fn producer(&self) -> &'plan AggregateOccurrenceProducer {
+        &self.record.producer
+    }
+
+    /// The producer's own source occurrence, for a source aggregate.
+    ///
+    /// `None` for a compiler-synthesized use, which has no occurrence in the
+    /// program — an absence, not a coordinate to fall back on.
+    pub(in crate::cranelift_backend) fn producer_origin(&self) -> Option<StaticOriginId> {
+        match &self.record.producer {
+            AggregateOccurrenceProducer::Source(origin) => Some(*origin),
+            AggregateOccurrenceProducer::SynthesizedUse { .. } => None,
+        }
+    }
+
+    pub(in crate::cranelift_backend) fn owner(&self) -> Option<PredeclaredFunctionId> {
+        self.record.owner
+    }
+
+    pub(in crate::cranelift_backend) fn shape(&self) -> PlannedAggregateShape {
+        self.record.shape
+    }
+
+    /// The ruled allocation lane. ⛔ Read here, never re-derived from the value.
+    pub(in crate::cranelift_backend) fn allocation(&self) -> PlannedAggregateAllocation {
+        self.record.allocation
+    }
+
+    pub(in crate::cranelift_backend) fn meet(&self) -> PlannedReferentLifetime {
+        self.record.meet
+    }
+
+    /// The ordered children, with each one's position, source occurrence,
+    /// lifetime and possible referent owners.
+    pub(in crate::cranelift_backend) fn children(&self) -> &'plan [PlannedAggregateChild] {
+        &self.record.children
+    }
+}
+
 /// The allocation lane the ruled lifetime meet selects for one aggregate.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(in crate::cranelift_backend) enum PlannedAggregateAllocation {
@@ -7236,6 +7290,37 @@ impl<'src> StaticTransitionPlan<'src> {
             }
         }
         None
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D7` — a READ-ONLY projection of one planned
+    /// aggregate ownership record, reached by its opaque occurrence identity.**
+    ///
+    /// ⭐ The key is the occurrence, never a coordinate. That is the whole
+    /// point: a consumer that holds a template holds its producer's identity,
+    /// and this turns that identity into the planner's own facts without the
+    /// consumer knowing where the producer sat or being able to search for it.
+    ///
+    /// ⛔ Read-only, and deliberately not a `&PlannedAggregateOwnership`. The
+    /// record is the planner's; handing out a reference to it would let a
+    /// consumer pattern-match its way to facts this projection has not chosen
+    /// to publish, and a later field would silently become emitter-visible.
+    pub(in crate::cranelift_backend) fn aggregate_record_view(
+        &self,
+        id: AggregateOccurrenceId,
+    ) -> Result<PlannedAggregateView<'_>, CraneliftBackendError> {
+        let record = self.aggregate_ownership.get(id.0 as usize).ok_or_else(|| {
+            planner_error("aggregate occurrence identity is outside this plan's population")
+        })?;
+        // ⚠ The identity indexes the arena, so the record found must AGREE
+        // that it is the one asked for. A record whose own `id` differs would
+        // mean the arena's order and its contents had diverged, which nothing
+        // downstream could see.
+        if record.id != id {
+            return Err(planner_error(
+                "planned aggregate record disagrees with the identity it was found by",
+            ));
+        }
+        Ok(PlannedAggregateView { record })
     }
 
     /// The closed planner population `P`, for the whole-pass relation closeout.

@@ -30,7 +30,7 @@ pub(super) use static_transition::{
 // carrier producers. Namespace re-export only.
 pub(super) use static_transition::{
     AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,
-    PlannedAggregateOwnership,
+    PlannedAggregateChild, PlannedAggregateOwnership, PlannedAggregateView,
     SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot,
     SynthesizedAggregateStep, SynthesizedDynamicSet,
 };
