@@ -172,8 +172,8 @@ to widen.
 - **`D5`** — **Complete owner/phase validation**, in place **before**
   `TransparentDeclarationClosure` is removed from the retained residual.
 - **`D5a`** — **Continuation elimination for the planned closure-valued
-  constructor field.** **Every exact planner-issued producer-owner unit emits
-  its own declared direct continuation call at its ruled seat**, instead of
+  constructor field.** **Every planner-issued continuation call is emitted from
+  its exact generated emission context at its ruled seat**, instead of
   letting the closure cross a unit boundary. Added 2026-08-04; **`D6` is not
   retried until this checkpoint is green.** Full specification in the section
   below.
@@ -381,10 +381,14 @@ it fails before the declaration-owned seat can exist.
 
 ##### The contract
 
-1. **Owner population.** Every planner-issued continuation call is owned and
-   emitted by its exact `producer_owner`. `CallableDeclaration` and recursively
-   discovered `ClosureBody` owners are members of **one closed causal-call
-   population; neither is privileged.**
+1. **Owner population — ⛔ SUPERSEDED 2026-08-04 by `evt_609am4v7cdt5b`; see
+   "The emission-owner correction" below.** As written this clause said every
+   planner-issued continuation call is owned **and emitted** by its exact
+   `producer_owner`, with `CallableDeclaration` and recursively discovered
+   `ClosureBody` as one unprivileged population. **The population claim
+   stands; binding emission to the raw producer owner does not.** Activation
+   falsified it: raw `fn2` cannot possess the operands of the call this clause
+   asks it to emit. Read clause 1 only through the correction section.
 
 2. **Two consumption seats, one mechanism.**
    - Where lowering **retains** the active computational frame and the exact
@@ -399,7 +403,10 @@ it fails before the declaration-owned seat can exist.
    identity, or exact ordered identity set, onto the exact
    `(producer_owner, producer_result_origin, producer_construct_origin)` result
    edge **before function definition.** This is exposure of existing planner
-   authority, not new discovery. ⛔ Lowering may not search globally,
+   authority, not new discovery — **but see the emission-owner correction: the
+   bounded planner/schema work that distinguishes the owner domains IS now
+   authorized, and this clause no longer forbids it.** ⛔ Lowering may not
+   search globally,
    reverse-derive a consumer, mint from reached syntax, choose the first token,
    or use the emitted closure shape as a selector. For this measured edge the
    projection has **exactly one** member; a zero member, a duplicate, or an
@@ -426,9 +433,100 @@ it fails before the declaration-owned seat can exist.
 6. **Negative boundary.** `Wrap(LexicalClosure)` without a consuming eliminator
    remains a **permanent** escape refusal. ⛔ No closure word, handle, tag,
    capsule, durable store, indirect call, runtime selector, new carrier lane, or
-   `same_recursive_argument_shapes` transplant is authorized. The generic
+   `same_recursive_argument_shapes` transplant is authorized. ⚠ **The ruled
+   planner-interned generated emission context is none of these** and is
+   expressly authorized by `evt_609am4v7cdt5b`; this clause does not reach it.
+   The generic
    `CallableCapsuleEscape -> EscapeForbidden` rule is unchanged, and
    [[RT-CONTSPEC-LEDGER]]'s general four-axis mapping work is not absorbed here.
+
+#### The emission-owner correction
+
+**Added 2026-08-04. Architect ruling `evt_609am4v7cdt5b`, reproduced
+independently on exact `bffc7f5b73dadf3e2f0110cf960a8d3187495717`. This
+supersedes clause 1's emission binding and unblocks the planner/schema work the
+clauses above forbade. Disposition: bounded planner and frame correction.**
+
+**The semantic continuation edge is real; `CSId(1)` as presently owned by raw
+`fn2` is not emittable.** ⛔ Do not delete the edge, reverse-map `fn3`
+coordinates into `fn2`, or widen `fn2` until the current token happens to fit.
+
+The focused trace reaches the detached seat, claims `CSId(1)` under `fn2`, then
+reports `producer=fn2 consumer=fn3`, `inputs=[(fn3,0),(fn3,1)]`, and an `fn2`
+environment of **one parameter and zero captures**. The first refusal is the
+source-owner mismatch; the bypass probe's out-of-range refusal is the same
+physical fact, not a labelling artifact.
+
+##### Three authorities the planner currently conflates
+
+1. **source-occurrence provenance owner** — raw `fn2`, because the nested
+   producer is textually in body 36;
+2. **root input provenance owner** — `fn3`, whose parameter and capture values
+   populate the continuation environment;
+3. **immediate emission and availability owner** — the already-interned
+   continuation-specialization execution context that selected and invoked
+   `fn2`.
+
+The fixed point descends from a newly interned specialization into
+`worker.body_origin`, then **forgets that generated execution context** and
+re-reads the raw occurrence owner. `CSId(0)` holds the two `fn3` continuation
+inputs, but its ordinary static-worker call passes only the worker's explicit
+argument and source captures, so raw `fn2` receives one word and the
+continuation inputs are dropped before its nested producer seat. **No lowering
+lookup can recover them lawfully.**
+
+##### The binding correction
+
+The existing continuation-specialization mechanism remains the mechanism; it
+gains an **explicit generated emission context.** That context is **not** a
+runtime carrier, selector, disposition, or third atomic participant.
+
+- The discovery frontier and causal ledgers must **distinguish an ordinary
+  predeclared owner from a continuation-specialization owner.** ⛔ Do not cast
+  or alias one ID domain into the other.
+- Descending into the selected worker body from an interned specialization
+  **retains that specialization as the immediate emission owner.** The raw
+  body's predeclared owner remains **provenance only**.
+- Every input record distinguishes **root provenance** (`fn3[0]`, `fn3[1]`)
+  from its **immediate available slot** in the enclosing specialization
+  environment.
+- The generated specialization execution must keep those continuation inputs
+  **live across the exact checked-IH worker execution.** A nested producer
+  emits and claims its exact direct continuation call **from that generated
+  context**, before result transfer, allocation, publication, or an
+  identity-erasing join.
+- Materialize this as an **explicit planner-interned, continuation-specialized
+  producer execution context.** It may be a generated definition subordinate to
+  the existing specialization identity. ⛔ It must not mutate or union the raw
+  `ClosureBody` ABI, and must not fuse a generic runtime suffix into the raw
+  source body.
+- **The same raw worker reached under two continuation identities yields two
+  distinct generated contexts** — never one widened raw ABI, never a runtime
+  choice.
+- The planned/resolved/declared/claimed/emitted exact-set closure extends over
+  this **generalized emission-owner domain**.
+
+For this witness the corrected nested call retains root provenance at `fn3`,
+while its immediate source slots belong to the specialization context that
+already carries those two values. **Raw `fn2` is no longer asked to emit a call
+whose operands it cannot possess.**
+
+##### What `bffc7f5b` keeps, and what it owes
+
+`bffc7f5b` is a **non-candidate evidence checkpoint.** Retained and accepted
+through this recut: pre-definition result-edge projection; the detached
+post-result, pre-transfer seat; common exact claim/call factoring; exact
+constructor, result and field validation; and the honest unexercised
+fail-closed scaffolding. **Rejected is only the assumption that raw `fn2` is
+both the nested edge's provenance owner and its immediate emission and
+source-slot owner.** The stop was taken at the correct boundary, and no further
+control work can be load-bearing until the positive route exists.
+
+The corrected checkpoint owes discriminators for: root provenance versus
+immediate owner and position; two continuation identities selecting the same
+raw worker; **unchanged ordinary `fn2` ABI**; missing, duplicate, and
+transplanted generated-owner bindings; recursive intern-before-descent; and the
+existing permanent stored-closure negative.
 
 **Still not a new node.** This is the distinct-owner-with-an-exact-token branch
 of the published decision table — a same-WP `D5a` frame recut, not a new
@@ -457,11 +555,14 @@ The load-bearing discriminator is instead:
 #### The checkpoint, and what it gates
 
 - under the existing selector witness, the landed object fixture reaches the
-  exact direct continuation call **at each producer owner's own seat** — `fn2`
-  at the detached-result seat, `fn3` at its own — with neither privileged;
-- each owner receives its exact declared continuation target, and the existing
-  whole-pass planned/resolved/declared/claimed/emitted closure closes **over
-  both**, each call emitted exactly once;
+  exact direct continuation call **from its exact generated emission context**
+  at the ruled seat, with root provenance and immediate available slot recorded
+  separately;
+- each call receives its exact declared continuation target, and the existing
+  whole-pass planned/resolved/declared/claimed/emitted closure closes over the
+  **generalized emission-owner domain**, each call emitted exactly once;
+- the ordinary raw `fn2` ABI is **unchanged**, and two continuation identities
+  over one raw worker produce two distinct generated contexts;
 - the generic closure-valued constructor negative is preserved.
 
 **Only after this checkpoint is green is `D6` retried unchanged** — one
