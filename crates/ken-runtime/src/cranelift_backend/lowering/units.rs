@@ -1702,10 +1702,30 @@ pub(super) fn define_continuation_bodies<M: Module>(
 /// specialization's continuation inputs, so a nested producer inside that body
 /// can reach operands raw `fn2` provably never receives.
 ///
-/// ⛔ **The raw unit is still emitted and is not retired.** It keeps its own
-/// descriptor, its own body and every other caller; it loses exactly one caller
-/// — the enclosing specialization's worker call, which retargets here. "A new
-/// owner for a body does not retire the old owner's unit."
+/// ⛔ **Two different questions about the raw unit, and they are decided by
+/// different authorities. Do not answer one with the other.**
+///
+/// 1. **Descriptor, provenance and source-binding authority are RETAINED.**
+///    The raw `ClosureBody` keeps its own descriptor, its own ABI, and its
+///    status as the source binding for this body — the template lowered here
+///    *is* that body, unchanged. ⛔ Nothing about this retarget mutates,
+///    unions, or suffixes the raw descriptor.
+/// 2. **Executable `Function` declaration/definition membership is NOT
+///    retained by default.** It is decided from the **post-retarget final
+///    graph**, by `StaticTransitionPlan::template_only_worker_bodies`: a raw
+///    worker every selecting specialization has retargeted — and whose carried
+///    invocation also binds a generated context — is **template-only**, and is
+///    absent from the emitted-`Function` population. A raw worker with any
+///    remaining final raw call stays executable.
+///
+/// ⚠ **This paragraph previously said the raw unit "is still emitted and is
+/// not retired", keeping its body and "simply losing one caller".** That was
+/// the pre-`D5a` reading and it is superseded: it answers question 2 with
+/// question 1's answer, so it is true of the descriptor and false of the
+/// emitted population whenever the retarget is total. The surviving half of
+/// the old claim is the useful one — *"a new owner for a body does not retire
+/// the old owner's unit"* remains correct about **authority**, and says
+/// nothing about **membership**.
 ///
 /// ⛔ The emission owner bound here is `Specialization(enclosing)`, and
 /// `defining_unit` stays the **raw** owner. Deriving one from the other is the

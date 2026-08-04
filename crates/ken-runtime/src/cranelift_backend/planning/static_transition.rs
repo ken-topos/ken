@@ -543,7 +543,22 @@ pub(in crate::cranelift_backend) struct ContinuationContextId(u32);
 ///
 /// ⛔ The raw `ClosureBody`'s own descriptor is **untouched** — not mutated, not
 /// unioned, and no runtime suffix is fused into it. The raw unit keeps its
-/// ordinary ABI and simply loses this one caller.
+/// ordinary ABI, its provenance, and its authority as this body's source
+/// binding.
+///
+/// ⚠ **That is a claim about the descriptor, and it settles nothing about
+/// whether an executable `Function` is emitted for the raw worker.** Those are
+/// separate questions with separate authorities, and this comment used to
+/// conflate them by adding *"and simply loses this one caller"*.
+///
+/// Executable membership is decided from the **post-retarget final graph**, by
+/// [`StaticTransitionPlan::template_only_worker_bodies`]: when **every**
+/// specialization selecting a body has retargeted to a generated context, and
+/// that body's carried invocation also binds one, the raw worker is
+/// **template-only** — it retains everything above and is absent from the
+/// emitted-`Function` population. If any final raw call remains, the body
+/// stays executable. ⛔ So "loses one caller" describes only the mixed case;
+/// under a total retarget the raw worker loses its last one.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) struct PlannedContinuationContext {
     id: ContinuationContextId,
