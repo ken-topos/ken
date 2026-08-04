@@ -6643,7 +6643,7 @@ impl<'a> Lowering<'a> {
                 (
                     SynthesizedAggregateNode::Dynamic(_),
                     SynthesizedArgument::Dynamic(Lowered::DynamicConstructor(dynamic)),
-                ) => self.dynamic_child_alternatives_agree(
+                ) => self.dynamic_alternatives_agree(
                     owner,
                     seat,
                     &path.field(position),
@@ -6740,7 +6740,13 @@ impl<'a> Lowering<'a> {
         })
     }
 
-    /// Whether a dynamic child's alternative population EQUALS the planner's.
+    /// Whether the dynamic alternative population at a path EQUALS the
+    /// planner's.
+    ///
+    /// Used for a dynamic CHILD at `parent.field(i)` and for a dynamic ROOT at
+    /// the bare root path. The two are the same contract at different seats,
+    /// which is why they share one function rather than one being a weaker
+    /// spelling of the other.
     ///
     /// ⭐ **Equality, not prefix agreement.** The expected population comes from
     /// `synthesized_dynamic_alternatives` — the planner's own ordered roles at
@@ -6759,7 +6765,7 @@ impl<'a> Lowering<'a> {
     ///
     /// The set itself has no record — it is not an allocation. Its alternatives
     /// are, and each one's role and identity are checked at its own position.
-    fn dynamic_child_alternatives_agree(
+    fn dynamic_alternatives_agree(
         &self,
         owner: ContinuationEmissionOwner,
         seat: StaticOriginId,
@@ -6791,6 +6797,71 @@ impl<'a> Lowering<'a> {
             }
         }
         Ok(true)
+    }
+
+    /// **Reconcile a host-result ROOT against the planner's tree.**
+    ///
+    /// ⭐ A root dynamic set is an allocation population exactly as a child one
+    /// is — the resource surface at `HostResultError`, read progress at
+    /// `HostResultOk`, the console `IOError` root. What makes it easy to miss
+    /// is that **no node declares it**: a child is reached through its parent's
+    /// ordered child model and is checked on the way, while a root is returned
+    /// straight into `Lowered::HostResult` with nothing above it to compare
+    /// against. The population equality had to be asked for here explicitly.
+    ///
+    /// ⛔ The check is BIDIRECTIONAL, and neither direction may be defaulted. A
+    /// root the planner gives a dynamic set to must receive one; a root it does
+    /// not must not. Treating a missing planned population as "no declaration,
+    /// so nothing to check" would make an unplanned root set pass, which is the
+    /// same shape as treating a short emitter vector as a prefix.
+    fn reconcile_host_result_root(
+        &self,
+        seat: StaticOriginId,
+        root: &SynthesizedAggregatePath,
+        value: &Lowered,
+    ) -> Result<(), CraneliftBackendError> {
+        // Absent means no context is being defined, which is not an emission
+        // this population covers -- the same boundary every other synthesized
+        // reconciliation draws.
+        let Some(owner) = self.defining_emission_owner else {
+            return Ok(());
+        };
+        let planned = self
+            .static_transition_plan
+            .synthesized_dynamic_alternatives(seat, root)
+            .ok();
+        match (planned, value) {
+            (Some(_), Lowered::DynamicConstructor(dynamic)) => {
+                if self.dynamic_alternatives_agree(owner, seat, root, dynamic)? {
+                    Ok(())
+                } else {
+                    Err(unsupported(
+                        "DynamicConstructor",
+                        format!(
+                            "the host-result root at {root:?} disagrees with the planner's \
+                             closed alternative population, so an allocation at that root has \
+                             no record or a record has no allocation"
+                        ),
+                    ))
+                }
+            }
+            (Some(_), _) => Err(unsupported(
+                "DynamicConstructor",
+                format!(
+                    "the planner plans a dynamic alternative set at {root:?} but the emitter \
+                     built a {}",
+                    lowered_value_kind(value)
+                ),
+            )),
+            (None, Lowered::DynamicConstructor(_)) => Err(unsupported(
+                "DynamicConstructor",
+                format!(
+                    "the emitter built a dynamic alternative set at {root:?}, where the \
+                     planner plans none, so its alternatives allocate with no records"
+                ),
+            )),
+            (None, _) => Ok(()),
+        }
     }
 
     /// Reconcile one dynamic alternative against the tree and return its exact

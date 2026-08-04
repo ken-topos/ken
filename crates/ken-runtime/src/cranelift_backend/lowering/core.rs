@@ -10889,6 +10889,13 @@ impl<'a> Lowering<'a> {
                     seat_operands,
                 )?
             };
+            // `D7` — the two ROOTS, which no node declares. Every other
+            // synthesized allocation is reached through a parent's ordered
+            // child model and reconciled on the way down; these two are
+            // returned straight into the host result with nothing above them,
+            // so the population equality is asked for here explicitly.
+            self.reconcile_host_result_root(static_origin, &error_root, &error)?;
+            self.reconcile_host_result_root(static_origin, &ok_root, &ok)?;
             Ok(LoweringOperand::Specialized(Lowered::HostResult {
                 success,
                 error: Box::new(error),
