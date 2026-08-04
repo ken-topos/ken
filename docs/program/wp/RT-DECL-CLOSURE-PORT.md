@@ -323,13 +323,19 @@ cannot be credited to the now-removed phantom `SchedulingEntry`.
 preservation checkpoint `08cb257ff5118a89b72b4018e3e1c4d1733a03d7`. Steward
 recut; `08cb257f` is preservation-only and never a candidate.**
 
-**Same WP, same atomic scope. Not a new graph node, and not part of `D6`.** The
-owner is **the planner-issued producer-owner population inside this same node**,
-comprising the `CallableDeclaration` and recursively discovered `ClosureBody`
-members; the callee/call mechanism is the already-landed continuation
-specialization. Splitting either side into a third atomic participant would
-misstate the defect: it is a composition gap between that population and the
-landed mechanism, not a new disposition or representation family.
+**Same WP, same atomic scope. Not a new graph node, and not part of `D6`.**
+**Two populations, and the frame means different things by them.** The
+**provenance/discovery population** is the planner-issued producer-owner
+population inside this same node, comprising the `CallableDeclaration` and
+recursively discovered `ClosureBody` members — that is where a continuation
+call's source occurrence is found. The **emission-owner population** is the
+generated specialization-context domain: the owners that actually possess the
+operands and emit the call. They are not the same set and neither is derivable
+from the other by casting. The callee/call mechanism is the already-landed
+continuation specialization. Splitting either side into a third atomic
+participant would misstate the defect: it is a composition gap between those
+populations and the landed mechanism, not a new disposition or representation
+family.
 
 #### What `D6` hit
 
@@ -360,7 +366,10 @@ exact localization checkpoint `c8f3a75ef5da6f8dddffb1eca05d389bb590502c` (the
 Architect independently re-ran the localization test: 1/1, same six-entry
 chronology and census). The mechanism family below was right; this section's
 original singular owner/seat premise was wrong, and the corrected contract
-replaces it rather than qualifying it.**
+replaces it rather than qualifying it.** ⛔ **The contract below has itself
+since been corrected on its emission half by `evt_609am4v7cdt5b` — read it
+together with "The emission-owner correction" and this section's own corrected
+clauses, never as the last word.**
 
 **What the localization proved.** `fn2 @36` is a planned `ClosureBody`; it
 enters, lowers its result, and is **the first unit to refuse** during boundary
@@ -372,12 +381,15 @@ edge's causal identity — `owner=fn2`, `continuation=10`, `alternative=1`,
 `CallableDeclaration`, never enters, because ordinary-unit emission aborts at
 `fn2` first — and the census separately carries the distinct `fn3` token.
 
-⇒ **This is a two-owner planned population**, not a missing token and not one
-token observed at the wrong owner. The fixed-point planner issues causal calls
-to **every producer owner it discovers**, including a recursively discovered
+⇒ **This is a two-owner planned population** — a claim about **discovery and
+provenance**, not about emission. It is not a missing token and not one token
+observed at the wrong owner. The fixed-point planner issues causal calls to
+**every producer owner it discovers**, including a recursively discovered
 `ClosureBody` result root; ordinary unit bodies are defined **before** the later
-`CallableDeclaration`, so the first such owner must discharge its own token or
-it fails before the declaration-owned seat can exist.
+`CallableDeclaration`. ⛔ **Do not read "must discharge its own token" as
+"raw `fn2` emits the call."** The discovered owner is where the occurrence is
+found; which function *emits* is settled by the emission-owner correction
+below, and for `CSId(1)` that is `Specialization(CSId(0))`, not raw `fn2`.
 
 ##### The contract
 
@@ -392,12 +404,17 @@ it fails before the declaration-owned seat can exist.
 
 2. **Two consumption seats, one mechanism.**
    - Where lowering **retains** the active computational frame and the exact
-     Construct/alternative/position facts, the existing in-context producer seat
-     remains lawful.
+     Construct/alternative/position facts, and the call is **same-owner**, the
+     existing in-context producer seat remains lawful and keeps it.
    - Where fixed-point discovery **detaches** a producer as an ordinary unit
-     result, the lawful seat is after lowering that exact retained result and
+     result, the seat is after lowering that exact retained result and
      **before** `transfer_unit_result_into_carrier`, allocation, publication, or
      join. The direct call's result replaces the producer constructor there.
+     ⛔ **For the measured cross-owner call this seat is a position, not an
+     owner.** It executes **in the explicit generated context** that retains the
+     enclosing continuation environment, with that call's continuation inputs
+     live across it. The raw `ClosureBody` does not become the final emission
+     owner merely because this seat exists inside its body.
 
 3. **Authority before emission.** Planning must **project** the already-issued
    identity, or exact ordered identity set, onto the exact
@@ -416,18 +433,27 @@ it fails before the declaration-owned seat can exist.
 4. **Exact call construction.** At the detached-result seat: validate the
    specialized result's planned constructor identity and field run; take
    ordinary operands from that exact result with the ruled recursive field
-   omitted; append only the planner-projected ordered captures from the exact
-   unit environment; claim the opaque identity under the current defining owner;
-   call the target already declared into that `Function`; and substitute the
-   returned value before transfer. **Factor the existing direct-call/claim
+   omitted; append only the planner-projected ordered captures, read from **the
+   immediately available slots of the generated emission context** while the
+   record's **root provenance is retained separately** and is never substituted
+   for them; claim the opaque identity under the **generalized emission owner**;
+   declare and call the target in **that generated `Function`**; and substitute
+   the returned value before transfer. **Factor the existing direct-call/claim
    machinery after identity resolution** rather than pretending the unavailable
-   active-frame selector exists at this seat.
+   active-frame selector exists at this seat. ⛔ **"The exact unit environment"
+   and "the current defining owner" are the two readings that stopped
+   `bffc7f5b`** — raw `fn2` holds one word and cannot supply `fn3[1]`. Neither
+   phrase is the rule here.
 
 5. **Closure remains global and affine.** The existing
-   planned/resolved/declared/claimed/emitted equality must close over **both**
-   owners. The `fn2` and `fn3` calls must each be emitted **exactly once**,
-   against their own decoded target. Omission, owner transplant, redirect,
-   duplicate claim or emission, result-edge disagreement, and capture
+   planned/resolved/declared/claimed/emitted equality must close over the
+   **generalized emission-owner domain** — every emission-owner identity,
+   predeclared and specialization alike — **not over raw `fn2`/`fn3` function
+   IDs.** Each planned continuation call is emitted **exactly once** from its
+   own emission owner, against its own decoded target. ⛔ Raw `fn2` is
+   **provenance**, not one of the final emitting functions; it keeps its
+   ordinary unit and simply loses this caller. Omission, owner transplant,
+   redirect, duplicate claim or emission, result-edge disagreement, and capture
    disagreement all remain fail-closed.
 
 6. **Negative boundary.** `Wrap(LexicalClosure)` without a consuming eliminator
@@ -530,8 +556,13 @@ existing permanent stored-closure negative.
 
 **Still not a new node.** This is the distinct-owner-with-an-exact-token branch
 of the published decision table — a same-WP `D5a` frame recut, not a new
-disposition, carrier lane, planner-semantic expansion, or third atomic
-participant.
+disposition, carrier lane, or third atomic participant, and **no change to Ken
+or runtime semantics or to the continuation-specialization mechanism itself**.
+⚠ **This sentence is not a bar on the authorized schema work.** The bounded
+planner and schema correction that distinguishes the emission-owner domains,
+including the planner-interned generated context, is expressly authorized by
+`evt_609am4v7cdt5b`. What is unchanged is the *semantics*, not the planner's
+record shapes.
 
 #### The `08cb257f` probe must keep rejecting — it is not the positive
 
@@ -569,13 +600,19 @@ The load-bearing discriminator is instead:
 production action: retire `TransparentDeclarationClosure`, remove the selector
 witness, re-run the closed evidence unhooked.
 
-**Resume base and scaffolding.** Runtime resumes from exact
-`c8f3a75ef5da6f8dddffb1eca05d389bb590502c`, which is a preservation and
-localization checkpoint only, **never a candidate** — as `08cb257f` remains.
+**Resume base and scaffolding. ⛔ Corrected 2026-08-04 — the resume point is
+`a765b8d3`, not `c8f3a75e`.** Runtime resumes from exact
+`a765b8d32ba82e53900be1cb711bc450d5490ee8`, the leader-accepted clean schema
+checkpoint: the emission-owner domain is separated from source-occurrence
+provenance, 643 green. Reverting to `c8f3a75e` — or to `bffc7f5b`, its
+predecessor — would discard the result-edge projection, the detached seat, the
+claim/call factoring, the exact validation, and the owner-domain separation that
+this recut accepts. `c8f3a75e`, `08cb257f` and `bffc7f5b` all remain
+preservation and evidence checkpoints only, **never candidates**.
 ⛔ **The localization trace is scaffolding, not acceptance evidence.** Retain it
-while implementing the two-owner closure, then remove it or replace it with
-load-bearing discriminator controls **before** candidate routing. `D6`, the
-candidate route, and the QA route stay closed until then.
+while implementing the **generated emission-owner closure**, then remove it or
+replace it with load-bearing discriminator controls **before** candidate
+routing. `D6`, the candidate route, and the QA route stay closed until then.
 
 #### `same_recursive_argument_shapes` is obsolete on this lane — no guard was lost
 
