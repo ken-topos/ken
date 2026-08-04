@@ -316,6 +316,21 @@ pub(crate) fn emit_px8tr_nested_post_effect_object(
     entry_symbol: impl Into<String>,
     disable_repair: bool,
 ) -> Result<Px8trNestedRouteObject, CraneliftBackendError> {
+    emit_px8tr_nested_post_effect_object_with_plan(entry_symbol, disable_repair, |_| {})
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a`** — the same witness, with one hook: the
+/// checked plan is handed to `mutate` before compilation.
+///
+/// ⭐ The mutation lands on the **plan**, never on the lowering. A control that
+/// perturbed the consumer would be asking whether the consumer agrees with
+/// itself; perturbing the plan asks the question that matters — whether the
+/// consumer is really reading the checked templates it claims to.
+pub(crate) fn emit_px8tr_nested_post_effect_object_with_plan(
+    entry_symbol: impl Into<String>,
+    disable_repair: bool,
+    mutate: impl FnOnce(&mut crate::OrientedSubcontinuationPlanV1),
+) -> Result<Px8trNestedRouteObject, CraneliftBackendError> {
     struct Reset;
     impl Drop for Reset {
         fn drop(&mut self) {
@@ -325,7 +340,8 @@ pub(crate) fn emit_px8tr_nested_post_effect_object(
     }
 
     let entry_symbol = entry_symbol.into();
-    let (entrypoint, declaration, plan) = px8tr_nested_post_effect_fixture();
+    let (entrypoint, declaration, mut plan) = px8tr_nested_post_effect_fixture();
+    mutate(&mut plan);
     let declarations = BTreeMap::from([(declaration.symbol.as_str(), &declaration)]);
     PX8TR_TRAP_PROVENANCE.with(|trace| trace.borrow_mut().clear());
     PX8TR_DISABLE_DEFORESTED_ANSWER_ROUTE.set(disable_repair);

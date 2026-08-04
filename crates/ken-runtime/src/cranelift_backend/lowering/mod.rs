@@ -1228,6 +1228,94 @@ pub(in crate::cranelift_backend) fn d5a_trace(entry: String) {
     D5A_TRACE.with(|trace| trace.borrow_mut().push(entry));
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — the checked-IH marker's ORDERED event log.**
+///
+/// ⭐ Two facts have to be separable and one of them is an **ordering**: the
+/// marker is consumed *at the call edge, before emission*. A pair of counters
+/// cannot say that -- both are `1` whether the consumption happened before or
+/// after the call was written. One ordered log can, so this is one log.
+///
+/// ⚠ Accumulates across a thread; read it through [`d5a_marker_events`] after
+/// [`reset_d5a_marker_events`], or an earlier compile's events are attributed
+/// to this one.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D5aMarkerEvent {
+    /// A checked-IH marker was consumed at the exact static-worker call edge,
+    /// carrying every identity that had to agree for it to be consumed.
+    Consumed {
+        call_template_id: u64,
+        slot_template_id: u64,
+        binder_index: u64,
+        arity: u64,
+    },
+    /// A static worker call instruction was actually written.
+    WorkerCallEmitted { body_origin: StaticOriginId },
+}
+
+#[cfg(test)]
+thread_local! {
+    static D5A_MARKER_EVENTS: std::cell::RefCell<Vec<D5aMarkerEvent>> = const {
+        std::cell::RefCell::new(Vec::new())
+    };
+    static D5A_MARKER_MUTATION: std::cell::Cell<D5aMarkerMutation> =
+        const { std::cell::Cell::new(D5aMarkerMutation::Exact) };
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a`** — the two causal mutations on the checked-IH
+/// marker seam. Each defeats exactly one claim the seam makes, and each is a
+/// perturbation the plan alone cannot express.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D5aMarkerMutation {
+    Exact,
+    /// Skip the consumption without an error, leaving the call itself lawful
+    /// and emitted. ⛔ The only way to ask whether the positive route *depends*
+    /// on the consumption — every plan-level perturbation refuses at the
+    /// consumer instead of reaching closeout.
+    SuppressConsumption,
+    /// Skip the ENTRY arity check only.
+    ///
+    /// ⚠ Without this, the consumer's own arity guard is **unreachable on this
+    /// witness**: the marker wraps the very call that reaches the consumer, so
+    /// entry and the consumer read the same two numbers and entry always
+    /// refuses first. The guard is still ruled and still load-bearing where a
+    /// marker's wrapped call is not the one that reaches a static worker — this
+    /// switch is what lets a control red it rather than leave it asserted.
+    RelaxEntryArity,
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn with_d5a_marker_mutation<T>(
+    mutation: D5aMarkerMutation,
+    body: impl FnOnce() -> T,
+) -> T {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            D5A_MARKER_MUTATION.with(|cell| cell.set(D5aMarkerMutation::Exact));
+        }
+    }
+    D5A_MARKER_MUTATION.with(|cell| cell.set(mutation));
+    let _restore = Restore;
+    body()
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d5a_marker_event(event: D5aMarkerEvent) {
+    D5A_MARKER_EVENTS.with(|events| events.borrow_mut().push(event));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_d5a_marker_events() {
+    D5A_MARKER_EVENTS.with(|events| events.borrow_mut().clear());
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d5a_marker_events() -> Vec<D5aMarkerEvent> {
+    D5A_MARKER_EVENTS.with(|events| events.borrow().clone())
+}
+
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn reset_d5a_trace() {
     D5A_TRACE.with(|trace| trace.borrow_mut().clear());
@@ -7951,9 +8039,22 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` — the marker denotes the COMPLETE
+    /// APPLICATION OCCURRENCE.**
+    ///
+    /// ⭐ That is what `CheckedComputationalIHCallTemplateV1::arity` is *about*:
+    /// a call template describes one complete application, so the marker's
+    /// wrapped expression must be exactly one `RuntimeExpr::Call` of that
+    /// arity. Entry required only that a template exist, which admitted a marker
+    /// wrapping anything at all -- and then the only place that could notice was
+    /// closeout, on the produced *value*, long after emission.
+    ///
+    /// ⛔ Checked at ENTRY, so a marker that does not denote an application is
+    /// refused before a single instruction is emitted for it.
     fn enter_checked_computational_ih_invocation(
         &mut self,
         call_template_id: u64,
+        body: &RuntimeExpr,
     ) -> Result<(), CraneliftBackendError> {
         if self
             .pending_computational_ih_call
@@ -7971,14 +8072,148 @@ impl<'a> Lowering<'a> {
                 "computational IH invocation marker has no checked plan",
             )
         })?;
-        plan.computational_ih_call(call_template_id)
+        let call = plan
+            .computational_ih_call(call_template_id)
             .ok_or_else(|| {
                 unsupported(
                     "OrientedSubcontinuationPlanV1",
                     "computational IH invocation marker has no checked call template",
                 )
             })?;
+        let RuntimeExpr::Call { args, .. } = body else {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH invocation marker does not wrap a complete application",
+            ));
+        };
+        let supplied = u64::try_from(args.len()).map_err(|_| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH invocation argument count exceeds addressable range",
+            )
+        })?;
+        #[cfg(test)]
+        let relaxed =
+            D5A_MARKER_MUTATION.with(std::cell::Cell::get) == D5aMarkerMutation::RelaxEntryArity;
+        #[cfg(not(test))]
+        let relaxed = false;
+        if !relaxed && supplied != call.arity {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                format!(
+                    "computational IH invocation marker wraps a call of {supplied} arguments but \
+                     its checked template names arity {}",
+                    call.arity
+                ),
+            ));
+        }
         Ok(())
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` — consume the checked-IH marker at the
+    /// exact static-worker call edge.**
+    ///
+    /// ⭐⭐ **The marker denotes the application, not the applied value.** On the
+    /// ported route the induction hypothesis *is* an emitted call, so its result
+    /// is a boundary word and no compile-time recursor-closure template exists
+    /// for closeout to read. Consuming here -- **before emission** -- is what
+    /// makes the marker mean the same thing on both routes; consuming on the
+    /// returned word would be a carrier decode, which is exactly what `§2h`
+    /// forbids.
+    ///
+    /// Three independent identities must agree, and all three are read from the
+    /// checked plan rather than from the operand:
+    ///
+    /// | requirement | what a mismatch would mean |
+    /// |---|---|
+    /// | the pending template resolves, and its slot template resolves | the marker names a plan this lowering does not hold |
+    /// | `call.arity == args.len()` | the emitted call is not the application the template describes |
+    /// | `slot.method_binder_ordinal == Var index` | the callee is not the binder the checked plan seated the IH at |
+    ///
+    /// ⭐ The third is an **independent oracle for the binder run**. The slot
+    /// template carries `recursive_position` and `method_binder_ordinal` as
+    /// *separate* fields -- the constructor source coordinate and the lexical
+    /// one -- so a lowering that conflated them (as this checkpoint's
+    /// predecessor did) disagrees with the plan here and refuses.
+    ///
+    /// ⛔ Returns `Ok(false)` when no marker is pending: an ordinary static
+    /// worker call is untouched by this seam.
+    fn consume_checked_ih_marker_at_static_worker_call(
+        &mut self,
+        binder_index: u64,
+        supplied_arguments: usize,
+    ) -> Result<bool, CraneliftBackendError> {
+        #[cfg(test)]
+        if D5A_MARKER_MUTATION.with(std::cell::Cell::get) == D5aMarkerMutation::SuppressConsumption
+        {
+            // ⛔ The call below is still emitted, lawfully and unchanged; only
+            // the consumption is withheld. That is the whole point — closeout
+            // must notice a real application that no consumption accounts for.
+            return Ok(false);
+        }
+        let Some(call_template_id) = self.pending_computational_ih_call else {
+            return Ok(false);
+        };
+        let plan = self.oriented_subcontinuation_plan.as_ref().ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "computational IH invocation has no checked plan",
+            )
+        })?;
+        let call = plan
+            .computational_ih_call(call_template_id)
+            .ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "computational IH invocation has no checked call template",
+                )
+            })?;
+        let slot = plan
+            .computational_ih_slot(call.slot_template_id)
+            .ok_or_else(|| {
+                unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "computational IH call template names a slot template the plan does not hold",
+                )
+            })?;
+        let supplied = u64::try_from(supplied_arguments).map_err(|_| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "static worker call argument count exceeds addressable range",
+            )
+        })?;
+        if supplied != call.arity {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                format!(
+                    "the checked computational-IH call template names arity {} but the static \
+                     worker call applies {supplied} arguments",
+                    call.arity
+                ),
+            ));
+        }
+        if slot.method_binder_ordinal != binder_index {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                format!(
+                    "the checked computational-IH slot seats its method binder at ordinal {} but \
+                     the consuming call reads `Var({binder_index})`",
+                    slot.method_binder_ordinal
+                ),
+            ));
+        }
+        // ⛔ Taken LAST. Every refusal above leaves the marker pending, so a
+        // rejected consumption still reaches closeout's fail-closed arm rather
+        // than silently becoming an unmarked call.
+        self.pending_computational_ih_call = None;
+        #[cfg(test)]
+        record_d5a_marker_event(D5aMarkerEvent::Consumed {
+            call_template_id,
+            slot_template_id: call.slot_template_id,
+            binder_index,
+            arity: call.arity,
+        });
+        Ok(true)
     }
 
     fn mint_checked_computational_ih_instance(
@@ -8181,9 +8416,24 @@ impl<'a> Lowering<'a> {
         &mut self,
         value: LoweringOperand,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        // ⭐ The marker consumes a **recursor closure template**; a carried
-        // boundary word is not one and never becomes one, so this is a
-        // specialized-only surface with the ruled fail-closed arm.
+        // **`RT-DECL-CLOSURE-PORT` `D5a` — closeout is keyed on WHETHER THE
+        // MARKER WAS CONSUMED, not on what the body produced.**
+        //
+        // ⭐ When it was already consumed -- at the exact static-worker call
+        // edge, or by a recursor-closure callee -- the marker's obligations are
+        // discharged and this operand is simply the application's result. It is
+        // forwarded **unchanged, including `Carried`**: the marker denotes the
+        // application, so once the application is bound there is nothing left
+        // here to read a template for. ⛔ Refusing a `Carried` here would refuse
+        // the ported route's *result* for a template it was never supposed to
+        // carry.
+        if self.pending_computational_ih_call.is_none() {
+            return Ok(value);
+        }
+        // ⭐ A still-PENDING marker keeps the specialized-template path exactly
+        // as it was: the marker consumes a **recursor closure template**, a
+        // carried boundary word is not one and never becomes one, so this stays
+        // a specialized-only surface with the ruled fail-closed arm.
         let mut value = value.specialized_at("a checked computational-IH marker")?;
         let Some(instance) = self.mint_checked_computational_ih_instance(&mut value)? else {
             return Ok(LoweringOperand::Specialized(value));
