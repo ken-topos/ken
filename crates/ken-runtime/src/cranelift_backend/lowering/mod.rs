@@ -6481,10 +6481,11 @@ impl<'a> Lowering<'a> {
         args: Vec<SynthesizedArgument>,
         operands: &[Lowered],
     ) -> Result<Lowered, CraneliftBackendError> {
-        // ⚠ Every allocation-reachable role in an operation's tree now has a
-        // record, including the site-bound ones -- `OptionSome`, `FileError`,
-        // `PrivateBufferSpan`, `ReadSome`. So `None` below is NOT the ordinary
-        // case for those; it is reached only when no context is being defined.
+        // ⚠ Every allocation-reachable use in an operation's tree HAS a record,
+        // site-bound ones included -- `OptionSome`, `FileError`,
+        // `PrivateBufferSpan`, `ReadSome`. None of them is lawfully unmodelled.
+        // The `None` below is reached only when no context is being defined,
+        // which is not an emission this population covers at all.
         // The exact `D5a` emission owner of the context doing the lowering.
         // Absent means no context is being defined, which is not an emission
         // this population covers -- so no occurrence, and the loud refusal at
@@ -6497,21 +6498,27 @@ impl<'a> Lowering<'a> {
                 args: args.into_iter().map(SynthesizedArgument::into_lowered).collect(),
             });
         };
-        let occurrence = self
-            .static_transition_plan
-            .synthesized_aggregate_occurrence(
-                owner,
-                seat,
-                path,
-                SynthesizedConstructorRole::Fixed(role),
-            )
-            .ok();
+        // ⛔ **`?`, never `.ok()`.** With a live emission owner, every
+        // allocation-reachable synthesized use HAS a record — that is the rule
+        // this checkpoint closed. So a lookup that fails here is a missing or
+        // wrong authority, not an absence to route around, and mapping it to
+        // `None` silently skipped the child reconciliation below and emitted a
+        // template that would then refuse only at its allocation.
+        //
+        // `None` survives on exactly one branch: the explicit
+        // no-emission-owner early return above.
+        let occurrence = Some(self.static_transition_plan.synthesized_aggregate_occurrence(
+            owner,
+            seat,
+            path,
+            SynthesizedConstructorRole::Fixed(role),
+        )?);
         // The recipe and this call site are two statements of one shape, so
         // they are cross-checked rather than trusted to agree. A recipe that
         // drifts from the code that builds the aggregate would otherwise pick
         // the lane for a different node than the one being allocated, and
         // nothing downstream could tell.
-        if occurrence.is_some() {
+        {
             let declared = self
                 .static_transition_plan
                 .synthesized_aggregate_children(
@@ -6611,18 +6618,19 @@ impl<'a> Lowering<'a> {
                     SynthesizedAggregateNode::Fixed { role: inner, .. },
                     SynthesizedArgument::Nested(value),
                 ) => {
-                    let expected = self
-                        .static_transition_plan
-                        .synthesized_aggregate_occurrence(
-                            owner,
-                            seat,
-                            &path.field(position),
-                            SynthesizedConstructorRole::Fixed(*inner),
-                        )
-                        .ok();
+                    // ⛔ Propagated, not mapped to `None`. Under `.ok()` a
+                    // missing expected record compared EQUAL to a child
+                    // carrying no occurrence, so two absences agreed and the
+                    // pair passed. The comparison is against `Some(expected)`.
+                    let expected = self.static_transition_plan.synthesized_aggregate_occurrence(
+                        owner,
+                        seat,
+                        &path.field(position),
+                        SynthesizedConstructorRole::Fixed(*inner),
+                    )?;
                     matches!(
                         value,
-                        Lowered::Constructor { occurrence, .. } if *occurrence == expected
+                        Lowered::Constructor { occurrence, .. } if *occurrence == Some(expected)
                     )
                 }
                 // ⭐ **A dynamic child is checked ALTERNATIVE BY ALTERNATIVE.**
@@ -6788,11 +6796,15 @@ impl<'a> Lowering<'a> {
                 )
             })?;
             let position = child_path.alternative(index);
-            let expected = self
-                .static_transition_plan
-                .synthesized_aggregate_occurrence(owner, seat, &position, *role)
-                .ok();
-            if alternative.occurrence != expected {
+            // ⛔ Same fail-closed rule: missing planner authority must not
+            // compare equal to an alternative carrying no occurrence.
+            let expected = self.static_transition_plan.synthesized_aggregate_occurrence(
+                owner,
+                seat,
+                &position,
+                *role,
+            )?;
+            if alternative.occurrence != Some(expected) {
                 return Ok(false);
             }
         }

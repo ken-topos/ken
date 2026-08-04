@@ -7086,13 +7086,15 @@ impl<'src> StaticTransitionPlan<'src> {
     /// The tree node one path names at one effect seat, whether or not it is
     /// allocation-reachable.
     ///
-    /// ⭐ This is what lets a **dynamic alternative** be reconciled. An
-    /// alternative gets no ownership record — it is allocated through the
-    /// value-shape disposition — so `synthesized_aggregate_children` cannot
-    /// serve it. But its ordered fields are exactly as much a measured fact as
-    /// a fixed constructor's, and an emitter that put `ResourceTraceIdentity`
-    /// at `ResourceReleaseFailed` field 2 instead of field 1 would otherwise
-    /// pass unchallenged while carrying the wrong occurrence.
+    /// ⭐ This is what lets a **dynamic alternative** be reconciled against the
+    /// tree. An alternative HAS its own path-keyed ownership record and takes
+    /// its allocation lane from it, exactly as a fixed constructor does; what
+    /// it does not have is a parent's declared child model to be reached
+    /// through, because a dynamic set's members are not ordered fields of a
+    /// constructor. So its ordered fields are read from the tree here, and an
+    /// emitter that put `ResourceTraceIdentity` at `ResourceReleaseFailed`
+    /// field 2 instead of field 1 would otherwise pass unchallenged while
+    /// carrying the wrong occurrence.
     ///
     /// A path that names no node, or names one that is not a fixed
     /// constructor, is a loud failure: the emitter and the tree disagree about

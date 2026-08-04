@@ -2182,3 +2182,4 @@ fn d7_non_unit_fixed_role_reaches_ordinary_aggregate_allocation() {
     )
     .expect("the FsWriteAt carrier fixture compiles and reaches the aggregate arm");
 }
+

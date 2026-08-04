@@ -5775,3 +5775,164 @@ fn ac5_redirecting_the_resolved_worker_target_reds_the_same_shape_witness() {
         "the mutation must not leak past its scope"
     );
 }
+
+/// **`D7` — every construction-time occurrence lookup FAILS CLOSED.**
+///
+/// MEASURED: with a live emission owner, a synthesized construction whose exact
+/// record does not exist refuses; a nested `Fixed` child whose expected record
+/// does not exist refuses rather than comparing two absences equal; and a
+/// host-result root whose authority lookup cannot be answered refuses rather
+/// than reading as a root with no planned set. With NO emission owner, all
+/// three are lawfully permissive.
+///
+/// CLAIMED: none of the construction-seat consumers converts a failed authority
+/// lookup into an absence. `None` is lawful on exactly one branch — the
+/// explicit no-emission-owner early return — and that branch is what the
+/// positive halves exercise.
+///
+/// THE GAP — and it is why these are driven at the CONSUMER rather than at the
+/// planner API. The planner-side row
+/// `a_lawful_non_dynamic_root_is_not_a_failed_lookup` proves the API types
+/// absence apart from failure, and stays green if a consumer reintroduces
+/// `.ok()`. Each assertion below turns red if its own consumer's `?` is changed
+/// back, which is the property the API row cannot hold.
+///
+/// ⚠ One sibling is NOT covered here: `dynamic_alternatives_agree`'s
+/// per-alternative record lookup. Reaching it needs a path whose alternative
+/// POPULATION resolves while its per-alternative RECORDS do not, which takes a
+/// second, wrong emission owner — and `PredeclaredFunctionId`'s field is
+/// `pub(super)`, so this module cannot mint one. That site carries the same `?`
+/// and is covered by mutation only. Said plainly rather than dressed with a
+/// control that would not actually reach it.
+#[test]
+fn a_construction_time_occurrence_lookup_fails_closed() {
+    use crate::cranelift_backend::planning::{
+        SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot,
+    };
+
+    let source = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::FailClosed::Seed".to_string(),
+        args: Vec::new(),
+    };
+    let (plan, root_origin) = planned_root_occurrence(&source);
+    // A real emission owner. The seat below is deliberately NOT one this owner
+    // has synthesized records at, so every lookup is unanswerable — which is
+    // the state `.ok()` used to convert into "there is nothing planned here".
+    let owner = ContinuationEmissionOwner::Predeclared(
+        plan.emittable_units()
+            .expect("a planned graph enumerates its units")
+            .first()
+            .copied()
+            .expect("a planned graph has an emittable unit")
+            .function(),
+    );
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+    let ok_root = SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk);
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+
+    // ── The lawful absence: NO emission owner ──
+    //
+    // This is the one branch on which a missing occurrence is correct, and it
+    // runs first so the refusals below cannot be read as "this consumer
+    // refuses everything".
+    compiler.defining_emission_owner = None;
+    assert!(
+        compiler
+            .synthesized_constructor(
+                root_origin,
+                &ok_root,
+                SynthesizedFixedConstructorRole::Wrote,
+                symbols.wrote.clone(),
+                Vec::new(),
+                &[],
+            )
+            .is_ok(),
+        "with no emission owner there is no emission this population covers, \
+         so the template is built carrying no occurrence"
+    );
+    assert!(
+        compiler
+            .reconcile_host_result_root(
+                root_origin,
+                &ok_root,
+                &Lowered::Constructor {
+                    constructor: symbols.wrote.clone(),
+                    synthesized_identity: None,
+                    occurrence: None,
+                    args: Vec::new(),
+                },
+            )
+            .is_ok(),
+        "the root consumer draws the same no-emission-owner boundary"
+    );
+
+    // ── Now with a live owner: every unanswerable lookup REFUSES ──
+    compiler.defining_emission_owner = Some(owner);
+
+    // 1. The construction's own exact record. Under `.ok()` this became
+    //    `occurrence: None` and the child reconciliation was SKIPPED entirely,
+    //    emitting a template that would refuse only later at its allocation.
+    assert!(
+        compiler
+            .synthesized_constructor(
+                root_origin,
+                &ok_root,
+                SynthesizedFixedConstructorRole::Wrote,
+                symbols.wrote.clone(),
+                Vec::new(),
+                &[],
+            )
+            .is_err(),
+        "a synthesized construction whose exact record does not exist must \
+         refuse, not carry `None` and skip its own child reconciliation"
+    );
+
+    // 2. A nested `Fixed` child's expected record. Under `.ok()` the
+    //    expectation became `None`, which compared EQUAL to a child carrying no
+    //    occurrence — two absences agreed and the pair passed.
+    const NESTED: &[SynthesizedAggregateNode] = &[SynthesizedAggregateNode::Fixed {
+        role: SynthesizedFixedConstructorRole::PrivateTransferCount,
+        children: &[],
+    }];
+    assert!(
+        compiler
+            .reconcile_declared_children(
+                owner,
+                root_origin,
+                &ok_root,
+                NESTED,
+                &[SynthesizedArgument::Nested(Lowered::Constructor {
+                    constructor: symbols.private_transfer_count.clone(),
+                    synthesized_identity: None,
+                    occurrence: None,
+                    args: Vec::new(),
+                })],
+                &[],
+            )
+            .is_err(),
+        "a nested child whose expected record does not exist must refuse; two \
+         absences must not compare equal"
+    );
+
+    // 3. The host-result root. The emitted root here is lawfully NON-dynamic,
+    //    which is exactly the case `.ok()` let through: the failed lookup read
+    //    as "the planner plans no set at this root", and `(None, non-dynamic)`
+    //    returned `Ok(())`.
+    assert!(
+        compiler
+            .reconcile_host_result_root(
+                root_origin,
+                &ok_root,
+                &Lowered::Constructor {
+                    constructor: symbols.wrote.clone(),
+                    synthesized_identity: None,
+                    occurrence: None,
+                    args: Vec::new(),
+                },
+            )
+            .is_err(),
+        "a root whose authority lookup cannot be answered must refuse, even \
+         when the emitted root is lawfully non-dynamic"
+    );
+}
