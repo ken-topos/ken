@@ -4261,6 +4261,7 @@ impl<'a> Lowering<'a> {
                     value,
                     PlannedAggregateShape::Constructor,
                 )?;
+                let schema = self.aggregate_schema_coordinate(occurrence, origin)?;
                 // ⭐ `D2` — the identity comes from the ONE artifact-static
                 // authority, via the typed newtype's own ABI-word method. ⛔ Not
                 // `intern_symbol`, which is dense insertion-order numbering over
@@ -4270,11 +4271,12 @@ impl<'a> Lowering<'a> {
                     Some(identity) => *identity,
                     None => self
                         .static_transition_plan
-                        .constructor_symbol_identity(origin)
+                        .constructor_symbol_identity(schema.origin)
                         .map_err(|error| {
                             backend_module(format!(
-                                "constructor transfer for {constructor} at {origin:?} has no \
-                                 resolved identity: {error}"
+                                "constructor transfer for {constructor} at {:?} has no \
+                                 resolved identity: {error}",
+                                schema.origin
                             ))
                         })?,
                 }
@@ -4289,11 +4291,15 @@ impl<'a> Lowering<'a> {
                 )?;
                 self.emit_carrier_store_tag_id(builder, word, identity)?;
                 for (position, argument) in args.iter().enumerate() {
-                    let child_origin = if synthesized_identity.is_some() {
+                    let child_origin = if schema.synthesized {
+                        // A synthesized subtree has no occurrence in the
+                        // program, so its children are reached by path and role
+                        // rather than by source position; the parent's
+                        // coordinate travels down unchanged, as it always has.
                         origin
                     } else {
                         self.static_transition_plan
-                            .child_static_origin(origin, position)?
+                            .child_static_origin(schema.origin, position)?
                     };
                     let child = self.emit_carrier_transfer(builder, child_origin, argument)?;
                     self.emit_carrier_store_field(builder, word, position, child)?;
@@ -4306,6 +4312,7 @@ impl<'a> Lowering<'a> {
                     value,
                     PlannedAggregateShape::Record,
                 )?;
+                let schema = self.aggregate_schema_coordinate(occurrence, origin)?;
                 let word = self.emit_checked_aggregate_alloc(
                     builder,
                     GovernedAllocationSite::SourceRecord,
@@ -4323,12 +4330,12 @@ impl<'a> Lowering<'a> {
                     // `D2` forbids.
                     let name = self
                         .static_transition_plan
-                        .record_field_identity(origin, position)?
+                        .record_field_identity(schema.origin, position)?
                         .name_abi_word()?;
                     self.emit_carrier_store_name(builder, word, position, name)?;
                     let child_origin = self
                         .static_transition_plan
-                        .child_static_origin(origin, position)?;
+                        .child_static_origin(schema.origin, position)?;
                     let child = self.emit_carrier_transfer(builder, child_origin, field)?;
                     self.emit_carrier_store_field(builder, word, position, child)?;
                 }
@@ -4471,6 +4478,42 @@ impl<'a> Lowering<'a> {
     /// to read, so there is exactly one place a planned record becomes a
     /// `BoundaryTag` and exactly one place an event is recorded — a caller
     /// cannot obtain the lane and then allocate without leaving a pair.
+    /// **`RT-DECL-CLOSURE-PORT` `D7` — the coordinate an aggregate's SCHEMA is
+    /// resolved at, recovered from its own ownership record.**
+    ///
+    /// ⭐⭐ **Ownership was only half the defect.** Carrying the occurrence fixed
+    /// which record an aggregate names; it did not fix where its constructor
+    /// symbol, its field NAMES and its child positions are looked up, and those
+    /// are keyed on a coordinate. A source record forwarded through a `Var` and
+    /// handed to a call was still asking for its field names at the `Var` --
+    /// measured, as `"static origin ... has no RecordFieldName atom at
+    /// occurrence 0"`, on the released forwarded-record row.
+    ///
+    /// ⛔ The producer origin comes from the ownership record the template
+    /// names, so it is recovered rather than transported. Nothing here searches
+    /// for it, and no caller may pass one.
+    ///
+    /// ⚠ A compiler-synthesized aggregate has no source origin at all. Its
+    /// children are reached by path and role, and the transfer coordinate
+    /// travels down to them unchanged -- which is what `synthesized` says, and
+    /// why it is read from the PRODUCER rather than from the template's
+    /// `synthesized_identity`. That field is `Some` for every source
+    /// constructor too, so it cannot tell the two apart.
+    fn aggregate_schema_coordinate(
+        &self,
+        occurrence: AggregateOccurrenceId,
+        transfer: StaticOriginId,
+    ) -> Result<AggregateSchemaCoordinate, CraneliftBackendError> {
+        let producer = self
+            .static_transition_plan
+            .aggregate_record_view(occurrence)?
+            .producer_origin();
+        Ok(AggregateSchemaCoordinate {
+            origin: producer.unwrap_or(transfer),
+            synthesized: producer.is_none(),
+        })
+    }
+
     fn aggregate_carrier_authority(
         &self,
         origin: StaticOriginId,
@@ -7307,6 +7350,13 @@ impl CarrierAllocationRequest {
             PlannedAggregateShape::Record => BoundaryClass::Record,
         }
     }
+}
+
+/// Where one aggregate's schema is resolved, and whether it is synthesized.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct AggregateSchemaCoordinate {
+    origin: StaticOriginId,
+    synthesized: bool,
 }
 
 /// **`RT-DECL-CLOSURE-PORT` `D7` — the identity of one aggregate allocation

@@ -7057,6 +7057,63 @@ fn d7_record_arguments() -> RuntimeExpr {
     ])
 }
 
+/// The same two records, bound by nested `Let`s and reached as `Var`s — so each
+/// arrives at the call already lowered and FORWARDED rather than written in
+/// argument position.
+///
+/// ⭐⭐ **This is the shape the producer field exists for.** A record literal in
+/// argument position is transferred at a coordinate that happens to be its own,
+/// so a use-coordinate lookup gets the right answer by accident. Forwarded
+/// through a binder it does not, and the ownership record has to come from the
+/// template or not at all.
+fn d7_forwarded_record_arguments() -> RuntimeExpr {
+    // The call sits under two binders, so `Var(0)` is the inner record and
+    // `Var(1)` the outer one.
+    let call = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D7_PAIR_CALLEE.to_string(),
+        }),
+        args: vec![RuntimeExpr::Var(1), RuntimeExpr::Var(0)],
+    };
+    let body = RuntimeExpr::Let {
+        value: Box::new(d7_pair_record(
+            "ctor:fixture::CallInput::Alpha",
+            "ctor:fixture::CallInput::Beta",
+        )),
+        body: Box::new(RuntimeExpr::Let {
+            value: Box::new(d7_pair_record(
+                "ctor:fixture::CallInput::Gamma",
+                "ctor:fixture::CallInput::Delta",
+            )),
+            body: Box::new(call),
+        }),
+    };
+    RuntimeExpr::Let {
+        value: Box::new(d7_wrap("ctor:fixture::CallInput::Seed")),
+        body: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::CallInput::Wrap".to_string(),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body,
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::CallInput::Seed".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Construct {
+                        constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                        args: Vec::new(),
+                    },
+                },
+            ],
+            default: ac_c7_trap(),
+        }),
+    }
+}
+
 fn d7_compile_ownership(program: &RuntimeExpr) -> Result<(), CraneliftBackendError> {
     let declaration = d7_pair_callee();
     let mut declarations = BTreeMap::new();
@@ -7397,6 +7454,7 @@ fn a_sibling_aggregates_producer_certificate_is_refused_before_any_allocation() 
     for (label, program) in [
         ("two constructors", d7_constructor_arguments()),
         ("two records", d7_record_arguments()),
+        ("two forwarded records", d7_forwarded_record_arguments()),
     ] {
         let (baseline, baseline_hits, baseline_allocations, _) =
             d7_ownership_run(&program, GovernedAllocationMutation::None);
