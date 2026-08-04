@@ -6418,8 +6418,15 @@ fn b2v_ac10_every_boundary_input_receives_one_policy_entailed_outcome() {
     // persistent aggregate must reject the child that dies first, and the same
     // variant must be admitted when its children outlive it. A nondegenerate
     // pair on one variant, so "rejects everything" cannot pass.
+    // ⛔ `Bytes`, not `Constructor`, is the variant that must still REJECT, and
+    // the substitution is `RT-DECL-CLOSURE-PORT` `D7`'s, not a weakening.
+    //
+    // The rule being pinned is *"no surviving parent may name storage that dies
+    // first."* A `Bytes` handle has **no children to take a lifetime meet
+    // over**, so the only way to satisfy that rule on the
+    // `ChildDiesBeforeParent` cell is to refuse — and it still does.
     let escaping = BoundaryInput {
-        variant: LoweredVariant::Constructor,
+        variant: LoweredVariant::Bytes,
         magnitude: MagnitudePartition::WithinImmediateField,
         reachability: ReachabilityPartition::ChildDiesBeforeParent,
         adoption: AdoptionPartition::StoreAdopted,
@@ -6438,6 +6445,63 @@ fn b2v_ac10_every_boundary_input_receives_one_policy_entailed_outcome() {
         "AC-10: the same variant with sound children must be admitted, or the \
          rejection above is about the variant and not about reachability"
     );
+
+    // ⭐⭐ **`D7` — the aggregate lane, and why re-tagging is not relaxation.**
+    //
+    // An aggregate DOES have children, so the same rule has a second lawful
+    // discharge: stop claiming the parent survives. `Constructor` at
+    // `ChildDiesBeforeParent` is admitted, but **as an invocation-owned
+    // parent** — so "no surviving parent names storage that dies first" holds
+    // because there is no surviving parent, not because the check was dropped.
+    //
+    // ⛔ The owner assertion is the load-bearing half. Admitting the cell while
+    // leaving `owner == PersistentStore` would be exactly the unsound edge this
+    // node exists to remove, and it would still satisfy a bare
+    // `matches!(.., HandleWord { .. })`.
+    for aggregate in [LoweredVariant::Constructor, LoweredVariant::Record] {
+        let meet = BoundaryInput {
+            variant: aggregate,
+            magnitude: MagnitudePartition::WithinImmediateField,
+            reachability: ReachabilityPartition::ChildDiesBeforeParent,
+            adoption: AdoptionPartition::StoreAdopted,
+        };
+        let BoundaryOutcome::HandleWord { tag, owner, .. } = meet.outcome() else {
+            panic!("D7: {aggregate:?} with a shorter-lived child must take the aggregate lane");
+        };
+        assert_eq!(
+            tag,
+            BoundaryTag::InvocationAggregate,
+            "D7: the aggregate meet must select the invocation aggregate lane"
+        );
+        assert_eq!(
+            owner,
+            BoundaryReferentOwner::InvocationArena,
+            "D7: the aggregate parent must be invocation-owned, or admitting \
+             this cell restores the dangling edge instead of removing it"
+        );
+
+        // ⛔ And the lane is REACHED BY THE MEET, not by the shape: the same
+        // aggregate whose children outlive it must still be persistent. Without
+        // this, the assertions above would pass on an implementation that had
+        // simply moved every aggregate onto the invocation lane.
+        let outlives = BoundaryInput {
+            reachability: ReachabilityPartition::ChildrenOutliveParent,
+            ..meet
+        };
+        let BoundaryOutcome::HandleWord { tag, owner, .. } = outlives.outcome() else {
+            panic!("D7: {aggregate:?} with surviving children must stay a handle");
+        };
+        assert_eq!(
+            tag,
+            BoundaryTag::PersistentGround,
+            "D7: an aggregate whose children outlive it keeps the persistent lane"
+        );
+        assert_eq!(
+            owner,
+            BoundaryReferentOwner::PersistentStore,
+            "D7: reachability, not the aggregate shape, selects the lane"
+        );
+    }
 
     // ⛔ Identity is CLASSIFIED, not assumed. A store-materialized persistent
     // handle carries the store's identity; an emitted-constructed one carries
