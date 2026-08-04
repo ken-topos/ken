@@ -1344,6 +1344,15 @@ pub(in crate::cranelift_backend) enum D5aRouteMutation {
     /// Bind a context the *enclosing specialization does not own* — the
     /// transplant the ruling's key exists to prevent.
     TransplantContextBinding,
+    /// Make the identity-and-body key resolve TWICE, so the lookup sees two
+    /// contexts claiming one specialization and worker body.
+    ///
+    /// ⚠ Applied inside the lookup because the planner derives its context
+    /// population deterministically and interns on that same key: a duplicate
+    /// is unreachable through any plan the planner will build, so this
+    /// perturbs the guard's INPUT — the population it walks — which is the
+    /// only way to ask the question at all.
+    DuplicateContextBinding,
     // ── the capture projection: root provenance versus immediate slot ──────
     /// Index the emitting environment with the ROOT ABI position instead of the
     /// immediate slot. ⭐ On a specialization-owned edge those are different
@@ -1369,11 +1378,29 @@ pub(in crate::cranelift_backend) enum D5aRouteMutation {
 thread_local! {
     static D5A_ROUTE_MUTATION: std::cell::Cell<D5aRouteMutation> =
         const { std::cell::Cell::new(D5aRouteMutation::Exact) };
+    /// How many times the live mutation actually **fired**.
+    ///
+    /// ⛔ A mutation whose precondition never holds on this fixture is
+    /// indistinguishable from an inert one: the compile stays green and the
+    /// control reads as "the mechanism defended itself". Every seat that can
+    /// decline to apply its mutation bumps this, so a control can require that
+    /// its perturbation reached the code at all.
+    static D5A_ROUTE_APPLICATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn d5a_route_mutation() -> D5aRouteMutation {
     D5A_ROUTE_MUTATION.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d5a_route_application() {
+    D5A_ROUTE_APPLICATIONS.with(|cell| cell.set(cell.get() + 1));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d5a_route_applications() -> usize {
+    D5A_ROUTE_APPLICATIONS.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]
@@ -1388,6 +1415,7 @@ pub(in crate::cranelift_backend) fn with_d5a_route_mutation<T>(
         }
     }
     D5A_ROUTE_MUTATION.with(|cell| cell.set(mutation));
+    D5A_ROUTE_APPLICATIONS.with(|cell| cell.set(0));
     let _restore = Restore;
     body()
 }

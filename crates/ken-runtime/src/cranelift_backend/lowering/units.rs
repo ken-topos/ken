@@ -1327,10 +1327,84 @@ pub(super) fn define_continuation_bodies<M: Module>(
         // The context's ABI has a capture run for them, so the call carries
         // them across the checked-IH worker execution.
         let mut worker_calls = declared_workers;
-        if let Some(context) = compiler
+        // `D5a` checkpoint 4 step 3 -- the binding's three reaching mutations.
+        //
+        // ⛔ `Suppress` and `Transplant` perturb WHICH context the retarget is
+        // handed; the exact lookup itself is untouched, so a refusal downstream
+        // is attributable to the binding and not to a rewritten resolver.
+        // `Transplant` declines when this unit has no foreign context to be
+        // given -- it bumps the application counter when it does fire, so a
+        // control can require the perturbation actually reached the seat rather
+        // than reading a green as a defence.
+        #[cfg(test)]
+        let resolved_context = match crate::cranelift_backend::lowering::d5a_route_mutation() {
+            crate::cranelift_backend::lowering::D5aRouteMutation::SuppressContextBinding => {
+                crate::cranelift_backend::lowering::record_d5a_route_application();
+                None
+            }
+            crate::cranelift_backend::lowering::D5aRouteMutation::TransplantContextBinding => {
+                let foreign = compiler
+                    .static_transition_plan
+                    .continuation_contexts()?
+                    .into_iter()
+                    .find(|context| context.enclosing_specialization() != unit.id);
+                match foreign {
+                    Some(context) => {
+                        crate::cranelift_backend::lowering::record_d5a_route_application();
+                        Some(context)
+                    }
+                    None => compiler
+                        .static_transition_plan
+                        .continuation_context_for(unit.id, unit.worker_body_origin)?,
+                }
+            }
+            _ => compiler
+                .static_transition_plan
+                .continuation_context_for(unit.id, unit.worker_body_origin)?,
+        };
+        #[cfg(not(test))]
+        let resolved_context = compiler
             .static_transition_plan
-            .continuation_context_for(unit.id, unit.worker_body_origin)?
-        {
+            .continuation_context_for(unit.id, unit.worker_body_origin)?;
+        if let Some(context) = resolved_context {
+            // `D5a` checkpoint 4 step 3 -- THE TRANSPLANT STOP.
+            //
+            // ⭐⭐ Added because a transplant was **measured to compile**. The
+            // resolved context used to be trusted wholesale and the record
+            // below took its `origin` from `unit.worker_body_origin` -- the
+            // asking unit's own value. `call_static_worker`'s
+            // `target.origin != worker.body_origin` check therefore compared
+            // that value with itself on this path and could not see a foreign
+            // context at all. Handed one context in place of another, lowering
+            // emitted a call that type-checked (the capture suffix made the
+            // operand run agree) and transferred to a function executing a
+            // DIFFERENT body.
+            //
+            // ⛔ Production never reaches that state: `continuation_context_for`
+            // is keyed by `(enclosing, worker_body)` and is the only producer.
+            // ⇒ But "unreachable by construction" was carrying the whole
+            // guarantee here, with no check able to observe a violation, so the
+            // ruling's transplanted-binding stop had nothing to name. These two
+            // comparisons cost nothing and turn it into a fact the code checks.
+            if context.enclosing_specialization() != unit.id {
+                return Err(backend_module(format!(
+                    "the retarget resolved generated context {:?}, whose enclosing specialization \
+                     is {:?} and not the {:?} now being defined; a context executes on behalf of \
+                     the one identity that owns it, so this call would transfer another \
+                     specialization's captures across this one's worker execution",
+                    context.id(),
+                    context.enclosing_specialization(),
+                    unit.id,
+                )));
+            }
+            if context.worker_body_origin() != unit.worker_body_origin {
+                return Err(backend_module(format!(
+                    "the retarget resolved a generated context executing body {:?}, but this \
+                     specialization selected worker body {:?}",
+                    context.worker_body_origin(),
+                    unit.worker_body_origin,
+                )));
+            }
             let target = bundle.context(context.id()).ok_or_else(|| {
                 backend_module(
                     "a planned generated context was never forward-declared".to_string(),
@@ -1342,11 +1416,12 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 DeclaredUnitCall {
                     function: module.declare_func_in_func(target, &mut func),
                     // The context EXECUTES that body, so the origin it answers
-                    // for is unchanged. `call_static_worker`'s
-                    // `target.origin != worker.body_origin` check therefore
-                    // still measures what it always did.
-                    origin: unit.worker_body_origin,
-                    call_site_origin: unit.worker_body_origin,
+                    // for is unchanged. ⛔ Read from the CONTEXT, not from the
+                    // asking unit: taking it from `unit` is what made
+                    // `call_static_worker`'s origin check self-referential
+                    // here. The equality above is what lets both readings agree.
+                    origin: context.worker_body_origin(),
+                    call_site_origin: context.worker_body_origin(),
                     header: context.header(),
                     slots: context.slots().to_vec(),
                     offsets: context_offsets,

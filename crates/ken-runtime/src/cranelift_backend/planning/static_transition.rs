@@ -6459,8 +6459,27 @@ impl<'src> StaticTransitionPlan<'src> {
         enclosing: ContinuationSpecializationId,
         worker_body_origin: StaticOriginId,
     ) -> Result<Option<ContinuationContextView<'_>>, CraneliftBackendError> {
+        let contexts = self.continuation_contexts()?;
+        // `D5a` checkpoint 4 step 3 -- the duplicate reaching mutation, applied
+        // to the POPULATION this loop walks and not to the stop below.
+        //
+        // ⚠ It has to be applied here. The planner interns contexts on this
+        // very key, so a duplicate is unreachable through any plan it will
+        // build; the only way to ask whether the collision stop works is to
+        // present the population it is written for. ⛔ Re-emitting the stop's
+        // own error under the mutation would have been a control that proves a
+        // hardcoded string propagates.
+        let mut order = (0..contexts.len()).collect::<Vec<_>>();
+        #[cfg(test)]
+        if crate::cranelift_backend::lowering::d5a_route_mutation()
+            == crate::cranelift_backend::lowering::D5aRouteMutation::DuplicateContextBinding
+        {
+            crate::cranelift_backend::lowering::record_d5a_route_application();
+            order.extend(0..contexts.len());
+        }
         let mut found = None;
-        for context in self.continuation_contexts()? {
+        for index in order {
+            let context = &contexts[index];
             if context.enclosing_specialization() == enclosing
                 && context.worker_body_origin() == worker_body_origin
             {
@@ -6469,10 +6488,15 @@ impl<'src> StaticTransitionPlan<'src> {
                         "two generated contexts claim one specialization and worker body",
                     ));
                 }
-                found = Some(context);
+                found = Some(index);
             }
         }
-        Ok(found)
+        Ok(found.map(|index| {
+            contexts
+                .into_iter()
+                .nth(index)
+                .expect("an index taken from this same population")
+        }))
     }
 
     /// Every already-validated continuation call token, with the full producer

@@ -12925,3 +12925,146 @@ fn d5a_the_detached_result_seats_five_guards_are_each_reached_by_a_real_mutation
         );
     }
 }
+
+/// **`D5a` checkpoint 4 step 1 — a missing generated-context binding refuses at
+/// the retarget.**
+///
+/// The retarget is what gives a continuation specialization a callee for its
+/// worker body. With the binding withheld, the specialization is left calling a
+/// raw unit that checkpoint 4 step 2 removed from the executable population —
+/// and the ruling is explicit that skipping `define_function` for an
+/// "emittable" raw unit mints an undefined phantom. This row measures that the
+/// refusal comes **before** any such phantom can be emitted.
+///
+/// ⭐ Note what the message rules out: *neither* an emittable raw unit *nor* a
+/// generated execution context. A retarget that quietly fell back to the raw
+/// unit would satisfy the first disjunct and this row would stay green — the
+/// message is worded, and asserted, so that it cannot.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_a_missing_generated_context_binding_refuses_before_any_phantom_is_emitted() {
+    let refusal = with_transparent_declaration_closure_witness(|| {
+        with_d5a_route_mutation(D5aRouteMutation::SuppressContextBinding, || {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                "d5a_missing_binding",
+                false,
+            )
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"))
+            .expect_err(
+                "with the context binding withheld the specialization has no callee for its \
+                 worker body, because that body left the executable population when the \
+                 retarget landed. A COMPILE here would mean the raw unit is still emitted and \
+                 the retarget is decorative",
+            )
+        })
+    });
+    assert!(
+        refusal.contains("has no declared callee in this function"),
+        "the refusal must be the retarget's own missing-callee stop. A different refusal means \
+         the compile got past the seat this row is about: {refusal}"
+    );
+    assert!(
+        d5a_route_applications() > 0,
+        "the mutation must actually have fired. A refusal reached with the perturbation never \
+         applied would be measuring the unmutated route"
+    );
+}
+
+/// **`D5a` checkpoint 4 step 1 — two contexts claiming one identity-and-body key
+/// is a hard stop, not a first-match preference.**
+///
+/// ⚠ **MEASURED**: presenting the lookup a population in which one context
+/// matches the key twice produces the collision refusal, and the lookup does
+/// not return either candidate. **CLAIMED**: the planner never builds such a
+/// population. **THE GAP**: the two are independent — `intern_generated_contexts`
+/// interns on exactly this key, so the duplicate is unreachable through any
+/// plan a compile accepts. The mutation therefore presents the population the
+/// stop is written for, which is the only way to ask the question. ⛔ It does
+/// not re-emit the stop's error; that would prove a hardcoded string
+/// propagates.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_two_generated_contexts_claiming_one_key_is_a_hard_stop() {
+    let refusal = with_transparent_declaration_closure_witness(|| {
+        with_d5a_route_mutation(D5aRouteMutation::DuplicateContextBinding, || {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                "d5a_duplicate_binding",
+                false,
+            )
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"))
+            .expect_err(
+                "a key that resolves twice must refuse. Picking either candidate would make \
+                 lowering the authority for a binding the planner owns, and 'first match' is \
+                 the exact selection rule the ruling forbids",
+            )
+        })
+    });
+    assert!(
+        refusal.contains("two generated contexts claim one specialization and worker body"),
+        "the refusal must be the collision stop itself: {refusal}"
+    );
+    assert!(
+        d5a_route_applications() > 0,
+        "the duplicate must actually have been presented; otherwise this row refused for some \
+         unrelated reason and reads as a defence"
+    );
+}
+
+/// **`D5a` checkpoint 4 step 1 — a transplanted generated-context binding
+/// refuses at the retarget.**
+///
+/// ⭐⭐ **This row exists because the transplant was measured to COMPILE.** The
+/// retarget trusted its resolved context wholesale and wrote the call record's
+/// `origin` from the asking unit's own `worker_body_origin`, so
+/// `call_static_worker`'s `target.origin != worker.body_origin` check compared
+/// that value with itself on this path. Handed one specialization's context in
+/// place of another's, lowering emitted a call that type-checked — the capture
+/// suffix made the operand run agree — and transferred to a function executing
+/// a different body. Nothing anywhere refused.
+///
+/// ⚠ **MEASURED**: with the two consistency comparisons in place, presenting a
+/// foreign context refuses by name before any call is emitted. **CLAIMED**: the
+/// planner never produces one, because `continuation_context_for` is keyed by
+/// `(enclosing, worker_body)` and is the binding's only producer — pinned
+/// independently by
+/// `d5a_a_generated_context_resolves_only_under_the_identity_that_encloses_it`.
+/// **THE GAP**: those are separate facts. Before this row, "unreachable by
+/// construction" was carrying the entire guarantee and no check could observe a
+/// violation, which left the ruling's transplanted-binding stop with nothing to
+/// name.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_a_transplanted_generated_context_binding_refuses_at_the_retarget() {
+    let refusal = with_transparent_declaration_closure_witness(|| {
+        with_d5a_route_mutation(D5aRouteMutation::TransplantContextBinding, || {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                "d5a_transplanted_binding",
+                false,
+            )
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"))
+            .expect_err(
+                "a context whose enclosing specialization is not the unit being defined must \
+                 refuse. This compiled before the stop existed, so a COMPILE here is a \
+                 regression to a state in which one specialization's captures cross another's \
+                 worker execution silently",
+            )
+        })
+    });
+    assert!(
+        refusal.contains("whose enclosing specialization is"),
+        "the refusal must be the transplant stop itself, naming both identities. Anything else \
+         means the foreign context got past the retarget: {refusal}"
+    );
+    assert!(
+        d5a_route_applications() > 0,
+        "the transplant declines when a unit has no foreign context to be handed, so a green \
+         run could mean the perturbation never fired rather than that it was refused. This \
+         requires it fired"
+    );
+}
