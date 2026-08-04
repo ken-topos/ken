@@ -6208,49 +6208,6 @@ fn d7_governed_sites_program(symbols: &crate::NativeProcessSymbols) -> RuntimeEx
     }))
 }
 
-/// The source-`Record` site, driven at the carrier edge.
-///
-/// ⛔ **A separate driver, and the reason is a finding rather than a
-/// convenience.** No ordinary source program in this suite reaches
-/// `emit_carrier_transfer`'s `Lowered::Record` arm: a record handed across a
-/// generated-unit boundary as a call argument arrives with an origin whose
-/// planned ownership record is `Constructor`-shaped, and the producer refuses
-/// on the shape cross-check before the allocation. The only reaching path is
-/// the one the landed `c1_d4_ac_c7` rows already drive — a `Lowered::Record`
-/// handed to `transfer_into_carrier` directly. That is a real emitter seam,
-/// not a stub, and it is the same `emit_carrier_transfer` arm; what differs is
-/// how it is entered.
-fn d7_transfer_a_carried_record() -> Result<(), CraneliftBackendError> {
-    let fixture = RuntimeExpr::Let {
-        value: Box::new(RuntimeExpr::Record {
-            fields: vec![
-                ("first".to_string(), ac_c7_ctor("SitesInner")),
-                ("second".to_string(), ac_c7_ctor("SitesOther")),
-            ],
-        }),
-        body: Box::new(RuntimeExpr::Project {
-            record: Box::new(RuntimeExpr::Var(0)),
-            field: "first".to_string(),
-        }),
-    };
-    let (plan, root) = planned_root_occurrence(&fixture);
-    let record_origin = plan
-        .child_static_origin(root, 0)
-        .expect("a `Let`'s value is child 0");
-    let seed_env = NativeSeedEnvironment::empty();
-    ac_c7_try_compile_edge(&seed_env, plan, move |compiler, builder| {
-        let record = Lowered::Record {
-            fields: vec![
-                ("first".to_string(), ac_c7_lowered_ctor("SitesInner")),
-                ("second".to_string(), ac_c7_lowered_ctor("SitesOther")),
-            ],
-        };
-        let word = compiler.transfer_into_carrier(builder, record_origin, &record)?;
-        compiler.emit_carrier_tag(builder, word)
-    })
-    .map(|_| ())
-}
-
 /// ⚠ The artifact is DISCARDED. These rows only ever ask whether one was
 /// defined at all, and keeping it would leak a backend type into the fixture
 /// for nothing.
@@ -6296,10 +6253,10 @@ fn d7_record_as_call_argument() -> RuntimeExpr {
 }
 
 /// **`D7` — a source `Record` passed as an ordinary generated-unit call
-/// argument is marshalled at the CALLEE's origin. The red premise.**
+/// argument is marshalled at ITS OWN caller-side occurrence.**
 ///
 /// MEASURED, by instrumenting `source_aggregate_occurrence` on this exact
-/// fixture. The planned population is
+/// fixture before the repair. The planned population is
 ///
 /// | occurrence | shape | producer |
 /// |---|---|---|
@@ -6308,36 +6265,53 @@ fn d7_record_as_call_argument() -> RuntimeExpr {
 /// | 2 | **`Record`** | **origin 4 — the record itself** |
 /// | 3 | `Constructor` | origin 6 — the callee closure's `ExitCode::Success` body |
 ///
-/// and the emitter asks for the `Record`'s ownership record **at origin 6**.
-/// It finds occurrence 3, whose shape is `Constructor`, and refuses on the
-/// shape cross-check. Origin 6 is `DeclaredUnitCall::origin` — the callee's
-/// scheduling entry — because `call_declared_unit_target` transfers every
-/// input that is still specialized at that coordinate.
+/// and the emitter asked for the `Record`'s ownership record **at origin 6**,
+/// found occurrence 3, and refused on the shape cross-check. Origin 6 is
+/// `DeclaredUnitCall::origin` — the callee's scheduling entry — because
+/// `call_declared_unit_target` transferred every input still specialized at
+/// that one coordinate.
 ///
-/// ⚠ **TRANSITION SENTINEL, and it asserts a DEFECT.** It is committed in this
-/// state deliberately, so the repair has a discriminator to flip rather than a
-/// claim to make. It retires the moment each call input is carried at its own
-/// caller-side occurrence, and the flip is the whole evidence for that repair.
+/// ⭐ **This row was committed asserting that refusal**, as
+/// `..._is_marshalled_at_the_callee_origin`, so the repair had a discriminator
+/// to flip rather than a claim to make. The rename and the flipped assertion
+/// are that flip.
 ///
-/// ⭐ The record's two fields are DIFFERENT constructors so that, once the
-/// repair lands, the successful compile is over a record whose field
-/// identities are distinguishable rather than interchangeable.
+/// ⛔ The shape check was never what was wrong. It was correct and doing its
+/// job; the coordinate it was asked about was wrong. Nothing in the repair
+/// weakens it, accepts both shapes, or defaults an occurrence — the caller-side
+/// occurrence `child_occurrence` had already issued is simply carried through
+/// to the transfer instead of being discarded.
 ///
-/// ⛔ Not a claim that the shape check is wrong. The shape check is correct and
-/// is doing exactly its job; what is wrong is the coordinate it was asked
-/// about.
+/// THE GAP: a successful compile shows the coordinate resolves and the shape
+/// agrees. It does not show the field identities themselves round-trip — that
+/// is `c1_d4_ac_c7`'s differential, which reads each projected child's runtime
+/// identity back.
 #[test]
-fn a_source_record_as_a_call_argument_is_marshalled_at_the_callee_origin() {
-    let error = emit_process_entrypoint_object_with_cranelift(
+fn a_source_record_as_a_call_argument_is_marshalled_at_its_own_occurrence() {
+    emit_process_entrypoint_object_with_cranelift(
         &d7_record_as_call_argument(),
         "ken_d7_record_call_input",
     )
-    .expect_err("the present marshalling refuses a record call argument");
-    assert!(
-        format!("{error:?}").contains("aggregate producer disagrees with its planned ownership shape"),
-        "the refusal must be the ownership-shape cross-check, which is what \
-         locates the wrong coordinate: {error:?}"
-    );
+    .expect("a record call argument resolves its ownership record at its own occurrence");
+}
+
+/// The source-`Record` site, driven by an ordinary program.
+///
+/// ⭐ This is the real route: a source `Record` passed as a generated-unit call
+/// argument, the same fixture
+/// [`a_source_record_as_a_call_argument_is_marshalled_at_its_own_occurrence`]
+/// drives. Before the call-input coordinate was repaired no ordinary program
+/// reached `emit_carrier_transfer`'s `Lowered::Record` arm at all — the
+/// transfer resolved the ownership record at the callee's scheduling entry and
+/// was refused on the shape cross-check first — so this row was driven at the
+/// lower-level carrier edge instead. That edge control still exists on its own
+/// (`c1_d4_ac_c7`); this row no longer needs it.
+fn d7_transfer_a_carried_record() -> Result<(), CraneliftBackendError> {
+    emit_process_entrypoint_object_with_cranelift(
+        &d7_record_as_call_argument(),
+        "ken_d7_record_site_bypass",
+    )
+    .map(|_| ())
 }
 
 /// The carried-constructor site, driven by the heterogeneous eliminator.
@@ -6372,19 +6346,21 @@ fn d7_transfer_carried_constructor_operands() -> Result<(), CraneliftBackendErro
 ///
 /// | site | driver | hits | outcome |
 /// |---|---|---|---|
-/// | source `Constructor` | process object | > 0 | refused at the choke's non-aggregate check |
-/// | source `Record` | carrier edge | > 0 | refused at the choke's non-aggregate check |
+/// | source `Constructor` | host-effect object | > 0 | refused at the choke's non-aggregate check |
+/// | source `Record` | record-as-call-argument | > 0 | refused at the choke's non-aggregate check |
 /// | selected dynamic alternative | host-effect object | > 0 | refused at the choke's non-aggregate check |
 /// | carried `transfer_constructor_operands` | heterogeneous eliminator | > 0 | refused at the choke's non-aggregate check |
 ///
 /// ⚠ **Three drivers, not one, and that is measured rather than chosen.** I
 /// wrote this as a single fixture first, on the argument that one emission
-/// makes the counter the only thing separating the rows. The counter then
-/// falsified the argument twice: no ordinary program here reaches the
-/// source-`Record` arm at all (see [`d7_transfer_a_carried_record`]), and
-/// nothing in a host-effect program builds a constructor from already-lowered
-/// operands (see [`d7_transfer_carried_constructor_operands`]). Each row now
-/// names the driver that actually reaches it.
+/// makes the counter the only thing separating the rows. The counter falsified
+/// the argument twice, and both findings turned out to be about the emitter
+/// rather than about the fixture: no ordinary program reached the
+/// source-`Record` arm, because the call-input coordinate resolved its
+/// ownership record at the callee's scheduling entry — since repaired, so that
+/// row is now an ordinary program — and nothing in a host-effect program builds
+/// a constructor from already-lowered operands, so that row is the
+/// heterogeneous eliminator.
 ///
 /// ⭐ **The hit count is not decoration.** Without it a row is green whenever
 /// its driver fails to reach the site — a vacuous pass that looks exactly like

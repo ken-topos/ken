@@ -3183,6 +3183,36 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
+    /// Carry one generated-unit call input across the boundary **at its own
+    /// caller-side source occurrence**.
+    ///
+    /// ⛔ **The origin is the input's, never the callee's.** A specialized
+    /// input left to be transferred inside `call_declared_unit_target` is
+    /// transferred at `target.origin`, which is the callee's scheduling entry —
+    /// so an aggregate input's planned ownership record is looked up at a
+    /// coordinate that names the callee body rather than the value being
+    /// carried. A source `Record` passed as an ordinary call argument resolved
+    /// the record planned for the closure's `Construct` body and was refused on
+    /// the shape cross-check, which is the discriminator this repair flips.
+    ///
+    /// ⚠ The caller-side origin is not derived here and nothing is searched for
+    /// it: `child_occurrence` already issued the exact occurrence for every
+    /// argument and every capture at the site below, and this only stops that
+    /// answer being thrown away.
+    fn carry_call_input(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        origin: StaticOriginId,
+        input: LoweringOperand,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        match input {
+            LoweringOperand::Carried(word) => Ok(LoweringOperand::Carried(word)),
+            LoweringOperand::Specialized(value) => Ok(LoweringOperand::Carried(
+                self.transfer_into_carrier(builder, origin, &value)?,
+            )),
+        }
+    }
+
     pub(super) fn call_declared_unit(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -3380,6 +3410,32 @@ impl<'a> Lowering<'a> {
                     let word = match value {
                         LoweringOperand::Carried(word) => word.word,
                         LoweringOperand::Specialized(value) => {
+                            // ⚠ **`target.origin` is the CALLEE's scheduling
+                            // entry, and for an aggregate that is the wrong
+                            // coordinate.** Its planned ownership record is
+                            // keyed by the caller-side source occurrence, so
+                            // resolving it here looks it up against the callee
+                            // body — the defect
+                            // `a_source_record_as_a_call_argument_is_marshalled_at_its_own_occurrence`
+                            // pins at the one assembly site where the origin
+                            // was already in hand and merely discarded.
+                            //
+                            // ⛔ **This is a stated residual, not a closed
+                            // seam.** MEASURED after that repair: 139 inputs
+                            // still arrive here specialized, all `Constructor`
+                            // and all in `Parameter` slots, and they come from
+                            // the source machine's call path. There the
+                            // occurrence exists — each argument is evaluated
+                            // from a `SourceOccurrence` — but
+                            // `SourceContinuation::CallArgument` pushes the
+                            // lowered value into a bare `Vec<LoweringOperand>`
+                            // and drops it. Closing this needs that payload to
+                            // carry the occurrence alongside the value, which
+                            // is a change to a landed state-machine
+                            // representation rather than to this call.
+                            //
+                            // ⛔ No guard here refusing aggregates: measured, it
+                            // would refuse 139 inputs that compile today.
                             self.transfer_into_carrier(builder, target.origin, value)?
                                 .word
                         }

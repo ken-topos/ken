@@ -9431,6 +9431,16 @@ impl<'a> Lowering<'a> {
                                 ),
                             ));
                         }
+                        // ⭐ **Each input crosses the boundary at ITS OWN
+                        // caller-side occurrence.** The exact origins are
+                        // already issued two lines up — `child_occurrence` for
+                        // every argument and every capture — and the
+                        // predecessor threw them away, leaving
+                        // `call_declared_unit_target` to transfer whatever
+                        // arrived specialized at `target.origin`, the callee's
+                        // scheduling entry. Nothing new is derived here and no
+                        // body is searched; the answer the planner already gave
+                        // is simply carried through to the transfer.
                         let mut inputs = args
                             .iter()
                             .enumerate()
@@ -9440,7 +9450,8 @@ impl<'a> Lowering<'a> {
                                     1 + position,
                                     argument,
                                 )?;
-                                self.lower_expr(builder, argument, env)
+                                let lowered = self.lower_expr(builder, argument, env)?;
+                                self.carry_call_input(builder, argument.static_origin, lowered)
                             })
                             .collect::<Result<Vec<_>, _>>()?;
                         let closure_origin = callee.static_origin;
@@ -9454,7 +9465,8 @@ impl<'a> Lowering<'a> {
                                         1 + position,
                                         capture,
                                     )?;
-                                    self.lower_expr(builder, capture, env)
+                                    let lowered = self.lower_expr(builder, capture, env)?;
+                                    self.carry_call_input(builder, capture.static_origin, lowered)
                                 })
                                 .collect::<Result<Vec<_>, _>>()?,
                         );
