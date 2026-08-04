@@ -4270,7 +4270,12 @@ impl<'a> Lowering<'a> {
                         .to_string(),
                 )
             })?;
-            ledger.record(function, word.word.as_u32(), occurrence)?;
+            // ⛔ Event evidence FIRST, then the relation pair. `E` is what
+            // allocated; deriving it from the relation would make `dom(R) = E`
+            // true by construction and the law unstateable.
+            let result = word.word.as_u32();
+            ledger.record_event(function, result)?;
+            ledger.relate(function, result, occurrence)?;
         }
         Ok(word)
     }
@@ -6472,10 +6477,21 @@ pub(in crate::cranelift_backend) struct AggregateAllocationEvent {
 }
 
 /// The events of one body, open while that body is being emitted.
+///
+/// ⭐ **`events` and `relation` are INDEPENDENTLY MUTABLE, on purpose.** `E` is
+/// what actually allocated; `R` is what those allocations were related to. A
+/// single map cannot tell the two apart — its keys would BE its domain by
+/// construction — so "an event was recorded but never related" and "a relation
+/// entry exists for no event" would both be unstateable, and the local close
+/// below would have nothing to compare. The law is `dom(R) = E`, and a law
+/// needs two sides.
 #[derive(Clone, Debug)]
 struct LocalAggregateEvents {
     function: u32,
-    pairs: BTreeMap<u32, AggregateOccurrenceId>,
+    /// `E` — one entry per governed raw allocation that actually happened.
+    events: BTreeSet<u32>,
+    /// `R` — the pairing of those events to the records that govern them.
+    relation: BTreeMap<u32, AggregateOccurrenceId>,
 }
 
 /// **The compilation's event-to-record relation `R`.**
@@ -6487,7 +6503,14 @@ struct LocalAggregateEvents {
 #[derive(Clone, Debug, Default)]
 pub(in crate::cranelift_backend) struct AggregateAllocationLedger {
     local: Option<LocalAggregateEvents>,
+    /// `E` over the compilation, appended at each body commit.
+    committed_events: BTreeSet<AggregateAllocationEvent>,
+    /// `R` over the compilation.
     committed: BTreeMap<AggregateAllocationEvent, AggregateOccurrenceId>,
+    /// Bodies whose event set was opened, and those whose commit landed. The
+    /// two are compared at the close, so a discarded commit cannot pass as a
+    /// body that simply allocated nothing.
+    opened_functions: BTreeSet<u32>,
     committed_functions: BTreeSet<u32>,
 }
 
@@ -6512,20 +6535,24 @@ impl AggregateAllocationLedger {
                 open.function
             )));
         }
+        if !self.opened_functions.insert(function) {
+            return Err(backend_module(format!(
+                "aggregate allocation ledger: function {function} opens a second time"
+            )));
+        }
         self.local = Some(LocalAggregateEvents {
             function,
-            pairs: BTreeMap::new(),
+            events: BTreeSet::new(),
+            relation: BTreeMap::new(),
         });
         Ok(())
     }
 
-    /// Record one allocation's `((FuncId, Value), occurrence)` pair.
-    fn record(
+    /// The open body, checked against the function the caller believes is open.
+    fn open_body(
         &mut self,
         function: u32,
-        result: u32,
-        occurrence: AggregateOccurrenceId,
-    ) -> Result<(), CraneliftBackendError> {
+    ) -> Result<&mut LocalAggregateEvents, CraneliftBackendError> {
         let local = self.local.as_mut().ok_or_else(|| {
             backend_module(
                 "aggregate allocation ledger: an allocation was emitted with no open body, so \
@@ -6540,7 +6567,35 @@ impl AggregateAllocationLedger {
                 local.function
             )));
         }
-        match local.pairs.insert(result, occurrence) {
+        Ok(local)
+    }
+
+    /// Record that a governed allocation happened. This is `E`, and it is taken
+    /// from the allocation itself — **never** derived from relation keys.
+    fn record_event(
+        &mut self,
+        function: u32,
+        result: u32,
+    ) -> Result<(), CraneliftBackendError> {
+        let local = self.open_body(function)?;
+        if !local.events.insert(result) {
+            return Err(backend_module(format!(
+                "aggregate allocation ledger: function {function} value {result} is already an \
+                 event, so one raw allocation produced two"
+            )));
+        }
+        Ok(())
+    }
+
+    /// Relate one event to the record that governs it.
+    fn relate(
+        &mut self,
+        function: u32,
+        result: u32,
+        occurrence: AggregateOccurrenceId,
+    ) -> Result<(), CraneliftBackendError> {
+        let local = self.open_body(function)?;
+        match local.relation.insert(result, occurrence) {
             // ⛔ Both a duplicate and a conflict reject. One raw allocation
             // yields one result value, so a second pair at that value means
             // either the wrapper ran twice for one allocation or two
@@ -6567,7 +6622,29 @@ impl AggregateAllocationLedger {
                 local.function
             )));
         }
-        for (result, occurrence) in local.pairs {
+        // ⛔ `dom(R) = E` at the LOCAL close, before anything is committed.
+        // An event with no relation entry is an allocation nothing authorized;
+        // a relation entry with no event is an authorization nothing allocated.
+        // Both are refusals, and neither is visible from one side alone.
+        let related = local.relation.keys().copied().collect::<BTreeSet<_>>();
+        if related != local.events {
+            return Err(backend_module(format!(
+                "aggregate allocation ledger: function {} has {} events and {} relation keys, \
+                 so dom(R) is not E",
+                local.function,
+                local.events.len(),
+                related.len()
+            )));
+        }
+        // Both evidences are appended, so the whole-pass close can restate the
+        // same law over the compilation rather than trusting each body's.
+        for result in local.events {
+            self.committed_events.insert(AggregateAllocationEvent {
+                function: local.function,
+                result,
+            });
+        }
+        for (result, occurrence) in local.relation {
             let event = AggregateAllocationEvent {
                 function: local.function,
                 result,
@@ -6600,6 +6677,30 @@ impl AggregateAllocationLedger {
                 open.function
             )));
         }
+        // ⭐ Every body that OPENED must have COMMITTED. A discarded commit
+        // leaves its events uncommitted, and without this the artifact would
+        // look like a body that simply allocated nothing.
+        if self.opened_functions != self.committed_functions {
+            return Err(backend_module(format!(
+                "aggregate allocation ledger: {} bodies opened but {} committed, so a body's \
+                 events were discarded",
+                self.opened_functions.len(),
+                self.committed_functions.len()
+            )));
+        }
+        // ⭐ `dom(R) = E` over the whole compilation, restated from the two
+        // independently accumulated evidences rather than trusted from the
+        // per-body closes. Clearing committed relation entries between bodies
+        // leaves the event evidence behind, and only this comparison sees it.
+        let related = self.committed.keys().copied().collect::<BTreeSet<_>>();
+        if related != self.committed_events {
+            return Err(backend_module(format!(
+                "aggregate allocation ledger: the compilation has {} events and {} relation \
+                 keys, so dom(R) is not E",
+                self.committed_events.len(),
+                related.len()
+            )));
+        }
         let population = planned
             .iter()
             .map(|record| record.id)
@@ -6609,7 +6710,14 @@ impl AggregateAllocationLedger {
             .values()
             .copied()
             .collect::<BTreeSet<_>>();
-        // Every related record belongs to the closed planner population.
+        // ⭐ `image(R) ⊆ P`, and deliberately NOT equality.
+        //
+        // `P` is a closed AUTHORIZATION population, not an execution
+        // obligation: it plans a record for every allocation-reachable node of
+        // every seat's tree under every emission owner the seat may be lowered
+        // by, while one compilation emits only the bodies it has. An unused
+        // record is lawful. Measured before this was ruled: requiring equality
+        // refused ordinary programs by 1 to 132 records.
         for occurrence in &image {
             if !population.contains(occurrence) {
                 return Err(backend_module(format!(
@@ -6619,10 +6727,10 @@ impl AggregateAllocationLedger {
             }
         }
         Ok(AggregateRelationClosure {
-            events: self.committed.len(),
+            events: self.committed_events.len(),
             image: image.len(),
             population: population.len(),
-            unallocated: population.difference(&image).copied().collect(),
+            unused: population.difference(&image).count(),
         })
     }
 }
@@ -6633,8 +6741,9 @@ pub(in crate::cranelift_backend) struct AggregateRelationClosure {
     pub(in crate::cranelift_backend) events: usize,
     pub(in crate::cranelift_backend) image: usize,
     pub(in crate::cranelift_backend) population: usize,
-    /// Planned records no event related. `image(R) = P` iff this is empty.
-    pub(in crate::cranelift_backend) unallocated: Vec<AggregateOccurrenceId>,
+    /// Planned records no event related. **Lawful** — `P` authorizes, it does
+    /// not oblige. Retained as a measurement, never as a failure condition.
+    pub(in crate::cranelift_backend) unused: usize,
 }
 
 /// One argument to a compiler-synthesized constructor, in the FORM the tree

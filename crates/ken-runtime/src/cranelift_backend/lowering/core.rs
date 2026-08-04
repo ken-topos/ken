@@ -863,13 +863,13 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 // every related record is in `P`, no body is built twice, and
                 // no event set is left open.
                 //
-                // ⚠ `image(R) = P` is MEASURED and deliberately NOT enforced.
-                // It does not hold, and the reason is structural rather than a
-                // defect in this ledger — see the handoff. `P` plans a record
-                // for every allocation-reachable node of every seat's tree
-                // under every emission owner the seat may be lowered by, while
-                // one compilation emits only the bodies it has. Enforcing the
-                // equality here would refuse ordinary programs.
+                // ⚠ `image(R) ⊆ P`, deliberately not equality. `P` is a closed
+                // AUTHORIZATION population: it plans a record for every
+                // allocation-reachable node of every seat's tree under every
+                // emission owner the seat may be lowered by, while one
+                // compilation emits only the bodies it has. An unused record is
+                // lawful, and requiring equality refused ordinary programs by
+                // 1 to 132 records when measured.
                 let _aggregate_relation =
                     super::units::close_aggregate_allocation_ledger(&mut compiler)?;
             }
@@ -921,13 +921,13 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 // every related record is in `P`, no body is built twice, and
                 // no event set is left open.
                 //
-                // ⚠ `image(R) = P` is MEASURED and deliberately NOT enforced.
-                // It does not hold, and the reason is structural rather than a
-                // defect in this ledger — see the handoff. `P` plans a record
-                // for every allocation-reachable node of every seat's tree
-                // under every emission owner the seat may be lowered by, while
-                // one compilation emits only the bodies it has. Enforcing the
-                // equality here would refuse ordinary programs.
+                // ⚠ `image(R) ⊆ P`, deliberately not equality. `P` is a closed
+                // AUTHORIZATION population: it plans a record for every
+                // allocation-reachable node of every seat's tree under every
+                // emission owner the seat may be lowered by, while one
+                // compilation emits only the bodies it has. An unused record is
+                // lawful, and requiring equality refused ordinary programs by
+                // 1 to 132 records when measured.
                 let _aggregate_relation =
                     super::units::close_aggregate_allocation_ledger(&mut compiler)?;
             root_result
