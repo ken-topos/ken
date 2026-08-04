@@ -908,6 +908,16 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 call_edges,
                 staged_process_input,
             )?;
+            // `D5a` checkpoint 4 step 3 — the reaching mutation for the ONE
+            // ledger's lifetime, and it is the checkpoint-2 defect itself:
+            // close after the FIRST definition pass, before any generated
+            // `Function` exists. ⛔ Nothing about the equality moves; only the
+            // window it is taken over.
+            #[cfg(test)]
+            if d5a_route_mutation() == D5aRouteMutation::CloseLedgerAfterTheFirstPass {
+                record_d5a_route_application();
+                super::units::close_continuation_claim_ledger(&mut compiler)?;
+            }
             // `RT-CONTSPEC-ACTIVATE` `D2` — define each declared continuation
             // target from its own projected contract, after the ordinary
             // bodies and before the root adapter.

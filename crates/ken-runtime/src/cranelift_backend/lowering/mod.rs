@@ -1392,6 +1392,13 @@ pub(in crate::cranelift_backend) enum D5aRouteMutation {
     /// only the executable ones — the "template-only means deleted" reading
     /// checkpoint 1 exists to refuse.
     DropSupersededWorkerTemplates,
+    // ── the one cross-pass causal ledger's lifetime ────────────────────────
+    /// Close the ledger after the FIRST definition pass, before any generated
+    /// `Function` exists. ⭐ This is the checkpoint-2 defect reproduced
+    /// deliberately: the equality is unchanged and only the window it is taken
+    /// over moves, which is what makes the refusal attributable to the
+    /// lifetime.
+    CloseLedgerAfterTheFirstPass,
 }
 
 #[cfg(test)]
