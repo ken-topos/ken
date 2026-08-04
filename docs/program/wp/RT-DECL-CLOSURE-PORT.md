@@ -640,7 +640,50 @@ The governing population is the **post-retarget executable call graph**:
   raw worker remains descriptor, provenance and template authority and is
   **absent from the emitted-`Function` population**.
 
-For the measured `fn2`, the second branch applies.
+⛔ **CORRECTED 2026-08-04 by `evt_3s0nf03nkmz0a`. This section previously
+asserted "for the measured `fn2`, the second branch applies." That was
+premature, and checkpoint 1 falsified it on the graph that exists there.** The
+measured checkpoint-1 census, reproduced independently by the Architect, is:
+
+```text
+template_only={}
+executable=[fn0, fn1, fn2, fn3]
+```
+
+**Branch one is the correct answer for the partial graph at checkpoint 1**, and
+the checkpoint-1 algorithm is sound substrate. Its *population answer* is
+**provisional** until the last retargeting seat is closed in checkpoint 4.
+⛔ **The final census decides `fn2`'s branch — not this frame's earlier
+prediction, and not the current partial graph.**
+
+**Why branch one holds there.** A second, distinct route reaches origin 36:
+`lower_source_machine_with_continuation ->
+call_declared_recursive_position_unit(origin 36)`. It is a planner-derived
+**carried source-machine recursive predecessor**, separate from the static-worker
+call already retargeted through the generated context. It is real and it is
+live: removing its graph edge would make the live invocation lose its declared
+target, so **neither global suppression nor reclassification as dead is
+lawful.**
+
+**Two axes, and they must not be conflated.**
+
+| question | answer, and where it is settled |
+|---|---|
+| Does the semantic recursive predecessor exist and remain reachable? | Yes — planner-derived, stays in the closed graph. Checkpoint 3 answers only this. |
+| Which final `Function` does that predecessor call? | At checkpoint 1, raw `fn2`. That is the current lowering binding, **not** proof that raw `fn2` is the final callee. Settled in checkpoint 4. |
+
+Checkpoint 3's origin-25 rule **preserves** this route and makes downstream
+reachability honest for it. It does not delete it, make it unreachable, or
+decide that its current raw callee is permanent — origin 25 is *downstream* of
+the invocation, and ⛔ **reachability repair cannot retarget the invocation that
+supplies the predecessor.**
+
+⛔ **"A `StaticBody` call edge is never superseded" is too broad for the
+completed mechanism.** The **source edge and its provenance are never deleted**.
+The **emitted callee edge may be retargeted** when exact planner authority
+proves that this carried invocation executes in a generated continuation
+context. Any implementation comment or table stating the broader claim is to be
+narrowed to that.
 
 ⛔ **Do not merely skip `define_function` after declaring an "emittable" raw
 unit.** That mints an undefined phantom and falsifies the declared/defined
@@ -709,27 +752,65 @@ same semantic node**.
 | 1 | raw-template versus executable-unit population substitution | the descriptor/call-target split and the no-phantom census |
 | 2 | one cross-pass continuation ledger lifetime | the exact-set closeout across all three definition passes |
 | 3 | recursive-return join reachability | origin 25, retaining the existing CFG validator |
-| 4 | generated-context and checked-IH activation | the positive route, then every ruled discriminator |
+| 4 | generated-context and checked-IH activation | three ordered steps below: carried-invocation binding, final executable-population close, then activation and evidence |
+
+**Landed so far:** checkpoint 1 at exact
+`8e07bab89762dab79e041fab768485e8d331abec` (accepted as checkpoint-1 evidence
+and preservation; its branch-one population answer is **provisional**), and
+checkpoint 2 at exact `e5762c5c` (one ledger lifetime, before/after measured
+under the ruling's own diagnostic bypasses). Both are preservation checkpoints,
+never candidates. **Checkpoints 2 and 3 are semantically unchanged by the
+2026-08-04 correction.**
 
 Each checkpoint must **preserve `cbdf9a2a`'s sound generated-context work** and
 must be **commit-clean before the next begins**. ⛔ **No red-versus-red
 discriminator counts as evidence** — the ruled discriminators land against the
-positive route in checkpoint 4, never before. Checkpoint 4 may be split into its
-own bounded final checkpoint if the activation seam does not fit one turn.
+positive route in checkpoint 4, never before.
+
+##### Checkpoint 4, in three ordered steps
+
+**Added 2026-08-04, Architect ruling `evt_3s0nf03nkmz0a`. This is a retarget of
+one exact emitted call while preserving its semantic predecessor — not deletion
+of the edge**, and it must use the existing continuation-specialization and
+generated-context mechanism.
+
+1. **Carried-invocation binding.** Before lowering, project an **exact** binding
+   from this planner-issued source-machine recursive invocation to its exact
+   continuation-specialized generated execution context. ⛔ The lookup must be
+   keyed by **the invocation's causal identity and retained source
+   coordinates** — never merely by body origin, ABI shape, "a context exists",
+   or first match. **Zero or multiple bindings is a hard stop.** If the exact
+   causal identity is not available at the source-machine seat, **planning must
+   expose it before definition; lowering may not reconstruct it.**
+2. **Final executable-population close.** Re-run checkpoint 1's post-retarget
+   population and the declared/defined/no-phantom census **after that binding
+   exists**. If another exact raw call still remains, `fn2` **stays branch one**
+   and its permanent raw closure refusal governs that route. **Only if every
+   emitted invocation has an exact generated-context target** does `fn2` become
+   descriptor/provenance/template-only, i.e. branch two.
+3. **Checked-IH activation and evidence.** Then discharge the already-recorded
+   carried-marker activation, and run the positive route plus **all** ruled
+   discriminators against the fully closed route.
+
+⛔ **This authorizes no runtime selector, closure carrier, raw-ABI widening,
+global body suppression, template recovery from a carried word, or choice by
+shape.**
+
+Any of these three steps may be split into its own bounded checkpoint if it does
+not fit one turn.
 
 **Only after checkpoint 4 is green is `D6` retried unchanged** — one
 production action: retire `TransparentDeclarationClosure`, remove the selector
 witness, re-run the closed evidence unhooked.
 
-**Resume base and scaffolding. ⛔ Corrected 2026-08-04 (second time this day) —
-the resume point is `cbdf9a2a`.** Runtime resumes from exact
-`cbdf9a2a9630517c2355dc487b51cba5be20e713` and begins at **checkpoint 1**.
-`cbdf9a2a` carries the generated contexts, immediate slots, retarget and
-emission seam, all measured and all accepted as sound. Reverting to `a765b8d3`,
-`c8f3a75e` or `bffc7f5b` would discard that work along with the result-edge
-projection, the detached seat, the claim/call factoring and the exact
-validation. `cbdf9a2a`, `a765b8d3`, `c8f3a75e`, `08cb257f` and `bffc7f5b` are
-**all** preservation and evidence checkpoints, **never candidates**.
+**Resume base and scaffolding. ⛔ Corrected 2026-08-04 (third time this day) —
+the resume point is `e5762c5c`, at checkpoint 3.** Runtime resumes from exact
+`e5762c5c`, which carries checkpoints 1 and 2 on top of `cbdf9a2a`'s generated
+contexts, immediate slots, retarget and emission seam. Reverting to `cbdf9a2a`,
+`8e07bab8`, `a765b8d3`, `c8f3a75e` or `bffc7f5b` would discard landed accepted
+work. `e5762c5c`, `8e07bab8`, `cbdf9a2a`, `a765b8d3`, `c8f3a75e`, `08cb257f` and
+`bffc7f5b` are **all** preservation and evidence checkpoints, **never
+candidates**.
 ⛔ **The localization trace is scaffolding, not acceptance evidence.** Retain it
 across the four checkpoints, then remove it or replace it with load-bearing
 discriminator controls **before** candidate routing. `D6`, the candidate route,
