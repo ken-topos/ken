@@ -2126,6 +2126,50 @@ impl ContinuationClaimLedger {
     }
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 2 — open the ONE cross-pass causal
+/// ledger.**
+///
+/// Called from the orchestration before the first generated `Function`, so
+/// every pass that can declare, claim or emit a causal call accumulates into
+/// this single object.
+///
+/// ⛔ There is exactly one of these and it must not be re-opened. A second open
+/// would discard whatever the first had accumulated and leave a partial
+/// equality reading as a global one, which is the failure mode checkpoint 2
+/// exists to remove — so re-opening rejects rather than replacing.
+pub(super) fn open_continuation_claim_ledger(
+    compiler: &mut Lowering<'_>,
+    bundle: &UnitBundle,
+) -> Result<(), CraneliftBackendError> {
+    if compiler.continuation_claims.is_some() {
+        return Err(backend_module(
+            "the continuation claim ledger is already open; one artifact has exactly one ledger              and re-opening would silently discard every token recorded so far"
+                .to_string(),
+        ));
+    }
+    compiler.continuation_claims = Some(ContinuationClaimLedger::open(
+        &compiler.static_transition_plan,
+        bundle,
+    )?);
+    Ok(())
+}
+
+/// **`D5a` checkpoint 2 — close it, once, after every generated `Function`.**
+///
+/// The single global `planned = resolved = declared = claimed = emitted`
+/// equality. ⛔ Not a per-pass partial: a pass that discharges nothing is
+/// normal, and only the whole-artifact set answers whether every planned causal
+/// token was discharged exactly once.
+pub(super) fn close_continuation_claim_ledger(
+    compiler: &mut Lowering<'_>,
+) -> Result<(), CraneliftBackendError> {
+    compiler
+        .continuation_claims
+        .take()
+        .ok_or_else(|| backend_module("the continuation claim ledger went missing".to_string()))?
+        .close()
+}
+
 pub(super) fn define_unit_bodies<M: Module>(
     module: &mut M,
     compiler: &mut Lowering<'_>,
@@ -2137,12 +2181,6 @@ pub(super) fn define_unit_bodies<M: Module>(
     let root = compiler.static_transition_plan.root_emittable_unit()?.function();
     // `D4`: projected once, declared afresh into each generated function below.
     let worker_targets = resolve_worker_targets(&compiler.static_transition_plan, bundle)?;
-    // `D3` — one affine claim per planned causal token, owner-checked against
-    // the exact unit being defined.
-    compiler.continuation_claims = Some(ContinuationClaimLedger::open(
-        &compiler.static_transition_plan,
-        bundle,
-    )?);
     // `RT-DECL-CLOSURE-PORT` `D5` — opened here because this bundle pass is the
     // only place a checked same-SCC call can reach a declaration-owned unit.
     compiler.checked_call_ledger = Some(CheckedCallLedger::open(
@@ -2194,13 +2232,10 @@ pub(super) fn define_unit_bodies<M: Module>(
             }
         }
     }
-    // Closure accounting after every unit is defined: no planned causal token
-    // may be left unclaimed.
-    compiler
-        .continuation_claims
-        .take()
-        .ok_or_else(|| backend_module("the continuation claim ledger went missing".to_string()))?
-        .close()?;
+    // ⛔ The continuation ledger is NOT closed here. `D5a` checkpoint 2 moved
+    // its lifetime out to the orchestration in `core.rs`, because two more
+    // passes after this one declare, claim and emit causal calls and closing
+    // here reported their tokens absent before they could exist.
     // `D5` closeout, before the artifact is published: planned = consumed =
     // emitted, and every emitted actual callee equals its exact resolved
     // target. ⛔ `consumed` is the affine machinery's OWN set, passed in rather

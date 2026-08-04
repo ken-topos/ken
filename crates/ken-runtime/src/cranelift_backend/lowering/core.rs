@@ -880,6 +880,26 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
             let (unit_bundle, call_edges) = functionized_bundle
                 .as_ref()
                 .expect("the functionized selector arm owns its bundle");
+            // `RT-DECL-CLOSURE-PORT` `D5a` checkpoint 2 — THE ONE LEDGER'S
+            // LIFETIME, opened and closed HERE rather than inside any single
+            // definition pass.
+            //
+            // ⛔ It used to open and close inside `define_unit_bodies`, which
+            // is the FIRST of the passes that declare, claim and emit causal
+            // calls. Its exact-set equality therefore ran while the
+            // generated-context pass had not yet had a chance to declare
+            // anything, and would report a planned token absent that was about
+            // to be discharged. ⇒ The defect was the *lifetime*, not the
+            // equality.
+            //
+            // ⭐ The position is the whole deliverable. Both endpoints sit in
+            // this one block, around every pass that can own a causal token, so
+            // "one global equality" is visible in a single place instead of
+            // being a property a reader must reconstruct from three files.
+            // There is deliberately no per-pass partial close and no second
+            // mirrored ledger — the passes accumulate into this one and it is
+            // checked once.
+            super::units::open_continuation_claim_ledger(&mut compiler, unit_bundle)?;
             let root_result = super::units::define_unit_bodies(
                 &mut module,
                 &mut compiler,
@@ -919,6 +939,18 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 process_mode,
                 project_public_scalar_root,
             )?;
+            // Every generated `Function` that can own a causal token now exists
+            // and has recorded itself, so the ONE global exact-set equality
+            // runs here.
+            //
+            // ⚠ Closing right after the last definition pass and before the
+            // root adapter is the tempting spot. It is closed after the adapter
+            // instead: the adapter is itself a generated `Function`, and
+            // closing before it would make a causal ref declared there
+            // invisible to the equality rather than caught by it. It declares
+            // none today — that is a fact about the adapter, not a reason to
+            // narrow the window.
+            super::units::close_continuation_claim_ledger(&mut compiler)?;
             root_result
         }
         BodyEmissionAuthority::RecursiveDescent => {
