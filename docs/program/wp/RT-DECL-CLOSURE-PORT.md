@@ -1310,9 +1310,20 @@ missing edge must fail **planning/compilation before `ObjectEmission`**.
 > **⭐ REQUIRED REPLACEMENT DERIVATION (Architect `evt_4p9ne0vcds5hb` §3).**
 > Re-derive `D7` from the **actual owner/phase transition graph**, after the finite
 > generated-unit / specialization / continuation fixed point closes. The planner
-> materializes **one exact `BoundaryUse`-shaped record per static lowering event**
-> that moves, stores, publishes, forwards, or semantically inspects a phase-bearing
-> operand. Names may vary; each record carries:
+> materializes **one exact `BoundaryUse`-shaped record per semantic producer
+> occurrence** that moves, stores, publishes, forwards, or semantically inspects a
+> phase-bearing operand. Names may vary; each record carries:
+>
+> **CORRECTED 2026-08-04 by `evt_4cbvtjh9dsv6d`. This clause read "one exact
+> record per static lowering event", and the allocation census falsifies it: in
+> one compilation, 44 of 123 compile/occurrence pairs emit more than one static
+> allocation, up to 26.** The record is not an affine allocation token. It proves
+> a universal fact about one semantic producer occurrence — the exact
+> possible-owner meet of its ordered children and the lane that meet selects —
+> and that proof stays true every time the backend replicates the same source
+> lowering under the same emission owner. **Duplicating the proof does not
+> consume it.** See the relational closure below, which replaces per-record
+> count-one.
 >
 > - producer owner/phase **and** consumer owner/phase;
 > - exact source origins, **or** a planner-interned synthesized-edge identity where
@@ -1339,9 +1350,63 @@ missing edge must fail **planning/compilation before `ObjectEmission`**.
 >    obligation **before allocation**;
 > 5. **reject any generated edge added after the plan fixed point closes.**
 >
-> Validation before function definition compares the exact **planned-edge set**
-> against the exact **emitted-consumption ledger**: no missing, extra, duplicate,
-> wrong-owner, wrong-phase, wrong-child-path, or unconsumed edge. ⭐ Rust
+> Validation before function definition compares the exact **planned-edge
+> relation** against the exact **emitted-consumption ledger**: no missing, extra,
+> duplicate, wrong-owner, wrong-phase, wrong-child-path, or unconsumed edge.
+>
+> #### The aggregate lifecycle law — a relation, not a per-record count
+>
+> **Binding form, Architect `evt_4cbvtjh9dsv6d`.** Let `P` be the closed set of
+> planner-issued semantic aggregate occurrence records, keyed by exact emission
+> owner plus semantic producer seat plus role/schema and any genuinely semantic
+> child/path discriminator; let `E` be the set of actual static
+> aggregate-allocation instructions the backend emits; let `R ⊆ E × P` be the
+> checked allocation relation. The required closure is:
+>
+> 1. every `e ∈ E` has **exactly one** related record `p ∈ P`;
+> 2. before emitting `e`, that record reconciles the current
+>    `ContinuationEmissionOwner`, seat, role/schema, shape, lane, ordered child
+>    obligations, and opaque occurrence ID;
+> 3. every related record is planned — no fabricated, stale, transplanted, or
+>    cross-owner ID enters `R`;
+> 4. `image(R) = P` exactly, so an **unused** planned record still rejects;
+> 5. each actual allocation instruction is recorded **once** — recording one
+>    emitted instruction twice, attaching two records to it, or emitting it
+>    without a record all reject;
+> 6. **one record may lawfully relate to many distinct allocation instructions.**
+>    Multiplicity on the `P` side is unbounded by this proof.
+>
+> **Count one moves from the record to the actual allocation event.** "Duplicate"
+> stays illegal for two planner records naming one semantic producer, and for two
+> ledger entries naming one actual allocation instruction. It is **not** illegal
+> for two distinct CLIF allocation instructions to use the same exact, reconciled
+> lifetime proof.
+>
+> **The boundary this protects:** minting one planner identity per CLIF emission
+> would make the semantic plan predict backend expansion, recursive descent, and
+> block cloning. That is the wrong layer and buys no lifetime safety. A
+> lowering-generated repetition counter is worse — it becomes identity authority
+> *after* planning. **The observed CLIF instruction/result is ledger evidence,
+> never planner identity; no lowering counter and no per-emission planner key are
+> authorized.**
+>
+> **Implementation boundary.** Keep template attachment and read-only lookup
+> repeatable and outside the ledger. Route every aggregate allocation through one
+> checked wrapper — conceptually `emit_planned_aggregate_alloc(current_owner,
+> occurrence, shape, children, ...)` — which resolves and fully reconciles the
+> record **before** the raw allocation, emits exactly one carrier allocation,
+> records the actual CLIF instruction/result paired with the record, and rejects
+> a duplicate actual event or a conflicting pairing. At Function and whole-pass
+> closeout, compare the exact relation and its image, **not** a per-record count.
+> A failed definition never closes successfully.
+>
+> **Still binding, unchanged by this correction:** the owner-axis finding
+> (`Predeclared` versus `Specialization` stays in the key and the
+> reconciliation) and the site-dependent population finding (every fixed use that
+> can allocate needs an exact record, or a static non-allocation proof plus a
+> fail-closed guard).
+>
+> ⭐ Rust
 > exhaustiveness stays useful for the set of semantic operations and dispositions —
 > but **privacy plus the choke-point token requirement is what proves no real
 > transition bypasses the population.**
