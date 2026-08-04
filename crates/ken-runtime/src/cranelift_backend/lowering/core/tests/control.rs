@@ -11905,6 +11905,26 @@ fn a_closure_stored_as_constructor_data_cannot_cross_a_unit_boundary() {
 ///
 /// ⚠ The census and trace are still printed. They cost nothing on a green run
 /// and are the first thing anyone wants when this goes red.
+///
+/// ## Why the trace scaffold is RETAINED, at checkpoint 4's close
+///
+/// The frame allows retiring the localization trace *only where a discriminator
+/// now bears its claim*. Almost everything it used to carry has moved to
+/// structured evidence: the population census to
+/// `d5a_the_final_executable_population_is_the_emittable_set_minus_the_superseded_bodies`,
+/// the capture projection to
+/// `d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_slot`,
+/// the context binding to the three binding rows, and the operand suffix to the
+/// prefix relation in the marker event log.
+///
+/// ⛔ **One claim has no other bearer: the assembled binder run below.** The
+/// `binder_index: 0` above proves entry 0 reaches the `StaticWorker` — the half
+/// that matters most, and it is checked against the plan rather than against
+/// this string — but nothing else measures that the run continues
+/// `[field, input, input]` and stops there. `continuation_case_binder_run_*`
+/// measures the *law* and stays green if production stops calling it. ⇒ The
+/// trace stays until a discriminator carries that shape, and this paragraph is
+/// the reason rather than an oversight.
 #[test]
 fn d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_worker_call() {
     reset_d5a_trace();
@@ -13344,5 +13364,204 @@ fn d5a_a_superseded_worker_body_keeps_its_raw_descriptor_authority() {
     assert!(
         d5a_route_applications() > 0,
         "the template population must actually have been narrowed"
+    );
+}
+
+/// **`D5a` checkpoint 2 — the one global causal equality closes over the
+/// GENERALIZED emission-owner domain.**
+///
+/// The ruling asks for one whole-artifact
+/// `planned = resolved = declared = claimed = emitted` equality, not per-pass
+/// partials — and the population it must close over now includes tokens whose
+/// emission owner is a **`Specialization`**, discharged in a definition pass
+/// that runs *after* the ordinary units. The failure this forbids is subtle:
+/// each individual pass can be internally consistent while the artifact as a
+/// whole loses a token.
+///
+/// ⭐ The mutation reproduces the checkpoint-2 defect exactly — the equality is
+/// untouched and only the **window** it is taken over moves back to the first
+/// definition pass. So the refusal is attributable to the lifetime and to
+/// nothing else, which is precisely what "the defect was the lifetime, not the
+/// equality" means.
+///
+/// The row also measures that the domain really is generalized: the witness
+/// plans a causal call whose emission owner is a `Specialization`, so a ledger
+/// closed before that owner's `Function` exists is closed over a strictly
+/// smaller population than the plan issued.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_the_one_causal_ledger_closes_over_the_generalized_emission_owner_domain() {
+    with_d5a_witness_plan(|plan| {
+        let specialization_owned = plan
+            .continuation_calls()
+            .expect("continuation calls")
+            .iter()
+            .filter(|call| {
+                matches!(
+                    call.emission_owner(),
+                    ContinuationEmissionOwner::Specialization(_)
+                )
+            })
+            .count();
+        assert!(
+            specialization_owned > 0,
+            "the witness must plan at least one causal call emitted from a generated context. \
+             With none, the ledger's domain is the pre-`D5a` predeclared one and closing it \
+             early would lose nothing — the row would be green because there was nothing to \
+             lose, not because the lifetime is right"
+        );
+    });
+    let refusal = with_transparent_declaration_closure_witness(|| {
+        with_d5a_route_mutation(D5aRouteMutation::CloseLedgerAfterTheFirstPass, || {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                "d5a_ledger_lifetime",
+                false,
+            )
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"))
+            .expect_err(
+                "closing the ledger before any generated `Function` exists must refuse: the \
+                 specialization-owned token is planned and cannot yet have been claimed. A \
+                 compile here would mean the equality is satisfied by a population smaller than \
+                 the plan issued, which is the per-pass partial the ruling forbids",
+            )
+        })
+    });
+    assert!(
+        d5a_route_applications() > 0,
+        "the early close must actually have happened"
+    );
+    assert!(
+        refusal.contains("does not equal the planned one") && refusal.contains("absent"),
+        "the refusal must come from the EQUALITY finding an undischarged token -- measured: \
+         `1 planned tokens absent, 0 unplanned tokens present`, which is exactly the \
+         specialization-owned call the early window excludes. Anything else, in particular \
+         `the continuation claim ledger went missing`, would mean the early close SUCCEEDED and \
+         this row is measuring the aftermath instead of the closeout: {refusal}"
+    );
+}
+
+/// **`D5a` — a specialization is interned BEFORE the fixed point descends into
+/// its worker body.**
+///
+/// The descent that discovers nested producers is queued only when
+/// `intern_specialization` reports the key newly inserted, and it carries the
+/// id that interning just assigned as the enclosing emission owner. That
+/// ordering is what makes the fixed point terminate on a recursive body: a
+/// descent that rediscovers its own key finds it interned and adds no work.
+///
+/// ⭐ The consequence is checkable on the finished plan, over the planner's own
+/// dense identities: a specialization produced *by* a descent names an
+/// enclosing specialization that was interned **strictly earlier**. Interning
+/// after the descent, or queuing work for a key not yet interned, cannot
+/// produce that ordering.
+///
+/// ⚠ **MEASURED**: every specialization-owned unit names an enclosing id that
+/// exists and is strictly smaller than its own, and the interned population is
+/// exactly the unit population. **CLAIMED**: the fixed point terminates on a
+/// recursive body. **THE GAP**: those are different statements. The termination
+/// half rests on the `inserted` guard at the descent, and the honest reaching
+/// mutation for it — queue the descent unconditionally — **does not terminate**,
+/// so it cannot be committed as a control. It is not written rather than
+/// written in a form that would hang CI.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_a_specialization_is_interned_before_the_descent_that_produced_it() {
+    with_d5a_witness_plan(|plan| {
+        let units = plan.continuation_units().expect("continuation units");
+        let ids = units.iter().map(|unit| unit.id()).collect::<BTreeSet<_>>();
+        assert_eq!(
+            ids.len(),
+            units.len(),
+            "the interned population must be in bijection with the unit population; a repeated \
+             dense id would mean two keys collapsed onto one specialization"
+        );
+        let mut descended = 0usize;
+        for unit in &units {
+            if let ContinuationEmissionOwner::Specialization(enclosing) = unit.emission_owner() {
+                assert!(
+                    ids.contains(&enclosing),
+                    "specialization {:?} names enclosing {enclosing:?}, which is not an interned \
+                     unit. A descent carrying an id that does not exist means work was queued \
+                     before its key was interned",
+                    unit.id()
+                );
+                assert!(
+                    enclosing < unit.id(),
+                    "specialization {:?} was produced by a descent from {enclosing:?}, so the \
+                     enclosing key must have been interned STRICTLY EARLIER and hold the smaller \
+                     dense id. Interning after the descent cannot produce this ordering — and \
+                     nor can it terminate on a recursive body, because the key its own descent \
+                     rediscovers would not yet be present",
+                    unit.id()
+                );
+                descended += 1;
+            }
+        }
+        assert!(
+            descended > 0,
+            "the witness must contain at least one specialization the fixed point reached by \
+             DESCENDING into a worker body. Without one, the ordering above holds vacuously and \
+             the recursive case is unmeasured"
+        );
+    });
+}
+
+/// **`D5a` — the measured residual: swapping the two capture coordinates is
+/// NOT caught.**
+///
+/// ⛔⛔ **This row asserts that a wrong read COMPILES.** It exists because the
+/// alternative is a paragraph of prose admitting the gap, and a residual stated
+/// only in a comment is the one thing nobody re-checks. Executable, it cannot
+/// drift away from the truth.
+///
+/// Indexing the emitting environment with `source_abi_position` instead of
+/// `immediate_slot` binds different operands on a specialization-owned edge —
+/// they are indices into different environments. Both are in range on this
+/// witness, and the values they select are untyped boundary words, so nothing
+/// refuses. The compile succeeds and the artifact is wrong.
+///
+/// **Promise class: transition sentinel**, and stated as one honestly:
+///
+/// - it is named for the **boundary**, not for a count;
+/// - **the event that retires it** is any mechanism that makes a swapped read
+///   detectable at this seat — a planner-supplied cross-check on the capture
+///   run, or a typed operand that distinguishes the two environments. Neither
+///   exists today and neither is authorized by this checkpoint, which forbids
+///   new planner/ABI semantics;
+/// - when that lands, this row goes **red on good news**, and the correct
+///   response is to delete it and fold the claim into
+///   `d5a_the_capture_projection_reads_the_immediate_slot_and_bounds_it`.
+///
+/// ⚠ Until then: `d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_slot`
+/// pins the split on the plan, and the fact that exactly one field is read at
+/// exactly one site is what carries the rest. That is weaker than a guard and
+/// this row is the record of how much weaker.
+#[test]
+fn d5a_reading_the_root_position_as_the_immediate_slot_is_currently_undetectable() {
+    let (outcome, applications) = with_transparent_declaration_closure_witness(|| {
+        with_d5a_route_mutation(D5aRouteMutation::ReadRootPositionAsImmediateSlot, || {
+            let outcome =
+                crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                    "d5a_coordinate_swap",
+                    false,
+                )
+                .map(|_| ())
+                .map_err(|error| format!("{error:?}"));
+            (outcome, d5a_route_applications())
+        })
+    });
+    assert!(
+        applications > 0,
+        "the swap must actually have been applied, or this row records a residual it never \
+         reached"
+    );
+    assert!(
+        outcome.is_ok(),
+        "GOOD NEWS, and this row is now the wrong shape. Something now detects a swapped \
+         capture coordinate at this seat. Delete this sentinel and fold the claim into the \
+         positive control that names the guard: {outcome:?}"
     );
 }
