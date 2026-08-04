@@ -2622,8 +2622,42 @@ enum Px8jRecursorMalformation {
     BrokenScopeParent,
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D6` — a functionized recursive declaration ACCEPTS
+/// a changing argument constructor through its one `ValueWord` parameter.**
+///
+/// ⭐⭐ **This row was `recursive_declaration_shape_change_hits_typed_boundary`,
+/// a negative, and `D6` inverted it — under the frame's explicit direction, not
+/// as a convenience.** The fixture calls a recursive transparent declaration
+/// with `Option::None` at the entry and `Option::Some(Int)` at the recursive
+/// site.
+///
+/// `same_recursive_argument_shapes` is **not a Ken semantic law and not a
+/// declared function-unit ABI predicate.** Its only production use guards
+/// `RecursiveDescent`'s same-function CFG backedges, where one fixed run of
+/// specialized `Lowered` block parameters has to represent every loop iteration
+/// — there, `None` becoming `Some(Int)` changes the compile-time template and
+/// must reject. A functionized call holds a different representation contract:
+/// every declared parameter is one `AbiSlotKind::Parameter` with
+/// `AbiCarrier::ValueWord`, the descriptor is independent of the particular
+/// runtime constructor, and each actual argument is transferred through the
+/// boundary encoder at the call. ⇒ `None` and `Some(Int)` are **two lawful
+/// values of one declared slot**, not an ABI shape disagreement.
+///
+/// ⛔ **No guard was lost, and none was transplanted.**
+/// `same_recursive_argument_shapes` stays exactly where it was, guarding every
+/// remaining `RecursiveDescent` backedge; it is deliberately NOT carried into
+/// the declared-call path. The separate negative the frame requires — a
+/// genuinely non-transferable value graph — is retained and unaffected:
+/// `c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth` here, and
+/// the root/depth admission rows in `constructors.rs`. This row proves the
+/// restriction was an implementation artefact of the retired lane; those prove
+/// the real boundary still refuses.
+///
+/// **Promise class: durable invariant.** The subject is that one declared
+/// `ValueWord` slot admits two constructors of one type. It reds if the
+/// declared-call path ever acquires a per-constructor shape predicate.
 #[test]
-fn recursive_declaration_shape_change_hits_typed_boundary() {
+fn d6_a_functionized_recursive_declaration_accepts_a_changing_argument_constructor() {
     let symbol = "decl:fixture::Loop::run".to_string();
     let declaration = RuntimeDeclaration {
         symbol: symbol.clone(),
@@ -2670,23 +2704,20 @@ fn recursive_declaration_shape_change_hits_typed_boundary() {
         Some(test_only_distinguished_root_join_plan()),
         None,
     );
-    let error = match result {
-        Ok(_) => panic!("a changing recursive native representation must fail closed"),
-        Err(error) => error,
-    };
-    assert!(
-        matches!(
-            &error,
-            CraneliftBackendError::Unsupported(UnsupportedLowering {
-                construct: "DeclarationRef",
-                reason,
-            }) if reason.contains("changes its native argument representation")
-        ),
-        // ⚠ A bare `matches!` assertion here reports only that the shape was
-        // wrong, never which error actually arrived — and this fixture can fail
-        // closed for several unrelated reasons upstream of the one it is about.
-        "the changing recursive representation must be the reason this fails: {error:?}"
-    );
+    // ⚠ Reported with the error attached rather than as a bare `is_ok`: this
+    // fixture could fail closed for several reasons upstream of the one the row
+    // is about, and "it still refuses" and "it refuses for a NEW reason" are
+    // different findings that an unadorned assertion would merge.
+    if let Err(error) = &result {
+        panic!(
+            "D6: a functionized recursive declaration must accept `None` at the entry and \
+             `Some(Int)` at the recursive site -- they are two lawful values of one declared \
+             `ValueWord` slot. If this is the old `changes its native argument representation` \
+             refusal, the declaration is still on the `RecursiveDescent` lane and the \
+             activation did not take. If it is anything else, it is a new refusal on the \
+             declared-call path and must be reported, not accommodated: {error:?}"
+        );
+    }
 }
 #[test]
 fn checked_join_marker_without_exact_plan_site_rejects_before_emission() {
@@ -5191,9 +5222,16 @@ fn retained_authority_residual_is_the_typed_selector_accounting() {
             ..RuntimeSymbolMetadata::empty()
         },
     };
+    // ⭐ **`D6` ACTIVATED this row.** A transparent declaration whose body is a
+    // closure seed used to retain the whole object on `RecursiveDescent`. It is
+    // now reached as a separately owned callable unit, so its head contributes
+    // no retained reason and the object selects `FunctionizedUnits`. ⛔ The
+    // body is still classified: this asserts the head is inert, not that
+    // declarations are exempt.
     assert_eq!(
         declaration_recursive_descent_residual(&declaration),
-        Some(RecursiveDescentResidual::TransparentDeclarationClosure)
+        None,
+        "D6: a closure-seed transparent declaration head no longer retains the lane"
     );
     let declarations = BTreeMap::from([(symbol.as_str(), &declaration)]);
     assert_eq!(
@@ -5201,7 +5239,9 @@ fn retained_authority_residual_is_the_typed_selector_accounting() {
             &RuntimeExpr::Value(RuntimeValue::Bool(true)),
             &declarations,
         ),
-        BodyEmissionAuthority::RecursiveDescent
+        BodyEmissionAuthority::FunctionizedUnits,
+        "D6: with the residual retired and nothing else firing, this program is \
+         functionized"
     );
 
     let completed_port = RuntimeExpr::ComputationalMatch {
@@ -10349,7 +10389,16 @@ fn d1_each_residual_variant_is_observable() {
         );
     }
 
-    // The fifth is declaration-borne, so it needs the declaration route.
+    // ⭐⭐ **`D6` RETIRED the fifth variant, and this is the row that proves the
+    // retirement is real rather than a name change.** The declaration route is
+    // still exercised, with the same closure-seed declaration that used to
+    // report `TransparentDeclarationClosure` — and it must now report **nothing
+    // at all**.
+    //
+    // ⛔ Asserting the empty set, not merely the absence of one variant: an
+    // enumerator that had silently reclassified the head into some other
+    // variant would satisfy `!contains(retired)` while still retaining the lane
+    // for every closure-seed declaration in the program.
     let declaration = d1_transparent_declaration_closure_witness();
     let mut declarations: BTreeMap<&str, &RuntimeDeclaration> = BTreeMap::new();
     declarations.insert(declaration.symbol.as_str(), &declaration);
@@ -10358,9 +10407,10 @@ fn d1_each_residual_variant_is_observable() {
         &declarations,
     );
     assert!(
-        reported.contains(&RecursiveDescentResidual::TransparentDeclarationClosure),
-        "TransparentDeclarationClosure must be observable by the enumerator; it reported \
-         {reported:?}"
+        reported.is_empty(),
+        "D6: a closure-seed transparent declaration whose body is a bare value must now \
+         contribute NO residual. A nonempty set here means the head was reclassified rather \
+         than retired, and the whole-program selector would still be held: {reported:?}"
     );
 }
 
@@ -10374,8 +10424,13 @@ fn d1_each_residual_variant_is_observable() {
 /// variants separates the two behaviours.
 ///
 /// ⛔ Asserts the **exact set**, not a length and not a subset: a walk that
-/// found four of five and a walk that found five would both satisfy "more than
+/// found three of four and a walk that found four would both satisfy "more than
 /// one".
+///
+/// ⚠ `D6` retired the fifth variant, so the closure-seed declaration is still
+/// supplied here and now contributes **nothing** — which keeps this row a live
+/// check on the declaration route rather than turning it into an
+/// expression-only walk.
 ///
 /// **Promise class: durable invariant.** It pins that the reported set equals
 /// the set of variants the program exhibits. `D2`-`D6` rewrite this file; every
@@ -10402,7 +10457,6 @@ fn d1_the_enumerator_reports_every_variant_not_the_first() {
         RecursiveDescentResidual::MatchScrutineeRecursor,
         RecursiveDescentResidual::LexicalCallArgumentRecursor,
         RecursiveDescentResidual::SeedClosureCall,
-        RecursiveDescentResidual::TransparentDeclarationClosure,
     ]
     .into_iter()
     .collect();
@@ -10656,10 +10710,21 @@ fn d5_compile(
     (outcome, d5_emitted_declaration_calls())
 }
 
-// ── Control 1: the exact fixture, UNHOOKED ────────────────────────────────
+// ── Control 1: the exact fixture, ACTIVATED ───────────────────────────────
+//
+// ⭐⭐ **This row is where `D6` is visible as one fact.** It used to read: the
+// fixture carries exactly the residual the witness masks, and production
+// selects `RecursiveDescent`. Both halves have inverted, and the inversion is
+// the whole node.
+//
+// ⛔ It asserts the **empty set** and not merely the retired variant's absence.
+// The `D5` fixture is a closure-seed transparent declaration containing a
+// checked recursive declaration call — precisely the shape the campaign's other
+// four variants also key on — so "no residual fires" is a real claim about all
+// five classifiers on a nontrivial program, not a restatement of the deletion.
 
 #[test]
-fn d5_c1_the_unhooked_fixture_reports_one_residual_and_selects_recursive_descent() {
+fn d6_the_governed_fixture_reports_no_residual_and_selects_functionized_units() {
     let entry = d5_entry();
     let declaration = d5_declaration();
     let carrier = d5_frame_carrier();
@@ -10669,16 +10734,17 @@ fn d5_c1_the_unhooked_fixture_reports_one_residual_and_selects_recursive_descent
     ]);
     assert_eq!(
         enumerate_recursive_descent_residuals(&entry, &declarations),
-        BTreeSet::from([RecursiveDescentResidual::TransparentDeclarationClosure]),
-        "D5 control 1: the fixture must carry EXACTLY the residual the witness \
-         masks. A second residual here would leave witness mode on \
-         RecursiveDescent and make control 2 unreachable for a reason the \
-         control could not report"
+        BTreeSet::new(),
+        "D6: with the declaration-head variant retired, this fixture must carry NO residual at \
+         all. A residual here is one of the four RETAINED variants firing on a program that \
+         used to be masked past them -- report it rather than tuning it away, because it means \
+         the campaign has a second reason to hold this lane that nobody has enumerated"
     );
     assert_eq!(
         select_body_emission_authority(&entry, &declarations),
-        BodyEmissionAuthority::RecursiveDescent,
-        "D5 control 1: production selection is unchanged"
+        BodyEmissionAuthority::FunctionizedUnits,
+        "D6: production selection is ACTIVATED. This is the one line the whole node exists to \
+         change, and it is now reached with no test hook anywhere in the path"
     );
 }
 
@@ -10748,81 +10814,79 @@ fn d5_c2_the_witness_reaches_the_seam_and_emits_the_exact_planner_target() {
             ..RuntimeSymbolMetadata::empty()
         },
     };
-    with_transparent_declaration_closure_witness(|| {
-        assert_eq!(
-            select_body_emission_authority(&entry, &declarations),
-            BodyEmissionAuthority::FunctionizedUnits,
-            "D5 control 2: the witness must reach the functionized lane"
-        );
+    assert_eq!(
+        select_body_emission_authority(&entry, &declarations),
+        BodyEmissionAuthority::FunctionizedUnits,
+        "D5 control 2: the witness must reach the functionized lane"
+    );
 
-        // The three discriminating fixtures, all compiling after `D2a`.
-        for (label, entry, decls) in [
-            (
-                "closure-seed, referenced",
-                &entry,
-                BTreeMap::from([(D5_DECLARATION, &plain)]),
-            ),
-            (
-                "closure-seed, unreferenced",
-                &unreferenced,
-                BTreeMap::from([(D5_DECLARATION, &plain)]),
-            ),
-            (
-                "non-closure thunk",
-                &thunk_entry,
-                BTreeMap::from([(thunk.symbol.as_str(), &thunk)]),
-            ),
-        ] {
-            compile_expr_into_module(
-                new_jit_module().expect("JIT module"),
-                "d5_c2_population",
-                Linkage::Local,
-                entry,
-                &NativeSeedEnvironment::empty(),
-                decls,
-                None,
-                false,
-                None,
-                None,
-                None,
-            )
-            .map(|_| ())
-            .unwrap_or_else(|error| {
-                panic!("D5 control 2: the {label} fixture must compile after D2a: {error:?}")
-            });
-        }
-
-        // The checked self-call, end to end.
-        let (outcome, emitted) = d5_compile(d5_plan(), None);
-        outcome.unwrap_or_else(|error| {
-            panic!("D5 control 2: the exact checked self-call must compile: {error}")
+    // The three discriminating fixtures, all compiling after `D2a`.
+    for (label, entry, decls) in [
+        (
+            "closure-seed, referenced",
+            &entry,
+            BTreeMap::from([(D5_DECLARATION, &plain)]),
+        ),
+        (
+            "closure-seed, unreferenced",
+            &unreferenced,
+            BTreeMap::from([(D5_DECLARATION, &plain)]),
+        ),
+        (
+            "non-closure thunk",
+            &thunk_entry,
+            BTreeMap::from([(thunk.symbol.as_str(), &thunk)]),
+        ),
+    ] {
+        compile_expr_into_module(
+            new_jit_module().expect("JIT module"),
+            "d5_c2_population",
+            Linkage::Local,
+            entry,
+            &NativeSeedEnvironment::empty(),
+            decls,
+            None,
+            false,
+            None,
+            None,
+            None,
+        )
+        .map(|_| ())
+        .unwrap_or_else(|error| {
+            panic!("D5 control 2: the {label} fixture must compile after D2a: {error:?}")
         });
+    }
 
-        // The independent planner side: which unit does the plan say a
-        // declaration reference resolves to? ⛔ Derived from the plan's own
-        // `CallableDeclaration` descriptors, never from the emitter's map.
-        let declaration_units = d5_planned_callable_declaration_origins(&entry, &declarations);
-        assert!(
-            !declaration_units.is_empty(),
-            "D5 control 2: the plan must own at least one CallableDeclaration \
-             unit, or the comparison below has nothing to compare against"
-        );
-        assert!(
-            !emitted.is_empty(),
-            "D5 control 2: reaching the seam is the point — an empty emission \
-             record means the compile succeeded without ever calling a \
-             declaration-owned unit, and every negative would then be green for \
-             the wrong reason"
-        );
-        for (reference, target, _func) in &emitted {
-            assert!(
-                declaration_units.contains(target),
-                "D5 control 2: the call emitted for reference {reference:?} went \
-                 to {target:?}, which is not one of the planner-resolved \
-                 declaration-owned callable units {declaration_units:?}"
-            );
-        }
+    // The checked self-call, end to end.
+    let (outcome, emitted) = d5_compile(d5_plan(), None);
+    outcome.unwrap_or_else(|error| {
+        panic!("D5 control 2: the exact checked self-call must compile: {error}")
     });
+
+    // The independent planner side: which unit does the plan say a
+    // declaration reference resolves to? ⛔ Derived from the plan's own
+    // `CallableDeclaration` descriptors, never from the emitter's map.
+    let declaration_units = d5_planned_callable_declaration_origins(&entry, &declarations);
+    assert!(
+        !declaration_units.is_empty(),
+        "D5 control 2: the plan must own at least one CallableDeclaration \
+         unit, or the comparison below has nothing to compare against"
+    );
+    assert!(
+        !emitted.is_empty(),
+        "D5 control 2: reaching the seam is the point — an empty emission \
+         record means the compile succeeded without ever calling a \
+         declaration-owned unit, and every negative would then be green for \
+         the wrong reason"
+    );
+    for (reference, target, _func) in &emitted {
+        assert!(
+            declaration_units.contains(target),
+            "D5 control 2: the call emitted for reference {reference:?} went \
+             to {target:?}, which is not one of the planner-resolved \
+             declaration-owned callable units {declaration_units:?}"
+        );
+    };
 }
 
 /// Every origin the plan classifies as a declaration-owned callable unit.
@@ -10885,54 +10949,14 @@ fn d5_c3_a_second_residual_leaves_witness_mode_on_recursive_descent() {
         (D5_FRAME_CARRIER, &carrier),
         (second.symbol.as_str(), &second),
     ]);
-    with_transparent_declaration_closure_witness(|| {
-        assert_eq!(
-            select_body_emission_authority(&entry, &declarations),
-            BodyEmissionAuthority::RecursiveDescent,
-            "D5 control 3: the witness masks ONE residual variant. If it forced \
-             the authority instead, this would read FunctionizedUnits — and \
-             control 2's positive would be an artefact of the hook rather than \
-             evidence about the seam"
-        );
-    });
-}
-
-// ── Control 5: the witness does not leak ──────────────────────────────────
-
-#[test]
-fn d5_c5_the_witness_does_not_leak_past_its_scope() {
-    let entry = d5_entry();
-    let declaration = d5_declaration();
-    let carrier = d5_frame_carrier();
-    let declarations = BTreeMap::from([
-        (D5_DECLARATION, &declaration),
-        (D5_FRAME_CARRIER, &carrier),
-    ]);
-    with_transparent_declaration_closure_witness(|| {
-        assert_eq!(
-            select_body_emission_authority(&entry, &declarations),
-            BodyEmissionAuthority::FunctionizedUnits
-        );
-    });
     assert_eq!(
         select_body_emission_authority(&entry, &declarations),
         BodyEmissionAuthority::RecursiveDescent,
-        "D5 control 5: after the scope closes the ordinary selector is back. A \
-         leak would make every later test on this thread run under the witness, \
-         which reads as the witness being unnecessary"
-    );
-    // The panic path, which is the one a trailing `set` would miss.
-    let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        with_transparent_declaration_closure_witness(|| panic!("a control asserted inside"));
-    }));
-    assert!(unwound.is_err(), "the closure must have panicked");
-    assert_eq!(
-        select_body_emission_authority(&entry, &declarations),
-        BodyEmissionAuthority::RecursiveDescent,
-        "D5 control 5: RAII restoration, not a trailing set — a control that \
-         asserts inside the witness scope panics on failure, and a leaked \
-         witness would then silently rewrite every subsequent selection"
-    );
+        "D5 control 3: the witness masks ONE residual variant. If it forced \
+         the authority instead, this would read FunctionizedUnits — and \
+         control 2's positive would be an artefact of the hook rather than \
+         evidence about the seam"
+    );;
 }
 
 // ── Control 4, the runnable half: the ABI-domain mutations ────────────────
@@ -10958,77 +10982,72 @@ fn d5_c4_abi_domain_mutations_each_refuse_before_any_call_is_emitted() {
         units::D5DeclaredCallMutation::Header,
         units::D5DeclaredCallMutation::Offsets,
     ] {
-        with_transparent_declaration_closure_witness(|| {
-            units::with_d5_declared_call_mutation(mutation, || {
-                let (outcome, emitted) = d5_compile(d5_plan(), None);
-                let refusal = outcome.expect_err(&format!(
-                    "D5 control 4: the {mutation:?} mutation must be refused. A \
-                     compile that accepts it means the ABI reconciliation is \
-                     not reading that field, and a green D5 would be green for \
-                     the wrong reason"
-                ));
-                assert!(
-                    refusal.contains("disagree")
-                        || refusal.contains("parameter-then-capture input run"),
-                    "D5 control 4: the {mutation:?} mutation must get D5's OWN \
-                     refusal, not some later one it happens to also trip. \
-                     Otherwise the control names a plane that never ran: {refusal}"
-                );
-                assert!(
-                    emitted.is_empty(),
-                    "D5 control 4: the {mutation:?} mutation must refuse BEFORE \
-                     emission. A recorded call means a mis-declared frame was \
-                     already written: {emitted:?}"
-                );
-            });
+        units::with_d5_declared_call_mutation(mutation, || {
+            let (outcome, emitted) = d5_compile(d5_plan(), None);
+            let refusal = outcome.expect_err(&format!(
+                "D5 control 4: the {mutation:?} mutation must be refused. A \
+                 compile that accepts it means the ABI reconciliation is \
+                 not reading that field, and a green D5 would be green for \
+                 the wrong reason"
+            ));
+            assert!(
+                refusal.contains("disagree")
+                    || refusal.contains("parameter-then-capture input run"),
+                "D5 control 4: the {mutation:?} mutation must get D5's OWN \
+                 refusal, not some later one it happens to also trip. \
+                 Otherwise the control names a plane that never ran: {refusal}"
+            );
+            assert!(
+                emitted.is_empty(),
+                "D5 control 4: the {mutation:?} mutation must refuse BEFORE \
+                 emission. A recorded call means a mis-declared frame was \
+                 already written: {emitted:?}"
+            );
         });
+    ;
     }
     // The positive control on the harness: unmutated, the same fixture compiles
     // and emits BOTH declaration-unit calls — the entry's unchecked one and the
     // body's checked self-call. ⛔ Without this row every refusal above is
     // equally consistent with the fixture never reaching the seam at all.
-    with_transparent_declaration_closure_witness(|| {
-        let (outcome, emitted) = d5_compile(d5_plan(), None);
-        outcome.expect("D5 control 4: the unmutated fixture compiles");
-        assert_eq!(
-            emitted.len(),
-            2,
-            "D5 control 4: after D2a both the entry's unchecked call and the \
-             body's checked self-call are emitted: {emitted:?}"
-        );
-    });
+    let (outcome, emitted) = d5_compile(d5_plan(), None);
+    outcome.expect("D5 control 4: the unmutated fixture compiles");
+    assert_eq!(
+        emitted.len(),
+        2,
+        "D5 control 4: after D2a both the entry's unchecked call and the \
+         body's checked self-call are emitted: {emitted:?}"
+    );;
 }
 
 // ── Control 4, the wrong-target class ─────────────────────────────────────
 
 #[test]
 fn d5_c4_a_retargeted_declaration_call_is_refused_before_emission() {
-    with_transparent_declaration_closure_witness(|| {
-        let (baseline, baseline_emitted) = d5_compile(d5_plan(), None);
-        baseline.expect("the unmutated fixture compiles");
-        units::with_d5_declared_call_mutation(units::D5DeclaredCallMutation::Retarget, || {
-            let (outcome, emitted) = d5_compile(d5_plan(), None);
-            // ⚠ **This row measures the FIXTURE, and says so.** The retarget
-            // swaps a caller's declaration-call record for another record in
-            // the same caller's map. Each caller here holds exactly one, so the
-            // swap is the identity and the compile is byte-for-byte the
-            // baseline. That is a reachability fact
-            // ([[mutation-proof-injection-point-is-a-reachability-tell]]), not
-            // evidence about the wrong-target class.
-            //
-            // ⛔ It is kept, and kept honest, rather than deleted or dressed up
-            // as a passing control: two declaration-owned callables reachable
-            // from ONE caller is what makes the class expressible, and building
-            // that fixture belongs with the mutual same-SCC work that D5 still
-            // owes. Asserting equality with the baseline is what stops this
-            // reading as a discharged control.
-            assert!(
-                outcome.is_ok() && emitted.len() == baseline_emitted.len(),
-                "the retarget is inert on single-record callers, so it must \
-                 reproduce the baseline exactly: {outcome:?} {emitted:?}"
-            );
-        });
-    });
+    let (baseline, baseline_emitted) = d5_compile(d5_plan(), None);
+    baseline.expect("the unmutated fixture compiles");
+    units::with_d5_declared_call_mutation(units::D5DeclaredCallMutation::Retarget, || {
+        let (outcome, emitted) = d5_compile(d5_plan(), None);
+        // ⚠ **This row measures the FIXTURE, and says so.** The retarget
+        // swaps a caller's declaration-call record for another record in
+        // the same caller's map. Each caller here holds exactly one, so the
+        // swap is the identity and the compile is byte-for-byte the
+        // baseline. That is a reachability fact
+        // ([[mutation-proof-injection-point-is-a-reachability-tell]]), not
+        // evidence about the wrong-target class.
+        //
+        // ⛔ It is kept, and kept honest, rather than deleted or dressed up
+        // as a passing control: two declaration-owned callables reachable
+        // from ONE caller is what makes the class expressible, and building
+        // that fixture belongs with the mutual same-SCC work that D5 still
+        // owes. Asserting equality with the baseline is what stops this
+        // reading as a discharged control.
+        assert!(
+            outcome.is_ok() && emitted.len() == baseline_emitted.len(),
+            "the retarget is inert on single-record callers, so it must \
+             reproduce the baseline exactly: {outcome:?} {emitted:?}"
+        );
+    });;
 }
 
 // ── The MUTUAL same-SCC fixture ───────────────────────────────────────────
@@ -11307,19 +11326,17 @@ fn d5_mutual_compile(
 /// **The mutual positive.** Both checked cross-calls reconcile and emit.
 #[test]
 fn d5_c2_mutual_same_scc_calls_reconcile_and_emit() {
-    with_transparent_declaration_closure_witness(|| {
-        let (outcome, emitted) = d5_mutual_compile(d5_mutual_plan_with(|_, _| {}, true));
-        outcome.unwrap_or_else(|error| {
-            panic!("D5: the mutual same-SCC pair must compile: {error}")
-        });
-        assert_eq!(
-            emitted.len(),
-            3,
-            "D5: the entry's unchecked call plus both checked cross-calls. \
-             Anything fewer and a mutation control below cannot distinguish a \
-             refusal from a path that was never taken: {emitted:?}"
-        );
+    let (outcome, emitted) = d5_mutual_compile(d5_mutual_plan_with(|_, _| {}, true));
+    outcome.unwrap_or_else(|error| {
+        panic!("D5: the mutual same-SCC pair must compile: {error}")
     });
+    assert_eq!(
+        emitted.len(),
+        3,
+        "D5: the entry's unchecked call plus both checked cross-calls. \
+         Anything fewer and a mutation control below cannot distinguish a \
+         refusal from a path that was never taken: {emitted:?}"
+    );;
 }
 
 // ── Control 4, the checked-plan half, on the MUTUAL fixture ───────────────
@@ -11446,48 +11463,45 @@ fn d5_c4_checked_plan_mutations_each_reach_their_own_authority() {
     ];
 
     for (label, edit, refingerprint, fragment, plane) in rows {
-        with_transparent_declaration_closure_witness(|| {
-            let plan = d5_mutual_plan_with(edit, refingerprint);
-            let (outcome, emitted) = d5_mutual_compile(plan);
-            let refusal = outcome.unwrap_err_or_panic(label);
-            assert!(
-                refusal.contains(fragment),
-                "D5 control 4 [{label}]: the refusal must be the one {plane} \
-                 owns. A different one means this row measures some other \
-                 mechanism, and the axis it names stays unpinned: {refusal}"
-            );
-            // ⚠ **Zero is the wrong floor, and measuring said so.** The
-            // entry's own call into `mutual_a`'s unit is UNCHECKED and lawful,
-            // and the root unit is emitted before any declaration body — so a
-            // refusal inside a body legitimately leaves it behind. Rows whose
-            // authority runs before lowering leave nothing at all.
-            //
-            // ⇒ The fact being asserted is that **no checked cross-call was
-            // emitted**: the unmutated fixture emits 3, so anything above 1
-            // means a checked call this row was supposed to stop got through.
-            assert!(
-                emitted.len() <= 1,
-                "D5 control 4 [{label}]: refused, but {} declaration-unit \
-                 call(s) were written — more than the entry's own unchecked \
-                 one, so a checked cross-call reached emission. Refusing after \
-                 emission is a different guarantee from refusing before it: \
-                 {emitted:?}",
-                emitted.len()
-            );
-        });
+        let plan = d5_mutual_plan_with(edit, refingerprint);
+        let (outcome, emitted) = d5_mutual_compile(plan);
+        let refusal = outcome.unwrap_err_or_panic(label);
+        assert!(
+            refusal.contains(fragment),
+            "D5 control 4 [{label}]: the refusal must be the one {plane} \
+             owns. A different one means this row measures some other \
+             mechanism, and the axis it names stays unpinned: {refusal}"
+        );
+        // ⚠ **Zero is the wrong floor, and measuring said so.** The
+        // entry's own call into `mutual_a`'s unit is UNCHECKED and lawful,
+        // and the root unit is emitted before any declaration body — so a
+        // refusal inside a body legitimately leaves it behind. Rows whose
+        // authority runs before lowering leave nothing at all.
+        //
+        // ⇒ The fact being asserted is that **no checked cross-call was
+        // emitted**: the unmutated fixture emits 3, so anything above 1
+        // means a checked call this row was supposed to stop got through.
+        assert!(
+            emitted.len() <= 1,
+            "D5 control 4 [{label}]: refused, but {} declaration-unit \
+             call(s) were written — more than the entry's own unchecked \
+             one, so a checked cross-call reached emission. Refusing after \
+             emission is a different guarantee from refusing before it: \
+             {emitted:?}",
+            emitted.len()
+        );
+    ;
     }
 
     // The positive control on the harness, in the same shape as every row
     // above: unmutated, this fixture compiles and emits its three calls.
-    with_transparent_declaration_closure_witness(|| {
-        let (outcome, emitted) = d5_mutual_compile(d5_mutual_plan_with(|_, _| {}, true));
-        assert!(
-            outcome.is_ok() && emitted.len() == 3,
-            "D5 control 4: without a mutation the fixture must reach emission. \
-             Every refusal above is otherwise consistent with a fixture that \
-             never got there: {outcome:?} {emitted:?}"
-        );
-    });
+    let (outcome, emitted) = d5_mutual_compile(d5_mutual_plan_with(|_, _| {}, true));
+    assert!(
+        outcome.is_ok() && emitted.len() == 3,
+        "D5 control 4: without a mutation the fixture must reach emission. \
+         Every refusal above is otherwise consistent with a fixture that \
+         never got there: {outcome:?} {emitted:?}"
+    );;
 }
 
 #[cfg(test)]
@@ -11527,9 +11541,7 @@ fn d5_the_recursion_group_axis_is_inert_on_a_self_call_and_causal_on_the_mutual_
 
     // Self-call: the template is its OWN group witness, so renaming the group
     // moves the template and its witness together and nothing disagrees.
-    let (self_outcome, self_emitted) = with_transparent_declaration_closure_witness(|| {
-        d5_compile(d5_plan_with(|call| rename(&mut call.recursion_group)), None)
-    });
+    let (self_outcome, self_emitted) = d5_compile(d5_plan_with(|call| rename(&mut call.recursion_group)), None);
     assert!(
         self_outcome.is_ok() && self_emitted.len() == 2,
         "the self-call fixture must be INERT under the rename — that is the \
@@ -11538,12 +11550,10 @@ fn d5_the_recursion_group_axis_is_inert_on_a_self_call_and_causal_on_the_mutual_
     );
 
     // Mutual: the witness is the OTHER template, and the rename separates them.
-    let (mutual_outcome, mutual_emitted) = with_transparent_declaration_closure_witness(|| {
-        d5_mutual_compile(d5_mutual_plan_with(
-            |a, _b| rename(&mut a.recursion_group),
-            true,
-        ))
-    });
+    let (mutual_outcome, mutual_emitted) = d5_mutual_compile(d5_mutual_plan_with(
+        |a, _b| rename(&mut a.recursion_group),
+        true,
+    ));
     let reason = mutual_outcome.expect_err(
         "the mutual fixture must CATCH the rename the self-call fixture misses",
     );
@@ -11630,43 +11640,41 @@ fn d5_c4_a_duplicated_checked_occurrence_is_refused_after_its_lawful_first() {
         },
         true,
     );
-    with_transparent_declaration_closure_witness(|| {
-        reset_d5_emitted_declaration_calls();
-        let outcome = compile_expr_into_module(
-            new_jit_module().expect("JIT module"),
-            "d5_duplicate",
-            Linkage::Local,
-            &entry,
-            &NativeSeedEnvironment::empty(),
-            BTreeMap::from([
-                (D5_MUTUAL_A, &a),
-                (D5_MUTUAL_B, &b),
-                (D5_FRAME_CARRIER, &carrier),
-            ]),
-            None,
-            false,
-            None,
-            None,
-            Some(plan),
-        )
-        .map(|_| ())
-        .map_err(|error| format!("{error:?}"));
-        let reason = outcome.expect_err(
-            "D5: one checked template consumed by two occurrences must be refused",
-        );
-        assert!(
-            reason.contains("consumed twice") || reason.contains("consumed more than once"),
-            "D5: the refusal must be the affine occurrence check. Any other \
-             one leaves the duplicate class unpinned: {reason}"
-        );
-        let emitted = d5_emitted_declaration_calls();
-        assert!(
-            emitted.len() <= 2,
-            "D5: at most the entry's unchecked call and the first, LAWFUL \
-             checked occurrence may be emitted before the repeat is refused: \
-             {emitted:?}"
-        );
-    });
+    reset_d5_emitted_declaration_calls();
+    let outcome = compile_expr_into_module(
+        new_jit_module().expect("JIT module"),
+        "d5_duplicate",
+        Linkage::Local,
+        &entry,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::from([
+            (D5_MUTUAL_A, &a),
+            (D5_MUTUAL_B, &b),
+            (D5_FRAME_CARRIER, &carrier),
+        ]),
+        None,
+        false,
+        None,
+        None,
+        Some(plan),
+    )
+    .map(|_| ())
+    .map_err(|error| format!("{error:?}"));
+    let reason = outcome.expect_err(
+        "D5: one checked template consumed by two occurrences must be refused",
+    );
+    assert!(
+        reason.contains("consumed twice") || reason.contains("consumed more than once"),
+        "D5: the refusal must be the affine occurrence check. Any other \
+         one leaves the duplicate class unpinned: {reason}"
+    );
+    let emitted = d5_emitted_declaration_calls();
+    assert!(
+        emitted.len() <= 2,
+        "D5: at most the entry's unchecked call and the first, LAWFUL \
+         checked occurrence may be emitted before the repeat is refused: \
+         {emitted:?}"
+    );;
 }
 
 // ── The D5 checked-call CLOSEOUT ──────────────────────────────────────────
@@ -11706,32 +11714,29 @@ fn d5_the_checked_call_closeout_rejects_omission_duplication_and_a_substituted_c
         ),
     ];
     for (label, mutation, fragment) in rows {
-        with_transparent_declaration_closure_witness(|| {
-            with_d5_closeout_mutation(mutation, || {
-                let (outcome, _emitted) =
-                    d5_mutual_compile(d5_mutual_plan_with(|_, _| {}, true));
-                let refusal = outcome.unwrap_err_or_panic(label);
-                assert!(
-                    refusal.contains(fragment),
-                    "D5 closeout [{label}]: the refusal must be the closeout's \
-                     own. Any other one means this row never reached it and the \
-                     claim it names stays unpinned: {refusal}"
-                );
-            });
+        with_d5_closeout_mutation(mutation, || {
+            let (outcome, _emitted) =
+                d5_mutual_compile(d5_mutual_plan_with(|_, _| {}, true));
+            let refusal = outcome.unwrap_err_or_panic(label);
+            assert!(
+                refusal.contains(fragment),
+                "D5 closeout [{label}]: the refusal must be the closeout's \
+                 own. Any other one means this row never reached it and the \
+                 claim it names stays unpinned: {refusal}"
+            );
         });
+    ;
     }
 
     // ⛔ The positive, in the same shape. Without it every row above is equally
     // consistent with the mutual fixture failing for an unrelated reason
     // ([[a-negative-check-passes-for-any-reason-so-it-needs-a-positive-control]]).
-    with_transparent_declaration_closure_witness(|| {
-        let (outcome, emitted) = d5_mutual_compile(d5_mutual_plan_with(|_, _| {}, true));
-        assert!(
-            outcome.is_ok() && emitted.len() == 3,
-            "D5 closeout: unmutated, planned = consumed = emitted holds and the \
-             fixture compiles: {outcome:?} {emitted:?}"
-        );
-    });
+    let (outcome, emitted) = d5_mutual_compile(d5_mutual_plan_with(|_, _| {}, true));
+    assert!(
+        outcome.is_ok() && emitted.len() == 3,
+        "D5 closeout: unmutated, planned = consumed = emitted holds and the \
+         fixture compiles: {outcome:?} {emitted:?}"
+    );;
 }
 
 /// **The closeout's `planned` set is the plan's own, and this proves it is not
@@ -11743,43 +11748,41 @@ fn d5_the_checked_call_closeout_rejects_omission_duplication_and_a_substituted_c
 /// red — and does.
 #[test]
 fn d5_the_closeout_planned_set_comes_from_the_plan_not_from_the_emissions() {
-    with_transparent_declaration_closure_witness(|| {
-        let mut plan = d5_mutual_plan_with(|_, _| {}, true);
-        // A third template, well-formed and bound to a real frame, for a
-        // declaration whose body carries no marker for it.
-        let mut orphan = d5_mutual_template(
-            912,
-            D5_MUTUAL_B,
-            D5_MUTUAL_A,
-            D5_MUTUAL_A_FRAME,
-            10,
-        );
-        orphan.checked_occurrence_path = vec![6];
-        orphan.runtime_marker_locations = vec![crate::CheckedRuntimeMarkerLocationV1 {
-            declaration: D5_MUTUAL_B.to_string(),
-            runtime_path: vec![3],
-        }];
-        orphan.occurrence_binding_fingerprint =
-            crate::compiler_private_recursive_call_binding_fingerprint(&orphan);
-        plan.recursive_calls.push(orphan);
-        let (outcome, _emitted) = d5_mutual_compile(plan);
-        let refusal = outcome.expect_err(
-            "a planned template the program never emits must be caught — if this \
-             compiles, `planned` is being read off the emissions and the whole \
-             set equality is an identity",
-        );
-        // ⚠ Attribution stated, not assumed: the marker-location reconciliation
-        // upstream sees this first, because the extra template declares an
-        // occurrence `mutual_b`'s body does not have. That is the correct owner
-        // for THIS shape; the closeout owns the shapes above, where the plan and
-        // the IR agree and only the ledger diverges.
-        assert!(
-            refusal.contains("Runtime occurrences differ")
-                || refusal.contains("does not equal the planned one"),
-            "the refusal must come from the marker reconciliation or the \
-             closeout, not from somewhere incidental: {refusal}"
-        );
-    });
+    let mut plan = d5_mutual_plan_with(|_, _| {}, true);
+    // A third template, well-formed and bound to a real frame, for a
+    // declaration whose body carries no marker for it.
+    let mut orphan = d5_mutual_template(
+        912,
+        D5_MUTUAL_B,
+        D5_MUTUAL_A,
+        D5_MUTUAL_A_FRAME,
+        10,
+    );
+    orphan.checked_occurrence_path = vec![6];
+    orphan.runtime_marker_locations = vec![crate::CheckedRuntimeMarkerLocationV1 {
+        declaration: D5_MUTUAL_B.to_string(),
+        runtime_path: vec![3],
+    }];
+    orphan.occurrence_binding_fingerprint =
+        crate::compiler_private_recursive_call_binding_fingerprint(&orphan);
+    plan.recursive_calls.push(orphan);
+    let (outcome, _emitted) = d5_mutual_compile(plan);
+    let refusal = outcome.expect_err(
+        "a planned template the program never emits must be caught — if this \
+         compiles, `planned` is being read off the emissions and the whole \
+         set equality is an identity",
+    );
+    // ⚠ Attribution stated, not assumed: the marker-location reconciliation
+    // upstream sees this first, because the extra template declares an
+    // occurrence `mutual_b`'s body does not have. That is the correct owner
+    // for THIS shape; the closeout owns the shapes above, where the plan and
+    // the IR agree and only the ledger diverges.
+    assert!(
+        refusal.contains("Runtime occurrences differ")
+            || refusal.contains("does not equal the planned one"),
+        "the refusal must come from the marker reconciliation or the \
+         closeout, not from somewhere incidental: {refusal}"
+    );;
 }
 
 // ── The generic closure-valued-constructor-field NEGATIVE ────────────────
@@ -11864,29 +11867,27 @@ fn a_closure_stored_as_constructor_data_cannot_cross_a_unit_boundary() {
         .map_err(|error| format!("{error:?}"))
     };
 
-    with_transparent_declaration_closure_witness(|| {
-        // The positive control on the harness. ⛔ Without it, the refusal below
-        // is equally consistent with the lane being broken for every
-        // constructor, and the finding would name the wrong thing.
-        compile(&plain).expect(
-            "a closure-bodied declaration whose constructor field is an ordinary \
-             value compiles on the functionized lane — so the lane, the witness \
-             and the declaration shape are all fine",
-        );
+    // The positive control on the harness. ⛔ Without it, the refusal below
+    // is equally consistent with the lane being broken for every
+    // constructor, and the finding would name the wrong thing.
+    compile(&plain).expect(
+        "a closure-bodied declaration whose constructor field is an ordinary \
+         value compiles on the functionized lane — so the lane, the witness \
+         and the declaration shape are all fine",
+    );
 
-        let refusal = compile(&closure_field).expect_err(
-            "a closure stored as observable constructor data must be refused. \
-             This is the generic escape prohibition, not a missing capability — \
-             if it ever compiles, a carrier lane has appeared that nothing \
-             authorized",
-        );
-        assert!(
-            refusal.contains("a closure cannot cross the boundary"),
-            "the refusal must be the closure-boundary one. A DIFFERENT refusal \
-             would mean this row stopped measuring the escape prohibition: \
-             {refusal}"
-        );
-    });
+    let refusal = compile(&closure_field).expect_err(
+        "a closure stored as observable constructor data must be refused. \
+         This is the generic escape prohibition, not a missing capability — \
+         if it ever compiles, a carrier lane has appeared that nothing \
+         authorized",
+    );
+    assert!(
+        refusal.contains("a closure cannot cross the boundary"),
+        "the refusal must be the closure-boundary one. A DIFFERENT refusal \
+         would mean this row stopped measuring the escape prohibition: \
+         {refusal}"
+    );;
 }
 
 /// **`RT-DECL-CLOSURE-PORT` `D5a` — the witness compiles, and its checked-IH
@@ -11929,14 +11930,12 @@ fn a_closure_stored_as_constructor_data_cannot_cross_a_unit_boundary() {
 fn d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_worker_call() {
     reset_d5a_trace();
     reset_d5a_marker_events();
-    let outcome = with_transparent_declaration_closure_witness(|| {
-        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-            "d5a_localization",
-            false,
-        )
-        .map(|_| ())
-        .map_err(|error| format!("{error:?}"))
-    });
+    let outcome = crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "d5a_localization",
+        false,
+    )
+    .map(|_| ())
+    .map_err(|error| format!("{error:?}"));
     // The planner-issued continuation-call census, taken independently of the
     // run above so a missing token and an unreached claim are distinguishable.
     let (entry_expr, declarations) =
@@ -12206,21 +12205,19 @@ fn d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_work
 #[test]
 fn d5a_suppressing_the_marker_consumption_restores_the_pending_closeout_refusal() {
     reset_d5a_marker_events();
-    let refusal = with_transparent_declaration_closure_witness(|| {
-        with_d5a_marker_mutation(D5aMarkerMutation::SuppressConsumption, || {
-            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-                "d5a_suppressed",
-                false,
-            )
-            .map(|_| ())
-            .map_err(|error| format!("{error:?}"))
-            .expect_err(
-                "with the consumption withheld the marker is still pending at \
-                 closeout, so the ported route must refuse. A compile here means \
-                 the consumption is inert and the acceptance row is green for \
-                 the wrong reason",
-            )
-        })
+    let refusal = with_d5a_marker_mutation(D5aMarkerMutation::SuppressConsumption, || {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "d5a_suppressed",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+        .expect_err(
+            "with the consumption withheld the marker is still pending at \
+             closeout, so the ported route must refuse. A compile here means \
+             the consumption is inert and the acceptance row is green for \
+             the wrong reason",
+        )
     });
     assert!(
         refusal.contains("a checked computational-IH marker is a specialized-only surface"),
@@ -12319,23 +12316,22 @@ fn d5a_a_plan_the_application_disagrees_with_refuses_before_the_worker_call() {
     ];
     for (label, mutate, expected) in rows {
         reset_d5a_marker_events();
-        let refusal = with_transparent_declaration_closure_witness(|| {
-            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object_with_plan(
-                "d5a_plan_mutation",
-                false,
-                |plan| mutate(plan),
+        let refusal = crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object_with_plan(
+            "d5a_plan_mutation",
+            false,
+            |plan| mutate(plan),
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+        .err()
+        .unwrap_or_else(|| {
+            panic!(
+                "{label}: the emitted application no longer matches its checked \
+                 template, so it must be refused. A compile means the consumer \
+                 is not reading that field at all"
             )
-            .map(|_| ())
-            .map_err(|error| format!("{error:?}"))
-            .err()
-            .unwrap_or_else(|| {
-                panic!(
-                    "{label}: the emitted application no longer matches its checked \
-                     template, so it must be refused. A compile means the consumer \
-                     is not reading that field at all"
-                )
-            })
-        });
+        })
+    ;
         assert!(
             refusal.contains(expected),
             "{label}: must get this seam's OWN refusal, not a later one it \
@@ -12369,24 +12365,22 @@ fn d5a_a_plan_the_application_disagrees_with_refuses_before_the_worker_call() {
     // asserted; it is ruled separately and is load-bearing wherever a marker's
     // wrapped call is not the one that reaches a static worker.
     reset_d5a_marker_events();
-    let refusal = with_transparent_declaration_closure_witness(|| {
-        with_d5a_marker_mutation(D5aMarkerMutation::RelaxEntryArity, || {
-            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object_with_plan(
-                "d5a_consumer_arity",
-                false,
-                |plan| {
-                    plan.computational_ih_calls[0].arity = 2;
-                    for call in &mut plan.computational_ih_calls {
-                        call.occurrence_binding_fingerprint = 0;
-                        call.occurrence_binding_fingerprint =
-                            crate::compiler_private_computational_ih_call_binding_fingerprint(call);
-                    }
-                },
-            )
-            .map(|_| ())
-            .map_err(|error| format!("{error:?}"))
-            .expect_err("the consumer's own arity guard must refuse the application")
-        })
+    let refusal = with_d5a_marker_mutation(D5aMarkerMutation::RelaxEntryArity, || {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object_with_plan(
+            "d5a_consumer_arity",
+            false,
+            |plan| {
+                plan.computational_ih_calls[0].arity = 2;
+                for call in &mut plan.computational_ih_calls {
+                    call.occurrence_binding_fingerprint = 0;
+                    call.occurrence_binding_fingerprint =
+                        crate::compiler_private_computational_ih_call_binding_fingerprint(call);
+                }
+            },
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+        .expect_err("the consumer's own arity guard must refuse the application")
     });
     assert!(
         refusal.contains("but the static worker call applies 1 arguments"),
@@ -12921,22 +12915,21 @@ fn d5a_the_detached_result_seats_five_guards_are_each_reached_by_a_real_mutation
         ),
     ];
     for (label, mutation, expected) in rows {
-        let refusal = with_transparent_declaration_closure_witness(|| {
-            with_d5a_route_mutation(mutation, || {
-                crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-                    "d5a_detached_seat",
-                    false,
-                )
-                .map(|_| ())
-                .map_err(|error| format!("{error:?}"))
-                .expect_err(&format!(
-                    "the `{label}` guard must refuse under {mutation:?}. A COMPILE here means \
-                     the guard is inert on the only route that reaches it — and since the \
-                     unmutated witness compiles, that would be a silently admitted defect \
-                     rather than a red-versus-red ambiguity"
-                ))
-            })
-        });
+        let refusal = with_d5a_route_mutation(mutation, || {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                "d5a_detached_seat",
+                false,
+            )
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"))
+            .expect_err(&format!(
+                "the `{label}` guard must refuse under {mutation:?}. A COMPILE here means \
+                 the guard is inert on the only route that reaches it — and since the \
+                 unmutated witness compiles, that would be a silently admitted defect \
+                 rather than a red-versus-red ambiguity"
+            ))
+        })
+    ;
         assert!(
             refusal.contains(expected),
             "the `{label}` guard must refuse with its OWN message. A different refusal means \
@@ -12964,21 +12957,19 @@ fn d5a_the_detached_result_seats_five_guards_are_each_reached_by_a_real_mutation
 /// **Promise class: durable invariant.**
 #[test]
 fn d5a_a_missing_generated_context_binding_refuses_before_any_phantom_is_emitted() {
-    let refusal = with_transparent_declaration_closure_witness(|| {
-        with_d5a_route_mutation(D5aRouteMutation::SuppressContextBinding, || {
-            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-                "d5a_missing_binding",
-                false,
-            )
-            .map(|_| ())
-            .map_err(|error| format!("{error:?}"))
-            .expect_err(
-                "with the context binding withheld the specialization has no callee for its \
-                 worker body, because that body left the executable population when the \
-                 retarget landed. A COMPILE here would mean the raw unit is still emitted and \
-                 the retarget is decorative",
-            )
-        })
+    let refusal = with_d5a_route_mutation(D5aRouteMutation::SuppressContextBinding, || {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "d5a_missing_binding",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+        .expect_err(
+            "with the context binding withheld the specialization has no callee for its \
+             worker body, because that body left the executable population when the \
+             retarget landed. A COMPILE here would mean the raw unit is still emitted and \
+             the retarget is decorative",
+        )
     });
     assert!(
         refusal.contains("has no declared callee in this function"),
@@ -13008,20 +12999,18 @@ fn d5a_a_missing_generated_context_binding_refuses_before_any_phantom_is_emitted
 /// **Promise class: durable invariant.**
 #[test]
 fn d5a_two_generated_contexts_claiming_one_key_is_a_hard_stop() {
-    let refusal = with_transparent_declaration_closure_witness(|| {
-        with_d5a_route_mutation(D5aRouteMutation::DuplicateContextBinding, || {
-            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-                "d5a_duplicate_binding",
-                false,
-            )
-            .map(|_| ())
-            .map_err(|error| format!("{error:?}"))
-            .expect_err(
-                "a key that resolves twice must refuse. Picking either candidate would make \
-                 lowering the authority for a binding the planner owns, and 'first match' is \
-                 the exact selection rule the ruling forbids",
-            )
-        })
+    let refusal = with_d5a_route_mutation(D5aRouteMutation::DuplicateContextBinding, || {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "d5a_duplicate_binding",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+        .expect_err(
+            "a key that resolves twice must refuse. Picking either candidate would make \
+             lowering the authority for a binding the planner owns, and 'first match' is \
+             the exact selection rule the ruling forbids",
+        )
     });
     assert!(
         refusal.contains("two generated contexts claim one specialization and worker body"),
@@ -13060,21 +13049,19 @@ fn d5a_two_generated_contexts_claiming_one_key_is_a_hard_stop() {
 /// **Promise class: durable invariant.**
 #[test]
 fn d5a_a_transplanted_generated_context_binding_refuses_at_the_retarget() {
-    let refusal = with_transparent_declaration_closure_witness(|| {
-        with_d5a_route_mutation(D5aRouteMutation::TransplantContextBinding, || {
-            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-                "d5a_transplanted_binding",
-                false,
-            )
-            .map(|_| ())
-            .map_err(|error| format!("{error:?}"))
-            .expect_err(
-                "a context whose enclosing specialization is not the unit being defined must \
-                 refuse. This compiled before the stop existed, so a COMPILE here is a \
-                 regression to a state in which one specialization's captures cross another's \
-                 worker execution silently",
-            )
-        })
+    let refusal = with_d5a_route_mutation(D5aRouteMutation::TransplantContextBinding, || {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "d5a_transplanted_binding",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+        .expect_err(
+            "a context whose enclosing specialization is not the unit being defined must \
+             refuse. This compiled before the stop existed, so a COMPILE here is a \
+             regression to a state in which one specialization's captures cross another's \
+             worker execution silently",
+        )
     });
     assert!(
         refusal.contains("whose enclosing specialization is"),
@@ -13119,14 +13106,12 @@ fn d5a_a_transplanted_generated_context_binding_refuses_at_the_retarget() {
 #[test]
 fn d5a_the_retargeted_worker_call_carries_the_raw_run_plus_the_context_capture_suffix() {
     reset_d5a_marker_events();
-    with_transparent_declaration_closure_witness(|| {
-        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-            "d5a_capture_suffix",
-            false,
-        )
-        .map(|_| ())
-        .map_err(|error| format!("{error:?}"))
-    })
+    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "d5a_capture_suffix",
+        false,
+    )
+    .map(|_| ())
+    .map_err(|error| format!("{error:?}"))
     .expect("the witness compiles");
     let events = d5a_marker_events();
     let calls = events
@@ -13244,28 +13229,27 @@ fn d5a_the_capture_projection_reads_the_immediate_slot_and_bounds_it() {
         ),
     ];
     for (label, mutation, expected) in rows {
-        let refusal = with_transparent_declaration_closure_witness(|| {
-            with_d5a_route_mutation(mutation, || {
-                let refusal =
-                    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-                        "d5a_capture_projection",
-                        false,
-                    )
-                    .map(|_| ())
-                    .map_err(|error| format!("{error:?}"))
-                    .expect_err(&format!(
-                        "{label} must refuse under {mutation:?}; a compile means the guard is \
-                         inert on the route that reaches it"
-                    ));
-                assert!(
-                    d5a_route_applications() > 0,
-                    "{label}: the mutation is scoped to one emission-owner class and declines \
-                     for the other, so a refusal reached without it firing would be measuring \
-                     the unmutated route"
-                );
-                refusal
-            })
-        });
+        let refusal = with_d5a_route_mutation(mutation, || {
+            let refusal =
+                crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                    "d5a_capture_projection",
+                    false,
+                )
+                .map(|_| ())
+                .map_err(|error| format!("{error:?}"))
+                .expect_err(&format!(
+                    "{label} must refuse under {mutation:?}; a compile means the guard is \
+                     inert on the route that reaches it"
+                ));
+            assert!(
+                d5a_route_applications() > 0,
+                "{label}: the mutation is scoped to one emission-owner class and declines \
+                 for the other, so a refusal reached without it firing would be measuring \
+                 the unmutated route"
+            );
+            refusal
+        })
+    ;
         assert!(
             refusal.contains(expected),
             "{label} must refuse with its OWN message, or this row is measuring the other \
@@ -13296,20 +13280,18 @@ fn d5a_the_capture_projection_reads_the_immediate_slot_and_bounds_it() {
 /// **Promise class: durable invariant.**
 #[test]
 fn d5a_perturbing_the_retained_source_coordinates_fails_closed_rather_than_calling_raw() {
-    let refusal = with_transparent_declaration_closure_witness(|| {
-        with_d5a_route_mutation(D5aRouteMutation::PerturbCarriedInvocationCoordinates, || {
-            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-                "d5a_carried_coordinates",
-                false,
-            )
-            .map(|_| ())
-            .map_err(|error| format!("{error:?}"))
-            .expect_err(
-                "a coordinate the planner never issued must resolve no context, and a body that \
-                 HAS a context may not then be called raw. A compile here means the retarget \
-                 does not depend on the coordinates it claims to be keyed by",
-            )
-        })
+    let refusal = with_d5a_route_mutation(D5aRouteMutation::PerturbCarriedInvocationCoordinates, || {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "d5a_carried_coordinates",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+        .expect_err(
+            "a coordinate the planner never issued must resolve no context, and a body that \
+             HAS a context may not then be called raw. A compile here means the retarget \
+             does not depend on the coordinates it claims to be keyed by",
+        )
     });
     assert!(
         refusal.contains("resolved no generated execution context, and that body has one"),
@@ -13342,20 +13324,18 @@ fn d5a_perturbing_the_retained_source_coordinates_fails_closed_rather_than_calli
 /// **Promise class: durable invariant.**
 #[test]
 fn d5a_a_superseded_worker_body_keeps_its_raw_descriptor_authority() {
-    let refusal = with_transparent_declaration_closure_witness(|| {
-        with_d5a_route_mutation(D5aRouteMutation::DropSupersededWorkerTemplates, || {
-            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-                "d5a_raw_descriptor",
-                false,
-            )
-            .map(|_| ())
-            .map_err(|error| format!("{error:?}"))
-            .expect_err(
-                "dropping the superseded body's descriptor must refuse. A compile would mean \
-                 nothing consumes the raw contract any more, and the checkpoint-1 separation \
-                 between descriptor authority and executable membership would be decorative",
-            )
-        })
+    let refusal = with_d5a_route_mutation(D5aRouteMutation::DropSupersededWorkerTemplates, || {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "d5a_raw_descriptor",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+        .expect_err(
+            "dropping the superseded body's descriptor must refuse. A compile would mean \
+             nothing consumes the raw contract any more, and the checkpoint-1 separation \
+             between descriptor authority and executable membership would be decorative",
+        )
     });
     assert!(
         refusal.contains("no raw worker template for body origin"),
@@ -13412,21 +13392,19 @@ fn d5a_the_one_causal_ledger_closes_over_the_generalized_emission_owner_domain()
              lose, not because the lifetime is right"
         );
     });
-    let refusal = with_transparent_declaration_closure_witness(|| {
-        with_d5a_route_mutation(D5aRouteMutation::CloseLedgerAfterTheFirstPass, || {
-            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-                "d5a_ledger_lifetime",
-                false,
-            )
-            .map(|_| ())
-            .map_err(|error| format!("{error:?}"))
-            .expect_err(
-                "closing the ledger before any generated `Function` exists must refuse: the \
-                 specialization-owned token is planned and cannot yet have been claimed. A \
-                 compile here would mean the equality is satisfied by a population smaller than \
-                 the plan issued, which is the per-pass partial the ruling forbids",
-            )
-        })
+    let refusal = with_d5a_route_mutation(D5aRouteMutation::CloseLedgerAfterTheFirstPass, || {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "d5a_ledger_lifetime",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+        .expect_err(
+            "closing the ledger before any generated `Function` exists must refuse: the \
+             specialization-owned token is planned and cannot yet have been claimed. A \
+             compile here would mean the equality is satisfied by a population smaller than \
+             the plan issued, which is the per-pass partial the ruling forbids",
+        )
     });
     assert!(
         d5a_route_applications() > 0,
@@ -13541,17 +13519,15 @@ fn d5a_a_specialization_is_interned_before_the_descent_that_produced_it() {
 /// this row is the record of how much weaker.
 #[test]
 fn d5a_reading_the_root_position_as_the_immediate_slot_is_currently_undetectable() {
-    let (outcome, applications) = with_transparent_declaration_closure_witness(|| {
-        with_d5a_route_mutation(D5aRouteMutation::ReadRootPositionAsImmediateSlot, || {
-            let outcome =
-                crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-                    "d5a_coordinate_swap",
-                    false,
-                )
-                .map(|_| ())
-                .map_err(|error| format!("{error:?}"));
-            (outcome, d5a_route_applications())
-        })
+    let (outcome, applications) = with_d5a_route_mutation(D5aRouteMutation::ReadRootPositionAsImmediateSlot, || {
+        let outcome =
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                "d5a_coordinate_swap",
+                false,
+            )
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"));
+        (outcome, d5a_route_applications())
     });
     assert!(
         applications > 0,

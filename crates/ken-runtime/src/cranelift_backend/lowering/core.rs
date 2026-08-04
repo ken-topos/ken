@@ -138,8 +138,19 @@ enum RecursiveDescentResidual {
     LexicalCallArgumentRecursor,
     /// A call whose callee is the retained non-lexical closure form.
     SeedClosureCall,
-    /// A transparent declaration whose body is a closure seed.
-    TransparentDeclarationClosure,
+    // ⭐⭐ **`RT-DECL-CLOSURE-PORT` `D6` RETIRED `TransparentDeclarationClosure`.**
+    //
+    // A transparent declaration whose body is a closure seed is now reached as a
+    // separately owned callable unit, so it is no longer a reason to retain the
+    // monolithic `RecursiveDescent` root. That is the whole node: `D1`-`D5a`
+    // built the planner-owned declaration units, the typed transport, the
+    // `DeclarationRef` calls and the complete owner/phase validation the ruling
+    // required **before** this variant could be removed.
+    //
+    // ⛔ The four variants above are untouched and the classifier below is still
+    // exhaustive and fail-closed. This is a retirement, not a relaxation: the
+    // selector is unchanged in kind and still refuses to select
+    // `FunctionizedUnits` while any remaining variant fires.
 }
 
 /// Produce the retained reason, if any, from the exhaustive source walk.
@@ -235,49 +246,6 @@ fn recursive_descent_residual(expr: &RuntimeExpr) -> Option<RecursiveDescentResi
         | RuntimeExpr::ImportedDeclarationRef { .. }
         | RuntimeExpr::Trap(_) => None,
     }
-}
-
-/// **`RT-DECL-CLOSURE-PORT` `D5` — the selector witness's two modes.**
-///
-/// ⛔ Observability only. `Exact` is the default and is what every test that
-/// does not name the witness sees; production never reads this at all.
-#[cfg(test)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SelectorWitness {
-    Exact,
-    /// Suppress the declaration-head `TransparentDeclarationClosure` result —
-    /// and nothing else — so the `FunctionizedUnits` call seam becomes
-    /// reachable for the `D5` controls.
-    SkipTransparentDeclarationClosure,
-}
-
-#[cfg(test)]
-thread_local! {
-    static SELECTOR_WITNESS: std::cell::Cell<SelectorWitness> =
-        const { std::cell::Cell::new(SelectorWitness::Exact) };
-}
-
-/// Run `body` with the `D5` selector witness engaged, restoring `Exact`
-/// afterwards **including on panic**.
-///
-/// ⚠ The restore is a `Drop` and not a trailing `set`: a control that asserts
-/// inside the closure panics on failure, and a trailing restore would leak the
-/// witness into every later test on this thread. That leak reads as the witness
-/// being unnecessary — the very thing control 5 exists to disprove.
-#[cfg(test)]
-pub(in crate::cranelift_backend) fn with_transparent_declaration_closure_witness<T>(
-    body: impl FnOnce() -> T,
-) -> T {
-    struct Restore;
-    impl Drop for Restore {
-        fn drop(&mut self) {
-            SELECTOR_WITNESS.with(|witness| witness.set(SelectorWitness::Exact));
-        }
-    }
-    SELECTOR_WITNESS
-        .with(|witness| witness.set(SelectorWitness::SkipTransparentDeclarationClosure));
-    let _restore = Restore;
-    body()
 }
 
 /// **`RT-DECL-CLOSURE-PORT` `D1` -- report EVERY residual variant present, not
@@ -436,23 +404,18 @@ fn collect_recursive_descent_residuals(
 /// The non-short-circuiting twin of
 /// [`declaration_recursive_descent_residual`].
 ///
-/// ⛔ A transparent closure-seed declaration records
-/// `TransparentDeclarationClosure` **and still walks its body**. The twin uses
-/// `.or_else(..)`, so a declaration that is both a closure seed and contains a
-/// second residual reports only the first -- which is exactly the shape this
-/// node's own fixture has.
+/// ⛔ The twin uses `.or_else(..)` and stops at its first hit; this walk records
+/// every classification and visits every child regardless of what a sibling
+/// produced. ⚠ `D6` retired the declaration-head variant, so a transparent
+/// declaration now contributes exactly what its **body** contributes — but the
+/// distinction between the two functions is unchanged and still load-bearing for
+/// the rest of the campaign.
 fn collect_declaration_recursive_descent_residuals(
     declaration: &RuntimeDeclaration,
     found: &mut BTreeSet<RecursiveDescentResidual>,
 ) {
     match &declaration.kind {
         RuntimeDeclarationKind::Transparent { body } => {
-            if matches!(
-                body,
-                RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
-            ) {
-                found.insert(RecursiveDescentResidual::TransparentDeclarationClosure);
-            }
             collect_recursive_descent_residuals(body, found);
         }
         RuntimeDeclarationKind::Primitive { .. }
@@ -469,47 +432,23 @@ fn declaration_recursive_descent_residual(
     declaration: &RuntimeDeclaration,
 ) -> Option<RecursiveDescentResidual> {
     match &declaration.kind {
-        RuntimeDeclarationKind::Transparent { body } => {
-            let head = matches!(
-                body,
-                RuntimeExpr::Closure { .. } | RuntimeExpr::LexicalClosure { .. }
-            )
-            .then_some(RecursiveDescentResidual::TransparentDeclarationClosure);
-            // ⭐⭐ **`RT-DECL-CLOSURE-PORT` `D5` — the `cfg(test)`-only selector
-            // WITNESS, and the only place it acts.**
-            //
-            // ⚠ It exists because of a measured circularity, not for
-            // convenience. `D5` must demonstrate its validator fail-closed on
-            // an *accepted* input, and a checked recursive declaration call
-            // requires a closure-seed body — which is exactly what this arm
-            // retains `RecursiveDescent` for. ⇒ Without a witness no accepted
-            // input can reach the seam, the validator is only *vacuously*
-            // fail-closed, and `D6` would both activate the route and first
-            // prove acceptance, collapsing the ordering the frame requires.
-            //
-            // ⛔⛔ **It masks one variant; it does not force an answer.** The
-            // derivation is preserved: the head result is computed exactly as
-            // production computes it, and only then filtered — and only when it
-            // is *exactly* `TransparentDeclarationClosure`, so a head result of
-            // some future variant passes through untouched. The body's ordinary
-            // residual walk below still runs, `find_map` still continues
-            // through every remaining declaration, the source-expression
-            // classifier is untouched, and
-            // `enumerate_recursive_descent_residuals` still reports this
-            // variant. A fixture carrying any second residual therefore stays
-            // on `RecursiveDescent` under the witness — which is the control
-            // that tells masking apart from forcing.
-            //
-            // ⛔ Production selection is unchanged: outside `cfg(test)` this is
-            // the identical expression it was before `D5`.
-            #[cfg(test)]
-            let head = head.filter(|found| {
-                !(SELECTOR_WITNESS.with(std::cell::Cell::get)
-                    == SelectorWitness::SkipTransparentDeclarationClosure
-                    && *found == RecursiveDescentResidual::TransparentDeclarationClosure)
-            });
-            head.or_else(|| recursive_descent_residual(body))
-        }
+        // ⭐⭐ **`RT-DECL-CLOSURE-PORT` `D6` — THE ACTIVATION.**
+        //
+        // A transparent declaration's own head no longer contributes a retained
+        // reason. Its body is classified exactly as any other expression is, so
+        // a closure-seed declaration selects `FunctionizedUnits` unless
+        // something in the body genuinely retains the lane.
+        //
+        // ⚠ **The `cfg(test)` selector witness that used to sit here is gone,
+        // and its removal is half the deliverable.** It existed to break a
+        // measured circularity: `D5` had to demonstrate its validator
+        // fail-closed on an *accepted* input, a checked recursive declaration
+        // call requires a closure-seed body, and this arm was exactly what kept
+        // such a program on `RecursiveDescent`. With the variant retired the
+        // route is reachable in production, so every control it governed now
+        // runs **unhooked** — which is the evidence `D6` owes and the reason the
+        // frame ordered activation after acceptance rather than with it.
+        RuntimeDeclarationKind::Transparent { body } => recursive_descent_residual(body),
         RuntimeDeclarationKind::Primitive { .. }
         | RuntimeDeclarationKind::Data { .. }
         | RuntimeDeclarationKind::Record { .. }
