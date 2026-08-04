@@ -3502,31 +3502,39 @@ impl<'a> Lowering<'a> {
                         LoweringOperand::Carried(word) => word.word,
                         LoweringOperand::Specialized(value) => {
                             // ⚠ **`target.origin` is the CALLEE's scheduling
-                            // entry, and for an aggregate that is the wrong
-                            // coordinate.** Its planned ownership record is
-                            // keyed by the caller-side source occurrence, so
-                            // resolving it here looks it up against the callee
-                            // body — the defect
-                            // `a_source_record_as_a_call_argument_is_marshalled_at_its_own_occurrence`
-                            // pins at the one assembly site where the origin
-                            // was already in hand and merely discarded.
+                            // entry.** This is the fallback for callers whose
+                            // input authority is not yet ruled; a caller that
+                            // has each input's caller-side occurrence carries
+                            // it across before reaching here, so nothing that
+                            // arrives specialized at this point has one.
                             //
-                            // ⛔ **This is a stated residual, not a closed
-                            // seam.** MEASURED after that repair: 139 inputs
-                            // still arrive here specialized, all `Constructor`
-                            // and all in `Parameter` slots, and they come from
-                            // the source machine's call path. There the
-                            // occurrence exists — each argument is evaluated
-                            // from a `SourceOccurrence` — but
-                            // `SourceContinuation::CallArgument` pushes the
-                            // lowered value into a bare `Vec<LoweringOperand>`
-                            // and drops it. Closing this needs that payload to
-                            // carry the occurrence alongside the value, which
-                            // is a change to a landed state-machine
-                            // representation rather than to this call.
+                            // ⛔ **Two repairs have landed and one site
+                            // remains.** `lower_expr`'s direct-closure-callee
+                            // arm and the source machine's call path both now
+                            // carry each input at its own occurrence.
                             //
-                            // ⛔ No guard here refusing aggregates: measured, it
-                            // would refuse 139 inputs that compile today.
+                            // MEASURED after both, `--nocapture
+                            // --test-threads=1` over the whole suite: 137
+                            // `BorrowedNativeValue`, 137 `CapabilityToken`, 42
+                            // `Int` and 1 `Bool` `Parameter`s, plus 55 `Int`
+                            // `Capture`s — all non-aggregate, so a
+                            // `NonAggregate` request takes the caller's tag,
+                            // consults no planned record and enters neither `E`
+                            // nor `R`. The origin is not load-bearing for any
+                            // of them. **No aggregate `Capture` reaches here at
+                            // all**, so the capture-authority witness does not
+                            // exist.
+                            //
+                            // ⛔ The one remaining aggregate population is **97
+                            // `Constructor` `Parameter`s, every one of them
+                            // from `call_static_worker`** (traced by
+                            // backtrace, not inferred). That site computes each
+                            // argument's exact caller-side origin with
+                            // `child_occurrence` and then discards it — the
+                            // identical shape, and a separate release.
+                            //
+                            // ⚠ No guard here refusing aggregates: measured, it
+                            // would refuse those 97 inputs, which compile today.
                             self.transfer_into_carrier(builder, target.origin, value)?
                                 .word
                         }
