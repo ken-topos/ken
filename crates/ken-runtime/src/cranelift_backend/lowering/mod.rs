@@ -665,6 +665,7 @@ impl ArtifactHelpers<'_> {
             worker_calls: BTreeMap::new(),
             worker_templates: BTreeMap::new(),
             context_calls: BTreeMap::new(),
+            defining_abi_operands: Vec::new(),
             generated_context_captures: None,
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
@@ -808,6 +809,23 @@ struct FunctionLocalRefs {
     /// binding from body origin" the ruling forbids. Minted per function; no
     /// `FuncRef` crosses a function.
     context_calls: BTreeMap<ContinuationContextId, units::DeclaredUnitCall>,
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 4 step 1b** -- this function's
+    /// own ABI-slot operands, indexed by ABI position.
+    ///
+    /// The `Parameter` run followed by the `Capture` run, in the one slot walk
+    /// that also builds the body's environment -- so index `i` here is ABI
+    /// position `i` of the function being defined.
+    ///
+    /// ⭐ A retargeted carried invocation reads its context's capture suffix
+    /// from here, at the **immediate slots** the planner assigned. It is stored
+    /// rather than threaded because the call seam is six frames below the body
+    /// walk; the alternative was passing an environment through every
+    /// intermediate, which is how a seat ends up reading whichever environment
+    /// happened to be nearest.
+    ///
+    /// ⛔ Reset per function, like every other field here: these are `ir::Value`
+    /// operands of one `Function` and mean nothing in another.
+    defining_abi_operands: Vec<LoweringOperand>,
     /// **`RT-DECL-CLOSURE-PORT` `D5a`** -- the operand suffix a **retargeted**
     /// worker call must append, and the one body origin it applies to.
     ///

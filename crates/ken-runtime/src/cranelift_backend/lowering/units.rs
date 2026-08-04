@@ -2587,6 +2587,14 @@ fn define_unit_body<M: Module>(
                 } else {
                     LoweringOperand::Carried(carried)
                 };
+                // `D5a` checkpoint 4 step 1b: the SAME operand, recorded by ABI
+                // position. ⭐ Taken from this one walk rather than rebuilt, so
+                // "index i is ABI position i" holds by construction instead of
+                // by two walks agreeing.
+                compiler
+                    .function_local
+                    .defining_abi_operands
+                    .push(operand.clone());
                 env.push(LoweringEnvironmentBinding::Value(operand));
             }
         }

@@ -7756,10 +7756,83 @@ impl<'a> Lowering<'a> {
                     ),
                 )
             })?;
+        // `D5a` checkpoint 4 step 1b — THE EXACT CAPTURE SUFFIX.
+        //
+        // The context declares a frame of `parameters + captures`; the carried
+        // invocation supplies the parameter run, so retargeting its callee
+        // without appending the captures is a call that does not match the
+        // frame it now names. ⛔ Appended in the context's DECLARED ORDER, and
+        // taken only from the immediate slots the planner assigned -- nothing
+        // is reconstructed from the raw worker, chosen by shape, or routed
+        // through a runtime transport.
+        let view = self
+            .static_transition_plan
+            .continuation_contexts()?
+            .into_iter()
+            .find(|candidate| candidate.id() == context)
+            .ok_or_else(|| {
+                unsupported(
+                    "ContinuationSpecialization",
+                    "the bound generated context has no projected view",
+                )
+            })?;
+        let defining_owner = self.defining_emission_owner.ok_or_else(|| {
+            unsupported(
+                "ContinuationSpecialization",
+                "a carried invocation retarget was reached with no emission owner bound for the                  context currently being defined",
+            )
+        })?;
+        let mut inputs = inputs.to_vec();
+        for capture in view.captures()? {
+            // ROOT provenance versus IMMEDIATE availability, kept apart exactly
+            // as at the specialization emission seam. Exhaustive over the owner
+            // classes with no catch-all.
+            match defining_owner {
+                ContinuationEmissionOwner::Predeclared(owner) => {
+                    if capture.source_owner != owner {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "a generated context capture names root source owner {:?}, which                                  is not the function emitting this carried invocation; its value                                  is not available here and reconstructing one would be the                                  reverse-map the ruling forbids",
+                                capture.source_owner
+                            ),
+                        ));
+                    }
+                    if capture.immediate_slot != capture.source_abi_position {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            "a generated context capture emitted from its own root owner has an                              immediate slot that disagrees with its root ABI position",
+                        ));
+                    }
+                }
+                ContinuationEmissionOwner::Specialization(_) => {
+                    // A context calling another context reads the immediate
+                    // slot alone; root provenance is retained and deliberately
+                    // not compared against a function that never held it.
+                }
+            }
+            let operand = self
+                .function_local
+                .defining_abi_operands
+                .get(capture.immediate_slot as usize)
+                .ok_or_else(|| {
+                    unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a generated context capture names immediate slot {} outside the                              emitting function's {} ABI operands; note this is the IMMEDIATE                              slot, not the root ABI position {} beside it",
+                            capture.immediate_slot,
+                            self.function_local.defining_abi_operands.len(),
+                            capture.source_abi_position,
+                        ),
+                    )
+                })?
+                .clone();
+            inputs.push(operand);
+        }
         self.call_declared_unit_target(
             builder,
             target,
-            inputs,
+            &inputs,
             #[cfg(test)]
             None,
         )
