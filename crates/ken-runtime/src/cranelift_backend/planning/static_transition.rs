@@ -2815,58 +2815,91 @@ fn synthesized_aggregate_recipe(
     }
 }
 
-/// The possible referent owners of one synthesized role, derived through its
-/// recipe.
+/// The possible referent owners of one aggregate child, as the schema declares
+/// it.
 ///
-/// `Wrote` is persistent **because** `PrivateTransferCount` is, which is
-/// persistent because both of its children are immediates. That chain is
-/// computed here rather than asserted per role, so the verdict cannot disagree
-/// with the recipe it is supposed to follow.
-///
-/// `depth` bounds the descent. The role graph is a tree today; a cycle would
-/// mean a role transitively contains itself, which is not representable, and
-/// this refuses rather than looping if one is ever introduced.
-fn synthesized_role_referent_owners(
-    role: SynthesizedFixedConstructorRole,
-    depth: usize,
+/// Exactness matters here independently of the verdict. These sets are the
+/// record's stated evidence, and a set that is merely *sufficient* to reach the
+/// right lane is still a false statement about what the child can be.
+fn synthesized_child_referent_owners(
+    child: SynthesizedAggregateChild,
+    schema: &dyn Fn(
+        SynthesizedFixedConstructorRole,
+    ) -> Option<&'static [SynthesizedAggregateChild]>,
+    visiting: &mut BTreeSet<SynthesizedFixedConstructorRole>,
+    done: &mut BTreeMap<SynthesizedFixedConstructorRole, BoundaryReferentOwner>,
 ) -> Result<Vec<BoundaryReferentOwner>, CraneliftBackendError> {
-    if depth == 0 {
-        return Err(planner_error(
-            "synthesized aggregate recipe exceeded its descent bound, so a role contains itself",
-        ));
+    match child {
+        // A scalar is NOT `NoReferent` alone. `Int`, `BoundedNat`,
+        // `StructuralNat` and `ProcessExitStatus` each have a declared
+        // persistent SPILL arm, so a scalar child may be a persistent-store
+        // referent. It can never be arena-owned, which is why the lane verdict
+        // is the same either way -- and why recording `{NoReferent}` was a
+        // false statement that happened not to cost anything yet.
+        SynthesizedAggregateChild::Immediate => Ok(vec![
+            BoundaryReferentOwner::NoReferent,
+            BoundaryReferentOwner::PersistentStore,
+        ]),
+        // A nested synthesized constructor IS a referent, and its owner is
+        // determined -- it is the lane that child's own record selected. It is
+        // never `NoReferent`, and listing alternatives it cannot take would
+        // describe a different node than the one being allocated.
+        SynthesizedAggregateChild::Role(inner) => Ok(vec![synthesized_role_selected_owner(
+            inner, schema, visiting, done,
+        )?]),
     }
-    let recipe = synthesized_aggregate_recipe(role).ok_or_else(|| {
-        planner_error("synthesized aggregate role has no planned child model")
-    })?;
-    for child in recipe {
-        let owners = match child {
-            SynthesizedAggregateChild::Immediate => vec![BoundaryReferentOwner::NoReferent],
-            SynthesizedAggregateChild::Role(inner) => {
-                synthesized_role_referent_owners(*inner, depth - 1)?
-            }
-        };
-        if owners.contains(&BoundaryReferentOwner::InvocationArena) {
-            return Ok(vec![
-                BoundaryReferentOwner::NoReferent,
-                BoundaryReferentOwner::PersistentStore,
-                BoundaryReferentOwner::InvocationArena,
-            ]);
-        }
-    }
-    // No child can be arena-owned, so this role's node is persistable and the
-    // node it produces is itself a persistent-store referent.
-    Ok(vec![
-        BoundaryReferentOwner::NoReferent,
-        BoundaryReferentOwner::PersistentStore,
-    ])
 }
 
-/// The descent bound for [`synthesized_role_referent_owners`].
+/// The exact owner one synthesized role's node is allocated under.
 ///
-/// The deepest modelled chain is `Wrote -> PrivateTransferCount -> immediate`,
-/// so this has real headroom over the population it bounds. It exists to make a
-/// cycle a loud failure, not to be tight.
-const SYNTHESIZED_AGGREGATE_RECIPE_DEPTH: usize = 8;
+/// `Wrote` is persistent **because** `PrivateTransferCount` is, which is
+/// persistent because neither of its scalar children can be arena-owned. The
+/// chain is computed rather than asserted per role, so a verdict cannot
+/// disagree with the schema it is supposed to follow.
+///
+/// ## Closure is structural, not a budget
+///
+/// `visiting` and `done` give the sealed role graph a visiting/done colouring:
+/// re-entering a role already on the stack is a **back-edge** and rejects,
+/// while an acyclic chain of any length closes. A numeric descent bound was the
+/// previous spelling and it was not a closure proof -- "eight is enough today"
+/// is a threshold, and it would have failed a lawful long chain and admitted a
+/// cycle shorter than the bound with equal confidence.
+fn synthesized_role_selected_owner(
+    role: SynthesizedFixedConstructorRole,
+    schema: &dyn Fn(
+        SynthesizedFixedConstructorRole,
+    ) -> Option<&'static [SynthesizedAggregateChild]>,
+    visiting: &mut BTreeSet<SynthesizedFixedConstructorRole>,
+    done: &mut BTreeMap<SynthesizedFixedConstructorRole, BoundaryReferentOwner>,
+) -> Result<BoundaryReferentOwner, CraneliftBackendError> {
+    if let Some(owner) = done.get(&role) {
+        return Ok(*owner);
+    }
+    if !visiting.insert(role) {
+        return Err(planner_error(
+            "synthesized aggregate schema has a back edge, so a role transitively contains itself",
+        ));
+    }
+    let recipe = schema(role)
+        .ok_or_else(|| planner_error("synthesized aggregate role has no planned child model"))?;
+    let mut escapes = false;
+    for child in recipe {
+        let owners = synthesized_child_referent_owners(*child, schema, visiting, done)?;
+        if owners.contains(&BoundaryReferentOwner::InvocationArena) {
+            escapes = true;
+        }
+    }
+    visiting.remove(&role);
+    let owner = if escapes {
+        BoundaryReferentOwner::InvocationArena
+    } else {
+        BoundaryReferentOwner::PersistentStore
+    };
+    done.insert(role, owner);
+    Ok(owner)
+}
+
 
 /// Derive one ownership record for every aggregate producer occurrence.
 ///
@@ -2936,24 +2969,32 @@ fn build_aggregate_ownership_plan(
             allocation,
         });
     }
-    // The synthesized half of the population. One record per modelled compiler
-    // role, derived through its recipe -- not one per emission site, because a
-    // modelled role's children are the same at every site by construction. A
-    // role whose children are NOT site-invariant is exactly the one the recipe
-    // declines to model, so it gets no record here and refuses at the seat.
+    // The synthesized half of the population.
+    //
+    // ⚠ ONE RECORD PER ROLE, AND THAT IS KNOWN TO BE WRONG. A role is a
+    // SCHEMA, not an occurrence identity: two uses of `PrivateTransferCount` at
+    // two producer seats are two occurrences even though their schema is one.
+    // The occurrence law requires one interned record per exact producer use,
+    // keyed by owner/phase, producer seat, schema and structural path.
+    //
+    // This spelling is retained deliberately as measured work-in-progress while
+    // the per-use interning is built, and it must NOT be read as the closed
+    // form. What is correct below it -- the schema, the derivation through it,
+    // and the exact owner sets -- is what the per-use records will copy.
+    let mut visiting = BTreeSet::new();
+    let mut done = BTreeMap::new();
     for role in SynthesizedFixedConstructorRole::ALL {
         let Some(recipe) = synthesized_aggregate_recipe(role) else {
             continue;
         };
         let mut children = Vec::with_capacity(recipe.len());
         for (position, child) in recipe.iter().enumerate() {
-            let owners = match child {
-                SynthesizedAggregateChild::Immediate => vec![BoundaryReferentOwner::NoReferent],
-                SynthesizedAggregateChild::Role(inner) => synthesized_role_referent_owners(
-                    *inner,
-                    SYNTHESIZED_AGGREGATE_RECIPE_DEPTH,
-                )?,
-            };
+            let owners = synthesized_child_referent_owners(
+                *child,
+                &synthesized_aggregate_recipe,
+                &mut visiting,
+                &mut done,
+            )?;
             children.push(PlannedAggregateChild {
                 position: u32::try_from(position).map_err(|_| {
                     planner_capacity_error("synthesized aggregate arity exceeds the position space")
@@ -14843,6 +14884,120 @@ mod tests {
     ///
     /// GAP: the invocation aggregate carrier row is deliberately absent from
     /// Slice 0; this control proves only the dormant authority it will consume.
+    /// `D7` — the synthesized schema graph closes STRUCTURALLY, not on a count.
+    ///
+    /// MEASURED: a fifteen-link acyclic role chain resolves, and a two-role
+    /// back edge rejects with the cycle refusal rather than recursing.
+    ///
+    /// CLAIMED: termination and cycle rejection come from the visiting/done
+    /// colouring of the sealed role graph, so chain LENGTH is not a
+    /// correctness input.
+    ///
+    /// THE GAP: this drives an injected schema, because the production schema
+    /// is a closed match that no fixture can make cyclic. What it therefore
+    /// proves is the closure algorithm, not that the production schema is
+    /// acyclic — the latter is the match arm's own shape and is not asserted
+    /// here.
+    ///
+    /// The chain is deliberately longer than the numeric descent bound this
+    /// replaced. Under that bound this exact input FAILED, which is the point:
+    /// a threshold rejects lawful depth and admits a shorter cycle with equal
+    /// confidence, so it was never a closure proof.
+    #[test]
+    fn synthesized_schema_closure_is_structural_not_a_depth_budget() {
+        use SynthesizedAggregateChild::{Immediate, Role};
+        use SynthesizedFixedConstructorRole as R;
+
+        // A fifteen-link chain: each role names the next, the last is scalar.
+        const CHAIN: [R; 15] = [
+            R::Unit,
+            R::ReadEof,
+            R::Wrote,
+            R::FileError,
+            R::OptionSome,
+            R::PrivateBufferSpan,
+            R::ReadSome,
+            R::ResourceHostIo,
+            R::ResourceClosed,
+            R::ResourceMalformed,
+            R::ResourceRightNotHeld,
+            R::ResourceReleaseFailed,
+            R::ResourceKindMismatch,
+            R::ResourceBufferLimit,
+            R::ResourceInvalidOffset,
+        ];
+        macro_rules! link {
+            ($next:expr) => {{
+                const L: &[SynthesizedAggregateChild] = &[Role($next)];
+                L
+            }};
+        }
+        let acyclic = |role: R| -> Option<&'static [SynthesizedAggregateChild]> {
+            match role {
+                R::Unit => Some(link!(R::ReadEof)),
+                R::ReadEof => Some(link!(R::Wrote)),
+                R::Wrote => Some(link!(R::FileError)),
+                R::FileError => Some(link!(R::OptionSome)),
+                R::OptionSome => Some(link!(R::PrivateBufferSpan)),
+                R::PrivateBufferSpan => Some(link!(R::ReadSome)),
+                R::ReadSome => Some(link!(R::ResourceHostIo)),
+                R::ResourceHostIo => Some(link!(R::ResourceClosed)),
+                R::ResourceClosed => Some(link!(R::ResourceMalformed)),
+                R::ResourceMalformed => Some(link!(R::ResourceRightNotHeld)),
+                R::ResourceRightNotHeld => Some(link!(R::ResourceReleaseFailed)),
+                R::ResourceReleaseFailed => Some(link!(R::ResourceKindMismatch)),
+                R::ResourceKindMismatch => Some(link!(R::ResourceBufferLimit)),
+                R::ResourceBufferLimit => Some(link!(R::ResourceInvalidOffset)),
+                R::ResourceInvalidOffset => Some(&[Immediate]),
+                _ => None,
+            }
+        };
+        assert!(
+            CHAIN.len() > 8,
+            "the chain must exceed the retired numeric bound, or this row does \
+             not discriminate a structural closure from a threshold"
+        );
+
+        let mut visiting = BTreeSet::new();
+        let mut done = BTreeMap::new();
+        let owner = synthesized_role_selected_owner(R::Unit, &acyclic, &mut visiting, &mut done)
+            .expect("a long acyclic schema chain closes");
+        assert_eq!(
+            owner,
+            BoundaryReferentOwner::PersistentStore,
+            "no link in the chain can be arena-owned, so the head is persistent"
+        );
+        assert!(
+            visiting.is_empty(),
+            "every role must be popped, or the colouring leaks and a sibling \
+             reuse would read as a back edge"
+        );
+        assert_eq!(
+            done.len(),
+            CHAIN.len(),
+            "each of the {} roles resolves exactly once",
+            CHAIN.len()
+        );
+
+        // The same algorithm on a two-role back edge.
+        let cyclic = |role: R| -> Option<&'static [SynthesizedAggregateChild]> {
+            match role {
+                R::Unit => Some(link!(R::ReadEof)),
+                R::ReadEof => Some(link!(R::Unit)),
+                _ => None,
+            }
+        };
+        let mut visiting = BTreeSet::new();
+        let mut done = BTreeMap::new();
+        let error = synthesized_role_selected_owner(R::Unit, &cyclic, &mut visiting, &mut done)
+            .expect_err("a back edge must reject rather than recur");
+        assert!(
+            format!("{error:?}").contains("back edge"),
+            "the refusal must be the cycle stop itself, not an incidental \
+             failure further along: {error:?}"
+        );
+    }
+
     #[test]
     fn substrate_same_shape_aggregates_keep_distinct_lifetimes() {
         let wrapper = |child| RuntimeExpr::Construct {
