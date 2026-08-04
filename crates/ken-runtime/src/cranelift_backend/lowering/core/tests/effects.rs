@@ -2094,3 +2094,91 @@ const PX8N_OVER_BOUND_READ: u64 = 5;
 
 #[cfg(test)]
 const PX8I_BIG_READ_START: u64 = 7;
+
+/// `RT-DECL-CLOSURE-PORT` `D7` — a REACHING fixture: drive a non-`Unit` fixed
+/// synthesized role through the ORDINARY aggregate allocation arm.
+///
+/// This is not a new semantic route. It is the `FsWriteAt` analogue of the
+/// existing `host_result_closure_match` carrier fixtures, which reach the arm
+/// with `ConsoleWrite` — whose success value is `Unit`, and which is why the
+/// whole measured population of that arm was three `Unit` events.
+///
+/// `FsWriteAt`'s success value is `Wrote(PrivateTransferCount(nat, nat))`, so
+/// the same shape drives a nested non-`Unit` fixed role instead.
+///
+/// **Why the closure call is load-bearing:** matching a host result directly
+/// keeps it specialized and it never crosses into the carrier. Passing it as a
+/// call argument forces it across a generated-unit boundary, so it is CARRIED —
+/// and `emit_carrier_transfer`'s `HostResult` arm then transfers its `ok`
+/// value, which is the `Lowered::Constructor` allocation this row exists to
+/// reach.
+#[cfg(test)]
+fn d7_fs_write_at_carrier_fixture(symbols: &crate::NativeProcessSymbols) -> RuntimeExpr {
+    let exit_success = || RuntimeExpr::Construct {
+        constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+        args: Vec::new(),
+    };
+    let trap = || RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "D7 reaching fixture default".to_string(),
+    };
+    let allocate = || RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::BufferAllocate,
+        capability: None,
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int((8).into()))],
+    };
+    // Same operand shape as the established `FsWriteAt` fixture: a span-origin
+    // resource distinct from the target buffer.
+    let write = RuntimeExpr::Effect {
+        family: "FS".to_string(),
+        operation: ken_host::HostOpV1::FsWriteAt,
+        capability: None,
+        args: vec![
+            RuntimeExpr::Var(1),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Var(0),
+            RuntimeExpr::Value(RuntimeValue::Int((0).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((4).into())),
+            RuntimeExpr::Var(1),
+        ],
+    };
+    let bind = |body: RuntimeExpr| RuntimeExpr::Match {
+        scrutinee: Box::new(allocate()),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: exit_success(),
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body,
+            },
+        ],
+        default: trap(),
+    };
+    bind(bind(host_result_closure_match(write)))
+}
+
+/// MEASURED: this fixture compiles, and its compile consults the planner's
+/// aggregate record for the `Wrote` role at the ordinary allocation arm.
+///
+/// CLAIMED: a non-`Unit` fixed synthesized role actually reaches that arm, so
+/// the arm's coverage is no longer the three `Unit` events I measured.
+///
+/// THE GAP: greenness alone does not prove reachability — a fixture that never
+/// reached the arm would also compile. The reachability proof is the MUTATION:
+/// withdrawing the `Wrote` schema from `synthesized_aggregate_recipe` must
+/// redden **this** row. That is recorded in the commit rather than asserted
+/// here, because a test cannot withdraw its own production schema.
+#[test]
+fn d7_non_unit_fixed_role_reaches_ordinary_aggregate_allocation() {
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    emit_process_entrypoint_object_with_cranelift(
+        &d7_fs_write_at_carrier_fixture(&symbols),
+        "ken_d7_non_unit_fixed_role_ordinary_allocation",
+    )
+    .expect("the FsWriteAt carrier fixture compiles and reaches the aggregate arm");
+}
