@@ -10375,3 +10375,603 @@ fn d1_the_enumerator_reports_every_variant_not_the_first() {
         "the selector still answers its own question on this program"
     );
 }
+
+// ─── RT-DECL-CLOSURE-PORT D5 — the split-domain validator's control group ──
+//
+// ⭐ Every control below runs the SAME program. What varies is one mutation,
+// applied at one plane, so a refusal names the plane that refused.
+//
+// ⛔⛔ **The selector witness is what makes any of this reachable.** Production
+// cannot enter the `FunctionizedUnits` declaration-call seam before `D6`,
+// because `TransparentDeclarationClosure` fires for every closure-seed
+// transparent declaration and a checked recursive declaration call REQUIRES a
+// closure-seed declaration. ⇒ A control that "fails before emission" without
+// the witness proves nothing about `D5`: it can fail earlier, for the
+// selector's ordinary reason, and never reach the validator at all.
+
+#[cfg(test)]
+const D5_DECLARATION: &str = "decl:fixture::d5::loop";
+#[cfg(test)]
+const D5_FRAME_CARRIER: &str = "decl:fixture::d5::frames";
+#[cfg(test)]
+const D5_CALL_TEMPLATE: u64 = 900;
+#[cfg(test)]
+const D5_FRAME: u64 = 90;
+
+#[cfg(test)]
+fn d5_cases() -> Vec<crate::RuntimeComputationalMatchCase> {
+    vec![crate::RuntimeComputationalMatchCase {
+        constructor: "ctor:fixture::D5::Only".to_string(),
+        argument_binders: 1,
+        recursive_positions: Vec::new(),
+        body: RuntimeExpr::Var(0),
+    }]
+}
+
+#[cfg(test)]
+fn d5_default() -> RuntimeTrap {
+    RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "no runtime match case selected for ind:fixture::D5".to_string(),
+    }
+}
+
+/// The declaration that carries the plan's one checked frame marker.
+///
+/// ⚠ It is **never referenced**, and that is deliberate. The transport
+/// validator requires one Runtime frame marker per planned frame
+/// (`planning.rs`: `markers.len() != plan.frames.len()`), but a
+/// `ComputationalMatch` in the declaration under test would drag the
+/// computational-recursor lane into a fixture about declaration calls. ⛔ Its
+/// body must produce **no** residual of its own, or control 1 would be
+/// measuring this declaration instead of the one it names.
+#[cfg(test)]
+fn d5_frame_carrier() -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: D5_FRAME_CARRIER.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::CheckedSubcontinuationFrame {
+                frame_id: D5_FRAME,
+                body: Box::new(RuntimeExpr::ComputationalMatch {
+                    scrutinee: Box::new(RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::D5::Only".to_string(),
+                        args: vec![RuntimeExpr::Value(RuntimeValue::Int((0).into()))],
+                    }),
+                    cases: d5_cases(),
+                    default: d5_default(),
+                }),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+/// The declaration under test: one capture, one parameter, and one checked
+/// same-SCC self-call in its body.
+///
+/// ⚠ The marker's structural path is `[3]` — `LexicalClosure` reaches its body
+/// on edge `3` (`planning.rs::collect_checked_oriented_markers`), and captures
+/// on edges `10 + i`. Deriving it any other way would make the fixture agree
+/// with a mis-stated plan.
+#[cfg(test)]
+fn d5_declaration() -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: D5_DECLARATION.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: vec![RuntimeExpr::Value(RuntimeValue::Int((7).into()))],
+                params: vec!["n".to_string()],
+                body: Box::new(RuntimeExpr::CheckedRecursiveInvocation {
+                    call_template_id: D5_CALL_TEMPLATE,
+                    checked_occurrence_path: vec![5],
+                    body: Box::new(RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::DeclarationRef {
+                            symbol: D5_DECLARATION.to_string(),
+                        }),
+                        args: vec![RuntimeExpr::Var(0)],
+                    }),
+                }),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+#[cfg(test)]
+fn d5_frame() -> crate::OrientedSubcontinuationFramePlanV1 {
+    let mut frame = crate::OrientedSubcontinuationFramePlanV1 {
+        frame_id: D5_FRAME,
+        segment_site_id: 9,
+        declaration: D5_DECLARATION.to_string(),
+        checked_occurrence_path: vec![D5_FRAME],
+        semantic_position: 0,
+        input_interface: oriented_test_interface(1),
+        output_interface: oriented_test_interface(2),
+        runtime_frame_fingerprint: crate::compiler_private_computational_match_frame_fingerprint(
+            &d5_cases(),
+            &d5_default(),
+        ),
+        occurrence_binding_fingerprint: 0,
+        control_witness: crate::OrientedControlWitnessV1::DistinguishedRoot,
+    };
+    frame.occurrence_binding_fingerprint =
+        crate::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+    frame
+}
+
+#[cfg(test)]
+fn d5_call_template() -> crate::CheckedRecursiveInvocationTemplateV1 {
+    crate::CheckedRecursiveInvocationTemplateV1 {
+        call_template_id: D5_CALL_TEMPLATE,
+        declaration: D5_DECLARATION.to_string(),
+        checked_occurrence_path: vec![5],
+        callee: D5_DECLARATION.to_string(),
+        level_instantiation: Vec::new(),
+        recursion_group: "scc:fixture::d5".to_string(),
+        scc_index: 0,
+        admission: 1,
+        arity: 1,
+        local_telescope: vec![oriented_test_interface(1)],
+        result_interface: oriented_test_interface(2),
+        callee_segment_site_id: 9,
+        callee_frame_templates: vec![D5_FRAME],
+        caller_interface: oriented_test_interface(2),
+        runtime_marker_locations: vec![crate::CheckedRuntimeMarkerLocationV1 {
+            declaration: D5_DECLARATION.to_string(),
+            runtime_path: vec![3],
+        }],
+        occurrence_binding_fingerprint: 0,
+    }
+}
+
+/// The plan, **re-fingerprinted after `edit`**.
+///
+/// ⛔⛔ Re-fingerprinting is the whole reason a checked-plan mutation is a
+/// control at all. `OrientedSubcontinuationPlanV1::validate` checks
+/// `occurrence_binding_fingerprint` over EVERY field of the template, and it
+/// runs on the compile path. ⇒ A mutation that leaves the stale fingerprint in
+/// place is refused by the plan's own consistency law, upstream of `D5`, and a
+/// control built on one would be measuring that law instead
+/// ([[a-mutation-on-the-discriminator-input-measures-the-consistency-law-not-the-decision]]).
+#[cfg(test)]
+fn d5_plan_with(
+    edit: impl FnOnce(&mut crate::CheckedRecursiveInvocationTemplateV1),
+) -> crate::OrientedSubcontinuationPlanV1 {
+    let mut call = d5_call_template();
+    edit(&mut call);
+    call.occurrence_binding_fingerprint =
+        crate::compiler_private_recursive_call_binding_fingerprint(&call);
+    crate::OrientedSubcontinuationPlanV1 {
+        representation_rule_version:
+            crate::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+        frames: vec![d5_frame()],
+        recursive_calls: vec![call],
+        computational_ih_slots: Vec::new(),
+        computational_ih_calls: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+fn d5_plan() -> crate::OrientedSubcontinuationPlanV1 {
+    d5_plan_with(|_| {})
+}
+
+/// The entry expression: one unchecked call into the declaration-owned unit.
+#[cfg(test)]
+fn d5_entry() -> RuntimeExpr {
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D5_DECLARATION.to_string(),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int((5).into()))],
+    }
+}
+
+/// Compile the fixture and return the outcome together with **the declaration
+/// calls actually emitted**, read back from the emitted instructions.
+#[cfg(test)]
+fn d5_compile(
+    plan: crate::OrientedSubcontinuationPlanV1,
+    extra: Option<&RuntimeDeclaration>,
+) -> (
+    Result<(), String>,
+    Vec<(StaticOriginId, StaticOriginId, cranelift_codegen::ir::FuncRef)>,
+) {
+    let entry = d5_entry();
+    let declaration = d5_declaration();
+    let carrier = d5_frame_carrier();
+    let mut declarations = BTreeMap::from([
+        (D5_DECLARATION, &declaration),
+        (D5_FRAME_CARRIER, &carrier),
+    ]);
+    if let Some(extra) = extra {
+        declarations.insert(extra.symbol.as_str(), extra);
+    }
+    reset_d5_emitted_declaration_calls();
+    let outcome = compile_expr_into_module(
+        new_jit_module().expect("JIT module"),
+        "d5_declaration_unit_call",
+        Linkage::Local,
+        &entry,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        false,
+        None,
+        None,
+        Some(plan),
+    )
+    .map(|_| ())
+    .map_err(|error| format!("{error:?}"));
+    (outcome, d5_emitted_declaration_calls())
+}
+
+// ── Control 1: the exact fixture, UNHOOKED ────────────────────────────────
+
+#[test]
+fn d5_c1_the_unhooked_fixture_reports_one_residual_and_selects_recursive_descent() {
+    let entry = d5_entry();
+    let declaration = d5_declaration();
+    let carrier = d5_frame_carrier();
+    let declarations = BTreeMap::from([
+        (D5_DECLARATION, &declaration),
+        (D5_FRAME_CARRIER, &carrier),
+    ]);
+    assert_eq!(
+        enumerate_recursive_descent_residuals(&entry, &declarations),
+        BTreeSet::from([RecursiveDescentResidual::TransparentDeclarationClosure]),
+        "D5 control 1: the fixture must carry EXACTLY the residual the witness \
+         masks. A second residual here would leave witness mode on \
+         RecursiveDescent and make control 2 unreachable for a reason the \
+         control could not report"
+    );
+    assert_eq!(
+        select_body_emission_authority(&entry, &declarations),
+        BodyEmissionAuthority::RecursiveDescent,
+        "D5 control 1: production selection is unchanged"
+    );
+}
+
+// ── Control 2: BLOCKED, and this is the measurement that says why ─────────
+//
+// ⛔⛔ **TRANSITION SENTINEL. It goes red the moment the blocker below is
+// fixed, and that red is the signal to promote it into D5's real positive
+// control.** It is named for the boundary, not for a count, and the event that
+// retires it is: *the closure-seed transparent declaration's vestigial
+// zero-arity `SchedulingEntry` unit stops being emitted with a closure body.*
+//
+// ⚠ **The witness is NOT the blocker, and the three cases below are what
+// establish that** rather than asserting it. Under the witness:
+//
+// | fixture                                | outcome |
+// |----------------------------------------|---------|
+// | closure-seed declaration, REFERENCED   | refused at the closure boundary |
+// | closure-seed declaration, UNREFERENCED | refused at the closure boundary |
+// | non-closure thunk declaration          | compiles |
+//
+// The unreferenced case is the discriminating one: with no call site at all,
+// the refusal cannot be about the call. And the thunk compiling is the positive
+// control on the harness — the `FunctionizedUnits` lane and the witness both
+// work. ⇒ What is refused is the **declaration's own scheduling-entry unit**,
+// whose planned occurrence is the closure expression, so emitting it must
+// transfer a `Lowered::Closure` across a unit boundary
+// (`boundary_transfer_admissibility`, `mod.rs`).
+//
+// ⭐ **Why this is not D5's to repair.** After `D4` every `DeclarationRef` to a
+// closure-seed declaration resolves to the `CallableDeclaration` unit — the
+// `(seed, body) = (true, Some(_))` arm of `declaration_call_target` is total
+// for that class — so the scheduling entry is unreachable and yet still
+// emitted. Retiring it, or re-classifying what its body lowers to, is a
+// **production semantic action**, which is exactly `D6`'s charter and outside
+// `D5`'s. Inventing one here would be the unauthorized fix the ruling forbids.
+
+#[test]
+fn d5_c2_the_positive_is_blocked_by_the_vestigial_declaration_scheduling_entry() {
+    let entry = d5_entry();
+    let declaration = d5_declaration();
+    let carrier = d5_frame_carrier();
+    let declarations = BTreeMap::from([
+        (D5_DECLARATION, &declaration),
+        (D5_FRAME_CARRIER, &carrier),
+    ]);
+    // A closure-seed declaration nothing refers to, and a non-closure thunk —
+    // the two fixtures that locate the refusal.
+    let unreferenced = RuntimeExpr::Value(RuntimeValue::Int((1).into()));
+    let thunk = RuntimeDeclaration {
+        symbol: "decl:fixture::d5::thunk".to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Value(RuntimeValue::Int((3).into())),
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    let thunk_entry = RuntimeExpr::DeclarationRef {
+        symbol: thunk.symbol.clone(),
+    };
+    with_transparent_declaration_closure_witness(|| {
+        assert_eq!(
+            select_body_emission_authority(&entry, &declarations),
+            BodyEmissionAuthority::FunctionizedUnits,
+            "the witness does reach the functionized lane — so nothing below is \
+             about the selector"
+        );
+        let (outcome, emitted) = d5_compile(d5_plan(), None);
+        let refusal = outcome.expect_err(
+            "SENTINEL FIRED: the closure-seed declaration now compiles under the \
+             witness. The vestigial scheduling-entry blocker is gone, so this \
+             sentinel has done its job — replace it with D5's real positive \
+             control (compile, then assert the emitted target equals the \
+             independently planner-resolved CallableDeclaration target), and \
+             build control 4's mutation population on top of it",
+        );
+        assert!(
+            refusal.contains("a closure cannot cross the boundary"),
+            "the refusal must still be the closure-boundary one this sentinel \
+             names. A DIFFERENT refusal means the blocker moved, and a control \
+             group built on the old diagnosis would be measuring nothing: {refusal}"
+        );
+        // ⭐ The seam IS reached, and this is the measurement that says so: the
+        // ENTRY's unchecked call to the declaration-owned unit is emitted and
+        // passes D5's ABI reconciliation before anything is refused. What is
+        // NOT reached is the checked self-call, which lives inside the
+        // `CallableDeclaration` unit's body — the vestigial scheduling entry is
+        // emitted first and refuses, so that unit's body is never emitted.
+        //
+        // ⇒ D5's ABI half is live and testable today (see the mutation control
+        // below); D5's checked-plan half is not.
+        assert_eq!(
+            emitted.len(),
+            1,
+            "exactly the entry's unchecked declaration-unit call is emitted \
+             before the refusal. More would mean the callable unit's body was \
+             reached after all, and the checked-plan half would then be \
+             testable too: {emitted:?}"
+        );
+        // ⚠ A marker-free twin: these two rows carry no checked plan, so the
+        // fixture's `CheckedRecursiveInvocation` would be refused for having no
+        // plan metadata — a refusal about transport, not about the boundary
+        // this sentinel names.
+        let plain = RuntimeDeclaration {
+            symbol: D5_DECLARATION.to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["n".to_string()],
+                    body: Box::new(RuntimeExpr::Var(0)),
+                },
+            },
+            metadata: RuntimeSymbolMetadata {
+                lowerability: Some(RuntimeLowerabilityStatus::Supported),
+                ..RuntimeSymbolMetadata::empty()
+            },
+        };
+        // Unreferenced: no call site, same refusal ⇒ not the call.
+        for (label, entry) in [("referenced", &entry), ("unreferenced", &unreferenced)] {
+            let refused = compile_expr_into_module(
+                new_jit_module().expect("JIT module"),
+                "d5_sentinel",
+                Linkage::Local,
+                entry,
+                &NativeSeedEnvironment::empty(),
+                BTreeMap::from([(D5_DECLARATION, &plain)]),
+                None,
+                false,
+                None,
+                None,
+                None,
+            )
+            .map(|_| ())
+            .expect_err(
+                "SENTINEL FIRED: a closure-seed transparent declaration compiles \
+                 under the witness — see the message above",
+            );
+            assert!(
+                format!("{refused:?}").contains("a closure cannot cross the boundary"),
+                "the {label} closure-seed declaration must be refused at the \
+                 closure boundary: {refused:?}"
+            );
+        }
+        // The positive control on the harness itself. ⛔ Without it, the two
+        // refusals above are consistent with the witness being broken, and the
+        // whole diagnosis would rest on a negative check
+        // ([[a-negative-check-passes-for-any-reason-so-it-needs-a-positive-control]]).
+        compile_expr_into_module(
+            new_jit_module().expect("JIT module"),
+            "d5_sentinel_positive",
+            Linkage::Local,
+            &thunk_entry,
+            &NativeSeedEnvironment::empty(),
+            BTreeMap::from([(thunk.symbol.as_str(), &thunk)]),
+            None,
+            false,
+            None,
+            None,
+            None,
+        )
+        .map(|_| ())
+        .expect(
+            "a NON-closure transparent declaration must compile under the \
+             witness. If this fails the functionized lane is broken generally, \
+             and the closure-specific diagnosis above is wrong",
+        );
+    });
+}
+
+// ── Control 3: the witness masks ONE variant, it does not force authority ──
+
+#[test]
+fn d5_c3_a_second_residual_leaves_witness_mode_on_recursive_descent() {
+    let entry = d5_entry();
+    let declaration = d5_declaration();
+    let carrier = d5_frame_carrier();
+    // A seed-closure call — a residual the witness has no business masking.
+    let second = RuntimeDeclaration {
+        symbol: "decl:fixture::d5::second".to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Closure {
+                    captures: Vec::new(),
+                    params: vec!["y".to_string()],
+                    body: Box::new(RuntimeExpr::Var(0)),
+                }),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((1).into()))],
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    let declarations = BTreeMap::from([
+        (D5_DECLARATION, &declaration),
+        (D5_FRAME_CARRIER, &carrier),
+        (second.symbol.as_str(), &second),
+    ]);
+    with_transparent_declaration_closure_witness(|| {
+        assert_eq!(
+            select_body_emission_authority(&entry, &declarations),
+            BodyEmissionAuthority::RecursiveDescent,
+            "D5 control 3: the witness masks ONE residual variant. If it forced \
+             the authority instead, this would read FunctionizedUnits — and \
+             control 2's positive would be an artefact of the hook rather than \
+             evidence about the seam"
+        );
+    });
+}
+
+// ── Control 5: the witness does not leak ──────────────────────────────────
+
+#[test]
+fn d5_c5_the_witness_does_not_leak_past_its_scope() {
+    let entry = d5_entry();
+    let declaration = d5_declaration();
+    let carrier = d5_frame_carrier();
+    let declarations = BTreeMap::from([
+        (D5_DECLARATION, &declaration),
+        (D5_FRAME_CARRIER, &carrier),
+    ]);
+    with_transparent_declaration_closure_witness(|| {
+        assert_eq!(
+            select_body_emission_authority(&entry, &declarations),
+            BodyEmissionAuthority::FunctionizedUnits
+        );
+    });
+    assert_eq!(
+        select_body_emission_authority(&entry, &declarations),
+        BodyEmissionAuthority::RecursiveDescent,
+        "D5 control 5: after the scope closes the ordinary selector is back. A \
+         leak would make every later test on this thread run under the witness, \
+         which reads as the witness being unnecessary"
+    );
+    // The panic path, which is the one a trailing `set` would miss.
+    let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        with_transparent_declaration_closure_witness(|| panic!("a control asserted inside"));
+    }));
+    assert!(unwound.is_err(), "the closure must have panicked");
+    assert_eq!(
+        select_body_emission_authority(&entry, &declarations),
+        BodyEmissionAuthority::RecursiveDescent,
+        "D5 control 5: RAII restoration, not a trailing set — a control that \
+         asserts inside the witness scope panics on failure, and a leaked \
+         witness would then silently rewrite every subsequent selection"
+    );
+}
+
+// ── Control 4, the runnable half: the ABI-domain mutations ────────────────
+//
+// ⭐ **Each of these gets its own D5 first refusal, before any call is
+// emitted.** They mutate the function-local declared-call COPY and leave the
+// plan's validated descriptor alone, which is what makes the reconciliation —
+// not the copy's internal consistency — the thing being measured.
+//
+// ⚠ `Exact` is run in the same loop as a **positive control**. Without it every
+// row is a negative check, and a negative check passes for any reason
+// ([[a-negative-check-passes-for-any-reason-so-it-needs-a-positive-control]]) —
+// including the compile failing earlier for a reason that has nothing to do
+// with the mutation.
+
+#[test]
+fn d5_c4_abi_domain_mutations_each_refuse_before_any_call_is_emitted() {
+    for mutation in [
+        units::D5DeclaredCallMutation::Carrier,
+        units::D5DeclaredCallMutation::Ownership,
+        units::D5DeclaredCallMutation::StorageOwner,
+        units::D5DeclaredCallMutation::Ordinal,
+        units::D5DeclaredCallMutation::Header,
+        units::D5DeclaredCallMutation::Offsets,
+    ] {
+        with_transparent_declaration_closure_witness(|| {
+            units::with_d5_declared_call_mutation(mutation, || {
+                let (outcome, emitted) = d5_compile(d5_plan(), None);
+                let refusal = outcome.expect_err(&format!(
+                    "D5 control 4: the {mutation:?} mutation must be refused. A \
+                     compile that accepts it means the ABI reconciliation is \
+                     not reading that field, and a green D5 would be green for \
+                     the wrong reason"
+                ));
+                assert!(
+                    refusal.contains("disagree")
+                        || refusal.contains("parameter-then-capture input run"),
+                    "D5 control 4: the {mutation:?} mutation must get D5's OWN \
+                     refusal, not some later one it happens to also trip. \
+                     Otherwise the control names a plane that never ran: {refusal}"
+                );
+                assert!(
+                    emitted.is_empty(),
+                    "D5 control 4: the {mutation:?} mutation must refuse BEFORE \
+                     emission. A recorded call means a mis-declared frame was \
+                     already written: {emitted:?}"
+                );
+            });
+        });
+    }
+    // The positive control on the harness: with no mutation, the same fixture
+    // emits its one call and fails only at the sentinel's blocker.
+    with_transparent_declaration_closure_witness(|| {
+        let (_outcome, emitted) = d5_compile(d5_plan(), None);
+        assert_eq!(
+            emitted.len(),
+            1,
+            "D5 control 4: unmutated, the entry's call IS emitted. Without this \
+             row every refusal above is consistent with the fixture never \
+             reaching the seam at all"
+        );
+    });
+}
+
+// ── Control 4, the wrong-target class ─────────────────────────────────────
+
+#[test]
+fn d5_c4_a_retargeted_declaration_call_is_refused_before_emission() {
+    with_transparent_declaration_closure_witness(|| {
+        units::with_d5_declared_call_mutation(units::D5DeclaredCallMutation::Retarget, || {
+            let (outcome, emitted) = d5_compile(d5_plan(), None);
+            // ⚠ The fixture has exactly one declaration-call record per caller,
+            // so the retarget is a no-op here and the compile behaves as the
+            // sentinel describes. That is a REACHABILITY fact about the
+            // fixture, not evidence about the wrong-target class, and it is
+            // stated rather than dressed up as a passing control: a second
+            // callable declaration in one caller is what would make the class
+            // expressible, and that needs the checked-plan half to be reachable
+            // first ([[mutation-proof-injection-point-is-a-reachability-tell]]).
+            assert!(
+                outcome.is_err(),
+                "the sentinel's blocker still stands under the retarget"
+            );
+            assert_eq!(
+                emitted.len(),
+                1,
+                "the retarget is inert on a single-record caller — this row \
+                 measures the fixture, and says so"
+            );
+        });
+    });
+}
