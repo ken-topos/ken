@@ -6021,7 +6021,7 @@ impl<'src> StaticTransitionPlan<'src> {
     /// | route into body `B` | superseded when |
     /// |---|---|
     /// | a specialization `S` whose selected worker body is `B` | a generated context exists for `(S, B)` |
-    /// | a `StaticBody` or `Declaration` call edge targeting `B` | ⛔ **never** |
+    /// | a `StaticBody` or `Declaration` call edge targeting `B` | ⛔ **not at this checkpoint** — see below |
     ///
     /// ⛔ **"A context exists" is NOT a global suppression predicate**, and the
     /// shape above is what stops it becoming one: a mixed caller population --
@@ -6029,7 +6029,7 @@ impl<'src> StaticTransitionPlan<'src> {
     /// edge -- leaves at least one unsuperseded route and keeps the raw
     /// `Function`. The ruling names that case explicitly.
     ///
-    /// ## ⚠ Why a `StaticBody` edge is NEVER superseded — MEASURED, and it
+    /// ## ⚠ Why a `StaticBody` edge is not superseded HERE — MEASURED, and it
     /// refutes the obvious argument
     ///
     /// The tempting reasoning: a `StaticBody` edge into `B` is `B`'s *seeding*
@@ -6052,9 +6052,22 @@ impl<'src> StaticTransitionPlan<'src> {
     ///
     /// ⇒ The injectivity is real; the inference from it is not. Same occurrence,
     /// two emitted calls, and only one of them retargets. **A call edge
-    /// therefore always counts as a live route**, which is the conservative
-    /// direction: the cost of being wrong here is an emitted body that refuses,
-    /// not a call to a function that does not exist.
+    /// therefore counts as a live route at this checkpoint**, which is the
+    /// conservative direction: the cost of being wrong here is an emitted body
+    /// that refuses, not a call to a function that does not exist.
+    ///
+    /// ⛔ **Narrowed by the checkpoint-3 release, and the distinction is
+    /// load-bearing.** "Never superseded" was too broad for the completed
+    /// mechanism. What is permanent is that **the source edge and its
+    /// provenance are never deleted**; what may still move is **the exact
+    /// emitted callee**, which `D5a` checkpoint 4 retargets under exact planner
+    /// authority — keyed by the invocation's causal identity and retained
+    /// source coordinates, never by body origin, ABI shape, or "a context
+    /// exists". ⇒ Read this table as *"no edge is superseded yet"*, not as
+    /// *"no edge can ever be"*. When checkpoint 4's binding exists, this census
+    /// is re-run against it: another exact raw call remaining keeps the body in
+    /// branch one, and only a fully retargeted invocation set makes it
+    /// template-only.
     pub(in crate::cranelift_backend) fn template_only_worker_bodies(
         &self,
     ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
@@ -6142,6 +6155,36 @@ impl<'src> StaticTransitionPlan<'src> {
             .emittable_call_edges()?
             .into_iter()
             .filter(|edge| !template_only.contains(&edge.callee_origin()))
+            .collect())
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 3 — the computational-match
+    /// origins that have a planner-issued source-machine recursive
+    /// predecessor.**
+    ///
+    /// Architect ruling `evt_5a0q3m9tnkh8e` §2: *"Final match-case reachability
+    /// must be the union of the initial selection and every planner-issued
+    /// source-machine recursive predecessor. An initial static selection may
+    /// disposition a case only when no planned recursive/dynamic predecessor
+    /// can select it."*
+    ///
+    /// A match named as the `continuation_origin` of a planner-issued causal
+    /// call has exactly that: the call's **return edge** comes back into the
+    /// match, and control resumes there with a value the initial scrutinee did
+    /// not determine.
+    ///
+    /// ⛔ Derived from the planner's own causal-call projection, not from
+    /// anything lowering observed. That matters because the defect is precisely
+    /// that lowering's *observed* selections are incomplete — the initial
+    /// scrutinee selects one case and the recursive return can select another,
+    /// so an authority built from observation cannot see the second.
+    pub(in crate::cranelift_backend) fn source_machine_recursive_predecessor_origins(
+        &self,
+    ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
+        Ok(self
+            .continuation_calls()?
+            .iter()
+            .map(|call| call.continuation_origin())
             .collect())
     }
 
