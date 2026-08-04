@@ -6061,6 +6061,7 @@ fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
         synthesized_identity: None,
         occurrence: None,
         args: vec![Lowered::Record {
+            occurrence: None,
             fields: vec![("field:held".to_string(), c1_closure(origin))],
         }],
     };
@@ -6119,6 +6120,7 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
         args: vec![
             Lowered::String("left".to_string()),
             Lowered::Record {
+                occurrence: None,
                 fields: vec![("field:right".to_string(), Lowered::Bytes(vec![7, 8]))],
             },
         ],
@@ -6140,6 +6142,7 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
         args: vec![
             Lowered::String("left".to_string()),
             Lowered::Record {
+                occurrence: None,
                 fields: vec![("field:right".to_string(), c1_closure(origin))],
             },
         ],

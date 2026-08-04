@@ -9305,6 +9305,14 @@ impl<'a> Lowering<'a> {
                     })
                     .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
                 Ok(LoweringOperand::Specialized(Lowered::Record {
+                    // ⭐ `D7` — resolved AT THE PRODUCER and carried with the
+                    // template, exactly as the `Construct` arms resolve theirs.
+                    // This is the one place a source record's ownership record
+                    // may be looked up: everywhere downstream is a use.
+                    occurrence: Some(self.static_transition_plan.source_aggregate_occurrence(
+                        static_origin,
+                        PlannedAggregateShape::Record,
+                    )?),
                     fields: lowered_fields,
                 }))
             }
@@ -9341,7 +9349,7 @@ impl<'a> Lowering<'a> {
                     }
                     // ── the pre-existing SPECIALIZED route, unchanged ──────
                     LoweringOperand::Specialized(lowered) => {
-                        let Lowered::Record { fields } = lowered else {
+                        let Lowered::Record { fields, .. } = lowered else {
                             return Err(unsupported(
                                 "Project",
                                 "record projection needs a record value",

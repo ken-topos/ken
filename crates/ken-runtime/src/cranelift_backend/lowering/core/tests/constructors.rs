@@ -2952,10 +2952,19 @@ fn ac_c7_project_edge(fields: [(&str, &str); 2], project: &str) -> (i64, u64, u6
         (fields[0].0.to_string(), ac_c7_lowered_ctor(fields[0].1)),
         (fields[1].0.to_string(), ac_c7_lowered_ctor(fields[1].1)),
     ];
+    // ⭐ `D7` — the record's PRODUCER occurrence, resolved here because this
+    // rig hand-builds the template that the `Record` lowering arm would
+    // otherwise have resolved it in. A hand-built aggregate with no producer
+    // is a fail-closed absence, not a licence to fall back to the transfer
+    // coordinate.
+    let record_occurrence = plan
+        .source_aggregate_occurrence(record_origin, PlannedAggregateShape::Record)
+        .expect("the planned record has an ownership record at its own origin");
     let seed_env = NativeSeedEnvironment::empty();
     let (_module, code) = ac_c7_compile_edge(&seed_env, plan, move |compiler, builder| {
         // ── PRODUCER: a compile-time record crosses the one-way seam ──────
         let record = Lowered::Record {
+            occurrence: Some(record_occurrence),
             fields: lowered_fields,
         };
         let word = compiler.transfer_into_carrier(builder, record_origin, &record)?;

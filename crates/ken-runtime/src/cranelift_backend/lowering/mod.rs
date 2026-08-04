@@ -2076,6 +2076,28 @@ enum Lowered {
         args: Vec<Lowered>,
     },
     Record {
+        /// **`RT-DECL-CLOSURE-PORT` `D7` — the planner-issued aggregate
+        /// occurrence this template will become.**
+        ///
+        /// ⭐ Exactly what `Lowered::Constructor::occurrence` is, and here for
+        /// the same reason: **the aggregate's authority belongs to its
+        /// PRODUCER, not to whatever coordinate happens to be in scope where it
+        /// is used.** A record forwarded through a `Var` or handed to a call
+        /// arrives somewhere that cannot lawfully re-query the plan for it.
+        ///
+        /// ⛔ Its absence is what made a source `Record` resolve its ownership
+        /// record at the coordinate of its *use* — a callee's scheduling entry,
+        /// a call argument's slot — and be refused on the shape cross-check
+        /// against whatever record lived there. The `Constructor` variant never
+        /// had that defect because it already carried this.
+        ///
+        /// `None` is a REFUSAL, never a default, exactly as on `Constructor`:
+        /// an aggregate with no interned occurrence has no lifetime meet, and
+        /// answering `PersistentGround` for it would reinstate the unproven
+        /// persistent lane. A value-domain record — one built from a
+        /// `RuntimeValue`, with no occurrence in the program — carries `None`
+        /// and fails closed at the allocation rather than borrowing a lane.
+        occurrence: Option<AggregateOccurrenceId>,
         fields: Vec<(String, Lowered)>,
     },
     /// A retained closure. ⭐ **The body is the static origin and nothing else.**
@@ -4018,7 +4040,7 @@ impl<'a> Lowering<'a> {
                 }
                 Ok(word)
             }
-            Lowered::Record { fields } => {
+            Lowered::Record { fields, .. } => {
                 let (occurrence, class) = self.aggregate_carrier_authority(
                     origin,
                     value,
@@ -4201,12 +4223,18 @@ impl<'a> Lowering<'a> {
         // template happened to be transferred, which after nested producer
         // traversal is a `Let`, `Match`, `Call` or `Effect` occurrence that
         // never built an aggregate at all.
-        let occurrence = match value {
-            Lowered::Constructor {
-                occurrence: Some(occurrence),
-                ..
-            } => *occurrence,
-            _ => self
+        // ⭐ **The PRODUCER's occurrence, whichever aggregate shape this is.**
+        // Both variants now carry one, so this reads the same answer for a
+        // record as for a constructor rather than having a shape-shaped hole
+        // that fell through to the use coordinate.
+        let occurrence = match value.source_aggregate_producer() {
+            Some(occurrence) => occurrence,
+            // ⚠ Reached only by an aggregate with NO producer — a value-domain
+            // record or constructor built from a `RuntimeValue`, which has no
+            // occurrence in the program. `source_aggregate_occurrence` then
+            // fails closed unless the transfer coordinate genuinely is a
+            // producer, which for those is the rig that built them.
+            None => self
                 .static_transition_plan
                 .source_aggregate_occurrence(origin, shape)?,
         };
@@ -6431,6 +6459,26 @@ impl Lowered {
     /// transfer census proves nothing either way, because the carrier is inert:
     /// that zero holds for every variant and cannot distinguish "closures never
     /// transfer" from "nothing transfers yet."
+    /// **The producer-issued occurrence of a source aggregate, whichever shape
+    /// it is.**
+    ///
+    /// ⭐ One reader over both aggregate variants, so a consumer asks *"what is
+    /// this template's producer authority?"* without branching on shape and
+    /// without a shape-specific spelling drifting from its sibling. `None` for
+    /// every non-aggregate, and for an aggregate whose occurrence is absent —
+    /// which is an explicit fail-closed absence at the allocation, never a
+    /// signal to fall back to a use coordinate.
+    pub(in crate::cranelift_backend) fn source_aggregate_producer(
+        &self,
+    ) -> Option<AggregateOccurrenceId> {
+        match self {
+            Lowered::Constructor { occurrence, .. } | Lowered::Record { occurrence, .. } => {
+                *occurrence
+            }
+            _ => None,
+        }
+    }
+
     pub(in crate::cranelift_backend) fn boundary_transfer_admissibility(
         &self,
     ) -> Result<(), CraneliftBackendError> {
@@ -6464,7 +6512,7 @@ impl Lowered {
                 }
                 Ok(())
             }
-            Lowered::Record { fields } => {
+            Lowered::Record { fields, .. } => {
                 for (_, value) in fields {
                     value.boundary_transfer_admissibility()?;
                 }
@@ -13067,7 +13115,11 @@ impl<'a> Lowering<'a> {
                     .map(|arg| self.lower_value(builder, arg))
                     .collect::<Result<Vec<_>, _>>()?,
             }),
+            // ⚠ A VALUE-domain record has no occurrence in the program, so it
+            // has no producer authority. Stated as an absence rather than
+            // filled in: it fails closed at the allocation.
             RuntimeValue::Record { fields } => Ok(Lowered::Record {
+                occurrence: None,
                 fields: fields
                     .iter()
                     .map(|(name, value)| Ok((name.clone(), self.lower_value(builder, value)?)))
@@ -13190,7 +13242,9 @@ impl<'a> Lowering<'a> {
                     .map(|arg| self.lower_ground_value(builder, arg))
                     .collect::<Result<Vec<_>, _>>()?,
             }),
+            // ⚠ Likewise a ground-value record: no occurrence, stated.
             RuntimeGroundValue::Record { fields } => Ok(Lowered::Record {
+                occurrence: None,
                 fields: fields
                     .iter()
                     .map(|(name, value)| {
@@ -14086,7 +14140,7 @@ impl<'a> Lowering<'a> {
                     .map(|arg| self.ground_value(arg))
                     .collect::<Result<Vec<_>, _>>()?,
             }),
-            Lowered::Record { fields } => Ok(RuntimeGroundValue::Record {
+            Lowered::Record { fields, .. } => Ok(RuntimeGroundValue::Record {
                 fields: fields
                     .into_iter()
                     .map(|(name, value)| Ok((name, self.ground_value(value)?)))
@@ -14152,7 +14206,10 @@ fn same_recursive_argument_shapes(left: &[Lowered], right: &[Lowered]) -> bool {
                     left_constructor == right_constructor
                         && same_recursive_argument_shapes(left_args, right_args)
                 }
-                (Lowered::Record { fields: left }, Lowered::Record { fields: right }) => {
+                (
+                    Lowered::Record { fields: left, .. },
+                    Lowered::Record { fields: right, .. },
+                ) => {
                     left.len() == right.len()
                         && left
                             .iter()
@@ -14244,7 +14301,7 @@ fn append_recursive_argument_values(
             Lowered::Constructor { args, .. } => {
                 append_recursive_argument_values(builder, args, output, native_int_tags)?;
             }
-            Lowered::Record { fields } => {
+            Lowered::Record { fields, .. } => {
                 for (_, field) in fields {
                     append_recursive_argument_values(
                         builder,
@@ -14329,7 +14386,11 @@ fn rebuild_recursive_argument(
                 .map(|arg| rebuild_recursive_argument(arg, values, native_int_tags))
                 .collect::<Result<Vec<_>, _>>()?,
         },
-        Lowered::Record { fields } => Lowered::Record {
+        Lowered::Record { occurrence, fields } => Lowered::Record {
+            // ⭐ The producer travels with the rebuilt template. Dropping it
+            // here would silently return the record to use-coordinate
+            // authority at exactly the boundary this field exists to cross.
+            occurrence: *occurrence,
             fields: fields
                 .iter()
                 .map(|(name, value)| {
