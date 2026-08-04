@@ -6258,6 +6258,88 @@ fn d7_compile_governed_sites(program: &RuntimeExpr) -> Result<(), CraneliftBacke
     emit_process_entrypoint_object_with_cranelift(program, "ken_d7_governed_sites").map(|_| ())
 }
 
+/// A source `Record` with DISTINGUISHABLE fields, passed as an ordinary
+/// generated-unit call argument.
+///
+/// ⭐ The two fields are different constructors on purpose. A record whose
+/// fields are interchangeable cannot show that the right field identities
+/// travelled; this one can.
+fn d7_record_as_call_argument() -> RuntimeExpr {
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["record".to_string()],
+            body: Box::new(RuntimeExpr::Construct {
+                constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                args: Vec::new(),
+            }),
+        }),
+        args: vec![RuntimeExpr::Record {
+            fields: vec![
+                (
+                    "first".to_string(),
+                    RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::CallInput::First".to_string(),
+                        args: Vec::new(),
+                    },
+                ),
+                (
+                    "second".to_string(),
+                    RuntimeExpr::Construct {
+                        constructor: "ctor:fixture::CallInput::Second".to_string(),
+                        args: Vec::new(),
+                    },
+                ),
+            ],
+        }],
+    }
+}
+
+/// **`D7` — a source `Record` passed as an ordinary generated-unit call
+/// argument is marshalled at the CALLEE's origin. The red premise.**
+///
+/// MEASURED, by instrumenting `source_aggregate_occurrence` on this exact
+/// fixture. The planned population is
+///
+/// | occurrence | shape | producer |
+/// |---|---|---|
+/// | 0 | `Constructor` | origin 2 — `CallInput::First` |
+/// | 1 | `Constructor` | origin 3 — `CallInput::Second` |
+/// | 2 | **`Record`** | **origin 4 — the record itself** |
+/// | 3 | `Constructor` | origin 6 — the callee closure's `ExitCode::Success` body |
+///
+/// and the emitter asks for the `Record`'s ownership record **at origin 6**.
+/// It finds occurrence 3, whose shape is `Constructor`, and refuses on the
+/// shape cross-check. Origin 6 is `DeclaredUnitCall::origin` — the callee's
+/// scheduling entry — because `call_declared_unit_target` transfers every
+/// input that is still specialized at that coordinate.
+///
+/// ⚠ **TRANSITION SENTINEL, and it asserts a DEFECT.** It is committed in this
+/// state deliberately, so the repair has a discriminator to flip rather than a
+/// claim to make. It retires the moment each call input is carried at its own
+/// caller-side occurrence, and the flip is the whole evidence for that repair.
+///
+/// ⭐ The record's two fields are DIFFERENT constructors so that, once the
+/// repair lands, the successful compile is over a record whose field
+/// identities are distinguishable rather than interchangeable.
+///
+/// ⛔ Not a claim that the shape check is wrong. The shape check is correct and
+/// is doing exactly its job; what is wrong is the coordinate it was asked
+/// about.
+#[test]
+fn a_source_record_as_a_call_argument_is_marshalled_at_the_callee_origin() {
+    let error = emit_process_entrypoint_object_with_cranelift(
+        &d7_record_as_call_argument(),
+        "ken_d7_record_call_input",
+    )
+    .expect_err("the present marshalling refuses a record call argument");
+    assert!(
+        format!("{error:?}").contains("aggregate producer disagrees with its planned ownership shape"),
+        "the refusal must be the ownership-shape cross-check, which is what \
+         locates the wrong coordinate: {error:?}"
+    );
+}
+
 /// The carried-constructor site, driven by the heterogeneous eliminator.
 ///
 /// ⚠ A third driver, and measured for the same reason as the second.
