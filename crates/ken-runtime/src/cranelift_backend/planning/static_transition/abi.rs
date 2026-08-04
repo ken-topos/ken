@@ -25,9 +25,10 @@ use super::semantic_ir::{
 };
 use super::{
     planner_capacity_error, planner_error, unsupported, BoundaryReferentOwner,
-    ContinuationSpecializationId, CraneliftBackendError, EdgeKind,
-    PlannedContinuationSpecialization, SemanticPlane, SemanticSourceKind, SemanticSourceSeed,
-    StaticEdge, StaticEdgeId, StaticNode, StaticNodeId, StaticOriginId, TransitionKind,
+    ContinuationContextId, ContinuationSpecializationId, CraneliftBackendError, EdgeKind,
+    PlannedContinuationContext, PlannedContinuationSpecialization, SemanticPlane,
+    SemanticSourceKind, SemanticSourceSeed, StaticEdge, StaticEdgeId, StaticNode, StaticNodeId,
+    StaticOriginId, TransitionKind,
 };
 
 /// The exclusive end of a dense range, with its overflow named.
@@ -507,6 +508,28 @@ pub(super) struct AbiContinuationInputAuthority {
     pub(super) referent_affinity: DenseRange,
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — one generated producer execution context's
+/// ABI contract.**
+///
+/// Kept in its own arena rather than beside [`AbiContinuationDescriptor`]:
+/// that population is exactly the continuation **callee** partition, and a
+/// context is the **caller** side. Sharing the arena would make one identity
+/// domain indexable as the other, which is the aliasing `evt_609am4v7cdt5b`
+/// forbids.
+///
+/// ⛔ There is deliberately no `AbiUnitDefinition` field. A context is not a
+/// `PredeclaredFunction` partition member under any of that enum's classes, and
+/// giving it one would let a reader recover a predeclared-unit answer from a
+/// context descriptor. Its identity is the `ContinuationContextId`, full stop.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(C)]
+pub(super) struct AbiContinuationContextDescriptor {
+    pub(super) context: ContinuationContextId,
+    pub(super) header: AbiFrameHeader,
+    pub(super) slots: DenseRange,
+    pub(super) inputs: DenseRange,
+}
+
 /// The ABI plane: one descriptor per `PredeclaredFunction`, and their slots.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(super) struct AbiPlane {
@@ -518,6 +541,11 @@ pub(super) struct AbiPlane {
     pub(super) continuation_slots: Vec<AbiSlot>,
     pub(super) continuation_inputs: Vec<AbiContinuationInputAuthority>,
     pub(super) continuation_affinities: Vec<BoundaryReferentOwner>,
+    /// `D5a`'s generated-context population, in its own arenas.
+    pub(super) context_descriptors: Vec<AbiContinuationContextDescriptor>,
+    pub(super) context_slots: Vec<AbiSlot>,
+    pub(super) context_inputs: Vec<AbiContinuationInputAuthority>,
+    pub(super) context_affinities: Vec<BoundaryReferentOwner>,
 }
 
 /// The fixed per-unit convention slots every activation carries, in layout
@@ -873,6 +901,196 @@ fn append_continuation_descriptor(
             definition: AbiUnitDefinition::ContinuationSpecialization {
                 specialization: specialization.id,
             },
+            header,
+            slots,
+            inputs,
+        });
+    Ok(())
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — install the generated contexts' ABI.**
+///
+/// Same discipline as [`install_continuation_specialization_abi`]: the arenas
+/// are reserved to their exact closed populations before the first descriptor is
+/// built, and any capacity growth while appending is refused rather than
+/// tolerated, so descriptor construction stays allocation-free.
+///
+/// The slot run per context is `[Parameter x parameters]
+/// ++ [Capture x enclosing continuation inputs] ++ CONVENTION_SLOTS` — the same
+/// layout order every other frame in the plane uses, which is what lets the
+/// context's body walk its slots with the identical
+/// "parameters then captures, in order" rule an ordinary unit body uses.
+pub(super) fn install_continuation_context_abi(
+    abi: &mut AbiPlane,
+    contexts: &[PlannedContinuationContext],
+) -> Result<(), CraneliftBackendError> {
+    if !abi.context_descriptors.is_empty()
+        || !abi.context_slots.is_empty()
+        || !abi.context_inputs.is_empty()
+        || !abi.context_affinities.is_empty()
+    {
+        return Err(planner_error(
+            "generated context ABI may be installed exactly once",
+        ));
+    }
+
+    let mut slot_count = 0usize;
+    let mut input_count = 0usize;
+    let mut affinity_count = 0usize;
+    for context in contexts {
+        let parameters = usize::try_from(context.parameters()).map_err(|_| {
+            planner_capacity_error("generated context ABI parameter count exhausted")
+        })?;
+        slot_count = slot_count
+            .checked_add(parameters)
+            .and_then(|count| count.checked_add(context.captures().len()))
+            .and_then(|count| count.checked_add(CONVENTION_SLOTS.len()))
+            .ok_or_else(|| {
+                planner_capacity_error("generated context ABI slot population exhausted")
+            })?;
+        input_count = input_count
+            .checked_add(context.captures().len())
+            .ok_or_else(|| {
+                planner_capacity_error("generated context ABI input population exhausted")
+            })?;
+        for projection in context.captures() {
+            affinity_count = affinity_count
+                .checked_add(projection.referent_affinity.len())
+                .ok_or_else(|| {
+                    planner_capacity_error(
+                        "generated context ABI affinity population exhausted",
+                    )
+                })?;
+        }
+    }
+
+    abi.context_descriptors
+        .try_reserve_exact(contexts.len())
+        .map_err(|_| planner_capacity_error("generated context ABI descriptor allocation failed"))?;
+    abi.context_slots
+        .try_reserve_exact(slot_count)
+        .map_err(|_| planner_capacity_error("generated context ABI slot allocation failed"))?;
+    abi.context_inputs
+        .try_reserve_exact(input_count)
+        .map_err(|_| planner_capacity_error("generated context ABI input allocation failed"))?;
+    abi.context_affinities
+        .try_reserve_exact(affinity_count)
+        .map_err(|_| planner_capacity_error("generated context ABI affinity allocation failed"))?;
+
+    for context in contexts {
+        let capacities = (
+            abi.context_descriptors.capacity(),
+            abi.context_slots.capacity(),
+            abi.context_inputs.capacity(),
+            abi.context_affinities.capacity(),
+        );
+        append_continuation_context_descriptor(abi, context)?;
+        if capacities
+            != (
+                abi.context_descriptors.capacity(),
+                abi.context_slots.capacity(),
+                abi.context_inputs.capacity(),
+                abi.context_affinities.capacity(),
+            )
+        {
+            return Err(planner_error(
+                "generated context ABI descriptor construction allocated after preflight",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn append_continuation_context_descriptor(
+    abi: &mut AbiPlane,
+    context: &PlannedContinuationContext,
+) -> Result<(), CraneliftBackendError> {
+    let expected_id = ContinuationContextId::from_position(abi.context_descriptors.len())?;
+    if context.id() != expected_id {
+        return Err(planner_error(
+            "generated context ABI descriptor identity is not positional",
+        ));
+    }
+
+    let slot_start = abi.context_slots.len();
+    for ordinal in 0..context.parameters() {
+        abi.context_slots
+            .push(slot(AbiSlotKind::Parameter, AbiCarrier::ValueWord, ordinal));
+    }
+
+    let input_start = abi.context_inputs.len();
+    for (position, projection) in context.captures().iter().enumerate() {
+        let ordinal = u32::try_from(position).map_err(|_| {
+            planner_capacity_error("generated context ABI input ordinal exhausted")
+        })?;
+        // The context's capture run IS the enclosing specialization's ordered
+        // continuation-input projection, so a projection that is not dense in
+        // its own ordinal would silently reorder the values this context exists
+        // to keep live.
+        if projection.ordinal != ordinal {
+            return Err(planner_error(
+                "a generated context capture is not positional in the enclosing specialization's \
+                 input projection",
+            ));
+        }
+        let affinity_start = abi.context_affinities.len();
+        abi.context_affinities
+            .extend_from_slice(&projection.referent_affinity);
+        let referent_affinity = DenseRange {
+            start: u32::try_from(affinity_start).map_err(|_| {
+                planner_capacity_error("generated context ABI affinity identity exhausted")
+            })?,
+            len: u32::try_from(projection.referent_affinity.len()).map_err(|_| {
+                planner_capacity_error("generated context ABI affinity range exhausted")
+            })?,
+        };
+        abi.context_inputs.push(AbiContinuationInputAuthority {
+            ordinal,
+            // ⚠ ROOT provenance, retained unchanged. The context makes the value
+            // *available*; it does not become its origin.
+            source_owner: projection.source_owner,
+            referent_affinity,
+        });
+        abi.context_slots.push(AbiSlot {
+            kind: AbiSlotKind::Capture,
+            carrier: projection.carrier,
+            ownership: projection.ownership,
+            storage_owner: projection.storage_owner,
+            width_bytes: projection.carrier.width_bytes(),
+            align_bytes: projection.carrier.align_bytes(),
+            ordinal,
+        });
+    }
+    for (kind, carrier) in CONVENTION_SLOTS {
+        abi.context_slots.push(slot(kind, carrier, 0));
+    }
+
+    let slots = DenseRange {
+        start: u32::try_from(slot_start).map_err(|_| {
+            planner_capacity_error("generated context ABI slot identity exhausted")
+        })?,
+        len: u32::try_from(abi.context_slots.len() - slot_start).map_err(|_| {
+            planner_capacity_error("generated context ABI slot range exhausted")
+        })?,
+    };
+    let inputs = DenseRange {
+        start: u32::try_from(input_start).map_err(|_| {
+            planner_capacity_error("generated context ABI input identity exhausted")
+        })?,
+        len: u32::try_from(abi.context_inputs.len() - input_start).map_err(|_| {
+            planner_capacity_error("generated context ABI input range exhausted")
+        })?,
+    };
+    let captures = u32::try_from(context.captures().len())
+        .map_err(|_| planner_capacity_error("generated context ABI capture count exhausted"))?;
+    let header = frame_header(
+        &abi.context_slots[slot_start..],
+        context.parameters(),
+        captures,
+    )?;
+    abi.context_descriptors
+        .push(AbiContinuationContextDescriptor {
+            context: context.id(),
             header,
             slots,
             inputs,

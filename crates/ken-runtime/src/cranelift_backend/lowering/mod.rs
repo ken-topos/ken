@@ -77,7 +77,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
     CheckedOrientedMarkerSets, ConstructorIdentity, ContinuationCallIdentity, ContinuationCallView,
     DeclarationCallTargetClass,
-    ContinuationEmissionOwner,
+    ContinuationContextId, ContinuationEmissionOwner,
     ContinuationInputView, ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge,
     ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, JoinPlanToken,
@@ -663,6 +663,7 @@ impl ArtifactHelpers<'_> {
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            generated_context_captures: None,
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
@@ -723,6 +724,15 @@ enum TrapExitAuthority {
     },
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5a`** -- the continuation-input operands one
+/// enclosing specialization passes across a retargeted worker call.
+struct GeneratedContextCaptures {
+    /// The exact worker body origin whose call carries this suffix.
+    worker_body_origin: StaticOriginId,
+    /// The enclosing specialization's continuation inputs, in ordinal order.
+    operands: Vec<LoweringOperand>,
+}
+
 struct FunctionLocalRefs {
     /// **`RT-FNSPLIT-B2F` `D3`** — the artifact-static seed material, resolved
     /// into this generated function.
@@ -775,6 +785,19 @@ struct FunctionLocalRefs {
     /// exact body origin. Minted per generated function; a `FuncRef` here
     /// belongs to that function and is never copied to another.
     worker_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    /// **`RT-DECL-CLOSURE-PORT` `D5a`** -- the operand suffix a **retargeted**
+    /// worker call must append, and the one body origin it applies to.
+    ///
+    /// `None` in every function that calls raw worker units directly, which is
+    /// every pre-`D5a` case. When present it is set by the enclosing
+    /// specialization's own body, from that frame's Capture slots, so the
+    /// operands are `ir::Value`s of *this* function and cannot be reused
+    /// elsewhere -- the same per-function discipline `worker_calls` follows.
+    ///
+    /// ⛔ The body origin is retained beside the operands rather than being
+    /// implicit: a suffix appended to the wrong worker call would be a silent
+    /// arity error at a frame that happened to be big enough.
+    generated_context_captures: Option<GeneratedContextCaptures>,
     /// **`RT-CONTSPEC-ACTIVATE` `D3`** -- this Function's own `FuncRef` per
     /// causal token it owns, keyed by the complete four-field identity.
     /// Minted into this `Function`; never passed across functions.

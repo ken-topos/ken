@@ -222,6 +222,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
             host_dispatch_context: None,
@@ -1914,6 +1915,7 @@ fn bare_carrier_test_lowering<'src>(
         native_int_mutation: NativeIntLoweringMutation::Exact,
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
+            generated_context_captures: None,
             seed_material: crate::cranelift_backend::lowering::seed_material::SeedMaterialRefs::none_for_tests(),
             host_dispatch: None,
             host_dispatch_context: None,
