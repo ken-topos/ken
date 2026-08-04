@@ -1084,9 +1084,19 @@ route in the boundary word, decode the word, or choose a callable at runtime.
 These are **in addition to** the eight downstream evidence obligations above,
 which stand unchanged.
 
-- the exact claimed `CSId(1)` call result reaches origin 10 as
-  `CheckedSelectedRecursor`, emits the carried fallback, and the linked witness
-  exits 0;
+- the exact claimed `CSId(0)` call result reaches origin 10 as
+  `CheckedSelectedRecursor`, emits the carried fallback, and the linked
+  witness exits 0; `CSId(1)` is raised later inside that fallback's
+  return-case body and reaches no carried consumer on this witness.
+  ⛔ **CORRECTED 2026-08-04 by `evt_3hnn2c2jvbkj`: this bullet named `CSId(1)`,
+  which is temporally impossible as written — `CSId(1)` is claimed after the
+  very fallback the bullet attributed to its result. The implementation's
+  predecessor-edge attribution is the lawful one; changing code to make the
+  prose true would corrupt the mechanism. The mechanism is identity-parametric
+  and unchanged: a result becomes `CheckedSelectedRecursor` only after its
+  exact `ContinuationCallIdentity` is claimed and the emitted callee checked
+  against `identity.target()`. Only which identity this witness instantiates it
+  with was wrong.**
 - dropping **only** that call-result route recreates the exact planned default;
 - the **same checked frame** with an ordinary direct predecessor stays
   `DirectScrutinee` — this is the control that would have caught the
