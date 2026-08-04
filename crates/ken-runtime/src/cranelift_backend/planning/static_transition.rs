@@ -1008,6 +1008,23 @@ impl ContinuationCallView<'_> {
     }
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5a`** — one already-issued causal call, projected
+/// onto the exact result edge it belongs to.
+///
+/// The three edge fields are the ruled key
+/// `(producer_owner, producer_result_origin, producer_construct_origin)`; the
+/// owner is implicit in how the projection is requested, so it cannot disagree
+/// with the unit asking. `recursive_position` rides along because the detached
+/// seat has to omit exactly that field of the planned constructor and has no
+/// other lawful way to learn which one it is.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct ContinuationResultEdge {
+    pub(in crate::cranelift_backend) producer_result_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) producer_construct_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) recursive_position: u32,
+    pub(in crate::cranelift_backend) identity: ContinuationCallIdentity,
+}
+
 /// Bounds-checked dense-range slice, failing closed rather than truncating.
 fn dense_slice<T>(arena: &[T], range: semantic_ir::DenseRange) -> Option<&[T]> {
     let start = range.start as usize;
@@ -5667,6 +5684,52 @@ impl<'src> StaticTransitionPlan<'src> {
             }
         }
         Ok(found)
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5a` — project already-issued causal authority
+    /// onto this owner's exact result edges.**
+    ///
+    /// This is **exposure, not discovery**. Every edge returned is a call the
+    /// planner already minted; the identity on it is resolved through the
+    /// existing four-field selector, so nothing here can create a binding that
+    /// [`Self::continuation_call_binding_for`] would not also return.
+    ///
+    /// ⛔ The owner is supplied by the caller and is the unit it is about to
+    /// define — it is never read back off a lowered value, a reached
+    /// occurrence, or an emitted shape. ⛔ There is no ordering preference and
+    /// no "first match": the population is returned whole, and a consumer that
+    /// cannot resolve it to one member must fail rather than choose (`D5a`
+    /// contract 3).
+    pub(in crate::cranelift_backend) fn continuation_result_edges_owned_by(
+        &self,
+        producer_owner: PredeclaredFunctionId,
+    ) -> Result<Vec<ContinuationResultEdge>, CraneliftBackendError> {
+        let mut edges = Vec::new();
+        for call in self.continuation_calls()? {
+            if call.producer_owner() != producer_owner {
+                continue;
+            }
+            let identity = self
+                .continuation_call_binding_for(
+                    call.producer_construct_origin(),
+                    call.continuation_origin(),
+                    call.producer_alternative(),
+                    call.recursive_position(),
+                )?
+                .ok_or_else(|| {
+                    planner_error(
+                        "a projected causal call has no binding under its own four-field \
+                         selector, so its result edge cannot be projected",
+                    )
+                })?;
+            edges.push(ContinuationResultEdge {
+                producer_result_origin: call.producer_result_origin(),
+                producer_construct_origin: call.producer_construct_origin(),
+                recursive_position: call.recursive_position(),
+                identity,
+            });
+        }
+        Ok(edges)
     }
 
     pub(in crate::cranelift_backend) fn emittable_units(
