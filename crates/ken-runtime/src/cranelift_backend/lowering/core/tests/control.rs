@@ -5745,6 +5745,17 @@ fn the_owner_classification_has_a_closed_production_naming_inventory() {
             // in this list is the violation, not a further capability.
             "pub(in crate::cranelift_backend) struct PredeclaredFunctionId(pub(super) u32);",
             "pub(in crate::cranelift_backend) fn with_last_io_error_role_omitted<T>(",
+            // ⭐ `RT-DECL-CLOSURE-PORT` `D2a` adds two, and they are the same
+            // shape as `with_last_io_error_role_omitted` above: a `cfg(test)`
+            // scoped-mutation seam and its closed mode sum. ⛔ Neither widens
+            // the plane. `declaration_owned_pairs`,
+            // `partition_function_units` and every population derivation stay
+            // `pub(super)`, so a consumer can ASK for the pre-`D2a` population
+            // inside a scoped control and cannot compute, mint or install one.
+            // ⚠ The source tripwire cannot distinguish `cfg(test)`, so it
+            // records the seam without claiming production reachability.
+            "pub(in crate::cranelift_backend) enum D2aPopulationMutation {",
+            "pub(in crate::cranelift_backend) fn with_d2a_population_mutation<T>(",
         ],
         "D7: the plane's widened-visibility inventory changed. `StaticOriginId` \
          is widened deliberately so the lowering can carry an occurrence's \
@@ -10638,41 +10649,37 @@ fn d5_c1_the_unhooked_fixture_reports_one_residual_and_selects_recursive_descent
     );
 }
 
-// ── Control 2: BLOCKED, and this is the measurement that says why ─────────
+// ── Control 2: the positive — witness only, full compile ──────────────────
 //
-// ⛔⛔ **TRANSITION SENTINEL. It goes red the moment the blocker below is
-// fixed, and that red is the signal to promote it into D5's real positive
-// control.** It is named for the boundary, not for a count, and the event that
-// retires it is: *the closure-seed transparent declaration's vestigial
-// zero-arity `SchedulingEntry` unit stops being emitted with a closure body.*
+// ⭐⭐ **This was a transition sentinel at `5e61d640`, and `D2a` retired it.**
+// It recorded a measured blocker: the closure-seed transparent declaration's
+// vestigial zero-arity `SchedulingEntry` unit was still emitted with the closure
+// as its body, so the functionized lane refused at
+// `boundary_transfer_admissibility` before the checked self-call could be
+// reached. The sentinel fired the moment the `D2a` population substitution
+// landed, which is exactly what it was named and labelled to do.
 //
-// ⚠ **The witness is NOT the blocker, and the three cases below are what
-// establish that** rather than asserting it. Under the witness:
+// ⚠ **The discriminating fixtures are kept, inverted.** They are what proved
+// the blocker was the declaration's own entry rather than the call site or the
+// witness, so they are also what proves the repair reaches the same place:
 //
-// | fixture                                | outcome |
-// |----------------------------------------|---------|
-// | closure-seed declaration, REFERENCED   | refused at the closure boundary |
-// | closure-seed declaration, UNREFERENCED | refused at the closure boundary |
-// | non-closure thunk declaration          | compiles |
+// | fixture                                | before `D2a` | after `D2a` |
+// |----------------------------------------|--------------|-------------|
+// | closure-seed declaration, REFERENCED   | refused      | compiles    |
+// | closure-seed declaration, UNREFERENCED | refused      | compiles    |
+// | non-closure thunk declaration          | compiles     | compiles    |
 //
-// The unreferenced case is the discriminating one: with no call site at all,
-// the refusal cannot be about the call. And the thunk compiling is the positive
-// control on the harness — the `FunctionizedUnits` lane and the witness both
-// work. ⇒ What is refused is the **declaration's own scheduling-entry unit**,
-// whose planned occurrence is the closure expression, so emitting it must
-// transfer a `Lowered::Closure` across a unit boundary
-// (`boundary_transfer_admissibility`, `mod.rs`).
+// The thunk row is the invariant control: it compiled before and after, so a
+// change in the other two rows cannot be credited to the lane or the harness.
 //
-// ⭐ **Why this is not D5's to repair.** After `D4` every `DeclarationRef` to a
-// closure-seed declaration resolves to the `CallableDeclaration` unit — the
-// `(seed, body) = (true, Some(_))` arm of `declaration_call_target` is total
-// for that class — so the scheduling entry is unreachable and yet still
-// emitted. Retiring it, or re-classifying what its body lowers to, is a
-// **production semantic action**, which is exactly `D6`'s charter and outside
-// `D5`'s. Inventing one here would be the unauthorized fix the ruling forbids.
+// ⛔ **The emitted-target assertion compares two independently produced facts**
+// — the planner-resolved `CallableDeclaration` target, taken from the static
+// transition plan, against the callee of the instruction actually emitted. Two
+// reads of `declaration_calls` would agree with each other whatever the emitter
+// did (Architect: *"not two declared-map reads"*).
 
 #[test]
-fn d5_c2_the_positive_is_blocked_by_the_vestigial_declaration_scheduling_entry() {
+fn d5_c2_the_witness_reaches_the_seam_and_emits_the_exact_planner_target() {
     let entry = d5_entry();
     let declaration = d5_declaration();
     let carrier = d5_frame_carrier();
@@ -10680,8 +10687,6 @@ fn d5_c2_the_positive_is_blocked_by_the_vestigial_declaration_scheduling_entry()
         (D5_DECLARATION, &declaration),
         (D5_FRAME_CARRIER, &carrier),
     ]);
-    // A closure-seed declaration nothing refers to, and a non-closure thunk —
-    // the two fixtures that locate the refusal.
     let unreferenced = RuntimeExpr::Value(RuntimeValue::Int((1).into()));
     let thunk = RuntimeDeclaration {
         symbol: "decl:fixture::d5::thunk".to_string(),
@@ -10696,72 +10701,52 @@ fn d5_c2_the_positive_is_blocked_by_the_vestigial_declaration_scheduling_entry()
     let thunk_entry = RuntimeExpr::DeclarationRef {
         symbol: thunk.symbol.clone(),
     };
+    let plain = RuntimeDeclaration {
+        symbol: D5_DECLARATION.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["n".to_string()],
+                body: Box::new(RuntimeExpr::Var(0)),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
     with_transparent_declaration_closure_witness(|| {
         assert_eq!(
             select_body_emission_authority(&entry, &declarations),
             BodyEmissionAuthority::FunctionizedUnits,
-            "the witness does reach the functionized lane — so nothing below is \
-             about the selector"
+            "D5 control 2: the witness must reach the functionized lane"
         );
-        let (outcome, emitted) = d5_compile(d5_plan(), None);
-        let refusal = outcome.expect_err(
-            "SENTINEL FIRED: the closure-seed declaration now compiles under the \
-             witness. The vestigial scheduling-entry blocker is gone, so this \
-             sentinel has done its job — replace it with D5's real positive \
-             control (compile, then assert the emitted target equals the \
-             independently planner-resolved CallableDeclaration target), and \
-             build control 4's mutation population on top of it",
-        );
-        assert!(
-            refusal.contains("a closure cannot cross the boundary"),
-            "the refusal must still be the closure-boundary one this sentinel \
-             names. A DIFFERENT refusal means the blocker moved, and a control \
-             group built on the old diagnosis would be measuring nothing: {refusal}"
-        );
-        // ⭐ The seam IS reached, and this is the measurement that says so: the
-        // ENTRY's unchecked call to the declaration-owned unit is emitted and
-        // passes D5's ABI reconciliation before anything is refused. What is
-        // NOT reached is the checked self-call, which lives inside the
-        // `CallableDeclaration` unit's body — the vestigial scheduling entry is
-        // emitted first and refuses, so that unit's body is never emitted.
-        //
-        // ⇒ D5's ABI half is live and testable today (see the mutation control
-        // below); D5's checked-plan half is not.
-        assert_eq!(
-            emitted.len(),
-            1,
-            "exactly the entry's unchecked declaration-unit call is emitted \
-             before the refusal. More would mean the callable unit's body was \
-             reached after all, and the checked-plan half would then be \
-             testable too: {emitted:?}"
-        );
-        // ⚠ A marker-free twin: these two rows carry no checked plan, so the
-        // fixture's `CheckedRecursiveInvocation` would be refused for having no
-        // plan metadata — a refusal about transport, not about the boundary
-        // this sentinel names.
-        let plain = RuntimeDeclaration {
-            symbol: D5_DECLARATION.to_string(),
-            kind: RuntimeDeclarationKind::Transparent {
-                body: RuntimeExpr::LexicalClosure {
-                    captures: Vec::new(),
-                    params: vec!["n".to_string()],
-                    body: Box::new(RuntimeExpr::Var(0)),
-                },
-            },
-            metadata: RuntimeSymbolMetadata {
-                lowerability: Some(RuntimeLowerabilityStatus::Supported),
-                ..RuntimeSymbolMetadata::empty()
-            },
-        };
-        // Unreferenced: no call site, same refusal ⇒ not the call.
-        for (label, entry) in [("referenced", &entry), ("unreferenced", &unreferenced)] {
-            let refused = compile_expr_into_module(
+
+        // The three discriminating fixtures, all compiling after `D2a`.
+        for (label, entry, decls) in [
+            (
+                "closure-seed, referenced",
+                &entry,
+                BTreeMap::from([(D5_DECLARATION, &plain)]),
+            ),
+            (
+                "closure-seed, unreferenced",
+                &unreferenced,
+                BTreeMap::from([(D5_DECLARATION, &plain)]),
+            ),
+            (
+                "non-closure thunk",
+                &thunk_entry,
+                BTreeMap::from([(thunk.symbol.as_str(), &thunk)]),
+            ),
+        ] {
+            compile_expr_into_module(
                 new_jit_module().expect("JIT module"),
-                "d5_sentinel",
+                "d5_c2_population",
                 Linkage::Local,
                 entry,
                 &NativeSeedEnvironment::empty(),
-                BTreeMap::from([(D5_DECLARATION, &plain)]),
+                decls,
                 None,
                 false,
                 None,
@@ -10769,40 +10754,72 @@ fn d5_c2_the_positive_is_blocked_by_the_vestigial_declaration_scheduling_entry()
                 None,
             )
             .map(|_| ())
-            .expect_err(
-                "SENTINEL FIRED: a closure-seed transparent declaration compiles \
-                 under the witness — see the message above",
-            );
+            .unwrap_or_else(|error| {
+                panic!("D5 control 2: the {label} fixture must compile after D2a: {error:?}")
+            });
+        }
+
+        // The checked self-call, end to end.
+        let (outcome, emitted) = d5_compile(d5_plan(), None);
+        outcome.unwrap_or_else(|error| {
+            panic!("D5 control 2: the exact checked self-call must compile: {error}")
+        });
+
+        // The independent planner side: which unit does the plan say a
+        // declaration reference resolves to? ⛔ Derived from the plan's own
+        // `CallableDeclaration` descriptors, never from the emitter's map.
+        let declaration_units = d5_planned_callable_declaration_origins(&entry, &declarations);
+        assert!(
+            !declaration_units.is_empty(),
+            "D5 control 2: the plan must own at least one CallableDeclaration \
+             unit, or the comparison below has nothing to compare against"
+        );
+        assert!(
+            !emitted.is_empty(),
+            "D5 control 2: reaching the seam is the point — an empty emission \
+             record means the compile succeeded without ever calling a \
+             declaration-owned unit, and every negative would then be green for \
+             the wrong reason"
+        );
+        for (reference, target, _func) in &emitted {
             assert!(
-                format!("{refused:?}").contains("a closure cannot cross the boundary"),
-                "the {label} closure-seed declaration must be refused at the \
-                 closure boundary: {refused:?}"
+                declaration_units.contains(target),
+                "D5 control 2: the call emitted for reference {reference:?} went \
+                 to {target:?}, which is not one of the planner-resolved \
+                 declaration-owned callable units {declaration_units:?}"
             );
         }
-        // The positive control on the harness itself. ⛔ Without it, the two
-        // refusals above are consistent with the witness being broken, and the
-        // whole diagnosis would rest on a negative check
-        // ([[a-negative-check-passes-for-any-reason-so-it-needs-a-positive-control]]).
-        compile_expr_into_module(
-            new_jit_module().expect("JIT module"),
-            "d5_sentinel_positive",
-            Linkage::Local,
-            &thunk_entry,
-            &NativeSeedEnvironment::empty(),
-            BTreeMap::from([(thunk.symbol.as_str(), &thunk)]),
-            None,
-            false,
-            None,
-            None,
-            None,
-        )
-        .map(|_| ())
-        .expect(
-            "a NON-closure transparent declaration must compile under the \
-             witness. If this fails the functionized lane is broken generally, \
-             and the closure-specific diagnosis above is wrong",
-        );
     });
+}
+
+/// Every origin the plan classifies as a declaration-owned callable unit.
+///
+/// ⛔ Read from the static transition plan's own ABI descriptors — the
+/// independent side of control 2's emitted-target comparison.
+#[cfg(test)]
+fn d5_planned_callable_declaration_origins(
+    entry: &RuntimeExpr,
+    declarations: &BTreeMap<&str, &RuntimeDeclaration>,
+) -> Vec<StaticOriginId> {
+    let plan = plan_static_transition_graph_with_symbols(
+        entry,
+        declarations,
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .expect("the D5 fixture plans");
+    plan.emittable_units()
+        .expect("the plan exposes its units")
+        .into_iter()
+        .filter(|unit| {
+            matches!(
+                unit.definition(),
+                AbiUnitDefinition::CallableDeclaration { .. }
+            )
+        })
+        .map(|unit| unit.origin())
+        .collect()
 }
 
 // ── Control 3: the witness masks ONE variant, it does not force authority ──
@@ -10933,16 +10950,18 @@ fn d5_c4_abi_domain_mutations_each_refuse_before_any_call_is_emitted() {
             });
         });
     }
-    // The positive control on the harness: with no mutation, the same fixture
-    // emits its one call and fails only at the sentinel's blocker.
+    // The positive control on the harness: unmutated, the same fixture compiles
+    // and emits BOTH declaration-unit calls — the entry's unchecked one and the
+    // body's checked self-call. ⛔ Without this row every refusal above is
+    // equally consistent with the fixture never reaching the seam at all.
     with_transparent_declaration_closure_witness(|| {
-        let (_outcome, emitted) = d5_compile(d5_plan(), None);
+        let (outcome, emitted) = d5_compile(d5_plan(), None);
+        outcome.expect("D5 control 4: the unmutated fixture compiles");
         assert_eq!(
             emitted.len(),
-            1,
-            "D5 control 4: unmutated, the entry's call IS emitted. Without this \
-             row every refusal above is consistent with the fixture never \
-             reaching the seam at all"
+            2,
+            "D5 control 4: after D2a both the entry's unchecked call and the \
+             body's checked self-call are emitted: {emitted:?}"
         );
     });
 }
@@ -10952,25 +10971,28 @@ fn d5_c4_abi_domain_mutations_each_refuse_before_any_call_is_emitted() {
 #[test]
 fn d5_c4_a_retargeted_declaration_call_is_refused_before_emission() {
     with_transparent_declaration_closure_witness(|| {
+        let (baseline, baseline_emitted) = d5_compile(d5_plan(), None);
+        baseline.expect("the unmutated fixture compiles");
         units::with_d5_declared_call_mutation(units::D5DeclaredCallMutation::Retarget, || {
             let (outcome, emitted) = d5_compile(d5_plan(), None);
-            // ⚠ The fixture has exactly one declaration-call record per caller,
-            // so the retarget is a no-op here and the compile behaves as the
-            // sentinel describes. That is a REACHABILITY fact about the
-            // fixture, not evidence about the wrong-target class, and it is
-            // stated rather than dressed up as a passing control: a second
-            // callable declaration in one caller is what would make the class
-            // expressible, and that needs the checked-plan half to be reachable
-            // first ([[mutation-proof-injection-point-is-a-reachability-tell]]).
+            // ⚠ **This row measures the FIXTURE, and says so.** The retarget
+            // swaps a caller's declaration-call record for another record in
+            // the same caller's map. Each caller here holds exactly one, so the
+            // swap is the identity and the compile is byte-for-byte the
+            // baseline. That is a reachability fact
+            // ([[mutation-proof-injection-point-is-a-reachability-tell]]), not
+            // evidence about the wrong-target class.
+            //
+            // ⛔ It is kept, and kept honest, rather than deleted or dressed up
+            // as a passing control: two declaration-owned callables reachable
+            // from ONE caller is what makes the class expressible, and building
+            // that fixture belongs with the mutual same-SCC work that D5 still
+            // owes. Asserting equality with the baseline is what stops this
+            // reading as a discharged control.
             assert!(
-                outcome.is_err(),
-                "the sentinel's blocker still stands under the retarget"
-            );
-            assert_eq!(
-                emitted.len(),
-                1,
-                "the retarget is inert on a single-record caller — this row \
-                 measures the fixture, and says so"
+                outcome.is_ok() && emitted.len() == baseline_emitted.len(),
+                "the retarget is inert on single-record callers, so it must \
+                 reproduce the baseline exactly: {outcome:?} {emitted:?}"
             );
         });
     });

@@ -35,6 +35,10 @@ pub(in crate::cranelift_backend) use abi::{
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use semantic_ir::with_last_io_error_role_omitted;
+#[cfg(test)]
+pub(in crate::cranelift_backend) use semantic_ir::{
+    with_d2a_population_mutation, D2aPopulationMutation,
+};
 pub(in crate::cranelift_backend) use semantic_ir::{
     ConstructorIdentity, FieldIdentity, PredeclaredFunctionId, StaticOriginId,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole, SynthesizedIoErrorRole,
@@ -1211,7 +1215,13 @@ struct BoundaryB1Census {
     ir_records: usize,
     semantic_edges: usize,
     /// The number of **function units** — `entries.len() + count(StaticBody
-    /// edges)`. Renamed from `helper_definitions` by `RT-FNSPLIT-B2O` `AC-6`.
+    /// edges) - count(declaration-owned pairs)` since `RT-DECL-CLOSURE-PORT`
+    /// `D2a`. ⛔ The subtraction is not a rounding detail: without it a
+    /// closure-seed transparent declaration contributes a second, unreachable
+    /// zero-input function whose body is a closure that cannot cross a unit
+    /// boundary. Old form, for readers of earlier evidence:
+    /// `entries.len() + count(StaticBody edges)`. Renamed from
+    /// `helper_definitions` by `RT-FNSPLIT-B2O` `AC-6`.
     ///
     /// ⚠ **This field is the one re-baselined quantity that cannot fail
     /// loudly, which is why the rename is an acceptance criterion and not
@@ -2856,6 +2866,50 @@ fn continuation_owner_source_root(
         })
         .collect::<BTreeSet<_>>();
     let roots = origins.difference(&nested).copied().collect::<Vec<_>>();
+    // ⭐⭐ `RT-DECL-CLOSURE-PORT` `D2a` — the seed's origin is the source root,
+    // and the set difference is a PROXY for it.
+    //
+    // The two agree for every unit whose owned occurrences form one tree: the
+    // un-nested root is the occurrence the seed node was planned from. `D2a` is
+    // exactly where the proxy diverges. A declaration-owned callable unit now
+    // owns **two** occurrence trees — the declaration occurrence (its ownership,
+    // provenance and `D3` signature authority) and the closure body it actually
+    // emits — and the body occurrence is a *child* of the declaration
+    // occurrence, so the difference collapses to the declaration and the walk
+    // starts one level above the code this unit contains.
+    //
+    // ⇒ Take the property, not the proxy: the root is the origin of this unit's
+    // seed node. ⚠ The difference derivation is retained as a **cross-check**
+    // wherever it still yields exactly one root, so its existing failure mode
+    // (an owner with no single occurrence tree) is not silently deleted.
+    // ⛔ Narrowed to the exact declaration-owned pair — the unit's seed carries
+    // an incoming `StaticBody` edge from a scheduling entry THIS SAME unit owns.
+    // That conjunction is only true of the `D2a` pair: an anonymous closure
+    // body's `StaticBody` source is owned by a different unit, and every other
+    // unit's seed has no incoming `StaticBody` edge at all. Applying the
+    // preference any wider re-roots units whose proxy was correct.
+    let seed = plan
+        .semantic
+        .functions
+        .get(owner.0 as usize)
+        .map(|function| function.planned_node);
+    let declaration_owned_seed = seed.is_some_and(|seed| {
+        plan.edges.iter().any(|edge| {
+            edge.kind == EdgeKind::StaticBody
+                && edge.to == seed
+                && plan.entries.contains(&edge.from)
+                // ⚠ Ownership is read off `origins` — the occurrences this
+                // owner already holds — rather than by spelling
+                // `SemanticOwner` here, which this file deliberately does not.
+                && origins.contains(&origin_of(edge.from))
+        })
+    });
+    if declaration_owned_seed {
+        let seed = origin_of(seed.expect("checked above"));
+        if origins.contains(&seed) {
+            return Ok(seed);
+        }
+    }
     let [root] = roots.as_slice() else {
         return Err(planner_error(
             "continuation owner does not have one exact source-occurrence root",
@@ -4473,6 +4527,7 @@ impl<'src> Planner<'src> {
             &self.plan.nodes,
             &self.plan.edges,
             &self.plan.entries,
+            self.plan.root_entry,
             &self.plan.semantic_sources,
             &self.plan.semantic_material,
         )?;
@@ -5240,7 +5295,8 @@ impl<'src> StaticTransitionPlan<'src> {
     /// unit order.**
     ///
     /// ⛔ **This does not derive the population and must never be made to.** The
-    /// set is `plan.entries` ∪ every `EdgeKind::StaticBody` **target**, already
+    /// set is `plan.entries` ∪ every `EdgeKind::StaticBody` **target** minus
+    /// every `D2a` declaration-owned pair, already
     /// seeded and validated by `B2O` (`semantic_ir.rs`
     /// `validate_function_units`) and already given one descriptor apiece by
     /// `B2R`. This walks `self.abi.descriptors` and projects; it re-seeds
@@ -5351,6 +5407,14 @@ impl<'src> StaticTransitionPlan<'src> {
         let mut endpoints: BTreeMap<StaticOriginId, StaticOriginId> = BTreeMap::new();
         for edge in &self.edges {
             if edge.kind != EdgeKind::StaticBody {
+                continue;
+            }
+            // `D2a`: a declaration-owned pair's relation is a definition, not a
+            // call, so it mints no endpoint record here either. ⛔ Asked of the
+            // semantic plane rather than decided here — the owner
+            // classification has one home, and this file is pinned not to name
+            // it.
+            if self.semantic.is_declaration_owned_static_body(edge)? {
                 continue;
             }
             match shape_of(edge.from) {
@@ -5860,6 +5924,7 @@ impl<'src> StaticTransitionPlan<'src> {
             &self.nodes,
             &self.edges,
             &self.entries,
+            self.root_entry,
             &self.semantic_sources,
             &self.semantic_material,
         )?;
@@ -7238,6 +7303,7 @@ mod tests {
             &plan.nodes,
             &plan.edges,
             &plan.entries,
+            plan.root_entry,
             &reversed_sources,
             &plan.semantic_material,
         )
@@ -7264,6 +7330,7 @@ mod tests {
             &changed_frames,
             &plan.edges,
             &plan.entries,
+            plan.root_entry,
             &reversed_sources,
             &plan.semantic_material,
         )
@@ -7331,6 +7398,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -7362,6 +7430,7 @@ mod tests {
                     &equal_plan.nodes,
                     &equal_plan.edges,
                     &equal_plan.entries,
+                    equal_plan.root_entry,
                     &equal_plan.semantic_sources,
                     &equal_plan.semantic_material,
                 )
@@ -7379,6 +7448,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -7396,6 +7466,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -7425,6 +7496,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -7847,6 +7919,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -7880,6 +7953,7 @@ mod tests {
                     &child_plan.nodes,
                     &child_plan.edges,
                     &child_plan.entries,
+                    child_plan.root_entry,
                     &child_plan.semantic_sources,
                     &child_plan.semantic_material,
                 )
@@ -7963,6 +8037,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -8231,6 +8306,7 @@ mod tests {
                 &plan.nodes,
                 &plan.edges,
                 &plan.entries,
+                plan.root_entry,
                 &plan.semantic_sources,
                 &plan.semantic_material,
             )
@@ -8302,6 +8378,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -8396,6 +8473,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -8411,6 +8489,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -8452,6 +8531,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -8473,6 +8553,7 @@ mod tests {
                     &plan.nodes,
                     &plan.edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -9901,6 +9982,7 @@ mod tests {
                     &plan.nodes,
                     &redirected_edges,
                     &plan.entries,
+                    plan.root_entry,
                     &plan.semantic_sources,
                     &plan.semantic_material,
                 )
@@ -10238,6 +10320,7 @@ mod tests {
                 nodes,
                 edges,
                 entries,
+                plan.root_entry,
                 &plan.semantic_sources,
                 &plan.semantic_material,
             )
@@ -10301,6 +10384,7 @@ mod tests {
                 &plan.nodes,
                 &plan.edges,
                 &plan.entries,
+                plan.root_entry,
                 &plan.semantic_sources,
                 &plan.semantic_material,
             )
@@ -11232,6 +11316,23 @@ mod tests {
                 .iter()
                 .filter(|edge| edge.kind == EdgeKind::StaticBody)
                 .count();
+            // ⚠ `RT-DECL-CLOSURE-PORT` `D2a` subtracts the declaration-owned
+            // pairs from this relation. It is omitted here because every
+            // fixture in this set is planned with NO declarations
+            // (`declarations` is empty above), so there are no such pairs. ⛔
+            // The general form is enforced by
+            // `SemanticPlane::validate_function_units`, and the fixture that
+            // exercises the subtraction is
+            // `d2a_one_source_declaration_contributes_exactly_one_function`. If
+            // a declaration ever enters this fixture set, this assertion is
+            // where it will red — and the subtraction is the fix, not a
+            // re-baselined count.
+            assert!(
+                declarations.is_empty(),
+                "AC-10/AC-1: `{name}` -- this relation omits D2a's \
+                 declaration-owned-pair subtraction because the fixture set \
+                 carries no declarations"
+            );
             assert_eq!(
                 plan.abi.descriptors.len(),
                 plan.entries.len() + static_body,
@@ -12254,6 +12355,192 @@ mod tests {
         );
     }
 
+    // ─── RT-DECL-CLOSURE-PORT D2a — the function-unit population ───────────
+    //
+    // ⭐⭐ **One source declaration contributes ONE function.** Before `D2a` a
+    // closure-seed transparent declaration contributed two: its `StaticBody`
+    // target (the `D2` callable unit) and its own zero-input `SchedulingEntry`
+    // at the closure occurrence. The second has no lawful runtime meaning — it
+    // cannot call the callable unit without the missing parameters and
+    // captures, cannot return the closure, and cannot be a no-op without
+    // changing program meaning.
+
+    /// Every class in the ruled partition, in one program.
+    ///
+    /// ⚠ All four are present **and distinguishable**: the two declaration
+    /// closure forms differ in arity, and the anonymous closure differs from
+    /// both. A fixture carrying one closure cannot tell "the relation leaving
+    /// THIS declaration" from "some relation".
+    #[cfg(test)]
+    fn d2a_every_partition_class() -> (RuntimeExpr, Vec<RuntimeDeclaration>) {
+        let lexical = RuntimeDeclaration {
+            symbol: "decl:fixture::d2a::lexical".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::LexicalClosure {
+                    captures: vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+                    params: vec!["a".to_string()],
+                    body: Box::new(RuntimeExpr::Var(0)),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        let seed = RuntimeDeclaration {
+            symbol: "decl:fixture::d2a::seed".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::Closure {
+                    captures: Vec::new(),
+                    params: vec!["p".to_string(), "q".to_string()],
+                    body: Box::new(RuntimeExpr::Var(0)),
+                },
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        let thunk = RuntimeDeclaration {
+            symbol: "decl:fixture::d2a::thunk".to_string(),
+            kind: RuntimeDeclarationKind::Transparent {
+                body: RuntimeExpr::Value(RuntimeValue::Int(73.into())),
+            },
+            metadata: crate::RuntimeSymbolMetadata::empty(),
+        };
+        // The root, carrying an ANONYMOUS closure that must keep its own
+        // `ClosureBody` unit and its own emitted `StaticBody` call.
+        let root = RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: Vec::new(),
+                    body: Box::new(RuntimeExpr::Value(RuntimeValue::Int(7.into()))),
+                }),
+                args: Vec::new(),
+            }),
+            body: Box::new(RuntimeExpr::Let {
+                value: Box::new(RuntimeExpr::DeclarationRef {
+                    symbol: "decl:fixture::d2a::lexical".to_string(),
+                }),
+                body: Box::new(RuntimeExpr::Let {
+                    value: Box::new(RuntimeExpr::DeclarationRef {
+                        symbol: "decl:fixture::d2a::seed".to_string(),
+                    }),
+                    body: Box::new(RuntimeExpr::DeclarationRef {
+                        symbol: "decl:fixture::d2a::thunk".to_string(),
+                    }),
+                }),
+            }),
+        };
+        (root, vec![lexical, seed, thunk])
+    }
+
+    /// The unit population as a sorted class census, plus the count of emitted
+    /// `StaticBody` **calls**.
+    #[cfg(test)]
+    fn d2a_population(plan: &StaticTransitionPlan<'_>) -> (Vec<&'static str>, usize) {
+        let mut classes = plan
+            .emittable_units()
+            .expect("validated units")
+            .into_iter()
+            .map(|unit| match unit.definition() {
+                AbiUnitDefinition::SchedulingEntry { .. } => "SchedulingEntry",
+                AbiUnitDefinition::CallableDeclaration { .. } => "CallableDeclaration",
+                AbiUnitDefinition::ClosureBody { .. } => "ClosureBody",
+                AbiUnitDefinition::ContinuationSpecialization { .. } => {
+                    "ContinuationSpecialization"
+                }
+            })
+            .collect::<Vec<_>>();
+        classes.sort_unstable();
+        let static_body_calls = plan
+            .emittable_call_edges()
+            .expect("validated call edges")
+            .into_iter()
+            .filter(|edge| edge.kind() == EmittableCallKind::StaticBody)
+            .count();
+        (classes, static_body_calls)
+    }
+
+    /// **`D2a` — the closed partition, stated as a population.**
+    #[test]
+    fn d2a_one_source_declaration_contributes_exactly_one_function() {
+        let (root, declarations) = d2a_every_partition_class();
+        let declarations = declarations
+            .iter()
+            .map(|declaration| (declaration.symbol.as_str(), declaration))
+            .collect::<BTreeMap<_, _>>();
+        let plan = plan_static_transition_graph_with_symbols(
+            &root,
+            &declarations,
+            &crate::NativeProcessSymbols::legacy_prelude(),
+            abi::AbiRootIngress::Value,
+            true,
+        )
+        .expect("the D2a fixture plans");
+        let (classes, static_body_calls) = d2a_population(&plan);
+        assert_eq!(
+            classes,
+            vec![
+                // the two closure declarations
+                "CallableDeclaration",
+                "CallableDeclaration",
+                // the anonymous closure at the root
+                "ClosureBody",
+                // the root, and the non-closure thunk declaration
+                "SchedulingEntry",
+                "SchedulingEntry",
+            ],
+            "D2a: root + thunk are the ONLY scheduling entries; each closure \
+             declaration contributes exactly one callable unit and no separate \
+             scheduling entry; the anonymous closure keeps its ClosureBody"
+        );
+        assert_eq!(
+            static_body_calls, 1,
+            "D2a: only the ANONYMOUS closure's static-body relation is an \
+             emitted call. A declaration-owned pair's relation is a \
+             definition/signature relation inside one unit, and emitting it as \
+             a call would reintroduce the phantom from the other side"
+        );
+        // Cross-plane one-for-one: the semantic partition, the ABI descriptors,
+        // and the declared function population must state the same result.
+        // ⛔ A repair that only skipped `emittable_units` would leave a phantom
+        // owner here, which is one of the four explicitly rejected half-measures.
+        assert_eq!(
+            plan.semantic.functions.len(),
+            classes.len(),
+            "D2a: the semantic function population must equal the ABI \
+             descriptor population exactly"
+        );
+    }
+
+    /// **`D2a` — the substitution is CAUSAL.**
+    #[test]
+    fn d2a_retaining_the_obsolete_scheduling_unit_restores_the_phantom() {
+        let (root, declarations) = d2a_every_partition_class();
+        let declarations = declarations
+            .iter()
+            .map(|declaration| (declaration.symbol.as_str(), declaration))
+            .collect::<BTreeMap<_, _>>();
+        let retained = with_d2a_population_mutation(
+            D2aPopulationMutation::RetainObsoleteSchedulingUnit,
+            || {
+                plan_static_transition_graph_with_symbols(
+                    &root,
+                    &declarations,
+                    &crate::NativeProcessSymbols::legacy_prelude(),
+                    abi::AbiRootIngress::Value,
+                    true,
+                )
+                .map(|plan| d2a_population(&plan).0)
+            },
+        );
+        let retained = retained.expect("the pre-D2a population still plans");
+        assert_eq!(
+            retained.iter().filter(|class| **class == "SchedulingEntry").count(),
+            4,
+            "D2a: with the substitution suppressed, BOTH closure declarations \
+             get their obsolete zero-input scheduling entry back — 4 entries \
+             where the ruled partition has 2. If this count did not move, the \
+             partition assertion above is not caused by D2a: {retained:?}"
+        );
+    }
+
     /// **`D4` — the partition is CAUSAL in both directions.**
     ///
     /// ⭐ Two mutations, because one cannot defeat a split. Without
@@ -12279,23 +12566,34 @@ mod tests {
             })
         };
 
-        // Direction 1 -- the pre-`D4` world. Both calls land on a zero-input
-        // scheduling entry, so the closure-seed reference is calling a thunk
-        // that declares none of its parameters or captures. ⭐ This is the exact
-        // wrong-arity target `D4` removes, and it is what the positive test
-        // would agree with if the retarget were absent.
-        let never = under(D4DeclarationTargetMutation::NeverRetarget)
-            .expect("the pre-D4 targeting still plans");
+        // Direction 1 -- the pre-`D4` world, and `D2a` has made it STRICTLY
+        // unreachable rather than merely wrong.
+        //
+        // ⭐ Before `D2a` this mutation planned: both calls landed on a
+        // zero-input scheduling entry, so the closure-seed reference called a
+        // thunk declaring none of its parameters or captures. That wrong-arity
+        // target was the thing `D4` removed. `D2a` removes the target itself —
+        // a closure-seed declaration's scheduling entry is no longer a function
+        // unit — so the same mutation now cannot be planned at all.
+        //
+        // ⚠ The assertion was updated because the mechanism got stronger, not
+        // because the control was re-fit to whatever the code now does: the
+        // direction being measured is unchanged (suppress the retarget, prove
+        // the positive partition was caused by the seed discriminator), and it
+        // is now measured by a refusal instead of by an arity.
+        let never = under(D4DeclarationTargetMutation::NeverRetarget);
+        let Err(CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(reason))) = never
+        else {
+            panic!(
+                "D4/D2a: with the retarget suppressed the closure-seed call \
+                 targets a scheduling entry that D2a no longer seeds as a unit, \
+                 so planning must refuse it: {never:?}"
+            );
+        };
         assert!(
-            never.len() == 2
-                && never.iter().all(|(class, definition, arity)| {
-                    *class == DeclarationCallTargetClass::SchedulingEntry
-                        && matches!(definition, AbiUnitDefinition::SchedulingEntry { .. })
-                        && *arity == (0, 0)
-                }),
-            "D4: with the retarget suppressed both declaration calls must fall \
-             back to zero-input scheduling entries -- if they do not, the \
-             positive partition is not caused by the seed discriminator: {never:?}"
+            reason.contains("declaration call edge target is not its function unit's seed"),
+            "D4/D2a: the refusal must name the missing unit seed. Any other \
+             invariant would leave the suppressed retarget unpinned: {reason}"
         );
 
         // Direction 2 -- the ruled-out reverse body search. It lands on the
