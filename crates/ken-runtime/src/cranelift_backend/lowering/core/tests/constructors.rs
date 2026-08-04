@@ -7097,6 +7097,115 @@ fn d7_ownership_run(
     (result, hits, allocations, substitution)
 }
 
+/// **`D7` — an aggregate with NO producer certificate is refused at the
+/// preflight, and the SAME aggregate carrying one gets past it.**
+///
+/// MEASURED, on a bare rig whose function carries no boundary-carrier refs —
+/// the same device the admissibility-ordering row uses, and for the same
+/// reason: with nothing to allocate into, the first thing the carrier step does
+/// is fail, so where a graph stops is observable.
+///
+/// | template | outcome |
+/// |---|---|
+/// | `Constructor` with `occurrence: None` | refused, naming the missing producer |
+/// | the SAME `Constructor` with its planned occurrence | past the preflight, stops at `BoundaryCarrier` |
+///
+/// ⭐⭐ **This is the arm the ownership controls cannot reach, and it is the one
+/// a weakening would take.** Those controls substitute a certificate that is
+/// PRESENT and wrong; adding a fallback for a certificate that is ABSENT leaves
+/// every one of them green. Twelve evidence rigs demonstrated this arm firing
+/// when the preflight landed, but that evidence was spent by the commit that
+/// repaired them — a refusal proven only by the reds it once caused is not
+/// pinned, because nothing re-runs it.
+///
+/// ⛔ The two rows differ in ONE field. If they differed in anything else the
+/// comparison would be between two fixtures rather than between two answers to
+/// one question.
+///
+/// ⚠ Promise class: **durable invariant** — a relation between two outcomes of
+/// one template, not either message as a value. A fallback that answered
+/// `None` from the transfer coordinate turns the first row green, which is
+/// exactly the regression this exists to catch.
+///
+/// CLAIMED: a missing producer occurrence is a refusal and never a licence to
+/// resolve ownership at wherever the value happens to be transferred.
+#[test]
+fn an_aggregate_with_no_producer_certificate_cannot_reach_the_carrier() {
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut module = new_jit_module().expect("JIT module constructs");
+    let mut signature = module.make_signature();
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function("d7_missing_producer_probe", Linkage::Local, &signature)
+        .expect("probe declares");
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+
+    let construct = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+    };
+    let (plan, construct_origin) = planned_root_occurrence(&construct);
+    // ⛔ Resolved at the TRANSFER coordinate the rows below use, on purpose.
+    // That makes the first row's refusal unattributable to the coordinate being
+    // unusable: the plan can answer at exactly this origin, and the template
+    // is refused anyway because it does not carry the answer itself.
+    let wrap_occurrence = plan
+        .source_aggregate_occurrence(construct_origin, PlannedAggregateShape::Constructor)
+        .expect("the planned `Construct` has an ownership record at its own origin");
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
+
+    // One SSA value, shared by both rows -- the child must be identical, or the
+    // two rows differ in more than the certificate.
+    let child = builder.ins().iconst(types::I64, 1);
+    let template = |occurrence| Lowered::Constructor {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        synthesized_identity: None,
+        occurrence,
+        args: vec![Lowered::Bool {
+            value: child,
+            known: Some(true),
+        }],
+    };
+
+    let refused = compiler
+        .transfer_into_carrier(&mut builder, construct_origin, &template(None))
+        .expect_err("an aggregate carrying no producer occurrence cannot cross");
+    let reason = format!("{refused:?}");
+    assert!(
+        reason.contains("no planner-issued producer occurrence"),
+        "the refusal must name the MISSING PRODUCER, not whatever a later step \
+         would have said: got {reason}"
+    );
+
+    let reached = compiler
+        .transfer_into_carrier(
+            &mut builder,
+            construct_origin,
+            &template(Some(wrap_occurrence)),
+        )
+        .expect_err("a fixture with no carrier refs cannot allocate");
+    assert!(
+        matches!(
+            reached,
+            CraneliftBackendError::Unsupported(UnsupportedLowering {
+                construct: "BoundaryCarrier",
+                ..
+            })
+        ),
+        "NON-VACUITY: the SAME template carrying its producer occurrence must get \
+         PAST the preflight and stop at the first emitted call, or the row above \
+         proves nothing about the certificate: got {reached:?}"
+    );
+}
+
 /// **`D7` — an aggregate's PRODUCER CERTIFICATE is load-bearing, and a sibling's
 /// is refused before a single allocation is emitted.**
 ///
