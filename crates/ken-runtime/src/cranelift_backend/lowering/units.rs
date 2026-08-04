@@ -1156,12 +1156,6 @@ pub(super) fn define_continuation_bodies<M: Module>(
         //
         // Declared here, into THIS function: no `FuncRef` crosses a function.
         let declared_workers = worker_targets.declare_in_func(module, &mut func);
-        if !declared_workers.contains_key(&unit.worker_body_origin) {
-            return Err(backend_module(
-                "the selected continuation worker body has no projected emittable-unit target"
-                    .to_string(),
-            ));
-        }
         function_local.unit_calls = declared_workers.clone();
         function_local.worker_templates = worker_targets.templates().clone();
         function_local.context_calls = declare_context_calls_in_func(
@@ -1212,6 +1206,18 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 },
             );
             retargeted_worker_body = Some(unit.worker_body_origin);
+        }
+        // ⛔ Checked AFTER the retarget, not before it. `D5a` checkpoint 4
+        // step 2 removes a fully retargeted raw worker from the emitted
+        // `Function` population, so demanding an *emittable-unit* target here
+        // would reject exactly the case the retarget exists to serve. What this
+        // specialization actually needs is a declared callee for its worker
+        // body -- raw or generated -- and that is what is required.
+        if !worker_calls.contains_key(&unit.worker_body_origin) {
+            return Err(backend_module(
+                "the selected continuation worker body has no declared callee in this function,                  neither an emittable raw unit nor a generated execution context"
+                    .to_string(),
+            ));
         }
         function_local.worker_calls = worker_calls;
         let mut func_ctx = FunctionBuilderContext::new();
