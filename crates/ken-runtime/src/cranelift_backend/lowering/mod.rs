@@ -6324,9 +6324,21 @@ impl<'a> Lowering<'a> {
         // lane at all; failing at construction would refuse them for a question
         // they never pose. Carrying `None` leaves the loud failure exactly where
         // it was — at the allocation, if one is ever reached.
+        // The exact `D5a` emission owner of the context doing the lowering.
+        // Absent means no context is being defined, which is not an emission
+        // this population covers -- so no occurrence, and the loud refusal at
+        // the allocation stands rather than a borrowed owner being invented.
+        let Some(owner) = self.defining_emission_owner else {
+            return Ok(Lowered::Constructor {
+                constructor,
+                synthesized_identity: Some(self.synthesized_fixed_identity(role)?),
+                occurrence: None,
+                args,
+            });
+        };
         let occurrence = self
             .static_transition_plan
-            .synthesized_aggregate_occurrence(seat, role)
+            .synthesized_aggregate_occurrence(owner, seat, role)
             .ok();
         // The recipe and this call site are two statements of one shape, so
         // they are cross-checked rather than trusted to agree. A recipe that
@@ -6336,7 +6348,7 @@ impl<'a> Lowering<'a> {
         if occurrence.is_some() {
             let declared = self
                 .static_transition_plan
-                .synthesized_aggregate_children(seat, role)?;
+                .synthesized_aggregate_children(owner, seat, role)?;
             if declared.len() != args.len() {
                 return Err(unsupported(
                     "Constructor",
@@ -6379,7 +6391,7 @@ impl<'a> Lowering<'a> {
                     SynthesizedAggregateChild::Role(inner) => {
                         let expected = self
                             .static_transition_plan
-                            .synthesized_aggregate_occurrence(seat, *inner)?;
+                            .synthesized_aggregate_occurrence(owner, seat, *inner)?;
                         matches!(
                             argument,
                             Lowered::Constructor {

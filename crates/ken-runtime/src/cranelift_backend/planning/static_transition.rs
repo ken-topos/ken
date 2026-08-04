@@ -2632,6 +2632,14 @@ pub(in crate::cranelift_backend) enum AggregateOccurrenceProducer {
     /// measured property, recorded on [`host_effect_synthesized_uses`], not an
     /// assumption.
     SynthesizedUse {
+        /// The exact `D5a` emission owner, `Predeclared` or `Specialization`.
+        ///
+        /// It is in the KEY, not merely on the record. One seat's body may be
+        /// lowered under a predeclared unit and again inside a generated
+        /// specialization context; those are different emissions and their
+        /// records must not alias. Deriving this from the seat's provenance
+        /// owner would collapse exactly the distinction `D5a` exists to keep.
+        owner: ContinuationEmissionOwner,
         seat: StaticOriginId,
         role: SynthesizedFixedConstructorRole,
     },
@@ -2873,6 +2881,62 @@ fn synthesized_aggregate_recipe(
     }
 }
 
+/// Every emission owner under which one effect seat's body may be lowered.
+///
+/// A seat is always emitted by its own predeclared unit. It is ALSO emitted
+/// inside every generated specialization context whose selected worker body
+/// contains it — that is the `D5a` case, and those two emissions are different
+/// occurrences of the same static seat.
+///
+/// Both halves are enumerated so neither needs a default. A seat reached under
+/// an owner this misses has no record and refuses loudly at its allocation,
+/// which is the fail-closed direction.
+fn synthesized_seat_emission_owners(
+    plan: &StaticTransitionPlan<'_>,
+    seat: StaticOriginId,
+) -> Result<Vec<ContinuationEmissionOwner>, CraneliftBackendError> {
+    let mut owners = Vec::new();
+    if let Some(predeclared) = plan.semantic.function_owner(seat)? {
+        owners.push(ContinuationEmissionOwner::Predeclared(predeclared));
+    }
+    for context in &plan.continuation_contexts {
+        if occurrence_subtree_contains(plan, context.worker_body_origin, seat)? {
+            owners.push(ContinuationEmissionOwner::Specialization(
+                context.enclosing_specialization,
+            ));
+        }
+    }
+    owners.sort();
+    owners.dedup();
+    Ok(owners)
+}
+
+/// Whether `needle` lies in the occurrence subtree rooted at `root`.
+///
+/// Bounded by the occurrence population rather than by a depth budget: the
+/// walk visits each origin at most once, so a malformed cyclic child relation
+/// terminates instead of recurring.
+fn occurrence_subtree_contains(
+    plan: &StaticTransitionPlan<'_>,
+    root: StaticOriginId,
+    needle: StaticOriginId,
+) -> Result<bool, CraneliftBackendError> {
+    let mut seen = BTreeSet::new();
+    let mut stack = vec![root];
+    while let Some(origin) = stack.pop() {
+        if origin == needle {
+            return Ok(true);
+        }
+        if !seen.insert(origin) {
+            continue;
+        }
+        if let Ok(children) = plan.semantic.child_origins(origin) {
+            stack.extend(children.iter().copied());
+        }
+    }
+    Ok(false)
+}
+
 /// **`RT-DECL-CLOSURE-PORT` `D7` — the synthesized producer uses of one host
 /// operation, in emission order.**
 ///
@@ -3111,6 +3175,7 @@ fn build_aggregate_ownership_plan(
             continue;
         };
         let seat = occurrence.static_origin;
+        for owner in synthesized_seat_emission_owners(plan, seat)? {
         for role in host_effect_synthesized_uses(*operation) {
             let Some(recipe) = synthesized_aggregate_recipe(*role) else {
                 // Site-dependent or alternative-only. No record, so the seat
@@ -3157,15 +3222,20 @@ fn build_aggregate_ownership_plan(
             };
             records.push(PlannedAggregateOwnership {
                 id: AggregateOccurrenceId(0),
-                producer: AggregateOccurrenceProducer::SynthesizedUse { seat, role: *role },
-                // The seat's own function owner. A synthesized producer is
-                // emitted by whoever emits its effect.
+                producer: AggregateOccurrenceProducer::SynthesizedUse {
+                    owner,
+                    seat,
+                    role: *role,
+                },
+                // Provenance only, kept for readers. The emission owner that
+                // confers authority is in the key above.
                 owner: plan.semantic.function_owner(seat)?,
                 shape: PlannedAggregateShape::Constructor,
                 children,
                 meet,
                 allocation,
             });
+        }
         }
     }
     records.sort_by_key(|record| record.producer);
@@ -6455,13 +6525,14 @@ impl<'src> StaticTransitionPlan<'src> {
     /// children are a property of the emission site rather than of the role.
     pub(in crate::cranelift_backend) fn synthesized_aggregate_occurrence(
         &self,
+        owner: ContinuationEmissionOwner,
         seat: StaticOriginId,
         role: SynthesizedFixedConstructorRole,
     ) -> Result<AggregateOccurrenceId, CraneliftBackendError> {
         self.aggregate_ownership
             .iter()
             .find(|record| {
-                record.producer == AggregateOccurrenceProducer::SynthesizedUse { seat, role }
+                record.producer == AggregateOccurrenceProducer::SynthesizedUse { owner, seat, role }
             })
             .map(|record| record.id)
             .ok_or_else(|| {
@@ -6482,11 +6553,12 @@ impl<'src> StaticTransitionPlan<'src> {
     /// persistent over an operand that can be arena-owned.
     pub(in crate::cranelift_backend) fn synthesized_aggregate_children(
         &self,
+        owner: ContinuationEmissionOwner,
         seat: StaticOriginId,
         role: SynthesizedFixedConstructorRole,
     ) -> Result<&'static [SynthesizedAggregateChild], CraneliftBackendError> {
         if !self.aggregate_ownership.iter().any(|record| {
-            record.producer == AggregateOccurrenceProducer::SynthesizedUse { seat, role }
+            record.producer == AggregateOccurrenceProducer::SynthesizedUse { owner, seat, role }
         }) {
             return Err(planner_error(
                 "synthesized aggregate role has no planned ownership record",
@@ -15058,21 +15130,27 @@ mod tests {
     /// adds is that a violation would be caught rather than silently indexed.
     #[test]
     fn one_role_at_two_seats_is_two_non_aliasing_occurrences() {
-        let record = |id: u32, seat: u32| PlannedAggregateOwnership {
-            id: AggregateOccurrenceId(id),
-            producer: AggregateOccurrenceProducer::SynthesizedUse {
-                seat: StaticOriginId(seat),
-                role: SynthesizedFixedConstructorRole::Unit,
-            },
-            owner: None,
-            shape: PlannedAggregateShape::Constructor,
-            children: Vec::new(),
-            meet: PlannedReferentLifetime::Persistent,
-            allocation: PlannedAggregateAllocation::PersistentGround,
+        let record = |id: u32, owner: ContinuationEmissionOwner, seat: u32| {
+            PlannedAggregateOwnership {
+                id: AggregateOccurrenceId(id),
+                producer: AggregateOccurrenceProducer::SynthesizedUse {
+                    owner,
+                    seat: StaticOriginId(seat),
+                    role: SynthesizedFixedConstructorRole::Unit,
+                },
+                owner: None,
+                shape: PlannedAggregateShape::Constructor,
+                children: Vec::new(),
+                meet: PlannedReferentLifetime::Persistent,
+                allocation: PlannedAggregateAllocation::PersistentGround,
+            }
         };
+        let unit_a = ContinuationEmissionOwner::Predeclared(PredeclaredFunctionId(0));
+        let unit_b = ContinuationEmissionOwner::Predeclared(PredeclaredFunctionId(1));
+        let generated = ContinuationEmissionOwner::Specialization(ContinuationSpecializationId(0));
 
         // Same ROLE, different SEAT: two lawful occurrences.
-        let distinct = [record(0, 11), record(1, 12)];
+        let distinct = [record(0, unit_a, 11), record(1, unit_a, 12)];
         validate_aggregate_producers_are_unique(&distinct)
             .expect("one role at two seats is two occurrences, not a collision");
         assert_ne!(
@@ -15081,8 +15159,17 @@ mod tests {
              bought nothing over the per-role one it replaced"
         );
 
-        // Same SEAT and same role: one use, so a second record is a collision.
-        let collided = [record(0, 11), record(1, 11)];
+        // Same ROLE and same SEAT, different EMISSION OWNER: also two lawful
+        // occurrences. This is the `D5a` axis -- one body lowered by its
+        // predeclared unit and again inside a generated context is two
+        // emissions, and a key without the owner would alias them.
+        validate_aggregate_producers_are_unique(&[record(0, unit_a, 11), record(1, unit_b, 11)])
+            .expect("one seat under two predeclared owners is two occurrences");
+        validate_aggregate_producers_are_unique(&[record(0, unit_a, 11), record(1, generated, 11)])
+            .expect("predeclared and specialization emissions of one seat are distinct");
+
+        // Same SEAT, same role, same owner: one use, so a second is a collision.
+        let collided = [record(0, unit_a, 11), record(1, unit_a, 11)];
         let error = validate_aggregate_producers_are_unique(&collided)
             .expect_err("two records for one use must reject");
         assert!(
