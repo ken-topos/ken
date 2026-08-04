@@ -2278,14 +2278,52 @@ impl<'a> Lowering<'a> {
             .iter()
             .map(|(origin, cases)| (*origin, cases.clone()))
             .collect::<Vec<_>>();
+        // `RT-DECL-CLOSURE-PORT` `D5a` checkpoint 3 — the planner-issued
+        // recursive predecessors. Read once, outside the loop, and from the
+        // planner rather than from anything observed here.
+        let recursive_predecessors = self
+            .static_transition_plan
+            .source_machine_recursive_predecessor_origins()?;
         for (match_origin, reached_cases) in reached {
             let case_bodies = self
                 .static_transition_plan
                 .source_match_case_body_origins(match_origin)?;
+            // ⭐ **THE UNION `D5a` checkpoint 3 repairs.** Final reachability is
+            // the initial selection PLUS every planner-issued source-machine
+            // recursive predecessor -- not the initial selection alone.
+            //
+            // A predecessor's contribution here is the planner's **closed case
+            // population**, because what re-enters the match is the *return* of
+            // a generated call: a carried word with no compile-time constructor
+            // template, so no case can be ruled out for it. Concretely, the
+            // initial scrutinee selecting `Vis` used to disposition the `Ret`
+            // arm's whole subtree, while the emitted causal call's return edge
+            // makes `Ret` genuinely reachable -- lowering then both materialized
+            // that arm's join and dispositioned it, and the finished CFG
+            // correctly exposed the contradiction.
+            //
+            // ⚠ The ruling also says *"specialized re-entry keeps its exact
+            // selected case"*. That describes the specialization **body**, which
+            // lowers its own selected alternative directly and never re-enters
+            // this match; it contributes to that generated function's own
+            // population, not to this one. ⇒ There is deliberately **no**
+            // exact-alternative narrowing at this seat: a narrowing that can
+            // never fire is a branch that rots, and adding one here would read
+            // as covering a case it could not reach.
+            //
+            // ⛔ The validator is untouched and this does not force any block
+            // dead or delete origin 25. The repair is to stop asserting a
+            // deadness that was never true.
+            let final_reachable: BTreeSet<usize> =
+                if recursive_predecessors.contains(&match_origin) {
+                    (0..case_bodies.len()).collect()
+                } else {
+                    reached_cases
+                };
             #[cfg(test)]
             let mut omitted_for_mutation = false;
             for (index, root) in case_bodies.into_iter().enumerate() {
-                if reached_cases.contains(&index) {
+                if final_reachable.contains(&index) {
                     continue;
                 }
                 #[cfg(test)]
