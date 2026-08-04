@@ -1022,6 +1022,7 @@ pub(super) fn define_continuation_bodies<M: Module>(
         inputs: Vec<ContinuationInputView>,
         continuation_origin: StaticOriginId,
         producer_alternative: u32,
+        recursive_position: u32,
         worker_closure_origin: StaticOriginId,
         worker_body_origin: StaticOriginId,
         worker_declared_arity: u32,
@@ -1047,6 +1048,7 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 inputs: unit.continuation_inputs()?,
                 continuation_origin: unit.continuation_origin(),
                 producer_alternative: unit.producer_alternative(),
+                recursive_position: unit.recursive_position(),
                 worker_closure_origin: unit.worker_closure_origin(),
                 worker_body_origin: unit.worker_body_origin(),
                 worker_declared_arity: unit.worker_declared_arity(),
@@ -1335,15 +1337,6 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 worker_captures,
             )?;
 
-            // The semantic case environment, through the sole binding
-            // authority: the continuation inputs in ordinal order, then the
-            // worker installed in the selected case's binder order.
-            let mut env: Vec<LoweringEnvironmentBinding> = carried_inputs
-                .into_iter()
-                .map(LoweringEnvironmentBinding::Value)
-                .collect();
-            env.insert(0, LoweringEnvironmentBinding::StaticWorker(worker));
-
             // Exact body recovery: the selected case of the computational
             // frame this continuation belongs to, by its own alternative.
             let frame_occurrence =
@@ -1365,6 +1358,90 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 alternative,
                 &case.body,
             )?;
+            // The semantic case environment, through the sole binding
+            // authority: the selected case's OWN BINDERS in constructor source
+            // order, then the continuation inputs.
+            //
+            // ⛔⛔ **This is the shape the checked-IH activation corrected, and
+            // the previous one could not be right for any case with more than
+            // one field.** It built `[StaticWorker] ++ continuation_inputs` --
+            // the worker at binder 0 and the nonrecursive constructor fields
+            // nowhere at all. Measured on the witness: the case binds 2 values
+            // (`Vis(unit, k)`), the ordinary envelope carries exactly one
+            // `NonrecursiveConstructorField { source_position: 0 }`, and that
+            // operand never entered the environment. So binder 0 resolved to
+            // the worker and binder 1 to a continuation input, and the checked
+            // computational-IH marker -- which reads the recursor closure at
+            // binder 1 -- received a carried word and refused with *"a carried
+            // boundary word has no compile-time template"*. ⭐ A true sentence
+            // about the wrong thing: the value was fine, the position was not.
+            //
+            // ⭐ The correct order is not a choice. `ContinuationOrdinary
+            // EnvelopeRole::NonrecursiveConstructorField` carries the exact
+            // `source_position` each ordinary operand came from, and the ruled
+            // `recursive_position` names the one field the worker stands for.
+            // Together they determine the binder run completely; nothing here
+            // picks an order.
+            let mut env: Vec<LoweringEnvironmentBinding> =
+                Vec::with_capacity(case.argument_binders);
+            for position in 0..case.argument_binders {
+                let position = u32::try_from(position).map_err(|_| {
+                    backend_module(
+                        "a continuation case binder position exceeds the planner's field width"
+                            .to_string(),
+                    )
+                })?;
+                if position == unit.recursive_position {
+                    env.push(LoweringEnvironmentBinding::StaticWorker(worker.clone()));
+                    continue;
+                }
+                let index = envelope
+                    .iter()
+                    .position(|role| {
+                        matches!(
+                            role,
+                            ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField {
+                                source_position,
+                            } if *source_position == position
+                        )
+                    })
+                    .ok_or_else(|| {
+                        // ⛔ Fails closed rather than leaving a hole in the
+                        // binder run. A missing role means the ordinary
+                        // envelope does not cover this case's fields, and a
+                        // gap-filled environment would silently shift every
+                        // later binder.
+                        backend_module(format!(
+                            "the ordinary envelope has no nonrecursive field at source position                              {position}, so the selected case's binder run cannot be built"
+                        ))
+                    })?;
+                env.push(LoweringEnvironmentBinding::Value(ordinary[index].clone()));
+            }
+            env.extend(
+                carried_inputs
+                    .into_iter()
+                    .map(LoweringEnvironmentBinding::Value),
+            );
+
+            #[cfg(test)]
+            d5a_trace(format!(
+                "  SPEC-BODY {:?} alt={} binders={} ordinary={} envelope={:?} env=[{}]",
+                unit.id,
+                unit.producer_alternative,
+                case.argument_binders,
+                ordinary.len(),
+                envelope,
+                env.iter()
+                    .map(|binding| match binding {
+                        LoweringEnvironmentBinding::StaticWorker(_) => "StaticWorker",
+                        LoweringEnvironmentBinding::Value(LoweringOperand::Carried(_)) =>
+                            "Carried",
+                        LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(_)) =>
+                            "Specialized",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
             let lowered = compiler.lower_expr(&mut builder, body, &env)?;
 
             // The Result slot is WRITTEN here and never read.
