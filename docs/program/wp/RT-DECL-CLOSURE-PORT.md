@@ -799,22 +799,44 @@ shape.**
 Any of these three steps may be split into its own bounded checkpoint if it does
 not fit one turn.
 
-**Only after checkpoint 4 is green is `D6` retried unchanged** — one
-production action: retire `TransparentDeclarationClosure`, remove the selector
-witness, re-run the closed evidence unhooked.
+**`D5a` is CLOSED.** Completed at exact
+`2ed97dd1cdbd0a76dbd49520f78047e8fde9d8e9` and fresh-QA approved against base
+`25fccc7e` (`evt_7rvdp1qcxd8xt`): 664 passing, zero failed; the nine ruled
+discriminators borne; all five formerly unexercised detached-seat guards
+exercised by reaching mutations; the final census measured as the **mixed**
+population `template_only={StaticOriginId(36)}`, `executable=[fn0, fn1, fn3]`,
+asserted as the relation `executable = emittable minus template_only` rather
+than as a literal list. That settles checkpoint 1's explicitly provisional
+branch-one answer as **branch two**.
 
-**Resume base and scaffolding. ⛔ Corrected 2026-08-04 (third time this day) —
-the resume point is `e5762c5c`, at checkpoint 3.** Runtime resumes from exact
-`e5762c5c`, which carries checkpoints 1 and 2 on top of `cbdf9a2a`'s generated
-contexts, immediate slots, retarget and emission seam. Reverting to `cbdf9a2a`,
-`8e07bab8`, `a765b8d3`, `c8f3a75e` or `bffc7f5b` would discard landed accepted
-work. `e5762c5c`, `8e07bab8`, `cbdf9a2a`, `a765b8d3`, `c8f3a75e`, `08cb257f` and
-`bffc7f5b` are **all** preservation and evidence checkpoints, **never
-candidates**.
-⛔ **The localization trace is scaffolding, not acceptance evidence.** Retain it
-across the four checkpoints, then remove it or replace it with load-bearing
-discriminator controls **before** candidate routing. `D6`, the candidate route,
-and the QA route stay closed until then.
+One boundary is recorded rather than hidden:
+`d5a_reading_the_root_position_as_the_immediate_slot_is_currently_undetectable`
+passes as a transition sentinel for a known swapped-coordinate residual. The
+candidate does not claim such a swap is caught.
+
+**CORRECTED 2026-08-04 by `evt_4m2qk2fehm6vg`: this frame previously said `D6`
+is "retried unchanged" as "one production action". That clause is now false,
+and its falsity is load-bearing** — a reader who keeps it will take the `D6a`
+repair below as unauthorized scope creep and refuse it.
+
+`D6` was performed at exact `1e5daa7b`, and its one action **succeeded and is
+isolated**: `TransparentDeclarationClosure` and both producers are retired, the
+selector witness is fully removed, the remaining residuals and their
+fail-closed classifier are unchanged, all 31 unhooked calls and 32 `D5`/`D5a`
+controls are green, the governed enumeration is empty and selects
+`FunctionizedUnits`, and the ruled shape-change row is now a positive with
+`RecursiveDescent`'s separate negative retained. **Then the functionized
+artifact ran for the first time and trapped.** `D6` is therefore **not closed**,
+and the repair may not be taken under the one-action clause. It is `D6a`.
+
+**Resume base.** The old block named `e5762c5c` at checkpoint 3; superseded.
+The resume point is exact `1e5daa7b`. Every earlier SHA on this lineage —
+`2ed97dd1`, `3e58490e`, `86bdb5cb`, `5758dd93`, `016b786c`, `d65ee15c`,
+`9f12da78`, `b6d13351`, `e5762c5c`, `8e07bab8`, `cbdf9a2a`, `a765b8d3`,
+`c8f3a75e`, `08cb257f`, `bffc7f5b` — is a preservation or evidence checkpoint
+and **never a candidate**; reverting to any discards accepted work. The
+localization trace is discharged: the `D5a` discriminators now bear its claims.
+The candidate and QA routes stay closed until `D6a` is green.
 
 #### `same_recursive_argument_shapes` is obsolete on this lane — no guard was lost
 
@@ -841,6 +863,119 @@ change through one `ValueWord` parameter, and retain a **separate negative** for
 an actually non-transferable value graph or a descriptor/input disagreement.
 ⛔ Do not transplant `same_recursive_argument_shapes` into the declared-call
 path; keep it for every remaining `RecursiveDescent` backedge.
+
+### `D6a` — thread the closed answer-route fact into the carried eliminator
+
+**Added 2026-08-04. Architect ruling `evt_4m2qk2fehm6vg`, grounded on exact
+`1e5daa7b2bde4f070e87cbdff69997cd65353e46`. Steward recut. `1e5daa7b` is the
+`D6` activation and red-evidence checkpoint, preservation-only and never a
+candidate.**
+
+**Same WP, same atomic scope, one bounded post-activation checkpoint. Not a new
+graph node**, not a new residual, disposition, carrier lane, runtime callable
+selector, or third atomic participant. The node gate was applied and returns
+"no node": the constraint arguing for one is this frame's own one-action
+sentence, which the ruling has just retired. The seam is an existing
+`D7`/source-machine semantic-consumer edge that `D6` activation exposed for the
+first time.
+
+#### What `D6` activation exposed
+
+`D6`'s own action is sound. What it removed was the last thing standing between
+the fixture and execution, so the governed runtime witness compiled, linked,
+and then exited 1 with `ken native trap: explicit entry trap`, empty trap
+provenance, and no `DeforestedAnswerResumed` event. **Its harness never used
+the selector witness, so this is the first execution of the functionized
+artifact.** Every prior checkpoint could prove emission or refusal, never a
+runtime answer.
+
+The first causal source seat is the `LoweringOperand::Carried` arm of
+`SourceContinuation::ComputationalMatchScrutinee` in `lowering/core.rs`:
+
+- the source continuation still holds the closed fact
+  `answer_route: SourceComputationalAnswerRoute`;
+- its **specialized** arm reads that fact, and on `CheckedSelectedRecursor`
+  routes an unmatched constructor through the unique guarded `ITree::Ret`
+  answer path, recording `DeforestedAnswerResumed`;
+- its **carried** arm builds `ComputationalEliminatorFrame` **without that
+  field**, and `ComputationalEliminatorFrame` has no answer-route member;
+- so `lower_carried_computational_match_inner` compares the carried tag only
+  against the ordinary `ITree::Ret` / `ITree::Vis` case identities and seals
+  the ordinary default.
+
+On this witness the checked recursive worker returns carried `Result::Ok` —
+the checked answer the specialized route sends to the unique `ITree::Ret`
+continuation. The carried route instead asks whether `Result::Ok` is literally
+an `ITree` constructor, which it is not, and takes `PX8-TR checked ITree
+recursor default`. The unit writes that trap identity to its `TrapWord`, the
+root adapter maps a process trap to `-4`, and the starter prints the trap line.
+
+**The empty provenance is predicted by the same drop, not a second failure.**
+`DeforestedAnswerResumed` is emitted only while lowering the specialized
+branch, so it cannot report a runtime-carried choice the emitted CFG never
+contained. It is evidence of the phase gap.
+
+#### The complete bounded mechanism, and nothing beyond it
+
+1. **Preserve the existing closed route fact.** Thread the existing
+   `SourceComputationalAnswerRoute` from
+   `SourceContinuation::ComputationalMatchScrutinee` into the carried
+   computational-eliminator operation. Do not infer it from a tag, body,
+   constructor spelling, frame id, or the presence of a continuation unit.
+2. **Ordinary case matching remains first and unchanged.** A carried value
+   whose exact planner-issued tag matches an ordinary computational case takes
+   that case.
+3. **The checked-answer fallback is narrow.** Only after no ordinary case
+   matches, and only for `CheckedSelectedRecursor`, emit the same guarded
+   answer route as the specialized arm: exactly one `ITree::Ret` case with one
+   binder, exactly one `ITree::Vis` case, exactly two cases total, and the
+   existing no-checked-marker condition on the return body. Feed the **same
+   carried word** as the return case's one retained argument and continue
+   through the original source control.
+4. **No phase forgery.** Do not decode, reconstruct, or convert the carried
+   word into `Lowered`; do not recover a template; do not choose a callable
+   target at runtime; do not add a constructor whitelist or a name-based
+   `Result` special case.
+5. **Defaults stay closed.** `DirectScrutinee`, malformed return topology,
+   disabled checked-answer routing, unknown or unlawful tags, and every
+   unmatched ordinary carried scrutinee retain the existing exact default and
+   trap behavior.
+
+#### The evidence, required before candidate or QA routing
+
+- the enabled linked artifact exits 0 through the unique
+  return-case-dependent `ExitSuccess`;
+- disabling **only** the checked-answer fallback exits 1 through the exact
+  planned `PX8-TR checked ITree recursor default`;
+- dropping the route fact between the source continuation and the carried
+  eliminator recreates this exact red;
+- an ordinary matching carried `ITree` constructor still takes its ordinary
+  case, ahead of the fallback;
+- `DirectScrutinee` plus malformed or ambiguous return topology cannot enter
+  the fallback;
+- the carried return argument remains `Carried`, and a
+  carried-to-specialized/template reconstruction mutation reds;
+- the original nontrivial source continuation is observed **after** the return
+  case, so a helper that returns an isolated value cannot pass;
+- every accepted `D5`/`D5a` control and the exhaustive residual controls stay
+  green unhooked.
+
+**Two evidence rules that are the point of this checkpoint, not decoration.**
+The compile-time `DeforestedAnswerResumed { actual_constructor }` assertion is
+**not truthful evidence of runtime execution on this branch** — keep it for the
+specialized branch, and for the carried branch pair the linked exit result with
+a separate emission/runtime discriminator. And prove the disabled trap's
+**planner trap identity at the unit `TrapWord` and root propagation seat**: the
+generic process `-4` string alone is not exact provenance.
+
+#### Holds
+
+Preserve `1e5daa7b`. Do not revert the residual retirement or reintroduce the
+selector witness — both are directionally correct. Do not tune joins, resume
+behavior, continuation identities, captures, or call operands from this red
+activation checkpoint. Runtime is released from exact `1e5daa7b` by its leader
+once this recut has published. The candidate route, `D6` closure, and the QA
+route stay closed until `D6a`'s evidence above is green.
 
 > ### ⭐⭐ `D7` NOW CARRIES THE EXACT-RECORD RE-DERIVATION, AND IT GATES ANOTHER NODE
 >
@@ -2342,8 +2477,17 @@ family — that is a measurement nobody has taken.
   closure-valued constructor field still crossing a unit boundary, `D6`'s
   retirement reddens a landed end-to-end fixture, so activation would again
   precede a runnable proof. ⇒ The full order is
-  **`D2a` → `D5` → `D5a` → `D6`**, and `D6` is retried unchanged once `D5a` is
-  green.
+  **`D2a` → `D5` → `D5a` → `D6` → `D6a`**.
+
+  **Corrected 2026-08-04 (Architect `evt_4m2qk2fehm6vg`).** This clause
+  previously ended "and `D6` is retried unchanged once `D5a` is green". `D6`
+  ran unchanged at `1e5daa7b` and its own action succeeded; the first execution
+  of the functionized artifact then trapped, on an existing carried-consumer
+  edge that only activation could expose. So the order does not end at `D6`,
+  and **this AC is not satisfied by a green `D6`** — it requires `D6a`'s
+  linked-exit evidence. Reading the retired clause as authority to fold the
+  `D6a` repair into `D6`, or to refuse it as out of scope, are the two wrong
+  readings it produced.
 - **`AC-4` (no-regression).** Workspace green **in CI** — ⛔ never a local
   `--workspace` run (`COORDINATION §12`).
 - **`AC-5`.** The exhaustive-match fail-closed property at `core.rs:59-65` is
