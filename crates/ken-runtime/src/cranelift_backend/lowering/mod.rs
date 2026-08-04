@@ -2732,6 +2732,23 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
+        // ⭐ **The CLASS is a second, independent reading of the same fact.**
+        // The variant match above is what the template *is*; this is what the
+        // sole disposition authority says it *represents*. They are derived by
+        // different code from different fields, so a template whose variant and
+        // disposition ever disagree is caught here rather than allocating under
+        // one and being emitted under the other.
+        let (_, class) = Self::carrier_handle_disposition(value)?;
+        let planned_class = CarrierAllocationRequest::aggregate_class(planned.shape());
+        if class != planned_class {
+            return Err(unsupported(
+                lowered_value_kind(value),
+                format!(
+                    "the template's boundary class is {class:?} but its own producer \
+                     occurrence names a {planned_class:?} ownership record"
+                ),
+            ));
+        }
         if planned.children().len() != children.len() {
             return Err(unsupported(
                 lowered_value_kind(value),
@@ -2749,7 +2766,38 @@ impl<'a> Lowering<'a> {
         // [`Self::reconcile_declared_children`]. Re-deriving it here from source
         // origins the planner deliberately recorded as absent would be a second,
         // weaker authority for a question that already has one.
-        if planned.producer_origin().is_some() {
+        if let Some(producer_origin) = planned.producer_origin() {
+            // ⭐ **The constructor SCHEMA, against the producer's own origin.**
+            // A source constructor's `synthesized_identity` was resolved at the
+            // producer and travels with the template for the same reason the
+            // occurrence does; here the two carried facts are made to agree with
+            // each other through the plan. A template that acquired one
+            // producer's occurrence and another's symbol -- the exact shape of a
+            // grafted or substituted certificate -- cannot satisfy both.
+            //
+            // ⚠ The RECORD half of the schema is not checked, and that is a
+            // stated gap rather than an oversight: a planned field name is a
+            // `FieldIdentity` span into the plan's own name arena, and there is
+            // no `&str -> FieldIdentity` direction to compare a template's field
+            // strings against. Supplying one would be a new planner search
+            // surface, which this release forbids. Record field ORDER and ARITY
+            // are covered above; field NAMING is not.
+            if let Lowered::Constructor {
+                synthesized_identity: Some(carried),
+                ..
+            } = value
+            {
+                let planned_identity = self
+                    .static_transition_plan
+                    .constructor_symbol_identity(producer_origin)?;
+                if *carried != planned_identity {
+                    return Err(unsupported(
+                        lowered_value_kind(value),
+                        "the template's carried constructor identity is not the one the \
+                         planner resolved at its own producer occurrence's origin",
+                    ));
+                }
+            }
             for (child, planned_child) in children.iter().zip(planned.children()) {
                 let Some(child_shape) = Self::lowered_aggregate_shape(child) else {
                     continue;
@@ -3417,6 +3465,11 @@ impl<'a> Lowering<'a> {
         // unchanged, so a refusal is attributable to the coordinate alone.
         #[cfg(test)]
         let inputs = Self::substitute_sibling_call_input_origin(inputs);
+        // ⭐ **`D7` — the A/B AGGREGATE-OWNERSHIP discriminator's only seam.**
+        // Same seam, different axis: this one moves the certificate the template
+        // carries rather than the coordinate it is transferred at.
+        #[cfg(test)]
+        let inputs = self.substitute_sibling_aggregate_producer(inputs);
         let mut carried = Vec::with_capacity(inputs.len());
         for input in inputs {
             let origin = input.occurrence.static_origin;
@@ -3449,6 +3502,78 @@ impl<'a> Lowering<'a> {
             governed_allocation_hit();
             inputs[0].occurrence = inputs[1].occurrence.clone();
         }
+        inputs
+    }
+
+    /// Replace the FIRST argument's carried **producer occurrence** with the
+    /// second's, under the A/B ownership mutation only.
+    ///
+    /// ⛔ Only the certificate moves. The template keeps its own constructor
+    /// symbol, its own children, its own resolved identity, its own call use and
+    /// its own parameter slot, so the emitter builds exactly what it built
+    /// before and only the ownership record it claims differs.
+    ///
+    /// ⚠ **The hit is counted only when the occurrence actually CHANGES.** A
+    /// call whose two arguments already share a record, or whose first argument
+    /// is not a specialized aggregate, leaves the list untouched -- and a
+    /// substitution that substitutes nothing is indistinguishable from a
+    /// well-defended one if the counter fires anyway.
+    #[cfg(test)]
+    fn substitute_sibling_aggregate_producer(
+        &self,
+        mut inputs: Vec<SourceCallInput>,
+    ) -> Vec<SourceCallInput> {
+        if GOVERNED_ALLOCATION_MUTATION.with(std::cell::Cell::get)
+            != GovernedAllocationMutation::SiblingAggregateProducer
+        {
+            return inputs;
+        }
+        if inputs.len() < 2 {
+            return inputs;
+        }
+        let LoweringOperand::Specialized(sibling) = &inputs[1].value else {
+            return inputs;
+        };
+        let Some(sibling) = sibling.source_aggregate_producer() else {
+            return inputs;
+        };
+        let LoweringOperand::Specialized(target) = &mut inputs[0].value else {
+            return inputs;
+        };
+        let carried = match target {
+            Lowered::Constructor { occurrence, .. } | Lowered::Record { occurrence, .. } => {
+                occurrence
+            }
+            _ => return inputs,
+        };
+        if *carried == Some(sibling) {
+            return inputs;
+        }
+        let replaced = *carried;
+        *carried = Some(sibling);
+        let agreement = replaced.and_then(|replaced| {
+            let before = self
+                .static_transition_plan
+                .aggregate_record_view(replaced)
+                .ok()?;
+            let after = self
+                .static_transition_plan
+                .aggregate_record_view(sibling)
+                .ok()?;
+            Some((
+                before.shape() == after.shape(),
+                before.allocation() == after.allocation(),
+            ))
+        });
+        SIBLING_PRODUCER_SUBSTITUTION.with(|cell| {
+            cell.set(Some(SiblingProducerSubstitution {
+                from: replaced,
+                to: sibling,
+                same_shape: agreement.is_some_and(|(shape, _)| shape),
+                same_lane: agreement.is_some_and(|(_, lane)| lane),
+            }));
+        });
+        governed_allocation_hit();
         inputs
     }
 
@@ -4712,6 +4837,8 @@ impl<'a> Lowering<'a> {
                 )
             })?,
         );
+        #[cfg(test)]
+        CARRIER_RAW_ALLOCATIONS.with(|n| n.set(n.get().saturating_add(1)));
         let call = builder
             .ins()
             .call(refs.alloc, &[arena, tag, class, count, out]);
@@ -6952,6 +7079,23 @@ pub(crate) enum GovernedAllocationMutation {
     /// occurrence, keeping its own value, callee, parameter slot, shape and
     /// lane. The A/B call-input authority discriminator.
     SiblingCallInputOrigin,
+    /// Give one source-call argument's TEMPLATE a sibling argument's
+    /// planner-issued **producer occurrence**, keeping its own value, args,
+    /// constructor symbol, call use, callee, parameter slot, shape, lane and
+    /// order. The A/B aggregate-ownership discriminator.
+    ///
+    /// ⛔ **Not the same axis as [`Self::SiblingCallInputOrigin`], and it may
+    /// not be cited as this control.** That one moves the coordinate a value is
+    /// *transferred at*; this one moves the certificate the value *carries*.
+    /// Since `aggregate_carrier_authority` prefers the carried occurrence, a
+    /// use-coordinate substitution is inert for exactly the templates that
+    /// authorize themselves — which is every aggregate on this route.
+    ///
+    /// ⭐ The occurrence is taken from a **live sibling argument's own
+    /// template**, never constructed. A hand-made identity would test that the
+    /// record lookup rejects nonsense; taking a real one tests that ownership
+    /// discriminates between two aggregates the plan considers equally real.
+    SiblingAggregateProducer,
 }
 
 #[cfg(test)]
@@ -6959,6 +7103,37 @@ thread_local! {
     static GOVERNED_ALLOCATION_MUTATION: std::cell::Cell<GovernedAllocationMutation> =
         const { std::cell::Cell::new(GovernedAllocationMutation::None) };
     static GOVERNED_ALLOCATION_HITS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// How many RAW carrier allocations have actually been emitted.
+    ///
+    /// ⭐ Counted at the `alloc` call itself, not at the choke's entry and not
+    /// at the ledger. "Refused before any allocation" is a claim about emitted
+    /// instructions, so the instrument has to sit where the instruction is
+    /// emitted -- a counter one frame earlier would be satisfied by a refusal
+    /// that had already allocated.
+    static CARRIER_RAW_ALLOCATIONS: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    /// What the ownership substitution actually moved, recorded at the seam.
+    ///
+    /// ⭐ Both records are read from the LIVE plan, at the moment of the swap.
+    /// "The two arguments agree on shape and lane" is the premise that makes the
+    /// negative a statement about IDENTITY rather than about shape, and a
+    /// premise re-derived afterwards from a separately built plan is a premise
+    /// about a different object.
+    static SIBLING_PRODUCER_SUBSTITUTION: std::cell::Cell<Option<SiblingProducerSubstitution>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// The exact ownership substitution one A/B run performed.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct SiblingProducerSubstitution {
+    /// The certificate the first argument carried before the substitution.
+    pub(in crate::cranelift_backend) from: Option<AggregateOccurrenceId>,
+    /// The sibling certificate it was given.
+    pub(in crate::cranelift_backend) to: AggregateOccurrenceId,
+    /// Whether the two records agree on planned shape.
+    pub(crate) same_shape: bool,
+    /// Whether the two records agree on planned allocation lane.
+    pub(crate) same_lane: bool,
 }
 
 /// RAII installation of one mutation.
@@ -6973,6 +7148,8 @@ thread_local! {
 pub(crate) struct GovernedAllocationMutationGuard {
     previous: GovernedAllocationMutation,
     previous_hits: u32,
+    previous_allocations: u32,
+    previous_substitution: Option<SiblingProducerSubstitution>,
 }
 
 #[cfg(test)]
@@ -6981,15 +7158,33 @@ impl GovernedAllocationMutationGuard {
         let guard = Self {
             previous: GOVERNED_ALLOCATION_MUTATION.with(std::cell::Cell::get),
             previous_hits: GOVERNED_ALLOCATION_HITS.with(std::cell::Cell::get),
+            previous_allocations: CARRIER_RAW_ALLOCATIONS.with(std::cell::Cell::get),
+            previous_substitution: SIBLING_PRODUCER_SUBSTITUTION.with(std::cell::Cell::get),
         };
         GOVERNED_ALLOCATION_MUTATION.with(|cell| cell.set(mutation));
         GOVERNED_ALLOCATION_HITS.with(|cell| cell.set(0));
+        CARRIER_RAW_ALLOCATIONS.with(|cell| cell.set(0));
+        SIBLING_PRODUCER_SUBSTITUTION.with(|cell| cell.set(None));
         guard
+    }
+
+    /// What the ownership substitution moved, if one fired.
+    pub(crate) fn substitution(&self) -> Option<SiblingProducerSubstitution> {
+        SIBLING_PRODUCER_SUBSTITUTION.with(std::cell::Cell::get)
     }
 
     /// How many times this mutation's seam actually fired.
     pub(crate) fn hits(&self) -> u32 {
         GOVERNED_ALLOCATION_HITS.with(std::cell::Cell::get)
+    }
+
+    /// How many raw carrier allocations were emitted since this guard installed.
+    ///
+    /// ⚠ Zero is only meaningful beside a baseline that is NON-zero. On its
+    /// own it is equally consistent with "refused before allocating" and with
+    /// "this fixture never allocates", and those are different claims.
+    pub(crate) fn raw_allocations(&self) -> u32 {
+        CARRIER_RAW_ALLOCATIONS.with(std::cell::Cell::get)
     }
 }
 
@@ -6998,6 +7193,8 @@ impl Drop for GovernedAllocationMutationGuard {
     fn drop(&mut self) {
         GOVERNED_ALLOCATION_MUTATION.with(|cell| cell.set(self.previous));
         GOVERNED_ALLOCATION_HITS.with(|cell| cell.set(self.previous_hits));
+        CARRIER_RAW_ALLOCATIONS.with(|cell| cell.set(self.previous_allocations));
+        SIBLING_PRODUCER_SUBSTITUTION.with(|cell| cell.set(self.previous_substitution));
     }
 }
 

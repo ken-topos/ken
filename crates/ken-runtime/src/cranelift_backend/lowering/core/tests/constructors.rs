@@ -6918,3 +6918,355 @@ fn the_aggregate_allocation_relation_holds_its_laws() {
         "a body still open at the closeout never committed its events"
     );
 }
+
+
+
+// ─── `D7` — the A/B aggregate-ownership controls ────────────────────────────
+
+/// The declared two-parameter callee the ownership controls call.
+///
+/// ⭐⭐ **A `DeclarationRef`, and that is measured rather than stylistic.** The
+/// source machine's multi-argument crossing arm is reached only by a
+/// `Lowered::DeclarationClosure` under `FunctionizedUnits`; a `LexicalClosure`
+/// callee takes the continuing-evaluation arm and never crosses a unit boundary
+/// at all, so its arguments never reach the seam these controls act at. Both
+/// spellings were compiled and traced, and only this one arrives.
+///
+/// ⚠ Its body is a bare exit constructor. A body that did anything with its
+/// parameters would put a second aggregate route between the mutation and the
+/// refusal, and the row would no longer be about the arguments.
+const D7_PAIR_CALLEE: &str = "fixture::d7::pair";
+
+fn d7_pair_callee() -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: D7_PAIR_CALLEE.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["a".to_string(), "b".to_string()],
+                body: Box::new(RuntimeExpr::Construct {
+                    constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                    args: Vec::new(),
+                }),
+            },
+        },
+        metadata: crate::RuntimeSymbolMetadata {
+            lowerability: Some(crate::RuntimeLowerabilityStatus::Supported),
+            ..crate::RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+fn d7_wrap(inner: &str) -> RuntimeExpr {
+    RuntimeExpr::Construct {
+        constructor: "ctor:fixture::CallInput::Wrap".to_string(),
+        args: vec![RuntimeExpr::Construct {
+            constructor: inner.to_string(),
+            args: Vec::new(),
+        }],
+    }
+}
+
+fn d7_pair_record(first: &str, second: &str) -> RuntimeExpr {
+    RuntimeExpr::Record {
+        fields: vec![
+            (
+                "first".to_string(),
+                RuntimeExpr::Construct {
+                    constructor: first.to_string(),
+                    args: Vec::new(),
+                },
+            ),
+            (
+                "second".to_string(),
+                RuntimeExpr::Construct {
+                    constructor: second.to_string(),
+                    args: Vec::new(),
+                },
+            ),
+        ],
+    }
+}
+
+/// A **recursor** whose case body calls the declared two-parameter unit with
+/// the two aggregates given.
+///
+/// ⭐⭐ **`recursive_positions: vec![0]` is load-bearing.** The source machine is
+/// entered only from a computational-match case that declares a recursive
+/// position; with an empty list the case body is lowered by ordinary descent and
+/// the call never reaches the source-machine crossing. Measured both ways: with
+/// the position removed the seam records zero reaches on this exact fixture.
+///
+/// ⚠ The `Seed` case is the base case and must stay. Without it the match is
+/// one-armed and the scrutinee's own child has nowhere to go.
+fn d7_ownership_recursor(args: Vec<RuntimeExpr>) -> RuntimeExpr {
+    RuntimeExpr::Let {
+        value: Box::new(d7_wrap("ctor:fixture::CallInput::Seed")),
+        body: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Var(0)),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::CallInput::Wrap".to_string(),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body: RuntimeExpr::Call {
+                        callee: Box::new(RuntimeExpr::DeclarationRef {
+                            symbol: D7_PAIR_CALLEE.to_string(),
+                        }),
+                        args,
+                    },
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: "ctor:fixture::CallInput::Seed".to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: RuntimeExpr::Construct {
+                        constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                        args: Vec::new(),
+                    },
+                },
+            ],
+            default: ac_c7_trap(),
+        }),
+    }
+}
+
+/// Two `Wrap`s with different children: same outer symbol, same shape, same
+/// arity, ⭐ **distinct nested producer facts**. That combination is what makes
+/// the negative below a statement about identity — everything a shape-only read
+/// can see agrees.
+fn d7_constructor_arguments() -> RuntimeExpr {
+    d7_ownership_recursor(vec![
+        d7_wrap("ctor:fixture::CallInput::Alpha"),
+        d7_wrap("ctor:fixture::CallInput::Beta"),
+    ])
+}
+
+/// The same design one shape over: two records with the same field names and
+/// arity and different field constructors.
+fn d7_record_arguments() -> RuntimeExpr {
+    d7_ownership_recursor(vec![
+        d7_pair_record(
+            "ctor:fixture::CallInput::Alpha",
+            "ctor:fixture::CallInput::Beta",
+        ),
+        d7_pair_record(
+            "ctor:fixture::CallInput::Gamma",
+            "ctor:fixture::CallInput::Delta",
+        ),
+    ])
+}
+
+fn d7_compile_ownership(program: &RuntimeExpr) -> Result<(), CraneliftBackendError> {
+    let declaration = d7_pair_callee();
+    let mut declarations = BTreeMap::new();
+    declarations.insert(D7_PAIR_CALLEE, &declaration);
+    compile_expr_into_module(
+        new_object_module("ken-runtime-process-entrypoint")?,
+        "ken_d7_aggregate_ownership",
+        Linkage::Export,
+        program,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        true,
+        None,
+        Some(crate::cranelift_backend::test_support::test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .map(|_| ())
+}
+
+/// One run under one mutation: the outcome, the seam's hit count, the raw
+/// allocations it emitted, and what it substituted.
+fn d7_ownership_run(
+    program: &RuntimeExpr,
+    mutation: GovernedAllocationMutation,
+) -> (
+    Result<(), CraneliftBackendError>,
+    u32,
+    u32,
+    Option<SiblingProducerSubstitution>,
+) {
+    let guard = GovernedAllocationMutationGuard::install(mutation);
+    let result = d7_compile_ownership(program);
+    let hits = guard.hits();
+    let allocations = guard.raw_allocations();
+    let substitution = guard.substitution();
+    drop(guard);
+    (result, hits, allocations, substitution)
+}
+
+/// **`D7` — an aggregate's PRODUCER CERTIFICATE is load-bearing, and a sibling's
+/// is refused before a single allocation is emitted.**
+///
+/// MEASURED, on a real two-argument declared-unit call reached through the
+/// source machine, one shape per row:
+///
+/// | row | baseline | negative |
+/// |---|---|---|
+/// | two `Wrap` constructors | compiles, 6 raw allocations | 1 hit, refused, **0 raw allocations** |
+/// | two records | compiles, 8 raw allocations | 1 hit, refused, **0 raw allocations** |
+///
+/// and in both negatives the substitution was recorded, from the live plan, as
+/// `same_shape: true, same_lane: true` — so the only thing that moved was the
+/// identity.
+///
+/// ⭐⭐ **The refusal names a NESTED child, not the outer node.** The preflight
+/// checks presence, then shape, then boundary class, then arity, then the
+/// carried constructor identity, and only then the children. Reaching the child
+/// arm therefore *proves* that everything an outer, shape-only read can see
+/// agreed. ⛔ That is exactly what the current `aggregate_allocation_at` reads —
+/// identity existence plus shape — so restoring it as the only check makes this
+/// negative go green. The preflight is what refuses here, and nothing else
+/// would.
+///
+/// ⭐ **Zero raw allocations is asserted against a non-zero baseline.** On its
+/// own, zero is equally consistent with "refused before allocating" and with
+/// "this fixture never allocates"; the baseline row is what separates them, and
+/// it is why each row runs unmutated first.
+///
+/// ⭐ **The hit count is asserted because the seam is a no-op on a call with
+/// fewer than two arguments, on a non-specialized operand, and on two arguments
+/// that already share a record.** Without it, all three of those and a caught
+/// substitution are the same green. The counter increments only when the
+/// occurrence actually CHANGES, so a substitution that substituted nothing
+/// cannot satisfy it.
+///
+/// ⛔ The certificate is taken from a **live sibling argument's own template**,
+/// never constructed. A hand-made identity would show that the record lookup
+/// rejects nonsense; a real one shows that ownership discriminates between two
+/// aggregates the plan considers equally real.
+///
+/// CLAIMED: a source aggregate is self-authenticating by its producer-issued
+/// occurrence. A call transports the value; it does not become its producer, and
+/// it cannot lend one argument's ownership to another.
+///
+/// THE GAP: this measures the argument position of one crossing. It says nothing
+/// about a certificate substituted somewhere the source machine does not reach —
+/// `call_static_worker`'s fallback is the open one, and it is measured
+/// separately.
+#[test]
+fn a_sibling_aggregates_producer_certificate_is_refused_before_any_allocation() {
+    for (label, program) in [
+        ("two constructors", d7_constructor_arguments()),
+        ("two records", d7_record_arguments()),
+    ] {
+        let (baseline, baseline_hits, baseline_allocations, _) =
+            d7_ownership_run(&program, GovernedAllocationMutation::None);
+        baseline.unwrap_or_else(|error| {
+            panic!("{label}: the unmutated route must compile, or the negative below \
+                    is measuring a broken fixture: {error:?}")
+        });
+        assert_eq!(
+            baseline_hits, 0,
+            "{label}: no substitution may fire without the mutation installed"
+        );
+        assert!(
+            baseline_allocations > 0,
+            "{label}: NON-VACUITY -- the unmutated route must actually allocate, or \
+             `0 allocations` under the mutation says nothing"
+        );
+
+        let (mutated, hits, allocations, substitution) = d7_ownership_run(
+            &program,
+            GovernedAllocationMutation::SiblingAggregateProducer,
+        );
+        assert_eq!(
+            hits, 1,
+            "{label}: the certificate substitution must fire exactly once, or this row \
+             is green for not having happened"
+        );
+        let substitution = substitution
+            .unwrap_or_else(|| panic!("{label}: a fired substitution records what it moved"));
+        assert_ne!(
+            substitution.from,
+            Some(substitution.to),
+            "{label}: an A/B control needs two DISTINCT certificates"
+        );
+        assert!(
+            substitution.same_shape,
+            "{label}: the two records must agree on shape, or the refusal is about \
+             shape rather than about ownership: {substitution:?}"
+        );
+        assert!(
+            substitution.same_lane,
+            "{label}: the two records must agree on allocation lane, or the refusal \
+             is about the lane rather than about ownership: {substitution:?}"
+        );
+        let Err(error) = mutated else {
+            panic!(
+                "{label}: a sibling's producer certificate was ACCEPTED after {hits} \
+                 substitution. Stated as measured: the certificate is not load-bearing \
+                 on this route"
+            );
+        };
+        assert_eq!(
+            allocations, 0,
+            "{label}: the whole-graph preflight must finish before the FIRST raw \
+             allocation, and the baseline emitted {baseline_allocations}: got {error:?}"
+        );
+        let reason = format!("{error:?}");
+        assert!(
+            reason.contains("at that position"),
+            "{label}: the refusal must be the per-position child disagreement -- an \
+             outer shape, class, arity or identity refusal would mean the row never \
+             exercised the nested authority a shape-only read cannot see: {reason}"
+        );
+    }
+}
+
+/// **`D7` — substituting an argument's call-USE coordinate is INERT, and that is
+/// why it cannot be cited as the ownership control.**
+///
+/// MEASURED, on the same two fixtures: with `SiblingCallInputOrigin` installed
+/// the seam fires (1 hit on each) and **both programs still compile**, emitting
+/// the same 6 and 8 raw allocations as their baselines.
+///
+/// ⭐⭐ **This is the positive statement of a negative result, and it is the
+/// point of the row.** `aggregate_carrier_authority` prefers the occurrence the
+/// template CARRIES and consults the transfer coordinate only for a template
+/// that has none. Every aggregate on this route carries one, so moving the
+/// coordinate changes nothing that any check can see. ⛔ A control built on this
+/// mutation would be unbuildable rather than merely unwritten — no fixture makes
+/// it refuse — and reporting it as "I could not find a fixture" would invite
+/// someone to look for one.
+///
+/// ⚠ The two mutations act at the SAME seam and are still different axes. That
+/// is what makes the pair informative: same call, same argument, same moment,
+/// and only the one that moves the certificate is observable.
+///
+/// CLAIMED: use and production are distinct authorities, and only production
+/// governs ownership.
+#[test]
+fn a_call_use_coordinate_substitution_is_inert_for_a_self_authorizing_aggregate() {
+    for (label, program) in [
+        ("two constructors", d7_constructor_arguments()),
+        ("two records", d7_record_arguments()),
+    ] {
+        let (_, baseline_hits, baseline_allocations, _) =
+            d7_ownership_run(&program, GovernedAllocationMutation::None);
+        assert_eq!(baseline_hits, 0, "{label}: the baseline installs no mutation");
+
+        let (result, hits, allocations, _) = d7_ownership_run(
+            &program,
+            GovernedAllocationMutation::SiblingCallInputOrigin,
+        );
+        assert_eq!(
+            hits, 1,
+            "{label}: the use-coordinate substitution must FIRE, or its inertness is \
+             a statement about a call it never reached"
+        );
+        result.unwrap_or_else(|error| {
+            panic!(
+                "{label}: a use-coordinate substitution refused. If this ever goes red \
+                 the two axes have merged, and the ownership control above is no longer \
+                 measuring something the use coordinate cannot: {error:?}"
+            )
+        });
+        assert_eq!(
+            allocations, baseline_allocations,
+            "{label}: an inert substitution must emit exactly the baseline's allocations"
+        );
+    }
+}
