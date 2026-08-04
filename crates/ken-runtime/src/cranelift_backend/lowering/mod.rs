@@ -7391,6 +7391,67 @@ enum SourceComputationalAnswerRoute {
     DirectScrutinee,
     CheckedSelectedRecursor,
 }
+
+/// **`RT-DECL-CLOSURE-PORT` `D6a` upstream half — one lowering predecessor's
+/// operand paired with the route it arrived by.**
+///
+/// ⭐⭐ **The route is a property of the exact predecessor that supplied the
+/// answer, not of the `ComputationalMatch` occurrence, its checked frame, or
+/// its owner.** The census on the governed witness is what settles that:
+/// `CSId(0)` and `CSId(1)` sit at the *same* continuation origin 10 and coexist
+/// with the ordinary direct scrutinee of that origin, so any occurrence-global
+/// projection marks the ordinary direct predecessor checked too.
+///
+/// ⛔ Compiler-path metadata only. It is **not** a field in the runtime word,
+/// not a carrier lane, and not a runtime discriminator — nothing here reaches
+/// the emitted CFG.
+#[derive(Clone)]
+struct RoutedAnswer {
+    value: LoweringOperand,
+    route: SourceComputationalAnswerRoute,
+}
+
+impl RoutedAnswer {
+    /// Ordinary source evaluation **starts** here.
+    fn direct(value: LoweringOperand) -> Self {
+        Self {
+            value,
+            route: SourceComputationalAnswerRoute::DirectScrutinee,
+        }
+    }
+
+    /// An exact producer **raises** it.
+    ///
+    /// ⛔ There are exactly two callers of this and there must not be a third
+    /// without a ruling: the exact selecting recursor-layer path, and the
+    /// result of an actually claimed and emitted continuation-specialization
+    /// call. A static-worker call, a raw unit call, an ordinary expression
+    /// result, or a merely matching continuation origin is **not** an exact
+    /// producer.
+    fn checked(value: LoweringOperand) -> Self {
+        Self {
+            value,
+            route: SourceComputationalAnswerRoute::CheckedSelectedRecursor,
+        }
+    }
+
+    /// Raise a frame's starting route with this predecessor's, never lower it.
+    ///
+    /// ⛔ The existing `SourceContinuation::ComputationalMatchScrutinee` field
+    /// stays the recursor-layer producer's authority, but it is **not the sole
+    /// authority** and must not overwrite a checked route carried in by an
+    /// exact call result. That asymmetry is why this is a join and not an
+    /// assignment.
+    fn raise(self, existing: SourceComputationalAnswerRoute) -> SourceComputationalAnswerRoute {
+        match (self.route, existing) {
+            (SourceComputationalAnswerRoute::CheckedSelectedRecursor, _)
+            | (_, SourceComputationalAnswerRoute::CheckedSelectedRecursor) => {
+                SourceComputationalAnswerRoute::CheckedSelectedRecursor
+            }
+            _ => SourceComputationalAnswerRoute::DirectScrutinee,
+        }
+    }
+}
 impl SourceComputationalAnswerRoute {
     fn for_recursor_layer(layer: &ComputationalRecursorLayer) -> Self {
         if layer.checked_frame_id.is_some()

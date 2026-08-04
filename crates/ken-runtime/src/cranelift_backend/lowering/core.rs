@@ -1084,7 +1084,7 @@ impl<'a> Lowering<'a> {
             source_selected_cursor: active.source_selected_cursor,
             selected_scope: active.selected_scope,
         });
-        self.lower_computational_match_value_composed(builder, value, &[*head, successor])
+        self.lower_computational_match_value_composed(builder, RoutedAnswer::direct(value), &[*head, successor])
     }
 
     /// ⛔⛔ **`AC-C4` clause 3 — a carried residual is a transferred VALUE, never
@@ -1159,14 +1159,14 @@ impl<'a> Lowering<'a> {
                     self.call_declared_recursive_position_unit(builder, body, &inputs, None)?;
                 return self.lower_computational_match_value_composed(
                     builder,
-                    returned,
+                    RoutedAnswer::direct(returned),
                     outer_eliminators,
                 );
             }
             Self::reject_carried_residual_arguments(args.len())?;
             return self.lower_computational_match_value_composed(
                 builder,
-                LoweringOperand::Carried(*word),
+                RoutedAnswer::direct(LoweringOperand::Carried(*word)),
                 outer_eliminators,
             );
         }
@@ -1470,7 +1470,7 @@ impl<'a> Lowering<'a> {
                                     let returned = returned?;
                                     return self.lower_computational_match_value_composed(
                                         builder,
-                                        returned,
+                                        RoutedAnswer::direct(returned),
                                         eliminators,
                                     );
                                 }
@@ -1640,7 +1640,7 @@ impl<'a> Lowering<'a> {
                                 )?;
                                 self.lower_computational_match_value_composed(
                                     builder,
-                                    returned,
+                                    RoutedAnswer::direct(returned),
                                     eliminators,
                                 )
                             }
@@ -1725,14 +1725,14 @@ impl<'a> Lowering<'a> {
                                     )
                                     .and_then(|value| {
                                         self.lower_computational_match_value_composed(
-                                            builder, value, &composed,
+                                            builder, RoutedAnswer::direct(value), &composed,
                                         )
                                     });
                                 self.leave_oriented_semantic_region(installed.checked);
                                 let returned = returned?;
                                 return self.lower_computational_match_value_composed(
                                     builder,
-                                    returned,
+                                    RoutedAnswer::direct(returned),
                                     eliminators,
                                 );
                             }
@@ -1740,14 +1740,14 @@ impl<'a> Lowering<'a> {
                             self.enter_oriented_semantic_region(installed.checked);
                             let returned = self.lower_computational_match_value_composed(
                                 builder,
-                                LoweringOperand::Carried(word),
+                                RoutedAnswer::direct(LoweringOperand::Carried(word)),
                                 &composed,
                             );
                             self.leave_oriented_semantic_region(installed.checked);
                             let returned = returned?;
                             return self.lower_computational_match_value_composed(
                                 builder,
-                                returned,
+                                RoutedAnswer::direct(returned),
                                 eliminators,
                             );
                         }
@@ -1770,7 +1770,7 @@ impl<'a> Lowering<'a> {
                             let returned = returned?;
                             return self.lower_computational_match_value_composed(
                                 builder,
-                                returned,
+                                RoutedAnswer::direct(returned),
                                 eliminators,
                             );
                         }
@@ -1841,7 +1841,7 @@ impl<'a> Lowering<'a> {
                                     None,
                                 )?;
                                 self.lower_computational_match_value_composed(
-                                    builder, returned, &composed,
+                                    builder, RoutedAnswer::direct(returned), &composed,
                                 )
                             }
                         };
@@ -1849,7 +1849,7 @@ impl<'a> Lowering<'a> {
                         let returned = returned?;
                         self.lower_computational_match_value_composed(
                             builder,
-                            returned,
+                            RoutedAnswer::direct(returned),
                             eliminators,
                         )
                     }
@@ -2134,7 +2134,7 @@ impl<'a> Lowering<'a> {
                 // carrier and the identity-erasing join has not run. This is
                 // the seat where the four-field selector's operands all exist
                 // and where the exact token is claimed at most once.
-                let mut continuation_result: Option<LoweringOperand> = None;
+                let mut continuation_result: Option<RoutedAnswer> = None;
                 if let Some((frame_origin, case_index, recursive_positions)) =
                     selected_computational.as_ref()
                 {
@@ -2194,7 +2194,11 @@ impl<'a> Lowering<'a> {
                         args: specialized_operands_at(&lowered_args, "a constructor argument")?,
                     })
                 };
-                let produced = continuation_result.unwrap_or(produced);
+                // `D6a` upstream half -- ordinary evaluation STARTS direct and
+                // the exact producer RAISES it. ⛔ Not a default written at the
+                // consumer: a site that hard-codes `DirectScrutinee` on a path an
+                // exact call result reaches would erase the fact being transported.
+                let produced = continuation_result.unwrap_or_else(|| RoutedAnswer::direct(produced));
                 self.lower_computational_match_value_composed(builder, produced, eliminators)
             }
             RuntimeExpr::Match {
@@ -2592,7 +2596,7 @@ impl<'a> Lowering<'a> {
                 // included — the producer-side twin of the source machine's
                 // fallback arm.
                 let value = self.lower_expr(builder, occurrence, producer_env)?;
-                self.lower_computational_match_value_composed(builder, value, eliminators)
+                self.lower_computational_match_value_composed(builder, RoutedAnswer::direct(value), eliminators)
             }
         }
     }
@@ -2600,9 +2604,11 @@ impl<'a> Lowering<'a> {
     fn lower_computational_match_value_composed(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        scrutinee: LoweringOperand,
+        scrutinee: RoutedAnswer,
         eliminators: &[EliminatorFrame<'_>],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let incoming_route = scrutinee.route;
+        let scrutinee = scrutinee.value;
         let Some(eliminator) = eliminators.first().copied() else {
             return Err(unsupported(
                 "ComputationalMatch",
@@ -2633,7 +2639,14 @@ impl<'a> Lowering<'a> {
         // route. ⛔ The phase is classified with no wildcard.
         if let LoweringOperand::Carried(word) = scrutinee {
             return match eliminator {
-                EliminatorFrame::Computational(frame) => {
+                EliminatorFrame::Computational(mut frame) => {
+                    // `D6a` -- the predecessor's route RAISES the frame's, and
+                    // never lowers it. The frame's own field stays the
+                    // recursor-layer producer's authority; this is the call-result
+                    // producer's, and the two join.
+                    frame.answer_route =
+                        RoutedAnswer { value: LoweringOperand::Carried(word), route: incoming_route }
+                            .raise(frame.answer_route);
                     self.lower_carried_computational_match(builder, word, frame, &eliminators[1..])
                 }
                 // ── ⛔ DEFERRED, and named rather than absorbed ────────────
@@ -3801,7 +3814,7 @@ impl<'a> Lowering<'a> {
                                 let mut prefix = edge.target.terminal_active_prefix;
                                 prefix.push(EliminatorFrame::InvocationReturn);
                                 self.lower_computational_match_value_composed(
-                                    builder, value, &prefix,
+                                    builder, RoutedAnswer::direct(value), &prefix,
                                 )?
                             };
                             match edge.target.join_plan.representation {
@@ -5873,7 +5886,7 @@ impl<'a> Lowering<'a> {
         recursive_position: usize,
         ordinary_inputs: &[LoweringOperand],
         producer_env: &[LoweringEnvironmentBinding],
-    ) -> Result<Option<LoweringOperand>, CraneliftBackendError> {
+    ) -> Result<Option<RoutedAnswer>, CraneliftBackendError> {
         let alternative = u32::try_from(producer_alternative).map_err(|_| {
             unsupported("ComputationalMatch", "case index exceeds addressable range")
         })?;
@@ -5934,7 +5947,7 @@ impl<'a> Lowering<'a> {
         identity: &ContinuationCallIdentity,
         ordinary_inputs: &[LoweringOperand],
         producer_env: &[LoweringEnvironmentBinding],
-    ) -> Result<LoweringOperand, CraneliftBackendError> {
+    ) -> Result<RoutedAnswer, CraneliftBackendError> {
         let identity = identity.clone();
         let defining = self.defining_unit.ok_or_else(|| {
             unsupported(
@@ -6232,7 +6245,15 @@ impl<'a> Lowering<'a> {
         }
         #[cfg(test)]
         d5a_trace("  CLAIM outcome=CallEmitted".to_string());
-        Ok(returned)
+        // ⭐⭐ `D6a` upstream half — PRODUCER 2, and this is the only place it
+        // fires. The authority is the opaque `ContinuationCallIdentity` this
+        // function consumed: the owner/affine claim has succeeded above and the
+        // emitted callee has been checked against `identity.target()`, so the
+        // value being returned is the result of that exact call and nothing
+        // else. ⛔ Nothing about the origin, the frame, the owner, the tag or
+        // the ABI is consulted, and a static-worker or raw unit call cannot
+        // reach this line at all.
+        Ok(RoutedAnswer::checked(returned))
     }
 
     /// **`RT-DECL-CLOSURE-PORT` `D5a` — the detached-result consumption seat.**
@@ -6479,7 +6500,14 @@ impl<'a> Lowering<'a> {
             .map(|(_, arg)| LoweringOperand::Specialized(arg.clone()))
             .collect::<Vec<_>>();
         let identity = edge.identity.clone();
-        self.claim_and_call_resolved_continuation(builder, &identity, &ordinary, unit_env)
+        // ⚠ `D6a`: this result becomes the defining unit's own result and
+        // therefore crosses a FUNCTION BOUNDARY, which carries only the word.
+        // The route is dropped here on purpose -- the caller re-attests from
+        // its own exact claimed call identity, and a callee that wrote a hidden
+        // route bit is exactly what the transport contract forbids.
+        Ok(self
+            .claim_and_call_resolved_continuation(builder, &identity, &ordinary, unit_env)?
+            .value)
     }
 
     /// **`D3` -- the callee-only consumer.**
@@ -9437,7 +9465,7 @@ impl<'a> Lowering<'a> {
                                     .and_then(|value| {
                                         self.lower_computational_match_value_composed(
                                             builder,
-                                            value,
+                                            RoutedAnswer::direct(value),
                                             &frames,
                                         )
                                     });
@@ -9448,7 +9476,7 @@ impl<'a> Lowering<'a> {
                             self.enter_oriented_semantic_region(installed.checked);
                             let result = self.lower_computational_match_value_composed(
                                 builder,
-                                LoweringOperand::Carried(word),
+                                RoutedAnswer::direct(LoweringOperand::Carried(word)),
                                 &frames,
                             );
                             self.leave_oriented_semantic_region(installed.checked);
@@ -9522,7 +9550,7 @@ impl<'a> Lowering<'a> {
                                 .and_then(|value| {
                                     self.lower_computational_match_value_composed(
                                         builder,
-                                        value,
+                                        RoutedAnswer::direct(value),
                                         &frames,
                                     )
                                 });
