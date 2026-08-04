@@ -11751,3 +11751,111 @@ fn d5_the_closeout_planned_set_comes_from_the_plan_not_from_the_emissions() {
         );
     });
 }
+
+// ── The D6 activation blocker ─────────────────────────────────────────────
+//
+// ⭐⭐ **`D6`'s one production action — retiring `TransparentDeclarationClosure`
+// — moves every closure-bodied transparent declaration onto the functionized
+// lane, and that lane cannot carry a CLOSURE-VALUED CONSTRUCTOR FIELD.**
+//
+// This was measured by performing the retirement and running the suite: the
+// landed end-to-end object-link fixture
+// `nested_post_effect_checked_recursor_reaches_success_and_retains_exact_trap_provenance`
+// went red with *"a closure cannot cross the boundary"*. That fixture is a
+// transparent declaration whose body is a `Closure` and whose
+// `ComputationalMatch` scrutinee is a `Construct` carrying an anonymous
+// `LexicalClosure` as a field — so retiring the residual is exactly what
+// reaches it.
+//
+// ⛔ **Not fixable inside `D6`.** Carrying a closure across a unit boundary as a
+// constructor field is capture transport / a durable carrier lane, and `D6` may
+// add no calls, inputs, capture transport, target projections, validators,
+// fields, capsules or fallbacks. So the retirement is NOT landed, and this
+// control stands in its place: it holds the measurement, stays green, and reds
+// if the capability ever arrives.
+//
+// ⚠ The pair is what makes it a finding rather than an anecdote. Both fixtures
+// are closure-bodied transparent declarations reaching the SAME lane under the
+// witness; they differ in one field.
+
+#[test]
+fn d6_the_functionized_lane_cannot_carry_a_closure_valued_constructor_field() {
+    let declaration = |arg: RuntimeExpr| RuntimeDeclaration {
+        symbol: "decl:fixture::d6::probe".to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["n".to_string()],
+                body: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::D6::Wrap".to_string(),
+                    args: vec![arg],
+                }),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    let plain = declaration(RuntimeExpr::Value(RuntimeValue::Int((1).into())));
+    let closure_field = declaration(RuntimeExpr::LexicalClosure {
+        captures: Vec::new(),
+        params: vec!["r".to_string()],
+        body: Box::new(RuntimeExpr::Value(RuntimeValue::Int((2).into()))),
+    });
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: "decl:fixture::d6::probe".to_string(),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int((5).into()))],
+    };
+    let compile = |decl: &RuntimeDeclaration| {
+        let declarations = BTreeMap::from([("decl:fixture::d6::probe", decl)]);
+        // Both fixtures must reach the SAME lane, or the comparison below is
+        // between two different mechanisms rather than one field.
+        assert_eq!(
+            select_body_emission_authority(&entry, &declarations),
+            BodyEmissionAuthority::FunctionizedUnits,
+            "under the witness both fixtures take the functionized lane"
+        );
+        compile_expr_into_module(
+            new_jit_module().expect("JIT module"),
+            "d6_activation_blocker",
+            Linkage::Local,
+            &entry,
+            &NativeSeedEnvironment::empty(),
+            declarations,
+            None,
+            false,
+            None,
+            None,
+            None,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+    };
+
+    with_transparent_declaration_closure_witness(|| {
+        // The positive control on the harness. ⛔ Without it, the refusal below
+        // is equally consistent with the lane being broken for every
+        // constructor, and the finding would name the wrong thing.
+        compile(&plain).expect(
+            "a closure-bodied declaration whose constructor field is an ordinary \
+             value compiles on the functionized lane — so the lane, the witness \
+             and the declaration shape are all fine",
+        );
+
+        let refusal = compile(&closure_field).expect_err(
+            "SENTINEL FIRED: the functionized lane now carries a closure-valued \
+             constructor field. That was D6's activation blocker, so re-attempt \
+             the retirement of TransparentDeclarationClosure and rerun the whole \
+             D5 population unhooked",
+        );
+        assert!(
+            refusal.contains("a closure cannot cross the boundary"),
+            "the refusal must still be the closure-boundary one this control \
+             names. A DIFFERENT refusal means the blocker moved, and D6's \
+             re-attempt would be planned against a stale diagnosis: {refusal}"
+        );
+    });
+}
