@@ -11889,22 +11889,26 @@ fn a_closure_stored_as_constructor_data_cannot_cross_a_unit_boundary() {
     });
 }
 
-/// **`RT-DECL-CLOSURE-PORT` `D5a` — the localization trace.**
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — the witness compiles, and its checked-IH
+/// marker is consumed at the static-worker call edge exactly once.**
 ///
-/// ⛔⛔ **Outcome-complete, because the previous localization was not.** That one
-/// instrumented only `claim_and_call_continuation`'s two early returns and read
-/// zero hits as "the helper is never entered" — but a SUCCESSFUL claim reaches
-/// neither early return, so zero was equally consistent with the claim
-/// succeeding. It was a negative check with no positive control
-/// ([[a-negative-check-passes-for-any-reason-so-it-needs-a-positive-control]]).
+/// ⭐⭐ **This row was a localization scaffold asserting `outcome.is_err()`, and
+/// it went red the moment the route became positive — which is exactly what it
+/// was for.** It is now a real acceptance row: the `px8tr_nested_post_effect`
+/// object emits, and the marker's ordered event log shows the consumption
+/// happening **before** the worker call instruction exists.
 ///
-/// Every instrumented path now records a terminal outcome, so silence in the
-/// trace means the site was not reached and nothing else. ⚠ This test makes no
-/// mechanism change and classifies nothing: it prints, and asserts only that the
-/// fixture still refuses.
+/// **Promise class: durable invariant.** The subject is a relation — consumption
+/// precedes emission, with the identities the checked plan names. Adding
+/// specializations, fields or inputs keeps it green; consuming on the returned
+/// word, consuming twice, or consuming under a different template reds it.
+///
+/// ⚠ The census and trace are still printed. They cost nothing on a green run
+/// and are the first thing anyone wants when this goes red.
 #[test]
-fn d5a_localization_trace_of_the_landed_object_fixture() {
+fn d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_worker_call() {
     reset_d5a_trace();
+    reset_d5a_marker_events();
     let outcome = with_transparent_declaration_closure_witness(|| {
         crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
             "d5a_localization",
@@ -12084,17 +12088,64 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
     for entry in &trace {
         eprintln!("{entry}");
     }
+    let events = d5a_marker_events();
     eprintln!("=== outcome: {outcome:?} ===");
-    // ⚠ The trace is evidence to be read, not a pin: turning its lines into
-    // expectations would freeze a mechanism that is about to change.
-    assert!(
-        outcome.is_err(),
-        "the landed object fixture still refuses under the witness; if it now \
-         compiles the localization is moot and D5a should be re-scoped"
+    eprintln!("=== D5a MARKER EVENTS ({}) ===", events.len());
+    for event in &events {
+        eprintln!("  {event:?}");
+    }
+    outcome.expect(
+        "the landed object fixture emits. Once the checked-IH marker is consumed \
+         at the static-worker call edge there is no remaining refusal on this \
+         route, and a failure here is a regression in the ported route rather \
+         than an unfinished checkpoint",
     );
-    // ⭐ The ONE exception, and it exists to close a specific gap rather than to
-    // pin the trace.
+
+    // The ordered claim: every consumption sits at a call edge, immediately
+    // ahead of the instruction it discharges.
     //
+    // ⚠ Stated in this direction and NOT the converse. An ordinary static worker
+    // call carries no marker and must stay untouched, so a `WorkerCallEmitted`
+    // with no consumption before it is lawful — see
+    // `d5a_an_unmarked_static_worker_call_is_untouched_by_the_marker_seam`.
+    let consumptions = events
+        .iter()
+        .enumerate()
+        .filter(|(_, event)| matches!(event, D5aMarkerEvent::Consumed { .. }))
+        .collect::<Vec<_>>();
+    assert!(
+        !consumptions.is_empty(),
+        "the witness must consume its checked-IH marker at the static-worker \
+         call edge; an empty log means the seam was never reached and every \
+         claim below would be vacuous. Events: {events:?}"
+    );
+    for (index, event) in &consumptions {
+        assert_eq!(
+            **event,
+            D5aMarkerEvent::Consumed {
+                call_template_id: 100,
+                slot_template_id: 200,
+                binder_index: 0,
+                arity: 1,
+            },
+            "every consumption must be under the exact templates the fixture's \
+             checked plan issues — call 100 naming slot 200, whose method binder \
+             ordinal is 0, at arity 1"
+        );
+        assert!(
+            matches!(
+                events.get(index + 1),
+                Some(D5aMarkerEvent::WorkerCallEmitted { .. })
+            ),
+            "the marker denotes the APPLICATION, so the very next event after \
+             consuming it is the call instruction it discharges. Anything else \
+             means it was consumed somewhere other than the call edge — and \
+             consuming it AFTER the call would mean reading it off the returned \
+             boundary word, the carrier decode the ruling forbids. Events: \
+             {events:?}"
+        );
+    }
+
     // **MEASURED** by `continuation_case_binder_run_*` below: the binder-run law
     // produces the ruled order for the witness's exact coordinates.
     // **CLAIMED** by this checkpoint: the specialization body is *built* in that
@@ -12102,10 +12153,11 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
     // controls call the plan function directly, so every one of them stays green
     // if `define_continuation_bodies` stops calling it.
     //
-    // This closes that gap and nothing else — it reads the environment the
-    // definition actually assembled, on the real witness. ⚠ It is coupled to the
-    // trace's format, so when the trace is retired the consumption claim needs a
-    // replacement rather than a silent deletion.
+    // ⭐ The `binder_index: 0` above is now an INDEPENDENT second witness for the
+    // same claim: the checked plan carries `recursive_position` (1) and
+    // `method_binder_ordinal` (0) as separate fields, so a lowering that
+    // conflated them would disagree with the plan and refuse. This assertion
+    // reads the environment the definition actually assembled.
     assert!(
         trace.iter().any(|entry| entry
             .contains("env=[StaticWorker, Carried, Carried, Carried]")),
@@ -12115,6 +12167,257 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
          original `env=[StaticWorker, Carried, Carried]` omitted the field \
          entirely, and `env=[Carried, StaticWorker, Carried, Carried]` read \
          `recursive_position` as a lexical index. Trace: {trace:?}"
+    );
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — suppressing the consumption restores the
+/// pending refusal.**
+///
+/// ⭐ The claim under test is that the positive route **depends on** the
+/// consumption, not merely that it coexists with one. Without this row, the
+/// green acceptance above is equally consistent with the seam being inert and
+/// something else having fixed the route.
+///
+/// The mutation withholds only the consumption; the call is still emitted,
+/// lawfully and unchanged. So this also states *where* the refusal lives: at
+/// closeout, on a marker nobody discharged — not at the consumer.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_suppressing_the_marker_consumption_restores_the_pending_closeout_refusal() {
+    reset_d5a_marker_events();
+    let refusal = with_transparent_declaration_closure_witness(|| {
+        with_d5a_marker_mutation(D5aMarkerMutation::SuppressConsumption, || {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                "d5a_suppressed",
+                false,
+            )
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"))
+            .expect_err(
+                "with the consumption withheld the marker is still pending at \
+                 closeout, so the ported route must refuse. A compile here means \
+                 the consumption is inert and the acceptance row is green for \
+                 the wrong reason",
+            )
+        })
+    });
+    assert!(
+        refusal.contains("a checked computational-IH marker is a specialized-only surface"),
+        "a PENDING marker must keep the specialized-template path and its \
+         fail-closed carried refusal, unchanged. A different refusal would mean \
+         this row stopped measuring the closeout arm: {refusal}"
+    );
+    let events = d5a_marker_events();
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, D5aMarkerEvent::Consumed { .. })),
+        "the mutation must withhold the consumption and nothing else: {events:?}"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, D5aMarkerEvent::WorkerCallEmitted { .. })),
+        "the call itself must still be emitted. If the mutation also suppressed \
+         the call, the refusal above would be about a route that never ran: \
+         {events:?}"
+    );
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — every identity the consumer requires refuses
+/// BEFORE the worker call is emitted.**
+///
+/// ⭐ The mutations land on the **checked plan**, not on the consumer. That is
+/// the discriminating choice: perturbing the consumer would ask whether it
+/// agrees with itself, while perturbing the plan asks whether it is really
+/// reading the checked templates it claims to.
+///
+/// **Promise class: durable invariant.** Each row asserts that one specific
+/// disagreement between the plan and the emitted application is refused, and
+/// names its own message so a later refusal cannot stand in for it.
+#[test]
+fn d5a_a_plan_the_application_disagrees_with_refuses_before_the_worker_call() {
+    // ⛔ Each mutation RE-SEALS the template's binding fingerprint, so the plan
+    // it produces is internally consistent and merely disagrees with the
+    // program. Without that, every row is refused by the plan's own ingest
+    // check ("computational IH call binding is inconsistent") and is green for
+    // a reason that has nothing to do with this seam — measured, not assumed.
+    fn reseal(plan: &mut crate::OrientedSubcontinuationPlanV1) {
+        for call in &mut plan.computational_ih_calls {
+            call.occurrence_binding_fingerprint = 0;
+            call.occurrence_binding_fingerprint =
+                crate::compiler_private_computational_ih_call_binding_fingerprint(call);
+        }
+        for slot in &mut plan.computational_ih_slots {
+            slot.occurrence_binding_fingerprint = 0;
+            slot.occurrence_binding_fingerprint =
+                crate::compiler_private_computational_ih_slot_binding_fingerprint(slot);
+        }
+    }
+    // (label, mutation, the refusal it must produce)
+    #[allow(clippy::type_complexity)]
+    let rows: Vec<(
+        &str,
+        Box<dyn Fn(&mut crate::OrientedSubcontinuationPlanV1)>,
+        &str,
+    )> = vec![
+        (
+            "stale arity",
+            Box::new(|plan: &mut crate::OrientedSubcontinuationPlanV1| {
+                plan.computational_ih_calls[0].arity = 2;
+                reseal(plan);
+            }),
+            "names arity 2",
+        ),
+        // ⚠ **MEASURED**: this row is refused by the plan's own ingest
+        // cross-reference check, *"computational IH call names a stale slot
+        // template"* — not by the consumer's slot lookup. **THE GAP**: the
+        // consumer's `ok_or_else` on that lookup is therefore unreachable
+        // through any plan a compile will accept, and no control here reds it.
+        // It is kept because the ruling names slot resolution as one of the
+        // three identities, and because the ingest check is a different
+        // authority that a later refactor could move — but it is defensive,
+        // and this row measures ingest rather than the consumer. Stated so
+        // nobody reads it as evidence for the consumer.
+        (
+            "a slot the plan does not hold",
+            Box::new(|plan: &mut crate::OrientedSubcontinuationPlanV1| {
+                plan.computational_ih_calls[0].slot_template_id = 999;
+                reseal(plan);
+            }),
+            "computational IH call names a stale slot template",
+        ),
+        (
+            "a method binder ordinal the call does not read",
+            Box::new(|plan: &mut crate::OrientedSubcontinuationPlanV1| {
+                plan.computational_ih_slots[0].method_binder_ordinal = 1;
+                reseal(plan);
+            }),
+            "seats its method binder at ordinal 1",
+        ),
+    ];
+    for (label, mutate, expected) in rows {
+        reset_d5a_marker_events();
+        let refusal = with_transparent_declaration_closure_witness(|| {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object_with_plan(
+                "d5a_plan_mutation",
+                false,
+                |plan| mutate(plan),
+            )
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"))
+            .err()
+            .unwrap_or_else(|| {
+                panic!(
+                    "{label}: the emitted application no longer matches its checked \
+                     template, so it must be refused. A compile means the consumer \
+                     is not reading that field at all"
+                )
+            })
+        });
+        assert!(
+            refusal.contains(expected),
+            "{label}: must get this seam's OWN refusal, not a later one it \
+             happens to also trip. Otherwise the row names a check that never \
+             ran: {refusal}"
+        );
+        let events = d5a_marker_events();
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, D5aMarkerEvent::Consumed { .. })),
+            "{label}: a rejected consumption must leave the marker pending, never \
+             discharge it: {events:?}"
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|event| matches!(event, D5aMarkerEvent::WorkerCallEmitted { .. })),
+            "{label}: the refusal must land BEFORE the call instruction is \
+             written. An emitted call means a mis-identified application was \
+             already committed: {events:?}"
+        );
+    }
+
+    // ⚠ The consumer's OWN arity guard, made reachable.
+    //
+    // On this witness the marker wraps the very call that reaches the consumer,
+    // so entry and the consumer read the same two numbers and entry always
+    // refuses first — the "stale arity" row above is measuring ENTRY. Relaxing
+    // entry is what lets the consumer's guard be red rather than merely
+    // asserted; it is ruled separately and is load-bearing wherever a marker's
+    // wrapped call is not the one that reaches a static worker.
+    reset_d5a_marker_events();
+    let refusal = with_transparent_declaration_closure_witness(|| {
+        with_d5a_marker_mutation(D5aMarkerMutation::RelaxEntryArity, || {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object_with_plan(
+                "d5a_consumer_arity",
+                false,
+                |plan| {
+                    plan.computational_ih_calls[0].arity = 2;
+                    for call in &mut plan.computational_ih_calls {
+                        call.occurrence_binding_fingerprint = 0;
+                        call.occurrence_binding_fingerprint =
+                            crate::compiler_private_computational_ih_call_binding_fingerprint(call);
+                    }
+                },
+            )
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"))
+            .expect_err("the consumer's own arity guard must refuse the application")
+        })
+    });
+    assert!(
+        refusal.contains("but the static worker call applies 1 arguments"),
+        "with entry relaxed, the refusal must be the CONSUMER's arity guard — \
+         entry's message names the marker's wrapped call instead: {refusal}"
+    );
+    assert!(
+        !d5a_marker_events()
+            .iter()
+            .any(|event| matches!(event, D5aMarkerEvent::WorkerCallEmitted { .. })),
+        "the consumer's arity guard must also refuse before emission"
+    );
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — an ordinary static worker call is untouched
+/// by the marker seam.**
+///
+/// ⭐ The whole seam is keyed on a *pending* marker, so the claim that matters
+/// for everything already landed is a negative one: a program with no checked
+/// plan at all reaches the same static-worker call and consumes nothing. Without
+/// this row, "the consumer only fires under a marker" is an inference from
+/// reading the code rather than a measurement.
+///
+/// The witness is the existing `RT-WORKER-BIND` one, which carries zero
+/// continuation machinery.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_an_unmarked_static_worker_call_is_untouched_by_the_marker_seam() {
+    reset_d5a_marker_events();
+    let compiled = crate::cranelift_backend::artifact::compile_expr_for_lowering_tests(
+        &super::constructors::static_worker_witness(true),
+        &NativeSeedEnvironment::empty(),
+    )
+    .expect("the ordinary static-worker witness compiles, exactly as it did before");
+    compiled.run(None).expect("and runs");
+    let events = d5a_marker_events();
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, D5aMarkerEvent::WorkerCallEmitted { .. })),
+        "the witness must actually reach the static-worker call edge, or this \
+         row proves nothing about it: {events:?}"
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, D5aMarkerEvent::Consumed { .. })),
+        "an unmarked call must consume nothing. A consumption here would mean \
+         the seam fires on programs that never had a checked-IH marker: \
+         {events:?}"
     );
 }
 

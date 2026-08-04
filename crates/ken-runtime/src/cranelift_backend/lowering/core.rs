@@ -1433,7 +1433,7 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
-                self.enter_checked_computational_ih_invocation(*call_template_id)?;
+                self.enter_checked_computational_ih_invocation(*call_template_id, body)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let value = self.lower_computational_producer_expr(
                     builder,
@@ -3596,7 +3596,7 @@ impl<'a> Lowering<'a> {
                         body,
                         ..
                     } => {
-                        self.enter_checked_computational_ih_invocation(call_template_id)?;
+                        self.enter_checked_computational_ih_invocation(call_template_id, &body)?;
                         control.continuation =
                             SourceContinuation::CheckedComputationalIHInvocationReturn {
                                 call_template_id,
@@ -6541,14 +6541,21 @@ impl<'a> Lowering<'a> {
             ));
         }
 
-        self.call_declared_unit_target(
+        let emitted = self.call_declared_unit_target(
             builder,
             target,
             &inputs,
             #[cfg(test)]
             None,
-        )
-        .map(|(operand, _inst)| operand)
+        )?;
+        // `D5a` -- the emission half of the marker's ordered log. ⛔ Recorded
+        // AFTER the instruction exists, so "consumed before emitted" is a fact
+        // about the log's order rather than about where the line was written.
+        #[cfg(test)]
+        record_d5a_marker_event(D5aMarkerEvent::WorkerCallEmitted {
+            body_origin: worker.body_origin,
+        });
+        Ok(emitted.0)
     }
 
     /// **`D2` -- the binder-lowering helper.** Lowers a `Let`'s bound value
@@ -8361,7 +8368,7 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
-                self.enter_checked_computational_ih_invocation(*call_template_id)?;
+                self.enter_checked_computational_ih_invocation(*call_template_id, body)?;
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let value = self.lower_expr(builder, body, env)?;
                 self.finish_checked_computational_ih_marker(value)
@@ -8954,6 +8961,15 @@ impl<'a> Lowering<'a> {
                         env.get(*index as usize)
                     {
                         let worker = worker.clone();
+                        // **`D5a` — the checked-IH marker is consumed HERE, on
+                        // the application, before a single instruction of it is
+                        // emitted.** Every identity is cross-checked against the
+                        // checked plan first; a refusal leaves the marker
+                        // pending so closeout still fails closed.
+                        self.consume_checked_ih_marker_at_static_worker_call(
+                            u64::from(*index),
+                            args.len(),
+                        )?;
                         return self.call_static_worker(
                             builder,
                             &worker,

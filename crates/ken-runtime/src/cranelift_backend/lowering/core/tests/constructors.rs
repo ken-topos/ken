@@ -5273,7 +5273,7 @@ fn static_worker_call_rejects_undeclared_target() {
 /// The carried capture is what routes the binder to `StaticWorker`; the call
 /// through the exact `Var(0)` callee is what consumes it.
 #[cfg(test)]
-fn static_worker_witness(capture_first: bool) -> RuntimeExpr {
+pub(super) fn static_worker_witness(capture_first: bool) -> RuntimeExpr {
     let carried = RuntimeExpr::Var(0);
     let constant = RuntimeExpr::Value(RuntimeValue::Int(3.into()));
     let captures = if capture_first {
