@@ -1424,7 +1424,7 @@ pub(super) struct ContinuationClaimLedger {
     resolved: BTreeMap<ContinuationCallIdentity, FuncId>,
     /// `None` until claimed; then the exact unit that claimed it, so owner
     /// agreement is a recorded fact rather than an inference.
-    claims: BTreeMap<ContinuationCallIdentity, Option<PredeclaredFunctionId>>,
+    claims: BTreeMap<ContinuationCallIdentity, Option<ContinuationEmissionOwner>>,
     /// **`4b`** -- the PLANNED set, read straight off the plan's own causal call
     /// projection at open time and never derived from [`Self::resolved`].
     planned: BTreeSet<ContinuationCallIdentity>,
@@ -1524,7 +1524,7 @@ impl ContinuationClaimLedger {
     /// later, at the exact producer occurrence.
     pub(super) fn declare_owned_in_func<M: Module>(
         &self,
-        defining: PredeclaredFunctionId,
+        defining: ContinuationEmissionOwner,
         module: &mut M,
         func: &mut Function,
         plan: &StaticTransitionPlan<'_>,
@@ -1537,7 +1537,7 @@ impl ContinuationClaimLedger {
         let units = plan.continuation_units()?;
         self.resolved
             .iter()
-            .filter(|(identity, _)| identity.producer_owner() == defining)
+            .filter(|(identity, _)| identity.emission_owner() == defining)
             .map(|(identity, target)| {
                 let unit = units
                     .iter()
@@ -1585,11 +1585,14 @@ impl ContinuationClaimLedger {
     pub(super) fn claim_exact(
         &mut self,
         identity: &ContinuationCallIdentity,
-        defining: PredeclaredFunctionId,
+        defining: ContinuationEmissionOwner,
     ) -> Result<FuncId, CraneliftBackendError> {
-        if identity.producer_owner() != defining {
+        if identity.emission_owner() != defining {
             return Err(backend_module(
-                "a continuation call token was claimed by a unit that does not own it".to_string(),
+                "a continuation call token was claimed by a context that is not its emission \
+                 owner; note this compares the EMISSION owner, not the raw source-occurrence \
+                 provenance owner beside it"
+                    .to_string(),
             ));
         }
         let consumed = self.claims.get_mut(identity).ok_or_else(|| {
@@ -1659,7 +1662,7 @@ impl ContinuationClaimLedger {
         // from ownership. A wrong owner under today's structure does not reach
         // here -- it surfaces as a leftover claim above.
         for (identity, consumed) in &self.claims {
-            if *consumed != Some(identity.producer_owner()) {
+            if *consumed != Some(identity.emission_owner()) {
                 return Err(backend_module(
                     "a continuation call token was claimed by a unit that does not own it"
                         .to_string(),
@@ -1836,7 +1839,7 @@ fn define_unit_body<M: Module>(
     // `Function`; never passed across functions.
     function_local.continuation_calls = match compiler.continuation_claims.as_ref() {
         Some(ledger) => ledger.declare_owned_in_func(
-            unit.function,
+            ContinuationEmissionOwner::Predeclared(unit.function),
             module,
             &mut func,
             &compiler.static_transition_plan,
@@ -1857,7 +1860,9 @@ fn define_unit_body<M: Module>(
     // consumer, or reads an owner back off anything it emitted.
     let result_edges = compiler
         .static_transition_plan
-        .continuation_result_edges_owned_by(unit.function)?;
+        .continuation_result_edges_owned_by(ContinuationEmissionOwner::Predeclared(
+            unit.function,
+        ))?;
     // `D3`: the owner operand for the claim, supplied independently of any
     // token -- this is the ordinary producer unit currently being defined.
     #[cfg(test)]
@@ -1866,6 +1871,9 @@ fn define_unit_body<M: Module>(
         unit.function, unit.origin
     ));
     compiler.defining_unit = Some(unit.function);
+    // `D5a`: an ordinary predeclared unit body emits as itself.
+    compiler.defining_emission_owner =
+        Some(ContinuationEmissionOwner::Predeclared(unit.function));
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
     // `RT-DECL-CLOSURE-PORT` `D5` — the causal control on the ABI half.

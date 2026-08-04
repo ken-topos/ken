@@ -832,6 +832,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
         continuation_claims: None,
         checked_call_ledger: None,
         defining_unit: None,
+        defining_emission_owner: None,
         seed_env,
         declarations,
         static_transition_plan,
@@ -5907,6 +5908,18 @@ impl<'a> Lowering<'a> {
                 "a continuation claim was reached with no unit currently being defined",
             )
         })?;
+        // `D5a` — the EMISSION owner of the context currently executing, which
+        // is a different question from which predeclared unit's body this is.
+        // ⛔ Not derived from `defining`: a generated specialization context
+        // lowers a raw body and would otherwise be mistaken for that raw body's
+        // predeclared owner, which is the whole conflation being removed.
+        let defining_owner = self.defining_emission_owner.ok_or_else(|| {
+            unsupported(
+                "ContinuationSpecialization",
+                "a continuation claim was reached with no emission owner bound for the context \
+                 currently being defined",
+            )
+        })?;
         // The EXACT target, resolved first.
         let exact_target = self
             .function_local
@@ -5985,8 +5998,8 @@ impl<'a> Lowering<'a> {
             self.static_transition_plan
                 .emittable_units()?
                 .iter()
-                .map(|unit| unit.function())
-                .find(|owner| *owner != defining)
+                .map(|unit| ContinuationEmissionOwner::Predeclared(unit.function()))
+                .find(|owner| *owner != defining_owner)
                 .ok_or_else(|| {
                     unsupported(
                         "ContinuationSpecialization",
@@ -5996,10 +6009,10 @@ impl<'a> Lowering<'a> {
                     )
                 })?
         } else {
-            defining
+            defining_owner
         };
         #[cfg(not(test))]
-        let claimed_owner = defining;
+        let claimed_owner = defining_owner;
         let ledger = self.continuation_claims.as_mut().ok_or_else(|| {
             unsupported(
                 "ContinuationSpecialization",
