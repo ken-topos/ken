@@ -7210,7 +7210,14 @@ impl<'src> StaticTransitionPlan<'src> {
     /// agrees with every prefix of the planned population and passes. A planner
     /// tree with two `ResourceKind` alternatives then accepts an emitter
     /// carrying only alternative 0, and the missing allocation is invisible
-    /// until a whole-pass `image(R) = P` closeout that does not exist yet.
+    /// everywhere.
+    ///
+    /// ⛔ **Not "invisible until a later closeout" — the earlier text said
+    /// that, and it was wrong.** The whole-pass close states `image(R) ⊆ P`,
+    /// not equality, because `P` authorizes rather than obliges and an unused
+    /// record is lawful. So the ledger cannot distinguish a truncated emitter
+    /// from a record this compilation simply had no body for, and the exact
+    /// cardinality can never be deferred to it.
     ///
     /// ⛔ So the count comes from HERE and never from the emitter.
     ///
@@ -16898,10 +16905,15 @@ mod tests {
     /// the previous spelling did. It iterated the emitter's own vector and
     /// resolved each position, which rejects an EXTRA alternative (its path
     /// does not exist) but accepts a MISSING final one, because a prefix agrees
-    /// with every position it has. The empty vector agreed with everything. A
-    /// whole-pass `image(R) = P` closeout would eventually surface the unused
-    /// records, but that pass does not exist yet and a construction boundary
-    /// cannot borrow the equality it claims to establish.
+    /// with every position it has. The empty vector agreed with everything.
+    ///
+    /// ⛔ The gap statement that stood here added that a whole-pass
+    /// `image(R) = P` closeout *"would eventually surface the unused records"*.
+    /// It would not, and there is no such closeout: `P` is an authorization
+    /// population, the whole-pass close states `image(R) ⊆ P`, and a planned
+    /// record no event related is lawful. A truncated emitter and a lawfully
+    /// unused record are the same shape at the ledger, so this boundary has to
+    /// establish the equality itself rather than borrow it from a later pass.
     ///
     /// ⚠ The refusal on an empty population is what makes the count usable: a
     /// zero-length expectation would make the emitter's own emptiness agree.

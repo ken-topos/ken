@@ -1869,7 +1869,7 @@ struct Lowering<'a> {
     /// different question: those name who the planner says owns the emission,
     /// this names the module definition the events belong to. One
     /// `PredeclaredFunctionId` can be built as more than one `FuncId` body.
-    defining_function_id: Option<u32>,
+    defining_function_id: Option<FuncId>,
     /// **`RT-DECL-CLOSURE-PORT` `D7`** — the aggregate-allocation event ledger,
     /// held across the whole emission pass.
     ///
@@ -3911,7 +3911,12 @@ impl<'a> Lowering<'a> {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
                 let ok = self.emit_carrier_transfer(builder, origin, ok)?;
                 let error = self.emit_carrier_transfer(builder, origin, error)?;
-                let word = self.emit_carrier_alloc(builder, tag, class, 2)?;
+                let word = self.emit_carrier_alloc(
+                    builder,
+                    CarrierAllocationRequest::NonAggregate { tag },
+                    class,
+                    2,
+                )?;
                 let success = if builder.func.dfg.value_type(*success) == types::I64 {
                     *success
                 } else {
@@ -3927,25 +3932,45 @@ impl<'a> Lowering<'a> {
             }
             Lowered::ResourceToken { value: payload } => {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
-                let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
+                let word = self.emit_carrier_alloc(
+                    builder,
+                    CarrierAllocationRequest::NonAggregate { tag },
+                    class,
+                    0,
+                )?;
                 self.emit_carrier_store_scalar(builder, word, *payload)?;
                 Ok(word)
             }
             Lowered::CapabilityToken { value: payload } => {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
-                let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
+                let word = self.emit_carrier_alloc(
+                    builder,
+                    CarrierAllocationRequest::NonAggregate { tag },
+                    class,
+                    0,
+                )?;
                 self.emit_carrier_store_scalar(builder, word, *payload)?;
                 Ok(word)
             }
             Lowered::BorrowedNativeValue { pointer } => {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
-                let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
+                let word = self.emit_carrier_alloc(
+                    builder,
+                    CarrierAllocationRequest::NonAggregate { tag },
+                    class,
+                    0,
+                )?;
                 self.emit_carrier_store_scalar(builder, word, *pointer)?;
                 Ok(word)
             }
             Lowered::ResponseBytes { pointer, len } => {
                 let (tag, class) = Self::carrier_handle_disposition(value)?;
-                let word = self.emit_carrier_alloc(builder, tag, class, 1)?;
+                let word = self.emit_carrier_alloc(
+                    builder,
+                    CarrierAllocationRequest::NonAggregate { tag },
+                    class,
+                    1,
+                )?;
                 self.emit_carrier_store_scalar(builder, word, *pointer)?;
                 let len = self.emit_carrier_immediate(builder, BoundaryTag::ImmediateInt, *len)?;
                 self.emit_carrier_store_field(builder, word, 0, len)?;
@@ -4208,7 +4233,6 @@ impl<'a> Lowering<'a> {
         &mut self,
         function: cranelift_module::FuncId,
     ) -> Result<(), CraneliftBackendError> {
-        let function = function.as_u32();
         self.defining_function_id = Some(function);
         match self.aggregate_allocations.as_mut() {
             Some(ledger) => ledger.open(function),
@@ -4227,19 +4251,15 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    /// **`D7` — the SOLE checked aggregate-allocation wrapper.**
+    /// **`D7` — ergonomic sugar over a `PlannedAggregate` request.**
     ///
-    /// Every allocation governed by a planned record goes through here, and
-    /// nothing else may call [`Self::emit_carrier_alloc`] for one. The wrapper
-    /// finishes the reconciliation the construction seats began — it resolves
-    /// the record by the occurrence the template carries, cross-checks the
-    /// shape, and takes the LANE from that record rather than from the value in
-    /// hand — then performs the raw allocation and records the event exactly
-    /// once.
-    ///
-    /// ⛔ The event is recorded AFTER the raw allocation, because the result
-    /// `Value` is half the event's identity and does not exist before it. That
-    /// ordering is what makes "one allocation, one pair" checkable at all.
+    /// ⚠ **The governance no longer lives here.** The class/shape agreement,
+    /// the lane derivation and the event-and-relation recording all happen at
+    /// [`Self::emit_carrier_alloc`], because a check that lives in a wrapper
+    /// holds only as long as every future caller remembers to reach for the
+    /// wrapper rather than the raw helper beside it — an obligation nothing
+    /// enforced and nothing measured. This function exists so the construction
+    /// seats read the way they did.
     fn emit_checked_aggregate_alloc(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -4248,45 +4268,101 @@ impl<'a> Lowering<'a> {
         class: BoundaryClass,
         field_count: usize,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
-        let tag = match self
-            .static_transition_plan
-            .aggregate_allocation_at(occurrence, shape)?
-        {
-            PlannedAggregateAllocation::PersistentGround => BoundaryTag::PersistentGround,
-            PlannedAggregateAllocation::InvocationAggregate => BoundaryTag::InvocationAggregate,
-        };
-        let word = self.emit_carrier_alloc(builder, tag, class, field_count)?;
-        // ⚠ Outside the emission pass there is no relation and no declared
-        // function, so there is no event to record. That is not a bypass: a
-        // bare rig emits no artifact, and the relation's laws are about an
-        // artifact's bodies. Inside the pass the FuncId is REQUIRED, and its
-        // absence is a loud failure rather than an unattributed event.
-        let function = self.defining_function_id;
-        if let Some(ledger) = self.aggregate_allocations.as_mut() {
-            let function = function.ok_or_else(|| {
-                backend_module(
-                    "a checked aggregate allocation ran inside the emission pass with no \
-                     declared function open, so its event has no FuncId to be scoped by"
-                        .to_string(),
-                )
-            })?;
-            // ⛔ Event evidence FIRST, then the relation pair. `E` is what
-            // allocated; deriving it from the relation would make `dom(R) = E`
-            // true by construction and the law unstateable.
-            let result = word.word.as_u32();
-            ledger.record_event(function, result)?;
-            ledger.relate(function, result, occurrence)?;
-        }
-        Ok(word)
+        self.emit_carrier_alloc(
+            builder,
+            CarrierAllocationRequest::PlannedAggregate { occurrence, shape },
+            class,
+            field_count,
+        )
     }
 
+    /// Enter one governed allocation into `E`, then into `R`.
+    ///
+    /// ⚠ Outside the emission pass there is no relation and no declared
+    /// function, so there is no event to record. That is not a bypass: a bare
+    /// rig emits no artifact, and the relation's laws are about an artifact's
+    /// bodies. Inside the pass the `FuncId` is REQUIRED, and its absence is a
+    /// loud failure rather than an unattributed event.
+    fn record_governed_allocation(
+        &mut self,
+        result: cranelift_codegen::ir::Value,
+        occurrence: AggregateOccurrenceId,
+    ) -> Result<(), CraneliftBackendError> {
+        let function = self.defining_function_id;
+        let Some(ledger) = self.aggregate_allocations.as_mut() else {
+            return Ok(());
+        };
+        let function = function.ok_or_else(|| {
+            backend_module(
+                "a governed aggregate allocation ran inside the emission pass with no declared \
+                 function open, so its event has no FuncId to be scoped by"
+                    .to_string(),
+            )
+        })?;
+        // ⛔ Event evidence FIRST, then the relation pair. `E` is what
+        // allocated; deriving it from the relation would make `dom(R) = E` true
+        // by construction and the law unstateable.
+        ledger.record_event(function, result)?;
+        ledger.relate(function, result, occurrence)
+    }
+
+    /// **`D7` — THE choke point. Every carrier allocation in the backend is
+    /// this call, and the REQUEST decides whether it is governed.**
+    ///
+    /// ⭐ The two arms are not two spellings of one thing:
+    ///
+    /// | request | class | lane | evidence |
+    /// |---|---|---|---|
+    /// | `NonAggregate` | must NOT be `Constructor`/`Record` | the caller's tag | none |
+    /// | `PlannedAggregate` | must MATCH the shape | `aggregate_allocation_at` | `E` then `R` |
+    ///
+    /// ⛔ Both refusals happen **before the raw `alloc` call**, so a bypass
+    /// cannot allocate and then fail: the arena's allocation count does not
+    /// move and no artifact is ever defined. Refusing afterwards would leave
+    /// the very half-governed state the request exists to make unspellable.
+    ///
+    /// ⛔ The event, by contrast, is recorded AFTER the raw allocation,
+    /// because the result `Value` is half the event's identity and does not
+    /// exist before it. That ordering is what makes "one allocation, one pair"
+    /// checkable at all.
     fn emit_carrier_alloc(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        tag: BoundaryTag,
+        request: CarrierAllocationRequest,
         class: BoundaryClass,
         field_count: usize,
     ) -> Result<CarriedBoundaryWord, CraneliftBackendError> {
+        // ── The request is settled before a single instruction is emitted ──
+        let tag = match request {
+            CarrierAllocationRequest::NonAggregate { tag } => {
+                if matches!(class, BoundaryClass::Constructor | BoundaryClass::Record) {
+                    return Err(backend_module(format!(
+                        "a {class:?} carrier was allocated as non-aggregate, so it would name no \
+                         planned ownership record and enter neither E nor R"
+                    )));
+                }
+                tag
+            }
+            CarrierAllocationRequest::PlannedAggregate { occurrence, shape } => {
+                let expected = CarrierAllocationRequest::aggregate_class(shape);
+                if class != expected {
+                    return Err(backend_module(format!(
+                        "a planned {shape:?} aggregate was allocated at class {class:?} rather \
+                         than {expected:?}"
+                    )));
+                }
+                // ⛔ The LANE is read from the record, never from the caller.
+                match self
+                    .static_transition_plan
+                    .aggregate_allocation_at(occurrence, shape)?
+                {
+                    PlannedAggregateAllocation::PersistentGround => BoundaryTag::PersistentGround,
+                    PlannedAggregateAllocation::InvocationAggregate => {
+                        BoundaryTag::InvocationAggregate
+                    }
+                }
+            }
+        };
         let refs = self.carrier_refs()?;
         let arena = self.carrier_arena()?;
         let pointer_type = builder.func.dfg.value_type(arena);
@@ -4306,9 +4382,13 @@ impl<'a> Lowering<'a> {
             .ins()
             .call(refs.alloc, &[arena, tag, class, count, out]);
         Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
-        Ok(CarriedBoundaryWord {
+        let word = CarriedBoundaryWord {
             word: builder.ins().stack_load(types::I64, slot, 0),
-        })
+        };
+        if let CarrierAllocationRequest::PlannedAggregate { occurrence, .. } = request {
+            self.record_governed_allocation(word.word, occurrence)?;
+        }
+        Ok(word)
     }
 
     /// `make_immediate(tag, payload, out) -> status`. ⚠ No arena: an immediate
@@ -4434,7 +4514,14 @@ impl<'a> Lowering<'a> {
         Self::require_i64(builder, status, BOUNDARY_ERR_BOUNDS);
         // ⚠ `require_i64` splits the block; from here the builder is in its
         // `valid` successor, which is where the allocation belongs.
-        let spilled = self.emit_carrier_alloc(builder, BoundaryTag::PersistentGround, spill, 0)?;
+        let spilled = self.emit_carrier_alloc(
+            builder,
+            CarrierAllocationRequest::NonAggregate {
+                tag: BoundaryTag::PersistentGround,
+            },
+            spill,
+            0,
+        )?;
         let store = builder
             .ins()
             .call(refs.store_scalar, &[arena, spilled.word, payload]);
@@ -4621,7 +4708,14 @@ impl<'a> Lowering<'a> {
         );
 
         // allocate → region marker → claim → copy → seal.
-        let word = self.emit_carrier_alloc(builder, BoundaryTag::PersistentGround, spill, 0)?;
+        let word = self.emit_carrier_alloc(
+            builder,
+            CarrierAllocationRequest::NonAggregate {
+                tag: BoundaryTag::PersistentGround,
+            },
+            spill,
+            0,
+        )?;
         let region = builder.ins().iconst(
             types::I64,
             i64::try_from(crate::boundary_value::BOUNDARY_INT_REGION_LIMBS).map_err(|_| {
@@ -4711,7 +4805,12 @@ impl<'a> Lowering<'a> {
         let refs = self.carrier_refs()?;
         let arena = self.carrier_arena()?;
         let pointer_type = builder.func.dfg.value_type(arena);
-        let word = self.emit_carrier_alloc(builder, tag, class, 0)?;
+        let word = self.emit_carrier_alloc(
+                    builder,
+                    CarrierAllocationRequest::NonAggregate { tag },
+                    class,
+                    0,
+                )?;
         let (_span_slot, span) = Self::carrier_out_slot(builder, pointer_type);
         let length = builder.ins().iconst(
             types::I64,
@@ -6450,6 +6549,58 @@ struct DynamicConstructorAlternativeV1 {
     fields: Vec<Lowered>,
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the CLOSED request the deepest carrier
+/// allocator accepts.**
+///
+/// ⭐ There is no way to hand the allocator a bare tag for an aggregate. A
+/// caller either names a **planned record** — and the lane, the event and the
+/// relation pair all follow from that record — or it declares the allocation
+/// **non-aggregate**, in which case a `Constructor`/`Record` class is refused
+/// before anything is emitted.
+///
+/// ⛔ This is what makes *"every governed allocation is in `E`"* a property of
+/// the ALLOCATOR rather than of caller discipline. The predecessor paired a
+/// checked wrapper that recorded evidence with a raw helper beside it that did
+/// not, so the law held exactly as long as every future caller remembered which
+/// one to reach for — an obligation nothing enforced and nothing measured. A
+/// bypass was one plausible-looking line, and it would have produced an
+/// allocation in no body's event set with no diagnostic anywhere.
+///
+/// ⛔ Not a `bool`, not an `Option<AggregateOccurrenceId>`. Both spellings
+/// admit "governed, but with no record" and "ungoverned, but at an aggregate
+/// class"; the sum admits neither, so the choke's two refusals are total over
+/// the domain rather than over the cases someone enumerated.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CarrierAllocationRequest {
+    /// A scalar, spill, byte-bodied, `HostResult` or borrowed allocation. It
+    /// names no record and never enters `E`.
+    ///
+    /// ⛔ The tag is the caller's precisely because there is no record to take
+    /// one from — which is why this variant may not carry an aggregate class.
+    NonAggregate { tag: BoundaryTag },
+    /// An aggregate governed by a planned ownership record.
+    ///
+    /// ⛔ Carries no tag. The lane is read from the record at `occurrence`,
+    /// never from the value in hand.
+    PlannedAggregate {
+        occurrence: AggregateOccurrenceId,
+        shape: PlannedAggregateShape,
+    },
+}
+
+impl CarrierAllocationRequest {
+    /// The one node class an aggregate of this shape may be carried at.
+    ///
+    /// ⚠ Total over `PlannedAggregateShape`, so a third shape is a compile
+    /// error here rather than a class that silently defaults.
+    fn aggregate_class(shape: PlannedAggregateShape) -> BoundaryClass {
+        match shape {
+            PlannedAggregateShape::Constructor => BoundaryClass::Constructor,
+            PlannedAggregateShape::Record => BoundaryClass::Record,
+        }
+    }
+}
+
 /// **`RT-DECL-CLOSURE-PORT` `D7` — the identity of one aggregate allocation
 /// EVENT within one compilation.**
 ///
@@ -6472,8 +6623,8 @@ struct DynamicConstructorAlternativeV1 {
 /// discovery this domain refuses.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(in crate::cranelift_backend) struct AggregateAllocationEvent {
-    function: u32,
-    result: u32,
+    function: FuncId,
+    result: cranelift_codegen::ir::Value,
 }
 
 /// The events of one body, open while that body is being emitted.
@@ -6487,11 +6638,11 @@ pub(in crate::cranelift_backend) struct AggregateAllocationEvent {
 /// needs two sides.
 #[derive(Clone, Debug)]
 struct LocalAggregateEvents {
-    function: u32,
+    function: FuncId,
     /// `E` — one entry per governed raw allocation that actually happened.
-    events: BTreeSet<u32>,
+    events: BTreeSet<cranelift_codegen::ir::Value>,
     /// `R` — the pairing of those events to the records that govern them.
-    relation: BTreeMap<u32, AggregateOccurrenceId>,
+    relation: BTreeMap<cranelift_codegen::ir::Value, AggregateOccurrenceId>,
 }
 
 /// **The compilation's event-to-record relation `R`.**
@@ -6510,8 +6661,8 @@ pub(in crate::cranelift_backend) struct AggregateAllocationLedger {
     /// Bodies whose event set was opened, and those whose commit landed. The
     /// two are compared at the close, so a discarded commit cannot pass as a
     /// body that simply allocated nothing.
-    opened_functions: BTreeSet<u32>,
-    committed_functions: BTreeSet<u32>,
+    opened_functions: BTreeSet<FuncId>,
+    committed_functions: BTreeSet<FuncId>,
 }
 
 impl AggregateAllocationLedger {
@@ -6521,7 +6672,7 @@ impl AggregateAllocationLedger {
     /// rollback-and-continue: a body that is built twice has emitted its
     /// allocations twice, and the relation cannot say which emission the
     /// records govern.
-    fn open(&mut self, function: u32) -> Result<(), CraneliftBackendError> {
+    fn open(&mut self, function: FuncId) -> Result<(), CraneliftBackendError> {
         if self.committed_functions.contains(&function) {
             return Err(backend_module(format!(
                 "aggregate allocation ledger: function {function} is built a second time, so \
@@ -6551,7 +6702,7 @@ impl AggregateAllocationLedger {
     /// The open body, checked against the function the caller believes is open.
     fn open_body(
         &mut self,
-        function: u32,
+        function: FuncId,
     ) -> Result<&mut LocalAggregateEvents, CraneliftBackendError> {
         let local = self.local.as_mut().ok_or_else(|| {
             backend_module(
@@ -6574,8 +6725,8 @@ impl AggregateAllocationLedger {
     /// from the allocation itself — **never** derived from relation keys.
     fn record_event(
         &mut self,
-        function: u32,
-        result: u32,
+        function: FuncId,
+        result: cranelift_codegen::ir::Value,
     ) -> Result<(), CraneliftBackendError> {
         let local = self.open_body(function)?;
         if !local.events.insert(result) {
@@ -6590,8 +6741,8 @@ impl AggregateAllocationLedger {
     /// Relate one event to the record that governs it.
     fn relate(
         &mut self,
-        function: u32,
-        result: u32,
+        function: FuncId,
+        result: cranelift_codegen::ir::Value,
         occurrence: AggregateOccurrenceId,
     ) -> Result<(), CraneliftBackendError> {
         let local = self.open_body(function)?;
@@ -7184,9 +7335,16 @@ impl<'a> Lowering<'a> {
     /// vector missing its last alternative, or an empty one, agrees with every
     /// prefix and returns true. A planner tree with two `ResourceKind`
     /// alternatives then accepted an emitter carrying only alternative 0, and
-    /// the missing allocation would not surface until a whole-pass
-    /// `image(R) = P` closeout that does not exist yet. A construction boundary
-    /// cannot lean on a later pass for the equality it claims to establish.
+    /// the missing allocation would never surface at all.
+    ///
+    /// ⛔ **The earlier text here said it would surface at a future whole-pass
+    /// `image(R) = P` closeout. There is no such closeout and there will not
+    /// be** — `P` is an authorization population, so a record no event related
+    /// is LAWFUL and the whole-pass close states `image(R) ⊆ P`. Exact
+    /// construction cardinality therefore cannot defer to the ledger under any
+    /// later WP: the ledger cannot tell a truncated emitter from a lawfully
+    /// unused record. It has to be established here, which is what this
+    /// function does.
     ///
     /// The set itself has no record — it is not an allocation. Its alternatives
     /// are, and each one's role and identity are checked at its own position.

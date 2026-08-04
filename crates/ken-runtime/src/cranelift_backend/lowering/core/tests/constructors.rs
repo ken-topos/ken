@@ -6139,6 +6139,116 @@ fn a_dynamic_alternative_with_no_planned_record_refuses() {
     );
 }
 
+/// **`D7` — the deepest carrier allocator refuses BOTH ungoverned requests, and
+/// refuses them before it emits anything.**
+///
+/// MEASURED, on a bare rig whose function carries no boundary-carrier refs —
+/// which is exactly what makes the ORDER observable:
+///
+/// | request | class | outcome |
+/// |---|---|---|
+/// | `NonAggregate` | `Constructor` | refused, naming the class |
+/// | `NonAggregate` | `Record` | refused, naming the class |
+/// | `PlannedAggregate { Constructor }` | `Record` | refused, naming the shape's class |
+/// | `PlannedAggregate { Constructor }` | `Constructor` | reaches the allocation and dies THERE |
+///
+/// ⭐ **The last row is the positive control and it is the load-bearing one.** A
+/// blanket refusal would satisfy the first three exactly as well; only a request
+/// that gets *past* both checks and fails at `carrier_refs` shows the checks
+/// discriminate rather than wall. It is also what witnesses the ordering the
+/// correction asks for: on this rig there is no `alloc` to reach, so a refusal
+/// that arrived after the raw call could not be observed at all — and the
+/// agreeing request proves the raw call is genuinely downstream of both.
+///
+/// CLAIMED: an aggregate class cannot be allocated without naming a planned
+/// record, and a planned record cannot be allocated at a class its shape does
+/// not authorize. Neither refusal can be reached after the arena has moved.
+///
+/// THE GAP: this row is about the CHOKE. That each construction seat actually
+/// ARRIVES here carrying a `PlannedAggregate` request is a different claim,
+/// held by the four-site bypass mutations recorded on this commit and not by
+/// anything asserted below.
+#[test]
+fn the_carrier_allocation_choke_refuses_both_ungoverned_requests() {
+    let source = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::Choke::Outer".to_string(),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Choke::Inner".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let (plan, _) = planned_root_occurrence(&source);
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+    // Found by SHAPE rather than by position, so the agreeing row below cannot
+    // fail at the planner's own shape cross-check and be misread as the class
+    // check biting.
+    let occurrence = compiler
+        .static_transition_plan
+        .aggregate_ownership_records()
+        .iter()
+        .find(|record| record.shape == PlannedAggregateShape::Constructor)
+        .expect("the fixture plans a constructor-shaped record")
+        .id;
+
+    let mut builder_context = FunctionBuilderContext::new();
+    let mut function = Function::new();
+    let mut builder = FunctionBuilder::new(&mut function, &mut builder_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+
+    for class in [BoundaryClass::Constructor, BoundaryClass::Record] {
+        let error = compiler
+            .emit_carrier_alloc(
+                &mut builder,
+                CarrierAllocationRequest::NonAggregate {
+                    tag: BoundaryTag::PersistentGround,
+                },
+                class,
+                0,
+            )
+            .expect_err("an aggregate class may not be allocated ungoverned");
+        assert!(
+            format!("{error:?}").contains("non-aggregate"),
+            "the refusal must name the ungoverned request: {error:?}"
+        );
+    }
+
+    let error = compiler
+        .emit_carrier_alloc(
+            &mut builder,
+            CarrierAllocationRequest::PlannedAggregate {
+                occurrence,
+                shape: PlannedAggregateShape::Constructor,
+            },
+            BoundaryClass::Record,
+            0,
+        )
+        .expect_err("a constructor-shaped record may not be carried as a Record");
+    assert!(
+        format!("{error:?}").contains("rather than"),
+        "the refusal must name the class the shape authorizes: {error:?}"
+    );
+
+    // ── POSITIVE CONTROL — past both checks, dead at the allocation ──
+    let error = compiler
+        .emit_carrier_alloc(
+            &mut builder,
+            CarrierAllocationRequest::PlannedAggregate {
+                occurrence,
+                shape: PlannedAggregateShape::Constructor,
+            },
+            BoundaryClass::Constructor,
+            0,
+        )
+        .expect_err("this rig has no boundary-carrier helper refs to allocate through");
+    assert!(
+        format!("{error:?}").contains("boundary-carrier helper refs"),
+        "an agreeing request must reach the ALLOCATION and fail there, not at \
+         either request check: {error:?}"
+    );
+}
+
 /// **`D7` — the aggregate allocation relation's laws, driven at the ledger.**
 ///
 /// MEASURED, as the numbered control matrix:
@@ -6161,15 +6271,49 @@ fn a_dynamic_alternative_with_no_planned_record_refuses() {
 /// `image(R) ⊆ P` — with `P` authorizing rather than obliging, so rows 2 and 3
 /// are the lawful shapes that a surjectivity requirement would have refused.
 ///
-/// THE GAP: rows 12 and 13 of the released matrix — wrong
-/// owner/seat/path/role/shape/lane/child, and per-site wrapper bypass — are NOT
-/// here. They are construction-seat properties, held by the committed
-/// reconciliation rows (`a_construction_time_occurrence_lookup_fails_closed`,
-/// `a_dynamic_alternative_with_no_planned_record_refuses`,
-/// `a_records_lookup_key_includes_its_path_not_only_its_role`) and by the path
-/// mutations recorded in their commits. This row is about the LEDGER, and
-/// driving it there is what lets rows 5 and 6 exist at all: they are only
-/// stateable because the event set and the relation are separate evidence.
+/// THE GAP: rows 12 and 13 of the released matrix are NOT here, and neither is
+/// inherited by gesture. This row is about the LEDGER, and driving it there is
+/// what lets rows 5 and 6 exist at all: they are only stateable because the
+/// event set and the relation are separate evidence.
+///
+/// **Row 12 — wrong owner/seat/path/role/shape/lane/child — is inherited only
+/// through this explicit axis mapping, and one axis is a residual:**
+///
+/// | axis | held by | where |
+/// |---|---|---|
+/// | owner | `a_dynamic_alternative_with_no_planned_record_refuses` | a second ENUMERATED unit's owner, at which the seat has no records |
+/// | seat | **nothing** | residual, stated below |
+/// | path | `a_records_lookup_key_includes_its_path_not_only_its_role`, `a_path_step_kind_is_load_bearing_not_an_index` | planner-side, both directions of the key |
+/// | role | `a_repeated_role_at_one_seat_gets_distinct_real_records` | one role twice at one seat gets two records |
+/// | shape | `the_carrier_allocation_choke_refuses_both_ungoverned_requests` | class-vs-shape at the choke; `aggregate_allocation_at` cross-checks the record's own shape beneath it |
+/// | lane | the choke reads the lane from the record, so there is no caller input to disagree with | structural, not asserted |
+/// | child | `a_construction_time_occurrence_lookup_fails_closed`, nested `Fixed` row | the child's own path is resolved, not the parent's |
+///
+/// ⛔ **The SEAT axis is a residual and is stated as one.** A wrong seat is not
+/// falsifiable from production here: the seat a construction site passes is the
+/// `StaticOriginId` it is lowering, so producing a *different* one would mean
+/// lowering a different expression, and every consumer would then agree with it
+/// consistently. Nothing below or in the mapping above closes that, and the
+/// lane row is likewise structural rather than asserted — it is closed by the
+/// caller having no lane to supply, not by a test that catches a wrong one.
+///
+/// **Row 13 is the four-site bypass matrix**, and it is new rather than
+/// inherited. `emit_carrier_alloc` now takes a closed request, so each governed
+/// site was mutated to hand the choke a `NonAggregate` request instead, against
+/// a baseline of 2 standing reds:
+///
+/// | site | reds | refusal |
+/// |---|---|---|
+/// | source `Constructor` | 57 | names the ungoverned request |
+/// | source `Record` | 5 | names the ungoverned request |
+/// | selected dynamic alternative | 6 | names the ungoverned request |
+/// | carried `transfer_constructor_operands` | 9 | names the ungoverned request |
+///
+/// ⭐ Each was checked for the CHOKE's own message rather than for a count, so
+/// a red arriving from some unrelated consequence of the edit could not pass as
+/// the bypass being caught. The choke's two refusals are asserted in
+/// `the_carrier_allocation_choke_refuses_both_ungoverned_requests`; these
+/// mutations are what show the four sites positively reach it.
 #[test]
 fn the_aggregate_allocation_relation_holds_its_laws() {
     // Two nested constructors, so the population has two records: one is used
@@ -6197,12 +6341,20 @@ fn the_aggregate_allocation_relation_holds_its_laws() {
     // A CLIF `Value` is numbered per function, so this is the ordinary case,
     // not an edge one. A ledger keyed on the value alone refused six lawful
     // allocations before `FuncId` scoped them.
+    // ⚠ `from_u32` is a TEST-only way to name an identity. Production never
+    // constructs one: it carries the `FuncId` the module handed it and the
+    // `Value` the allocation produced.
+    let func = FuncId::from_u32;
+    let val = cranelift_codegen::ir::Value::from_u32;
+
     let mut ledger = AggregateAllocationLedger::default();
-    for function in [7_u32, 9] {
+    for function in [func(7), func(9)] {
         ledger.open(function).expect("each body opens");
-        ledger.record_event(function, 12).expect("value 12 in each");
+        ledger.record_event(function, val(12)).expect("value 12 in each");
         // ── 2. ONE record governing several events is lawful ──
-        ledger.relate(function, 12, first).expect("the same record governs both");
+        ledger
+            .relate(function, val(12), first)
+            .expect("the same record governs both");
         ledger.commit().expect("each body commits");
     }
     let closure = ledger.close(&planned).expect("the relation closes");
@@ -6214,20 +6366,30 @@ fn the_aggregate_allocation_relation_holds_its_laws() {
         "this fixture must leave a planned record unused, or row 3 is vacuous"
     );
 
-    // ── 4. A duplicate or conflicting pair rejects ──
+    // ── 4. BOTH a duplicate and a conflicting pair reject ──
+    //
+    // ⭐ Two assertions, not one. `relation.insert` returning `Some` is the
+    // single condition behind both, but "the wrapper ran twice for one
+    // allocation" and "two allocations share a result value" are different
+    // defects, and a spelling that rejected only a CHANGED occurrence would
+    // satisfy the conflicting half while letting the duplicate half through.
     let mut ledger = AggregateAllocationLedger::default();
-    ledger.open(1).unwrap();
-    ledger.record_event(1, 3).unwrap();
-    ledger.relate(1, 3, first).unwrap();
+    ledger.open(func(1)).unwrap();
+    ledger.record_event(func(1), val(3)).unwrap();
+    ledger.relate(func(1), val(3), first).unwrap();
     assert!(
-        ledger.relate(1, 3, second).is_err(),
-        "a second pair at one event is a duplicate or a conflict"
+        ledger.relate(func(1), val(3), first).is_err(),
+        "a second pair at one event to the SAME record is a duplicate"
+    );
+    assert!(
+        ledger.relate(func(1), val(3), second).is_err(),
+        "a second pair at one event to a DIFFERENT record is a conflict"
     );
 
     // ── 5. An event recorded but never related rejects at the local close ──
     let mut ledger = AggregateAllocationLedger::default();
-    ledger.open(1).unwrap();
-    ledger.record_event(1, 3).unwrap();
+    ledger.open(func(1)).unwrap();
+    ledger.record_event(func(1), val(3)).unwrap();
     assert!(
         ledger.commit().is_err(),
         "an allocation nothing authorized must not commit"
@@ -6235,8 +6397,8 @@ fn the_aggregate_allocation_relation_holds_its_laws() {
 
     // ── 6. A relation entry with no event rejects at the local close ──
     let mut ledger = AggregateAllocationLedger::default();
-    ledger.open(1).unwrap();
-    ledger.relate(1, 3, first).unwrap();
+    ledger.open(func(1)).unwrap();
+    ledger.relate(func(1), val(3), first).unwrap();
     assert!(
         ledger.commit().is_err(),
         "an authorization nothing allocated must not commit"
@@ -6246,9 +6408,9 @@ fn the_aggregate_allocation_relation_holds_its_laws() {
     //
     // The event evidence remains, so only the two-sided comparison sees it.
     let mut ledger = AggregateAllocationLedger::default();
-    ledger.open(1).unwrap();
-    ledger.record_event(1, 3).unwrap();
-    ledger.relate(1, 3, first).unwrap();
+    ledger.open(func(1)).unwrap();
+    ledger.record_event(func(1), val(3)).unwrap();
+    ledger.relate(func(1), val(3), first).unwrap();
     ledger.commit().unwrap();
     ledger.clear_committed_relation_for_tests();
     assert!(
@@ -6258,9 +6420,9 @@ fn the_aggregate_allocation_relation_holds_its_laws() {
 
     // ── 8. A discarded body commit rejects via opened-vs-committed ──
     let mut ledger = AggregateAllocationLedger::default();
-    ledger.open(1).unwrap();
-    ledger.record_event(1, 3).unwrap();
-    ledger.relate(1, 3, first).unwrap();
+    ledger.open(func(1)).unwrap();
+    ledger.record_event(func(1), val(3)).unwrap();
+    ledger.relate(func(1), val(3), first).unwrap();
     ledger.discard_open_body_for_tests();
     assert!(
         ledger.close(&planned).is_err(),
@@ -6268,17 +6430,31 @@ fn the_aggregate_allocation_relation_holds_its_laws() {
          allocated nothing"
     );
 
-    // ── 9. A second build or commit of one FuncId rejects ──
+    // ── 9. BOTH a second build and a second commit of one FuncId reject ──
+    //
+    // ⚠ The two are guarded independently — `open` by `committed_functions`,
+    // `commit` by there being no open set — and the second assertion is what
+    // shows a body cannot commit its events twice even if the open guard were
+    // relaxed. It is the reachable spelling of a double commit: the
+    // `committed_functions` guard inside `commit` sits behind the `open` guard
+    // and cannot be reached while that one holds.
     let mut ledger = AggregateAllocationLedger::default();
-    ledger.open(1).unwrap();
+    ledger.open(func(1)).unwrap();
     ledger.commit().unwrap();
-    assert!(ledger.open(1).is_err(), "a second build of one FuncId rejects");
+    assert!(
+        ledger.open(func(1)).is_err(),
+        "a second build of one FuncId rejects"
+    );
+    assert!(
+        ledger.commit().is_err(),
+        "a second commit of one FuncId has no open event set to commit"
+    );
 
     // ── 10. A related occurrence absent from P rejects ──
     let mut ledger = AggregateAllocationLedger::default();
-    ledger.open(1).unwrap();
-    ledger.record_event(1, 3).unwrap();
-    ledger.relate(1, 3, second).unwrap();
+    ledger.open(func(1)).unwrap();
+    ledger.record_event(func(1), val(3)).unwrap();
+    ledger.relate(func(1), val(3), second).unwrap();
     ledger.commit().unwrap();
     assert!(
         ledger.close(&planned[..1]).is_err(),
@@ -6288,13 +6464,13 @@ fn the_aggregate_allocation_relation_holds_its_laws() {
     // ── 11. An allocation with no open body rejects ──
     let mut ledger = AggregateAllocationLedger::default();
     assert!(
-        ledger.record_event(1, 3).is_err(),
+        ledger.record_event(func(1), val(3)).is_err(),
         "an allocation with no open body belongs to no function's event set"
     );
 
     // And an open body left open at the whole-pass close rejects.
     let mut ledger = AggregateAllocationLedger::default();
-    ledger.open(1).unwrap();
+    ledger.open(func(1)).unwrap();
     assert!(
         ledger.close(&planned).is_err(),
         "a body still open at the closeout never committed its events"
