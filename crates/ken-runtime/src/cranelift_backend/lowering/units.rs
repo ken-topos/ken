@@ -1850,6 +1850,11 @@ fn define_unit_body<M: Module>(
     }
     // `D3`: the owner operand for the claim, supplied independently of any
     // token -- this is the ordinary producer unit currently being defined.
+    #[cfg(test)]
+    d5a_trace(format!(
+        "UNIT-BODY entry function={:?} origin={:?}",
+        unit.function, unit.origin
+    ));
     compiler.defining_unit = Some(unit.function);
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
@@ -2133,6 +2138,11 @@ fn define_unit_body<M: Module>(
         builder.seal_all_blocks();
         builder.finalize();
     }
+    #[cfg(test)]
+    d5a_trace(format!(
+        "UNIT-BODY done function={:?} origin={:?} root={:?}",
+        unit.function, unit.origin, root_outcome.as_ref().map(|_| "root")
+    ));
     compiler.validate_materialized_dead_join_cfg(unit.function, &func)?;
     // `4b` -- the emission-seam equality gate, on the FINISHED function and
     // before it is defined into the module. The callee of every recorded causal

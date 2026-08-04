@@ -5848,12 +5848,20 @@ impl<'a> Lowering<'a> {
                 "recursive position exceeds addressable range",
             )
         })?;
+        #[cfg(test)]
+        d5a_trace(format!(
+            "CLAIM entry defining={:?} construct={producer_construct_origin:?} \
+             continuation={continuation_origin:?} alt={alternative} pos={position}",
+            self.defining_unit
+        ));
         // The claim regime exists only while the unit-definition pass is open.
         // Outside it -- a direct lowering harness, or an authority that never
         // opens the ledger -- there is no ledger to claim against and no
         // close() to satisfy, so the producer keeps its existing route. This
         // is the ledger's own presence, not a guess about the caller.
         if self.continuation_claims.is_none() {
+            #[cfg(test)]
+            d5a_trace("  CLAIM outcome=NoLedger".to_string());
             return Ok(None);
         }
         let Some(identity) = self.static_transition_plan.continuation_call_binding_for(
@@ -5863,8 +5871,12 @@ impl<'a> Lowering<'a> {
             position,
         )?
         else {
+            #[cfg(test)]
+            d5a_trace("  CLAIM outcome=NoBinding".to_string());
             return Ok(None);
         };
+        #[cfg(test)]
+        d5a_trace(format!("  CLAIM bound identity={identity:?}"));
         let defining = self.defining_unit.ok_or_else(|| {
             unsupported(
                 "ContinuationSpecialization",
@@ -5972,6 +5984,11 @@ impl<'a> Lowering<'a> {
         })?;
         ledger.claim_exact(&identity, claimed_owner)?;
         #[cfg(test)]
+        d5a_trace(format!(
+            "  CLAIM outcome=Claimed target={:?} owner={claimed_owner:?}",
+            identity.target()
+        ));
+        #[cfg(test)]
         if mutation == ContinuationEmissionMutation::ClaimTokenTwice {
             ledger.claim_exact(&identity, claimed_owner)?;
         }
@@ -6057,6 +6074,8 @@ impl<'a> Lowering<'a> {
                 "a causal token emitted more than one direct continuation call",
             ));
         }
+        #[cfg(test)]
+        d5a_trace("  CLAIM outcome=CallEmitted".to_string());
         Ok(Some(returned))
     }
 

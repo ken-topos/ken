@@ -1140,6 +1140,38 @@ pub(in crate::cranelift_backend) fn with_d5_closeout_mutation<T>(
     body()
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — the outcome-complete localization trace.**
+///
+/// ⛔⛔ **Outcome-complete on purpose.** The previous localization instrumented
+/// only `claim_and_call_continuation`'s two EARLY RETURNS and read zero hits as
+/// "the helper is never entered". That inference is wrong: a *successful*
+/// claim-and-call reaches neither early return, so zero is equally consistent
+/// with the claim succeeding. A negative check passes for any reason, and that
+/// one had no positive control. ⇒ Every path through the instrumented sites
+/// records a terminal outcome here, so silence in the trace means the site was
+/// not reached and nothing else.
+#[cfg(test)]
+thread_local! {
+    static D5A_TRACE: std::cell::RefCell<Vec<String>> = const {
+        std::cell::RefCell::new(Vec::new())
+    };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d5a_trace(entry: String) {
+    D5A_TRACE.with(|trace| trace.borrow_mut().push(entry));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_d5a_trace() {
+    D5A_TRACE.with(|trace| trace.borrow_mut().clear());
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn take_d5a_trace() -> Vec<String> {
+    D5A_TRACE.with(|trace| trace.borrow().clone())
+}
+
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn reset_d5_emitted_declaration_calls() {
     D5_EMITTED_DECLARATION_CALLS.with(|calls| calls.borrow_mut().clear());
@@ -5238,11 +5270,18 @@ impl Lowered {
             //
             // ⛔ One exact typed error at every depth, so a nested rejection is
             // not reported as some enclosing variant's failure.
-            Lowered::Closure { .. } | Lowered::DeclarationClosure { .. } => Err(unsupported(
-                "Closure",
-                "a closure cannot cross the boundary: it is runtime-local and \
-                 live-domain only, and it has no durable lane",
-            )),
+            Lowered::Closure { .. } | Lowered::DeclarationClosure { .. } => {
+                #[cfg(test)]
+                d5a_trace(format!(
+                    "  BOUNDARY-REFUSAL first closure child variant={}",
+                    lowered_value_kind(self)
+                ));
+                Err(unsupported(
+                    "Closure",
+                    "a closure cannot cross the boundary: it is runtime-local and \
+                     live-domain only, and it has no durable lane",
+                ))
+            }
             Lowered::ComputationalRecursorClosure { .. } => Err(unsupported(
                 "ComputationalMatch",
                 "a computational recursor closure names an in-flight activation, \
