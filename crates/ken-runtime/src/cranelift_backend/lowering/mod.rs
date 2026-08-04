@@ -6307,12 +6307,44 @@ impl<'a> Lowering<'a> {
         constructor: RuntimeSymbol,
         args: Vec<Lowered>,
     ) -> Result<Lowered, CraneliftBackendError> {
+        // An unmodelled role carries no occurrence and is NOT refused here.
+        //
+        // The refusal belongs at the seat that needs the answer, not at the one
+        // that builds the template. Most of these roles are consumed as
+        // `DynamicConstructor` alternatives and never ask for an allocation
+        // lane at all; failing at construction would refuse them for a question
+        // they never pose. Carrying `None` leaves the loud failure exactly where
+        // it was — at the allocation, if one is ever reached.
+        let occurrence = self
+            .static_transition_plan
+            .synthesized_aggregate_occurrence(role)
+            .ok();
+        // The recipe and this call site are two statements of one shape, so
+        // they are cross-checked rather than trusted to agree. A recipe that
+        // drifts from the code that builds the aggregate would otherwise pick
+        // the lane for a different node than the one being allocated, and
+        // nothing downstream could tell.
+        if occurrence.is_some() {
+            let declared = self
+                .static_transition_plan
+                .synthesized_aggregate_arity(role)?;
+            if declared != args.len() {
+                return Err(unsupported(
+                    "Constructor",
+                    format!(
+                        "synthesized aggregate role is planned with {declared} children but the \
+                         emitter built {}",
+                        args.len()
+                    ),
+                ));
+            }
+        }
         Ok(Lowered::Constructor {
             constructor,
             synthesized_identity: Some(self.synthesized_fixed_identity(role)?),
-            // Step B interns one occurrence per (emission origin, role, path).
-            // Until it does this refuses loudly rather than defaulting.
-            occurrence: None,
+            // `D7` — the planner's occurrence for this role, resolved here and
+            // carried, exactly as a source constructor's is.
+            occurrence,
             args,
         })
     }

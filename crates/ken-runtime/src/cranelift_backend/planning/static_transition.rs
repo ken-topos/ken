@@ -2608,6 +2608,22 @@ fn validate_occurrence_authority_plan(
 #[repr(transparent)]
 pub(in crate::cranelift_backend) struct AggregateOccurrenceId(u32);
 
+/// Which producer an aggregate occurrence record is about.
+///
+/// The two arms are the two ways an aggregate comes to exist, and they are
+/// named by different authorities on purpose. A source aggregate is named by
+/// its own occurrence in the program. A synthesized one has no occurrence to be
+/// named by, so it is named by the closed compiler role that builds it — never
+/// by the origin it happens to be emitted at, which belongs to whatever
+/// expression the emission was reached through.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum AggregateOccurrenceProducer {
+    /// A `Construct`/`Record` written in the program.
+    Source(StaticOriginId),
+    /// A compiler-synthesized aggregate, named by its closed role.
+    Synthesized(SynthesizedFixedConstructorRole),
+}
+
 /// Which aggregate shape one producer occurrence builds.
 ///
 /// ⛔ Deliberately its own two-member enum rather than a reuse of
@@ -2637,7 +2653,13 @@ pub(in crate::cranelift_backend) enum PlannedAggregateAllocation {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) struct PlannedAggregateChild {
     pub(in crate::cranelift_backend) position: u32,
-    pub(in crate::cranelift_backend) origin: StaticOriginId,
+    /// The child's own source occurrence.
+    ///
+    /// `None` for a child of a compiler-synthesized aggregate, which has no
+    /// occurrence in the program. Recorded as an absence rather than filled
+    /// with the parent's origin -- the aliasing that made a synthesized
+    /// subtree indistinguishable from the expression it was emitted under.
+    pub(in crate::cranelift_backend) origin: Option<StaticOriginId>,
     pub(in crate::cranelift_backend) lifetime: PlannedReferentLifetime,
     /// The **possible** referent owners of this child, never a determination.
     ///
@@ -2666,8 +2688,15 @@ pub(in crate::cranelift_backend) struct PlannedAggregateOwnership {
     /// The opaque identity lowering carries on the template and hands back at
     /// emission. Dense, and equal to this record's index in the population.
     pub(in crate::cranelift_backend) id: AggregateOccurrenceId,
-    pub(in crate::cranelift_backend) origin: StaticOriginId,
-    pub(in crate::cranelift_backend) owner: PredeclaredFunctionId,
+    /// Which producer this record is about, and the population's sort key.
+    pub(in crate::cranelift_backend) producer: AggregateOccurrenceProducer,
+    /// The function unit that emits a source producer.
+    ///
+    /// `None` for a synthesized role, which has no source occurrence and
+    /// therefore no function owner. Spelled as an absence rather than a
+    /// borrowed owner so nothing can read a synthesized record as if it were
+    /// owned by whichever unit happened to emit it.
+    pub(in crate::cranelift_backend) owner: Option<PredeclaredFunctionId>,
     pub(in crate::cranelift_backend) shape: PlannedAggregateShape,
     pub(in crate::cranelift_backend) children: Vec<PlannedAggregateChild>,
     /// The meet itself, retained beside the lane it selects so a reader can
@@ -2724,6 +2753,121 @@ fn aggregate_child_referent_owners(
     }
 }
 
+/// One child of a compiler-synthesized aggregate, as the recipe declares it.
+///
+/// The three cases are the three things the planner can know about a child it
+/// never sees a source occurrence for.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SynthesizedAggregateChild {
+    /// An immediate the emitter materializes inline -- a native int, a bounded
+    /// nat, a scalar read out of the host reply. It has no boundary node, so
+    /// no owner but `NoReferent` is possible for it at any site.
+    Immediate,
+    /// Another synthesized role. Its own record supplies its owner, so this
+    /// child's contribution to the meet is derived rather than declared.
+    Role(SynthesizedFixedConstructorRole),
+}
+
+/// The closed child model of one compiler-synthesized aggregate role.
+///
+/// `None` means **not modelled**, and that is a refusal rather than a gap to be
+/// filled with a default. Two populations sit behind it:
+///
+/// - Roles whose children include a value supplied by the **emission site**
+///   (`OptionSome` wraps a user path; `PrivateBufferSpan` carries a
+///   `ResourceToken`). Their meet is a property of the site, not the role, so a
+///   role-keyed record cannot state it and must not pretend to.
+/// - Roles only ever built as `DynamicConstructor` **alternatives**. Those
+///   allocate through the value-shape disposition and never consult this lane
+///   at all, so a record for them would describe a seat nothing reaches.
+///
+/// Both refuse loudly if they ever reach the aggregate seat, which is the point.
+///
+/// The arity is cross-checked against the emitter's actual operand run, so a
+/// recipe that drifts from the lowering code that builds it fails rather than
+/// silently describing a different aggregate.
+fn synthesized_aggregate_recipe(
+    role: SynthesizedFixedConstructorRole,
+) -> Option<&'static [SynthesizedAggregateChild]> {
+    use SynthesizedAggregateChild::{Immediate, Role};
+    use SynthesizedFixedConstructorRole as R;
+    match role {
+        R::Unit | R::ReadEof => Some(&[]),
+        R::FileOperationRead | R::FileOperationWrite | R::FileOperationChangeMode => Some(&[]),
+        R::PrivateTransferCount => Some(&[Immediate, Immediate]),
+        R::ResourceTraceIdentity => Some(&[Immediate, Immediate]),
+        R::Wrote => Some(&[Role(R::PrivateTransferCount)]),
+        // Site-dependent: a user operand or a resource handle reaches these.
+        R::OptionSome | R::FileError | R::PrivateBufferSpan | R::ReadSome => None,
+        // Built only as dynamic-constructor alternatives.
+        R::ResourceHostIo
+        | R::ResourceClosed
+        | R::ResourceMalformed
+        | R::ResourceRightNotHeld
+        | R::ResourceReleaseFailed
+        | R::ResourceKindMismatch
+        | R::ResourceBufferLimit
+        | R::ResourceInvalidOffset
+        | R::ResourceInvalidBounds
+        | R::ResourceNoProgress
+        | R::ResourceKindFsHandle
+        | R::ResourceKindBuffer => None,
+    }
+}
+
+/// The possible referent owners of one synthesized role, derived through its
+/// recipe.
+///
+/// `Wrote` is persistent **because** `PrivateTransferCount` is, which is
+/// persistent because both of its children are immediates. That chain is
+/// computed here rather than asserted per role, so the verdict cannot disagree
+/// with the recipe it is supposed to follow.
+///
+/// `depth` bounds the descent. The role graph is a tree today; a cycle would
+/// mean a role transitively contains itself, which is not representable, and
+/// this refuses rather than looping if one is ever introduced.
+fn synthesized_role_referent_owners(
+    role: SynthesizedFixedConstructorRole,
+    depth: usize,
+) -> Result<Vec<BoundaryReferentOwner>, CraneliftBackendError> {
+    if depth == 0 {
+        return Err(planner_error(
+            "synthesized aggregate recipe exceeded its descent bound, so a role contains itself",
+        ));
+    }
+    let recipe = synthesized_aggregate_recipe(role).ok_or_else(|| {
+        planner_error("synthesized aggregate role has no planned child model")
+    })?;
+    for child in recipe {
+        let owners = match child {
+            SynthesizedAggregateChild::Immediate => vec![BoundaryReferentOwner::NoReferent],
+            SynthesizedAggregateChild::Role(inner) => {
+                synthesized_role_referent_owners(*inner, depth - 1)?
+            }
+        };
+        if owners.contains(&BoundaryReferentOwner::InvocationArena) {
+            return Ok(vec![
+                BoundaryReferentOwner::NoReferent,
+                BoundaryReferentOwner::PersistentStore,
+                BoundaryReferentOwner::InvocationArena,
+            ]);
+        }
+    }
+    // No child can be arena-owned, so this role's node is persistable and the
+    // node it produces is itself a persistent-store referent.
+    Ok(vec![
+        BoundaryReferentOwner::NoReferent,
+        BoundaryReferentOwner::PersistentStore,
+    ])
+}
+
+/// The descent bound for [`synthesized_role_referent_owners`].
+///
+/// The deepest modelled chain is `Wrote -> PrivateTransferCount -> immediate`,
+/// so this has real headroom over the population it bounds. It exists to make a
+/// cycle a loud failure, not to be tight.
+const SYNTHESIZED_AGGREGATE_RECIPE_DEPTH: usize = 8;
+
 /// Derive one ownership record for every aggregate producer occurrence.
 ///
 /// ⛔ **The population is every `Construct`/`Record` source occurrence, not the
@@ -2752,7 +2896,7 @@ fn build_aggregate_ownership_plan(
             }
             children.push(PlannedAggregateChild {
                 position: child.position,
-                origin: child.origin,
+                origin: Some(child.origin),
                 lifetime: child.lifetime,
                 owners,
             });
@@ -2780,18 +2924,77 @@ fn build_aggregate_ownership_plan(
             // sorted population, so it cannot be assigned before the order is
             // final.
             id: AggregateOccurrenceId(0),
-            origin,
-            owner: plan
-                .semantic
-                .function_owner(origin)?
-                .ok_or_else(|| planner_error("aggregate producer has no function owner"))?,
+            producer: AggregateOccurrenceProducer::Source(origin),
+            owner: Some(
+                plan.semantic
+                    .function_owner(origin)?
+                    .ok_or_else(|| planner_error("aggregate producer has no function owner"))?,
+            ),
             shape,
             children,
             meet,
             allocation,
         });
     }
-    records.sort_by_key(|record| record.origin);
+    // The synthesized half of the population. One record per modelled compiler
+    // role, derived through its recipe -- not one per emission site, because a
+    // modelled role's children are the same at every site by construction. A
+    // role whose children are NOT site-invariant is exactly the one the recipe
+    // declines to model, so it gets no record here and refuses at the seat.
+    for role in SynthesizedFixedConstructorRole::ALL {
+        let Some(recipe) = synthesized_aggregate_recipe(role) else {
+            continue;
+        };
+        let mut children = Vec::with_capacity(recipe.len());
+        for (position, child) in recipe.iter().enumerate() {
+            let owners = match child {
+                SynthesizedAggregateChild::Immediate => vec![BoundaryReferentOwner::NoReferent],
+                SynthesizedAggregateChild::Role(inner) => synthesized_role_referent_owners(
+                    *inner,
+                    SYNTHESIZED_AGGREGATE_RECIPE_DEPTH,
+                )?,
+            };
+            children.push(PlannedAggregateChild {
+                position: u32::try_from(position).map_err(|_| {
+                    planner_capacity_error("synthesized aggregate arity exceeds the position space")
+                })?,
+                // A synthesized child has no source occurrence. The recipe is
+                // its provenance, and this field records that plainly rather
+                // than borrowing an unrelated origin to fill the slot.
+                origin: None,
+                lifetime: if owners.contains(&BoundaryReferentOwner::InvocationArena) {
+                    PlannedReferentLifetime::ActivationOwned
+                } else {
+                    PlannedReferentLifetime::Persistent
+                },
+                owners,
+            });
+        }
+        let escapes = children
+            .iter()
+            .any(|child| child.owners.contains(&BoundaryReferentOwner::InvocationArena));
+        let (meet, allocation) = if escapes {
+            (
+                PlannedReferentLifetime::ActivationOwned,
+                PlannedAggregateAllocation::InvocationAggregate,
+            )
+        } else {
+            (
+                PlannedReferentLifetime::Persistent,
+                PlannedAggregateAllocation::PersistentGround,
+            )
+        };
+        records.push(PlannedAggregateOwnership {
+            id: AggregateOccurrenceId(0),
+            producer: AggregateOccurrenceProducer::Synthesized(role),
+            owner: None,
+            shape: PlannedAggregateShape::Constructor,
+            children,
+            meet,
+            allocation,
+        });
+    }
+    records.sort_by_key(|record| record.producer);
     for (index, record) in records.iter_mut().enumerate() {
         record.id = AggregateOccurrenceId(u32::try_from(index).map_err(|_| {
             planner_capacity_error("the aggregate occurrence population exceeds the identity space")
@@ -6008,7 +6211,7 @@ impl<'src> StaticTransitionPlan<'src> {
         let record = self
             .aggregate_ownership
             .iter()
-            .find(|record| record.origin == origin)
+            .find(|record| record.producer == AggregateOccurrenceProducer::Source(origin))
             .ok_or_else(|| {
                 planner_error("aggregate producer has no planned ownership record")
             })?;
@@ -6036,7 +6239,7 @@ impl<'src> StaticTransitionPlan<'src> {
         let record = self
             .aggregate_ownership
             .iter()
-            .find(|record| record.origin == origin)
+            .find(|record| record.producer == AggregateOccurrenceProducer::Source(origin))
             .ok_or_else(|| planner_error("aggregate producer has no planned ownership record"))?;
         if record.shape != shape {
             return Err(planner_error(
@@ -6044,6 +6247,45 @@ impl<'src> StaticTransitionPlan<'src> {
             ));
         }
         Ok(record.id)
+    }
+
+    /// The occurrence identity of one **compiler-synthesized** aggregate role.
+    ///
+    /// The role is the key because a synthesized aggregate has no occurrence in
+    /// the program to be keyed by. A role the recipe declines to model has no
+    /// record and refuses here, which is the honest answer for a role whose
+    /// children are a property of the emission site rather than of the role.
+    pub(in crate::cranelift_backend) fn synthesized_aggregate_occurrence(
+        &self,
+        role: SynthesizedFixedConstructorRole,
+    ) -> Result<AggregateOccurrenceId, CraneliftBackendError> {
+        self.aggregate_ownership
+            .iter()
+            .find(|record| record.producer == AggregateOccurrenceProducer::Synthesized(role))
+            .map(|record| record.id)
+            .ok_or_else(|| {
+                planner_error("synthesized aggregate role has no planned ownership record")
+            })
+    }
+
+    /// The declared arity of one modelled synthesized role, for the emitter's
+    /// consistency cross-check.
+    ///
+    /// The recipe and the lowering code that builds these aggregates are two
+    /// statements of one shape. This is what lets the emitter catch them
+    /// disagreeing instead of silently allocating a node the recipe describes
+    /// differently.
+    pub(in crate::cranelift_backend) fn synthesized_aggregate_arity(
+        &self,
+        role: SynthesizedFixedConstructorRole,
+    ) -> Result<usize, CraneliftBackendError> {
+        self.aggregate_ownership
+            .iter()
+            .find(|record| record.producer == AggregateOccurrenceProducer::Synthesized(role))
+            .map(|record| record.children.len())
+            .ok_or_else(|| {
+                planner_error("synthesized aggregate role has no planned ownership record")
+            })
     }
 
     /// The ruled allocation lane of an already-interned aggregate occurrence.
