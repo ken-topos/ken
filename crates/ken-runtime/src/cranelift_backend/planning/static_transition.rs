@@ -16812,6 +16812,92 @@ mod tests {
         );
     }
 
+    /// **The PLANNER owns the alternative population, count included.**
+    ///
+    /// MEASURED: at a real `FsWriteAt` seat the resource surface reports ten
+    /// ordered roles, `ResourceKind` reports its two, and a reachable `IOError`
+    /// set reports the whole closed inventory. A path that names a constructor,
+    /// an `IOError` alternative, or nothing at all is refused rather than
+    /// answering an empty population.
+    ///
+    /// CLAIMED: an emitter's alternative vector can be compared for EQUALITY
+    /// against this, so a truncated set is caught at construction.
+    ///
+    /// THE GAP — this is the correction's subject, so it is worth stating what
+    /// the previous spelling did. It iterated the emitter's own vector and
+    /// resolved each position, which rejects an EXTRA alternative (its path
+    /// does not exist) but accepts a MISSING final one, because a prefix agrees
+    /// with every position it has. The empty vector agreed with everything. A
+    /// whole-pass `image(R) = P` closeout would eventually surface the unused
+    /// records, but that pass does not exist yet and a construction boundary
+    /// cannot borrow the equality it claims to establish.
+    ///
+    /// ⚠ The refusal on an empty population is what makes the count usable: a
+    /// zero-length expectation would make the emitter's own emptiness agree.
+    #[test]
+    fn the_planner_owns_the_ordered_alternative_population() {
+        use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+        use SynthesizedConstructorRole::Fixed;
+        use SynthesizedFixedConstructorRole as R;
+
+        let (plan, seat, _) = d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
+        let err = SynthesizedAggregatePath::root(ERR);
+
+        assert_eq!(
+            plan.synthesized_dynamic_alternatives(seat, &err)
+                .expect("the error root is the resource surface"),
+            vec![
+                Fixed(R::ResourceHostIo),
+                Fixed(R::ResourceClosed),
+                Fixed(R::ResourceMalformed),
+                Fixed(R::ResourceRightNotHeld),
+                Fixed(R::ResourceReleaseFailed),
+                Fixed(R::ResourceKindMismatch),
+                Fixed(R::ResourceBufferLimit),
+                Fixed(R::ResourceInvalidOffset),
+                Fixed(R::ResourceInvalidBounds),
+                Fixed(R::ResourceNoProgress),
+            ],
+            "the surface population is ordered and closed, and its COUNT is the \
+             planner's rather than whatever the emitter built"
+        );
+
+        assert_eq!(
+            plan.synthesized_dynamic_alternatives(seat, &err.alternative(4).field(0))
+                .expect("`ResourceReleaseFailed` field 0 is the `ResourceKind` set"),
+            vec![Fixed(R::ResourceKindFsHandle), Fixed(R::ResourceKindBuffer)],
+        );
+
+        let roles = plan.semantic.synthesized_io_error_roles().to_vec();
+        assert!(roles.len() > 1, "the closed inventory must be non-trivial");
+        assert_eq!(
+            plan.synthesized_dynamic_alternatives(seat, &err.alternative(0).field(0))
+                .expect("`ResourceHostIo` field 0 is a reachable IOError set"),
+            roles
+                .iter()
+                .map(|role| SynthesizedConstructorRole::IoError(*role))
+                .collect::<Vec<_>>(),
+            "a reachable IOError set reports its whole closed inventory"
+        );
+
+        // ⛔ Every non-set path REFUSES rather than reporting an empty
+        // population. An empty expectation would make an emitter's own
+        // emptiness agree, which is the failure this row exists to exclude.
+        for wrong in [
+            err.alternative(4),                          // a constructor
+            err.alternative(4).field(1),                 // a constructor
+            err.alternative(0).field(0).alternative(0),  // an IOError ALTERNATIVE
+            err.alternative(12),                         // no node at all
+            SynthesizedAggregatePath::root(OK),          // `Wrote`, a constructor
+        ] {
+            assert!(
+                plan.synthesized_dynamic_alternatives(seat, &wrong).is_err(),
+                "{wrong:?} does not name an alternative set and must refuse, not \
+                 report an empty population"
+            );
+        }
+    }
+
     /// Every operation whose tree this module states.
     fn measured_tree_operations() -> Vec<ken_host::HostOpV1> {
         use ken_host::HostOpV1 as Op;
