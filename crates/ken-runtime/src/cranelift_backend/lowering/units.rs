@@ -371,7 +371,34 @@ impl CallEdgeTargets {
 /// last-writer, because a duplicate means two units claim one body and the
 /// binding could not name either unambiguously.
 pub(in crate::cranelift_backend) struct WorkerTargets {
+    /// The EXECUTABLE targets: bodies with a declared `Function` to call.
     by_origin: BTreeMap<StaticOriginId, ResolvedUnitTarget>,
+    /// **`D5a` checkpoint 1 -- the TEMPLATE population, over every emittable
+    /// unit including the template-only ones.**
+    ///
+    /// Architect ruling `evt_5a0q3m9tnkh8e`: *"the constructor's raw
+    /// identity/arity validation must be separate from the generated context
+    /// `FuncRef` used by the call."* This map is that separation made
+    /// structural -- it carries the descriptor facts and **no `FuncRef` at
+    /// all**, so a template-only body can be validated against its own raw
+    /// contract by code that has no way to call it.
+    templates: BTreeMap<StaticOriginId, WorkerTemplate>,
+}
+
+/// **`D5a` checkpoint 1 -- one raw worker body's descriptor contract.**
+///
+/// ⛔ Deliberately has no `function: FuncRef` field. `construct_static_worker_
+/// binding` reads only `call_site_origin`, `header`, `slots` and `offsets`, so
+/// removing the callee from the record it validates against makes "validated
+/// the raw contract, called the generated context" a fact about the types
+/// rather than a discipline someone has to remember.
+#[derive(Clone)]
+pub(in crate::cranelift_backend) struct WorkerTemplate {
+    pub(in crate::cranelift_backend) origin: StaticOriginId,
+    pub(in crate::cranelift_backend) call_site_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) header: AbiFrameHeader,
+    pub(in crate::cranelift_backend) slots: Vec<AbiSlot>,
+    pub(in crate::cranelift_backend) offsets: Vec<u32>,
 }
 
 impl WorkerTargets {
@@ -407,6 +434,13 @@ impl WorkerTargets {
             })
             .collect()
     }
+
+    /// The raw template contract for every emittable body, executable or not.
+    pub(in crate::cranelift_backend) fn templates(
+        &self,
+    ) -> &BTreeMap<StaticOriginId, WorkerTemplate> {
+        &self.templates
+    }
 }
 
 /// Project the already-validated emittable units by exact body origin.
@@ -414,8 +448,40 @@ pub(in crate::cranelift_backend) fn resolve_worker_targets(
     plan: &StaticTransitionPlan<'_>,
     bundle: &UnitBundle,
 ) -> Result<WorkerTargets, CraneliftBackendError> {
-    let mut by_origin: BTreeMap<StaticOriginId, ResolvedUnitTarget> = BTreeMap::new();
+    let mut templates: BTreeMap<StaticOriginId, WorkerTemplate> = BTreeMap::new();
+    // The TEMPLATE population is every emittable unit -- `D5a` checkpoint 1
+    // keeps the raw worker's descriptor and source binding whether or not it
+    // still receives a `Function`.
     for unit in plan.emittable_units()? {
+        let (offsets, frame_bytes) = unit.slot_offsets()?;
+        if frame_bytes != unit.header().frame_bytes {
+            return Err(backend_module(
+                "worker template frame size disagrees with its slot run".to_string(),
+            ));
+        }
+        let origin = unit.origin();
+        if templates
+            .insert(
+                origin,
+                WorkerTemplate {
+                    origin,
+                    call_site_origin: origin,
+                    header: unit.header(),
+                    slots: unit.slots().to_vec(),
+                    offsets,
+                },
+            )
+            .is_some()
+        {
+            return Err(backend_module(
+                "two emittable units claim the same body origin, so no worker template could \
+                 name either unambiguously"
+                    .to_string(),
+            ));
+        }
+    }
+    let mut by_origin: BTreeMap<StaticOriginId, ResolvedUnitTarget> = BTreeMap::new();
+    for unit in plan.executable_units()? {
         let function = bundle.function(unit.function()).ok_or_else(|| {
             backend_module(
                 "a planned unit has no forward-declared function to project as a worker target"
@@ -445,7 +511,10 @@ pub(in crate::cranelift_backend) fn resolve_worker_targets(
             ));
         }
     }
-    Ok(WorkerTargets { by_origin })
+    Ok(WorkerTargets {
+        by_origin,
+        templates,
+    })
 }
 
 /// **`RT-DECL-CLOSURE-PORT` `D5` — the checked-call closeout ledger.**
@@ -572,7 +641,12 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
     plan: &StaticTransitionPlan<'_>,
     bundle: &UnitBundle,
 ) -> Result<CallEdgeTargets, CraneliftBackendError> {
-    let derived = plan.emittable_call_edges()?;
+    // `D5a` checkpoint 1: the edges that SURVIVE the retarget. An edge into a
+    // template-only body is the seeding edge whose realization moved to a
+    // generated context; resolving it would demand a `FuncId` for a unit with
+    // no emitted `Function`, and `bundle.function`'s `None` is a real answer
+    // rather than a prompt to fabricate one.
+    let derived = plan.executable_call_edges()?;
     // `RT-CONTSPEC-ACTIVATE` `D1b`: the exact-set source-body binding, joined
     // on validated caller + callee scheduling entry. A `StaticBody` edge's
     // resolved `call_site_origin` becomes the callable SOURCE BODY; the
@@ -804,7 +878,11 @@ pub(in crate::cranelift_backend) fn declare_unit_bundle<M: Module>(
 ) -> Result<UnitBundle, CraneliftBackendError> {
     let sig = unit_signature(module);
     let mut functions = BTreeMap::new();
-    for (ordinal, unit) in plan.emittable_units()?.into_iter().enumerate() {
+    // `D5a` checkpoint 1: the EXECUTABLE population, not the template one. ⛔ A
+    // template-only raw worker must not be declared here -- declaring it and
+    // then not defining it is the undefined phantom the ruling names, and it
+    // would falsify the declared/defined census below.
+    for (ordinal, unit) in plan.executable_units()?.into_iter().enumerate() {
         // The symbol carries the dense ordinal purely so the linker sees
         // distinct names. ⛔ It is NOT an identity: nothing resolves a unit by
         // parsing this string, and `functions` is keyed by the planner's id.
@@ -1085,6 +1163,7 @@ pub(super) fn define_continuation_bodies<M: Module>(
             ));
         }
         function_local.unit_calls = declared_workers.clone();
+        function_local.worker_templates = worker_targets.templates().clone();
         // `RT-DECL-CLOSURE-PORT` `D5a` -- THE RETARGET.
         //
         // If this specialization's worker body has a generated execution
@@ -1426,6 +1505,7 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
         function_local.unit_calls = declared_calls.static_bodies;
         function_local.declaration_calls = declared_calls.declarations;
         function_local.worker_calls = worker_targets.declare_in_func(module, &mut func);
+        function_local.worker_templates = worker_targets.templates().clone();
         // `D5a`: this context's own causal call refs, selected by the EMISSION
         // owner. ⛔ Not by `raw_owner` -- that is the filter that would hand this
         // function the raw unit's tokens and leave its own undeclared.
@@ -2069,9 +2149,13 @@ pub(super) fn define_unit_bodies<M: Module>(
         compiler.oriented_subcontinuation_plan.as_ref(),
     ));
     let mut root_result = None;
+    // `D5a` checkpoint 1: the SAME population `declare_unit_bundle` walked.
+    // Both passes read `executable_units` so declared and defined cannot
+    // disagree -- reading different methods here is exactly how a phantom
+    // appears.
     let emissions = compiler
         .static_transition_plan
-        .emittable_units()?
+        .executable_units()?
         .into_iter()
         .map(|unit| {
             let (offsets, frame_bytes) = unit.slot_offsets()?;
@@ -2262,6 +2346,9 @@ fn define_unit_body<M: Module>(
     d5_mutate_declared_calls(&mut function_local.declaration_calls);
     // `D4`: this function's own worker refs, minted here and never copied.
     function_local.worker_calls = worker_targets.declare_in_func(module, &mut func);
+    // `D5a` checkpoint 1: the raw template contracts, beside the call targets
+    // and deliberately not derived from them.
+    function_local.worker_templates = worker_targets.templates().clone();
     let mut func_ctx = FunctionBuilderContext::new();
     let root_outcome;
     {
