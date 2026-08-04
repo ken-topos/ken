@@ -102,6 +102,15 @@ fn px8tr_test_interface(name: u8) -> crate::CheckedAnswerInterfaceV1 {
     crate::CheckedAnswerInterfaceV1::new(bytes).expect("PX8-TR test interface is canonical")
 }
 
+/// `D5a` localization: the same fixture's planning inputs, so a census can be
+/// taken independently of the emission run.
+#[cfg(test)]
+pub(crate) fn px8tr_nested_post_effect_planning_inputs()
+-> (crate::RuntimeExpr, Vec<crate::RuntimeDeclaration>) {
+    let (entry, declaration, _plan) = px8tr_nested_post_effect_fixture();
+    (entry, vec![declaration])
+}
+
 fn px8tr_nested_post_effect_fixture() -> (
     RuntimeExpr,
     RuntimeDeclaration,

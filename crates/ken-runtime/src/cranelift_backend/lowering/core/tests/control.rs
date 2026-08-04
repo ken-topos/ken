@@ -11858,3 +11858,99 @@ fn a_closure_stored_as_constructor_data_cannot_cross_a_unit_boundary() {
         );
     });
 }
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — the localization trace.**
+///
+/// ⛔⛔ **Outcome-complete, because the previous localization was not.** That one
+/// instrumented only `claim_and_call_continuation`'s two early returns and read
+/// zero hits as "the helper is never entered" — but a SUCCESSFUL claim reaches
+/// neither early return, so zero was equally consistent with the claim
+/// succeeding. It was a negative check with no positive control
+/// ([[a-negative-check-passes-for-any-reason-so-it-needs-a-positive-control]]).
+///
+/// Every instrumented path now records a terminal outcome, so silence in the
+/// trace means the site was not reached and nothing else. ⚠ This test makes no
+/// mechanism change and classifies nothing: it prints, and asserts only that the
+/// fixture still refuses.
+#[test]
+fn d5a_localization_trace_of_the_landed_object_fixture() {
+    reset_d5a_trace();
+    let outcome = with_transparent_declaration_closure_witness(|| {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "d5a_localization",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+    });
+    // The planner-issued continuation-call census, taken independently of the
+    // run above so a missing token and an unreached claim are distinguishable.
+    let (entry_expr, declarations) =
+        crate::cranelift_backend::test_objects::px8tr_nested_post_effect_planning_inputs();
+    let declarations = declarations
+        .iter()
+        .map(|declaration| (declaration.symbol.as_str(), declaration))
+        .collect::<BTreeMap<_, _>>();
+    let census = plan_static_transition_graph_with_symbols(
+        &entry_expr,
+        &declarations,
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .map(|plan| {
+        let units = plan
+            .emittable_units()
+            .expect("units")
+            .into_iter()
+            .map(|unit| format!("{:?}@{:?}={:?}", unit.function(), unit.origin(), unit.definition()))
+            .collect::<Vec<_>>();
+        let calls = plan
+            .continuation_calls()
+            .expect("continuation calls")
+            .iter()
+            .map(|call| {
+                format!(
+                    "owner={:?} result_root={:?} construct={:?} continuation={:?} \
+                     alt={} pos={} target={:?}",
+                    call.producer_owner(),
+                    call.producer_result_origin(),
+                    call.producer_construct_origin(),
+                    call.continuation_origin(),
+                    call.producer_alternative(),
+                    call.recursive_position(),
+                    call.target(),
+                )
+            })
+            .collect::<Vec<_>>();
+        (units, calls)
+    });
+    let trace = take_d5a_trace();
+    eprintln!("=== D5a PLANNER CENSUS ===");
+    match &census {
+        Ok((units, calls)) => {
+            eprintln!("units ({}):", units.len());
+            for unit in units {
+                eprintln!("  {unit}");
+            }
+            eprintln!("continuation calls ({}):", calls.len());
+            for call in calls {
+                eprintln!("  {call}");
+            }
+        }
+        Err(error) => eprintln!("  planning failed: {error:?}"),
+    }
+    eprintln!("=== D5a TRACE ({} entries) ===", trace.len());
+    for entry in &trace {
+        eprintln!("{entry}");
+    }
+    eprintln!("=== outcome: {outcome:?} ===");
+    // ⚠ The only assertion. The trace is evidence to be read, not a pin: turning
+    // any of its lines into an expectation would freeze a mechanism that is
+    // about to change.
+    assert!(
+        outcome.is_err(),
+        "the landed object fixture still refuses under the witness; if it now \
+         compiles the localization is moot and D5a should be re-scoped"
+    );
+}
