@@ -1352,7 +1352,13 @@ missing edge must fail **planning/compilation before `ObjectEmission`**.
 >
 > Validation before function definition compares the exact **planned-edge
 > relation** against the exact **emitted-consumption ledger**: no missing, extra,
-> duplicate, wrong-owner, wrong-phase, wrong-child-path, or unconsumed edge.
+> duplicate, wrong-owner, wrong-phase, or wrong-child-path edge.
+>
+> ⛔ **CORRECTED 2026-08-04 by `evt_39b1dzgc85gyf`: this sentence also said "or
+> unconsumed edge", and for the aggregate-allocation population that is false.**
+> An unused planned record is lawful — see the relation law immediately below.
+> A no-unconsumed reading survives only where a planned edge genuinely must be
+> consumed; it is **not** a general property of `P`.
 >
 > #### The aggregate lifecycle law — a relation, not a per-record count
 >
@@ -1363,18 +1369,76 @@ missing edge must fail **planning/compilation before `ObjectEmission`**.
 > aggregate-allocation instructions the backend emits; let `R ⊆ E × P` be the
 > checked allocation relation. The required closure is:
 >
-> 1. every `e ∈ E` has **exactly one** related record `p ∈ P`;
-> 2. before emitting `e`, that record reconciles the current
->    `ContinuationEmissionOwner`, seat, role/schema, shape, lane, ordered child
->    obligations, and opaque occurrence ID;
-> 3. every related record is planned — no fabricated, stale, transplanted, or
->    cross-owner ID enters `R`;
-> 4. `image(R) = P` exactly, so an **unused** planned record still rejects;
-> 5. each actual allocation instruction is recorded **once** — recording one
->    emitted instruction twice, attaching two records to it, or emitting it
->    without a record all reject;
-> 6. **one record may lawfully relate to many distinct allocation instructions.**
->    Multiplicity on the `P` side is unbounded by this proof.
+> **CORRECTED 2026-08-04 by `evt_39b1dzgc85gyf`. The clause that stood here
+> required `image(R) = P` exactly, "so an unused planned record still rejects".
+> That is falsified: the measured artifact carries 1 to 132 lawfully unused
+> records.** `P` is a closed **authorization** population, not a closed
+> execution-obligation population — the source half admits every source
+> `Construct`/`Record` occurrence whether or not it crosses a carrier here, the
+> synthesized half is every Effect seat times every lawful emission owner times
+> every allocation-reachable recipe-tree use, and the owner population includes
+> every generated specialization whose worker subtree contains the seat.
+> **An unused `p` is a dormant proof, not a missing emission, and forcing
+> surjectivity would reject ordinary valid artifacts.** Surjectivity is dropped;
+> no other exactness law is weakened.
+>
+> Each event is identified by `AggregateAllocationEvent { function: FuncId,
+> result: Value }`. The binding closure is:
+>
+> 1. **`dom(R) = E` exactly.** Every actual governed allocation event is observed
+>    once and has exactly one related record, and no relation entry may name a
+>    nonexistent event;
+> 2. `R` is single-valued on events and every pair is unique — duplicate or
+>    conflicting pairing rejects;
+> 3. **`image(R) ⊆ P`.** Every related occurrence is planner-issued under the
+>    exact closed population. ⛔ There is deliberately **no** `image(R) = P`
+>    requirement;
+> 4. before raw allocation the selected record reconciles owner, seat, path, full
+>    role/schema, shape, lane, ordered children, and opaque occurrence identity —
+>    a failure emits no successful artifact;
+> 5. **one `p ∈ P` may govern any number of distinct events, including zero;**
+> 6. **body lifecycle is exact and append-only** — every opened `FuncId` body
+>    commits exactly once after finalization/verification and before
+>    `define_function`; no body remains open; opened and committed `FuncId` sets
+>    agree; the whole-pass relation is the exact union of committed body
+>    relations; and a second build or commit rejects.
+>
+> ⛔ **Do not define `E` from the keys of `R`.** That makes `dom(R) = E` true by
+> construction and leaves the missing-pair mutation invisible. Event evidence and
+> relation evidence stay **separate**: each local body holds an event set and an
+> event-to-occurrence map; after the raw allocator returns its `Value`, record
+> the event, then record the pair; local close requires exact key equality
+> between the two; global commit appends both and records the `FuncId` in
+> monotone opened/committed censuses; whole-pass close requires global event-set
+> equality with relation keys, opened-body equality with committed-body keys, no
+> open local body, and `image(R) ⊆ P`. An equivalent private representation is
+> fine **only if** the two sets stay independently mutable enough for the
+> negative controls to discriminate.
+>
+> **The ledger stays `FuncId`-local plus whole-pass.** ⛔ No build counter, no
+> planner re-key, no ABI change, and **no control-flow reachability planner** is
+> authorized — deriving exact allocation reachability would be a second model of
+> lowering control flow, which `D7` must not create.
+>
+> ##### The controls this law binds
+>
+> Each must be committed, and each must discriminate:
+>
+> | must be LAWFUL (closeout succeeds) | must REJECT |
+> |---|---|
+> | the same numeric `Value` under two distinct `FuncId`s is two events | duplicate or conflicting event pairing |
+> | one planner record governing many events | an observed event whose relation insertion is suppressed, at local close |
+> | **at least one unused planned record** | a relation entry naming no observed event |
+> | | committed relation entries cleared between bodies while event evidence remains |
+> | | a suppressed or discarded body commit, via open-versus-committed closure |
+> | | a second build or commit of one `FuncId` |
+> | | a related occurrence absent from `P` |
+> | | allocation with no open body |
+> | | wrong owner, seat, path, role, shape, lane, or child — refused **before** raw allocation |
+> | | each governed-site wrapper bypass, before a successful artifact definition |
+>
+> ⭐ **The unused-record row is the one that would have caught this defect**, and
+> it is a positive control: it fails if surjectivity is ever reintroduced.
 >
 > **Count one moves from the record to the actual allocation event.** "Duplicate"
 > stays illegal for two planner records naming one semantic producer, and for two
@@ -1396,9 +1460,13 @@ missing edge must fail **planning/compilation before `ObjectEmission`**.
 > occurrence, shape, children, ...)` — which resolves and fully reconciles the
 > record **before** the raw allocation, emits exactly one carrier allocation,
 > records the actual CLIF instruction/result paired with the record, and rejects
-> a duplicate actual event or a conflicting pairing. At Function and whole-pass
-> closeout, compare the exact relation and its image, **not** a per-record count.
-> A failed definition never closes successfully.
+> a duplicate actual event or a conflicting pairing. **The checked wrapper is the
+> sole lawful route for the four governed aggregate-allocation sites; other raw
+> carrier allocations do not enter `E`, and this law does not reach unrelated
+> scalar or spill carriers.** At Function and whole-pass closeout, compare
+> **`dom(R)` against the independently recorded event set, and `image(R)` for
+> containment in `P`** — ⛔ **never** a per-record count, and ⛔ **never** an
+> image-equality check. A failed definition never closes successfully.
 >
 > **Still binding, unchanged by this correction:** the owner-axis finding
 > (`Predeclared` versus `Specialization` stays in the key and the
@@ -2515,8 +2583,12 @@ family — that is a measurement nobody has taken.
      performs **no** post-invalidation dispatch.
   7. **Construction ordering and defense.** Missing/duplicate/transplanted child
      record, wrong origin/position/identity/arity/owner/phase, stale owner
-     provenance, changed selected tag, or an unused aggregate record **rejects
-     before function definition or carrier allocation**. Independently mutating a
+     provenance, or a changed selected tag **rejects before function definition
+     or carrier allocation**. ⛔ **CORRECTED 2026-08-04 by `evt_39b1dzgc85gyf`:
+     this list also required "an unused aggregate record" to reject. It is
+     falsified — the measured artifact carries 1 to 132 lawfully unused records,
+     and at least one unused planned record must now let closeout SUCCEED.**
+     Independently mutating a
      persistent parent to receive an invocation child must still reach exact
      `BOUNDARY_ERR_ESCAPE`; ⛔ weakening or removing that guard **reds**.
   8. **Representation-semantic parity.** Persistent and invocation-owned ordinary
