@@ -16,7 +16,7 @@ use super::{
     backend, unsupported, BackendFailure, CraneliftBackendError, RuntimeDeclaration,
     RuntimeDeclarationKind,
 };
-use crate::boundary_value::BoundaryReferentOwner;
+use crate::boundary_value::{BoundaryClass, BoundaryReferentOwner, BoundaryTag};
 use crate::{RuntimeExpr, RuntimePartiality, RuntimeTrap, RuntimeTrapCode};
 use abi::{
     build_abi_plane, install_continuation_context_abi, install_continuation_specialization_abi,
@@ -2759,13 +2759,49 @@ fn aggregate_child_referent_owners(
 /// never sees a source occurrence for.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) enum SynthesizedAggregateChild {
-    /// An immediate the emitter materializes inline -- a native int, a bounded
-    /// nat, a scalar read out of the host reply. It has no boundary node, so
-    /// no owner but `NoReferent` is possible for it at any site.
-    Immediate,
+    /// A scalar, named by the **exact** closed immediate disposition the
+    /// emitter must produce for it.
+    ///
+    /// `spill` is the whole reason this is not one class. A
+    /// `RepresentedImmediate` does NOT mean "no boundary node": when a runtime
+    /// magnitude test finds the payload too wide for the immediate field, a
+    /// `spill: Some(_)` value becomes a handle of that class, which is a
+    /// persistent-store referent. So
+    ///
+    /// - `spill: None` (`Bool`) is exactly `{NoReferent}`;
+    /// - `spill: Some(_)` (`Int`, `BoundedNat`, `StructuralNat`,
+    ///   `ProcessExitStatus`) is `{NoReferent, PersistentStore}`.
+    ///
+    /// These are the disposition authority's own two fields, not a second tag
+    /// table. Recording only the broad `RepresentedImmediate` family, or
+    /// widening every scalar to the larger set, is a safe LANE answer and a
+    /// false statement about the child -- and a record's owner sets are its
+    /// stated evidence, not merely a means to a verdict.
+    Scalar {
+        tag: BoundaryTag,
+        spill: Option<BoundaryClass>,
+    },
     /// Another synthesized role. Its own record supplies its owner, so this
     /// child's contribution to the meet is derived rather than declared.
     Role(SynthesizedFixedConstructorRole),
+}
+
+impl SynthesizedAggregateChild {
+    /// A `BoundedNat` scalar, as the reply-validation lowering produces it.
+    const fn bounded_nat() -> Self {
+        Self::Scalar {
+            tag: BoundaryTag::ImmediateBoundedNat,
+            spill: Some(BoundaryClass::Int),
+        }
+    }
+
+    /// A native `Int` scalar.
+    const fn native_int() -> Self {
+        Self::Scalar {
+            tag: BoundaryTag::ImmediateInt,
+            spill: Some(BoundaryClass::Int),
+        }
+    }
 }
 
 /// The closed child model of one compiler-synthesized aggregate role.
@@ -2789,14 +2825,23 @@ pub(in crate::cranelift_backend) enum SynthesizedAggregateChild {
 fn synthesized_aggregate_recipe(
     role: SynthesizedFixedConstructorRole,
 ) -> Option<&'static [SynthesizedAggregateChild]> {
-    use SynthesizedAggregateChild::{Immediate, Role};
+    use SynthesizedAggregateChild::Role;
     use SynthesizedFixedConstructorRole as R;
+    const NAT2: &[SynthesizedAggregateChild] = &[
+        SynthesizedAggregateChild::bounded_nat(),
+        SynthesizedAggregateChild::bounded_nat(),
+    ];
+    const INT2: &[SynthesizedAggregateChild] = &[
+        SynthesizedAggregateChild::native_int(),
+        SynthesizedAggregateChild::native_int(),
+    ];
+    const WROTE: &[SynthesizedAggregateChild] = &[Role(R::PrivateTransferCount)];
     match role {
         R::Unit | R::ReadEof => Some(&[]),
         R::FileOperationRead | R::FileOperationWrite | R::FileOperationChangeMode => Some(&[]),
-        R::PrivateTransferCount => Some(&[Immediate, Immediate]),
-        R::ResourceTraceIdentity => Some(&[Immediate, Immediate]),
-        R::Wrote => Some(&[Role(R::PrivateTransferCount)]),
+        R::PrivateTransferCount => Some(NAT2),
+        R::ResourceTraceIdentity => Some(INT2),
+        R::Wrote => Some(WROTE),
         // Site-dependent: a user operand or a resource handle reaches these.
         R::OptionSome | R::FileError | R::PrivateBufferSpan | R::ReadSome => None,
         // Built only as dynamic-constructor alternatives.
@@ -2836,7 +2881,10 @@ fn synthesized_child_referent_owners(
         // referent. It can never be arena-owned, which is why the lane verdict
         // is the same either way -- and why recording `{NoReferent}` was a
         // false statement that happened not to cost anything yet.
-        SynthesizedAggregateChild::Immediate => Ok(vec![
+        SynthesizedAggregateChild::Scalar { spill: None, .. } => {
+            Ok(vec![BoundaryReferentOwner::NoReferent])
+        }
+        SynthesizedAggregateChild::Scalar { spill: Some(_), .. } => Ok(vec![
             BoundaryReferentOwner::NoReferent,
             BoundaryReferentOwner::PersistentStore,
         ]),
@@ -14884,6 +14932,109 @@ mod tests {
     ///
     /// GAP: the invocation aggregate carrier row is deliberately absent from
     /// Slice 0; this control proves only the dormant authority it will consume.
+    /// `D7` — a scalar child's owner set is derived from its EXACT disposition.
+    ///
+    /// MEASURED: a `spill: None` scalar yields exactly `{NoReferent}`; a
+    /// `spill: Some(_)` scalar yields `{NoReferent, PersistentStore}`; and
+    /// every scalar in the production schema agrees with the disposition its
+    /// own `Lowered` variant declares.
+    ///
+    /// CLAIMED: the recorded owner set is the child's exact evidence, read off
+    /// the spill field of the sole disposition authority — not a family-wide
+    /// answer that happens to reach the right lane.
+    ///
+    /// THE GAP: neither set contains `InvocationArena`, so **this distinction
+    /// changes no lane verdict today**. It is asserted because the sets are the
+    /// record's stated evidence and a merely-sufficient set is a false one; a
+    /// reader should not mistake this row for lane coverage.
+    #[test]
+    fn a_scalar_childs_owner_set_comes_from_its_exact_spill_disposition() {
+        let mut visiting = BTreeSet::new();
+        let mut done = BTreeMap::new();
+
+        let spill_free = SynthesizedAggregateChild::Scalar {
+            tag: BoundaryTag::ImmediateBool,
+            spill: None,
+        };
+        assert_eq!(
+            synthesized_child_referent_owners(
+                spill_free,
+                &synthesized_aggregate_recipe,
+                &mut visiting,
+                &mut done
+            )
+            .expect("a spill-free scalar resolves"),
+            vec![BoundaryReferentOwner::NoReferent],
+            "a `Bool` never becomes a node at any magnitude, so `PersistentStore` \
+             is not among its possible owners"
+        );
+
+        for spilling in [
+            SynthesizedAggregateChild::native_int(),
+            SynthesizedAggregateChild::bounded_nat(),
+        ] {
+            assert_eq!(
+                synthesized_child_referent_owners(
+                    spilling,
+                    &synthesized_aggregate_recipe,
+                    &mut visiting,
+                    &mut done
+                )
+                .expect("a spill-capable scalar resolves"),
+                vec![
+                    BoundaryReferentOwner::NoReferent,
+                    BoundaryReferentOwner::PersistentStore,
+                ],
+                "a wide {spilling:?} spills to a handle of its spill class, which \
+                 is a persistent-store referent"
+            );
+        }
+
+        // The two sets must actually differ, or the row is vacuous and would
+        // pass against the single family-wide answer it exists to reject.
+        assert_ne!(
+            synthesized_child_referent_owners(
+                spill_free,
+                &synthesized_aggregate_recipe,
+                &mut visiting,
+                &mut done
+            )
+            .expect("spill-free resolves"),
+            synthesized_child_referent_owners(
+                SynthesizedAggregateChild::native_int(),
+                &synthesized_aggregate_recipe,
+                &mut visiting,
+                &mut done
+            )
+            .expect("spill-capable resolves"),
+            "spill presence must change the recorded owner set, or recording the \
+             disposition bought nothing over the broad immediate family"
+        );
+
+        // Every scalar the production schema declares must name the disposition
+        // its own emitter variant declares. This is the anti-drift half: the
+        // recipe is a second statement of a shape the disposition authority
+        // already owns.
+        for role in SynthesizedFixedConstructorRole::ALL {
+            let Some(recipe) = synthesized_aggregate_recipe(role) else {
+                continue;
+            };
+            for child in recipe {
+                if let SynthesizedAggregateChild::Scalar { tag, spill } = child {
+                    assert!(
+                        matches!(
+                            (tag, spill),
+                            (BoundaryTag::ImmediateBoundedNat, Some(BoundaryClass::Int))
+                                | (BoundaryTag::ImmediateInt, Some(BoundaryClass::Int))
+                        ),
+                        "{role:?} declares a scalar {tag:?}/{spill:?} that no \
+                         emitter variant produces"
+                    );
+                }
+            }
+        }
+    }
+
     /// `D7` — the synthesized schema graph closes STRUCTURALLY, not on a count.
     ///
     /// MEASURED: a fifteen-link acyclic role chain resolves, and a two-role
@@ -14905,7 +15056,7 @@ mod tests {
     /// confidence, so it was never a closure proof.
     #[test]
     fn synthesized_schema_closure_is_structural_not_a_depth_budget() {
-        use SynthesizedAggregateChild::{Immediate, Role};
+        use SynthesizedAggregateChild::Role;
         use SynthesizedFixedConstructorRole as R;
 
         // A fifteen-link chain: each role names the next, the last is scalar.
@@ -14948,7 +15099,11 @@ mod tests {
                 R::ResourceReleaseFailed => Some(link!(R::ResourceKindMismatch)),
                 R::ResourceKindMismatch => Some(link!(R::ResourceBufferLimit)),
                 R::ResourceBufferLimit => Some(link!(R::ResourceInvalidOffset)),
-                R::ResourceInvalidOffset => Some(&[Immediate]),
+                R::ResourceInvalidOffset => {
+                    const TAIL: &[SynthesizedAggregateChild] =
+                        &[SynthesizedAggregateChild::native_int()];
+                    Some(TAIL)
+                }
                 _ => None,
             }
         };

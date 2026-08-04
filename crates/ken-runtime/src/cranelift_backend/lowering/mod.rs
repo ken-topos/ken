@@ -6348,11 +6348,22 @@ impl<'a> Lowering<'a> {
             // which is the dangling parent this whole record exists to prevent.
             for (position, (child, argument)) in declared.iter().zip(&args).enumerate() {
                 let agrees = match child {
-                    // No boundary node, so nothing for an arena to own. Read
-                    // from the sole disposition authority, not from the variant.
-                    SynthesizedAggregateChild::Immediate => matches!(
+                    // The EXACT planned disposition, spill class and presence
+                    // included -- not the broad `RepresentedImmediate` family.
+                    //
+                    // The family is not enough because it does not distinguish
+                    // the two owner sets the planner derived from: `spill:
+                    // None` has no boundary node at any magnitude, while
+                    // `spill: Some(_)` becomes a persistent-store handle at
+                    // wide ones. Accepting any immediate here would let a
+                    // record justified by one of those govern an operand that
+                    // is the other.
+                    SynthesizedAggregateChild::Scalar { tag, spill } => matches!(
                         argument.boundary_disposition(),
-                        BoundaryDisposition::RepresentedImmediate { .. }
+                        BoundaryDisposition::RepresentedImmediate {
+                            tag: emitted_tag,
+                            spill: emitted_spill,
+                        } if emitted_tag == *tag && emitted_spill == *spill
                     ),
                     // The named role's own record supplied this child's owners,
                     // so the operand must be that exact interned occurrence --
