@@ -1844,10 +1844,26 @@ impl SemanticPlane {
                 // seed check below is what keeps a call from landing in the
                 // middle of a unit, and it runs on both classes.
                 let scheduling_entry = entries.contains(&edge.to);
-                let callable_declaration = edges
+                // ⚠⚠ **NAMED FOR WHAT IT MEASURES.** This is "the endpoint is a
+                // static-body unit head" — the WHOLE such population, anonymous
+                // `ClosureBody` units included. It is **not** the
+                // callable-declaration discriminator, and must never be
+                // described as one: reading it that way would make this file a
+                // second, weaker classification authority for a class the ABI
+                // plane already decides exactly.
+                //
+                // ⭐ The layering, stated so it is not collapsed by a later
+                // edit: the **semantic plane** establishes that the endpoint is
+                // a unit head and therefore that a self-loop is structurally
+                // possible; the **ABI plane** —
+                // `AbiPlane::validate_declaration_call_targets` — reads the
+                // exact `AbiUnitDefinition` and is the sole authority on the
+                // callable class. ⛔ Do not reverse-search the semantic graph to
+                // duplicate that.
+                let static_body_head = edges
                     .iter()
                     .any(|body| body.kind == EdgeKind::StaticBody && body.to == edge.to);
-                if !scheduling_entry && !callable_declaration {
+                if !scheduling_entry && !static_body_head {
                     return Err(planner_error(
                         "declaration call edge target is neither a scheduling entry nor a \
                          static body unit head",
@@ -1872,7 +1888,17 @@ impl SemanticPlane {
                 // whose reference resolves back into the unit it already sits
                 // in has no second unit to call, so the edge would be an
                 // intra-unit transfer misfiled as a call.
-                if to_unit == from_unit && !callable_declaration {
+                //
+                // ⚠ **What this test does and does not decide.** Admitting the
+                // self-loop here is a *structural* permission keyed on the
+                // broad head predicate above; it does not certify that the
+                // target is the exact declaration-owned `CallableDeclaration`
+                // of the referenced symbol. That certification is
+                // `validate_declaration_call_targets`'s, and it is what keeps
+                // an anonymous `ClosureBody` self-loop out. ⇒ The plan is
+                // fail-closed across the two layers together, never by this
+                // line alone.
+                if to_unit == from_unit && !static_body_head {
                     return Err(planner_error(
                         "declaration call edge does not cross a function unit boundary",
                     ));
