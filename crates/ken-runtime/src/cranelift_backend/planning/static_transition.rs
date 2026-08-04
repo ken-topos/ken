@@ -3088,8 +3088,11 @@ fn host_effect_recipe_tree(operation: ken_host::HostOpV1) -> SynthesizedHostResu
             N::nullary(R::ResourceNoProgress),
         ]));
 
-    /// `Option::Some(<the site's path operand>)` — a site-dependent leaf, so
-    /// this node and every parent of it is unmodellable.
+    /// `Option::Some(<the site's path operand>)`.
+    ///
+    /// Its child is site-bound, which bounds the ROLE-INVARIANT meet and not
+    /// the meet: this node and every parent of it gets an exact seat-bound
+    /// record, derived from the seat's own operand authority.
     const SOME_SITE_PATH: SynthesizedAggregateNode = N::Fixed {
         role: R::OptionSome,
         // The seat's operand 0 — the path the caller passed.
@@ -7014,12 +7017,16 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(record.id)
     }
 
-    /// The occurrence identity of one **compiler-synthesized** aggregate role.
+    /// The occurrence identity of one **compiler-synthesized** aggregate use.
     ///
-    /// The role is the key because a synthesized aggregate has no occurrence in
-    /// the program to be keyed by. A role the recipe declines to model has no
-    /// record and refuses here, which is the honest answer for a role whose
-    /// children are a property of the emission site rather than of the role.
+    /// ⛔ The key is `owner + seat + path + full role`, never the role alone. A
+    /// synthesized aggregate has no occurrence in the program to be keyed by,
+    /// and a role repeats within one seat's tree — `ResourceKind` three times —
+    /// so the path is what separates the uses.
+    ///
+    /// Every allocation-reachable use has a record, site-bound ones included.
+    /// Absence here is a loud failure, not the ordinary answer for a role whose
+    /// children come from the emission site.
     pub(in crate::cranelift_backend) fn synthesized_aggregate_occurrence(
         &self,
         owner: ContinuationEmissionOwner,
@@ -7205,38 +7212,93 @@ impl<'src> StaticTransitionPlan<'src> {
         seat: StaticOriginId,
         path: &SynthesizedAggregatePath,
     ) -> Result<Vec<SynthesizedConstructorRole>, CraneliftBackendError> {
+        self.synthesized_alternative_population(seat, path)?
+            .ok_or_else(|| {
+                planner_error("synthesized aggregate path does not name a dynamic alternative set")
+            })
+    }
+
+    /// **The alternative population at a path, with ABSENCE typed apart from
+    /// FAILURE.**
+    ///
+    /// ⭐ `Ok(None)` means the path **lawfully resolved** to a node that is not
+    /// a dynamic set — a constructor, a scalar, a site operand, or an absent
+    /// arm. `Err` means the question could not be answered at all: the seat is
+    /// missing or is not an `Effect`, the walk left the tree, an `IOError`
+    /// position is outside the closed inventory, or the population is
+    /// malformed.
+    ///
+    /// ⛔ **Those are not the same answer and a caller may not merge them.** A
+    /// root reconciliation that wrote `.ok()` here turned every one of those
+    /// failures into "the planner plans no set at this root", so a non-dynamic
+    /// emitted root then matched the absent case and was accepted. That is a
+    /// missing-authority default in a function whose whole contract is that
+    /// neither direction may be defaulted — and no shape or truncation mutation
+    /// can find it, because both of those keep the lookup working.
+    fn synthesized_alternative_population(
+        &self,
+        seat: StaticOriginId,
+        path: &SynthesizedAggregatePath,
+    ) -> Result<Option<Vec<SynthesizedConstructorRole>>, CraneliftBackendError> {
         let operation = self.host_effect_operation(seat)?;
         match self.synthesized_tree_walk(operation, path)? {
             SynthesizedTreeResolution::Node(node) => match node {
-            SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::Alternatives(
-                alternatives,
-            )) => alternatives
-                .iter()
-                .map(|alternative| match alternative {
-                    SynthesizedAggregateNode::Fixed { role, .. } => {
-                        Ok(SynthesizedConstructorRole::Fixed(*role))
-                    }
-                    _ => Err(planner_error(
-                        "a dynamic aggregate alternative is not a constructor, so it allocates \
-                         nothing",
-                    )),
-                })
-                .collect(),
-            SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::IoErrors) => Ok(self
-                .semantic
-                .synthesized_io_error_roles()
-                .iter()
-                .map(|role| SynthesizedConstructorRole::IoError(*role))
-                .collect()),
-                _ => Err(planner_error(
-                    "synthesized aggregate path does not name a dynamic alternative set",
+                SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::Alternatives(
+                    alternatives,
+                )) => alternatives
+                    .iter()
+                    .map(|alternative| match alternative {
+                        SynthesizedAggregateNode::Fixed { role, .. } => {
+                            Ok(SynthesizedConstructorRole::Fixed(*role))
+                        }
+                        // ⛔ A malformed population is a FAILURE, not an
+                        // absence: an alternative that is not a constructor
+                        // allocates nothing and the set cannot be stated.
+                        _ => Err(planner_error(
+                            "a dynamic aggregate alternative is not a constructor, so it \
+                             allocates nothing",
+                        )),
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Some),
+                SynthesizedAggregateNode::Dynamic(SynthesizedDynamicSet::IoErrors) => Ok(Some(
+                    self.semantic
+                        .synthesized_io_error_roles()
+                        .iter()
+                        .map(|role| SynthesizedConstructorRole::IoError(*role))
+                        .collect(),
                 )),
+                // ⭐ A LAWFUL non-set. The path resolved; the node it named
+                // simply is not a dynamic set. This is the only absence, and it
+                // is the one a caller may act on.
+                SynthesizedAggregateNode::Fixed { .. }
+                | SynthesizedAggregateNode::Scalar { .. }
+                | SynthesizedAggregateNode::SiteOperand(_)
+                | SynthesizedAggregateNode::Absent => Ok(None),
             },
-            // An alternative is a member of a set, not a set.
+            // An alternative is a member of a set, not a set. A path that names
+            // one where a set was asked for is a disagreement about the shape
+            // of the tree, not a lawful absence.
             SynthesizedTreeResolution::IoErrorAlternative(_) => Err(planner_error(
                 "synthesized aggregate path names an IOError alternative, not a set",
             )),
         }
+    }
+
+    /// [`Self::synthesized_alternative_population`] at a host-result ROOT.
+    ///
+    /// Named separately because the two callers want different things from the
+    /// same answer: a dynamic CHILD is declared dynamic by its parent's child
+    /// model, so `Ok(None)` there is a tree inconsistency and
+    /// `synthesized_dynamic_alternatives` turns it into an error. A ROOT has
+    /// nothing above it declaring its kind, so `Ok(None)` is the ordinary
+    /// answer for the arms that build a constructor or nothing at all.
+    pub(in crate::cranelift_backend) fn synthesized_root_alternative_population(
+        &self,
+        seat: StaticOriginId,
+        path: &SynthesizedAggregatePath,
+    ) -> Result<Option<Vec<SynthesizedConstructorRole>>, CraneliftBackendError> {
+        self.synthesized_alternative_population(seat, path)
     }
 
     /// The host operation of one `Effect` seat.
@@ -16896,6 +16958,114 @@ mod tests {
                  report an empty population"
             );
         }
+    }
+
+    /// **A lawful non-dynamic root and a FAILED lookup are different answers.**
+    ///
+    /// MEASURED: at a real `FsWriteAt` seat the error root reports a population
+    /// and the `ok` root — `Wrote`, a constructor — reports `Ok(None)`. At an
+    /// `FsReadFile` seat the `ok` root is `Absent` and also reports `Ok(None)`.
+    /// A seat that is not an `Effect` occurrence, and a path that leaves the
+    /// tree or names an `IOError` position outside the closed inventory, each
+    /// report `Err`.
+    ///
+    /// CLAIMED: absence is typed apart from failure, so a caller cannot act on
+    /// "the planner plans no set here" when what actually happened is that the
+    /// question could not be answered.
+    ///
+    /// THE GAP — and it is the reason this row exists. The root reconciliation
+    /// wrote `.ok()` on this query, which merged every failure into absence: a
+    /// non-dynamic emitted root then matched the absent case and was accepted,
+    /// a missing-authority default inside a function whose stated contract is
+    /// that neither direction may be defaulted. **No shape or truncation
+    /// mutation can find that**, because both keep the lookup working — which
+    /// is why the five root mutations were all green against it. The
+    /// distinguishing evidence is exactly the two halves below, and the
+    /// positive half matters as much as the negative: without it, the
+    /// correction would be satisfied by making every non-dynamic root fail.
+    #[test]
+    fn a_lawful_non_dynamic_root_is_not_a_failed_lookup() {
+        use SynthesizedAggregateRoot::{HostResultError as ERR, HostResultOk as OK};
+
+        let (plan, seat, _) = d7_seat_fixture(ken_host::HostOpV1::FsWriteAt, d7_three_operands());
+        let err = SynthesizedAggregatePath::root(ERR);
+        let ok = SynthesizedAggregatePath::root(OK);
+
+        // Dynamic root: a population.
+        assert_eq!(
+            plan.synthesized_root_alternative_population(seat, &err)
+                .expect("the error root resolves")
+                .expect("the error root is the resource surface")
+                .len(),
+            10
+        );
+
+        // ⭐ LAWFULLY non-dynamic: `Wrote` is a constructor, so the answer is a
+        // resolved absence rather than a failure.
+        assert_eq!(
+            plan.synthesized_root_alternative_population(seat, &ok)
+                .expect("the ok root resolves lawfully"),
+            None,
+            "a constructor root is a resolved non-set, not a failed lookup"
+        );
+
+        // The same for an arm that builds no aggregate at all.
+        let (absent_plan, absent_seat, _) = d7_seat_fixture(
+            ken_host::HostOpV1::FsReadFile,
+            vec![RuntimeExpr::Value(RuntimeValue::Int(1.into()))],
+        );
+        assert_eq!(
+            absent_plan
+                .synthesized_root_alternative_population(
+                    absent_seat,
+                    &SynthesizedAggregatePath::root(OK)
+                )
+                .expect("an absent ok arm resolves lawfully"),
+            None,
+            "`FsReadFile`'s `ok` builds no aggregate, which is still a RESOLVED \
+             answer"
+        );
+
+        // ⛔ And every way the question can fail to be answerable stays `Err`.
+        let non_effect = plan
+            .source_occurrences
+            .iter()
+            .flatten()
+            .find(|occurrence| !matches!(occurrence.expr, RuntimeExpr::Effect { .. }))
+            .expect("the fixture has a non-effect occurrence")
+            .static_origin;
+        assert!(
+            plan.synthesized_root_alternative_population(non_effect, &err)
+                .is_err(),
+            "a seat that is not a host effect cannot answer, and must not read \
+             as a root with no planned set"
+        );
+        assert!(
+            plan.synthesized_root_alternative_population(
+                StaticOriginId(u32::MAX),
+                &err
+            )
+            .is_err(),
+            "an origin outside the occurrence population must fail, not resolve \
+             to an absence"
+        );
+        assert!(
+            plan.synthesized_root_alternative_population(seat, &err.alternative(12))
+                .is_err(),
+            "a path that leaves the tree must fail, not resolve to an absence"
+        );
+        let inventory = plan.semantic.synthesized_io_error_roles().len();
+        assert!(
+            plan.synthesized_root_alternative_population(
+                seat,
+                &err.alternative(0).field(0).alternative(
+                    u32::try_from(inventory).expect("the inventory fits")
+                )
+            )
+            .is_err(),
+            "an IOError position outside the closed inventory must fail, not \
+             resolve to an absence"
+        );
     }
 
     /// Every operation whose tree this module states.

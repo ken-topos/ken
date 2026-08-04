@@ -6826,10 +6826,18 @@ impl<'a> Lowering<'a> {
         let Some(owner) = self.defining_emission_owner else {
             return Ok(());
         };
+        // ⛔ **`?`, never `.ok()`.** A lookup FAILURE and a lawful non-dynamic
+        // root are different answers, and the planner types them apart. Merging
+        // them here -- an absent or non-`Effect` seat, a walk that leaves the
+        // tree, an `IOError` position outside the closed inventory, a malformed
+        // population -- would make every one of those read as "the planner
+        // plans no set at this root", and a non-dynamic emitted root would then
+        // match the absent case and be accepted. That is the missing-authority
+        // default this function's contract forbids, and no shape or truncation
+        // mutation can find it: both of those keep the lookup working.
         let planned = self
             .static_transition_plan
-            .synthesized_dynamic_alternatives(seat, root)
-            .ok();
+            .synthesized_root_alternative_population(seat, root)?;
         match (planned, value) {
             (Some(_), Lowered::DynamicConstructor(dynamic)) => {
                 if self.dynamic_alternatives_agree(owner, seat, root, dynamic)? {
