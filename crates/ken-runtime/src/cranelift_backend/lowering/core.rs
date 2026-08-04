@@ -10305,8 +10305,7 @@ impl<'a> Lowering<'a> {
         captures: Vec<Lowered>,
         args: Vec<LoweringOperand>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        // ⛔⛔ **The pending checked-recursion marker is CONSUMED here, and a
-        // present one is refused.**
+        // ⛔⛔ **The pending checked-recursion marker is CONSUMED here.**
         //
         // ⚠ Every consumer this route diverts from reached
         // `lower_recursive_declaration_call`, which consumes the marker on
@@ -10318,24 +10317,12 @@ impl<'a> Lowering<'a> {
         // optional bookkeeping; it is what keeps the diversion from corrupting
         // an unrelated call site.
         //
-        // ⛔ And a marker that IS present is refused rather than dropped. A
-        // checked same-SCC invocation is a soundness obligation carried by the
-        // oriented plan, and a direct call to a declaration-owned unit has no
-        // mechanism to honour it. Discharging it by ignoring it would be a
-        // silent accept of exactly the kind the conservative-guard rule
-        // forbids.
-        if self
-            .consume_checked_recursive_invocation_call(symbol)?
-            .is_some()
-        {
-            return Err(unsupported(
-                "Call",
-                format!(
-                    "checked recursive invocation of {symbol} cannot cross a \
-                     declaration-owned unit call"
-                ),
-            ));
-        }
+        // `D5` replaces `D4`'s conservative refusal of a present marker with
+        // the split-domain validation below. The marker remains **validation
+        // authority only**: nothing it carries becomes a runtime operand, an
+        // identity word, a selector, a capsule, a capture, an alternate ABI, a
+        // copied body, or a fallback.
+        let checked = self.consume_checked_recursive_invocation_call(symbol)?;
         // The declared arity, checked against the call before anything is
         // emitted. The descriptor rejects a mismatched slice too, but it can
         // only say "the frame is missing an input"; this says which call.
@@ -10349,9 +10336,273 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
+        self.validate_declaration_unit_call(reference, symbol, checked, params.len(), captures.len())?;
         let mut inputs = args;
         inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
         self.call_declared_declaration_unit(builder, reference, &inputs)
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D5` — the split-domain validation that stands
+    /// between a call occurrence and the declaration-owned unit it reaches.**
+    ///
+    /// Two authorities are joined on **one exact occurrence and one exact
+    /// target**, and neither is derived from the other:
+    ///
+    /// 1. **the checked-plan domain** validates the facts it actually owns —
+    ///    same-SCC identity, admission, application arity, and the canonical
+    ///    local telescope;
+    /// 2. **the identity join** binds the consumed checked occurrence to the
+    ///    planner-issued `DeclarationCall` reference: exact callee symbol,
+    ///    exact application arity, exact resolved `CallableDeclaration` target.
+    ///    These three equalities are the *only* lawful shared facts between the
+    ///    two domains;
+    /// 3. **the ABI domain** validates that same target's `D3`-established
+    ///    `Parameter ++ Capture` descriptor run and `D4` input order.
+    ///
+    /// ⛔⛔ **There is no checked-interface → ABI projection, and D5 must not
+    /// invent one** (Architect ruling, 2026-08-04). `CheckedAnswerInterfaceV1`
+    /// is canonical *semantic* bytes plus a fingerprint of those bytes: it
+    /// encodes no [`AbiCarrier`], no [`AbiOwnership`], no [`AbiStorageOwner`],
+    /// no slot ordinal and no capture provenance. So owner and phase are read
+    /// where they actually live — on the resolved descriptor — and never parsed
+    /// out of canonical bytes, surrogated by a fingerprint comparison, or
+    /// assigned by telescope position.
+    ///
+    /// ⛔ **The ABI half compares two independently produced copies**, which is
+    /// the whole reason it is not tautological. `resolve_call_edges` copies the
+    /// already-validated unit header/slots/offsets into the function-local
+    /// [`units::DeclaredUnitCall`] record; the plan's own descriptor is
+    /// immutable and was independently checked by `D3` against the caller-side
+    /// `StaticBody` signature. Reading `slot.carrier` from the declared record
+    /// and then deriving that same record's expected owner from it would be a
+    /// check with one operand. ⇒ The chain preserved here is
+    /// `caller-side D3 signature ↔ validated target descriptor ↔ exact declared
+    /// call record`.
+    ///
+    /// ⚠ **Axes deliberately NOT re-checked here, because an earlier authority
+    /// already fails closed on them.** `OrientedSubcontinuationPlanV1::validate`
+    /// runs on the compile path (`planning.rs`, inside
+    /// `oriented_subcontinuation_plan_for_program`) and there establishes, for
+    /// every recursive-call template: the callee segment site and the exact
+    /// callee frame-template set against the plan's own frames; the composition
+    /// of the last callee frame's output interface with `result_interface` and
+    /// `caller_interface`; and `occurrence_binding_fingerprint` over **every**
+    /// field of the template. `planning.rs` additionally reconciles the exact
+    /// per-declaration marker locations, which is what binds `declaration` to
+    /// the body the marker actually sits in. Restating those here would put a
+    /// second copy of each law in a file where the two can disagree, and would
+    /// let a control mis-attribute an upstream refusal to `D5`.
+    fn validate_declaration_unit_call(
+        &self,
+        reference: StaticOriginId,
+        symbol: &RuntimeSymbol,
+        checked: Option<CheckedRecursiveInvocationInstance>,
+        params: usize,
+        captures: usize,
+    ) -> Result<(), CraneliftBackendError> {
+        // ── The identity join, half one: the planner's resolved target class.
+        //
+        // ⛔ Every call through this route is a call to a declaration-OWNED
+        // unit, so a planner that resolved this same reference to the
+        // declaration's zero-arity scheduling entry disagrees with the lowering
+        // about what the declaration is. That fails closed rather than emitting
+        // a call whose arity the descriptor would then have to reject.
+        let class = self
+            .static_transition_plan
+            .declaration_call_target_class(reference)
+            .ok_or_else(|| {
+                backend(BackendFailure::PlannerInvariant(format!(
+                    "declaration reference to {symbol} has no planned call target class"
+                )))
+            })?;
+        if class != DeclarationCallTargetClass::CallableDeclaration {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "declaration {symbol} lowers as a declaration-owned unit call but its planned \
+                 call targets the declaration's scheduling entry"
+            ))));
+        }
+        let declared = self
+            .function_local
+            .declaration_calls
+            .get(&reference)
+            .ok_or_else(|| {
+                backend_module(
+                    "DeclarationRef has no planner-derived declaration call target".to_string(),
+                )
+            })?;
+        // ── The ABI domain, on that exact target.
+        let mut found = None;
+        for unit in self.static_transition_plan.emittable_units()? {
+            if unit.origin() != declared.origin {
+                continue;
+            }
+            if found.is_some() {
+                return Err(backend(BackendFailure::PlannerInvariant(
+                    "two abi descriptors claim one declaration call target origin".to_string(),
+                )));
+            }
+            found = Some(unit);
+        }
+        let unit = found.ok_or_else(|| {
+            backend(BackendFailure::PlannerInvariant(
+                "declaration call target has no abi descriptor".to_string(),
+            ))
+        })?;
+        if !matches!(
+            unit.definition(),
+            AbiUnitDefinition::CallableDeclaration { .. }
+        ) {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "declaration call to {symbol} resolves a target that is not a declaration-owned \
+                 callable unit"
+            ))));
+        }
+        // The declared call record against the plan's immutable descriptor:
+        // header, the whole slot run (carrier, ownership, storage owner,
+        // width/alignment, kind and ordinal), and the offsets.
+        if unit.header() != declared.header {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "declaration call record header disagrees with its validated descriptor"
+                    .to_string(),
+            )));
+        }
+        if unit.slots() != declared.slots.as_slice() {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "declaration call record slot run disagrees with its validated descriptor"
+                    .to_string(),
+            )));
+        }
+        let (offsets, frame_bytes) = unit.slot_offsets()?;
+        if offsets != declared.offsets || frame_bytes != declared.header.frame_bytes {
+            return Err(backend(BackendFailure::PlannerInvariant(
+                "declaration call record offsets disagree with its validated descriptor"
+                    .to_string(),
+            )));
+        }
+        // ── The `D4` input order, stated against the descriptor that receives
+        // it. `inputs = args in PARAMETER order ++ captures in D3 order` is only
+        // meaningful if the descriptor's leading run is exactly that many
+        // `Parameter` slots followed by exactly that many `Capture` slots, each
+        // densely ordinalled within its own kind-run.
+        let mut expected = (0..params)
+            .map(|ordinal| (AbiSlotKind::Parameter, ordinal as u32))
+            .chain((0..captures).map(|ordinal| (AbiSlotKind::Capture, ordinal as u32)));
+        for slot in unit.slots() {
+            match slot.kind {
+                AbiSlotKind::Parameter | AbiSlotKind::Capture => {
+                    if expected.next() != Some((slot.kind, slot.ordinal)) {
+                        return Err(backend(BackendFailure::PlannerInvariant(format!(
+                            "declaration call to {symbol} does not match its callable unit's \
+                             parameter-then-capture input run"
+                        ))));
+                    }
+                }
+                AbiSlotKind::Result
+                | AbiSlotKind::Control
+                | AbiSlotKind::Trap
+                | AbiSlotKind::Store => {}
+            }
+        }
+        if expected.next().is_some() {
+            return Err(backend(BackendFailure::PlannerInvariant(format!(
+                "declaration call to {symbol} supplies more inputs than its callable unit declares"
+            ))));
+        }
+        // ── The checked-plan domain. An unchecked call has nothing further to
+        // reconcile: it carries no same-SCC obligation, and the ABI half above
+        // is unconditional.
+        let Some(instance) = checked else {
+            return Ok(());
+        };
+        let InvocationTemplateRef::SameSccCall(call_template_id) = instance.source else {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "declaration-owned unit call received a computational IH invocation",
+            ));
+        };
+        let plan = self.oriented_subcontinuation_plan.as_ref().ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked declaration-owned unit call has no checked plan",
+            )
+        })?;
+        let call = plan.recursive_call(call_template_id).ok_or_else(|| {
+            unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked declaration-owned unit call has no checked template",
+            )
+        })?;
+        // ── The identity join, half two: callee symbol and application arity.
+        // These are the lawful shared equalities — the callee the checked plan
+        // names is the callee the emitter is about to call, applied to exactly
+        // the arity the plan admitted.
+        if &call.callee != symbol {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked declaration-owned unit call names another callee",
+            ));
+        }
+        if call.arity != params as u64 {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                format!(
+                    "checked recursive invocation of {symbol} is admitted at arity {} but the \
+                     declaration-owned unit call applies {params}",
+                    call.arity
+                ),
+            ));
+        }
+        if call.local_telescope.len() as u64 != call.arity {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked recursive invocation's local telescope does not cover its arity",
+            ));
+        }
+        // ── Same-SCC identity and admission.
+        //
+        // ⭐ **What makes this call *same-SCC* is that its callee is itself a
+        // recursive member of the caller's group** — not that the template says
+        // so. The independent side is the rest of the plan: some template in
+        // this recursion group must be the callee's OWN call template, and the
+        // group must be internally consistent in `scc_index` and `admission`.
+        //
+        // ⚠ For a self-call the witness is this very template, so `recursion_
+        // group` alone is not discriminated by a single-declaration fixture;
+        // the mutual same-SCC fixture is what closes that. Stated rather than
+        // left to be discovered — the rule is identical either way, and there
+        // is deliberately no `caller == callee` shortcut.
+        let group = plan
+            .recursive_calls
+            .iter()
+            .filter(|other| other.recursion_group == call.recursion_group)
+            .collect::<Vec<_>>();
+        if !group.iter().any(|other| other.declaration == call.callee) {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked recursive invocation's callee is not a recursive member of its own \
+                 recursion group",
+            ));
+        }
+        if group
+            .iter()
+            .any(|other| other.scc_index != call.scc_index || other.admission != call.admission)
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "checked recursion group disagrees about its scc index or admission",
+            ));
+        }
+        if plan
+            .recursive_calls
+            .iter()
+            .any(|other| other.scc_index == call.scc_index && other.recursion_group != call.recursion_group)
+        {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "two checked recursion groups claim one scc index",
+            ));
+        }
+        Ok(())
     }
 
     /// `static_origin` is the origin of the **match occurrence** whose cases

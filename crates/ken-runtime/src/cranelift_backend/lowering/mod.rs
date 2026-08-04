@@ -1088,6 +1088,31 @@ thread_local! {
         const { std::cell::Cell::new(TrapIdentityMutation::Exact) };
     static TRAP_CALLER_PROTOCOL_MUTATION: std::cell::Cell<TrapCallerProtocolMutation> =
         const { std::cell::Cell::new(TrapCallerProtocolMutation::Exact) };
+    /// **`RT-DECL-CLOSURE-PORT` `D5` — every declaration-owned unit call this
+    /// thread actually emitted**, as `(reference occurrence, target origin,
+    /// emitted callee)`.
+    ///
+    /// ⛔ Appended at the emission site from the emitted `Inst` itself. Its
+    /// point is to be an authority *independent of* `declaration_calls`, so a
+    /// control can compare the planner-resolved target against what was really
+    /// called. ⚠ It accumulates across a thread, so read it through
+    /// [`d5_emitted_declaration_calls`] after
+    /// [`reset_d5_emitted_declaration_calls`] — a bare read attributes an
+    /// earlier compile's calls to the current one.
+    static D5_EMITTED_DECLARATION_CALLS: std::cell::RefCell<
+        Vec<(StaticOriginId, StaticOriginId, cranelift_codegen::ir::FuncRef)>,
+    > = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_d5_emitted_declaration_calls() {
+    D5_EMITTED_DECLARATION_CALLS.with(|calls| calls.borrow_mut().clear());
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d5_emitted_declaration_calls()
+-> Vec<(StaticOriginId, StaticOriginId, cranelift_codegen::ir::FuncRef)> {
+    D5_EMITTED_DECLARATION_CALLS.with(|calls| calls.borrow().clone())
 }
 
 #[cfg(test)]
@@ -2491,20 +2516,42 @@ impl<'a> Lowering<'a> {
                     "DeclarationRef has no planner-derived declaration call target".to_string(),
                 )
             })?;
-        self.call_declared_unit_target(
+        #[cfg(test)]
+        let target_origin = target.origin;
+        let (operand, call) = self.call_declared_unit_target(
             builder,
             target,
             inputs,
             #[cfg(test)]
             None,
-        )
-        .map(|(operand, _inst)| operand)
+        )?;
+        // `RT-DECL-CLOSURE-PORT` `D5` — the emitted-target oracle.
+        //
+        // ⭐ The callee is read back out of the **instruction that was actually
+        // emitted**, not out of the declared map a second time. A control that
+        // compared two reads of `declaration_calls` would agree with itself
+        // whatever the emitter did; this disagrees the moment the emitted call
+        // and the planner-resolved target diverge.
+        #[cfg(test)]
+        {
+            let func_ref = match builder.func.dfg.insts[call] {
+                cranelift_codegen::ir::InstructionData::Call { func_ref, .. } => func_ref,
+                _ => panic!("a declared unit call is emitted as a direct call instruction"),
+            };
+            D5_EMITTED_DECLARATION_CALLS.with(|calls| {
+                calls
+                    .borrow_mut()
+                    .push((reference_origin, target_origin, func_ref))
+            });
+        }
+        Ok(operand)
     }
 
     /// Emit the direct call to a declared unit target.
     ///
     /// Returns the produced operand **and the exact `Inst` emitted for the
     /// call**. ⭐ The `Inst` is returned rather than kept in a `last_call` field
+    /// (see also [`D5_EMITTED_DECLARATION_CALLS`])
     /// so that a caller which needs to attribute the emitted instruction has to
     /// take it from the emission itself; a stale side-channel would attribute
     /// one call site's instruction to another's token.

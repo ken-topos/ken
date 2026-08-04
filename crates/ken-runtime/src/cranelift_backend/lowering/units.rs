@@ -491,6 +491,125 @@ pub(in crate::cranelift_backend) fn resolve_call_edges(
     Ok(CallEdgeTargets { edges })
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5`** — one mutation of the function-local
+/// declared-call copy, per axis the ABI reconciliation claims to hold.
+///
+/// ⚠ Every variant leaves the plan's descriptor untouched. `Exact` is the
+/// identity, and a control that ran only `Exact` would be asserting its own
+/// setup ([[a-mutation-control-with-unwrap-or-exact-is-the-identity]]).
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D5DeclaredCallMutation {
+    Exact,
+    /// Phase: the word class a slot is carried in.
+    Carrier,
+    /// Owner: whether the callee owns or borrows the slot.
+    Ownership,
+    /// Owner: whose storage the slot addresses.
+    StorageOwner,
+    /// The slot's position within its own kind-run.
+    Ordinal,
+    /// The declared frame size.
+    Header,
+    /// Where a slot sits in the frame.
+    Offsets,
+    /// The call resolves some other unit's record — the wrong-target class.
+    Retarget,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D5_DECLARED_CALL_MUTATION: std::cell::Cell<D5DeclaredCallMutation> =
+        const { std::cell::Cell::new(D5DeclaredCallMutation::Exact) };
+}
+
+/// Run `body` with one declared-call mutation installed, restoring `Exact` on
+/// the way out **including on panic** — a control asserts inside, and a leak
+/// would silently mutate every later compile on this thread.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn with_d5_declared_call_mutation<T>(
+    mutation: D5DeclaredCallMutation,
+    body: impl FnOnce() -> T,
+) -> T {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            D5_DECLARED_CALL_MUTATION.with(|cell| cell.set(D5DeclaredCallMutation::Exact));
+        }
+    }
+    D5_DECLARED_CALL_MUTATION.with(|cell| cell.set(mutation));
+    let _restore = Restore;
+    body()
+}
+
+#[cfg(test)]
+fn d5_mutate_declared_calls(calls: &mut BTreeMap<StaticOriginId, DeclaredUnitCall>) {
+    let mutation = D5_DECLARED_CALL_MUTATION.with(std::cell::Cell::get);
+    if mutation == D5DeclaredCallMutation::Exact {
+        return;
+    }
+    // ⚠ The retarget needs a DIFFERENT record to point at, so it is taken
+    // before the loop below borrows the map mutably.
+    let other = calls.values().next().cloned();
+    for call in calls.values_mut() {
+        match mutation {
+            D5DeclaredCallMutation::Exact => {}
+            D5DeclaredCallMutation::Carrier => {
+                if let Some(slot) = call.slots.iter_mut().find(|slot| {
+                    matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture)
+                }) {
+                    slot.carrier = match slot.carrier {
+                        AbiCarrier::ValueWord => AbiCarrier::GroundValueCarrier,
+                        _ => AbiCarrier::ValueWord,
+                    };
+                }
+            }
+            D5DeclaredCallMutation::Ownership => {
+                if let Some(slot) = call.slots.iter_mut().find(|slot| {
+                    matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture)
+                }) {
+                    slot.ownership = match slot.ownership {
+                        AbiOwnership::OwnedByFrame => AbiOwnership::BorrowedForActivation,
+                        _ => AbiOwnership::OwnedByFrame,
+                    };
+                }
+            }
+            D5DeclaredCallMutation::StorageOwner => {
+                if let Some(slot) = call.slots.iter_mut().find(|slot| {
+                    matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture)
+                }) {
+                    slot.storage_owner = match slot.storage_owner {
+                        AbiStorageOwner::ActivationFrame => AbiStorageOwner::PersistentStore,
+                        _ => AbiStorageOwner::ActivationFrame,
+                    };
+                }
+            }
+            D5DeclaredCallMutation::Ordinal => {
+                if let Some(slot) = call.slots.iter_mut().find(|slot| {
+                    matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture)
+                }) {
+                    slot.ordinal = slot.ordinal.wrapping_add(1);
+                }
+            }
+            D5DeclaredCallMutation::Header => {
+                call.header.frame_bytes = call.header.frame_bytes.wrapping_add(8);
+            }
+            D5DeclaredCallMutation::Offsets => {
+                if let Some(offset) = call.offsets.first_mut() {
+                    *offset = offset.wrapping_add(8);
+                }
+            }
+            D5DeclaredCallMutation::Retarget => {
+                if let Some(other) = other.clone() {
+                    if other.origin != call.origin {
+                        *call = other;
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 thread_local! {
     /// How many call edges the most recent compile resolved.
@@ -1598,6 +1717,17 @@ fn define_unit_body<M: Module>(
     compiler.defining_unit = Some(unit.function);
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
+    // `RT-DECL-CLOSURE-PORT` `D5` — the causal control on the ABI half.
+    //
+    // ⛔⛔ **Injected HERE, on the function-local COPY, and never on the plan's
+    // descriptor.** That asymmetry is the entire point: `D5`'s ABI
+    // reconciliation claims the declared call record still agrees with the
+    // immutable descriptor `D3` validated. A mutation applied to both sides
+    // would leave them agreeing and prove nothing; a mutation applied to the
+    // descriptor would trip the ABI plane upstream instead. ⇒ Only a mutation
+    // of the copy measures the reconciliation itself.
+    #[cfg(test)]
+    d5_mutate_declared_calls(&mut function_local.declaration_calls);
     // `D4`: this function's own worker refs, minted here and never copied.
     function_local.worker_calls = worker_targets.declare_in_func(module, &mut func);
     let mut func_ctx = FunctionBuilderContext::new();
