@@ -10375,13 +10375,13 @@ impl<'a> Lowering<'a> {
                     _ => unreachable!("validated FS result operation"),
                 };
                 let operation =
-                    self.synthesized_constructor(operation_role, operation_symbol, Vec::new())?;
-                let path = self.synthesized_constructor(
+                    self.synthesized_constructor(static_origin, operation_role, operation_symbol, Vec::new())?;
+                let path = self.synthesized_constructor(static_origin, 
                     SynthesizedFixedConstructorRole::OptionSome,
                     self.process_symbols.option_some.clone(),
                     vec![path],
                 )?;
-                self.synthesized_constructor(
+                self.synthesized_constructor(static_origin, 
                     SynthesizedFixedConstructorRole::FileError,
                     self.process_symbols.file_error.clone(),
                     vec![operation, path, io_error],
@@ -10439,7 +10439,7 @@ impl<'a> Lowering<'a> {
                         },
                     ))
                 };
-                let trace_identity = self.synthesized_constructor(
+                let trace_identity = self.synthesized_constructor(static_origin, 
                     SynthesizedFixedConstructorRole::ResourceTraceIdentity,
                     self.process_symbols.resource_trace_identity.clone(),
                     vec![identity_low_int, identity_high_int],
@@ -10627,7 +10627,7 @@ impl<'a> Lowering<'a> {
                     ));
                 };
                 let span_origin = *span_origin;
-                let span = self.synthesized_constructor(
+                let span = self.synthesized_constructor(static_origin, 
                     SynthesizedFixedConstructorRole::PrivateBufferSpan,
                     self.process_symbols.private_buffer_span.clone(),
                     vec![
@@ -10636,7 +10636,7 @@ impl<'a> Lowering<'a> {
                         Lowered::BoundedNat(count),
                     ],
                 )?;
-                let transferred = self.synthesized_constructor(
+                let transferred = self.synthesized_constructor(static_origin, 
                     SynthesizedFixedConstructorRole::PrivateTransferCount,
                     self.process_symbols.private_transfer_count.clone(),
                     vec![
@@ -10679,7 +10679,7 @@ impl<'a> Lowering<'a> {
                     effective_request,
                     None,
                 );
-                let transferred = self.synthesized_constructor(
+                let transferred = self.synthesized_constructor(static_origin, 
                     SynthesizedFixedConstructorRole::PrivateTransferCount,
                     self.process_symbols.private_transfer_count.clone(),
                     vec![
@@ -10687,7 +10687,7 @@ impl<'a> Lowering<'a> {
                         Lowered::BoundedNat(remaining),
                     ],
                 )?;
-                self.synthesized_constructor(
+                self.synthesized_constructor(static_origin, 
                     SynthesizedFixedConstructorRole::Wrote,
                     self.process_symbols.wrote.clone(),
                     vec![transferred],
@@ -10695,7 +10695,7 @@ impl<'a> Lowering<'a> {
             } else if operation == ken_host::HostOpV1::FsHandleMetadata {
                 self.lower_unsigned_u64_int(builder, detail)?
             } else {
-                self.synthesized_constructor(
+                self.synthesized_constructor(static_origin, 
                     SynthesizedFixedConstructorRole::Unit,
                     self.process_symbols.unit.clone(),
                     Vec::new(),

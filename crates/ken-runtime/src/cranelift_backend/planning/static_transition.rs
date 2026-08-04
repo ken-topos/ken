@@ -2620,8 +2620,21 @@ pub(in crate::cranelift_backend) struct AggregateOccurrenceId(u32);
 pub(in crate::cranelift_backend) enum AggregateOccurrenceProducer {
     /// A `Construct`/`Record` written in the program.
     Source(StaticOriginId),
-    /// A compiler-synthesized aggregate, named by its closed role.
-    Synthesized(SynthesizedFixedConstructorRole),
+    /// One exact compiler-synthesized producer USE.
+    ///
+    /// A role is a schema, not an identity. Two uses of `PrivateTransferCount`
+    /// at two seats are two occurrences even though their schema is one, so the
+    /// key carries the seat that makes them distinct.
+    ///
+    /// `seat` is the `Effect` occurrence whose lowering builds this producer,
+    /// which is also what supplies the emission owner. No sequence ordinal
+    /// appears here because no role repeats within one seat-lowering; that is a
+    /// measured property, recorded on [`host_effect_synthesized_uses`], not an
+    /// assumption.
+    SynthesizedUse {
+        seat: StaticOriginId,
+        role: SynthesizedFixedConstructorRole,
+    },
 }
 
 /// Which aggregate shape one producer occurrence builds.
@@ -2860,6 +2873,75 @@ fn synthesized_aggregate_recipe(
     }
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the synthesized producer uses of one host
+/// operation, in emission order.**
+///
+/// This is the recipe-as-data the per-use interning needs: to intern one record
+/// per exact synthesized producer use, the planner must know which uses the
+/// emitter will make at each seat. That population lives in
+/// `lower_process_host_effect` as imperative code, so it is restated here and
+/// the emitter reconciles against it.
+///
+/// ## It was MEASURED, not read off the code
+///
+/// Derived by instrumenting every `synthesized_constructor` call with its
+/// enclosing effect seat and running the suite **single-threaded**, then
+/// tabulating. The parallel run is not usable for this: `--nocapture` output
+/// from concurrent tests interleaves, and it manufactured phantom sequences —
+/// one seat appeared to build its error tree twice, which would have forced a
+/// planner-issued repetition sequence into this key for no reason.
+///
+/// **The measured fact that shapes the key: no role repeats within one
+/// seat-lowering.** So `(emission owner, effect seat, role)` is already unique
+/// and no sequence ordinal is required. If a future operation does repeat a
+/// role at one seat, the arity/child reconciliation will not catch it — the
+/// planned/consumed ledger will, because the second use finds its record
+/// already consumed.
+///
+/// `FsWriteFile` and `FsChangeMode` follow the same shape as the other file
+/// operations with their own `FileOperation*` role; no fixture exercises them
+/// today, so their rows are derived from the operation match rather than
+/// observed, and they are marked as such.
+fn host_effect_synthesized_uses(
+    operation: ken_host::HostOpV1,
+) -> &'static [SynthesizedFixedConstructorRole] {
+    use ken_host::HostOpV1 as Op;
+    use SynthesizedFixedConstructorRole as R;
+    const TRACE: &[SynthesizedFixedConstructorRole] = &[R::ResourceTraceIdentity];
+    const UNIT: &[SynthesizedFixedConstructorRole] = &[R::Unit];
+    const TRACE_UNIT: &[SynthesizedFixedConstructorRole] = &[R::ResourceTraceIdentity, R::Unit];
+    const READ_FILE: &[SynthesizedFixedConstructorRole] =
+        &[R::FileOperationRead, R::OptionSome, R::FileError];
+    const WRITE_FILE: &[SynthesizedFixedConstructorRole] =
+        &[R::FileOperationWrite, R::OptionSome, R::FileError];
+    const CHANGE_MODE: &[SynthesizedFixedConstructorRole] =
+        &[R::FileOperationChangeMode, R::OptionSome, R::FileError];
+    const READ_AT: &[SynthesizedFixedConstructorRole] = &[
+        R::ResourceTraceIdentity,
+        R::PrivateBufferSpan,
+        R::PrivateTransferCount,
+    ];
+    const WRITE_AT: &[SynthesizedFixedConstructorRole] = &[
+        R::ResourceTraceIdentity,
+        R::PrivateTransferCount,
+        R::Wrote,
+    ];
+    match operation {
+        Op::ConsoleIsTerminal => &[],
+        Op::ConsoleWrite | Op::ConsoleFlush => UNIT,
+        Op::BufferAllocate | Op::BufferFreeze | Op::FsHandleMetadata => TRACE,
+        Op::ResourceRelease => TRACE_UNIT,
+        Op::FsReadFile | Op::FsOpen => READ_FILE,
+        Op::FsWriteFile => WRITE_FILE,
+        Op::FsChangeMode => CHANGE_MODE,
+        Op::FsReadAt => READ_AT,
+        Op::FsWriteAt => WRITE_AT,
+        // Not an admitted consumer; `lower_process_host_effect` refuses it
+        // before any synthesized producer runs.
+        _ => &[],
+    }
+}
+
 /// The possible referent owners of one aggregate child, as the schema declares
 /// it.
 ///
@@ -3017,71 +3099,74 @@ fn build_aggregate_ownership_plan(
             allocation,
         });
     }
-    // The synthesized half of the population.
+    // The synthesized half: ONE record per exact producer use, not per role.
     //
-    // ⚠ ONE RECORD PER ROLE, AND THAT IS KNOWN TO BE WRONG. A role is a
-    // SCHEMA, not an occurrence identity: two uses of `PrivateTransferCount` at
-    // two producer seats are two occurrences even though their schema is one.
-    // The occurrence law requires one interned record per exact producer use,
-    // keyed by owner/phase, producer seat, schema and structural path.
-    //
-    // This spelling is retained deliberately as measured work-in-progress while
-    // the per-use interning is built, and it must NOT be read as the closed
-    // form. What is correct below it -- the schema, the derivation through it,
-    // and the exact owner sets -- is what the per-use records will copy.
+    // The population is (every `Effect` source occurrence) x (the modelled uses
+    // its operation makes), so two seats using one role get two records and one
+    // seat's record cannot authorize another's allocation.
     let mut visiting = BTreeSet::new();
     let mut done = BTreeMap::new();
-    for role in SynthesizedFixedConstructorRole::ALL {
-        let Some(recipe) = synthesized_aggregate_recipe(role) else {
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        let RuntimeExpr::Effect { operation, .. } = occurrence.expr else {
             continue;
         };
-        let mut children = Vec::with_capacity(recipe.len());
-        for (position, child) in recipe.iter().enumerate() {
-            let owners = synthesized_child_referent_owners(
-                *child,
-                &synthesized_aggregate_recipe,
-                &mut visiting,
-                &mut done,
-            )?;
-            children.push(PlannedAggregateChild {
-                position: u32::try_from(position).map_err(|_| {
-                    planner_capacity_error("synthesized aggregate arity exceeds the position space")
-                })?,
-                // A synthesized child has no source occurrence. The recipe is
-                // its provenance, and this field records that plainly rather
-                // than borrowing an unrelated origin to fill the slot.
-                origin: None,
-                lifetime: if owners.contains(&BoundaryReferentOwner::InvocationArena) {
-                    PlannedReferentLifetime::ActivationOwned
-                } else {
-                    PlannedReferentLifetime::Persistent
-                },
-                owners,
+        let seat = occurrence.static_origin;
+        for role in host_effect_synthesized_uses(*operation) {
+            let Some(recipe) = synthesized_aggregate_recipe(*role) else {
+                // Site-dependent or alternative-only. No record, so the seat
+                // refuses if it ever asks -- unchanged behaviour.
+                continue;
+            };
+            let mut children = Vec::with_capacity(recipe.len());
+            for (position, child) in recipe.iter().enumerate() {
+                let owners = synthesized_child_referent_owners(
+                    *child,
+                    &synthesized_aggregate_recipe,
+                    &mut visiting,
+                    &mut done,
+                )?;
+                children.push(PlannedAggregateChild {
+                    position: u32::try_from(position).map_err(|_| {
+                        planner_capacity_error(
+                            "synthesized aggregate arity exceeds the position space",
+                        )
+                    })?,
+                    // A synthesized child has no source occurrence of its own.
+                    origin: None,
+                    lifetime: if owners.contains(&BoundaryReferentOwner::InvocationArena) {
+                        PlannedReferentLifetime::ActivationOwned
+                    } else {
+                        PlannedReferentLifetime::Persistent
+                    },
+                    owners,
+                });
+            }
+            let escapes = children
+                .iter()
+                .any(|child| child.owners.contains(&BoundaryReferentOwner::InvocationArena));
+            let (meet, allocation) = if escapes {
+                (
+                    PlannedReferentLifetime::ActivationOwned,
+                    PlannedAggregateAllocation::InvocationAggregate,
+                )
+            } else {
+                (
+                    PlannedReferentLifetime::Persistent,
+                    PlannedAggregateAllocation::PersistentGround,
+                )
+            };
+            records.push(PlannedAggregateOwnership {
+                id: AggregateOccurrenceId(0),
+                producer: AggregateOccurrenceProducer::SynthesizedUse { seat, role: *role },
+                // The seat's own function owner. A synthesized producer is
+                // emitted by whoever emits its effect.
+                owner: plan.semantic.function_owner(seat)?,
+                shape: PlannedAggregateShape::Constructor,
+                children,
+                meet,
+                allocation,
             });
         }
-        let escapes = children
-            .iter()
-            .any(|child| child.owners.contains(&BoundaryReferentOwner::InvocationArena));
-        let (meet, allocation) = if escapes {
-            (
-                PlannedReferentLifetime::ActivationOwned,
-                PlannedAggregateAllocation::InvocationAggregate,
-            )
-        } else {
-            (
-                PlannedReferentLifetime::Persistent,
-                PlannedAggregateAllocation::PersistentGround,
-            )
-        };
-        records.push(PlannedAggregateOwnership {
-            id: AggregateOccurrenceId(0),
-            producer: AggregateOccurrenceProducer::Synthesized(role),
-            owner: None,
-            shape: PlannedAggregateShape::Constructor,
-            children,
-            meet,
-            allocation,
-        });
     }
     records.sort_by_key(|record| record.producer);
     for (index, record) in records.iter_mut().enumerate() {
@@ -3090,6 +3175,29 @@ fn build_aggregate_ownership_plan(
         })?);
     }
     Ok(records)
+}
+
+/// Every record names a DISTINCT producer.
+///
+/// This is the non-aliasing law of the occurrence domain, and it is production
+/// code rather than a test because it is what makes an identity an identity: if
+/// two records shared a producer, one seat's record could authorize another
+/// seat's allocation and the lane chosen for one node would govern a different
+/// one. Two uses of a role at two seats must be two occurrences; two records for
+/// ONE use is the same failure seen from the other side.
+fn validate_aggregate_producers_are_unique(
+    records: &[PlannedAggregateOwnership],
+) -> Result<(), CraneliftBackendError> {
+    let mut seen = BTreeSet::new();
+    for record in records {
+        if !seen.insert(record.producer) {
+            return Err(planner_error(
+                "two aggregate ownership records name the same producer, so an occurrence \
+                 identity is not unique",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_aggregate_ownership_plan(
@@ -3101,6 +3209,7 @@ fn validate_aggregate_ownership_plan(
             "aggregate ownership is not the exact closed lifetime-meet derivation",
         ));
     }
+    validate_aggregate_producers_are_unique(records)?;
     // ⛔ A second, independent check on the same records, because the
     // re-derivation above only proves the builder agrees with itself. This one
     // states the PROPERTY: the persistent lane is issued only where no child
@@ -6346,14 +6455,17 @@ impl<'src> StaticTransitionPlan<'src> {
     /// children are a property of the emission site rather than of the role.
     pub(in crate::cranelift_backend) fn synthesized_aggregate_occurrence(
         &self,
+        seat: StaticOriginId,
         role: SynthesizedFixedConstructorRole,
     ) -> Result<AggregateOccurrenceId, CraneliftBackendError> {
         self.aggregate_ownership
             .iter()
-            .find(|record| record.producer == AggregateOccurrenceProducer::Synthesized(role))
+            .find(|record| {
+                record.producer == AggregateOccurrenceProducer::SynthesizedUse { seat, role }
+            })
             .map(|record| record.id)
             .ok_or_else(|| {
-                planner_error("synthesized aggregate role has no planned ownership record")
+                planner_error("synthesized aggregate use has no planned ownership record")
             })
     }
 
@@ -6370,13 +6482,12 @@ impl<'src> StaticTransitionPlan<'src> {
     /// persistent over an operand that can be arena-owned.
     pub(in crate::cranelift_backend) fn synthesized_aggregate_children(
         &self,
+        seat: StaticOriginId,
         role: SynthesizedFixedConstructorRole,
     ) -> Result<&'static [SynthesizedAggregateChild], CraneliftBackendError> {
-        if !self
-            .aggregate_ownership
-            .iter()
-            .any(|record| record.producer == AggregateOccurrenceProducer::Synthesized(role))
-        {
+        if !self.aggregate_ownership.iter().any(|record| {
+            record.producer == AggregateOccurrenceProducer::SynthesizedUse { seat, role }
+        }) {
             return Err(planner_error(
                 "synthesized aggregate role has no planned ownership record",
             ));
@@ -14932,6 +15043,54 @@ mod tests {
     ///
     /// GAP: the invocation aggregate carrier row is deliberately absent from
     /// Slice 0; this control proves only the dormant authority it will consume.
+    /// `D7` — one role at two producer seats is TWO non-aliasing occurrences.
+    ///
+    /// MEASURED: two records for one role at different seats are accepted and
+    /// carry different identities; two records naming the same `(seat, role)`
+    /// are rejected by name.
+    ///
+    /// CLAIMED: the occurrence domain is non-aliasing, so one seat's record
+    /// cannot authorize another seat's allocation.
+    ///
+    /// THE GAP: this drives hand-built records, so it proves the LAW and not
+    /// that the builder populates it correctly. The builder's own agreement is
+    /// the rebuild comparison in `validate_aggregate_ownership_plan`; what this
+    /// adds is that a violation would be caught rather than silently indexed.
+    #[test]
+    fn one_role_at_two_seats_is_two_non_aliasing_occurrences() {
+        let record = |id: u32, seat: u32| PlannedAggregateOwnership {
+            id: AggregateOccurrenceId(id),
+            producer: AggregateOccurrenceProducer::SynthesizedUse {
+                seat: StaticOriginId(seat),
+                role: SynthesizedFixedConstructorRole::Unit,
+            },
+            owner: None,
+            shape: PlannedAggregateShape::Constructor,
+            children: Vec::new(),
+            meet: PlannedReferentLifetime::Persistent,
+            allocation: PlannedAggregateAllocation::PersistentGround,
+        };
+
+        // Same ROLE, different SEAT: two lawful occurrences.
+        let distinct = [record(0, 11), record(1, 12)];
+        validate_aggregate_producers_are_unique(&distinct)
+            .expect("one role at two seats is two occurrences, not a collision");
+        assert_ne!(
+            distinct[0].id, distinct[1].id,
+            "two occurrences must not share an identity, or the per-use key \
+             bought nothing over the per-role one it replaced"
+        );
+
+        // Same SEAT and same role: one use, so a second record is a collision.
+        let collided = [record(0, 11), record(1, 11)];
+        let error = validate_aggregate_producers_are_unique(&collided)
+            .expect_err("two records for one use must reject");
+        assert!(
+            format!("{error:?}").contains("same producer"),
+            "the refusal must be the aliasing stop itself: {error:?}"
+        );
+    }
+
     /// `D7` — a scalar child's owner set is derived from its EXACT disposition.
     ///
     /// MEASURED: a `spill: None` scalar yields exactly `{NoReferent}`; a

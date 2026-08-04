@@ -2628,7 +2628,13 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
                     }],
                 }],
             });
+            // `D7` — this fixture has no `Effect` occurrence, so `match_origin`
+            // is not a producer seat and carries no per-use record. That is
+            // correct and leaves the row's existing refusal unchanged: the
+            // template gets no occurrence and refuses at the allocation, which
+            // is where it already fails.
             let error = compiler.synthesized_constructor(
+                match_origin,
                 SynthesizedFixedConstructorRole::Wrote,
                 producer_symbols.wrote.clone(),
                 vec![Lowered::Bool {

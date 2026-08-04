@@ -6302,8 +6302,16 @@ impl<'a> Lowering<'a> {
             .synthesized_constructor_identity(SynthesizedConstructorRole::Fixed(role))
     }
 
+    /// Build one compiler-synthesized aggregate template at an exact producer
+    /// seat.
+    ///
+    /// `seat` is the `Effect` occurrence whose lowering is making this use. It
+    /// is passed explicitly rather than read from ambient state so that the
+    /// occurrence this template carries is bound to the exact use — a role
+    /// alone cannot select one, which is the whole point of the per-use key.
     fn synthesized_constructor(
         &self,
+        seat: StaticOriginId,
         role: SynthesizedFixedConstructorRole,
         constructor: RuntimeSymbol,
         args: Vec<Lowered>,
@@ -6318,7 +6326,7 @@ impl<'a> Lowering<'a> {
         // it was — at the allocation, if one is ever reached.
         let occurrence = self
             .static_transition_plan
-            .synthesized_aggregate_occurrence(role)
+            .synthesized_aggregate_occurrence(seat, role)
             .ok();
         // The recipe and this call site are two statements of one shape, so
         // they are cross-checked rather than trusted to agree. A recipe that
@@ -6328,7 +6336,7 @@ impl<'a> Lowering<'a> {
         if occurrence.is_some() {
             let declared = self
                 .static_transition_plan
-                .synthesized_aggregate_children(role)?;
+                .synthesized_aggregate_children(seat, role)?;
             if declared.len() != args.len() {
                 return Err(unsupported(
                     "Constructor",
@@ -6371,7 +6379,7 @@ impl<'a> Lowering<'a> {
                     SynthesizedAggregateChild::Role(inner) => {
                         let expected = self
                             .static_transition_plan
-                            .synthesized_aggregate_occurrence(*inner)?;
+                            .synthesized_aggregate_occurrence(seat, *inner)?;
                         matches!(
                             argument,
                             Lowered::Constructor {
