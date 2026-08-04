@@ -174,9 +174,11 @@ to widen.
 - **`D5a`** — **Continuation elimination for the planned closure-valued
   constructor field.** **Every planner-issued continuation call is emitted from
   its exact generated emission context at its ruled seat**, instead of
-  letting the closure cross a unit boundary. Added 2026-08-04; **`D6` is not
-  retried until this checkpoint is green.** Full specification in the section
-  below.
+  letting the closure cross a unit boundary. Added 2026-08-04. **Recut the same
+  day into four ordered checkpoints** (`evt_5a0q3m9tnkh8e`, outcome (c)
+  mis-sizing): population substitution, ledger lifetime, join reachability, then
+  activation and the discriminators. **`D6` is not retried until checkpoint 4 is
+  green.** Full specification in the section below.
 - **`D6`** — Remove the residual variant, and only then re-run `AC-1`.
 
 ### `D2a` — the population substitution D5 could not run without
@@ -451,9 +453,14 @@ below, and for `CSId(1)` that is `Specialization(CSId(0))`, not raw `fn2`.
    predeclared and specialization alike — **not over raw `fn2`/`fn3` function
    IDs.** Each planned continuation call is emitted **exactly once** from its
    own emission owner, against its own decoded target. ⛔ Raw `fn2` is
-   **provenance**, not one of the final emitting functions; it keeps its
-   ordinary unit and simply loses this caller. Omission, owner transplant,
-   redirect, duplicate claim or emission, result-edge disagreement, and capture
+   **provenance**, not one of the final emitting functions. **⛔ CORRECTED
+   2026-08-04 by `evt_5a0q3m9tnkh8e`: this clause previously said raw `fn2`
+   "keeps its ordinary unit and simply loses this caller." That is false in the
+   measured case and forbade the population substitution the ruling requires.
+   Whether the raw worker keeps an emitted Function is decided by the
+   post-retarget executable call graph — see "The raw-template versus
+   executable-unit population" below.** Omission, owner transplant, redirect,
+   duplicate claim or emission, result-edge disagreement, and capture
    disagreement all remain fail-closed.
 
 6. **Negative boundary.** `Wrap(LexicalClosure)` without a consuming eliminator
@@ -550,9 +557,12 @@ control work can be load-bearing until the positive route exists.
 
 The corrected checkpoint owes discriminators for: root provenance versus
 immediate owner and position; two continuation identities selecting the same
-raw worker; **unchanged ordinary `fn2` ABI**; missing, duplicate, and
-transplanted generated-owner bindings; recursive intern-before-descent; and the
-existing permanent stored-closure negative.
+raw worker; **unchanged ordinary `fn2` ABI** — which per `evt_5a0q3m9tnkh8e`
+means the raw worker's **descriptor and source binding** are preserved so a
+generated context can validate and lower the same body, **not** that the raw
+body is defined in an environment lacking the continuation inputs; missing,
+duplicate, and transplanted generated-owner bindings; recursive
+intern-before-descent; and the existing permanent stored-closure negative.
 
 **Still not a new node.** This is the distinct-owner-with-an-exact-token branch
 of the published decision table — a same-WP `D5a` frame recut, not a new
@@ -596,23 +606,134 @@ The load-bearing discriminator is instead:
   over one raw worker produce two distinct generated contexts;
 - the generic closure-valued constructor negative is preserved.
 
-**Only after this checkpoint is green is `D6` retried unchanged** — one
+#### The four-checkpoint recut — `D5a` is mis-sized as one turn
+
+**Added 2026-08-04. Architect ruling `evt_5a0q3m9tnkh8e`: contract reading (B),
+strengthened to a closed population rule, plus outcome (c) sizing at the
+delivery-frame level. Grounded on exact
+`cbdf9a2a9630517c2355dc487b51cba5be20e713`.**
+
+**Still one semantic node and one eventual atomic candidate** — not a new
+disposition, carrier lane, or third atomic participant. What changes is the
+**delivery order inside `D5a`**: four ordered, independently reviewable
+checkpoints in place of one turn.
+
+**`cbdf9a2a` is accepted as a preservation-only generated-context checkpoint,
+never a candidate.** Sound and retained through this recut: the owner domains,
+context interning, unchanged raw ABI, provenance/immediate-slot split, the
+retarget, and the generated `Function` direction.
+
+##### The raw-template versus executable-unit population
+
+Raw `fn2` is a **source template** here, not necessarily an emitted `Function`.
+"Unchanged ordinary `fn2` ABI" preserves the raw worker's **descriptor and
+source binding** so generated contexts can validate and lower the same body. It
+does **not** require defining that body in an environment known to lack the
+continuation inputs.
+
+The governing population is the **post-retarget executable call graph**:
+
+- if **at least one** exact final call edge still targets the raw worker, its
+  ordinary `Function` remains **declared and defined**, and the permanent
+  unconsumed-closure refusal still governs that raw execution;
+- if **every** exact final call edge is retargeted to generated contexts, the
+  raw worker remains descriptor, provenance and template authority and is
+  **absent from the emitted-`Function` population**.
+
+For the measured `fn2`, the second branch applies.
+
+⛔ **Do not merely skip `define_function` after declaring an "emittable" raw
+unit.** That mints an undefined phantom and falsifies the declared/defined
+census. Planning must separate **raw-body descriptor authority** from
+**executable-unit membership**, and the constructor's raw identity and arity
+validation must be **separate** from the generated context `FuncRef` the call
+uses. ⛔ **"One context exists" is not a global suppression predicate** — a
+mixed raw-plus-context caller population **retains** the raw `Function`.
+
+**Clause 6 is unchanged.** A genuinely raw, unconsumed `Wrap(LexicalClosure)`
+still refuses. The contextual execution does not cross that boundary; it
+eliminates the callable in the generated context.
+
+##### One cross-pass ledger lifetime
+
+`define_unit_bodies` presently closes the
+planned/resolved/declared/claimed/emitted equality **before**
+`define_continuation_bodies` and `define_continuation_context_bodies`. It
+therefore reports one planned token absent before the generated context has had
+any chance to declare, claim, or emit it.
+
+Open the one ledger **before the first generated `Function`**, and close it only
+**after** ordinary units, continuation specializations, and generated contexts
+have all been defined and recorded. ⛔ **One global equality** — not per-pass
+partial equalities, and not a mirrored second ledger.
+
+With that close moved later, the next reached edge is the existing
+checked-computational-IH carried-marker refusal while defining the
+specialization body. That measurement used diagnostic bypasses and **authorizes
+no weakening**: the refusal itself names the already-ruled emitted-helper route.
+This recut carries that activation seam as checkpoint 4. ⛔ **No compile-time
+template recovery from a carried word.**
+
+##### Recursive-return join reachability — origin 25
+
+**Origin 25 is a stale reachability classification, not a new residual.**
+Independently reproduced by the Architect:
+
+```text
+required_join_origins(fn3) = {10, 14, 25}
+join(25) = NativeScalarPair, has_continuing_predecessor = true
+```
+
+Origin 25 is the ordinary `Result` `Match` in the `ITree::Ret` arm owned by
+`fn3`. The initial scrutinee selects `Vis`, but the newly emitted exact
+continuation call supplies the recursive return edge on which `Ret` is
+reachable. Lowering currently **both** consumes and materializes origin 25
+**and** dispositions its subtree as statically unselected from the initial
+selection. The finished CFG correctly exposes that contradiction.
+
+⛔ **Keep the `materialized-but-dead` validator.** Do not bypass it, force the
+block dead, or delete origin 25.
+
+Final match-case reachability is the **union of the initial selection and every
+planner-issued source-machine recursive predecessor**. An initial static
+selection may disposition a case **only when no planned recursive or dynamic
+predecessor can select it**. A specialized re-entry keeps its exact selected
+case; a carried or dynamic re-entry retains the planner's closed reachable case
+population. This is bounded existing `D7`/join-disposition work **inside this
+same semantic node**.
+
+##### The delivery order
+
+| # | checkpoint | what it closes |
+|---|---|---|
+| 1 | raw-template versus executable-unit population substitution | the descriptor/call-target split and the no-phantom census |
+| 2 | one cross-pass continuation ledger lifetime | the exact-set closeout across all three definition passes |
+| 3 | recursive-return join reachability | origin 25, retaining the existing CFG validator |
+| 4 | generated-context and checked-IH activation | the positive route, then every ruled discriminator |
+
+Each checkpoint must **preserve `cbdf9a2a`'s sound generated-context work** and
+must be **commit-clean before the next begins**. ⛔ **No red-versus-red
+discriminator counts as evidence** — the ruled discriminators land against the
+positive route in checkpoint 4, never before. Checkpoint 4 may be split into its
+own bounded final checkpoint if the activation seam does not fit one turn.
+
+**Only after checkpoint 4 is green is `D6` retried unchanged** — one
 production action: retire `TransparentDeclarationClosure`, remove the selector
 witness, re-run the closed evidence unhooked.
 
-**Resume base and scaffolding. ⛔ Corrected 2026-08-04 — the resume point is
-`a765b8d3`, not `c8f3a75e`.** Runtime resumes from exact
-`a765b8d32ba82e53900be1cb711bc450d5490ee8`, the leader-accepted clean schema
-checkpoint: the emission-owner domain is separated from source-occurrence
-provenance, 643 green. Reverting to `c8f3a75e` — or to `bffc7f5b`, its
-predecessor — would discard the result-edge projection, the detached seat, the
-claim/call factoring, the exact validation, and the owner-domain separation that
-this recut accepts. `c8f3a75e`, `08cb257f` and `bffc7f5b` all remain
-preservation and evidence checkpoints only, **never candidates**.
+**Resume base and scaffolding. ⛔ Corrected 2026-08-04 (second time this day) —
+the resume point is `cbdf9a2a`.** Runtime resumes from exact
+`cbdf9a2a9630517c2355dc487b51cba5be20e713` and begins at **checkpoint 1**.
+`cbdf9a2a` carries the generated contexts, immediate slots, retarget and
+emission seam, all measured and all accepted as sound. Reverting to `a765b8d3`,
+`c8f3a75e` or `bffc7f5b` would discard that work along with the result-edge
+projection, the detached seat, the claim/call factoring and the exact
+validation. `cbdf9a2a`, `a765b8d3`, `c8f3a75e`, `08cb257f` and `bffc7f5b` are
+**all** preservation and evidence checkpoints, **never candidates**.
 ⛔ **The localization trace is scaffolding, not acceptance evidence.** Retain it
-while implementing the **generated emission-owner closure**, then remove it or
-replace it with load-bearing discriminator controls **before** candidate
-routing. `D6`, the candidate route, and the QA route stay closed until then.
+across the four checkpoints, then remove it or replace it with load-bearing
+discriminator controls **before** candidate routing. `D6`, the candidate route,
+and the QA route stay closed until then.
 
 #### `same_recursive_argument_shapes` is obsolete on this lane — no guard was lost
 
