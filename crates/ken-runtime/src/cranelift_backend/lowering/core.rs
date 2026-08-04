@@ -6274,16 +6274,26 @@ impl<'a> Lowering<'a> {
     ///   planned constructor at that edge's construct origin, checked against
     ///   the planner's own identity rather than against its name or shape.
     ///
-    /// ## ⛔ UNEXERCISED GUARDS — do not read these as tested
+    /// ## The five guards, and how each one is reached
     ///
-    /// The multi-member stop, the non-constructor result stop, the identity
-    /// disagreement stop, the out-of-range position stop and the field-run
-    /// stop are all **written but not yet reachable by any control**, because
-    /// the only fixture that reaches this seat stops further along, at the
-    /// capture projection (see the `D5a` cross-owner hard stop). A mutation
-    /// control written now would compare a red against a red and pass for the
-    /// wrong reason. ⇒ They are pinned when the positive path completes, and
-    /// **not before**.
+    /// ⭐ These were carried as **explicitly unexercised** through checkpoints 1
+    /// to 3: the only fixture reaching this seat refused further along, so a
+    /// control written then would have compared a red against a red. Checkpoint
+    /// 4 made the route positive, and each is now red by its own reaching
+    /// mutation on the witness that compiles —
+    /// `d5a_the_detached_result_seats_five_guards_are_each_reached_by_a_real_mutation`,
+    /// with the [`D5aRouteMutation`] variant named beside it:
+    ///
+    /// | guard | reaching mutation |
+    /// |---|---|
+    /// | multi-member projection | `DuplicateResidualEdge` |
+    /// | result is not a constructor | `CarryNonConstructorResult` |
+    /// | identity disagreement | `StripLoweredConstructorIdentity` |
+    /// | position outside the field run | `PerturbRecursivePosition` |
+    /// | field run versus declared run | `PerturbOrdinaryParameterCount` |
+    ///
+    /// ⛔ Every one perturbs what this seat is **handed**, never the guard that
+    /// inspects it.
     pub(super) fn eliminate_detached_producer_continuation(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -6291,7 +6301,7 @@ impl<'a> Lowering<'a> {
         lowered: LoweringOperand,
         unit_env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let residual = result_edges
+        let mut residual = result_edges
             .iter()
             .filter(|edge| {
                 !self
@@ -6300,6 +6310,56 @@ impl<'a> Lowering<'a> {
                     .contains_key(&edge.identity)
             })
             .collect::<Vec<_>>();
+        // `D5a` checkpoint 4 step 3 — the multi-member reaching mutation.
+        //
+        // ⛔ The SAME edge presented twice, not a fabricated second one: what the
+        // guard rejects is two undischarged causal calls landing on one result
+        // value, and a synthesized edge would additionally differ in identity,
+        // leaving the refusal attributable to either fact.
+        #[cfg(test)]
+        if d5a_route_mutation() == D5aRouteMutation::DuplicateResidualEdge {
+            if let Some(first) = residual.first().copied() {
+                residual.push(first);
+            }
+        }
+        // `D5a` checkpoint 4 step 3 — the non-constructor reaching mutation.
+        //
+        // A carried boundary word is a real operand of the only other class this
+        // seat can be handed, so the guard rejects the case it names rather than
+        // a shape invented for the test.
+        #[cfg(test)]
+        let lowered = if d5a_route_mutation() == D5aRouteMutation::CarryNonConstructorResult
+            && !residual.is_empty()
+        {
+            LoweringOperand::Carried(CarriedBoundaryWord {
+                word: builder.ins().iconst(types::I64, 0),
+            })
+        } else {
+            lowered
+        };
+        // `D5a` checkpoint 4 step 3 — the identity-disagreement reaching
+        // mutation. The result stays a specialized constructor with the same
+        // fields; only its synthesized identity is withdrawn, so what the guard
+        // reads is exactly the planner-identity comparison and nothing else.
+        #[cfg(test)]
+        let lowered = if d5a_route_mutation() == D5aRouteMutation::StripLoweredConstructorIdentity
+            && !residual.is_empty()
+        {
+            match lowered {
+                LoweringOperand::Specialized(Lowered::Constructor {
+                    constructor,
+                    synthesized_identity: _,
+                    args,
+                }) => LoweringOperand::Specialized(Lowered::Constructor {
+                    constructor,
+                    synthesized_identity: None,
+                    args,
+                }),
+                other => other,
+            }
+        } else {
+            lowered
+        };
         let edge = match residual.as_slice() {
             [] => return Ok(lowered),
             [edge] => *edge,
@@ -6355,6 +6415,17 @@ impl<'a> Lowering<'a> {
                  for that edge's producer Construct origin",
             ));
         }
+        // `D5a` checkpoint 4 step 3 — the out-of-range reaching mutation. Taken
+        // as the planned constructor's own arity, so the perturbation is "one
+        // past the field run" by construction rather than a literal that a
+        // wider constructor would quietly bring back into range.
+        #[cfg(test)]
+        let position = if d5a_route_mutation() == D5aRouteMutation::PerturbRecursivePosition {
+            args.len()
+        } else {
+            edge.recursive_position as usize
+        };
+        #[cfg(not(test))]
         let position = edge.recursive_position as usize;
         if position >= args.len() {
             return Err(unsupported(
@@ -6374,6 +6445,21 @@ impl<'a> Lowering<'a> {
                     "the projected target has no continuation unit",
                 )
             })?;
+        // `D5a` checkpoint 4 step 3 — the field-run reaching mutation.
+        //
+        // ⛔ Applied AFTER the position guard above, so the two are separable:
+        // the position it reads is still the ruled one and still in range, and
+        // the only thing that moves is the declared ordinary run this count is
+        // compared against.
+        #[cfg(test)]
+        let ordinary_declared = if d5a_route_mutation()
+            == D5aRouteMutation::PerturbOrdinaryParameterCount
+        {
+            unit.ordinary_parameters() as usize + 1
+        } else {
+            unit.ordinary_parameters() as usize
+        };
+        #[cfg(not(test))]
         let ordinary_declared = unit.ordinary_parameters() as usize;
         // The field run: every field but the ruled recursive one becomes an
         // ordinary operand, so the declared ordinary-parameter count is a

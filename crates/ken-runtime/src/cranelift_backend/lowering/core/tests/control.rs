@@ -12592,3 +12592,336 @@ fn continuation_case_binder_run_hard_stops_rather_than_leaving_a_hole() {
          projected worker: {second_position:?}"
     );
 }
+
+// ── `RT-DECL-CLOSURE-PORT` `D5a` checkpoint 4 — the ruled discriminators ─────
+//
+// Every row below runs against the POSITIVE route. The frame forbids
+// red-versus-red evidence, so a control that merely reproduces a refusal the
+// fixture already had is not admissible here: each mutation must move a green
+// compile to a named refusal, or measure a plan fact the emission run consumes.
+
+/// Plan the `px8tr_nested_post_effect` witness and hand its
+/// [`StaticTransitionPlan`] to `f`.
+///
+/// ⭐ The plan is built here **independently of any emission run**. That is what
+/// makes the rows below oracles rather than echoes: a claim read off a
+/// successful compile cannot distinguish "the planner recorded this" from
+/// "lowering happened not to need it".
+fn with_d5a_witness_plan<T>(f: impl FnOnce(&StaticTransitionPlan<'_>) -> T) -> T {
+    let (entry_expr, declarations) =
+        crate::cranelift_backend::test_objects::px8tr_nested_post_effect_planning_inputs();
+    let declarations = declarations
+        .iter()
+        .map(|declaration| (declaration.symbol.as_str(), declaration))
+        .collect::<BTreeMap<_, _>>();
+    let plan = plan_static_transition_graph_with_symbols(
+        &entry_expr,
+        &declarations,
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .expect("the witness plans; a planning failure here is a regression, not a checkpoint");
+    f(&plan)
+}
+
+/// **`D5a` — root provenance and the immediate slot are two coordinates, and the
+/// witness makes them genuinely differ.**
+///
+/// The ruling splits one question into two: *which owner's ABI position is this
+/// value's root provenance*, and *where does the environment now emitting hold
+/// it*. For a `Predeclared` emitter the two coincide by construction and the
+/// production code enforces that as a consistency law. For a `Specialization`
+/// emitter they are indices into different environments, and comparing them
+/// would be the reverse map `evt_609am4v7cdt5b` forbids.
+///
+/// ⭐ **This row is the positive control for every other row in this group.**
+/// If the fixture ever degenerated so that the two coordinates agreed
+/// everywhere, the `Specialization` arm would read either field and get the
+/// same answer, and a lowering bug that swapped them would be undetectable —
+/// silently, with every neighbouring row still green. Its red therefore means
+/// *the witness stopped discriminating*, not that the mechanism broke.
+///
+/// **Promise class: durable invariant.** The subject is the relation between
+/// the two coordinates per emission-owner class, asserted exhaustively over the
+/// planned population rather than against a literal census.
+#[test]
+fn d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_slot() {
+    with_d5a_witness_plan(|plan| {
+        let units = plan.continuation_units().expect("continuation units");
+        let mut predeclared = 0usize;
+        let mut specialization_with_a_real_difference = 0usize;
+        for unit in &units {
+            let inputs = unit.continuation_inputs().expect("continuation inputs");
+            match unit.emission_owner() {
+                ContinuationEmissionOwner::Predeclared(owner) => {
+                    predeclared += 1;
+                    for input in &inputs {
+                        assert_eq!(
+                            input.source_owner, owner,
+                            "a predeclared emitter IS its inputs' root provenance owner, so a \
+                             projection naming another owner was built against a different \
+                             emitter than the one that will run"
+                        );
+                        assert_eq!(
+                            input.immediate_slot, input.source_abi_position,
+                            "for a predeclared emitter the root ABI position and the immediate \
+                             slot index the same environment, so they must agree; this is the \
+                             consistency law that lets that arm read either field"
+                        );
+                    }
+                }
+                ContinuationEmissionOwner::Specialization(_) => {
+                    if inputs
+                        .iter()
+                        .any(|input| input.immediate_slot != input.source_abi_position)
+                    {
+                        specialization_with_a_real_difference += 1;
+                    }
+                }
+            }
+        }
+        assert!(
+            predeclared > 0,
+            "the witness must still plan at least one predeclared-owned continuation, or the \
+             equality law above is asserted over an empty population"
+        );
+        assert!(
+            specialization_with_a_real_difference > 0,
+            "the witness must still plan at least one specialization-owned continuation whose \
+             immediate slot DIFFERS from its root ABI position. Without one, reading either \
+             coordinate gives the same operands and every discriminator in this group is \
+             vacuous: the distinction `D5a` exists to draw would be a distinction without a \
+             difference on the only fixture that measures it"
+        );
+    });
+}
+
+/// **`D5a` — a generated context resolves under the continuation identity that
+/// owns it, and under no other.**
+///
+/// The ruling forbids keying the binding on the worker body origin, on ABI
+/// shape, on "a context exists", or on first match. `intern_generated_contexts`
+/// states that as a **key** — `(enclosing_specialization, worker_body_origin)`,
+/// leading with the identity — rather than as a check. This row measures the
+/// consequence: the same body origin presented under a different continuation
+/// identity resolves to nothing.
+///
+/// ⚠ **MEASURED**: the lookup returns `Some` only for a context's own enclosing
+/// specialization, over every (identity, body) pair the plan admits.
+/// **CLAIMED**: two continuation identities selecting one raw worker would
+/// yield two distinct contexts. **THE GAP**: this witness plans two
+/// specializations over *different* worker bodies, so the second half is
+/// measured on the key's discriminating power and not on a second context. The
+/// reaching half is
+/// `d5a_a_transplanted_generated_context_binding_refuses_at_the_retarget`, which
+/// hands one identity another's context and is refused.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_a_generated_context_resolves_only_under_the_identity_that_encloses_it() {
+    with_d5a_witness_plan(|plan| {
+        let contexts = plan.continuation_contexts().expect("contexts");
+        let units = plan.continuation_units().expect("units");
+        assert!(
+            !contexts.is_empty(),
+            "the witness must plan at least one generated context; with none, both directions \
+             below hold vacuously"
+        );
+        for context in &contexts {
+            let found = plan
+                .continuation_context_for(
+                    context.enclosing_specialization(),
+                    context.worker_body_origin(),
+                )
+                .expect("the lookup answers")
+                .unwrap_or_else(|| {
+                    panic!(
+                        "context {:?} must resolve under its own key",
+                        context.id()
+                    )
+                });
+            assert_eq!(
+                found.id(),
+                context.id(),
+                "the lookup must return the context whose key was presented, not a plausible one"
+            );
+            for unit in &units {
+                if unit.id() == context.enclosing_specialization() {
+                    continue;
+                }
+                assert!(
+                    plan.continuation_context_for(unit.id(), context.worker_body_origin())
+                        .expect("the lookup answers")
+                        .is_none(),
+                    "specialization {:?} does not enclose context {:?}, so presenting that \
+                     context's WORKER BODY under this identity must resolve to nothing. A `Some` \
+                     here means the binding is reachable from the body origin alone, which is \
+                     exactly the reconstruction the ruling forbids",
+                    unit.id(),
+                    context.id(),
+                );
+            }
+        }
+    });
+}
+
+/// **`D5a` checkpoint 4 step 2 — the final executable population, as a relation.**
+///
+/// ⭐⭐ **This is the census that decides `fn2`'s branch, and the frame is
+/// explicit that no earlier prediction settles it.** Checkpoint 1 measured
+/// `template_only={}` on the partial graph and the frame recorded that answer as
+/// *provisional*. With the retarget and the carried-invocation binding both
+/// landed, the measured answer is that the ported worker body IS superseded:
+/// it keeps its descriptor and leaves the emitted-`Function` population.
+///
+/// ⭐ The row asserts **relations, not the literal census**, so a fixture that
+/// grows a unit stays green while a rule that suppresses the wrong population
+/// reds:
+///
+/// 1. `executable = emittable \ template_only` — the no-phantom identity;
+/// 2. every superseded body still has an emittable descriptor, so "absent from
+///    the executable set" never means "absent from the plan";
+/// 3. at least one worker body a specialization selects is **not** superseded —
+///    the mixed caller population the ruling names. "One context exists" is not
+///    a global suppression predicate, and without this clause a rule that
+///    suppressed every worker body the moment any context appeared would pass
+///    clauses 1 and 2 unchanged.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d5a_the_final_executable_population_is_the_emittable_set_minus_the_superseded_bodies() {
+    with_d5a_witness_plan(|plan| {
+        let template_only = plan
+            .template_only_worker_bodies()
+            .expect("the superseded set");
+        let emittable = plan
+            .emittable_units()
+            .expect("emittable units")
+            .iter()
+            .map(|unit| (unit.function(), unit.origin()))
+            .collect::<Vec<_>>();
+        let executable = plan
+            .executable_units()
+            .expect("executable units")
+            .iter()
+            .map(|unit| (unit.function(), unit.origin()))
+            .collect::<Vec<_>>();
+
+        let expected = emittable
+            .iter()
+            .filter(|(_, origin)| !template_only.contains(origin))
+            .copied()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            executable, expected,
+            "the executable population must be exactly the emittable population minus the \
+             superseded bodies. Declaring from one set and defining from the other is how an \
+             undefined phantom appears, and this equality is what forbids it"
+        );
+
+        for origin in &template_only {
+            assert!(
+                emittable.iter().any(|(_, unit)| unit == origin),
+                "superseded body {origin:?} must keep its emittable descriptor. Losing it would \
+                 make 'template-only' mean 'deleted', and the raw worker's identity and arity \
+                 validation reads that descriptor"
+            );
+        }
+
+        assert!(
+            !template_only.is_empty(),
+            "the witness must supersede at least one worker body, or this row measures a \
+             population the retarget never touched and the checkpoint-4 census question is \
+             unanswered"
+        );
+        let selected = plan
+            .continuation_units()
+            .expect("units")
+            .iter()
+            .map(|unit| unit.worker_body_origin())
+            .collect::<BTreeSet<_>>();
+        assert!(
+            selected.iter().any(|body| !template_only.contains(body)),
+            "at least one selected worker body must SURVIVE as an executable unit. A generated \
+             context existing anywhere in the artifact is not a licence to suppress every raw \
+             worker; a mixed caller population retains the raw `Function`, and without this \
+             clause a global suppression rule would satisfy every other assertion here"
+        );
+    });
+}
+
+/// **`D5a` checkpoint 4 step 3 — the detached-result seat's five formerly
+/// unexercised guards, each reached by a real mutation on the compiling
+/// witness.**
+///
+/// ⭐⭐ The seat's doc comment carried an explicit *"UNEXERCISED GUARDS — do not
+/// read these as tested"* block through checkpoints 1 to 3, because the only
+/// fixture that reaches it refused further along and any control written then
+/// would have compared a red against a red. The route is now positive — the
+/// trace shows `DETACHED-SEAT edge result=... construct=... pos=1` on a compile
+/// that succeeds — so every guard is reachable, and each row below moves that
+/// green compile to one named refusal.
+///
+/// ⛔ Every mutation perturbs what the seat is **handed**; none perturbs a
+/// guard. A control that edited the condition would ask whether the condition
+/// agrees with itself.
+///
+/// **Promise class: durable invariant.** Each row names the message its own
+/// guard produces, so a later refusal moving in front cannot stand in for it —
+/// which is the failure this whole group exists to prevent.
+#[test]
+fn d5a_the_detached_result_seats_five_guards_are_each_reached_by_a_real_mutation() {
+    // (label, mutation, a phrase unique to the guard it must red)
+    let rows = [
+        (
+            "multi-member projection",
+            D5aRouteMutation::DuplicateResidualEdge,
+            "undischarged causal calls onto one",
+        ),
+        (
+            "result is not a specialized constructor",
+            D5aRouteMutation::CarryNonConstructorResult,
+            "is not a specialized constructor",
+        ),
+        (
+            "identity disagreement",
+            D5aRouteMutation::StripLoweredConstructorIdentity,
+            "is not the planner's own constructor",
+        ),
+        (
+            "position outside the planned field run",
+            D5aRouteMutation::PerturbRecursivePosition,
+            "outside the planned",
+        ),
+        (
+            "field run against the declared ordinary run",
+            D5aRouteMutation::PerturbOrdinaryParameterCount,
+            "must differ by one",
+        ),
+    ];
+    for (label, mutation, expected) in rows {
+        let refusal = with_transparent_declaration_closure_witness(|| {
+            with_d5a_route_mutation(mutation, || {
+                crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                    "d5a_detached_seat",
+                    false,
+                )
+                .map(|_| ())
+                .map_err(|error| format!("{error:?}"))
+                .expect_err(&format!(
+                    "the `{label}` guard must refuse under {mutation:?}. A COMPILE here means \
+                     the guard is inert on the only route that reaches it — and since the \
+                     unmutated witness compiles, that would be a silently admitted defect \
+                     rather than a red-versus-red ambiguity"
+                ))
+            })
+        });
+        assert!(
+            refusal.contains(expected),
+            "the `{label}` guard must refuse with its OWN message. A different refusal means \
+             some earlier authority moved in front of it and this row stopped measuring the \
+             guard it names: {refusal}"
+        );
+    }
+}

@@ -1301,6 +1301,97 @@ pub(in crate::cranelift_backend) fn with_d5a_marker_mutation<T>(
     body()
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 4 step 3 — the REACHING mutations
+/// for the ruled discriminators.**
+///
+/// ⭐⭐ Every variant here exists because the route is now **positive**. Before
+/// checkpoint 4 the only fixture that reaches these seats refused further along,
+/// so a control written then would have compared a red against a red and passed
+/// for the wrong reason — which is why the frame forbids red-versus-red
+/// evidence and why the detached seat carried an explicit *"UNEXERCISED
+/// GUARDS — do not read these as tested"* block. Each variant below moves the
+/// green compile to one named refusal.
+///
+/// ⛔ Each perturbs **what a seat is handed**, never the guard that inspects it.
+/// A mutation of the guard would ask whether the guard agrees with itself.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D5aRouteMutation {
+    Exact,
+    // ── the detached-result seat's five formerly unexercised guards ─────────
+    /// Present the one residual causal edge twice, so the seat sees a
+    /// multi-member projection onto one unit result.
+    DuplicateResidualEdge,
+    /// Hand the seat a carried word instead of the specialized constructor the
+    /// planned producer edge requires.
+    CarryNonConstructorResult,
+    /// Strip the lowered constructor's synthesized identity, so the result is
+    /// no longer the planner's own constructor for that edge's construct
+    /// origin.
+    StripLoweredConstructorIdentity,
+    /// Move the ruled recursive position past the planned constructor's field
+    /// run.
+    PerturbRecursivePosition,
+    /// Perturb the continuation's declared ordinary-parameter count, so the
+    /// field run and the declared run no longer differ by exactly the one
+    /// omitted recursive field.
+    PerturbOrdinaryParameterCount,
+    // ── the generated-context binding (checkpoint 4 step 1) ────────────────
+    /// Withhold the retarget's context lookup, leaving the specialization to
+    /// call the raw worker unit that checkpoint 4 step 2 removed from the
+    /// executable population.
+    SuppressContextBinding,
+    /// Bind a context the *enclosing specialization does not own* — the
+    /// transplant the ruling's key exists to prevent.
+    TransplantContextBinding,
+    // ── the capture projection: root provenance versus immediate slot ──────
+    /// Index the emitting environment with the ROOT ABI position instead of the
+    /// immediate slot. ⭐ On a specialization-owned edge those are different
+    /// environments, which is the whole reason the two coordinates are kept
+    /// apart.
+    ReadRootPositionAsImmediateSlot,
+    // ── the generated-context capture suffix ──────────────────────────────
+    /// Append the enclosing frame's continuation inputs to EVERY static-worker
+    /// call rather than to the one whose body origin was retargeted.
+    AppendCaptureSuffixToEveryWorkerCall,
+    // ── the carried-invocation binding's retained source coordinates ───────
+    /// Perturb the recursive position the carried invocation presents, so the
+    /// lookup is asked for a coordinate the planner never issued.
+    PerturbCarriedInvocationCoordinates,
+    // ── the raw worker's unchanged descriptor authority ────────────────────
+    /// Drop the superseded bodies from the raw template population, keeping
+    /// only the executable ones — the "template-only means deleted" reading
+    /// checkpoint 1 exists to refuse.
+    DropSupersededWorkerTemplates,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D5A_ROUTE_MUTATION: std::cell::Cell<D5aRouteMutation> =
+        const { std::cell::Cell::new(D5aRouteMutation::Exact) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d5a_route_mutation() -> D5aRouteMutation {
+    D5A_ROUTE_MUTATION.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn with_d5a_route_mutation<T>(
+    mutation: D5aRouteMutation,
+    body: impl FnOnce() -> T,
+) -> T {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            D5A_ROUTE_MUTATION.with(|cell| cell.set(D5aRouteMutation::Exact));
+        }
+    }
+    D5A_ROUTE_MUTATION.with(|cell| cell.set(mutation));
+    let _restore = Restore;
+    body()
+}
+
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn record_d5a_marker_event(event: D5aMarkerEvent) {
     D5A_MARKER_EVENTS.with(|events| events.borrow_mut().push(event));
