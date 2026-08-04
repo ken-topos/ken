@@ -3,6 +3,9 @@
 //! root-authority, join-site, source-install and recursor tests -> `control`).
 
 use super::*;
+use crate::cranelift_backend::lowering::units::{
+    continuation_case_binder_run, ContinuationCaseBinderSource,
+};
 use crate::RuntimeSymbolMetadata;
 
 #[derive(Clone, Copy)]
@@ -12082,12 +12085,207 @@ fn d5a_localization_trace_of_the_landed_object_fixture() {
         eprintln!("{entry}");
     }
     eprintln!("=== outcome: {outcome:?} ===");
-    // ⚠ The only assertion. The trace is evidence to be read, not a pin: turning
-    // any of its lines into an expectation would freeze a mechanism that is
-    // about to change.
+    // ⚠ The trace is evidence to be read, not a pin: turning its lines into
+    // expectations would freeze a mechanism that is about to change.
     assert!(
         outcome.is_err(),
         "the landed object fixture still refuses under the witness; if it now \
          compiles the localization is moot and D5a should be re-scoped"
+    );
+    // ⭐ The ONE exception, and it exists to close a specific gap rather than to
+    // pin the trace.
+    //
+    // **MEASURED** by `continuation_case_binder_run_*` below: the binder-run law
+    // produces the ruled order for the witness's exact coordinates.
+    // **CLAIMED** by this checkpoint: the specialization body is *built* in that
+    // order. **THE GAP**: a correct law that production does not consume. Those
+    // controls call the plan function directly, so every one of them stays green
+    // if `define_continuation_bodies` stops calling it.
+    //
+    // This closes that gap and nothing else — it reads the environment the
+    // definition actually assembled, on the real witness. ⚠ It is coupled to the
+    // trace's format, so when the trace is retired the consumption claim needs a
+    // replacement rather than a silent deletion.
+    assert!(
+        trace.iter().any(|entry| entry
+            .contains("env=[StaticWorker, Carried, Carried, Carried]")),
+        "the specialization body must be assembled in the ruled order — the IH \
+         prefix first, then the nonrecursive constructor field, then the two \
+         continuation inputs. Both rejected orders are visible here: the \
+         original `env=[StaticWorker, Carried, Carried]` omitted the field \
+         entirely, and `env=[Carried, StaticWorker, Carried, Carried]` read \
+         `recursive_position` as a lexical index. Trace: {trace:?}"
+    );
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — the ruled computational-case binding law.**
+///
+/// The subject is [`continuation_case_binder_run`]: given the planner's own
+/// coordinates, which environment slot does each operand take? The order **is**
+/// the property, which is why these controls read a plan rather than assembled
+/// Cranelift operands — a `Value` cannot exist without a live `FunctionBuilder`,
+/// so an operand-level control could only re-run the pipeline and read a
+/// refusal, which is red-vs-red and states nothing about the order.
+///
+/// **Promise class: durable invariant.** Each row asserts a relation between the
+/// planner's coordinates and the produced run. An extension that admits a second
+/// projected worker, more fields, or a different envelope layout keeps every one
+/// of these green; only a change to the binding law itself reds them, and that
+/// is a contract decision.
+#[test]
+fn continuation_case_binder_run_puts_the_ih_prefix_first_at_a_nonzero_recursive_position() {
+    // The exact `px8tr_nested_post_effect` witness shape: `Vis(unit, k)` with
+    // the recursive field at source position 1, one nonrecursive field at
+    // source position 0, and two continuation inputs.
+    let run = continuation_case_binder_run(
+        2,
+        &[1],
+        1,
+        &[ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField { source_position: 0 }],
+        2,
+    )
+    .expect("the witness's own coordinates are a lawful binder run");
+
+    assert_eq!(
+        run,
+        vec![
+            ContinuationCaseBinderSource::InductionHypothesis,
+            ContinuationCaseBinderSource::Ordinary(0),
+            ContinuationCaseBinderSource::ContinuationInput(0),
+            ContinuationCaseBinderSource::ContinuationInput(1),
+        ],
+        "the IH prefix leads, the nonrecursive field is read at its IH-offset \
+         position, and the continuation inputs tail in ordinal order"
+    );
+
+    // ⭐ Stated separately because these two are the ruled discriminator, and an
+    // exact-vector assertion alone does not say which part of it was the defect.
+    assert_eq!(
+        run[0],
+        ContinuationCaseBinderSource::InductionHypothesis,
+        "`Var(0)` is the projected worker even though the recursive SOURCE \
+         position is 1 — reading `recursive_position` as a lexical index puts \
+         the ordinary field here, and the measured consequence was \
+         `Unsupported(Call, \"callee is not a closure\")` on a `Unit`"
+    );
+    assert_eq!(
+        run[1],
+        ContinuationCaseBinderSource::Ordinary(0),
+        "the nonrecursive field is read at its IH-offset position, not at its \
+         constructor source position"
+    );
+}
+
+/// At recursive source position **0** the two readings coincide — which is
+/// exactly why the defect needed a nonzero position to surface, and why this row
+/// alone would have been a false green.
+#[test]
+fn continuation_case_binder_run_agrees_with_the_rejected_reading_at_source_position_zero() {
+    let run = continuation_case_binder_run(
+        2,
+        &[0],
+        0,
+        &[ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField { source_position: 1 }],
+        1,
+    )
+    .expect("a source-position-zero recursive field is a lawful binder run");
+
+    assert_eq!(
+        run,
+        vec![
+            ContinuationCaseBinderSource::InductionHypothesis,
+            ContinuationCaseBinderSource::Ordinary(0),
+            ContinuationCaseBinderSource::ContinuationInput(0),
+        ],
+        "with the recursive field at source position 0, the IH prefix and the \
+         rejected lexical reading both put the worker at slot 0"
+    );
+}
+
+/// The envelope is a **role list**, so a field's index in it is not its
+/// constructor source position. This row separates the two readings by permuting
+/// the envelope — the only construction that can tell them apart.
+#[test]
+fn continuation_case_binder_run_resolves_a_field_by_source_position_not_envelope_ordinal() {
+    let run = continuation_case_binder_run(
+        3,
+        &[1],
+        1,
+        &[
+            ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField { source_position: 2 },
+            ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField { source_position: 0 },
+        ],
+        0,
+    )
+    .expect("a permuted envelope covering every nonrecursive field is lawful");
+
+    assert_eq!(
+        run,
+        vec![
+            ContinuationCaseBinderSource::InductionHypothesis,
+            ContinuationCaseBinderSource::Ordinary(1),
+            ContinuationCaseBinderSource::Ordinary(0),
+        ],
+        "constructor arguments follow SOURCE order (0 then 2) while each one's \
+         operand is fetched from its own envelope index (1 then 0); an \
+         implementation that walked the envelope in order would produce \
+         `[IH, Ordinary(0), Ordinary(1)]`"
+    );
+}
+
+/// ⛔ Every gap is a hard stop. A gap-filled run silently shifts every later
+/// binder, which is a wrong program rather than a refused one — so each guard
+/// asserts its own message, never merely `is_err`.
+#[test]
+fn continuation_case_binder_run_hard_stops_rather_than_leaving_a_hole() {
+    let missing_field = continuation_case_binder_run(2, &[1], 1, &[], 0)
+        .expect_err("an envelope covering no field cannot build a binder run");
+    assert!(
+        format!("{missing_field:?}").contains("has no nonrecursive field at source position 0"),
+        "a missing role must name the exact source position it could not \
+         resolve: {missing_field:?}"
+    );
+
+    let out_of_range = continuation_case_binder_run(1, &[3], 3, &[], 0)
+        .expect_err("a recursive position outside the binder run cannot be bound");
+    assert!(
+        format!("{out_of_range:?}").contains("outside its own 1-binder run"),
+        "an out-of-range recursive position must name the run it left: \
+         {out_of_range:?}"
+    );
+
+    let worker_not_recursive = continuation_case_binder_run(
+        2,
+        &[1],
+        0,
+        &[ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField { source_position: 0 }],
+        0,
+    )
+    .expect_err("a worker standing for no recursive field cannot be bound");
+    assert!(
+        format!("{worker_not_recursive:?}")
+            .contains("stands for no induction hypothesis"),
+        "a worker whose ruled position is not recursive must refuse rather than \
+         take a slot: {worker_not_recursive:?}"
+    );
+
+    // ⚠ This is also the reason segment 1's reversal is **unobservable**: a
+    // second recursive position has no projected worker, so no accepted case
+    // ever has more than one IH, and reversed order coincides with forward
+    // order. The clause is written as the law states it so that admitting a
+    // second worker later is a change to the projection, not to this order.
+    let second_position = continuation_case_binder_run(
+        2,
+        &[0, 1],
+        1,
+        &[ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField { source_position: 0 }],
+        0,
+    )
+    .expect_err("a specialization projects exactly one worker");
+    assert!(
+        format!("{second_position:?}")
+            .contains("projects no worker for"),
+        "a second recursive position must hard-stop rather than reuse the one \
+         projected worker: {second_position:?}"
     );
 }

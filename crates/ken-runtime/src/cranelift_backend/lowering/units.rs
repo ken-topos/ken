@@ -991,6 +991,151 @@ pub(in crate::cranelift_backend) fn resolve_continuation_targets(
     Ok(resolved)
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D5a`** — one entry of a continuation
+/// specialization body's case environment, named by **where its operand comes
+/// from** rather than by the operand.
+///
+/// ⭐ The whole property under repair here is an **order**, so the order is
+/// what this type makes observable. Cranelift `Value`s cannot be synthesized
+/// without a live `FunctionBuilder`, so a control written against the assembled
+/// operands could only ever re-run the pipeline and read a refusal; a control
+/// written against this plan states the binding law directly.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum ContinuationCaseBinderSource {
+    /// The projected `StaticWorker`, standing for one recursive field's
+    /// **induction hypothesis**.
+    InductionHypothesis,
+    /// The ordinary-envelope operand at this index. ⛔ An index into the
+    /// envelope, never a constructor source position -- the two coincide only
+    /// when no `WorkerCapture` role precedes the field.
+    Ordinary(usize),
+    /// The continuation input at this ordinal.
+    ContinuationInput(usize),
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D5a` — the ruled computational-case binding law,
+/// as a plan.**
+///
+/// The established law, identical in the specialized and carried paths
+/// (`lower_computational_match_value_composed` builds the same three segments
+/// from `induction_hypotheses`, `extend_specialized(args)`, then the frame
+/// environment):
+///
+/// ```text
+/// [IH bindings, recursive-position order REVERSED]
+///   ++ [constructor arguments, source order]
+///   ++ [frame/tail environment]
+/// ```
+///
+/// ⭐ **`recursive_position` is a constructor SOURCE-FIELD coordinate, not a
+/// lexical environment index.** Reading it as the latter is the exact defect
+/// this function exists to prevent: it placed the worker at environment slot
+/// `recursive_position`, which for a nonzero position moves the induction
+/// hypothesis out of its established lexical prefix and rebinds `Var(0)` to an
+/// ordinary field. The measured consequence on `px8tr_nested_post_effect` was
+/// `Unsupported(Call, "callee is not a closure")` -- `Var(0)` reading a `Unit`.
+///
+/// The specialization eliminates **one** selected recursive callable, so its
+/// projected `StaticWorker` is that position's IH-prefix binding. The selected
+/// recursive field itself is deliberately absent from the constructor-argument
+/// segment, because
+/// [`ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField`] is by
+/// construction the population that excludes it -- so the run's length is
+/// exactly `argument_binders`, one IH per recursive position and one operand
+/// per remaining field.
+///
+/// ⛔ Worker-capture `Parameter` slots are **not** case binders. They construct
+/// the `StaticWorker`; they never enter this run.
+///
+/// Every gap is a hard stop rather than a hole: a gap-filled run would silently
+/// shift every later binder, which is a wrong program rather than a refused one.
+pub(super) fn continuation_case_binder_run(
+    argument_binders: usize,
+    recursive_positions: &[usize],
+    worker_recursive_position: u32,
+    envelope: &[ContinuationOrdinaryEnvelopeRole],
+    continuation_inputs: usize,
+) -> Result<Vec<ContinuationCaseBinderSource>, CraneliftBackendError> {
+    for position in recursive_positions.iter().copied() {
+        if position >= argument_binders {
+            return Err(backend_module(format!(
+                "the selected case names a recursive position {position} outside its own \
+                 {argument_binders}-binder run"
+            )));
+        }
+    }
+    let worker_position = usize::try_from(worker_recursive_position).map_err(|_| {
+        backend_module(
+            "the ruled recursive position exceeds this platform's index width".to_string(),
+        )
+    })?;
+    if !recursive_positions.contains(&worker_position) {
+        return Err(backend_module(format!(
+            "the ruled recursive position {worker_position} is not among the selected case's \
+             recursive positions, so the projected worker stands for no induction hypothesis"
+        )));
+    }
+
+    let mut run = Vec::with_capacity(argument_binders + continuation_inputs);
+
+    // Segment 1 -- the IH prefix, recursive positions reversed.
+    //
+    // ⚠ **The reversal is not observable on any case this mechanism accepts.**
+    // A specialization projects exactly one worker, so a second recursive
+    // position has no IH to bind and hard-stops below; with one position,
+    // reversed and forward order coincide. It is written as the law states it
+    // rather than collapsed to the single-position case, so that admitting a
+    // second worker later is a change to the projection and not to this order.
+    for position in recursive_positions.iter().rev().copied() {
+        if position != worker_position {
+            return Err(backend_module(format!(
+                "the selected case has a recursive position {position} that the continuation \
+                 specialization projects no worker for, so its induction-hypothesis prefix cannot \
+                 be built"
+            )));
+        }
+        run.push(ContinuationCaseBinderSource::InductionHypothesis);
+    }
+
+    // Segment 2 -- the constructor arguments in SOURCE order, each taken from
+    // its own envelope role. The selected recursive fields are the ones the
+    // prefix above already stands for.
+    for position in 0..argument_binders {
+        if recursive_positions.contains(&position) {
+            continue;
+        }
+        let source_position = u32::try_from(position).map_err(|_| {
+            backend_module(
+                "a continuation case binder position exceeds the planner's field width".to_string(),
+            )
+        })?;
+        let index = envelope
+            .iter()
+            .position(|role| {
+                matches!(
+                    role,
+                    ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField {
+                        source_position: candidate,
+                    } if *candidate == source_position
+                )
+            })
+            .ok_or_else(|| {
+                backend_module(format!(
+                    "the ordinary envelope has no nonrecursive field at source position \
+                     {source_position}, so the selected case's binder run cannot be built"
+                ))
+            })?;
+        run.push(ContinuationCaseBinderSource::Ordinary(index));
+    }
+
+    // Segment 3 -- the tail environment: this frame's continuation inputs, in
+    // their ruled ordinal order.
+    for ordinal in 0..continuation_inputs {
+        run.push(ContinuationCaseBinderSource::ContinuationInput(ordinal));
+    }
+    Ok(run)
+}
+
 /// **`RT-CONTSPEC-ACTIVATE` `D2` — define each declared continuation target
 /// from its own projected contract.**
 ///
@@ -1359,69 +1504,49 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 &case.body,
             )?;
             // The semantic case environment, through the sole binding
-            // authority: the selected case's OWN BINDERS in constructor source
-            // order, then the continuation inputs.
+            // authority, in the order `continuation_case_binder_run` states:
+            // the IH prefix, the constructor arguments in source order, then
+            // this frame's continuation inputs.
             //
-            // ⛔⛔ **This is the shape the checked-IH activation corrected, and
-            // the previous one could not be right for any case with more than
-            // one field.** It built `[StaticWorker] ++ continuation_inputs` --
-            // the worker at binder 0 and the nonrecursive constructor fields
-            // nowhere at all. Measured on the witness: the case binds 2 values
-            // (`Vis(unit, k)`), the ordinary envelope carries exactly one
-            // `NonrecursiveConstructorField { source_position: 0 }`, and that
-            // operand never entered the environment. So binder 0 resolved to
-            // the worker and binder 1 to a continuation input, and the checked
-            // computational-IH marker -- which reads the recursor closure at
-            // binder 1 -- received a carried word and refused with *"a carried
-            // boundary word has no compile-time template"*. ⭐ A true sentence
-            // about the wrong thing: the value was fine, the position was not.
-            //
-            // ⭐ The correct order is not a choice. `ContinuationOrdinary
-            // EnvelopeRole::NonrecursiveConstructorField` carries the exact
-            // `source_position` each ordinary operand came from, and the ruled
-            // `recursive_position` names the one field the worker stands for.
-            // Together they determine the binder run completely; nothing here
-            // picks an order.
-            let mut env: Vec<LoweringEnvironmentBinding> =
-                Vec::with_capacity(case.argument_binders);
-            for position in 0..case.argument_binders {
-                let position = u32::try_from(position).map_err(|_| {
-                    backend_module(
-                        "a continuation case binder position exceeds the planner's field width"
-                            .to_string(),
-                    )
-                })?;
-                if position == unit.recursive_position {
-                    env.push(LoweringEnvironmentBinding::StaticWorker(worker.clone()));
-                    continue;
-                }
-                let index = envelope
-                    .iter()
-                    .position(|role| {
-                        matches!(
-                            role,
-                            ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField {
-                                source_position,
-                            } if *source_position == position
-                        )
-                    })
-                    .ok_or_else(|| {
-                        // ⛔ Fails closed rather than leaving a hole in the
-                        // binder run. A missing role means the ordinary
-                        // envelope does not cover this case's fields, and a
-                        // gap-filled environment would silently shift every
-                        // later binder.
-                        backend_module(format!(
-                            "the ordinary envelope has no nonrecursive field at source position                              {position}, so the selected case's binder run cannot be built"
-                        ))
-                    })?;
-                env.push(LoweringEnvironmentBinding::Value(ordinary[index].clone()));
+            // ⛔ This site chooses nothing. It maps a plan onto operands; the
+            // order is the plan's, and the plan is a pure function of the
+            // planner's own coordinates.
+            let plan = continuation_case_binder_run(
+                case.argument_binders,
+                &case.recursive_positions,
+                unit.recursive_position,
+                envelope,
+                carried_inputs.len(),
+            )?;
+            let mut env: Vec<LoweringEnvironmentBinding> = Vec::with_capacity(plan.len());
+            for source in &plan {
+                let binding = match *source {
+                    ContinuationCaseBinderSource::InductionHypothesis => {
+                        LoweringEnvironmentBinding::StaticWorker(worker.clone())
+                    }
+                    ContinuationCaseBinderSource::Ordinary(index) => {
+                        let operand = ordinary.get(index).ok_or_else(|| {
+                            backend_module(
+                                "the binder run names an ordinary-envelope index this frame loaded \
+                                 no operand for"
+                                    .to_string(),
+                            )
+                        })?;
+                        LoweringEnvironmentBinding::Value(operand.clone())
+                    }
+                    ContinuationCaseBinderSource::ContinuationInput(ordinal) => {
+                        let operand = carried_inputs.get(ordinal).ok_or_else(|| {
+                            backend_module(
+                                "the binder run names a continuation input ordinal this frame \
+                                 loaded no operand for"
+                                    .to_string(),
+                            )
+                        })?;
+                        LoweringEnvironmentBinding::Value(operand.clone())
+                    }
+                };
+                env.push(binding);
             }
-            env.extend(
-                carried_inputs
-                    .into_iter()
-                    .map(LoweringEnvironmentBinding::Value),
-            );
 
             #[cfg(test)]
             d5a_trace(format!(
