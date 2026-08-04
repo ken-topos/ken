@@ -171,6 +171,11 @@ to widen.
   not complete until this lands.** Full specification in the section below.
 - **`D5`** — **Complete owner/phase validation**, in place **before**
   `TransparentDeclarationClosure` is removed from the retained residual.
+- **`D5a`** — **Continuation elimination for the planned closure-valued
+  constructor field.** The declaration-owned unit calls the declared
+  continuation directly instead of letting the closure cross a unit boundary.
+  Added 2026-08-04; **`D6` is not retried until this checkpoint is green.** Full
+  specification in the section below.
 - **`D6`** — Remove the residual variant, and only then re-run `AC-1`.
 
 ### `D2a` — the population substitution D5 could not run without
@@ -310,6 +315,116 @@ exact planned/consumed/emitted set closure.
 
 After the population correction, **re-run those controls**, so that a rejection
 cannot be credited to the now-removed phantom `SchedulingEntry`.
+
+### `D5a` — eliminate the ruled closure field, do not carry it
+
+**Added 2026-08-04. Architect ruling `evt_44k5h9z49nf9b`, grounded on exact
+preservation checkpoint `08cb257ff5118a89b72b4018e3e1c4d1733a03d7`. Steward
+recut; `08cb257f` is preservation-only and never a candidate.**
+
+**Same WP, same atomic scope. Not a new graph node, and not part of `D6`.** The
+new owner is this node's `CallableDeclaration`; the callee/call mechanism is the
+already-landed continuation specialization. Splitting either side into a third
+owner would misstate the defect: it is a composition gap between the new owner
+and the landed mechanism, not a new disposition or representation family.
+
+#### What `D6` hit
+
+`D6`'s retirement selects `FunctionizedUnits` correctly and runs `D5` unhooked,
+then reddens the landed object-link fixture
+`nested_post_effect_checked_recursor_reaches_success_and_retains_exact_trap_provenance`:
+a closure-valued `Construct` field refuses at boundary transfer. The
+discriminating probe holds lane and declaration shape fixed — a plain field
+compiles, an anonymous `LexicalClosure` field refuses. The `RecursiveDescent`
+lane had no unit boundary, which is why this never surfaced before.
+
+**⛔ Do not recast that landed end-to-end regression as expected behavior.**
+
+#### It is an existing continuation-specialization edge, not constructor data
+
+The fixture's producer is exactly a checked `ComputationalMatch`; scrutinee
+constructor `ITree::Vis(Unit, LexicalClosure)`; case `ITree::Vis` with recursive
+position `1`; the closure at position `1` invoked through the checked IH route.
+⇒ That is the planner's existing `ContinuationSpecialization` population —
+matching producer constructor, selected alternative, ruled recursive position,
+static worker body and captures, exact consumer continuation. **The closure is
+not observable constructor data.**
+
+#### The binding mechanism — eliminate the callable before the boundary
+
+Resolve and claim the **existing planner-issued causal identity** in the
+declaration-owned `CallableDeclaration` function. Emit the direct declared
+continuation call **at the producer occurrence** — before
+`transfer_constructor_operands`, before boundary publication, and before any
+join can erase identity. Pass only the ordinary inputs and ordered captures
+through the existing typed input ABI. Use the direct call's result in place of
+the producer constructor.
+
+⛔ **No closure word, handle, tag, capsule, durable store, indirect call,
+runtime selector, or new carrier lane is lawful.** The generic
+`CallableCapsuleEscape -> EscapeForbidden` rule is unchanged.
+
+**The plan must contain the exact causal identity before function definition.**
+If it does not, lowering **stops** and routes the missing planner authority; it
+may not mint a token from the reached syntax. ⛔ Do not absorb
+[[RT-CONTSPEC-LEDGER]]'s general four-axis mapping work here.
+
+#### The `08cb257f` probe must keep rejecting — it is not the positive
+
+That probe returns `Wrap(LexicalClosure)` and has **no consuming computational
+eliminator**, so its closure really is stored as a constructor value. Its
+plain-field half proves the lane works; its closure-field half proves the
+generic escape prohibition. It proves nothing about a carrier capability
+arriving. ⛔ **Its comments and trigger must not say this row should turn green
+before `D6`.**
+
+The load-bearing discriminator is instead:
+
+1. the exact planned `Vis` recursive field **compiles** by direct continuation
+   elimination;
+2. the same-shaped **unplanned, nonrecursive, returned, or stored** closure
+   field **rejects before allocation or publication**;
+3. omitting, transplanting, redirecting, or failing to claim the exact causal
+   identity **fails** the existing planned/resolved/declared/claimed/emitted
+   closeout.
+
+#### The checkpoint, and what it gates
+
+- under the existing selector witness, the landed object fixture reaches the
+  exact direct continuation call inside the declaration-owned unit;
+- that unit receives its exact declared continuation target, and the existing
+  whole-pass closure closes;
+- the generic closure-valued constructor negative is preserved.
+
+**Only after this checkpoint is green is `D6` retried unchanged** — one
+production action: retire `TransparentDeclarationClosure`, remove the selector
+witness, re-run the closed evidence unhooked.
+
+#### `same_recursive_argument_shapes` is obsolete on this lane — no guard was lost
+
+`same_recursive_argument_shapes` is **not a Ken semantic law and not a declared
+function-unit ABI predicate.** Its only production uses guard
+`RecursiveDescent`'s same-function CFG backedges, where one fixed run of
+specialized `Lowered` block parameters must represent every loop iteration;
+there, turning `None` into `Some(Int)` changes the compile-time template and
+must reject.
+
+Functionized calls hold a different representation contract: every declared
+parameter is one `AbiSlotKind::Parameter` with `AbiCarrier::ValueWord`; the
+descriptor is independent of the particular runtime constructor; each actual
+argument is transferred through the boundary encoder at the call; and graph
+admissibility still rejects genuinely non-transferable children. ⇒ `None` and
+`Some(Int)` are **two lawful values of one declared slot**, not an ABI shape
+disagreement.
+
+`recursive_declaration_shape_change_hits_typed_boundary` going green is
+therefore **the intended removal of a `RecursiveDescent` implementation
+restriction**, not a lost guard. On the `D6` lineage, rename and reframe it as a
+**positive** proving the functionized recursive declaration accepts the variant
+change through one `ValueWord` parameter, and retain a **separate negative** for
+an actually non-transferable value graph or a descriptor/input disagreement.
+⛔ Do not transplant `same_recursive_argument_shapes` into the declared-call
+path; keep it for every remaining `RecursiveDescent` backedge.
 
 > ### ⭐⭐ `D7` NOW CARRIES THE EXACT-RECORD RE-DERIVATION, AND IT GATES ANOTHER NODE
 >
@@ -1805,6 +1920,14 @@ family — that is a measurement nobody has taken.
   rather than the property. ⇒ **`D2a` lands first, then `D5`'s transition
   sentinel is promoted into the real checked positive, and only then `D6`.** A
   `D5` whose positive is still a sentinel does not satisfy this AC.
+
+  **Extended 2026-08-04 (Architect `evt_44k5h9z49nf9b`).** `D5a` sits between
+  `D5` and `D6` for the same reason one step further out: with the planned
+  closure-valued constructor field still crossing a unit boundary, `D6`'s
+  retirement reddens a landed end-to-end fixture, so activation would again
+  precede a runnable proof. ⇒ The full order is
+  **`D2a` → `D5` → `D5a` → `D6`**, and `D6` is retried unchanged once `D5a` is
+  green.
 - **`AC-4` (no-regression).** Workspace green **in CI** — ⛔ never a local
   `--workspace` run (`COORDINATION §12`).
 - **`AC-5`.** The exhaustive-match fail-closed property at `core.rs:59-65` is
