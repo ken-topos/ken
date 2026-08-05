@@ -135,7 +135,7 @@ impl AbiCarrier {
     /// ⚠ A **borrow is only meaningful against an owner that outlives the
     /// borrower**, so this answer is incomplete on its own: read it together
     /// with `storage_owner`, which names who that owner is.
-    const fn ownership(self) -> AbiOwnership {
+    pub(super) const fn ownership(self) -> AbiOwnership {
         match self {
             // A parameter or lexical capture arrives owned by the frame for the
             // activation's extent and is reclaimed when the activation ends.
@@ -181,7 +181,7 @@ impl AbiCarrier {
     /// absent here**: this node declares the durable owner, it does not
     /// materialize anything. No encoder, no decoder, no second emission
     /// authority.
-    const fn storage_owner(self) -> AbiStorageOwner {
+    pub(super) const fn storage_owner(self) -> AbiStorageOwner {
         match self {
             // Parameters and lexical captures live in the activation's own frame
             // once the boundary transfer completes.
@@ -1213,7 +1213,9 @@ fn lexical_capture_origins(
 /// `RuntimeExprShape` or `TransitionKind` must state its carrier explicitly; it
 /// cannot inherit `ValueWord` by omission, which is how an unrepresentable
 /// construct would otherwise acquire a representation silently.
-fn result_carrier(source: SemanticSourceKind) -> Result<AbiCarrier, CraneliftBackendError> {
+pub(super) fn result_carrier(
+    source: SemanticSourceKind,
+) -> Result<AbiCarrier, CraneliftBackendError> {
     Ok(match source {
         SemanticSourceKind::Expression(shape) => match shape {
             RuntimeExprShape::ImportedDeclarationRef => {

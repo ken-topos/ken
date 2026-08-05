@@ -26,6 +26,10 @@ use semantic_ir::{
     build_semantic_plane, build_synthesized_constructor_inventory, SemanticMaterialArena,
     SemanticPlane, SemanticSourceKind, SemanticSourceSeed,
 };
+// `RT-CONTSRC-PRODUCER-LOCAL` `D2` — the shape vocabulary, so a producer-local
+// contract asks the existing `abi::result_carrier` authority rather than
+// restating a carrier.
+use semantic_ir::RuntimeExprShape;
 
 // ⭐ `D1`'s capability surface. The two identity types cross into
 // `crate::cranelift_backend` so `lowering` can hold and compare them; ⛔
@@ -5066,6 +5070,120 @@ fn continuation_owner_entry_sources(
     Ok(sources)
 }
 
+/// `RT-CONTSRC-PRODUCER-LOCAL` `D2` — which producer-local binding kind a
+/// coordinate names.
+///
+/// ⛔ **Not part of the coordinate's identity.** `binding_origin` +
+/// `binding_ordinal` already distinguish every binding, including two of
+/// different kinds, so adding a kind tag to the representation would be a
+/// second statement of a fact the identity already carries. This selects the
+/// two facts whose *derivation* differs, and nothing else.
+///
+/// ⛔ Closed, no default arm: a third binding kind must state its carrier and
+/// its referent lifetime explicitly rather than inherit either.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProducerLocalKind {
+    /// The result of a host effect. The `Effect` occurrence owns the identity,
+    /// and its own occurrence authority owns the referent lifetime.
+    HostEffectResult,
+    /// One binder of one `Match`/`ComputationalMatch` case. The referent comes
+    /// from the scrutinee, named here by the match occurrence whose child 0 it
+    /// is.
+    MatchCaseBinder { match_origin: StaticOriginId },
+}
+
+/// `RT-CONTSRC-PRODUCER-LOCAL` `D2` — the planner contract for one
+/// producer-local binding.
+///
+/// ⭐ **One authority for both kinds.** Only the carrier and the referent
+/// lifetime are derived per kind; ownership and storage owner are read off
+/// `AbiCarrier`'s existing methods — the same two the entry plane's `abi::slot`
+/// reads — so this record cannot disagree with the entry plane about what a
+/// carrier implies. ⛔ Nothing here restates a fact another record already
+/// holds.
+///
+/// **Where each fact comes from, stated because "planner-derived" is not an
+/// answer:**
+///
+/// | fact | host-effect result | `Match` case binder |
+/// |---|---|---|
+/// | carrier | `abi::result_carrier` on the `Effect` shape — the existing "carrier an occurrence's result travels in" authority, and this binding *is* that result | ⚠ `ValueWord`, **derived here for the first time** — see below |
+/// | ownership | `AbiCarrier::ownership` | `AbiCarrier::ownership` |
+/// | storage owner | `AbiCarrier::storage_owner` | `AbiCarrier::storage_owner` |
+/// | referent affinity | the `Effect` occurrence's own lifetime authority | the scrutinee child's lifetime authority |
+///
+/// ⚠ **The one fact no prior authority stated.** A case binder is not an
+/// occurrence's result, so `result_carrier` does not answer for it and nothing
+/// else did either. `ValueWord` is this plane's carrier for an ordinary in-body
+/// Ken value — it is what `result_carrier` assigns every expression shape that
+/// is not `Trap` or `ImportedDeclarationRef` — and a binder is exactly that.
+/// Recorded as a `D2` derivation rather than presented as a pre-existing
+/// reading.
+///
+/// ⭐ The binder's referent lifetime is **not** conservatively floored, because
+/// it does not have to be: `PlannedReferentLifetime::Persistent` is issued only
+/// when the complete source result is closed over persistent children, so a
+/// field of a persistent scrutinee is persistent by that type's own definition
+/// and reading the scrutinee's lifetime is not a promotion.
+fn producer_local_source(
+    plan: &StaticTransitionPlan<'_>,
+    kind: ProducerLocalKind,
+    binding: ProducerLocalBinding,
+    locator: ProducerLocalLocator,
+) -> Result<ContinuationSourceSlotAuthority, CraneliftBackendError> {
+    let (carrier, lifetime) = match kind {
+        ProducerLocalKind::HostEffectResult => (
+            abi::result_carrier(SemanticSourceKind::Expression(RuntimeExprShape::Effect))?,
+            occurrence_authority(plan, binding.binding_origin)?.lifetime,
+        ),
+        ProducerLocalKind::MatchCaseBinder { match_origin } => {
+            let scrutinee = occurrence_authority(plan, match_origin)?
+                .children
+                .iter()
+                .find(|child| child.position == 0)
+                .ok_or_else(|| {
+                    planner_error("a match case binder names a match with no scrutinee child")
+                })?;
+            (AbiCarrier::ValueWord, scrutinee.lifetime)
+        }
+    };
+    Ok(ContinuationSourceSlotAuthority {
+        coordinate: ContinuationSourceCoordinate::ProducerLocal { binding, locator },
+        carrier,
+        ownership: carrier.ownership(),
+        storage_owner: carrier.storage_owner(),
+        referent_affinity: lifetime_referent_affinity(lifetime),
+    })
+}
+
+/// `D2` — one producer-local value, as the walk's value authority.
+///
+/// `binding_origin` is what **creates** the value; `locator.environment_origin`
+/// is the scope whose environment **contains** it. For a case binder the two
+/// coincide; for a `Let`-bound effect result they deliberately do not, which is
+/// the separation `D1` exists to express.
+fn producer_local_value(
+    plan: &StaticTransitionPlan<'_>,
+    kind: ProducerLocalKind,
+    binding_origin: StaticOriginId,
+    binding_ordinal: u32,
+    environment_origin: StaticOriginId,
+    environment_index: u32,
+) -> Result<ContinuationValueSourceAuthority, CraneliftBackendError> {
+    let binding = ProducerLocalBinding {
+        binding_owner: occurrence_authority(plan, binding_origin)?.owner,
+        binding_origin,
+        binding_ordinal,
+    };
+    let locator = ProducerLocalLocator {
+        environment_origin,
+        environment_index,
+    };
+    Ok(ContinuationValueSourceAuthority::source(
+        producer_local_source(plan, kind, binding, locator)?,
+    ))
+}
+
 fn walk_continuation_value_environment(
     plan: &StaticTransitionPlan<'_>,
     origin: StaticOriginId,
@@ -5107,6 +5225,30 @@ fn walk_continuation_value_environment(
             if found.is_some() {
                 return Ok((ContinuationValueSourceAuthority::Open, found));
             }
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D2` — a `Let`-bound **host-effect
+            // result** is a producer-local binding, not an opaque value.
+            //
+            // ⭐ Minted HERE rather than in the `Effect` arm, because this is
+            // where the value enters an environment and therefore where it
+            // acquires a locator. An effect result consumed without a binder
+            // never enters one, and correctly stays `Open`: there is no
+            // environment position to name.
+            //
+            // ⛔ The binding origin is the `Effect` occurrence — what creates
+            // the value — while the locator names this `Let`'s body, whose
+            // environment holds it at index 0. The two differ on purpose.
+            let bound_origin = child(0)?;
+            let value = match plan.planned_occurrence_expr(bound_origin)? {
+                RuntimeExpr::Effect { .. } => producer_local_value(
+                    plan,
+                    ProducerLocalKind::HostEffectResult,
+                    bound_origin,
+                    0,
+                    child(1)?,
+                    0,
+                )?,
+                _ => value,
+            };
             let mut nested = Vec::with_capacity(environment.len() + 1);
             nested.push(value);
             nested.extend_from_slice(environment);
@@ -5134,10 +5276,31 @@ fn walk_continuation_value_environment(
             }
             let mut value = ContinuationValueSourceAuthority::Closed(Vec::new());
             for (index, case) in cases.iter().enumerate() {
+                // `RT-CONTSRC-PRODUCER-LOCAL` `D2` — each case binder is a
+                // producer-local binding. ⛔ Its identity is the case BODY's
+                // occurrence plus the binder ordinal, never the match
+                // occurrence plus an encoded pair: two numbers packed into one
+                // is the aliasing this plane refuses everywhere else, and the
+                // case body is already the exact static identity of that
+                // binder's scope.
+                let case_body = child(1 + index)?;
                 let mut nested = Vec::with_capacity(case.binders + environment.len());
-                nested.extend(
-                    (0..case.binders).map(|_| ContinuationValueSourceAuthority::Open),
-                );
+                for binder in 0..case.binders {
+                    nested.push(producer_local_value(
+                        plan,
+                        ProducerLocalKind::MatchCaseBinder {
+                            match_origin: origin,
+                        },
+                        case_body,
+                        u32::try_from(binder).map_err(|_| {
+                            planner_capacity_error("continuation case binder ordinal exhausted")
+                        })?,
+                        case_body,
+                        u32::try_from(binder).map_err(|_| {
+                            planner_capacity_error("continuation case binder ordinal exhausted")
+                        })?,
+                    )?);
+                }
                 nested.extend_from_slice(environment);
                 let (case_value, found) = walk(1 + index, &nested)?;
                 if found.is_some() {
@@ -5160,10 +5323,27 @@ fn walk_continuation_value_environment(
                     .ok_or_else(|| {
                         planner_capacity_error("continuation case binder count exhausted")
                     })?;
+                // `D2` — same binding kind as the ordinary `Match` above; a
+                // computational case's argument and recursive binders are one
+                // ordered binder run, so the ordinal spans both.
+                let case_body = child(1 + index)?;
                 let mut nested = Vec::with_capacity(binders + environment.len());
-                nested.extend(
-                    (0..binders).map(|_| ContinuationValueSourceAuthority::Open),
-                );
+                for binder in 0..binders {
+                    nested.push(producer_local_value(
+                        plan,
+                        ProducerLocalKind::MatchCaseBinder {
+                            match_origin: origin,
+                        },
+                        case_body,
+                        u32::try_from(binder).map_err(|_| {
+                            planner_capacity_error("continuation case binder ordinal exhausted")
+                        })?,
+                        case_body,
+                        u32::try_from(binder).map_err(|_| {
+                            planner_capacity_error("continuation case binder ordinal exhausted")
+                        })?,
+                    )?);
+                }
                 nested.extend_from_slice(environment);
                 let (case_value, found) = walk(1 + index, &nested)?;
                 if found.is_some() {
@@ -5608,6 +5788,33 @@ fn exact_continuation_source_environment(
             return Ok(None);
         }
         exact_inputs.push(sources.remove(0));
+    }
+    // `RT-CONTSRC-PRODUCER-LOCAL` `D2` — producer-local bindings are
+    // REPRESENTED here and not yet ADMITTED. `D3` teaches the ten consumers to
+    // assign the domain and `D4` releases admission; between the two, a
+    // candidate whose environment names one declines.
+    //
+    // ⭐ **This preserves the pre-`D2` population exactly.** Every position that
+    // is a producer-local binding today was `Open` before `D2`, and `Open`
+    // declined at the take-loop above. The decline simply moved from "opaque"
+    // to a named domain. ⛔ It is not an edge selector: it tests the coordinate
+    // domain, is uniform over every edge, and consults no corpus, closure
+    // identity, first-`Open` reason or planned-member status.
+    //
+    // ⛔ It must come BEFORE the validator, not after. `validate_continuation_
+    // source_slot` refuses this domain with a planner ERROR, which rejects the
+    // enclosing source program; declining the candidate is the correct
+    // boundary, and it is the one the take-loop above already uses.
+    //
+    // **Promise class: transition sentinel** — `D4` deletes this block, and
+    // that is the event that retires it.
+    if exact_inputs.iter().any(|input| {
+        matches!(
+            input.coordinate,
+            ContinuationSourceCoordinate::ProducerLocal { .. }
+        )
+    }) {
+        return Ok(None);
     }
     for source in &exact_inputs {
         validate_continuation_source_slot(plan, source)?;
@@ -19361,6 +19568,271 @@ mod tests {
                  generated-context capture lookup could resolve one as the other"
             );
         }
+    }
+
+    /// A `ComputationalMatch` consumer sitting inside a `Match` case body, with
+    /// a `Let`-bound host-effect result above both.
+    ///
+    /// The environment reaching that consumer therefore holds **both** `D2`
+    /// binding kinds and an entry parameter, in one vector, which is what lets
+    /// one walk distinguish them instead of three fixtures each proving its own
+    /// half.
+    fn contsrc_d2_both_binding_kinds_fixture() -> RuntimeExpr {
+        RuntimeExpr::Let {
+            value: Box::new(RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleRead,
+                capability: None,
+                args: Vec::new(),
+            }),
+            body: Box::new(RuntimeExpr::Match {
+                scrutinee: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::Contspec::Node".to_string(),
+                    args: vec![unit()],
+                }),
+                cases: vec![RuntimeMatchCase {
+                    constructor: "ctor:fixture::Contspec::Node".to_string(),
+                    binders: 1,
+                    // ⛔ `Var(3)` is load-bearing, not decoration. The case
+                    // body must REACH past the two computational binders to the
+                    // surrounding environment, or `required_input_count` is
+                    // zero, `exact_inputs` is empty, and every assertion below
+                    // about the gate is satisfied by a fixture that never
+                    // reached it. Index 3 = the two `ComputationalMatch`
+                    // binders, then the enclosing `Match` binder.
+                    body: contspec_parameter_match(RuntimeExpr::Var(3)),
+                }],
+                default: trap("d2 both binding kinds"),
+            }),
+        }
+    }
+
+    /// The environment the walk reaches at `target`, and that target's owner.
+    fn contsrc_d2_reached_environment(
+        plan: &StaticTransitionPlan<'_>,
+        target: StaticOriginId,
+    ) -> Vec<ContinuationValueSourceAuthority> {
+        let owner = occurrence_authority(plan, target)
+            .expect("the target has an occurrence authority")
+            .owner;
+        let entry_sources = continuation_owner_entry_sources(plan, owner)
+            .expect("the owner has an exact entry environment");
+        let entry_environment = entry_sources
+            .into_iter()
+            .map(ContinuationValueSourceAuthority::source)
+            .collect::<Vec<_>>();
+        let root = continuation_owner_source_root(plan, owner).expect("one source root");
+        let (_, reached) =
+            walk_continuation_value_environment(plan, root, target, &entry_environment)
+                .expect("the walk reaches the target");
+        reached.expect("the target is inside its owner's subtree")
+    }
+
+    /// The first occurrence of the given expression shape, in origin order.
+    fn contsrc_d2_first_origin(
+        plan: &StaticTransitionPlan<'_>,
+        matches_shape: impl Fn(&RuntimeExpr) -> bool,
+    ) -> StaticOriginId {
+        let mut origins = plan
+            .occurrence_authorities
+            .iter()
+            .map(|authority| authority.origin)
+            .collect::<Vec<_>>();
+        origins.sort();
+        origins
+            .into_iter()
+            .find(|origin| {
+                plan.planned_occurrence_expr(*origin)
+                    .is_ok_and(&matches_shape)
+            })
+            .expect("the fixture contains that shape")
+    }
+
+    fn contsrc_d2_local(
+        value: &ContinuationValueSourceAuthority,
+    ) -> (&ContinuationSourceSlotAuthority, ProducerLocalBinding, ProducerLocalLocator) {
+        let ContinuationValueSourceAuthority::Closed(sources) = value else {
+            panic!("expected an exactly-sourced value, got {value:?}");
+        };
+        let [source] = sources.as_slice() else {
+            panic!("expected exactly one source, got {sources:?}");
+        };
+        let ContinuationSourceCoordinate::ProducerLocal { binding, locator } = source.coordinate
+        else {
+            panic!("expected a producer-local coordinate, got {:?}", source.coordinate);
+        };
+        (source, binding, locator)
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D2` — both binding kinds are populated as
+    /// DISTINCT structural bindings, with a planner-derived contract.**
+    ///
+    /// One fixture, one walk, one environment vector holding a `Match` case
+    /// binder, a `Let`-bound host-effect result and an entry parameter — so the
+    /// row can tell the two local kinds apart from each other *and* from the
+    /// entry domain, which three separate fixtures could not.
+    ///
+    /// MEASURED: at the consumer inside the case body the environment is
+    /// `[case binder, effect result, entry ...]`; the two local bindings differ
+    /// in `binding_origin`; each carries `ValueWord` with the ownership and
+    /// storage owner `AbiCarrier` derives, and a non-empty referent affinity.
+    /// CLAIMED: `D2` populates both kinds through one derivation that restates
+    /// no other record's fact. THE GAP: nothing here admits either binding —
+    /// the candidate still declines, which is the next row.
+    ///
+    /// ⭐ The locator/binding split is asserted, not assumed: for the effect
+    /// result the two origins **differ** (the `Effect` creates the value, the
+    /// `Let` body holds it), and for the case binder they coincide. If a future
+    /// change collapsed the two fields, the effect row would red.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_d2_populates_both_producer_local_binding_kinds() {
+        let expr = Box::leak(Box::new(contsrc_d2_both_binding_kinds_fixture()));
+        let plan = plan_static_transition_graph(expr, &BTreeMap::new())
+            .expect("the D2 fixture plans");
+        let target = contsrc_d2_first_origin(&plan, |expr| {
+            matches!(expr, RuntimeExpr::ComputationalMatch { .. })
+        });
+        let effect_origin = contsrc_d2_first_origin(&plan, |expr| {
+            matches!(expr, RuntimeExpr::Effect { .. })
+        });
+        let reached = contsrc_d2_reached_environment(&plan, target);
+        assert!(
+            reached.len() >= 2,
+            "the fixture must reach the consumer with both local bindings: {reached:?}"
+        );
+
+        // Position 0 -- the `Match` case binder. Its scope introduces it and
+        // holds it, so binding and locator name the same occurrence.
+        let (binder_source, binder_binding, binder_locator) = contsrc_d2_local(&reached[0]);
+        assert_eq!(binder_binding.binding_ordinal, 0);
+        assert_eq!(
+            binder_binding.binding_origin, binder_locator.environment_origin,
+            "a case binder is introduced by, and held in, the same scope"
+        );
+        assert_eq!(binder_locator.environment_index, 0);
+
+        // Position 1 -- the `Let`-bound host-effect result. The `Effect`
+        // creates it; the `Let` body holds it. ⛔ Different origins.
+        let (effect_source, effect_binding, effect_locator) = contsrc_d2_local(&reached[1]);
+        assert_eq!(
+            effect_binding.binding_origin, effect_origin,
+            "the host-effect result must be identified by the Effect occurrence itself"
+        );
+        assert_ne!(
+            effect_binding.binding_origin, effect_locator.environment_origin,
+            "the binding identity and the emission-time locator must not collapse into one"
+        );
+        assert_eq!(effect_locator.environment_index, 0);
+
+        // The two kinds are distinct bindings, which is the deliverable.
+        assert_ne!(
+            binder_binding, effect_binding,
+            "the two D2 binding kinds must not compare equal"
+        );
+
+        // The contract, derived once and consistent with the entry plane's
+        // reading of the same carrier.
+        for (label, source) in [("case binder", binder_source), ("effect result", effect_source)] {
+            assert_eq!(source.carrier, AbiCarrier::ValueWord, "{label} carrier");
+            assert_eq!(
+                source.ownership,
+                source.carrier.ownership(),
+                "{label} ownership must be the carrier's, not a second statement of it"
+            );
+            assert_eq!(
+                source.storage_owner,
+                source.carrier.storage_owner(),
+                "{label} storage owner must be the carrier's"
+            );
+            assert!(
+                !source.referent_affinity.is_empty(),
+                "{label} must carry a real referent affinity; an empty one is what \
+                 validate_continuation_source_slot rejects for the entry domain"
+            );
+        }
+
+        // ⭐ The referent affinity is derived PER BINDING, not stamped from one
+        // constant. The case binder's scrutinee is a persistent constructor and
+        // the host effect's result is activation-owned, so the two affinities
+        // must differ on this fixture. A single hardcoded affinity — the
+        // easiest wrong implementation — reds here.
+        assert_ne!(
+            binder_source.referent_affinity, effect_source.referent_affinity,
+            "both kinds received the same referent affinity, so the derivation is not \
+             reading each binding's own lifetime authority"
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D2` — representing a binding is not
+    /// admitting it. The candidate still declines, and declines for a NAMED
+    /// domain rather than for opacity.**
+    ///
+    /// This is the law that makes `D2` behaviour-preserving. Every position
+    /// that is a producer-local binding today was `Open` before `D2`, and both
+    /// decline the candidate — so no edge's verdict moves, which is exactly
+    /// what the unchanged `D0` per-row parity and lib baselines show.
+    ///
+    /// MEASURED: the fixture's environment holds producer-local bindings, and
+    /// `exact_continuation_source_environment` returns `Ok(None)` for it — a
+    /// candidate decline, **not** an `Err` rejecting the source program.
+    /// CLAIMED: `D2` moved the decline's *reason*, never its *outcome*.
+    /// THE GAP: `D4` releases admission and deletes the gate; until then this
+    /// says nothing about whether these bindings *could* lawfully intern.
+    ///
+    /// ⭐ The `Ok(None)` versus `Err` distinction is the whole point. The
+    /// planner-side refusal `D1` installed is an `Err`, which would reject the
+    /// enclosing program; the gate must sit before it.
+    ///
+    /// **Promise class: transition sentinel** — `D4` releases admission and
+    /// retires this row along with the gate it measures.
+    #[test]
+    fn contsrc_d2_a_producer_local_environment_declines_the_candidate_not_the_program() {
+        let expr = Box::leak(Box::new(contsrc_d2_both_binding_kinds_fixture()));
+        let plan = plan_static_transition_graph(expr, &BTreeMap::new())
+            .expect("a fixture whose environment names producer-local bindings still PLANS");
+        let target = contsrc_d2_first_origin(&plan, |expr| {
+            matches!(expr, RuntimeExpr::ComputationalMatch { .. })
+        });
+        let reached = contsrc_d2_reached_environment(&plan, target);
+        assert!(
+            reached.iter().any(|value| matches!(
+                value,
+                ContinuationValueSourceAuthority::Closed(sources)
+                    if sources.iter().any(|source| matches!(
+                        source.coordinate,
+                        ContinuationSourceCoordinate::ProducerLocal { .. }
+                    ))
+            )),
+            "the fixture must actually reach the gate, or this row measures nothing: {reached:?}"
+        );
+
+        // The admission law itself: nothing interned names the unassigned
+        // domain. ⛔ Checked across two plans so it is not a statement about one
+        // fixture, and the interned-input count is asserted so an empty
+        // population cannot satisfy it vacuously.
+        let mut interned_inputs = 0usize;
+        for plan in [&plan, &contspec_plan()] {
+            for unit in &plan.continuation_specializations {
+                for input in &unit.key.continuation_inputs {
+                    interned_inputs += 1;
+                    assert!(
+                        matches!(
+                            input.coordinate,
+                            ContinuationSourceCoordinate::EntryAbi { .. }
+                        ),
+                        "an interned specialization names an unassigned producer-local \
+                         coordinate: {:?}",
+                        input.coordinate
+                    );
+                }
+            }
+        }
+        assert!(
+            interned_inputs > 0,
+            "no specialization interned any input at all, so the admission law held vacuously"
+        );
     }
 
     fn mutate_projection_field(
