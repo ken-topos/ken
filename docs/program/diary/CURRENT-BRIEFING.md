@@ -33,7 +33,68 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~06:4xZ · D7 `1d` answered NEGATIVE; `1e` released
+## LIVE — 2026-08-05 ~07:0xZ · `1e` FALSIFIED; `RT-CONTSRC-PRODUCER-LOCAL` cut
+
+**`origin/main`: `a8e37a3d`** (PR #1412). New node `RT-CONTSRC-PRODUCER-LOCAL`
+is `ready` with a frame; `D7` checkpoint `1f` withdraws `1e`. Verify; do not
+trust this line.
+
+### The one thing to do next
+
+**Release `RT-CONTSRC-PRODUCER-LOCAL` to Runtime.** Handoff-gate compaction of
+runtime-leader/implementer/qa was launched at ~07:0xZ; all three were 0 ahead
+and 0 dirty, so the gate's `reset --hard` was safe. **After it returns: post the
+kick, then rouse each seat with `send-keys` — a freshly compacted Claude seat
+does not wake on a mention alone.**
+
+### The branch trap for this release, and it is live
+
+**`179af863` is contained by exactly ONE ref —
+`wp/RT-DECL-CLOSURE-PORT-typed-units` — and NO worktree has it checked out.**
+All three runtime seats sit on their own `*/work` branches at 0 ahead of `main`.
+⇒ The implementer must **explicitly check out that branch** before touching the
+new node. If it starts on `runtime-implementer/work` it builds on bare `main`
+without checkpoints 1/`1b`/`1c`, and a grep for its own `D7` symbols comes back
+empty — which reads as missing work rather than as a wrong branch.
+
+### What `1e` got wrong, and the defect is reusable
+
+`1e` ruled the minimal scope was the host-effect-result slot alone. **Falsified**
+(`evt_5ngh190h9b1k5`) and the design rejected by the Architect
+(`evt_75k8cydbj5127`): every effect-bearing closure needs **two** `Open` inputs,
+ordinal 0 an effect result and ordinal 1 a case binder, so the
+effect-result-only population is **zero** and closing it moves no row.
+
+**The defect: `1d`'s census recorded the DECLINING ordinal — the first `Open` —
+and I read it as a REQUIREMENT census.** "6 effect edges = the 6 failing rows"
+was a pair count short-circuited at the first `Open`, compared against a `161`
+in a different unit. Corrected closure-edge census: **34 case-binder-only, 4
+mixed, 1 `Construct`-only.** A first-failure statistic is silent about every
+input after the one that failed, so it cannot support a minimality claim.
+
+**Also settled:** there is no lawful ABI seat for a mid-body value — the
+Architect closed all five exits. A producer-local value is a **third
+availability class**, which is why this is a representation boundary and not a
+missing enum arm.
+
+### The rulings now standing
+
+- **BROAD admission.** All newly representable candidates may intern, not the 4
+  `D0` edges alone — the narrow option needs a real edge-selection authority
+  with every cheap substitute forbidden. This **dissolves** route modality.
+- **~34 edges newly intern**, changing emitted code on green programs. Expected;
+  the per-row `D0` and `718/2` baselines are the control.
+- **`D7` retired the clause** blocking candidate/QA/`D6`/`AC-4` "while the row
+  stands unreached" — it could never be discharged by the node holding it.
+
+### Four stops on this node were MY framing, not Runtime
+
+checkpoint 1 (mislocalized), `1b` (`1/1/1`), `1c` (forward reading), `1e`
+(first-`Open` as requirement). **The instruction to measure rather than comply
+caught every one.** Keep writing frames that way. This is not a sizing problem
+and should not be read as one later.
+
+## SUPERSEDED — 2026-08-05 ~06:4xZ · D7 `1d` answered NEGATIVE; `1e` released
 
 **`origin/main` at last check: `3eeeb5ed`** (the `1e` ruling, PR #1410; D7 frame
 blob `b5c240e6`). Verify it; do not trust this line.
