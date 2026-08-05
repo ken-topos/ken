@@ -10174,17 +10174,32 @@ impl<'a> Lowering<'a> {
                 // arrived — which is the point: the phase is a fact about how
                 // the value reached the seat, never about what the program
                 // means.
+                // ⛔ The mutation deletes the CARRIED arm, leaving the
+                // specialized read the whole route -- the exact state that
+                // produced the `264 -> 262 / position 1` refusal the frame
+                // names.
+                #[cfg(test)]
+                let carried_arm_removed = effect_seat_dispatch_mutation()
+                    == EffectSeatDispatchMutation::RemoveCarriedCapacityArm;
+                #[cfg(not(test))]
+                let carried_arm_removed = false;
                 let (_, capacity_operand) = seats.operand(SEAT_0)?;
-                let (capacity, valid) = match capacity_operand {
-                    LoweringOperand::Specialized(lowered) => {
-                        let lowered = lowered.clone();
-                        Self::record_capacity_phase_dispatch(false);
-                        self.narrow_native_int_u64(builder, &lowered)?
-                    }
-                    LoweringOperand::Carried(word) => {
-                        let word = *word;
-                        Self::record_capacity_phase_dispatch(true);
-                        self.narrow_carried_int_u64(builder, word)?
+                let (capacity, valid) = if carried_arm_removed {
+                    let capacity = seats.specialized(SEAT_0)?.clone();
+                    Self::record_capacity_phase_dispatch(false);
+                    self.narrow_native_int_u64(builder, &capacity)?
+                } else {
+                    match capacity_operand {
+                        LoweringOperand::Specialized(lowered) => {
+                            let lowered = lowered.clone();
+                            Self::record_capacity_phase_dispatch(false);
+                            self.narrow_native_int_u64(builder, &lowered)?
+                        }
+                        LoweringOperand::Carried(word) => {
+                            let word = *word;
+                            Self::record_capacity_phase_dispatch(true);
+                            self.narrow_carried_int_u64(builder, word)?
+                        }
                     }
                 };
                 let invalid = builder.ins().icmp_imm(
@@ -10537,6 +10552,18 @@ impl<'a> Lowering<'a> {
             // seats are not templates; with the projection driven by declared
             // uses, an operation with no site-bound child asks for nothing
             // without needing to be named.
+            //
+            // ⛔ The mutation puts the dense realization back, exactly as it
+            // stood: every argument demanded as a template, before any declared
+            // use has said which ones it wants.
+            #[cfg(test)]
+            if effect_seat_dispatch_mutation() == EffectSeatDispatchMutation::RestoreBulkConversion
+                && operation != ken_host::HostOpV1::BufferFreeze
+            {
+                for ordinal in 0..lowered.len() as u32 {
+                    let _ = seats.specialized(EffectSeatSlot::Argument(ordinal))?;
+                }
+            }
             let error_root =
                 SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultError);
             let ok_root = SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk);

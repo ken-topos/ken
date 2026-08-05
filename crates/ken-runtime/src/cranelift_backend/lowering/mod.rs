@@ -328,6 +328,44 @@ fn effect_seat_next_visit_index() -> usize {
         index
     })
 }
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the two framed lowering-closure mutations.**
+///
+/// ⛔ Both name a REMOVAL of something this release added, not a corruption of
+/// an input. That is what makes them closure evidence: each restores the state
+/// the frame says must refuse, and the control asserts the refusal is the exact
+/// one the frame names rather than any refusal.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EffectSeatDispatchMutation {
+    Exact,
+    /// Delete the carried arm of the capacity seat, leaving the specialized
+    /// read the whole route -- the state that produced the exact
+    /// `264 -> 262 / position 1` refusal.
+    RemoveCarriedCapacityArm,
+    /// Restore the eager all-argument projection in reply synthesis, so every
+    /// argument is demanded as a template whether or not a synthesized node
+    /// declares a use for it.
+    RestoreBulkConversion,
+}
+
+#[cfg(test)]
+thread_local! {
+    static EFFECT_SEAT_DISPATCH_MUTATION: std::cell::Cell<EffectSeatDispatchMutation> =
+        const { std::cell::Cell::new(EffectSeatDispatchMutation::Exact) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_effect_seat_dispatch_mutation(
+    mutation: EffectSeatDispatchMutation,
+) {
+    EFFECT_SEAT_DISPATCH_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
+fn effect_seat_dispatch_mutation() -> EffectSeatDispatchMutation {
+    EFFECT_SEAT_DISPATCH_MUTATION.with(std::cell::Cell::get)
+}
+
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BoundedNatLoweringMutation {

@@ -2803,3 +2803,227 @@ fn a_carried_capacity_narrows_exactly_as_a_specialized_one_over_both_representat
         }
     }
 }
+
+/// **The framed failure taxonomy.** An out-of-range *`Int`* is `InvalidBounds`;
+/// a word that is not an exact `Int` at all is a carrier error, and is never
+/// relabelled.
+///
+/// MEASURED: on one fixture shape, three carried capacities produce three
+/// distinct outcomes — a valid `Int` returns 41 and dispatches once; an
+/// out-of-range `Int` returns 71 and dispatches zero times; a `Bool`, `Bytes`
+/// or `String` returns the emitted fail-closed `-1` and dispatches zero times.
+///
+/// CLAIMED: `valid == 0` is reachable only from a well-formed exact `Int`, so
+/// `InvalidBounds` cannot be read off a word that never denoted a number.
+///
+/// THE GAP: this reaches the wrong-tag guard (a `Bool` is an immediate whose
+/// tag is not `ImmediateInt`) and the wrong-class guard (`Bytes`/`String`
+/// resolve to nodes the `int_view` class guard refuses). It does **not** reach
+/// an unsealed magnitude or a wrong referent owner from checked source — those
+/// are `int_view`'s own guards, proven at their own layer by
+/// `boundary_value_clif`'s `AC-4` unsealed-readability control. What this
+/// control adds for them is that their status leaves through the same
+/// `require_i64(.., BOUNDARY_OK)` as the two reached here, which is why the
+/// third outcome is a distinct value rather than a shared one.
+///
+/// ⛔ The `-1` rows need the other two rows to mean anything. `-1` is the
+/// generic emitted refusal and is reached for any fail-closed reason, so a
+/// control asserting only "a `Bool` capacity fails" would pass on a lowering
+/// that failed for every capacity. The positive rows are what make it a
+/// taxonomy rather than three assertions that something went wrong.
+#[test]
+fn a_capacity_that_is_not_an_exact_int_fails_closed_and_is_never_invalid_bounds() {
+    const CARRIER_ERROR: i64 = -1;
+    const INVALID_BOUNDS: i64 = 71;
+    const ALLOCATED: i64 = 41;
+
+    let row = |what: &str, value: RuntimeExpr| {
+        crate::cranelift_backend::lowering::units::reset_capacity_phase_dispatch();
+        let outcome = run_capacity_fixture(&move |symbols| {
+            carried_capacity_fixture(symbols, value.clone())
+        })
+        .unwrap_or_else(|error| panic!("{what}: the fixture compiles: {error:?}"));
+        assert_eq!(
+            crate::cranelift_backend::lowering::units::capacity_phase_dispatch(),
+            (0, 1),
+            "{what}: the row must reach the CARRIED arm, or it says nothing about it"
+        );
+        outcome
+    };
+
+    // The two positive rows. Without them the refusals below are unanchored.
+    let (allocated, allocated_probe) = row("a valid Int", RuntimeExpr::Value(RuntimeValue::Int(8.into())));
+    assert_eq!(allocated, ALLOCATED, "a valid carried capacity allocates");
+    assert_eq!(
+        allocated_probe,
+        CapacityWireProbe { calls: 1, capacity: 8 },
+        "a valid carried capacity dispatches exactly once with its own magnitude"
+    );
+
+    let (bounded, bounded_probe) = row("an out-of-range Int", big(crate::Sign::NonNegative, &[0, 1]));
+    assert_eq!(
+        bounded, INVALID_BOUNDS,
+        "a well-formed Int that does not fit u64 takes the semantic InvalidBounds lane"
+    );
+    assert_eq!(bounded_probe.calls, 0, "and dispatches zero times");
+
+    // The taxonomy rows.
+    for (what, value) in [
+        ("a Bool", RuntimeExpr::Value(RuntimeValue::Bool(true))),
+        ("Bytes", RuntimeExpr::Value(RuntimeValue::Bytes(vec![1, 2, 3]))),
+        (
+            "a String",
+            RuntimeExpr::Value(RuntimeValue::String("not a number".to_string())),
+        ),
+    ] {
+        let (code, probe) = row(what, value);
+        assert_ne!(
+            code, INVALID_BOUNDS,
+            "{what} is not an exact Int, so it must NEVER be reported as InvalidBounds"
+        );
+        assert_ne!(code, ALLOCATED, "{what} must not allocate");
+        assert_eq!(
+            code, CARRIER_ERROR,
+            "{what} must fail closed through the carrier's own status check"
+        );
+        assert_eq!(probe.calls, 0, "{what} must perform zero host dispatches");
+    }
+}
+
+/// **The framed disposition discriminator.** The carried phase is admitted at
+/// the seat whose `Need` an emitted helper can satisfy, and still refused at a
+/// seat that genuinely needs a compile-time template.
+///
+/// MEASURED: one program shape, one closure boundary, two seats. A carried
+/// capacity at `BufferAllocate.capacity` compiles and allocates; a carried
+/// `Bytes` at `ConsoleWrite`'s byte-span seat refuses, and the refusal names
+/// that exact seat, operation and need.
+///
+/// CLAIMED: `Avail` is per seat rather than per phase — admitting `Carried`
+/// somewhere is not admitting it everywhere.
+///
+/// THE GAP: this shows the two seats disagree, not that the boundary sits at
+/// exactly the right place for every one of the thirteen operations. The
+/// population control is what covers the rest; this covers the pair the frame
+/// names, which is the pair a shared contract arm would have collapsed.
+#[test]
+fn the_carried_phase_is_admitted_at_the_capacity_seat_and_still_refused_at_a_template_seat() {
+    // The admitting side. Same closure boundary as the refusing side below, so
+    // the two differ in the SEAT and nothing else.
+    crate::cranelift_backend::lowering::units::reset_capacity_phase_dispatch();
+    let (allocated, probe) = run_capacity_fixture(&|symbols| {
+        carried_capacity_fixture(symbols, RuntimeExpr::Value(RuntimeValue::Int(8.into())))
+    })
+    .expect("a carried capacity is admitted at its seat");
+    assert_eq!(
+        crate::cranelift_backend::lowering::units::capacity_phase_dispatch(),
+        (0, 1),
+        "the admitting side must be the carried arm"
+    );
+    assert_eq!(allocated, 41);
+    assert_eq!(probe, CapacityWireProbe { calls: 1, capacity: 8 });
+
+    // The refusing side. `ConsoleWrite`'s byte-span seat needs a pointer and a
+    // length off a compile-time template; no emitted helper in this release
+    // satisfies that from a boundary word.
+    let error = run_capacity_fixture(&|_symbols| RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["payload".to_string()],
+            body: Box::new(RuntimeExpr::Effect {
+                family: "Console".to_string(),
+                operation: ken_host::HostOpV1::ConsoleWrite,
+                capability: None,
+                args: vec![
+                    RuntimeExpr::Construct {
+                        constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                        args: Vec::new(),
+                    },
+                    RuntimeExpr::Var(0),
+                ],
+            }),
+        }),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Bytes(b"probe".to_vec()))],
+    })
+    .expect_err("a carried byte span is refused at its seat");
+
+    let reason = format!("{error:?}");
+    // ⛔ The discriminating pair, not a substring list. The refusal must be the
+    // SEAT's -- naming which seat of which operation needs what -- and must not
+    // be the generic specialized-only surface's, which is the diagnostic the
+    // removed bulk conversion produced for every seat alike.
+    assert!(
+        reason.contains("Argument(1)")
+            && reason.contains("ConsoleWrite")
+            && reason.contains("BytesPointerLength"),
+        "the refusal must name the exact seat, operation and need; got {reason}"
+    );
+    assert!(
+        !reason.contains("is a specialized-only surface"),
+        "the refusal must not be the generic specialized-only surface's; got {reason}"
+    );
+}
+
+/// **The framed lowering closure.** Each of the two things this release did is
+/// removed in turn, and the exact refusal the frame names comes back.
+///
+/// MEASURED: with the carried capacity arm deleted, a carried capacity refuses
+/// at its own seat naming `BufferAllocate`, `Argument(0)` and `ExactIntU64`.
+/// With the eager all-argument projection restored, the same fixture refuses
+/// again — at the same seat, from reply synthesis, because the capacity is
+/// demanded as a template by a consumer that has no site-bound child for it.
+/// Neither refusal is the generic specialized-only surface's, and the unmutated
+/// fixture allocates.
+///
+/// CLAIMED: both halves of the release are load-bearing for the carried
+/// capacity row.
+///
+/// THE GAP: a mutation proves the row depends on the code it removes; it does
+/// not prove the code is *correct*. The phase pair is what carries correctness.
+/// What this adds is that a future edit reverting either half cannot pass
+/// quietly.
+#[test]
+fn removing_the_carried_capacity_arm_or_restoring_the_bulk_conversion_refuses_at_the_seat() {
+    let carried = || {
+        run_capacity_fixture(&|symbols| {
+            carried_capacity_fixture(symbols, RuntimeExpr::Value(RuntimeValue::Int(8.into())))
+        })
+    };
+
+    // ⛔ The positive control. Without it both refusals below are satisfied by
+    // a fixture that never compiled at all.
+    set_effect_seat_dispatch_mutation(EffectSeatDispatchMutation::Exact);
+    let (allocated, probe) = carried().expect("the unmutated carried capacity allocates");
+    assert_eq!(allocated, 41);
+    assert_eq!(probe, CapacityWireProbe { calls: 1, capacity: 8 });
+
+    for (mutation, what) in [
+        (
+            EffectSeatDispatchMutation::RemoveCarriedCapacityArm,
+            "deleting the carried capacity arm",
+        ),
+        (
+            EffectSeatDispatchMutation::RestoreBulkConversion,
+            "restoring the eager all-argument projection",
+        ),
+    ] {
+        set_effect_seat_dispatch_mutation(mutation);
+        let error = carried()
+            .map(|outcome| format!("{outcome:?}"))
+            .expect_err(&format!("{what} must refuse the carried capacity"));
+        let reason = format!("{error:?}");
+        assert!(
+            reason.contains("Argument(0)")
+                && reason.contains("BufferAllocate")
+                && reason.contains("ExactIntU64"),
+            "{what}: the refusal must name the exact seat, operation and need; got {reason}"
+        );
+        assert!(
+            !reason.contains("is a specialized-only surface"),
+            "{what}: the refusal must not be the generic specialized-only surface's; got {reason}"
+        );
+    }
+
+    set_effect_seat_dispatch_mutation(EffectSeatDispatchMutation::Exact);
+    carried().expect("the fixture allocates again once the mutation clears");
+}
