@@ -40,19 +40,22 @@
 
 ### The one thing to do next
 
-**Wait for `runtime-leader`'s re-release, then ROUSE the implementer.** I
-compacted it to **ctx 0%** at the leader's request (`evt_6r040yzhv9tjq`), and
-⛔ **a just-compacted Claude seat does not pick up a mention posted after its
-compaction** — the leader was told to say so here and I do the mechanical wake.
-⛔ **Nothing else is owed by me.**
+**`D4a` IS DONE — QA-APPROVED at exact `ac897a08`** (`evt_7yydatq78eqvg`), over
+`52422da5`, lineage `97a4148b` (fixture + control) → `ac897a08` (record).
+**Expect `runtime-leader`'s `D3b` disposition next**, which routes to the
+Architect. ⛔ **Nothing is owed by me.**
 
-⚠ **The seat was STRANDED, not merely idle.** Its composer held unsubmitted real
-text — *"confirm the scrutinee hypothesis and build the shifted fixture"* —
-with the seat finished (`Baked for 5m 51s`) sitting behind it. ⛔ **And
-`handoff-gate-compact.sh` leads with a bare `Enter`, which would have SUBMITTED
-that strand instead of compacting.** Hand-drove one pane with a clear-first.
-`C-u` did not clear and the render stayed stale; `C-a`/`C-k` plus a probe string
-proved the buffer was empty before staging `/compact`. ⭐ **The displayed line is
+⚠ **`runtime-leader` STALLED AT CAPACITY at ~11:47Z and I re-prompted it.** The
+QA approval reached it, the model refused with *"Selected model is at capacity"*,
+and ⛔ **the Codex turn ended SILENTLY** — approval unprocessed, ring frozen,
+pane looking merely quiet. Re-prompt recovered it (`• Working`). ⭐ **Capacity is
+transient and the seat does NOT self-recover; a re-prompt is the whole fix.**
+
+⚠ **Earlier, the implementer was STRANDED, not idle** — composer held unsubmitted
+text behind a finished turn. ⛔ **`handoff-gate-compact.sh` leads with a bare
+`Enter`, which would have SUBMITTED that strand instead of compacting.** Hand-drove
+one pane with a clear-first; `C-u` did not clear and the render stayed stale, so
+a probe string proved the buffer empty before staging. ⭐ **The displayed line is
 not the buffer.**
 
 ### `D4a` ROUND 2 — gated YES, run once, and where it actually stands
@@ -76,28 +79,53 @@ and **`ConsoleWrite` lowers, reaches the emission seam, and produces a
 `CurrentLexical` record**. So a lawful lowerable shifted-population fixture is
 reachable and the lane question is answered.
 
-⛔ **But the reached record still has NO SHIFT** — `post_shift_index = 0`,
-`locator_index = 0`, `env_len = 4`. Nesting a further `Match` case body around
-the `ComputationalMatch` grew `env_len` to 5 and **both indices stayed 0**.
+⛔⛔ **THE "NO SHIFT" READING WAS AN INSTRUMENT DEFECT, AND I PUBLISHED IT.** The
+mid-round report said no nesting could shift the value, and I wrote its
+scrutinee hypothesis into this file as the next bounded act. ⭐ **The first half
+was true and the second half was wrong — the probe recorded ONE LINE PER SEAM,
+but the seam carries a VECTOR of continuation inputs.** The shifted input was at
+**ordinal 1** the whole time, in the shape already built:
 
-⭐ **The implementer's hypothesis, offered as hypothesis and not as established:**
-the producer construct sits in its `ComputationalMatch`'s **scrutinee**, and a
-scrutinee is evaluated *outside* that match's own binders — so binders that match
-introduces are correctly not in force at the seat. To shift, the effect result
-must be introduced **above a binder whose BODY (not whose scrutinee) contains the
-producer construct.** Confirming it is the next bounded act; the leader will
-re-release exactly that on the standing `D4a` scope.
+| ordinal | binding | locator index | post-shift index |
+|---|---|---|---|
+| 0 | the enclosing `Match`'s case binder | 0 | 0 |
+| 1 | the `Let`-bound host-effect result | 0 | **1** |
 
-⚠ **Two traps a successor must not re-pay.** `ConsoleIsTerminal` looks like a
-free win from the consumer list and is not. And ⛔ **`env_len` growing is NOT
-evidence of a shift** — both attempts grew it while the index stayed 0, which is
-act 1's "green on the wrong axis" shape one level down.
+⭐ **No nesting search was needed and none should have been scheduled.** This is
+exactly the recorded lesson *a short-circuiting probe measures the first cause,
+not the set* — it reports one member of a vector and reads as a property of the
+population. ⛔ **The `env_len` observations were the tell and I read them as the
+obstacle:** growing to 5 while "the index" stayed 0 was the probe holding ordinal
+0 fixed, not the program refusing to shift.
 
-⭐ **The oracle design is already settled and survives the stop:** the operand at
-each slot carries a distinct Cranelift SSA `Value`, observable purely
-lowering-side — no planner re-walk, no index arithmetic, no fixture-authored
-expected index. The seam probe that reads both slots is written and proven to
-fire. **What is missing is only a fixture shape that shifts.**
+**MEASURED at the production planner and lowering path** (`recursive_port_process_compiles`):
+
+```
+post_shift_index = 1        locator.environment_index = 0
+producer_env[1] = HostResult(v246, Ok, Err)   <- creation seat recorded v246
+producer_env[0] = HostResult(v466, Ok, Err)   <- the decoy
+```
+
+⭐ **The decoy is a second `ConsoleWrite`** in the `Match` scrutinee's constructor
+argument, matching on carrier, phase, lowering shape and constructor pair — **only
+the SSA word differs**, which forces the oracle to be the SSA word rather than any
+incidental discriminator.
+
+⭐ **Oracle independence, the part `D3b` relies on:** lowering records the operand
+it builds at the binder-creation seat, keyed by its own occurrence id with no
+environment index in play; the seam half reads by index; the two join on
+`binding_origin`, so **a wrong index breaks the join.** No planner re-walk, no
+index arithmetic, no fixture-authored expected index, no direct construction.
+
+**Mutations:** `UseLocatorIndex` and `SwapSlots` committed inside the control,
+each asserting its own flip. ⭐ **`SwapSlots` is not redundant** — both indices
+stay lawful and in bounds, so it survives a repair that merely bounds-checks.
+Three more run by hand and reverted, including *drop the intervening binder*,
+which reds loudly if the fixture stops being shifted — **act 1's gap, closed.**
+
+⚠ **One trap a successor must not re-pay:** `ConsoleIsTerminal` looks like a free
+win from the consumer list and is not — it returns `Bool` before seat synthesis
+and plans no seat at all.
 
 ### THE `D4a` BIND — RULED, and round 1's stop. History; do not re-derive.
 
@@ -210,7 +238,7 @@ deadline.
 | `D2` identity + value contract | accepted preservation at exact `e6d4f085` |
 | `D2b` immediate availability | **QA-APPROVED** exact `7316e13a` — `evt_3w4s25ta13hc4` |
 | `D3a` | **QA-APPROVED** exact `14b111ae` — `evt_62g4pganvk6f6` |
-| `D4a` | `V` admitted `52422da5`; rd 1 **HARD STOP** `evt_7xwdw87mgf1q3` (QA-verified); rd 2 ruled `evt_28xx7t69z7j76`, **gated YES** `evt_65xkzqppdqdaj`, re-released `evt_s2nbzddsag9k` — **BUILDING** |
+| `D4a` | **QA-APPROVED** exact `ac897a08` — `evt_7yydatq78eqvg`. `V` admitted `52422da5`; rd 1 hard stop `evt_7xwdw87mgf1q3`; rd 2 ruled `evt_28xx7t69z7j76`, gated `evt_65xkzqppdqdaj`, shifted fixture landed |
 | `D3b` / `D4b` | held, in that order |
 
 ⛔ **There is no undivided `D4` any more.** The SET EQUALITY definition below
