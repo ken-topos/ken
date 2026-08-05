@@ -40,10 +40,20 @@
 
 ### The one thing to do next
 
-**Wait for `RT-UNIT-CLOSURE-CONVERT` `D1b`, which hard-stops to me.** Released
-16:36Z at `evt_6tef507frnhkf` in thread **`thr_668pxy8mez8hb`** (kick anchor
-`evt_1zj6yp3p35v9f`). **The cut is still mine and I have NOT made it.** Nothing
-else waits on me.
+**Wait for the Architect's CONTRACT ruling**, routed at `evt_7p0jwvxm9kwmw` in
+thread **`thr_668pxy8mez8hb`** (kick anchor `evt_1zj6yp3p35v9f`):
+
+> **Must `LexicalClosure.captures` cover every free index its `body` reaches?**
+
+⛔ **INVENTORY IS CLOSED. There will be no `D1d`.** Three passes (`D1`, `D1b`,
+`D1c`) each corrected its predecessor's premise; I said `D1c` terminates it and
+it does. **Do not authorize a fourth measurement** — the one still owed is
+conditional on the ruling (below).
+
+⛔ **`RT-UNIT-CLOSURE-CONVERT`'s PREMISE IS RETIRED.** It was framed to
+"activate function-unit closure conversion" for a substrate gap. **There is no
+measured production instance of that gap.** My frame defect, the fifth of this
+class on this campaign.
 
 ### `D1` returned a HARD STOP at `bc754c03`, and I did NOT size from it
 
@@ -97,11 +107,65 @@ confirms a new representation or analysis pass is genuinely required, **that is
 an Architect question and I route it**; it grows substrate and is not mine to
 cut unilaterally.
 
+### What `D1b` and `D1c` then established — READ BEFORE ACTING ON `D1` ABOVE
+
+⛔ **`D1`'s account above is SUPERSEDED on its central claim.** It said "a free
+variable with no declared capture slot", which **assumed the `Var` is valid and
+the captures are wrong** — unmeasured. Both later passes are on the branch:
+`D1b` `a8b66c5c`, `D1c` `e27d297a`, records at
+`docs/program/wp/RT-UNIT-CLOSURE-CONVERT-D1{b,c}.md`.
+
+**`D1b` — the membership basis is POSITIONAL DEPTH, not free variables.** All
+three production writers are
+`captures: (0..runtime_depth).map(RuntimeExpr::Var).collect()` and **nothing
+inspects a body**. ⭐ **The declaration is therefore TOTAL by construction** —
+which is the load-bearing fact for the ruling now pending.
+
+⭐ **The `StaticWorker` at de Bruijn 0 is NOT the cause**, and this kills the
+tempting repair: both failures are `index == env_len`, short by exactly one at
+the **outermost** position, and removing the worker makes the shortfall
+**worse**. That is why shifting `Var`s stays banned rather than merely
+discouraged — the measurement makes it look plausible.
+
+**`D1c` — the failing units NEVER REACH THAT PATH.** Zero records across the
+entire `ken-runtime` lib suite **and** the `ken-elaborator` lib suite. The empty
+list is a **literal written by a fixture author**:
+
+```rust
+// crates/ken-runtime/src/cranelift_backend/test_objects.rs:176, :220
+RuntimeExpr::LexicalClosure { captures: Vec::new(), params: vec!["response"], body: … }
+```
+
+among **92** empty-capture construction sites. ⛔ `D1b`'s own hard stop naming
+`ken-elaborator` as the required route was an **inference, not a measurement**,
+and its author corrected it in place.
+
+### ⛔ THE TRAP — do not clear the five reds by editing the fixtures
+
+**Do not "correct" the five fixtures while the ruling is open.** They came from
+`D4a`'s admitted population and exist to exercise something. Greening five reds
+by editing the fixtures that produce them is the exact shape of weakening a
+proof — and if the contract turns out to be the wider one, it erases the only
+witnesses to a real defect. **The reds stay until the Architect rules.**
+
+### What each ruling outcome means, decided in advance
+
+| ruling | consequence |
+|---|---|
+| `captures` **must be total** | the fixtures are malformed; small correction; `RT-CONTSRC-PRODUCER-LOCAL`'s candidate unblocks cheaply; **I recut this node to that** and it stops sitting large on the critical path |
+| a body **may** reach an undeclared enclosing binding | real capability gap; the end-to-end measurement below becomes owed; **a substrate node follows and that expansion is the ARCHITECT's to authorize, not mine to cut** |
+
+⚠ **The measurement still owed, CONDITIONAL on the ruling:** whether
+*elaborated* Ken programs ever produce a closure whose body outruns its declared
+captures. Neither suite reaches those sites, so that behaviour is **unmeasured —
+not shown correct.** It needs an end-to-end `ken-cli` corpus. ⛔ I did **not**
+authorize it, because whether it is needed depends on the ruling.
+
 ⚠ **OPERATOR-FACING, and it is the campaign-sizing question they already
-hold:** if the third reading is the true one, this node is **large and sits
-ahead of all seven `RecursiveDescent` retirement nodes**, since they funnel
-through `RT-DECL-CLOSURE-PORT`. That is a critical-path fact, not a Runtime
-execution problem. Do not decide it here.
+hold:** only on the second ruling is this node large and sitting ahead of all
+seven `RecursiveDescent` retirement nodes, which funnel through
+`RT-DECL-CLOSURE-PORT`. That is a critical-path fact, not a Runtime execution
+problem. Do not decide it here.
 
 ⭐ **Second silent stale anchor this campaign:** the `B2R` table's
 `CaptureSlot` at `semantic_ir.rs:438` now lands **six lines from the
