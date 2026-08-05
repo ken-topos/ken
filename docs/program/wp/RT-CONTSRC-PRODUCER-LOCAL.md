@@ -1199,6 +1199,49 @@ all six failing `D0` rows.
   **Only after that function-local verification may the whole-pass ledger
   record the composed discharge.**
 
+  ###### `D8j` 4b needs its OWN non-degenerate control. Architect `evt_447qfaj9ddd3s`.
+
+  **Check 4 is two checks and only the callee half had a live
+  discriminator.** At `f854bd78` the operand-run comparison executed **only on
+  the degenerate equality `1 == 1`** — the sole root-owned CLIF witness has two
+  workers with identical declared runs (arity one, zero captures). Caught by
+  `runtime-leader`; the implementer did not claim otherwise.
+
+  ⛔ **`D8k` MAY NOT INHERIT THIS DISCRIMINATOR**, and the reason generalizes
+  past this node: *"a defective or vacuous operand comparator could admit the
+  wrong local discharge and `D8k`'s set equalities could still close
+  perfectly."* **Operand-contract agreement is a LOCAL ADMISSION NET of `D8j`,
+  not a global-ledger property of `D8k`.** A partition cannot see that one of
+  its members was admitted on a wrong fact.
+
+  The required control, and its four properties:
+
+  1. a real root-owned source-machine composed call, emitted through the
+     ordinary planner/lowering path;
+  2. exact causal identity, paired target, claiming owner, recorded
+     instruction, decoded callee and downstream result all remain **correct**;
+  3. **only the supplied-run evidence disagrees** with that exact target's
+     declared raw run;
+  4. **verification 4b is the FIRST refusal**, and the composed-discharge
+     relation remains empty.
+
+  **Narrowest lawful form:** a `cfg(test)`-only mutation of
+  `StaticWorkerEmission.supplied_operands` **after a real call has assembled
+  and emitted its operand vector**. The positive path must keep deriving that
+  field from the actual assembled `inputs.len()` adjacent to the emitter.
+  ⭐ **The mutation changes an INPUT handed to the verifier, never the
+  comparison itself.** A lawful differing-arity/capture witness is also
+  acceptable.
+
+  ⛔ **Substituting the whole other target is NOT a control** — verification 1
+  or 4a refuses first and **masks** 4b. This is the short-circuit trap: a probe
+  that trips an earlier guard measures that guard, not the one under test.
+
+  **If the bounded control cannot reach 4b without an earlier refusal,
+  preserve the attempt and route that exact refusal** — do not fabricate a
+  count, instruction, identity or plan. No production mechanism change is
+  authorized by this ruling.
+
   ###### `D8k` — the global law becomes a PARTITION, not a weakened count
 
   ```
