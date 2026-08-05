@@ -16309,13 +16309,15 @@ fn d8b_a_composed_call_target_is_its_own_selectors_callee() {
 /// overall". Removing reason one produces a refusal, not a collision, on both
 /// plans, with the disarmed run as its positive control.
 ///
-/// **THE GAP**: the owner-collision refusal encoded in
-/// `composed_worker_view` is therefore **unreachable and unexercised** — read it
-/// as defence in depth against a future change to the walk, not as a tested
-/// guard. Nothing available here can present a plan carrying two owners at one
-/// coordinate, because the planner refuses to build one. The owner's *selector*
-/// role is separately live: supplying an owner no unit carries reaches the
-/// zero-answer refusal, controlled in
+/// ⇒ **`D8b` amendment: there is no owner-collision refusal.** One was encoded
+/// here and is deleted. Its population is proved impossible by the two reasons
+/// above, so it was a check that could never fail — not defence in depth, and
+/// not a residual worth carrying. What this row measures is the *impossibility*,
+/// which is the real guarantee; the deleted guard only restated it where it
+/// could not be exercised.
+///
+/// The owner's *selector* role is separately live: supplying an owner no unit
+/// carries reaches the zero-answer refusal, controlled in
 /// [`d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_refusal`].
 ///
 /// **Promise class: durable invariant.**
@@ -16435,4 +16437,101 @@ fn d8a_one_emission_owner_answers_one_composed_source_coordinate() {
              broke something else and says nothing about owners: {refusal}"
         );
     }
+}
+
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8d` — the target-derived binding is built,
+/// and measurably never installed on any fixture in this suite.**
+///
+/// The binding is `D8d`'s whole deliverable and it is deliberately unreadable
+/// until `D8e` supplies its consumer. That makes it indistinguishable, from the
+/// outside, from a binding that was never built at all — so this row measures
+/// the difference rather than asserting it, with a counter at the site and a
+/// counter at the installation.
+///
+/// ## What is measured
+///
+/// 1. The composed deferred-constructor site **is reached at a real recursive
+///    position** by `px8j_deferred_recursive_field_fixture`, through a real
+///    object emission. The path is live; the binding is not sitting behind dead
+///    code.
+/// 2. **No binding is installed there**, because that lowering has no defining
+///    emission owner — it is not the functionized-units authority — so there is
+///    no `D8a` selector to key a target on, and the position keeps its existing
+///    `Value` binding.
+/// 3. The one plan population that **does** carry composed-call targets, the
+///    `D5a` witness, **never reaches the composed site at all**.
+///
+/// ⇒ The two preconditions — a reached composed recursive position, and an open
+/// unit-definition pass over a plan that interned a target at that exact
+/// selector — **do not coincide anywhere in this suite**. That is not a defect
+/// in the binding; it is a statement about the fixture population, and it is
+/// what `D8e` inherits: a consumer with nothing to consume until a witness
+/// combines the two.
+///
+/// ## Why this is a pin and not a note
+///
+/// Written down in a handoff, this decays. As a row it reds the moment either
+/// half changes — the moment a fixture reaches the site under a defining owner,
+/// clause 2 flips and someone must look. That is exactly the review that should
+/// happen when the gap closes.
+///
+/// **Promise class: transition sentinel.** Named for the boundary, and retired
+/// by the event that closes it: a witness that reaches the composed site inside
+/// a functionized unit definition whose plan interns a target there.
+#[test]
+fn d8d_the_composed_binding_site_is_live_and_no_current_fixture_installs_a_target() {
+    use crate::cranelift_backend::lowering::{
+        d8d_bindings, d8d_recursive_sites, reset_d8d_bindings,
+    };
+
+    // (1) and (2) — the site is live, and installs nothing.
+    reset_d8d_bindings();
+    let deferred = RuntimeExpr::Match {
+        scrutinee: Box::new(px8j_deferred_recursive_field_fixture()),
+        cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+            .into_iter()
+            .map(|constructor| RuntimeMatchCase {
+                constructor: constructor.to_string(),
+                binders: 1,
+                body: RuntimeExpr::Construct {
+                    constructor: crate::EXIT_SUCCESS_CONSTRUCTOR.to_string(),
+                    args: Vec::new(),
+                },
+            })
+            .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D8d composed site".to_string(),
+        },
+    };
+    let (result, _trace) =
+        px8j_capture_source_trace(&deferred, false, "ken_d8d_composed_site");
+    result.expect("the deferred-constructor producer path lowers");
+    let (sites, bindings) = (d8d_recursive_sites(), d8d_bindings());
+    assert!(
+        sites > 0,
+        "the composed site must be REACHED at a recursive position, or this row is measuring \
+         dead code and clause 2 below is vacuous"
+    );
+    assert_eq!(
+        bindings, 0,
+        "no binding can be installed here: this lowering has no defining emission owner, so \
+         there is no D8a selector to key a target on. A non-zero count means the gap this row \
+         pins has closed and D8e's consumer now has a subject -- look, do not silence"
+    );
+
+    // (3) — and the population that HAS targets never reaches the site.
+    reset_d8d_bindings();
+    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "ken_d8d_witness_site",
+        false,
+    )
+    .expect("the D5a witness compiles");
+    assert_eq!(
+        (d8d_recursive_sites(), d8d_bindings()),
+        (0, 0),
+        "the D5a witness -- the one plan carrying composed-call targets -- must not reach the \
+         composed site. If it does, the two preconditions have met and this sentinel is retired"
+    );
 }

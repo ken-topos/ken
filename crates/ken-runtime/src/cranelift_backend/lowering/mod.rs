@@ -3278,6 +3278,53 @@ fn env_with_operands(
 /// the same rule as [`env_with`], for the sites whose leading bindings are
 /// themselves lowered operands (a call's arguments) and whose trailing ones are
 /// a closure's captured templates.
+/// **`D8d` — how many target-derived static-worker bindings were installed.**
+///
+/// ⛔ An INSTALLATION counter, not a consumption one. `D8e` owns consumption and
+/// this says nothing about it. It exists because "the binding is intentionally
+/// unreadable" and "the binding was never built" are indistinguishable from the
+/// outside, and only one of them is the checkpoint.
+#[cfg(test)]
+thread_local! {
+    static D8D_STATIC_WORKER_BINDINGS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// **`D8d` — how many times the composed site reached a RECURSIVE position.**
+///
+/// The denominator to `D8D_STATIC_WORKER_BINDINGS`' numerator. Without it,
+/// "no binding installed" cannot be told apart from "the site was never
+/// reached", and those have completely different consequences for `D8e`.
+#[cfg(test)]
+thread_local! {
+    static D8D_RECURSIVE_SITES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8d_record_site() {
+    D8D_RECURSIVE_SITES.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8d_recursive_sites() -> usize {
+    D8D_RECURSIVE_SITES.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8d_record_binding() {
+    D8D_STATIC_WORKER_BINDINGS.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_d8d_bindings() {
+    D8D_STATIC_WORKER_BINDINGS.with(|count| count.set(0));
+    D8D_RECURSIVE_SITES.with(|count| count.set(0));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8d_bindings() -> usize {
+    D8D_STATIC_WORKER_BINDINGS.with(std::cell::Cell::get)
+}
+
 fn extend_specialized(
     env: &mut Vec<LoweringEnvironmentBinding>,
     bindings: impl IntoIterator<Item = Lowered>,

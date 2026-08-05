@@ -11544,35 +11544,19 @@ impl<'src> StaticTransitionPlan<'src> {
     ) -> Result<ComposedWorkerView, CraneliftBackendError> {
         let units = self.continuation_units()?;
 
-        // ⭐ `D8a` — the owner invariant, checked before the owner is used to
-        // select. The four source coordinates determine the emission owner:
+        // ⛔ `D8b` amendment — an owner-collision refusal stood here and is
+        // deleted. `D8a` measured its population **impossible**, twice over:
         // `continuation_result_origins` does not descend into closures and every
-        // descent root is a closure's body child, so for one frame the seed walk
-        // and each descent walk cover disjoint occurrence subtrees and a
-        // producer `Construct` is reached by exactly one discovery.
+        // descent root is a closure's body child, so the seed and descent walks
+        // cover disjoint subtrees; and removing that disjointness does not
+        // produce two owners, it produces the availability law's refusal at
+        // planning. A guard whose population the planner proves cannot exist is
+        // not a residual to carry -- it is a check that can never fail, and one
+        // more of those was already deleted from this node for the same reason.
         //
-        // ⛔ It is encoded rather than assumed because that disjointness lives in
-        // a traversal two planes away from here. A reader of this method cannot
-        // see it, a change to the walk would not red anything here, and the cost
-        // of being wrong is a consumer handed one of two owners' workers with no
-        // signal. `set_continuation_descent_owner_duplication` removes exactly
-        // that disjointness and this refusal is what catches it.
-        let mut owners = BTreeSet::new();
-        for unit in &units {
-            if unit.producer_construct_origin() == producer_construct_origin
-                && unit.continuation_origin() == continuation_origin
-                && unit.producer_alternative() == producer_alternative
-                && unit.recursive_position() == recursive_position
-            {
-                owners.insert(unit.emission_owner());
-            }
-        }
-        if owners.len() > 1 {
-            return Err(planner_error(
-                "two emission owners answer one composed source coordinate; a producer Construct                  occurrence is reached by exactly one continuation discovery, so this is a                  planner invariant failure and never a choice between owners",
-            ));
-        }
-
+        // ⛔ The `emission_owner` field stays and its selector role is live:
+        // supplying an owner no unit carries reaches the zero-answer refusal
+        // below, and dropping it from the filter reds two rows.
         let mut answer: Option<ComposedWorkerView> = None;
         for unit in &units {
             if unit.emission_owner() != emission_owner

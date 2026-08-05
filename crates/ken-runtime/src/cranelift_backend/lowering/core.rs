@@ -3385,13 +3385,13 @@ impl<'a> Lowering<'a> {
 
         match deferred.outer_eliminator {
             EliminatorFrame::Computational(frame) => {
-                let case = match frame
+                let Some((alternative, case)) = frame
                     .cases
                     .iter()
-                    .find(|case| case.constructor == deferred.constructor)
-                {
-                    Some(case) => case,
-                    None => return Ok(Err(frame.default.clone())),
+                    .enumerate()
+                    .find(|(_, case)| case.constructor == deferred.constructor)
+                else {
+                    return Ok(Err(frame.default.clone()));
                 };
                 if case.argument_binders != constructor_args.len() {
                     return Err(unsupported(
@@ -3464,7 +3464,38 @@ impl<'a> Lowering<'a> {
                     );
                     induction_hypotheses.push(LoweringEnvironmentBinding::Value(induction_hypothesis));
                 }
-                extend_specialized(&mut induction_hypotheses, constructor_args);
+                // ⭐ `D8d` — THE ONE ENVIRONMENT AUTHORITY at the selected
+                // recursive source-order position.
+                //
+                // Every nonrecursive position stays a `Value`, the IH prefix
+                // above and the outer frame below are untouched, and a recursive
+                // position the planner has no target for keeps its existing
+                // `Value` binding -- "no target" is the ordinary
+                // non-specialized path, exactly as a missing continuation call
+                // binding is, and never a licence to invent one.
+                //
+                // ⛔ A `StaticWorker`, deliberately NOT a specialized
+                // `Value(Closure)`. The capsule has no value representation, so
+                // reading it in value position fails closed at `value_at` --
+                // which is the property `D8e`'s consumer will be the sole lawful
+                // way around. Until then this binding is intentionally
+                // unreadable, and nothing here manufactures a consumer for it.
+                for (position, lowered) in constructor_args.into_iter().enumerate() {
+                    let binding = match self.composed_recursive_argument_binding(
+                        case,
+                        deferred.construct_origin,
+                        frame.static_origin,
+                        alternative,
+                        position,
+                        &lowered,
+                    )? {
+                        Some(worker) => LoweringEnvironmentBinding::StaticWorker(worker),
+                        None => LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(
+                            lowered,
+                        )),
+                    };
+                    induction_hypotheses.push(binding);
+                }
                 induction_hypotheses.extend(outer_tail);
                 Ok(Ok(induction_hypotheses))
             }
@@ -8846,6 +8877,120 @@ impl<'a> Lowering<'a> {
     /// Keeping this as a distinct operation makes the S1 boundary mechanical:
     /// a recursive position cannot accidentally return to source-body
     /// re-lowering without bypassing the one operation that emits its call.
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8d` — the one target-derived environment
+    /// binding, at the selected recursive source-order position.**
+    ///
+    /// `None` for every nonrecursive position, and for a recursive position the
+    /// planner issued no [`ComposedCallTarget`] for. ⛔ That second `None` is
+    /// the **ordinary non-specialized path**, not a gap: it is the same shape
+    /// `continuation_call_binding_for` already uses, where no binding means the
+    /// producer keeps its existing route untouched. The entire pre-`D5a`
+    /// population lives there.
+    ///
+    /// ⛔ The selector is the exact `D8a` five-field one, and every field is
+    /// supplied from a fact this seat already holds: the defining unit's
+    /// emission owner, the deferred constructor's own occurrence, the active
+    /// computational frame's origin, the selected case index, and this position.
+    /// Nothing is derived from the lowered value's shape, from arity, or from
+    /// which of the two targets exists.
+    ///
+    /// ## What comes from where, and why it is split that way
+    ///
+    /// | fact | source |
+    /// |---|---|
+    /// | closure occurrence, raw body, declared arity, capture **count** | the planner-issued target |
+    /// | capture **operands** | the lowered closure at this position |
+    ///
+    /// ⭐ That split is the established `D6a` idiom, not a compromise. Identity
+    /// and shape are planner facts and lowering may not re-derive them; the
+    /// operands are runtime values that only this frame holds, and the planner
+    /// carries provenance for them rather than the values themselves. The
+    /// constructor then re-checks the two against each other, so a divergence
+    /// refuses rather than silently binding a short capture run.
+    ///
+    /// ⛔ The route is [`StaticWorkerCallRoute::RawWorker`], fixed by `D6a`'s
+    /// law that a selected recursive argument takes the raw worker
+    /// unconditionally. It is **not selected** here — nothing reads route
+    /// eligibility to decide it, which would be the route-selected emission this
+    /// checkpoint excludes.
+    ///
+    /// Fails closed when the planner names a target and the lowered value at
+    /// that position is not a closure: the planner's provenance says it is one,
+    /// so a disagreement is two authorities differing about the same source
+    /// position, and binding either answer would pick a winner.
+    fn composed_recursive_argument_binding(
+        &self,
+        case: &crate::RuntimeComputationalMatchCase,
+        construct_origin: StaticOriginId,
+        frame_origin: StaticOriginId,
+        alternative: usize,
+        position: usize,
+        lowered: &Lowered,
+    ) -> Result<Option<StaticWorkerBinding>, CraneliftBackendError> {
+        if !case.recursive_positions.contains(&position) {
+            return Ok(None);
+        }
+        // No defining owner means no unit-definition pass is open, so there is
+        // no owner to key the selector on. The producer keeps its existing
+        // route, as it does when the claim ledger is absent.
+        #[cfg(test)]
+        d8d_record_site();
+        let Some(emission_owner) = self.defining_emission_owner else {
+            return Ok(None);
+        };
+        let alternative = u32::try_from(alternative).map_err(|_| {
+            unsupported("ComputationalMatch", "case index exceeds addressable range")
+        })?;
+        let recursive_position = u32::try_from(position).map_err(|_| {
+            unsupported(
+                "ComputationalMatch",
+                "recursive position exceeds addressable range",
+            )
+        })?;
+
+        let selector = (
+            emission_owner,
+            construct_origin,
+            frame_origin,
+            alternative,
+            recursive_position,
+        );
+        let Some(target) = self
+            .static_transition_plan
+            .composed_call_targets()?
+            .into_iter()
+            .find(|target| target.selector() == selector)
+        else {
+            return Ok(None);
+        };
+
+        let Lowered::Closure { captures, .. } = lowered else {
+            return Err(unsupported(
+                "ComputationalMatch",
+                format!(
+                    "the planner issued a composed-call target at recursive position \
+                     {position}, whose provenance names a closure occurrence, but this frame \
+                     lowered {} there; two authorities disagree about one source position and \
+                     binding either would be choosing between them",
+                    lowered_value_kind(lowered)
+                ),
+            ));
+        };
+
+        #[cfg(test)]
+        d8d_record_binding();
+        let worker = target.worker();
+        self.construct_static_worker_binding(
+            worker.closure_origin(),
+            worker.body_origin(),
+            worker.declared_arity(),
+            worker.captures().len(),
+            captures.clone(),
+            StaticWorkerCallRoute::RawWorker,
+        )
+        .map(Some)
+    }
+
     fn call_declared_recursive_position_unit(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
