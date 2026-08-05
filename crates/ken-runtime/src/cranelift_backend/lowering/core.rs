@@ -7085,7 +7085,8 @@ impl<'a> Lowering<'a> {
                     "retained callable capture count exceeds addressable range",
                 )
             })?;
-            // 5. Ordinal, provenance, owner and lifetime in ONE comparison
+            // 5. Phase admissibility, then ordinal/provenance/owner/lifetime in
+            //    ONE comparison
             //    against the planner's own projection. ⛔ Comparing field by
             //    field here would let a field added to `AbiSlot` later go
             //    unchecked; whole-slot equality cannot.
@@ -7093,20 +7094,14 @@ impl<'a> Lowering<'a> {
             //    Ordinal density falls out of this rather than needing its own
             //    pass: slot *i* of the capture run must carry ordinal *i*, so a
             //    duplicated, permuted or gapped ordinal fails here.
-            let expected = expected_capture_slot(provenance, ordinal);
-            if **slot != expected {
-                return Err(unsupported(
-                    "RetainedCallableCaptureContract",
-                    format!(
-                        "capture {position} of the retained callable at {closure_origin:?} \
-                         declares slot {slot:?} but its {provenance:?} provenance projects \
-                         {expected:?}"
-                    ),
-                ));
-            }
-            // 6. Phase admissibility. ⛔ Exhaustive -- no wildcard, and no
-            //    `specialized_operands_at` fallback that would silently answer
-            //    for the carried case.
+            //    ⚠ **The phase check runs FIRST, and the order is load-bearing
+            //    rather than stylistic.** Behind the whole-slot equality below
+            //    it would be DEAD for the only provenance production calls this
+            //    with: equality already forces a lexical capture's slot to be
+            //    `ValueWord`, whose storage owner is the activation frame, so no
+            //    descriptor could ever reach the phase arm. Asking whether the
+            //    refusal could be provoked at all is what surfaced that -- a
+            //    guard nothing can trip is not a guard.
             match capture {
                 // A compile-time template is lawful in any capture slot: it is
                 // read where the descriptor says, whatever owns that storage.
@@ -7127,6 +7122,17 @@ impl<'a> Lowering<'a> {
                         ));
                     }
                 }
+            }
+            let expected = expected_capture_slot(provenance, ordinal);
+            if **slot != expected {
+                return Err(unsupported(
+                    "RetainedCallableCaptureContract",
+                    format!(
+                        "capture {position} of the retained callable at {closure_origin:?} \
+                         declares slot {slot:?} but its {provenance:?} provenance projects \
+                         {expected:?}"
+                    ),
+                ));
             }
         }
         Ok(())

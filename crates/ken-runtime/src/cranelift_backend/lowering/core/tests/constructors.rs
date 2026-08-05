@@ -8029,3 +8029,312 @@ fn a_sibling_records_field_schema_is_refused_before_any_allocation() {
          identities at all: {reason}"
     );
 }
+
+// -- `D7` checkpoint 1: the retained-callable capture contract ---------------
+//
+// The gate these exercise is the one the framed `#23` reaching row stops at.
+// Its subject is a MIXED-PHASE environment, so every control below builds a
+// real carried word rather than asserting about specialized captures only --
+// a run whose every capture is specialized cannot distinguish a gate that
+// preserves phase from one that never sees a carried capture at all.
+
+/// One capture's intended phase, so a fixture states its environment rather
+/// than deriving it.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CapturePhase {
+    Specialized,
+    Carried,
+}
+
+/// A capture slot the caller shapes, so each axis of the contract can be
+/// perturbed on its own.
+///
+/// ⛔ Defaults to the descriptor the planner would actually lay. A fixture that
+/// had to spell every field to get the EXACT case would make the exact case the
+/// unusual one, and a control is only as trustworthy as its unmutated twin.
+#[cfg(test)]
+fn lexical_capture_slot(ordinal: u32) -> AbiSlot {
+    AbiSlot {
+        kind: AbiSlotKind::Capture,
+        carrier: AbiCarrier::ValueWord,
+        ownership: AbiOwnership::OwnedByFrame,
+        storage_owner: AbiStorageOwner::ActivationFrame,
+        width_bytes: 8,
+        align_bytes: 8,
+        ordinal,
+    }
+}
+
+/// Drive the capture-contract gate against a descriptor and an environment the
+/// caller shapes independently.
+///
+/// The two are separate parameters on purpose: the gate's whole claim is that
+/// it relates a capture RUN to a planner-issued CONTRACT, so a fixture must be
+/// able to move one while holding the other.
+#[cfg(test)]
+fn attempt_capture_contract(
+    phases: &[CapturePhase],
+    capture_slots: impl FnOnce() -> Option<Vec<AbiSlot>>,
+    declared_arity: u32,
+) -> Result<StaticWorkerBinding, CraneliftBackendError> {
+    let source = worker_source();
+    let (plan, root) = planned_root_occurrence(&source);
+    let closure_origin = plan
+        .child_static_origin(root, 0)
+        .expect("the Let's bound value is planned as child 0");
+    let body_origin = plan
+        .child_static_origin(closure_origin, 0)
+        .expect("a lexical closure plans its body as child 0");
+    let seed_env = NativeSeedEnvironment::empty();
+    let mut compiler = bare_carrier_test_lowering(&seed_env, plan);
+    if let Some(capture_slots) = capture_slots() {
+        let mut slots = (0..declared_arity)
+            .map(|ordinal| AbiSlot {
+                kind: AbiSlotKind::Parameter,
+                carrier: AbiCarrier::ValueWord,
+                ownership: AbiOwnership::OwnedByFrame,
+                storage_owner: AbiStorageOwner::ActivationFrame,
+                width_bytes: 8,
+                align_bytes: 8,
+                ordinal,
+            })
+            .collect::<Vec<_>>();
+        let declared_captures = capture_slots.len() as u32;
+        slots.extend(capture_slots);
+        let offsets = (0..slots.len() as u32).map(|index| index * 8).collect();
+        compiler.function_local.worker_templates.insert(
+            body_origin,
+            units::WorkerTemplate {
+                origin: body_origin,
+                call_site_origin: body_origin,
+                header: AbiFrameHeader {
+                    parameters: declared_arity,
+                    captures: declared_captures,
+                    frame_bytes: (slots.len() as u32) * 8,
+                    align_bytes: 8,
+                },
+                slots,
+                offsets,
+            },
+        );
+    }
+
+    // A carried capture is an SSA word, so the environment needs a real
+    // function under construction to mint one. ⛔ Standing in a specialized
+    // value for it would make every control below measure the specialized path.
+    let mut func = Function::with_name_signature(
+        UserFuncName::user(0, 0),
+        cranelift_codegen::ir::Signature::new(cranelift_codegen::isa::CallConv::SystemV),
+    );
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    let captures = phases
+        .iter()
+        .enumerate()
+        .map(|(index, phase)| match phase {
+            CapturePhase::Specialized => {
+                LoweringOperand::Specialized(Lowered::Bytes(format!("capture{index}").into_bytes()))
+            }
+            CapturePhase::Carried => LoweringOperand::Carried(CarriedBoundaryWord {
+                word: builder.ins().iconst(types::I64, i64::from(index as i32)),
+            }),
+        })
+        .collect::<Vec<_>>();
+
+    compiler.construct_static_worker_binding(
+        closure_origin,
+        body_origin,
+        declared_arity,
+        phases.len(),
+        captures,
+    )
+}
+
+/// The positive control, and the property checkpoint 1 exists to establish: a
+/// MIXED environment is representable, and each capture keeps the phase it
+/// arrived at.
+///
+/// ⭐ The phase assertion is per-capture, not a count. "Two captures survived"
+/// is satisfied by a run that specialized both.
+#[test]
+fn a_mixed_phase_capture_run_installs_and_keeps_each_capture_at_its_own_phase() {
+    let binding = expect_worker_binding(attempt_capture_contract(
+        &[
+            CapturePhase::Specialized,
+            CapturePhase::Carried,
+            CapturePhase::Carried,
+        ],
+        || Some((0..3).map(lexical_capture_slot).collect()),
+        1,
+    ));
+    assert_eq!(binding.captures.len(), 3);
+    assert!(
+        matches!(&binding.captures[0], LoweringOperand::Specialized(Lowered::Bytes(value))
+            if value == b"capture0"),
+        "the specialized capture is stored unchanged, in position"
+    );
+    assert!(
+        matches!(&binding.captures[1], LoweringOperand::Carried(_)),
+        "a carried capture stays carried rather than being refused or re-specialized"
+    );
+    assert!(
+        matches!(&binding.captures[2], LoweringOperand::Carried(_)),
+        "and so does the second one -- one surviving carried capture would not \
+         show the run is phase-preserving"
+    );
+}
+
+/// Omission: the planner issued no contract for this body. `worker_templates`
+/// membership is the fact the gate needs, and its absence is the half a keyed
+/// map cannot make unrepresentable.
+#[test]
+fn a_mixed_phase_capture_run_without_a_planner_issued_contract_rejects() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Specialized, CapturePhase::Carried],
+        || None,
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("no raw worker template"),
+        "rejects for the omitted-contract reason: {error:?}"
+    );
+}
+
+/// Order: the capture run's slots are permuted, so slot *i* no longer carries
+/// ordinal *i*. Every other fact -- count, carrier, owner, lifetime -- agrees,
+/// so the refusal is attributable to order alone.
+#[test]
+fn a_capture_contract_whose_slot_ordinals_are_permuted_rejects() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Carried, CapturePhase::Specialized],
+        || Some(vec![lexical_capture_slot(1), lexical_capture_slot(0)]),
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("provenance projects"),
+        "rejects against the projected slot: {error:?}"
+    );
+}
+
+/// Order, the duplication case: two slots claim ordinal 0, so one capture has
+/// no slot of its own and another is named twice. A gate that only counted
+/// slots would accept this.
+#[test]
+fn a_capture_contract_with_a_duplicated_slot_ordinal_rejects() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Carried, CapturePhase::Specialized],
+        || Some(vec![lexical_capture_slot(0), lexical_capture_slot(0)]),
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("provenance projects"),
+        "rejects against the projected slot: {error:?}"
+    );
+}
+
+/// Provenance / lane: the descriptor declares the SEED capture lane for a
+/// callable whose captures are lexical. The capture that meets it is
+/// specialized, so this isolates provenance from the phase axis below.
+#[test]
+fn a_capture_contract_declaring_the_seed_lane_for_a_lexical_callable_rejects() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Specialized],
+        || {
+            Some(vec![AbiSlot {
+                carrier: AbiCarrier::GroundValueCarrier,
+                ownership: AbiOwnership::BorrowedForActivation,
+                storage_owner: AbiStorageOwner::ArtifactStatic,
+                ..lexical_capture_slot(0)
+            }])
+        },
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("provenance projects"),
+        "rejects against the projected lexical slot: {error:?}"
+    );
+}
+
+/// Phase / lifetime: the same seed-lane descriptor, met by a CARRIED capture.
+///
+/// ⭐ This is the pair that makes the phase arm reachable at all. The two
+/// fixtures differ in exactly one thing -- the capture's phase -- and they must
+/// produce DIFFERENT refusals: the specialized one above cannot get past slot
+/// equality, and this one is stopped earlier, by the lifetime rule, because an
+/// invocation-time word cannot inhabit artifact-static storage.
+#[test]
+fn a_carried_capture_meeting_artifact_static_storage_rejects_on_lifetime() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Carried],
+        || {
+            Some(vec![AbiSlot {
+                carrier: AbiCarrier::GroundValueCarrier,
+                ownership: AbiOwnership::BorrowedForActivation,
+                storage_owner: AbiStorageOwner::ArtifactStatic,
+                ..lexical_capture_slot(0)
+            }])
+        },
+        1,
+    ));
+    let rendered = format!("{error:?}");
+    assert!(
+        rendered.contains("arrived carried") && rendered.contains("ArtifactStatic"),
+        "rejects for the lifetime reason, naming the storage owner: {rendered}"
+    );
+    assert!(
+        !rendered.contains("provenance projects"),
+        "and is stopped BEFORE slot equality -- if it fell through to that, the \
+         lifetime arm would be dead code that no descriptor could reach: {rendered}"
+    );
+}
+
+/// Count: the contract declares fewer capture slots than the run supplies. The
+/// header and the slot run are two recorded facts, and this moves both together
+/// so the refusal is about the run rather than about their disagreement.
+#[test]
+fn a_capture_contract_declaring_too_few_slots_rejects() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Carried, CapturePhase::Specialized],
+        || Some(vec![lexical_capture_slot(0)]),
+        1,
+    ));
+    assert!(
+        format!("{error:?}").contains("captures"),
+        "rejects on the capture count: {error:?}"
+    );
+}
+
+/// Owner: the slot names the right carrier and the right storage owner but
+/// claims the wrong TRANSFER discipline.
+///
+/// ⭐ Isolated from the two axes above on purpose. `AbiOwnership` and
+/// `AbiStorageOwner` are deliberately distinct facts -- one is "who reclaims
+/// this", the other is "borrowed from what" -- and a gate that compared only the
+/// carrier would accept a descriptor promising the caller a value the frame
+/// actually reclaims.
+#[test]
+fn a_capture_contract_claiming_the_wrong_transfer_discipline_rejects() {
+    let error = expect_worker_rejection(attempt_capture_contract(
+        &[CapturePhase::Carried],
+        || {
+            Some(vec![AbiSlot {
+                ownership: AbiOwnership::TransferredToCaller,
+                ..lexical_capture_slot(0)
+            }])
+        },
+        1,
+    ));
+    let rendered = format!("{error:?}");
+    assert!(
+        rendered.contains("provenance projects"),
+        "rejects against the projected slot: {rendered}"
+    );
+    assert!(
+        !rendered.contains("arrived carried"),
+        "and NOT on the lifetime arm -- this slot's storage is still \
+         activation-frame owned, so only the transfer discipline moved: {rendered}"
+    );
+}

@@ -4646,7 +4646,18 @@ fn retained_closures_carry_a_static_origin_and_no_body_term() {
     assert_eq!(
         declared_fields(source, "    Closure {"),
         vec![
-            "captures: Vec<Lowered>,",
+            // ⚠ `D7` widened this field from `Vec<Lowered>`, and the pin's own
+            // property is UNCHANGED by it: a capture is not a body carrier. It
+            // is argued, not absorbed — a retained callable is an
+            // invocation-local capsule whose captures reached it at their own
+            // phases, and demanding a compile-time template for every one of
+            // them left a lawfully mixed environment with no representation at
+            // all. The frame's `Row: the closure-capture cell` supersedes `C1`'s
+            // "every child stays `Lowered`" for capture edges only. `body`
+            // remains the sole body authority, which is what this equality
+            // protects. ⛔ What would still red it is an added field, or a
+            // capture edge acquiring a `StaticOriginId`/`RuntimeExpr`.
+            "captures: Vec<LoweringOperand>,",
             "params: Vec<String>,",
             "body: StaticOriginId,",
         ],
@@ -4664,7 +4675,12 @@ fn retained_closures_carry_a_static_origin_and_no_body_term() {
             // the property this inventory protects is unchanged.
             "reference: StaticOriginId,",
             "symbol: RuntimeSymbol,",
-            "captures: Vec<Lowered>,",
+            // ⚠ `D7`, for the same reason and on the same authority as
+            // `Closure::captures` above. A declaration closure's LEXICAL
+            // captures reach it at their own phases; its SEED captures resolve
+            // to JIT-time ground values and are constructed as explicit
+            // `Specialized`, so the widening costs the seed lane nothing.
+            "captures: Vec<LoweringOperand>,",
             "params: Vec<String>,",
             "body: StaticOriginId,",
         ],
