@@ -16441,7 +16441,19 @@ fn d8a_one_emission_owner_answers_one_composed_source_coordinate() {
 
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8d` — the target-derived binding is built,
-/// and measurably never installed on any fixture in this suite.**
+/// and measurably not installed by EITHER of the two populations `D8d` landed
+/// with.**
+///
+/// ⚠ **`D8e` retired this row's original claim, and the retirement is recorded
+/// here rather than in a handoff.** As landed, this said the two preconditions
+/// "do not coincide anywhere in this suite". They now do:
+/// `d8e_the_composed_binding_is_installed_consumed_and_meets_the_causal_projection`
+/// is the witness that combines them, and it installs and consumes. What
+/// survives — and what this row is now scoped to — is the narrower, still-live
+/// fact about the two populations `D8d` was measured against: neither of them
+/// crosses over, which is why the witness had to be BUILT rather than found.
+/// ⛔ Do not restore the wider wording; it is false, and its falsity is the
+/// only reason `D8e` has a positive route at all.
 ///
 /// The binding is `D8d`'s whole deliverable and it is deliberately unreadable
 /// until `D8e` supplies its consumer. That makes it indistinguishable, from the
@@ -16462,25 +16474,26 @@ fn d8a_one_emission_owner_answers_one_composed_source_coordinate() {
 /// 3. The one plan population that **does** carry composed-call targets, the
 ///    `D5a` witness, **never reaches the composed site at all**.
 ///
-/// ⇒ The two preconditions — a reached composed recursive position, and an open
-/// unit-definition pass over a plan that interned a target at that exact
-/// selector — **do not coincide anywhere in this suite**. That is not a defect
-/// in the binding; it is a statement about the fixture population, and it is
-/// what `D8e` inherits: a consumer with nothing to consume until a witness
-/// combines the two.
+/// ⇒ Over these two populations the preconditions — a reached composed
+/// recursive position, and an open unit-definition pass over a plan that
+/// interned a target at that exact selector — **do not coincide**. That is not
+/// a defect in the binding; it is a statement about these two fixtures, and it
+/// is what made `D8e`'s witness a construction problem rather than a lookup.
 ///
 /// ## Why this is a pin and not a note
 ///
 /// Written down in a handoff, this decays. As a row it reds the moment either
-/// half changes — the moment a fixture reaches the site under a defining owner,
-/// clause 2 flips and someone must look. That is exactly the review that should
-/// happen when the gap closes.
+/// half changes for these fixtures — the moment one of them reaches the site
+/// under a defining owner, clause 2 flips and someone must look. That is
+/// exactly the review that should happen when the gap closes.
 ///
-/// **Promise class: transition sentinel.** Named for the boundary, and retired
-/// by the event that closes it: a witness that reaches the composed site inside
-/// a functionized unit definition whose plan interns a target there.
+/// **Promise class: durable invariant, over a named pair.** It is no longer a
+/// sentinel: the event that would have retired it has happened, and the row was
+/// re-scoped to what it still measures rather than deleted, because clauses 1
+/// and 3 remain the only proof that `D8e`'s witness reaches a live site by
+/// construction and not by inheriting one of these two.
 #[test]
-fn d8d_the_composed_binding_site_is_live_and_no_current_fixture_installs_a_target() {
+fn d8d_the_composed_binding_site_is_live_and_neither_landed_population_installs_a_target() {
     use crate::cranelift_backend::lowering::{
         d8d_bindings, d8d_recursive_sites, d8e_consumptions, reset_d8d_bindings,
     };
@@ -16523,9 +16536,11 @@ fn d8d_the_composed_binding_site_is_live_and_no_current_fixture_installs_a_targe
     );
     assert_eq!(
         bindings, 0,
-        "no binding can be installed here: this lowering has no defining emission owner, so \
-         there is no D8a selector to key a target on. A non-zero count means the gap this row \
-         pins has closed and D8e's consumer now has a subject -- look, do not silence"
+        "no binding can be installed on THIS fixture: its lowering has no defining emission \
+         owner, so there is no D8a selector to key a target on. D8e's own witness installs one -- \
+         that is not this clause. A non-zero count here means px8j itself has moved onto the \
+         functionized lane, which changes what every other px8j row measures -- look, do not \
+         silence"
     );
 
     // (3) — and the population that HAS targets never reaches the site.
@@ -16538,7 +16553,397 @@ fn d8d_the_composed_binding_site_is_live_and_no_current_fixture_installs_a_targe
     assert_eq!(
         (d8d_recursive_sites(), d8d_bindings(), d8e_consumptions()),
         (0, 0, 0),
-        "the D5a witness -- the one plan carrying composed-call targets -- must not reach the \
-         composed site. If it does, the two preconditions have met and this sentinel is retired"
+        "the D5a witness -- the plan D8b's target population was measured on -- must not reach \
+         the composed site. It is the control that keeps D8e's witness honest: if this fixture \
+         reached the site too, D8e's positive route could be inherited from it rather than built"
+    );
+}
+
+// ── `RT-CONTSRC-PRODUCER-LOCAL` `D8e` — the witness ────────────────────────
+//
+// The `D8d` sentinel measured two populations that never meet: the fixture that
+// REACHES the composed deferred-constructor site carries no defining emission
+// owner, and the one plan that carries composed-call TARGETS never reaches the
+// site. This fixture is the first program in which all four facts hold at once,
+// through the ordinary production planner/lowering path:
+//
+//   1. `requires_heterogeneous_deforestation` on the selected constructor field;
+//   2. an `immediate_binder_eliminator` bridge over that field's binder;
+//   3. a functionized-unit definition, so `defining_emission_owner` is `Some`;
+//   4. an interned specialization at the exact `D8a` five-field selector.
+//
+// ⭐ Each of the four is load-bearing and each was reached by MEASUREMENT, not
+// by design. Three shapes were rejected on the way, and what each rejected is
+// worth recording, because they are the constraints the shape is pinned by:
+//
+//   - The declaration body may not BE the `ComputationalMatch`. A
+//     declaration-owned unit's source root is its planned seed node, and for
+//     that shape the seed is the producer `Construct` -- so the continuation
+//     value-environment walk starts BELOW its own continuation and the planner
+//     refuses with "computational continuation is outside its source owner
+//     subtree". The `Let` wrapper is what puts the walk above it.
+//   - The wrapper may not be a `Match`. `Match { scrutinee: ComputationalMatch
+//     with recursive positions }` is the `MatchScrutineeRecursor` residual, which
+//     selects `RecursiveDescent` -- and that lane defines no units at all, so
+//     fact 3 fails silently and the composed site is reached with no owner.
+//   - The selected field's arms must be statically selectable. A field whose
+//     arms merge at runtime materializes a source join whose planned
+//     representation is derived from the field's OWN arms (specialized
+//     constructors, hence native scalar lanes) while lowering merges the
+//     COMPOSED result there -- and `D8e`'s consumer returns a unit-call carrier.
+//     Raising that join by giving an arm a carried field instead makes the
+//     scrutinee carried, which the deferred-constructor case refuses outright.
+//     ⇒ The two requirements are satisfiable together only where no merge is
+//     built, which is what the compile-time `Bool::True` scrutinee arranges.
+//
+// ⚠ The witness does NOT compile, and the row asserts that refusal rather than
+// hiding it. See the row's own header for what it is and is not evidence of.
+
+/// The witness program, parameterised by the two axes its controls move.
+///
+/// `callee_index` is the de Bruijn index the bridge case body calls.
+/// `computational_bridge` selects whether the immediate-binder eliminator is a
+/// `ComputationalMatch` (whose case bodies are lowered by the source machine) or
+/// a `Match` (whose case bodies are lowered by `lower_expr`). ⛔ The two bridges
+/// install IDENTICALLY -- the `D8d` binding is materialized by the outer frame
+/// either way -- so the axis isolates the consumer and nothing else.
+#[cfg(test)]
+fn d8e_witness_declaration(
+    symbol: &str,
+    callee_index: u32,
+    computational_bridge: bool,
+) -> RuntimeDeclaration {
+    let wrap = "ctor:fixture::D8EWitness::Wrap";
+    let done = "ctor:fixture::D8EWitness::Done";
+    let unit = || RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+        args: Vec::new(),
+    };
+    let ok_unit = || RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Result::Ok".to_string(),
+        args: vec![unit()],
+    };
+    let call = || RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::Var(callee_index)),
+        args: vec![unit()],
+    };
+    let bridge_default = RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: "D8e witness bridge default".to_string(),
+    };
+    let bridge = if computational_bridge {
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Var(2)),
+            cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+                .into_iter()
+                .map(|constructor| crate::RuntimeComputationalMatchCase {
+                    constructor: constructor.to_string(),
+                    argument_binders: 1,
+                    recursive_positions: vec![0],
+                    body: call(),
+                })
+                .collect(),
+            default: bridge_default,
+        }
+    } else {
+        RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Var(2)),
+            cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+                .into_iter()
+                .map(|constructor| RuntimeMatchCase {
+                    constructor: constructor.to_string(),
+                    binders: 1,
+                    body: call(),
+                })
+                .collect(),
+            default: bridge_default,
+        }
+    };
+    // The selected constructor field: a `Match`, so
+    // `requires_heterogeneous_deforestation` holds, on a compile-time
+    // constructor, so exactly one arm is lowered and no join is merged.
+    let selected_field = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Bool::True".to_string(),
+            args: Vec::new(),
+        }),
+        cases: [
+            ("ctor:prelude::Bool::True", "ctor:prelude::Result::Ok"),
+            ("ctor:prelude::Bool::False", "ctor:prelude::Result::Err"),
+        ]
+        .into_iter()
+        .map(|(constructor, result)| RuntimeMatchCase {
+            constructor: constructor.to_string(),
+            binders: 0,
+            body: RuntimeExpr::Construct {
+                constructor: result.to_string(),
+                args: vec![unit()],
+            },
+        })
+        .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D8e witness selected-field default".to_string(),
+        },
+    };
+    let eliminator = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: wrap.to_string(),
+            args: vec![
+                // The worker the `D8a` selector's provenance names: a capture-free
+                // closure at the producer's recursive position.
+                RuntimeExpr::LexicalClosure {
+                    captures: Vec::new(),
+                    params: vec!["unit".to_string()],
+                    body: Box::new(ok_unit()),
+                },
+                selected_field,
+            ],
+        }),
+        cases: vec![
+            crate::RuntimeComputationalMatchCase {
+                constructor: wrap.to_string(),
+                argument_binders: 2,
+                recursive_positions: vec![0],
+                body: bridge,
+            },
+            crate::RuntimeComputationalMatchCase {
+                constructor: done.to_string(),
+                argument_binders: 0,
+                recursive_positions: Vec::new(),
+                body: ok_unit(),
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D8e witness eliminator default".to_string(),
+        },
+    };
+    RuntimeDeclaration {
+        symbol: symbol.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            // ⛔ The `Let` is not decoration -- see the header. It is what puts
+            // the unit's source root above its own continuation.
+            body: RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: vec!["state".to_string()],
+                body: Box::new(RuntimeExpr::Let {
+                    value: Box::new(eliminator),
+                    body: Box::new(RuntimeExpr::Var(0)),
+                }),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+/// Compile the witness and return the outcome beside the three `D8d`/`D8e`
+/// counters and the emitted static-worker call log.
+#[cfg(test)]
+fn d8e_witness_compile(
+    label: &str,
+    callee_index: u32,
+    computational_bridge: bool,
+) -> (
+    Option<CraneliftBackendError>,
+    (usize, usize, usize),
+    Vec<D5aMarkerEvent>,
+) {
+    use crate::cranelift_backend::lowering::{
+        d5a_marker_events, d8d_bindings, d8d_recursive_sites, d8e_consumptions,
+        reset_d5a_marker_events, reset_d8d_bindings,
+    };
+    let symbol = format!("decl:fixture::d8e::{label}");
+    let declaration = d8e_witness_declaration(&symbol, callee_index, computational_bridge);
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: symbol.clone(),
+        }),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let declarations = BTreeMap::from([(symbol.as_str(), &declaration)]);
+    reset_d8d_bindings();
+    reset_d5a_marker_events();
+    let outcome = compile_expr_into_module(
+        new_object_module(label).expect("the object module builds"),
+        &format!("ken_{label}"),
+        Linkage::Export,
+        &entry,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    );
+    (
+        outcome.err(),
+        (d8d_recursive_sites(), d8d_bindings(), d8e_consumptions()),
+        d5a_marker_events(),
+    )
+}
+
+/// **`D8e` — installation and consumption meet, and the causal projection the
+/// meeting inherits refuses one plane later.**
+///
+/// ⭐ **What this row IS evidence of.** On a program built entirely through the
+/// ordinary production planner and lowering path, the `D8d` binding is installed
+/// at the selected recursive source-order position, the `D8e` consumer resolves
+/// the exact source-machine `Var` callee to that binding *before* the value-only
+/// `Var` path, and the shared route-selected emitter writes the call with the
+/// exact raw operand run. Both counters the `D8d` sentinel pinned at zero
+/// transition, and the emitted call is read back from the emitter's own log
+/// rather than from the binding that requested it.
+///
+/// ⛔ **What it is NOT evidence of, said plainly.** The program does not compile.
+/// It refuses at the `D5a` detached-result seat, and that refusal is NOT this
+/// node's to repair. Interning the specialization that supplies the `D8a` target
+/// necessarily projects a causal call onto the same emitting unit
+/// (`continuation_result_edges_owned_by` is keyed on the emission owner and
+/// admits every projected call), and that edge has exactly two discharges: a
+/// claim, or a unit result that IS the planned producer constructor. The
+/// composed deferred-constructor path can do neither -- it returns to the
+/// selected field before `claim_and_call_continuation`, which is the one claim
+/// seat in the crate, and it exists precisely to eliminate the constructor the
+/// other discharge requires. ⇒ The gap is a whole-node finding, escalated rather
+/// than worked around; a witness that compiled would have had to fabricate one
+/// of the two discharges.
+///
+/// **Transition sentinel.** The refusal assertion goes red the moment the
+/// composed path acquires a lawful discharge for its own causal call. That is
+/// the event that retires it, and when it fires the three counter assertions
+/// above it are the positive route, already green.
+#[test]
+fn d8e_the_composed_binding_is_installed_consumed_and_meets_the_causal_projection() {
+    let (error, counters, markers) = d8e_witness_compile("d8e_witness", 3, true);
+    let (sites, bindings, consumptions) = counters;
+
+    assert!(
+        sites > 0,
+        "the witness must REACH the composed deferred-constructor site, or every clause below is \
+         vacuous"
+    );
+    assert_eq!(
+        (bindings, consumptions),
+        (1, 1),
+        "the two zeros the D8d sentinel pinned must BOTH transition on one program: one \
+         target-derived StaticWorkerBinding installed at the selected recursive position, and one \
+         source-machine Var callee resolved to it. A (1, 0) here means the binding is still \
+         unreadable and D8e's consumer never fired; a (0, 1) is impossible and would mean the \
+         consumer fired on something it did not resolve from the environment"
+    );
+
+    // The emitter's own record, not the binding's. ⛔ Read back from
+    // `WorkerCallEmitted`, which is written AFTER the instruction exists, so
+    // this is a fact about emission rather than about the request.
+    let emitted = markers
+        .iter()
+        .filter_map(|event| match event {
+            D5aMarkerEvent::WorkerCallEmitted {
+                raw_operands,
+                supplied_operands,
+                route,
+                ..
+            } => Some((*raw_operands, *supplied_operands, *route)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        emitted,
+        vec![(1, 1, StaticWorkerCallRoute::RawWorker)],
+        "the common route-selected emitter must receive the EXACT raw run: one source argument, \
+         zero stored captures (the witness's worker is capture-free), no generated-context \
+         suffix, and the raw route D8d fixes for a selected recursive argument. A supplied count \
+         above the raw count means a suffix was appended to a raw target; a second entry means \
+         the call was emitted twice"
+    );
+
+    let error = error.expect(
+        "the witness does not compile, and this row exists to say so. If it now compiles, the \
+         composed path has acquired a discharge for its own projected causal call -- retire this \
+         sentinel and promote the clauses above",
+    );
+    let reason = format!("{error:?}");
+    assert!(
+        reason.contains("detached-result seat"),
+        "the refusal must be the D5a causal projection, which is the finding this row escalates. \
+         Anything else is a NEW refusal on the composed consumption path and must be reported, \
+         not accommodated: {reason}"
+    );
+    assert!(
+        !reason.contains("runtime-local and live-domain only"),
+        "the outer raw-body unit-result closure refusal must NOT be reached -- D8e's law names it \
+         explicitly. Reaching it would mean the worker's closure-valued result crossed a unit \
+         boundary instead of being consumed in place: {reason}"
+    );
+}
+
+/// **`D8e` control 1 — the consumption is attributable to the EXACT binding.**
+///
+/// ⛔ The perturbation moves the callee's index by one, onto the induction
+/// hypothesis that sits immediately before the `D8d` binding in the same
+/// environment. It is not a fabricated index: it names a real, live, adjacent
+/// binding of the same call arity, so a consumer that resolved "some callable in
+/// scope" rather than "this binding" would still fire.
+///
+/// ⭐ Installation is UNCHANGED, and that is the half that makes this a
+/// discriminator rather than a smoke test: the binding is still installed, so
+/// the zero consumption count is attributable to the callee alone.
+#[test]
+fn d8e_a_neighbouring_callee_installs_the_binding_and_consumes_nothing() {
+    let (_error, (sites, bindings, consumptions), markers) =
+        d8e_witness_compile("d8e_neighbour", 2, true);
+    assert!(sites > 0, "the control must reach the same composed site");
+    assert_eq!(
+        (bindings, consumptions),
+        (1, 0),
+        "moving the callee one index onto the neighbouring induction hypothesis must leave \
+         installation untouched and consume NOTHING. A (1, 1) here means D8e's consumer resolves \
+         something weaker than the exact Var binding"
+    );
+    assert!(
+        !markers.iter().any(|event| matches!(
+            event,
+            D5aMarkerEvent::WorkerCallEmitted { .. }
+        )),
+        "and with nothing consumed the shared emitter must not have written a worker call"
+    );
+}
+
+/// **`D8e` control 2 — the value-only path still fails closed.**
+///
+/// The bridge becomes an ordinary `Match`, so its case bodies are lowered by
+/// `lower_expr` rather than by the source machine, and the callee index moves to
+/// the `D8d` binding's position in THAT environment. Same binding, same call,
+/// same arity -- only the lowering path differs.
+///
+/// ⭐ This is what proves `D8e`'s consumer is the sole lawful way to read the
+/// capsule, and that `D8d`'s fail-closed property survives it: off the
+/// source-machine path the binding is refused in value position rather than
+/// silently read.
+#[test]
+fn d8e_off_the_source_machine_path_the_binding_is_refused_in_value_position() {
+    let (error, (sites, bindings, consumptions), _markers) =
+        d8e_witness_compile("d8e_value_position", 2, false);
+    assert!(sites > 0, "the control must reach the same composed site");
+    assert_eq!(
+        (bindings, consumptions),
+        (1, 0),
+        "the ordinary bridge installs the SAME binding -- installation is the outer frame's work \
+         and does not depend on the bridge -- and consumes nothing, because D8e's consumer sits \
+         on the source-machine Call arm alone"
+    );
+    let reason = format!("{:?}", error.expect("the value-position read must refuse"));
+    assert!(
+        reason.contains("a static worker binding has no value representation"),
+        "and the refusal must be D8d's own fail-closed value-position guard, not an incidental \
+         downstream failure: {reason}"
     );
 }
