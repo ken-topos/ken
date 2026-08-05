@@ -69,7 +69,8 @@ pub(super) use static_transition::{
 // checking `-p ken-runtime` separately from `--profile test`.
 #[cfg(test)]
 pub(in crate::cranelift_backend) use static_transition::{
-    d3b_publish_without_finalization, d3b_refinalize, D3bFinalizationPerturbation,
+    d3b_publish_without_finalization, d3b_refinalize, d4b_arm_admission, d4b_take_admission,
+    D3bFinalizationPerturbation, D4bVerdict,
 };
 #[cfg(test)]
 pub(super) use static_transition::with_last_io_error_role_omitted;

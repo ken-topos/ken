@@ -6296,6 +6296,40 @@ fn required_surrounding_environment_prefix(
     Ok(maximum)
 }
 
+/// **`D4b`** — one required position's admission verdict, as the take-loop's own
+/// two clauses see it. Test-only.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D4bVerdict {
+    /// `Closed([S])` — one exact source. The only admitting verdict.
+    Closed,
+    /// `Open` — refused by the take-loop's first clause.
+    Open,
+    /// `Closed([S, T, ..])` — refused by the take-loop's second clause.
+    Ambiguous(usize),
+}
+
+#[cfg(test)]
+thread_local! {
+    static D4B_ADMISSION: std::cell::RefCell<Vec<(Vec<D4bVerdict>, bool)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    static D4B_ADMISSION_ARMED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4b_arm_admission(armed: bool) {
+    D4B_ADMISSION_ARMED.with(|cell| cell.set(armed));
+    if armed {
+        D4B_ADMISSION.with(|ledger| ledger.borrow_mut().clear());
+    }
+}
+
+/// Every candidate edge seen while armed, as `(required verdict vector, admitted)`.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4b_take_admission() -> Vec<(Vec<D4bVerdict>, bool)> {
+    D4B_ADMISSION.with(|ledger| std::mem::take(&mut *ledger.borrow_mut()))
+}
+
 fn exact_continuation_source_environment(
     plan: &StaticTransitionPlan<'_>,
     producer_owner: PredeclaredFunctionId,
@@ -6368,6 +6402,40 @@ fn exact_continuation_source_environment(
             "computational continuation lacks its complete semantic value environment",
         ));
     }
+    // `D4b` — record this candidate's FULL required vector and the outcome the
+    // take-loop below will reach. ⛔ Recorded before the loop runs, and the
+    // outcome is computed from the same two clauses rather than from the loop's
+    // return: the control's whole subject is that `admitted` is exactly
+    // "every required position closed and unambiguous", with no third modality.
+    #[cfg(test)]
+    let recorded = if D4B_ADMISSION_ARMED.with(std::cell::Cell::get) {
+        let verdicts = reached
+            .iter()
+            .take(required_input_count)
+            .map(|value| match value {
+                ContinuationValueSourceAuthority::Open => D4bVerdict::Open,
+                ContinuationValueSourceAuthority::Closed(sources) if sources.len() == 1 => {
+                    D4bVerdict::Closed
+                }
+                ContinuationValueSourceAuthority::Closed(sources) => {
+                    D4bVerdict::Ambiguous(sources.len())
+                }
+            })
+            .collect::<Vec<_>>();
+        // ⛔⛔ Recorded as NOT admitted, and flipped only where the take-loop
+        // below actually falls through. The outcome must be production's own
+        // control flow, never a predicate written beside it -- a re-implemented
+        // decision here would make the control compare the instrument with
+        // itself, and an extra route modality installed in the real loop would
+        // pass unnoticed. (Measured: it did, before this was restructured.)
+        Some(D4B_ADMISSION.with(|ledger| {
+            let mut ledger = ledger.borrow_mut();
+            ledger.push((verdicts, false));
+            ledger.len() - 1
+        }))
+    } else {
+        None
+    };
     let mut exact_inputs = Vec::with_capacity(required_input_count);
     for value in reached.into_iter().take(required_input_count) {
         let ContinuationValueSourceAuthority::Closed(mut sources) = value else {
@@ -6381,6 +6449,12 @@ fn exact_continuation_source_environment(
             return Ok(None);
         }
         exact_inputs.push(sources.remove(0));
+    }
+    // The take-loop fell through: this candidate is admitted. ⭐ This assignment
+    // IS the observation -- reaching this line is what "admitted" means.
+    #[cfg(test)]
+    if let Some(index) = recorded {
+        D4B_ADMISSION.with(|ledger| ledger.borrow_mut()[index].1 = true);
     }
     // `RT-CONTSRC-PRODUCER-LOCAL` `D4a` — ADMISSION. The `D2` transition
     // sentinel that declined every producer-local candidate stood exactly here
@@ -21311,6 +21385,135 @@ mod tests {
         assert!(
             format!("{refusal:?}").contains("not present in the lexical environment"),
             "the refusal must name the absent binding rather than fall through: {refusal:?}"
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D4b` — the admission partition is EXACTLY
+    /// `interned = V` / `declined = R`, with no third modality.**
+    ///
+    /// ⭐ `D4a` admitted the producer-local domain by **deleting** a filter, and
+    /// the claim it left behind is that `R` is refused upstream by the
+    /// take-loop's own two clauses — an `Open` value, or a position carrying
+    /// more than one exact source — and by nothing else.
+    ///
+    /// ⛔ **The proposition is an equivalence, and both directions are asserted
+    /// per record**: a candidate is admitted **iff** every required position is
+    /// closed and unambiguous. An extra route modality, a special case, a corpus
+    /// lookup, a closure-identity test or a first-`Open` classification would all
+    /// appear as a record where the two sides disagree.
+    ///
+    /// ⛔ **Both sides must be witnessed**, or the equivalence is half-vacuous.
+    /// The declining fixtures are named rather than hoped for: the required-tail
+    /// fixture supplies an `Open` and an `Ambiguous(2)` position, and the
+    /// IH/argument fixture supplies the `Open[ih-binder]` edge — which are the
+    /// census's three non-closed positions, and the only ones in the corpus.
+    ///
+    /// ⚠ **MEASURED**: admission agrees with the closed-vector predicate on
+    /// every record, both sides non-empty, and every declined record carries an
+    /// `Open` or ambiguous position. **CLAIMED**: nothing outside the required
+    /// vector participates in the decision. **THE GAP**: this measures the
+    /// decision, not the vector — that each position's verdict is itself right
+    /// is the source walk's authority, not this row's.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn d4b_admission_is_exactly_the_closed_required_vector() {
+        let symbols = crate::NativeProcessSymbols::legacy_prelude();
+        d4b_arm_admission(true);
+        // Admitting fixtures.
+        let complete = Box::leak(Box::new(contspec_complete_environment_fixture()));
+        let _ = plan_static_transition_graph_with_symbols(
+            complete,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+            false,
+        );
+        // ⛔ The THREE declining shapes, named rather than hoped for. Between
+        // them they carry exactly the census's three non-closed positions.
+        //
+        // `Open[let-value:Construct]` — a required tail with open provenance.
+        let tail = Box::leak(Box::new(contspec_required_tail_fixture(unit())));
+        let _ = plan_static_transition_graph_with_symbols(
+            &*tail,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+            false,
+        );
+        // `AMBIG2[let-value:If]` — an `If` whose branches name two DISTINCT
+        // exact sources, which the walk refuses to collapse to one ordinal.
+        let ambiguous_tail = RuntimeExpr::If {
+            scrutinee: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            then_expr: Box::new(RuntimeExpr::Var(0)),
+            else_expr: Box::new(RuntimeExpr::Var(1)),
+        };
+        let ambiguous = Box::leak(Box::new(contspec_required_tail_fixture(ambiguous_tail)));
+        let _ = plan_static_transition_graph_with_symbols(
+            &*ambiguous,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+            false,
+        );
+        let ih = Box::leak(Box::new(contsrc_d2_ih_and_argument_case_fixture()));
+        let _ = plan_static_transition_graph(ih, &BTreeMap::new());
+        d4b_arm_admission(false);
+        let records = d4b_take_admission();
+
+        assert!(
+            !records.is_empty(),
+            "the witness corpus must produce candidate edges at all"
+        );
+        for (vector, admitted) in &records {
+            let all_closed = vector.iter().all(|verdict| *verdict == D4bVerdict::Closed);
+            assert_eq!(
+                *admitted, all_closed,
+                "admission must be exactly 'every required position closed and unambiguous'; \
+                 this record disagrees, which is an extra route modality: vector={vector:?}"
+            );
+        }
+
+        let admitted = records.iter().filter(|(_, a)| *a).count();
+        let declined = records.len() - admitted;
+        assert!(
+            admitted > 0,
+            "no admitted edge was witnessed, so V is unmeasured and the equivalence is \
+             half-vacuous"
+        );
+        assert!(
+            declined > 0,
+            "no DECLINED edge was witnessed ({admitted} of {}), so R is unmeasured -- the row \
+             would pass on a corpus where admission is unconditionally true",
+            records.len()
+        );
+
+        // ⛔ Every declined edge is refused by one of the take-loop's two
+        // clauses. A decline with an all-closed vector would mean some other
+        // predicate is running.
+        for (vector, admitted) in &records {
+            if !admitted {
+                assert!(
+                    vector.iter().any(|verdict| matches!(
+                        verdict,
+                        D4bVerdict::Open | D4bVerdict::Ambiguous(_)
+                    )),
+                    "a declined edge must carry an Open or ambiguous position: vector={vector:?}"
+                );
+            }
+        }
+
+        // ⛔ Both decline CLAUSES are witnessed, not just one. A corpus carrying
+        // only `Open` declines would leave the ambiguity clause unmeasured.
+        assert!(
+            records.iter().any(|(v, _)| v.contains(&D4bVerdict::Open)),
+            "the Open decline clause is unwitnessed"
+        );
+        assert!(
+            records
+                .iter()
+                .any(|(v, _)| v.iter().any(|x| matches!(x, D4bVerdict::Ambiguous(_)))),
+            "the ambiguity decline clause is unwitnessed"
         );
     }
 

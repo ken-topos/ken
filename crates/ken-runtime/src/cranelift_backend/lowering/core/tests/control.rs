@@ -15093,7 +15093,9 @@ fn d3c_observe(
     d3c_set_armed(true);
     d3c_set_position_selection(selection);
     // The population that reaches a seat under an intervening binder.
-    let _ = recursive_port_process_compiles(&governed_nested_resource_bracket(3));
+    let _ = recursive_port_process_compiles(
+        &crate::cranelift_backend::planning::governed_nested_resource_bracket(3),
+    );
     // ⭐ And the `D5a` witness, which reaches predeclared emission seats at
     // **zero** binder depth and compiles GREEN. It supplies the agreement half:
     // without it the divergence measured in the other population would be
