@@ -1492,6 +1492,50 @@ all six failing `D0` rows.
   independent work, that is a genuine hard stop and a re-cut** — say so rather
   than absorbing it silently.
 
+  ###### `D8e` PART ONE DONE at exact `70171a99` — consumer complete, WITNESS NOT BUILT
+
+  **Not discharged, and the leader said so plainly rather than implying
+  otherwise.** `742/2/1` unchanged, both profiles clean. **The implementer ran
+  out of runway, not into a wall** — that distinction is load-bearing for
+  whoever picks it up, and it is why this is not yet the whole-node finding the
+  section above describes.
+
+  **The consumer, which is complete and correct:** in the source machine's
+  `Call` arm, an exact `Var` callee resolving to a `D8d` binding takes the
+  static-worker route, placed **ahead of the callee's own evaluation**. That
+  placement is the mechanism, not a convenience — a `Var` callee evaluated
+  first goes through the machine's value arm, which calls `value_at` and fails
+  closed on a static worker by design. **So the binding is consumed there or
+  refused everywhere; there is no third outcome.** A `Var` resolving to `Value`
+  falls through untouched. Arguments evaluate under the machine's own control
+  and phase through the existing `CallArgument` continuation; only the
+  completion differs. `call_static_worker` is split at the argument phase so
+  direct descent and this consumer share `call_static_worker_with_inputs` —
+  **no duplicate operand assembly**, arity moved into the shared half.
+  `SourceCallee` is a **sum, not a widened operand slot**: widening it to hold a
+  static worker would undo the fail-closed property `D8d` installed it for.
+
+  **The sentinel now carries a THIRD counter** and records consumption at zero
+  alongside installation, so the gap stays pinned rather than decaying into an
+  assumption.
+
+  > **THE REMAINING WORK IS THE WITNESS, and its required conjunction is now
+  > known.** The composed deferred-constructor path fires only under
+  > `requires_heterogeneous_deforestation` **plus** an immediate-binder
+  > eliminator, and that must coincide with **functionized-unit definition**
+  > **and** an **interned specialization at the exact selector**. All four at
+  > once.
+  >
+  > **This is a fixture-design problem, and it is the deliverable** — see the
+  > STANDING section above. **Build it through the ordinary production
+  > planner/lowering path.** Hand-constructing a plan, or fabricating a target
+  > or identity to make the conjunction hold, is banned.
+  >
+  > **If the four cannot be made to coincide lawfully, THAT is the whole-node
+  > finding** — the composed path cannot exercise this substrate — and it
+  > hard-stops to me rather than being worked around. No production mechanism
+  > change is authorized by the witness continuation.
+
   **`D8f` — checked-marker occupancy.** The witness places an ordinary
   selected-argument call **before** the checked IH call inside one checked
   wrapper. So *"a marker is pending"* **cannot** mean *"the next static-worker

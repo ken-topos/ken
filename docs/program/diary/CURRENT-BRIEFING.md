@@ -96,8 +96,30 @@ gap, not a missing fixture** — the released bounded witness repair could never
 have discharged it, because the only source shape that exercises the raw table
 is refused earlier. That is why its wrong-table mutation stays green.
 
-**Next: wait for `D8e`.** Released by the leader at `evt_4rs11vaganczg` on exact
-`c2e8314f`; implementer working it. `D8a`/`D8b`/`D8d` all discharged.
+**Next: confirm both Runtime seats compacted, then tell the leader to re-release
+`D8e` for its WITNESS ONLY** on exact `70171a99`. ⚠ **A compacted Claude seat
+does not wake on a mention** — rouse the pane.
+
+⛔ **`D8e` is NOT discharged.** Consumer complete and inert at exact `70171a99`
+(`742/2/1`, both profiles clean); **the witness was not built.** ⭐ The
+implementer **ran out of runway, not into a wall** — so this is *not yet* the
+whole-node finding.
+
+⭐ **The witness's required conjunction, now known:**
+`requires_heterogeneous_deforestation` **plus** an immediate-binder eliminator,
+coinciding with **functionized-unit definition** **and** an **interned
+specialization at the exact selector**. All four at once. ⛔ Build it through the
+ordinary production planner/lowering path — **no hand-constructed plan, no
+fabricated target or identity.** ⛔ **If the four cannot lawfully coincide, THAT
+is the whole-node finding** and it hard-stops to me.
+
+**The consumer sits AHEAD of the callee's own evaluation, and that placement is
+the mechanism** — a `Var` callee evaluated first goes through the value arm,
+which calls `value_at` and fails closed on a static worker by design. ⇒ **The
+binding is consumed there or refused everywhere; no third outcome.** Sentinel now
+carries a **third counter** recording consumption at zero.
+
+`D8a`/`D8b`/`D8d` all discharged.
 
 ⭐ **`D8d` DISCHARGED at exact `c2e8314f`** (`742/2/1`). The target-derived
 `StaticWorkerBinding` is installed at the selected recursive source-order
