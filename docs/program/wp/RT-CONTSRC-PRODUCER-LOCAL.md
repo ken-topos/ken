@@ -986,7 +986,22 @@ all six failing `D0` rows.
   that resolved a generated context** — ⛔ not on every IH, per the corrected
   conditional law above.
 
-  ###### `D6a` STATUS — mechanism ACCEPTED at exact `625b7860`, held for fidelity
+  ###### `D6a` STATUS — DISCHARGED at exact `70d4e8d9`
+
+  **Architect fidelity verdict `evt_t1g8hrrtw4vn`**, parent `625b7860`, tree
+  `5d868b6a`. The comment-only child touched exactly the three authorized files;
+  after removing comment lines from the zero-context diff, the only changed Rust
+  tokens are **two assertion-message literals** — conditions, predicates,
+  expected vectors, route enum and construction, binder plan, provenance checks
+  and control reachability all unchanged. A repository-wide phrase-family sweep
+  found **no surviving** unconditional-IH, equal-route-means-reuse, or
+  silent-tail-append statement. `736 / 2 / 1`, both profiles clean.
+
+  ⇒ `D6b` is the next sequenced checkpoint, released at `evt_4hn520k8c5z5y`.
+
+  The acceptance record below is retained as the mechanism's provenance.
+
+  ###### `D6a` mechanism acceptance — exact `625b7860` (superseded by the discharge above)
 
   Architect review `evt_3hx267n11sm9k`, parent `e27d297a`, tree `80471947`.
   Measured `730 passed / 7 failed / 1 ignored` to **`736 / 2 / 1`** — five rows
