@@ -786,12 +786,10 @@ pub(in crate::cranelift_backend) enum ContinuationSourceCoordinate {
     /// storage-owner / affinity are planner-derived and live on the enclosing
     /// record, exactly as the entry arm's slot-derived ones do.
     ///
-    /// ⚠ `dead_code` is allowed **only** because `D1` is the representation and
-    /// `D2` is what populates it — the arm is constructed today by the controls
-    /// that prove each consumer refuses it, and the warning would otherwise
-    /// read as "unused, delete me". ⛔ `D2` removes this attribute; it is not a
-    /// standing exemption.
-    #[allow(dead_code)]
+    /// ⭐ `D4a` removed this arm's `dead_code` allowance. `D1` represented it,
+    /// `D2` populated it in the walk, and `D4a` admits it — so it is now
+    /// constructed and read on the ordinary planning path, not only by the
+    /// controls that prove each consumer handles it.
     ProducerLocal {
         binding: ProducerLocalBinding,
         locator: ProducerLocalLocator,
@@ -6030,33 +6028,30 @@ fn exact_continuation_source_environment(
         }
         exact_inputs.push(sources.remove(0));
     }
-    // `RT-CONTSRC-PRODUCER-LOCAL` `D2` — producer-local bindings are
-    // REPRESENTED here and not yet ADMITTED. `D3` teaches the ten consumers to
-    // assign the domain and `D4` releases admission; between the two, a
-    // candidate whose environment names one declines.
+    // `RT-CONTSRC-PRODUCER-LOCAL` `D4a` — ADMISSION. The `D2` transition
+    // sentinel that declined every producer-local candidate stood exactly here
+    // and is now deleted, which is the event its own promise class named.
     //
-    // ⭐ **This preserves the pre-`D2` population exactly.** Every position that
-    // is a producer-local binding today was `Open` before `D2`, and `Open`
-    // declined at the take-loop above. The decline simply moved from "opaque"
-    // to a named domain. ⛔ It is not an edge selector: it tests the coordinate
-    // domain, is uniform over every edge, and consults no corpus, closure
-    // identity, first-`Open` reason or planned-member status.
+    // ⭐ **Nothing replaces it, and that is the point.** The declined set `R`
+    // is refused **upstream** by the take-loop above, on the authority that was
+    // always there: an `Open` value declines, and a position carrying more than
+    // one exact source declines as ambiguous. Those two clauses are precisely
+    // the census's three non-closed positions — `OPEN[ih-binder]`,
+    // `OPEN[let-value:Construct]`, `AMBIG2[let-value:If]`. So admitting `V` is
+    // *removing* a filter, never adding a selector.
     //
-    // ⛔ It must come BEFORE the validator, not after. `validate_continuation_
-    // source_slot` refuses this domain with a planner ERROR, which rejects the
-    // enclosing source program; declining the candidate is the correct
-    // boundary, and it is the one the take-loop above already uses.
+    // ⛔ No corpus, closure identity, planned-member status, first-`Open`
+    // classification or edge predicate is consulted here or anywhere below.
+    // The full required vector is walked — `required_input_count` positions,
+    // every one of which must be closed and unambiguous — and that walk remains
+    // the sole authority.
     //
-    // **Promise class: transition sentinel** — `D4` deletes this block, and
-    // that is the event that retires it.
-    if exact_inputs.iter().any(|input| {
-        matches!(
-            input.coordinate,
-            ContinuationSourceCoordinate::ProducerLocal { .. }
-        )
-    }) {
-        return Ok(None);
-    }
+    // ⚠ The consumers below are what make this safe: `D3a` taught
+    // `validate_continuation_source_slot` to RE-DERIVE a producer-local source
+    // rather than refuse it, so admitting the domain no longer walks into a
+    // planner error. The two lowering emission seams still refuse both local
+    // availability arms; `D3b` assigns them, against the emissions this
+    // checkpoint creates.
     for source in &exact_inputs {
         validate_continuation_source_slot(plan, source)?;
     }
@@ -20822,30 +20817,32 @@ mod tests {
         );
     }
 
-    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D2` — representing a binding is not
-    /// admitting it. The candidate still declines, and declines for a NAMED
-    /// domain rather than for opacity.**
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D4a` — the binding is ADMITTED, and the
+    /// declined set is refused by the authority that was always there.**
     ///
-    /// This is the law that makes `D2` behaviour-preserving. Every position
-    /// that is a producer-local binding today was `Open` before `D2`, and both
-    /// decline the candidate — so no edge's verdict moves, which is exactly
-    /// what the unchanged `D0` per-row parity and lib baselines show.
+    /// ⭐ **This row is the `D2` sentinel, fired and restated — not deleted.**
+    /// Its predecessor asserted the exact opposite: that no interned
+    /// specialization names a producer-local coordinate. That was `D2`'s law
+    /// and its promise class named `D4` as the event that retires it. `D4a` is
+    /// that event, so the assertion is **inverted rather than dropped**, which
+    /// keeps the transition itself measured instead of leaving a gap where a
+    /// law used to be.
     ///
     /// MEASURED: the fixture's environment holds producer-local bindings, and
-    /// `exact_continuation_source_environment` returns `Ok(None)` for it — a
-    /// candidate decline, **not** an `Err` rejecting the source program.
-    /// CLAIMED: `D2` moved the decline's *reason*, never its *outcome*.
-    /// THE GAP: `D4` releases admission and deletes the gate; until then this
-    /// says nothing about whether these bindings *could* lawfully intern.
+    /// at least one interned specialization now names a producer-local
+    /// coordinate, against a nonzero interned-input total. CLAIMED: the `D2`
+    /// filter is gone and the domain reaches interning. THE GAP: this row does
+    /// **not** measure `R`'s decline — this fixture is fully closed, so nothing
+    /// in it reaches either decline clause, and the corpus-level
+    /// `interned = V` / `declined = R` partition is `D4b`'s. It also says
+    /// nothing about lowering, which still refuses both local availability
+    /// arms; that is `D3b`'s, against the emissions this checkpoint creates.
     ///
-    /// ⭐ The `Ok(None)` versus `Err` distinction is the whole point. The
-    /// planner-side refusal `D1` installed is an `Err`, which would reject the
-    /// enclosing program; the gate must sit before it.
-    ///
-    /// **Promise class: transition sentinel** — `D4` releases admission and
-    /// retires this row along with the gate it measures.
+    /// **Promise class: durable invariant** — the admission law itself. It goes
+    /// red if a future change re-filters the domain or weakens either decline
+    /// clause.
     #[test]
-    fn contsrc_d2_a_producer_local_environment_declines_the_candidate_not_the_program() {
+    fn contsrc_d4a_a_producer_local_environment_is_admitted_and_r_still_declines() {
         let expr = Box::leak(Box::new(contsrc_d2_both_binding_kinds_fixture()));
         let plan = plan_static_transition_graph(expr, &BTreeMap::new())
             .expect("a fixture whose environment names producer-local bindings still PLANS");
@@ -20865,31 +20862,45 @@ mod tests {
             "the fixture must actually reach the gate, or this row measures nothing: {reached:?}"
         );
 
-        // The admission law itself: nothing interned names the unassigned
-        // domain. ⛔ Checked across two plans so it is not a statement about one
-        // fixture, and the interned-input count is asserted so an empty
-        // population cannot satisfy it vacuously.
+        // ADMISSION, the inverted law. ⛔ The count is asserted alongside, so an
+        // empty interned population cannot satisfy this vacuously — which is
+        // the shape that would have let a still-filtering gate pass.
         let mut interned_inputs = 0usize;
+        let mut interned_local = 0usize;
         for plan in [&plan, &contspec_plan()] {
             for unit in &plan.continuation_specializations {
                 for input in &unit.key.continuation_inputs {
                     interned_inputs += 1;
-                    assert!(
-                        matches!(
-                            input.coordinate,
-                            ContinuationSourceCoordinate::EntryAbi { .. }
-                        ),
-                        "an interned specialization names an unassigned producer-local \
-                         coordinate: {:?}",
-                        input.coordinate
-                    );
+                    if matches!(
+                        input.coordinate,
+                        ContinuationSourceCoordinate::ProducerLocal { .. }
+                    ) {
+                        interned_local += 1;
+                    }
                 }
             }
         }
         assert!(
             interned_inputs > 0,
-            "no specialization interned any input at all, so the admission law held vacuously"
+            "no specialization interned any input at all, so this row holds vacuously"
         );
+        assert!(
+            interned_local > 0,
+            "D4a admits the producer-local domain, so at least one interned specialization must \
+             name one; zero means the gate is still filtering and the deletion did not take"
+        );
+
+        // ⛔ `R`'s decline is deliberately NOT asserted here, and the reason is
+        // that it cannot be asserted honestly from this fixture. This
+        // environment is fully closed — that is precisely why it is admitted —
+        // so nothing in it reaches either decline clause. A row that
+        // constructed an `Open` value locally and matched on it would be a
+        // tautology about the enum, not a measurement of the take-loop.
+        //
+        // What keeps `R` declined is that `D4a` deleted a block *below* the
+        // take-loop and changed nothing in it. The corpus-level partition
+        // proof, `interned = V` and `declined = R` over all 83 instances, is
+        // `D4b`'s deliverable and needs the census harness, not this row.
     }
 
     /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3a` — the validator RE-DERIVES a
