@@ -6255,6 +6255,57 @@ impl<'a> Lowering<'a> {
                 .map(|input| input.coordinate)
                 .collect::<Vec<_>>()
         ));
+        // `RT-CONTSRC-PRODUCER-LOCAL` `D4a` — the observatory's seam half.
+        //
+        // ⛔ **It observes and returns nothing.** It stands ahead of the
+        // coordinate refusal below precisely because that refusal is still in
+        // force: `D4a` measures the operands a `D3b` consumer WOULD index, and
+        // measuring them is not consuming them. Test-only; the refusal below is
+        // untouched and still fires on every one of these inputs.
+        #[cfg(test)]
+        for input in unit
+            .continuation_inputs()?
+            .into_iter()
+            .filter(|_| crate::cranelift_backend::lowering::d4a_armed())
+        {
+            use crate::cranelift_backend::lowering::{
+                d4a_describe_binding, d4a_record_seam, d4a_slot_selection,
+                ContinuationImmediateAvailability, ContinuationSourceCoordinate, D4aSeamObservation,
+                D4aSlotSelection,
+            };
+            let ContinuationSourceCoordinate::ProducerLocal { binding, locator } = input.coordinate
+            else {
+                continue;
+            };
+            let ContinuationImmediateAvailability::CurrentLexical {
+                post_shift_index, ..
+            } = input.availability
+            else {
+                continue;
+            };
+            let locator_index = locator.environment_index;
+            // `D4a` mutation point. ⭐ The mutation perturbs WHICH INDEX the
+            // instrument reads, which is exactly the choice a `D3b` consumer
+            // will have to make. Production is not routed through it.
+            let selected = match d4a_slot_selection() {
+                D4aSlotSelection::Exact | D4aSlotSelection::SwapSlots => post_shift_index,
+                D4aSlotSelection::UseLocatorIndex => locator_index,
+            };
+            let at = |index: u32| d4a_describe_binding(producer_env.get(index as usize));
+            let (post_shift_operand, locator_operand) =
+                if d4a_slot_selection() == D4aSlotSelection::SwapSlots {
+                    (at(locator_index), at(selected))
+                } else {
+                    (at(selected), at(locator_index))
+                };
+            d4a_record_seam(D4aSeamObservation {
+                binding_origin: binding.binding_origin,
+                post_shift_index,
+                locator_index,
+                post_shift_operand,
+                locator_operand,
+            });
+        }
         for input in unit.continuation_inputs()? {
             // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — present a producer-local
             // coordinate to this seam, so its refusal is measured rather than
@@ -9177,6 +9228,18 @@ impl<'a> Lowering<'a> {
             RuntimeExpr::Let { value, body } => {
                 let value = self.child_occurrence(static_origin, 0, value)?;
                 let bound = self.lower_binder(builder, value, env)?;
+                // `RT-CONTSRC-PRODUCER-LOCAL` `D4a` — the binder-creation seat.
+                // ⭐ The observatory's independent half: the operand and the
+                // occurrence that creates it are both in hand HERE, with no
+                // environment index involved. Test-only; production is
+                // unchanged.
+                #[cfg(test)]
+                if crate::cranelift_backend::lowering::d4a_armed() {
+                    crate::cranelift_backend::lowering::d4a_record_created(
+                        value.static_origin,
+                        crate::cranelift_backend::lowering::d4a_describe_binding(Some(&bound)),
+                    );
+                }
                 // The two short-circuits below are value-shaped, so they read
                 // through the binding rather than around it. A static worker
                 // binding is neither a backedge nor a trap, so it falls

@@ -14552,3 +14552,288 @@ fn a_discarded_visit_refuses_before_its_body_is_defined() {
     recursive_port_process_compiles(&expr)
         .expect("the bracket compiles again once the mutation clears");
 }
+
+// ---------------------------------------------------------------------------
+// `RT-CONTSRC-PRODUCER-LOCAL` `D4a` — the lowerable shifted producer-local
+// population, and the control that measures which operand the emitting
+// environment actually holds at the post-shift index.
+// ---------------------------------------------------------------------------
+
+fn d4a_unit() -> RuntimeExpr {
+    RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+        args: Vec::new(),
+    }
+}
+
+fn d4a_trap(message: &str) -> RuntimeTrap {
+    RuntimeTrap {
+        code: RuntimeTrapCode::PatternMatchFailure,
+        message: message.to_string(),
+    }
+}
+
+/// One admitted host effect. ⭐ `ConsoleWrite` and not `ConsoleRead`: the lane,
+/// not the shape, is what made the `D2b` fixture unlowerable, and
+/// `CRANELIFT_HOST_EFFECT_CONSUMERS_V1` is a compile-time constant. ⛔ Not
+/// `ConsoleIsTerminal` either — it is in that set and still plans no seat,
+/// because it returns before seat synthesis.
+///
+/// The payload is the only difference between the two occurrences, and it
+/// exists so a reader can tell them apart in source; nothing asserts on it.
+fn d4a_console_write(payload: &[u8]) -> RuntimeExpr {
+    RuntimeExpr::Effect {
+        family: "Console".to_string(),
+        operation: ken_host::HostOpV1::ConsoleWrite,
+        capability: None,
+        args: vec![
+            RuntimeExpr::Construct {
+                constructor: "ctor:prelude::Stream::Stdout".to_string(),
+                args: Vec::new(),
+            },
+            RuntimeExpr::Value(crate::RuntimeValue::Bytes(payload.to_vec())),
+        ],
+    }
+}
+
+/// The consumer: a computational match whose scrutinee is the producer
+/// construct, carrying a closure at the recursive position.
+fn d4a_parameter_match(case_body: RuntimeExpr) -> RuntimeExpr {
+    let worker = RuntimeExpr::LexicalClosure {
+        captures: Vec::new(),
+        params: vec!["worker".to_string()],
+        body: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Contspec::Leaf".to_string(),
+            args: Vec::new(),
+        }),
+    };
+    RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:fixture::Contspec::Node".to_string(),
+            args: vec![worker],
+        }),
+        cases: vec![
+            crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Contspec::Leaf".to_string(),
+                argument_binders: 0,
+                recursive_positions: Vec::new(),
+                body: d4a_unit(),
+            },
+            crate::RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Contspec::Node".to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: case_body,
+            },
+        ],
+        default: d4a_trap("d4a persistent continuation result"),
+    }
+}
+
+/// **The `D4a` population fixture — and it supplies ONLY the population.**
+///
+/// ⛔ **It is not evidence of its own coordinate selection.** It is built to
+/// exhibit a shifted producer-local emission that reaches lowering, and being
+/// observed to exhibit one proves nothing about the derivation. The
+/// discrimination is carried by the creation-seat attribution and the two
+/// mutations in [`d4a_the_post_shift_slot_holds_the_operand_built_for_that_binding`].
+///
+/// **The shape, and why each piece is there:**
+///
+/// - the outer `Let` binds an admitted host-effect result, so the value is a
+///   producer-local with a locator whose `environment_index` is `0`;
+/// - the enclosing `Match` case pushes **one intervening binder** before the
+///   emission seat, so the value has moved by the time it is emitted — this is
+///   the shift, and it is the whole reason the fixture exists;
+/// - the `Match` scrutinee's constructor argument is a **second** host effect
+///   of the **same operation**, so the binder at the locator index is a decoy
+///   with the same carrier, the same phase and the same lowering shape. ⭐ Only
+///   its SSA word differs, which is what forces the oracle to be the SSA word
+///   rather than any incidental discriminator.
+///
+/// ⛔ `contsrc_d2_both_binding_kinds_fixture` is NOT modified. This is additive;
+/// that fixture and its `D2b` discriminator stand exactly as they were.
+fn d4a_shifted_lowerable_fixture() -> RuntimeExpr {
+    RuntimeExpr::Let {
+        value: Box::new(d4a_console_write(b"post-shift")),
+        body: Box::new(RuntimeExpr::Match {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Contspec::Node".to_string(),
+                args: vec![d4a_console_write(b"decoy")],
+            }),
+            cases: vec![RuntimeMatchCase {
+                constructor: "ctor:fixture::Contspec::Node".to_string(),
+                binders: 1,
+                body: d4a_parameter_match(RuntimeExpr::Var(3)),
+            }],
+            default: d4a_trap("d4a shifted lowerable"),
+        }),
+    }
+}
+
+/// Compile the fixture through the production planner and lowering path under
+/// one slot selection, and return the shifted observation plus the operand
+/// lowering recorded at the binder-creation seat for that binding.
+fn d4a_observe(
+    selection: crate::cranelift_backend::lowering::D4aSlotSelection,
+) -> (crate::cranelift_backend::lowering::D4aSeamObservation, String) {
+    use crate::cranelift_backend::lowering::{
+        d4a_set_slot_selection, d4a_take_created, d4a_take_seam, D4aSlotSelection,
+    };
+    use crate::cranelift_backend::lowering::d4a_set_armed;
+    let _ = d4a_take_seam();
+    let _ = d4a_take_created();
+    d4a_set_armed(true);
+    d4a_set_slot_selection(selection);
+    let expr = d4a_shifted_lowerable_fixture();
+    // ⛔ The exact production entry the other controls in this file use. The
+    // emission still refuses the producer-local coordinate downstream of the
+    // observatory, so this is expected to be an error; `D4a` measures the
+    // operands, it does not consume them.
+    let _ = recursive_port_process_compiles(&expr);
+    d4a_set_armed(false);
+    d4a_set_slot_selection(D4aSlotSelection::Exact);
+    let seam = d4a_take_seam();
+    let created = d4a_take_created();
+
+    // The shifted row is selected by the property that defines it, never by
+    // ordinal: a fixture whose rows reorder must not silently measure a
+    // different input.
+    let shifted = seam
+        .iter()
+        .filter(|observation| observation.post_shift_index != observation.locator_index)
+        .cloned()
+        .collect::<Vec<_>>();
+    let [shifted] = shifted.as_slice() else {
+        panic!(
+            "expected exactly one shifted producer-local input reaching lowering, got \
+             {shifted:?} out of {seam:?}"
+        );
+    };
+    let built = created
+        .iter()
+        .filter(|(origin, _)| *origin == shifted.binding_origin)
+        .map(|(_, operand)| operand.clone())
+        .collect::<Vec<_>>();
+    let [built] = built.as_slice() else {
+        panic!(
+            "the binder-creation seat must record exactly one operand for binding origin \
+             {:?}, got {built:?}",
+            shifted.binding_origin
+        );
+    };
+    (shifted.clone(), built.clone())
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D4a` — the emitting environment holds, at the
+/// post-shift index, the operand lowering built for that exact binding.**
+///
+/// This is the property `D4a` exists to supply `D3b`, and the one the previous
+/// round could not reach: at `52422da5` the single reaching emission had
+/// `post_shift_index == locator.environment_index == 0`, which makes a real
+/// post-shift walk and a locator pass-through observationally identical.
+///
+/// MEASURED: compiling `d4a_shifted_lowerable_fixture` through the production
+/// planner and lowering path yields exactly one producer-local continuation
+/// input whose `post_shift_index` differs from its locator's
+/// `environment_index`; the operand the emitting context's environment holds at
+/// that post-shift index is **the same Cranelift SSA value** lowering recorded
+/// at the binder-creation seat for that binding's own occurrence; and the
+/// operand at the locator index is a **different** SSA value of the same
+/// carrier, phase and lowering shape.
+///
+/// CLAIMED: a consumer indexing this environment with `post_shift_index`
+/// obtains the producer-local value, and one indexing it with the locator's
+/// introduction index does not.
+///
+/// THE GAP: **no consumer indexes it yet.** The emission seam still refuses
+/// every producer-local coordinate; this measures the operands such a consumer
+/// would read, which is why the Architect's gate separates the two — the `D4a`
+/// mutation proves the instrument, and `D3b`'s own mutation must prove the
+/// consumer against this same fixture.
+///
+/// ⛔ The oracle is independent of the planner: the creation half is keyed by
+/// the lowering's own occurrence id at the seat where it constructs the binder,
+/// with no environment index in play. There is no planner re-walk, no index
+/// arithmetic, and no fixture-authored expected index anywhere in this row.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d4a_the_post_shift_slot_holds_the_operand_built_for_that_binding() {
+    use crate::cranelift_backend::lowering::D4aSlotSelection;
+
+    let (exact, built) = d4a_observe(D4aSlotSelection::Exact);
+
+    // The population, stated as a precondition rather than as a result: the
+    // fixture was built for this, so it is not evidence — it is what makes
+    // everything below discriminating instead of vacuous.
+    assert_ne!(
+        exact.post_shift_index, exact.locator_index,
+        "the fixture must reach a genuinely shifted emission; equal indices make the wrong \
+         answer indistinguishable from the right one, which is the defect this checkpoint \
+         exists to close"
+    );
+
+    // ⭐ THE PROPERTY. Attribution, not agreement: the operand at the post-shift
+    // slot is the one lowering built for this binding's own occurrence.
+    assert_eq!(
+        exact.post_shift_operand, built,
+        "the emitting environment does not hold, at the post-shift index, the operand lowering \
+         built for binding origin {:?}",
+        exact.binding_origin
+    );
+
+    // ⛔ THE VACUITY KILL. Had the derivation handed the locator's introduction
+    // index through, it would have named a position holding a DIFFERENT value —
+    // so this asserts the wrong answer is wrong, not merely that two numbers
+    // are unequal.
+    assert_ne!(
+        exact.locator_operand, built,
+        "the locator index holds the same operand as the post-shift index, so nothing here \
+         distinguishes a real post-shift walk from passing the introduction index through"
+    );
+
+    // The decoy is same-shaped on every incidental axis, so the row above
+    // cannot have been carried by a representation mismatch.
+    let shape = |operand: &str| {
+        operand
+            .split_once('(')
+            .map(|(head, _)| head.to_string())
+            .unwrap_or_else(|| operand.to_string())
+    };
+    assert_eq!(
+        shape(&exact.post_shift_operand),
+        shape(&exact.locator_operand),
+        "the decoy must match the post-shift operand's carrier, phase and lowering shape, or an \
+         incidental refusal could carry this test instead of the index"
+    );
+
+    // `D4a` MUTATION 1 — consume the locator's introduction index.
+    let (mutated, mutated_built) = d4a_observe(D4aSlotSelection::UseLocatorIndex);
+    assert_eq!(
+        mutated_built, built,
+        "the mutation must perturb only which slot is read; the binder-creation seat is not on \
+         its path and must record the same operand"
+    );
+    assert_ne!(
+        mutated.post_shift_operand, mutated_built,
+        "reading the locator index still produced the operand built for this binding, so the \
+         instrument cannot tell the two slots apart and proves nothing about the index"
+    );
+
+    // `D4a` MUTATION 2 — exchange the two slots. Distinct from mutation 1: both
+    // indices stay lawful and in bounds, so it survives a repair that merely
+    // bounds-checks.
+    let (swapped, swapped_built) = d4a_observe(D4aSlotSelection::SwapSlots);
+    assert_eq!(swapped_built, built, "the creation seat is off the swap's path");
+    assert_ne!(
+        swapped.post_shift_operand, swapped_built,
+        "swapping the slots left the post-shift position holding this binding's operand, so the \
+         pairing is not what the oracle reads"
+    );
+    assert_eq!(
+        swapped.locator_operand, built,
+        "the swap must move this binding's operand to the locator position; if it did not, the \
+         two reads are not the pair the exact row asserted about"
+    );
+}

@@ -1291,6 +1291,173 @@ thread_local! {
         const { std::cell::Cell::new(ContinuationEmissionMutation::Exact) };
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D4a` — the lowering-side operand observatory.**
+///
+/// ⭐ **This is an INSTRUMENT, not a mechanism.** It is `#[cfg(test)]` in every
+/// part; production compiles as if it did not exist, and nothing here is
+/// consulted by any lowering decision. Its whole job is to answer one question
+/// the planner cannot be asked without becoming its own oracle: *which actual
+/// operand does the emitting context's environment hold at the post-shift
+/// index, and is it the operand lowering built for that exact binding?*
+///
+/// ⛔ **The identity it reports is the Cranelift SSA `Value`, deliberately.**
+/// A carrier, a phase, a length or a planner coordinate would all agree between
+/// a correct index and a wrong one on a same-shaped decoy — which is exactly the
+/// population this checkpoint's fixture supplies. The SSA word is the one thing
+/// that cannot agree, so it is the only honest discriminator here.
+///
+/// ⛔ **No planner re-walk, no index arithmetic, no fixture-authored expected
+/// index.** The creation half is keyed by the LOWERING's own occurrence id at
+/// the seat where it constructs the binder; the seam half is keyed by index.
+/// The two are joined by `binding_origin`, and a wrong index breaks the join.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D4aSlotSelection {
+    /// Production's own answer: the projection's `post_shift_index`.
+    Exact,
+    /// `D4a` mutation 1 — consume the locator's scope-relative introduction
+    /// index instead. This is the defect `D2b` reopened `D2` for, expressed at
+    /// the lowering slot.
+    UseLocatorIndex,
+    /// `D4a` mutation 2 — read both slots, then exchange them. Distinct from
+    /// mutation 1: it perturbs the *pairing* while both indices stay lawful, so
+    /// it survives any repair that merely bounds-checks the index.
+    SwapSlots,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// ⛔ The observatory is **disarmed by default**, so every other test in
+    /// this binary pays nothing and records nothing. Only `D4a`'s own control
+    /// arms it, and it disarms again when that control takes its readings.
+    static D4A_ARMED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static D4A_SLOT_SELECTION: std::cell::Cell<D4aSlotSelection> =
+        const { std::cell::Cell::new(D4aSlotSelection::Exact) };
+    static D4A_SEAM: std::cell::RefCell<Vec<D4aSeamObservation>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    static D4A_CREATED: std::cell::RefCell<Vec<(StaticOriginId, String)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// One reaching producer-local continuation input, as lowering actually sees it.
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub(in crate::cranelift_backend) struct D4aSeamObservation {
+    /// The binding this input names — the join key into the creation record.
+    pub(in crate::cranelift_backend) binding_origin: StaticOriginId,
+    /// The projection's post-shift index into the emitting environment.
+    pub(in crate::cranelift_backend) post_shift_index: u32,
+    /// The locator's scope-relative introduction index.
+    pub(in crate::cranelift_backend) locator_index: u32,
+    /// The actual operand at the selected post-shift slot.
+    pub(in crate::cranelift_backend) post_shift_operand: String,
+    /// The actual operand at the locator slot — the decoy.
+    pub(in crate::cranelift_backend) locator_operand: String,
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4a_set_slot_selection(selection: D4aSlotSelection) {
+    D4A_SLOT_SELECTION.with(|cell| cell.set(selection));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4a_set_armed(armed: bool) {
+    D4A_ARMED.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4a_armed() -> bool {
+    D4A_ARMED.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4a_slot_selection() -> D4aSlotSelection {
+    D4A_SLOT_SELECTION.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4a_record_seam(observation: D4aSeamObservation) {
+    if !d4a_armed() {
+        return;
+    }
+    D4A_SEAM.with(|cell| cell.borrow_mut().push(observation));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4a_take_seam() -> Vec<D4aSeamObservation> {
+    D4A_SEAM.with(|cell| std::mem::take(&mut *cell.borrow_mut()))
+}
+
+/// The **binder-creation seat**: lowering has just built the operand for the
+/// value bound at `origin`. ⭐ Recorded here and nowhere else, because this is
+/// the only point at which the operand and the occurrence that creates it are
+/// both in hand without consulting an environment index.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4a_record_created(
+    origin: StaticOriginId,
+    operand: String,
+) {
+    if !d4a_armed() {
+        return;
+    }
+    D4A_CREATED.with(|cell| cell.borrow_mut().push((origin, operand)));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4a_take_created() -> Vec<(StaticOriginId, String)> {
+    D4A_CREATED.with(|cell| std::mem::take(&mut *cell.borrow_mut()))
+}
+
+/// A lowering-side description of one environment slot, carrying the Cranelift
+/// SSA `Value` wherever the operand has one.
+///
+/// ⛔ Deliberately **not** a `Debug` impl on the operand types. `Lowered` has no
+/// `Debug` on purpose (`RT-FNSPLIT-C1`), and adding one would be a second way to
+/// read a compile-time template out of an operand. This is a test-only
+/// projection to a string, and it reaches only the fields it names.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4a_describe_binding(
+    binding: Option<&LoweringEnvironmentBinding>,
+) -> String {
+    match binding {
+        None => "none".to_string(),
+        Some(LoweringEnvironmentBinding::StaticWorker(..)) => "worker".to_string(),
+        Some(LoweringEnvironmentBinding::Value(LoweringOperand::Carried(word))) => {
+            format!("carried({:?})", word.word)
+        }
+        Some(LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(lowered))) => {
+            match lowered {
+                Lowered::Int { value, .. }
+                | Lowered::Bool { value, .. }
+                | Lowered::ProcessExitStatus { value }
+                | Lowered::CapabilityToken { value }
+                | Lowered::ResourceToken { value }
+                | Lowered::BorrowedNativeValue { pointer: value } => {
+                    format!("specialized-scalar({value:?})")
+                }
+                Lowered::Constructor { constructor, .. } => {
+                    format!("specialized-ctor({constructor})")
+                }
+                Lowered::Record { .. } => "specialized-record".to_string(),
+                Lowered::Closure { .. } => "specialized-closure".to_string(),
+                Lowered::Trap(..) => "specialized-trap".to_string(),
+                Lowered::HostResult {
+                    success,
+                    ok_constructor,
+                    err_constructor,
+                    ..
+                } => format!("specialized-hostresult({success:?},{ok_constructor},{err_constructor})"),
+                Lowered::ResponseBytes { pointer, len } => {
+                    format!("specialized-responsebytes({pointer:?},{len:?})")
+                }
+                Lowered::Bytes(bytes) => format!("specialized-bytes({bytes:?})"),
+                Lowered::String(text) => format!("specialized-string({text})"),
+                _ => "specialized-other".to_string(),
+            }
+        }
+    }
+}
+
 /// **`AC-5` -- the two executable mutation controls for the static-worker
 /// substrate.**
 ///
