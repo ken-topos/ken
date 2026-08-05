@@ -804,53 +804,6 @@ pub(in crate::cranelift_backend) enum ContinuationSourceCoordinate {
 }
 
 impl ContinuationSourceCoordinate {
-    /// The entry-ABI coordinate this names, or the refusal owed to `D3b`.
-    ///
-    /// ⛔ **Not an exemption.** A caller is a consumer that does not yet assign
-    /// the producer-local domain, and it fails closed here rather than reading
-    /// a position the local arm does not have.
-    ///
-    /// ⚠ **`D3a` — the live enumeration is now the TWO LOWERING EMISSION ARMS,
-    /// and they are not callers of this method.** Every planner-side consumer
-    /// has been given a real producer-local derivation, so this method has no
-    /// caller left; `dead_code` is allowed for exactly that reason and is
-    /// **time-bounded, not standing**. What remains owed is:
-    ///
-    /// - `lowering::core`, the retained-frame emission seam — must consume
-    ///   `ContinuationImmediateAvailability::CurrentLexical` at its exact
-    ///   emission origin, environment and post-shift index.
-    /// - `lowering::core`, the declared-context emission seam — must consume
-    ///   `ContinuationImmediateAvailability::GeneratedContextCapture` for its
-    ///   exact context, owner and declared slot.
-    ///
-    /// Both still refuse today, in lowering's own vocabulary rather than
-    /// through this method: their refusal names *lowering's* environments, and
-    /// routing it through a planner-side helper would replace a message about
-    /// the operand run being indexed with one about a coordinate domain.
-    ///
-    /// ⛔ **Kept rather than deleted because deleting it would be the lie.**
-    /// `D3b` consumes both arms, at which point nothing is owed and this method
-    /// goes with the debt it names. It is retained here so the debt has a
-    /// single named place, and its own refusal contract stays measured by
-    /// `contsrc_d3a_entry_abi_seam_still_refuses_the_producer_local_domain`.
-    #[allow(dead_code)]
-    fn entry_abi_pending_producer_local(
-        self,
-    ) -> Result<(PredeclaredFunctionId, u32, ContinuationInputSource), CraneliftBackendError> {
-        match self {
-            Self::EntryAbi {
-                source_owner,
-                source_abi_position,
-                source,
-            } => Ok((source_owner, source_abi_position, source)),
-            Self::ProducerLocal { .. } => Err(planner_error(
-                "a continuation input names a producer-local binding, which this consumer does \
-                 not yet assign; RT-CONTSRC-PRODUCER-LOCAL D1 represents the coordinate and D3 \
-                 assigns it, and refusing here is deliberate — the alternative is reading an \
-                 entry ABI position this value does not have",
-            )),
-        }
-    }
 
     /// A producer-local coordinate for a control that must **reach** one.
     ///
@@ -1064,14 +1017,6 @@ pub(in crate::cranelift_backend) enum ContinuationImmediateAvailability {
 }
 
 impl ContinuationImmediateAvailability {
-    /// The entry-ABI operand position, refusing the two producer-local arms.
-    ///
-    /// ⛔ `D2b` builds the producer-local availabilities; `D3` teaches the
-    /// emission consumers to *assign* them. Between the two this is the honest
-    /// answer, and it is deliberately the same fail-closed shape as
-    /// [`ContinuationSourceCoordinate::entry_abi_pending_producer_local`]: a
-    /// consumer that has not been taught the lexical environment must refuse
-    /// rather than index an ABI run with a lexical index.
     /// The entry-ABI operand position, for a test that has already established
     /// the arm. ⛔ Test-only and panicking on purpose: production consumers must
     /// go through the fail-closed path above, never assert their way past the
@@ -1084,21 +1029,6 @@ impl ContinuationImmediateAvailability {
         }
     }
 
-    fn entry_abi_slot_pending_producer_local(self) -> Result<u32, CraneliftBackendError> {
-        match self {
-            Self::EntryAbi { immediate_slot } => Ok(immediate_slot),
-            Self::CurrentLexical { .. } | Self::GeneratedContextCapture { .. } => {
-                Err(planner_error(
-                    "a continuation input is immediately available only as a producer-local \
-                     binding, which this consumer does not yet resolve; \
-                     RT-CONTSRC-PRODUCER-LOCAL D2b projects that availability and D3 assigns it \
-                     at the emission seats. Refusing is deliberate: the alternative is indexing \
-                     an ABI operand run with a lexical environment index, which names a \
-                     different value",
-                ))
-            }
-        }
-    }
 }
 
 /// One exact source-slot value in the environment carried by a producer edge
@@ -21186,44 +21116,6 @@ mod tests {
             entry, local,
             "the same owner reached through two domains must not collapse to one provenance"
         );
-    }
-
-    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3a` — the seam is retained, and its own
-    /// refusal contract stays measured while it has no caller.**
-    ///
-    /// ⚠ `D3a` assigns every planner-side consumer, so this method's live
-    /// enumeration is now the two lowering emission arms and nothing calls it.
-    /// An uncalled refusal is indistinguishable from a deleted one, so its
-    /// contract is asserted directly until `D3b` retires it with the debt.
-    ///
-    /// MEASURED: the method still returns the entry triple for an entry-ABI
-    /// coordinate and still refuses a producer-local one. CLAIMED: retaining
-    /// the seam retains a working refusal, not just a comment. THE GAP: this
-    /// says nothing about the two lowering seams, which refuse in their own
-    /// vocabulary and are `D3b`'s.
-    ///
-    /// **Promise class: transition sentinel** — `D3b` deletes the method and
-    /// this row with it.
-    #[test]
-    fn contsrc_d3a_entry_abi_seam_still_refuses_the_producer_local_domain() {
-        let entry = ContinuationSourceCoordinate::EntryAbi {
-            source_owner: PredeclaredFunctionId(7),
-            source_abi_position: 3,
-            source: ContinuationInputSource::Parameter,
-        };
-        assert_eq!(
-            entry.entry_abi_pending_producer_local().expect(
-                "the entry domain is exactly what this seam still answers for"
-            ),
-            (
-                PredeclaredFunctionId(7),
-                3,
-                ContinuationInputSource::Parameter
-            )
-        );
-        assert!(ContinuationSourceCoordinate::producer_local_probe()
-            .entry_abi_pending_producer_local()
-            .is_err());
     }
 
     fn mutate_projection_field(
