@@ -6364,6 +6364,25 @@ impl<'a> Lowering<'a> {
                              discharge it",
                         )
                     })?;
+                // `D4b` — the BEHAVIOURAL non-vacuity counter and the identity
+                // mutation, both on the live consumer path rather than in a
+                // construction control.
+                #[cfg(test)]
+                let claimed_context = {
+                    crate::cranelift_backend::lowering::record_d4b_generated_frame_consumption();
+                    match crate::cranelift_backend::lowering::d4b_frame_mutation() {
+                        crate::cranelift_backend::lowering::D4bFrameMutation::Exact => {
+                            claimed_context
+                        }
+                        // ⛔ Perturbs the RECORDED id, which is exactly the input
+                        // the agreement check reads. The key it resolves from is
+                        // left intact, so what reds is the disagreement and not a
+                        // failure to resolve.
+                        crate::cranelift_backend::lowering::D4bFrameMutation::WrongClaimedContext => {
+                            claimed_context.d4b_displaced()
+                        }
+                    }
+                };
                 if context.id() != claimed_context {
                     return Err(unsupported(
                         "ContinuationSpecialization",

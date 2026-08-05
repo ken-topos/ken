@@ -12876,6 +12876,87 @@ fn d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_
 /// revalidation is exercised by construction rather than by execution; `D4b`
 /// supplies that.
 ///
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D4b` — the generated-frame consumer is
+/// exercised BEHAVIOURALLY, on a fixture that compiles and runs.**
+///
+/// ⭐⭐ **This retires a standing evidence boundary, and the retraction is the
+/// point.** `D3b`'s record carried "0 of 60 consumer observations held a
+/// generated emission owner", and concluded the generated-frame route could only
+/// be proved by construction. That number was **wrong**. It was measured while
+/// the capture-view defect was still live, so every generated-context capture
+/// was refusing before it reached this consumer — the probe recorded the
+/// breakage, not the design, and the figure was then carried forward as a
+/// standing fact.
+///
+/// Re-measured on the repaired tree, `verify_entry_frame` takes the
+/// generated-frame arm **30 times** across ordinary lowering tests, including
+/// `nested_post_effect_checked_recursor_reaches_success_and_retains_exact_trap_provenance`,
+/// which emits and **executes** a real object.
+///
+/// ⛔ Incidental traffic is not a control, which is why this row exists: it arms
+/// a counter over a real compile, asserts the arm was actually taken, and then
+/// perturbs the identity the consumer revalidates.
+///
+/// ⚠ **MEASURED**: the route is taken on a compiling fixture, and displacing the
+/// claimed context id reds it with the agreement refusal. **CLAIMED**: the
+/// three-sided revalidation is live on the behavioural path, not only where a
+/// planner control drives it. **THE GAP**: this proves the recorded id must
+/// agree with what its own key resolves to; it does not re-prove that the key
+/// resolved uniquely — `d3b_every_generated_frame_requirement_resolves_to_exactly_one_context`
+/// owns that.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d4b_the_generated_frame_consumer_runs_on_a_real_compile() {
+    use crate::cranelift_backend::lowering::{
+        d4b_generated_frame_consumptions, reset_d4b_generated_frame_consumptions,
+        set_d4b_frame_mutation, D4bFrameMutation,
+    };
+
+    let compile = |mutation| {
+        reset_d4b_generated_frame_consumptions();
+        set_d4b_frame_mutation(mutation);
+        let outcome = crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "d4b_generated_frame",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"));
+        let taken = d4b_generated_frame_consumptions();
+        set_d4b_frame_mutation(D4bFrameMutation::Exact);
+        (outcome, taken)
+    };
+
+    let (exact, taken) = compile(D4bFrameMutation::Exact);
+    exact.expect("the witness must compile with the generated-frame route exact");
+    // ⛔ THE non-vacuity assertion. Without it a green compile is equally
+    // consistent with the fixture never reaching this consumer at all -- which
+    // is precisely the state the retracted 0/60 figure described.
+    assert!(
+        taken > 0,
+        "the witness must actually TAKE the generated-frame arm; with zero, the row proves only          that a program which never reaches this consumer still compiles"
+    );
+
+    let (refusal, mutated_taken) = compile(D4bFrameMutation::WrongClaimedContext);
+    // ⛔ **At least once, NOT the same count.** The refusal short-circuits the
+    // compile, so the mutated run necessarily reaches this arm fewer times than
+    // the exact one -- an equality here reds on the short-circuit rather than on
+    // anything about the guard. What must hold is that the arm was reached at
+    // all, which is what makes the refusal attributable to the mutation.
+    assert!(
+        mutated_taken > 0,
+        "the mutation must have reached the generated-frame arm, or the refusal below belongs \
+         to something else entirely"
+    );
+    let refusal = refusal.expect_err(
+        "a claimed context id disagreeing with the one its own key resolves to must refuse; a          compile means the recorded identity is decorative",
+    );
+    assert!(
+        refusal.contains("the recorded identity and the key it was resolved from disagree"),
+        "the refusal must be the identity-agreement one, not a downstream failure: {refusal}"
+    );
+}
+
 /// **Promise class: durable invariant.**
 #[test]
 fn d3b_every_generated_frame_requirement_resolves_to_exactly_one_context() {

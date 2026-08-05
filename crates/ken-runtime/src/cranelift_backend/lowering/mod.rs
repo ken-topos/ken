@@ -1316,6 +1316,54 @@ pub(in crate::cranelift_backend) enum D3bConsumerMutation {
     ShiftProducerLocalSlot,
 }
 
+/// **`D4b`** — how the generated-frame consumer's identity revalidation is
+/// perturbed on the BEHAVIOURAL path. Test-only.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D4bFrameMutation {
+    Exact,
+    /// Present a claimed `ContinuationContextId` that is not the one this
+    /// claim's own `(specialization, worker body)` key resolves to.
+    WrongClaimedContext,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D4B_FRAME_MUTATION: std::cell::Cell<D4bFrameMutation> =
+        const { std::cell::Cell::new(D4bFrameMutation::Exact) };
+    /// How many times the GENERATED-frame arm of `verify_entry_frame` was
+    /// actually taken. ⛔ The non-vacuity counter: a behavioural control that
+    /// only asserts a successful compile cannot tell "the generated route ran"
+    /// from "the fixture never took it".
+    static D4B_GENERATED_FRAME_CONSUMPTIONS: std::cell::Cell<usize> =
+        const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d4b_frame_mutation(mutation: D4bFrameMutation) {
+    D4B_FRAME_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4b_frame_mutation() -> D4bFrameMutation {
+    D4B_FRAME_MUTATION.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d4b_generated_frame_consumption() {
+    D4B_GENERATED_FRAME_CONSUMPTIONS.with(|cell| cell.set(cell.get() + 1));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d4b_generated_frame_consumptions() -> usize {
+    D4B_GENERATED_FRAME_CONSUMPTIONS.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_d4b_generated_frame_consumptions() {
+    D4B_GENERATED_FRAME_CONSUMPTIONS.with(|cell| cell.set(0));
+}
+
 #[cfg(test)]
 thread_local! {
     static D3B_CONSUMER_MUTATION: std::cell::Cell<D3bConsumerMutation> =

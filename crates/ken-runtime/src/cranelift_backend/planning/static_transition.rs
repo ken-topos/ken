@@ -522,6 +522,20 @@ pub(in crate::cranelift_backend) enum ContinuationEmissionOwner {
 #[repr(transparent)]
 pub(in crate::cranelift_backend) struct ContinuationContextId(u32);
 
+impl ContinuationContextId {
+    /// A DIFFERENT context identity. **Mutation support only** — used to present
+    /// a claimed id that disagrees with the one the claim's own key resolves to,
+    /// so the consumer's agreement check has something to catch.
+    ///
+    /// ⛔ Not a way to construct an identity from an integer: it can only
+    /// displace an id that already exists, so no test can mint one out of thin
+    /// air and have it read as planner-issued.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn d4b_displaced(self) -> Self {
+        Self(self.0.wrapping_add(1))
+    }
+}
+
 /// **`RT-DECL-CLOSURE-PORT` `D5a` — one planner-interned generated producer
 /// execution context.**
 ///
