@@ -1990,30 +1990,55 @@ impl ComposedWorkerView {
     }
 }
 
-/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a2` — one required callable raw target.**
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8b` — one planner-issued composed-call
+/// target.**
 ///
-/// ## What it is, and what it deliberately is not
+/// ## What it is
 ///
-/// It is an **executable-target requirement**: a statement that the raw worker
-/// body named by one exact four-field composed selector must be reachable as a
-/// declared-and-defined `Function`, because the selected recursive argument at
-/// that selector routes to `RawWorker` unconditionally and has nowhere else to
-/// go.
+/// The callee a composed eliminator frame will call at one exact `D8a`
+/// selector, with the complete provenance needed to call it: closure
+/// occurrence, raw body, declared arity, ordered capture provenance, and route
+/// eligibility, all carried as the whole [`ComposedWorkerView`] rather than as
+/// a bare origin beside it.
 ///
-/// ⛔ It is **not an emitted-call event**. It mints no
-/// [`EmittableCallEdge`](Self), forces no declaration in lowering, retains no
-/// template globally, and infers nothing from a reached lowerer or a source
-/// re-walk. Demand comes from the *existence of a specialization at that
-/// selector* — a planner fact, already interned — and from nothing else.
+/// ⛔ **It is a representation, not a route decision and not a population
+/// claim.** It does not say which of the two callees is taken — the view
+/// carries route eligibility and `D8c` owns consumption. It mints no
+/// `EmittableCallEdge`, forces no declaration, demands no `Function`, and
+/// asserts nothing about the executable population.
+///
+/// ⭐ **This replaces `D7a2`'s raw-target requirement, and the difference is the
+/// whole point.** That object was a *demand on the population* — "this raw body
+/// must be a declared-and-defined `Function`" — and it was withdrawn because
+/// honouring it re-opened the permanently-refused raw closure route. This one
+/// makes no such demand. The shape survives because the shape was right: one per
+/// exact selector, unconstructible outside planning, whole view, derived from an
+/// interned specialization fact.
+///
+/// ## Which side of the split each fact sits on
+///
+/// | fact | side |
+/// |---|---|
+/// | the selector resolves to exactly one worker | **unreconciled** — [`StaticTransitionPlan::composed_worker_view_unreconciled`] |
+/// | provenance re-checks: position, body child, ordered captures | **unreconciled** |
+/// | selector agreement, the law this object is validated by | **unreconciled** |
+/// | is the callee reachable as an emitted `Function` | **reconciled** — `D8c` owns it, and nothing here asks it |
+///
+/// ⛔ Stating this is not decoration. `D7a2` derived its requirements from a
+/// population question that the requirements themselves decided, and the split
+/// exists so that cannot recur: a target is minted from resolution alone, so no
+/// later executability answer can depend on an earlier one that assumed it.
 ///
 /// ⛔ **Unconstructible.** Every field is private, there is no constructor
 /// outside this module, and the only way to obtain one is
-/// [`StaticTransitionPlan::composed_raw_target_requirements`]. It carries the
-/// whole [`ComposedWorkerView`] rather than a bare body origin, so a consumer
-/// reconciling it can compare full provenance instead of an origin that two
-/// layers could both plausibly name.
+/// [`StaticTransitionPlan::composed_call_targets`].
+///
+/// ⛔ **There is no body accessor.** The callee is read as
+/// `target.worker().body_origin()`. A `body_origin()` on this type would be a
+/// second spelling of one field, and the check that compared the two was
+/// deleted in `D7a2` for comparing a value with itself.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(in crate::cranelift_backend) struct ComposedRawTargetRequirement {
+pub(in crate::cranelift_backend) struct ComposedCallTarget {
     emission_owner: ContinuationEmissionOwner,
     producer_construct_origin: StaticOriginId,
     continuation_origin: StaticOriginId,
@@ -2022,10 +2047,10 @@ pub(in crate::cranelift_backend) struct ComposedRawTargetRequirement {
     worker: ComposedWorkerView,
 }
 
-// Read by this node's tests; `D7b` is the held production consumer.
+// Read by this node's tests; `D8c` is the held production consumer.
 #[cfg_attr(not(test), allow(dead_code))]
-impl ComposedRawTargetRequirement {
-    /// The exact four-field causal selector this requirement was minted under.
+impl ComposedCallTarget {
+    /// The exact `D8a` five-field selector this target was minted under.
     pub(in crate::cranelift_backend) fn selector(
         &self,
     ) -> (
@@ -2043,90 +2068,43 @@ impl ComposedRawTargetRequirement {
             self.recursive_position,
         )
     }
-    /// The full worker provenance the requirement is about.
+    /// The full worker provenance — the callee, and everything needed to call
+    /// it. ⛔ The only route to the body origin, deliberately.
     pub(in crate::cranelift_backend) fn worker(&self) -> &ComposedWorkerView {
         &self.worker
     }
-    /// The exact raw body that must be callable. ⛔ Read from the carried
-    /// provenance, never stored a second time — a body field beside the view is
-    /// the seam where the two would drift.
-    pub(in crate::cranelift_backend) fn required_body_origin(&self) -> StaticOriginId {
-        self.worker.body_origin
-    }
 }
 
-/// `D7a2` requirement-minting defects, for the controls that no well-formed plan
-/// can reach on its own.
+/// `D8b` target-minting defects, for the controls that no well-formed plan can
+/// reach on its own.
 ///
-/// ⛔ `#[cfg(test)]`. The reconciliation is derived from interned planner facts,
-/// so a wrong body or a transplanted construct origin is unreachable through any
-/// plan the planner will build — which is exactly why the refusals that catch
-/// them would otherwise ship unexercised.
+/// ⛔ `#[cfg(test)]`. Targets are derived from interned planner facts, so a
+/// wrong body or a transplanted construct origin is unreachable through any plan
+/// the planner will build — which is exactly why the law that catches them would
+/// otherwise ship unexercised.
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(in crate::cranelift_backend) enum ComposedRawTargetDefect {
+pub(in crate::cranelift_backend) enum ComposedCallTargetDefect {
     Exact,
-    /// Drop the requirement whose required body is this origin, leaving every
-    /// other requirement intact. The population is then *consistent* and simply
-    /// missing one target — which is what makes it the honest control both for
-    /// the preserved unexecutable-target refusal and for "a body no requirement
-    /// names stays superseded".
-    OmitRequirementFor(StaticOriginId),
-    /// Mint the first requirement carrying a body that is not its own worker's.
+    /// Mint the first target carrying a body that is not its own worker's.
     WrongBody,
-    /// Mint the first requirement under a sibling layer's construct origin while
+    /// Mint the first target under a sibling layer's construct origin while
     /// keeping its own worker provenance.
     TransplantConstruct,
 }
 
 #[cfg(test)]
 thread_local! {
-    static COMPOSED_RAW_TARGET_DEFECT: Cell<ComposedRawTargetDefect> =
-        const { Cell::new(ComposedRawTargetDefect::Exact) };
-    static COMPOSED_RAW_TARGET_RETENTION: Cell<bool> = const { Cell::new(false) };
+    static COMPOSED_CALL_TARGET_DEFECT: Cell<ComposedCallTargetDefect> =
+        const { Cell::new(ComposedCallTargetDefect::Exact) };
 }
 
-/// Arm one `D7a2` requirement-minting defect for the current thread.
+/// Arm one `D8b` target-minting defect for the current thread.
 #[cfg(test)]
-pub(in crate::cranelift_backend) fn set_composed_raw_target_defect(
-    defect: ComposedRawTargetDefect,
+pub(in crate::cranelift_backend) fn set_composed_call_target_defect(
+    defect: ComposedCallTargetDefect,
 ) {
-    COMPOSED_RAW_TARGET_DEFECT.with(|cell| cell.set(defect));
-}
-
-/// **Arm the `D7a2` retention — the half of this checkpoint that is measured
-/// but NOT wired into production.**
-///
-/// ## Why it is not wired, stated where the switch is
-///
-/// Retaining a required raw body in the declared-and-defined `Function`
-/// population is correct on the planner's own terms: the reconciliation gate
-/// passes, both layers answer positively, and no phantom appears. It is
-/// nonetheless refused one plane later, and the refusal is not incidental. With
-/// the retention armed, the witness compile emits
-///
-/// ```text
-/// UNIT-BODY entry function=PredeclaredFunctionId(2) origin=StaticOriginId(36)
-///   UNIT-RESULT transfer origin=StaticOriginId(36) value=Constructor
-///   BOUNDARY-REFUSAL first closure child variant=Closure
-/// ```
-///
-/// ⇒ Defining the retained raw body means transferring its result across the
-/// unit boundary, and that result is a constructor **carrying a raw closure
-/// child**, which has no durable lane. This is the *permanent raw closure
-/// refusal* [`StaticTransitionPlan::template_only_worker_bodies`] already names
-/// as what governs branch one. The generated context exists precisely so that
-/// this body's result never takes that route; retaining the raw body re-opens
-/// the route the retarget was built to replace.
-///
-/// ⛔ So the switch stays test-only until that is settled. Production behaviour
-/// is exactly what `D7a` shipped. What arming it buys is that the blocking fact
-/// is **pinned by a control** rather than narrated in a handoff, and that every
-/// reconciliation law below is measured against the population it was written
-/// for instead of against an empty set.
-#[cfg(test)]
-pub(in crate::cranelift_backend) fn set_composed_raw_target_retention(armed: bool) {
-    COMPOSED_RAW_TARGET_RETENTION.with(|cell| cell.set(armed));
+    COMPOSED_CALL_TARGET_DEFECT.with(|cell| cell.set(defect));
 }
 
 /// Re-expose one immutable input projection as a view.
@@ -10781,11 +10759,6 @@ impl<'src> StaticTransitionPlan<'src> {
         }
         let units = self.continuation_units()?;
         let edges = self.emittable_call_edges()?;
-        // `D7a2` — the retained raw targets, read once. ⛔ Derived through
-        // `composed_worker_view_unreconciled`, which never asks this method, so
-        // the two do not recurse. Empty unless the retention is armed; see
-        // `set_composed_raw_target_retention` for why it is not wired.
-        let required = self.retained_raw_target_bodies()?;
         let mut template_only = BTreeSet::new();
         // Only a body some context actually names can be superseded. Starting
         // from the contexts rather than from every unit keeps the candidate set
@@ -10847,25 +10820,13 @@ impl<'src> StaticTransitionPlan<'src> {
             }) {
                 continue;
             }
-            // ⭐ `D7a2` — the third surviving raw route, and the reason it is a
-            // *route* rather than an exception.
-            //
-            // The two realizations above are both **emitted calls**, and both
-            // retarget. A raw-target requirement is neither: it is a demand that
-            // this body be callable, minted from the four-field composed
-            // selector whose selected recursive argument routes to `RawWorker`
-            // unconditionally. That argument has no context to retarget to and
-            // no second target to fall back on, so the route it takes survives
-            // by construction and the body must stay in the executable
-            // population.
-            //
-            // ⛔ Not a global template retention. Only a body some requirement
-            // **names** is retained; a superseded body no requirement names is
-            // still superseded, and the row that measures that is what stops
-            // this clause quietly becoming "retain everything".
-            if required.contains(&body) {
-                continue;
-            }
+            // ⛔ `D8b` withdrew a third clause here — retain a body some
+            // composed-call requirement names. It was correct on the planner's
+            // own terms and refused one plane later: defining the retained raw
+            // body transfers a constructor carrying a raw closure child across
+            // the unit boundary, which is the permanent raw closure refusal this
+            // very method names above. A composed-call target makes no claim on
+            // this population, so nothing replaces it.
             template_only.insert(body);
         }
         Ok(template_only)
@@ -11423,29 +11384,28 @@ impl<'src> StaticTransitionPlan<'src> {
         Ok(answer)
     }
 
-    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a2` — every required callable raw
-    /// target, one per four-field composed selector the planner interned.**
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8b` — every planner-issued composed-call
+    /// target, one per `D8a` selector the planner interned.**
     ///
     /// Demand is derived from the **existence of a specialization at a
-    /// selector**, which is an already-interned planner fact. Nothing here reads
-    /// a reached lowerer, walks source, or consults an emitted shape: the
-    /// selected recursive argument at every such selector routes to
-    /// `RawWorker` unconditionally, so its raw body is required, and that is the
-    /// whole derivation.
+    /// selector**, an already-interned planner fact. Nothing here reads a
+    /// reached lowerer, walks source, or consults an emitted shape.
     ///
-    /// ⛔ The view is taken **unreconciled**. Asking the executability question
-    /// while computing the requirements that decide executability is the cycle
-    /// the split exists to prevent, and it would also be backwards: a body is
-    /// retained *because* it is required, not required because it survived.
+    /// ⛔ **Unreconciled by construction, and that is the no-circularity rule.**
+    /// The view is taken from
+    /// [`Self::composed_worker_view_unreconciled`], so no target depends on an
+    /// executability answer. `D8c` owns that question, and it must be free to
+    /// answer it without the answer having already been assumed here — which is
+    /// exactly the loop `D7a2` closed and was withdrawn for.
     ///
-    /// ⛔ A selector whose group does not resolve — conflicting workers, failed
-    /// provenance — mints **no** requirement and propagates its refusal. A
-    /// requirement is a claim that one exact body must exist; there is no such
-    /// claim to make when the planner cannot say which body.
+    /// ⛔ A selector whose group does not resolve — conflicting workers, two
+    /// emission owners, failed provenance — mints **no** target and propagates
+    /// its refusal. A target names one exact callee; there is none to name when
+    /// the planner cannot say which.
     #[cfg_attr(not(test), allow(dead_code))]
-    pub(in crate::cranelift_backend) fn composed_raw_target_requirements(
+    pub(in crate::cranelift_backend) fn composed_call_targets(
         &self,
-    ) -> Result<Vec<ComposedRawTargetRequirement>, CraneliftBackendError> {
+    ) -> Result<Vec<ComposedCallTarget>, CraneliftBackendError> {
         let units = self.continuation_units()?;
         let mut selectors = units
             .iter()
@@ -11462,7 +11422,7 @@ impl<'src> StaticTransitionPlan<'src> {
         selectors.sort_unstable();
         selectors.dedup();
 
-        let mut requirements = Vec::with_capacity(selectors.len());
+        let mut targets = Vec::with_capacity(selectors.len());
         for (owner, construct, frame, alternative, position) in selectors {
             let worker = self.composed_worker_view_unreconciled(
                 owner,
@@ -11471,7 +11431,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 alternative,
                 position,
             )?;
-            requirements.push(ComposedRawTargetRequirement {
+            targets.push(ComposedCallTarget {
                 emission_owner: owner,
                 producer_construct_origin: construct,
                 continuation_origin: frame,
@@ -11483,120 +11443,69 @@ impl<'src> StaticTransitionPlan<'src> {
 
         #[cfg(test)]
         {
-            match COMPOSED_RAW_TARGET_DEFECT.with(Cell::get) {
-                ComposedRawTargetDefect::Exact => {}
-                ComposedRawTargetDefect::OmitRequirementFor(body) => {
-                    requirements.retain(|requirement| requirement.required_body_origin() != body);
-                }
-                ComposedRawTargetDefect::WrongBody => {
-                    // Point the first requirement at another requirement's body.
-                    // ⛔ A fabricated origin would be caught by the plane bounds
-                    // rather than by the reconciliation, which would prove the
-                    // wrong guard.
-                    let other = requirements
+            match COMPOSED_CALL_TARGET_DEFECT.with(Cell::get) {
+                ComposedCallTargetDefect::Exact => {}
+                ComposedCallTargetDefect::WrongBody => {
+                    // Point the first target at another target's body. ⛔ A
+                    // fabricated origin would be caught by the plane bounds
+                    // rather than by the law below, which would prove the wrong
+                    // guard.
+                    let other = targets
                         .iter()
-                        .map(|requirement| requirement.required_body_origin())
-                        .find(|body| *body != requirements[0].required_body_origin());
+                        .map(|target| target.worker.body_origin)
+                        .find(|body| *body != targets[0].worker.body_origin);
                     if let Some(other) = other {
-                        requirements[0].worker.body_origin = other;
+                        targets[0].worker.body_origin = other;
                     }
                 }
-                ComposedRawTargetDefect::TransplantConstruct => {
-                    let other = requirements
+                ComposedCallTargetDefect::TransplantConstruct => {
+                    let other = targets
                         .iter()
-                        .map(|requirement| requirement.producer_construct_origin)
-                        .find(|construct| *construct != requirements[0].producer_construct_origin);
+                        .map(|target| target.producer_construct_origin)
+                        .find(|construct| *construct != targets[0].producer_construct_origin);
                     if let Some(other) = other {
-                        requirements[0].producer_construct_origin = other;
+                        targets[0].producer_construct_origin = other;
                     }
                 }
             }
         }
-        Ok(requirements)
+        Ok(targets)
     }
 
-    /// **`D7a2` — the raw bodies the reconciliation retains in the one
-    /// declared-and-defined `Function` population.**
+    /// **`D8b` — the composed-call target law: selector agreement.**
     ///
-    /// ⛔ Exactly the bodies some requirement names, and nothing else. This is
-    /// **not** a global template retention: a superseded body that no
-    /// requirement names stays superseded, which is what
-    /// [`Self::template_only_worker_bodies`]' pre-`D7a2` rule already decided
-    /// and what this retention deliberately does not disturb.
+    /// Returns the number of targets checked, so a caller can tell a real
+    /// population from an empty one.
+    ///
+    /// **One law, and it is on the unreconciled side.** Re-resolving a target's
+    /// own five-field selector must return the worker it carries. That catches
+    /// both minting defects, because both are one defect seen from two sides: a
+    /// callee attributed to a selector that does not resolve to it. Each names
+    /// real origins, so neither is visible to a check that only asks whether the
+    /// body exists.
+    ///
+    /// ⛔ **Three checks that were here are gone, and none of them should come
+    /// back in this form:**
+    ///
+    /// - *the carried body must be its worker's body* — read the field back
+    ///   through an accessor defined as that field, so it compared a value with
+    ///   itself. Killed by its own control in `D7a2`; the accessor is deleted
+    ///   too, so it cannot be written again by accident;
+    /// - *exact-set equality against the executable population* — an
+    ///   executability question, which is `D8c`'s and whose presence here was
+    ///   the circularity;
+    /// - *declaration and definition agree* — unexercised twice, measured both
+    ///   times, and deleted rather than carried a third time. Every body on
+    ///   these plans has an emittable descriptor by construction, and the only
+    ///   perturbation that would reach it is a fabricated origin, which the
+    ///   plane bounds catch instead.
     #[cfg_attr(not(test), allow(dead_code))]
-    pub(in crate::cranelift_backend) fn required_raw_target_bodies(
-        &self,
-    ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
-        Ok(self
-            .composed_raw_target_requirements()?
-            .iter()
-            .map(|requirement| requirement.required_body_origin())
-            .collect())
-    }
-
-    /// **`D7a2` — the raw bodies the reconciliation actually retains.**
-    ///
-    /// ⛔ Empty in production. The retention is measured, not wired: see
-    /// [`set_composed_raw_target_retention`] for the exact refusal that blocks
-    /// it and the trace that names the seat. Keeping the *read* here rather than
-    /// deleting it is deliberate — the wiring is one predicate, and the row that
-    /// arms it proves what happens when it flips.
-    fn retained_raw_target_bodies(
-        &self,
-    ) -> Result<BTreeSet<StaticOriginId>, CraneliftBackendError> {
-        #[cfg(test)]
-        if COMPOSED_RAW_TARGET_RETENTION.with(Cell::get) {
-            return self.required_raw_target_bodies();
-        }
-        Ok(BTreeSet::new())
-    }
-
-    /// **`D7a2` — the reconciliation gate, which `D7b` must pass before it
-    /// installs any binding.**
-    ///
-    /// ⛔ **It does not pass in production today**, and that is the honest
-    /// report rather than a defect in the gate: check 3 finds that a composed
-    /// selector demands a callable raw body the executable population does not
-    /// contain, because the retention that would put it there is refused one
-    /// plane later. See [`set_composed_raw_target_retention`].
-    ///
-    /// Returns the number of requirements reconciled, so a caller can assert it
-    /// ran over a real population rather than an empty one.
-    ///
-    /// Three checks, each against a fact derived independently of the one it
-    /// validates:
-    ///
-    /// 1. **Selector agreement.** Re-resolving a requirement's own four-field
-    ///    selector must return the worker it carries. One law, and it catches
-    ///    **both** minting defects, because both are the same defect seen from
-    ///    two sides: a demand attributed to a selector that does not resolve to
-    ///    it. A wrong body and a transplanted construct origin each produce
-    ///    exactly that, and each names real origins, so neither is visible to a
-    ///    comparison that only asks whether the body exists.
-    ///
-    ///    ⛔ There was a fourth check here — *a requirement's carried body must
-    ///    be its own worker's body* — and its own control killed it. It read
-    ///    the body back through [`ComposedRawTargetRequirement::required_body_origin`],
-    ///    which is *defined* as that field, so it compared a value with itself
-    ///    and could not fail. Deleted rather than repaired: the requirement
-    ///    deliberately stores the body once, and a second copy to compare
-    ///    against is the drift this design avoids.
-    /// 2. **Exact-set equality.** The set of required bodies must equal the set
-    ///    of *retained* raw targets — required bodies actually in the
-    ///    executable-unit population. Inequality means a body was demanded and
-    ///    is not callable, which is the undefined phantom stated as a set law.
-    ///    ⚠ **This is the check that fails in production today.**
-    /// 3. **Declaration and definition agree.** Every required body must have
-    ///    an emittable descriptor as well as an executable unit, so "retained"
-    ///    can never come to mean "declared but undefined" or its converse.
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(in crate::cranelift_backend) fn verify_raw_target_reconciliation(
+    pub(in crate::cranelift_backend) fn verify_composed_call_targets(
         &self,
     ) -> Result<usize, CraneliftBackendError> {
-        let requirements = self.composed_raw_target_requirements()?;
-
-        for requirement in &requirements {
-            let (owner, construct, frame, alternative, position) = requirement.selector();
+        let targets = self.composed_call_targets()?;
+        for target in &targets {
+            let (owner, construct, frame, alternative, position) = target.selector();
             let resolved = self.composed_worker_view_unreconciled(
                 owner,
                 construct,
@@ -11604,53 +11513,15 @@ impl<'src> StaticTransitionPlan<'src> {
                 alternative,
                 position,
             )?;
-            if resolved != requirement.worker {
+            if resolved != target.worker {
                 return Err(planner_error(
-                    "a raw-target requirement's own four-field selector resolves to a different \
-                     worker than the requirement carries, so the demand was minted for one layer \
-                     and attributed to another",
+                    "a composed-call target's own selector resolves to a different worker than \
+                     the target carries, so the callee was minted for one layer and attributed \
+                     to another",
                 ));
             }
         }
-
-        let required = requirements
-            .iter()
-            .map(|requirement| requirement.required_body_origin())
-            .collect::<BTreeSet<_>>();
-        let executable = self
-            .executable_units()?
-            .iter()
-            .map(|unit| unit.origin())
-            .collect::<BTreeSet<_>>();
-        let retained = required
-            .iter()
-            .copied()
-            .filter(|body| executable.contains(body))
-            .collect::<BTreeSet<_>>();
-        if required != retained {
-            return Err(planner_error(
-                "the required raw-target set and the retained raw-target set are not equal: a \
-                 composed selector demands a callable raw body that the executable population \
-                 does not contain, which is the undefined phantom the reconciliation exists to \
-                 prevent",
-            ));
-        }
-
-        let emittable = self
-            .emittable_units()?
-            .iter()
-            .map(|unit| unit.origin())
-            .collect::<BTreeSet<_>>();
-        for body in &required {
-            if !emittable.contains(body) {
-                return Err(planner_error(
-                    "a required raw target has no emittable descriptor, so it could be defined \
-                     without being declared",
-                ));
-            }
-        }
-
-        Ok(requirements.len())
+        Ok(targets.len())
     }
 
     /// [`Self::composed_worker_view`] up to but **not including** the
