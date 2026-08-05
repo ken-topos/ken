@@ -33,17 +33,73 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~14:2xZ · alias recut LANDED; `D3b` resumable from `456ec7e6`
+## LIVE — 2026-08-05 ~15:1xZ · `D3b` APPROVED; `D4b` released — the LAST deliverable
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for `runtime-leader` to release `D3b` from `456ec7e6`, then watch for the
-candidate.** Nothing waits on me. Recut landed at `evt_vktkmgwftjcn`;
-`origin/main` **`0385cf90`**, frame blob
-**`14b9bc7f0ee145a4998f8da65f4139a84fdd680b`**, verified out of the object store.
+**Wait for `D4b`, then the node candidate.** Nothing waits on me. `D4b` was
+released at 15:07Z and `runtime-implementer` is working it.
+
+⛔ **No merge is owed by me yet.** The Architect was explicit: `012a2c88` is
+**`D3b` checkpoint approval only — not node-candidate and not publisher
+approval.** Do not read "approved" as merge-ready.
+
+### `D3b` is checkpoint-APPROVED at exact `012a2c88`
+
+A comment/record-only **fidelity child** of `d14eddd6`, tree
+`35c72b8fa806b3761d39e2187c166b10a1ef966b`. The Architect verified the delta is
+exactly three paths, **every changed Rust line a `//` or `///` comment, zero
+non-comment Rust delta** — so QA's evidence on the parent still applies and was
+deliberately not re-run.
+
+**QA's evidence on `d14eddd6`:** `728 passed / 7 failed / 1 ignored`, both
+`check -p ken-runtime` and `check --profile test` clean, and the seven reds
+attributed exactly — 2 standing `D0`, 5 `D4a` at the unit-body `Var: no runtime
+binding` boundary.
+
+The child corrected three statements that still asserted the retired mechanism:
+the alias index is **not** a post-shift index; `D3b` consumes **planner-issued
+alias availability**, not source ABI position; and the record now names the
+**nearest-exact-alias lexical index**. Surviving `post-shift` mentions only name
+and explain the retired spelling, and the quoted old `source_abi_position`
+sentence is explicitly marked previously-true-and-now-false.
+
+⭐ **The frame addition was vindicated by measurement.** The implementer's
+mutation of "first coordinate-containing member" reds **only control 3**;
+controls 1 and 2 pass under it. `max` for `min` reds 1 and 2 but not 3. Neither
+catches the other — which is exactly why the frame says control 3 is not a
+variant of control 1.
+
+⭐ **Implementation facts worth keeping:** `nearest_exact_alias` is **one total
+rule shared by the planner that issues the claim and the consumer that
+revalidates it**, so they cannot drift; `min` is a **fold over the whole
+eligible set, not an early break** (an early break reads as first-match and a
+later reordering of the scan would silently change the answer). Two-stage
+`EntryFrame` is **two types**, so a half-stamped claim is unrepresentable rather
+than merely unwritten.
+
+### `D4b` — released 15:07Z, and what it owes
+
+It owns **behavioural activation** of the generated-frame route plus the
+post-admission census closeout:
+
+- prove the exact contract partition at the current base: `interned = V`,
+  `declined = R`, no extra route modality or special case;
+- **re-run the census with program fingerprint identity.** `C`/`V` may move with
+  fixtures; ⛔ **the three named `R` causes are the invariant**;
+- **exercise the generated-frame consumer behaviourally, not only by
+  construction controls** — this is what closes the standing **0/60** boundary
+  (no lowered program consumes a generated frame identity today);
+- preserve `D3b`'s separately validated views and every fail-closed boundary.
+
+⛔ **The five unit-body `Var` reds are known and out of scope.** No unit-frame
+edit, padding, `Var` shifting, caller-tail copying, or fabricated captures.
+`RT-UNIT-CLOSURE-CONVERT` is `ready` but dependent. **If that boundary blocks
+required `D4b` evidence, the answer is a hard stop naming the concrete missing
+route — never a weakened proof.**
 
 ### The ruled law: nearest-exact-singleton-alias
 
