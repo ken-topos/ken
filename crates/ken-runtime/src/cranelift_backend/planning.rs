@@ -61,6 +61,11 @@ pub(super) use static_transition::{
     verify_current_lexical_availability,
     verify_predeclared_entry_frame_membership,
     ContinuationUnitView,
+    // `RT-CONTSRC-PRODUCER-LOCAL` `D7a` — the planner-issued composed worker
+    // view, reached from a computational frame's own coordinates. Namespace
+    // re-export only: no wrapper, no derivation, no second authority.
+    ComposedWorkerRouteEligibility, ComposedWorkerView, ContinuationWorkerCaptureProvenance,
+    ContinuationWorkerCaptureSource,
 };
 
 // `D3b` stage-2 controls. ⛔ `#[cfg(test)]` on the RE-EXPORT as well as on the

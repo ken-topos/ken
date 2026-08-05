@@ -15651,3 +15651,309 @@ fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder()
          identity alone: {substituted:#?}"
     );
 }
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a` — the composed worker view is the
+/// selecting unit's own worker, or one of the four named refusals.**
+///
+/// The subject is the *specification* of
+/// [`StaticTransitionPlan::composed_worker_view`], asserted exhaustively over
+/// the planned population rather than against a literal census: group the units
+/// by the released three-field selector, and for each group the projection must
+///
+/// 1. refuse with the conflict message if the members disagree about the
+///    worker — an ambiguous selector has no worker for any later question to be
+///    about;
+/// 2. otherwise refuse with the template-only message if the agreed raw worker
+///    body is superseded — the selected recursive argument's route is raw
+///    unconditionally, so that body is a target with a descriptor and no
+///    emitted `Function`;
+/// 3. otherwise answer, field for field, with that group's own key facts.
+///
+/// The second half proves the selector actually reads all three fields:
+/// perturbing any one of them, to a value the plan does have but not at that
+/// coordinate, must reach the *zero-answer* refusal rather than a plausible
+/// neighbour.
+///
+/// **MEASURED**, each by a mutation on the compiling plans rather than by
+/// assertion: clause 1 fires non-vacuously; each of the three selector fields
+/// is load-bearing (dropping any one is caught, and dropping the position is
+/// caught by the sibling-position re-check rather than by the selector); and
+/// all three provenance re-checks are reachable and reported here — comparing
+/// the body against the closure instead of its body child, and shifting a
+/// capture ordinal, each red this row with their own message.
+///
+/// **CLAIMED**: clauses 2 and 3 — that a resolving group is checked for
+/// executability and then answered with the planner's own facts.
+///
+/// **THE GAP**: every group on both plans is ambiguous, so clause 1 is the only
+/// outcome either can reach and clauses 2 and 3 are **unexercised** — read them
+/// as untested, not as tested. The ordering makes that unavoidable here: clause
+/// 2 was reachable under the earlier per-candidate order and clause 1 was not,
+/// and no plan in this crate reaches both.
+/// [`d7a_the_released_three_field_selector_cannot_name_one_worker_while_one_source_match_is_specialized_at_two_layers`]
+/// measures why.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_refusal() {
+    use crate::cranelift_backend::planning::ComposedWorkerRouteEligibility;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    fn check(plan: &StaticTransitionPlan<'_>) {
+        let units = plan.continuation_units().expect("continuation units");
+        let template_only = plan
+            .template_only_worker_bodies()
+            .expect("the superseded set");
+        assert!(
+            !units.is_empty(),
+            "the witness must plan at least one continuation specialization, or every clause \
+             below quantifies over nothing"
+        );
+
+        let mut groups: BTreeMap<(StaticOriginId, u32, u32), Vec<usize>> = BTreeMap::new();
+        for (index, unit) in units.iter().enumerate() {
+            groups
+                .entry((
+                    unit.continuation_origin(),
+                    unit.producer_alternative(),
+                    unit.recursive_position(),
+                ))
+                .or_default()
+                .push(index);
+        }
+
+        let mut reached_conflict = 0usize;
+
+        for ((origin, alternative, position), members) in &groups {
+            let answered = plan.composed_worker_view(*origin, *alternative, *position);
+
+            let identities = members
+                .iter()
+                .map(|index| {
+                    let unit = &units[*index];
+                    (
+                        unit.worker_closure_origin(),
+                        unit.worker_body_origin(),
+                        unit.worker_declared_arity(),
+                        unit.worker_capture_count(),
+                    )
+                })
+                .collect::<BTreeSet<_>>();
+            if identities.len() > 1 {
+                let refusal = answered
+                    .expect_err("a group whose members name different workers must refuse");
+                assert!(
+                    format!("{refusal:?}").contains("different full worker identities"),
+                    "the refusal must be the conflict one, and specifically NOT the \
+                     template-only one: an ambiguous group has no agreed body for that \
+                     question to be about, and reporting it would bury the ambiguity: \
+                     {refusal:?}"
+                );
+                reached_conflict += 1;
+                continue;
+            }
+
+            let unit = &units[members[0]];
+            if template_only.contains(&unit.worker_body_origin()) {
+                let refusal = answered.expect_err(
+                    "a resolved group whose raw worker body is superseded must refuse: the \
+                     selected recursive argument calls that body unconditionally",
+                );
+                assert!(
+                    format!("{refusal:?}").contains("template-only"),
+                    "the refusal must be the unexecutable-raw-target one: {refusal:?}"
+                );
+                continue;
+            }
+
+            let view = answered.expect("a group that resolves must answer");
+            assert_eq!(
+                (
+                    view.closure_origin(),
+                    view.body_origin(),
+                    view.declared_arity(),
+                    view.captures().len(),
+                    view.recursive_position(),
+                ),
+                (
+                    unit.worker_closure_origin(),
+                    unit.worker_body_origin(),
+                    unit.worker_declared_arity(),
+                    unit.worker_capture_count(),
+                    unit.recursive_position(),
+                ),
+                "the projection must be the selecting unit's own worker facts, not a plausible \
+                 reconstruction of them"
+            );
+            let expected = match plan
+                .continuation_context_for(unit.id(), unit.worker_body_origin())
+                .expect("the context lookup answers")
+            {
+                Some(context) => {
+                    ComposedWorkerRouteEligibility::GeneratedContextIssued(context.id())
+                }
+                None => ComposedWorkerRouteEligibility::RawOnly,
+            };
+            assert_eq!(
+                view.route_eligibility(),
+                expected,
+                "route eligibility must be the planner's own singleton context resolution for \
+                 this exact (specialization, worker body), never a re-derivation from whichever \
+                 target exists"
+            );
+        }
+
+        // ⛔ Each of the three selector fields must be load-bearing. The
+        // perturbed value is one the plan really has — a worker body origin, the
+        // next alternative, the next position — so a selector that ignored a
+        // field would answer here rather than refusing.
+        for unit in &units {
+            for (label, perturbed) in [
+                (
+                    "frame origin",
+                    (
+                        unit.worker_body_origin(),
+                        unit.producer_alternative(),
+                        unit.recursive_position(),
+                    ),
+                ),
+                (
+                    "selected alternative",
+                    (
+                        unit.continuation_origin(),
+                        unit.producer_alternative() + 1,
+                        unit.recursive_position(),
+                    ),
+                ),
+                (
+                    "recursive position",
+                    (
+                        unit.continuation_origin(),
+                        unit.producer_alternative(),
+                        unit.recursive_position() + 1,
+                    ),
+                ),
+            ] {
+                let refusal = plan
+                    .composed_worker_view(perturbed.0, perturbed.1, perturbed.2)
+                    .expect_err(
+                        "a selector no specialization claims must refuse, so that a consumer \
+                         cannot be handed a neighbour's worker",
+                    );
+                assert!(
+                    format!("{refusal:?}").contains("no continuation specialization claims"),
+                    "perturbing the {label} must reach the ZERO-answer refusal, which is what \
+                     shows that field participates in the selection: {refusal:?}"
+                );
+            }
+        }
+
+        assert!(
+            reached_conflict > 0,
+            "the conflict refusal must be reached on the real witness, or the ordering clause \
+             above is asserted over a population that never exhibits it"
+        );
+    }
+
+    // ⭐ Both plans in this crate that intern continuation specializations. The
+    // D5a witness's workers carry NO captures, so on it alone the capture
+    // provenance re-check quantifies over an empty run and a mutation that
+    // breaks it stays green -- measured, not assumed. `contspec_nested_fixture`
+    // carries one capture per worker, which is what reaches that clause.
+    with_d5a_witness_plan(check);
+    let expr = crate::cranelift_backend::planning::contspec_nested_fixture();
+    let nested = plan_static_transition_graph(&expr, &BTreeMap::new())
+        .expect("the nested continuation fixture plans");
+    check(&nested);
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a` — the released three-field selector does
+/// not name one worker, and this measures exactly why.**
+///
+/// The selector is the computational-frame origin, the selected alternative and
+/// the ruled recursive source position. All three are properties of the
+/// **source text**. When one source computational match is specialized at more
+/// than one recursion layer, every layer shares all three and the layers are
+/// distinguished only by their producer `Construct` occurrence — so the triple
+/// has as many answers as there are layers, with a different static worker each.
+///
+/// ⭐ That is not a fixture accident. Both plans in this crate that intern
+/// continuation specializations are nested, because nesting is what
+/// `RT-CONTSRC-PRODUCER-LOCAL` is about; a program specialized at one layer
+/// would resolve, and there is no such program in the suite to measure.
+///
+/// ⭐ The discriminating field is `producer_construct_origin`, which is
+/// **already the first field of the landed four-field selector**
+/// [`StaticTransitionPlan::continuation_call_binding_for`], and is in scope on
+/// the composed path as `deferred.construct_origin`. This row asserts it really
+/// does separate the layers, so the recommendation rests on a measurement.
+///
+/// **Promise class: transition sentinel.** It is named for the boundary, not
+/// for a count, and it is retired by whichever event resolves that boundary:
+/// the selector gaining the producer `Construct` origin, or a single-layer
+/// specialization witness entering the suite. Either turns it red on purpose,
+/// which is the review it exists to force.
+#[test]
+fn d7a_the_released_three_field_selector_cannot_name_one_worker_while_one_source_match_is_specialized_at_two_layers(
+) {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    fn check(plan: &StaticTransitionPlan<'_>) {
+        let units = plan.continuation_units().expect("continuation units");
+        let mut groups: BTreeMap<(StaticOriginId, u32, u32), Vec<usize>> = BTreeMap::new();
+        for (index, unit) in units.iter().enumerate() {
+            groups
+                .entry((
+                    unit.continuation_origin(),
+                    unit.producer_alternative(),
+                    unit.recursive_position(),
+                ))
+                .or_default()
+                .push(index);
+        }
+
+        let shared = groups
+            .values()
+            .find(|members| members.len() > 1)
+            .expect(
+                "the witness must specialize one source match at more than one layer; with every \
+                 group a singleton the released selector would be sufficient and this row would \
+                 be measuring nothing",
+            );
+
+        let workers = shared
+            .iter()
+            .map(|index| {
+                (
+                    units[*index].worker_closure_origin(),
+                    units[*index].worker_body_origin(),
+                )
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            workers.len(),
+            shared.len(),
+            "the layers sharing one selector must name DIFFERENT static workers. If they named \
+             the same one the triple would be ambiguous only in name, the projection would \
+             resolve, and the selector would need no fourth field"
+        );
+
+        let constructs = shared
+            .iter()
+            .map(|index| units[*index].producer_construct_origin())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            constructs.len(),
+            shared.len(),
+            "the producer Construct occurrence must separate the layers the released selector \
+             conflates. This is the measurement the four-field recommendation rests on: without \
+             it, adding that field would refuse just as the three-field one does"
+        );
+    }
+
+    with_d5a_witness_plan(check);
+    let expr = crate::cranelift_backend::planning::contspec_nested_fixture();
+    let nested = plan_static_transition_graph(&expr, &BTreeMap::new())
+        .expect("the nested continuation fixture plans");
+    check(&nested);
+}

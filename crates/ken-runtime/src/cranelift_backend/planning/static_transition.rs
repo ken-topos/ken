@@ -1531,13 +1531,41 @@ pub(in crate::cranelift_backend) enum ContinuationWorkerCaptureSource {
     Lexical(StaticOriginId),
 }
 
+/// One selected worker capture's exact provenance.
+///
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a`** widened this from module-private to
+/// backend-visible so [`ComposedWorkerView`] can carry the *same* record the
+/// specialization key holds rather than a second copy of its shape. The fields
+/// stay private with read-only accessors: the point is that a consumer can read
+/// this provenance and cannot construct one, which a `pub`-field mirror would
+/// have given away.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-struct ContinuationWorkerCaptureProvenance {
+pub(in crate::cranelift_backend) struct ContinuationWorkerCaptureProvenance {
     ordinal: u32,
     owner: PredeclaredFunctionId,
     closure_origin: StaticOriginId,
     source: ContinuationWorkerCaptureSource,
     lifetime: PlannedReferentLifetime,
+}
+
+// Read by this node's tests; `D7b`/`D7c` are the held production consumers.
+#[cfg_attr(not(test), allow(dead_code))]
+impl ContinuationWorkerCaptureProvenance {
+    pub(in crate::cranelift_backend) fn ordinal(&self) -> u32 {
+        self.ordinal
+    }
+    pub(in crate::cranelift_backend) fn owner(&self) -> PredeclaredFunctionId {
+        self.owner
+    }
+    pub(in crate::cranelift_backend) fn closure_origin(&self) -> StaticOriginId {
+        self.closure_origin
+    }
+    pub(in crate::cranelift_backend) fn source(&self) -> ContinuationWorkerCaptureSource {
+        self.source
+    }
+    pub(in crate::cranelift_backend) fn lifetime(&self) -> PlannedReferentLifetime {
+        self.lifetime
+    }
 }
 
 /// Exact source provenance of the static worker whose result enters a return
@@ -1858,6 +1886,107 @@ pub(in crate::cranelift_backend) enum ContinuationOrdinaryEnvelopeRole {
         source: ContinuationWorkerCaptureSource,
         lifetime: PlannedReferentLifetime,
     },
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a` — whether the planner issued a generated
+/// execution context for the composed frame's worker body.**
+///
+/// ⛔ **This is eligibility, not a route.** The `D6a` route law is asymmetric
+/// and this enum does not restate half of it:
+///
+/// - the **selected recursive constructor argument** calls
+///   [`StaticWorkerCallRoute::RawWorker`] **unconditionally**, at every value of
+///   this enum. `GeneratedContextIssued` is not a licence to route it anywhere
+///   else;
+/// - an **induction hypothesis** at this frame carries
+///   `GeneratedContext` **iff** this is `GeneratedContextIssued` *and* the unit
+///   defining it resolved that exact context. `RawOnly` means every route out of
+///   this frame is raw, and equal routes are then a lawful, route-degenerate
+///   state — never evidence that one binding was reused for both.
+///
+/// [`StaticWorkerCallRoute::RawWorker`]:
+///     crate::cranelift_backend::lowering::StaticWorkerCallRoute
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum ComposedWorkerRouteEligibility {
+    /// The planner interned exactly this context for `(specialization, worker
+    /// body)`. The identity is carried, not merely the fact, so a consumer that
+    /// later resolves a context has something to compare against rather than a
+    /// boolean it must re-derive.
+    GeneratedContextIssued(ContinuationContextId),
+    /// No generated context names this specialization and this worker body, so
+    /// the raw worker is the only target. ⛔ Not "none found yet": the lookup
+    /// this is read from is a singleton resolution that refuses rather than
+    /// choosing.
+    RawOnly,
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a` — one composed frame's static worker, as
+/// the planner already knows it.**
+///
+/// ## Why this exists
+///
+/// The composed eliminator path holds the *frame* coordinates — the
+/// computational-frame origin, the selected alternative, and the ruled
+/// recursive source position — and does **not** hold the continuation unit that
+/// carries the worker those coordinates select. Every fact below already sits
+/// in an interned [`ContinuationSpecializationKey`]; without this projection the
+/// only route from those coordinates to these facts is to walk the closure
+/// occurrence and read its shape, which is the second authority
+/// `RT-WORKER-BIND` exists to prevent.
+///
+/// ⛔ **Exposure, not discovery.** Nothing here is computed from a lowered
+/// value, an emitted shape, a body arity, an environment length, or from which
+/// of the two targets happens to exist. Every field is copied out of the key
+/// and re-checked against an independent planner fact before it is returned.
+///
+/// ⛔ **Unmintable.** Every field is private, there is no public constructor,
+/// and the only way to obtain one is
+/// [`StaticTransitionPlan::composed_worker_view`].
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct ComposedWorkerView {
+    closure_origin: StaticOriginId,
+    body_origin: StaticOriginId,
+    declared_arity: u32,
+    captures: Vec<ContinuationWorkerCaptureProvenance>,
+    route_eligibility: ComposedWorkerRouteEligibility,
+    recursive_position: u32,
+}
+
+// Read by this node's tests; `D7b`/`D7c` are the held production consumers.
+#[cfg_attr(not(test), allow(dead_code))]
+impl ComposedWorkerView {
+    /// The exact closure occurrence the specialization selected.
+    pub(in crate::cranelift_backend) fn closure_origin(&self) -> StaticOriginId {
+        self.closure_origin
+    }
+    /// The **raw** worker body — the closure occurrence's own body child, and
+    /// the origin a raw-route call resolves. It is re-derived through the sole
+    /// child-origin production point before this view is built, so it is not
+    /// read back off the same children list that recorded it.
+    pub(in crate::cranelift_backend) fn body_origin(&self) -> StaticOriginId {
+        self.body_origin
+    }
+    /// The worker's declared arity, from the key. ⛔ Not a body parameter count
+    /// re-read at the call site.
+    pub(in crate::cranelift_backend) fn declared_arity(&self) -> u32 {
+        self.declared_arity
+    }
+    /// The ordered capture provenance, dense in capture ordinal. Its agreement
+    /// with the ABI-validated ordinary envelope is checked before this view is
+    /// built.
+    pub(in crate::cranelift_backend) fn captures(&self) -> &[ContinuationWorkerCaptureProvenance] {
+        &self.captures
+    }
+    /// See [`ComposedWorkerRouteEligibility`] — eligibility, and specifically
+    /// **not** the selected recursive argument's route, which is always raw.
+    pub(in crate::cranelift_backend) fn route_eligibility(&self) -> ComposedWorkerRouteEligibility {
+        self.route_eligibility
+    }
+    /// The selector's own recursive source position, echoed back after the
+    /// worker's `sibling_position` was checked to equal it.
+    pub(in crate::cranelift_backend) fn recursive_position(&self) -> u32 {
+        self.recursive_position
+    }
 }
 
 /// Re-expose one immutable input projection as a view.
@@ -10967,6 +11096,215 @@ impl<'src> StaticTransitionPlan<'src> {
             }
         }
         Ok(found)
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a` — the planner-issued composed worker
+    /// view.**
+    ///
+    /// Keyed by the three facts a composed eliminator frame actually holds: the
+    /// **computational-frame origin** it is lowering, the **selected
+    /// alternative**, and one member of that case's **ruled recursive
+    /// positions**. It answers with the full worker provenance the continuation
+    /// unit uses — closure occurrence, raw body, declared arity, ordered capture
+    /// provenance, and route eligibility.
+    ///
+    /// ⛔ **This method is the whole point of `D7a`, so read what it forbids.**
+    /// A consumer that has this cannot need to walk the closure occurrence, read
+    /// a body's parameter count, measure an environment's length, or decide from
+    /// *whichever of the two targets happens to exist*. Every one of those is a
+    /// second authority for a fact the planner already interned, and each was
+    /// available before this method was and is what it retires.
+    ///
+    /// ## The four refusals, and why none of them is an `Option`
+    ///
+    /// Unlike [`Self::continuation_call_binding_for`], **zero answers is a
+    /// refusal, not a `None`.** The difference is what the two selectors mean.
+    /// That one asks *is this producer occurrence specialized at all*, and "no"
+    /// is the ordinary pre-specialization path taken by every program in the
+    /// pre-`D5a` population. This one is asked only about a position the planner
+    /// **already ruled recursive on a frame it already specialized**, so zero is
+    /// a contradiction between two planner facts and there is no lawful
+    /// alternative route for a caller to fall back to.
+    ///
+    /// | refusal | what it means |
+    /// |---|---|
+    /// | zero answers | no specialization claims this frame, alternative and position |
+    /// | conflicting full identities | two do, and they disagree about the worker |
+    /// | wrong position / body / capture provenance | a key's own worker record fails its independent re-check |
+    /// | unexecutable raw target | the raw body is superseded, so a raw-route call has no `Function` to reach |
+    ///
+    /// ⚠ **The fourth is not defensive padding.** The selected recursive
+    /// argument's route is `RawWorker` unconditionally, so a superseded raw body
+    /// means this view would hand a consumer a target that has a descriptor and
+    /// no emitted `Function`. Refusing here is the same fail-closed direction
+    /// [`Self::executable_units`] takes, applied at the projection rather than
+    /// at the emission.
+    ///
+    /// ⛔ **Agreement between several answers is lawful; equality is by full
+    /// identity.** Two specializations may share a frame, alternative and
+    /// position — they differ in producer construct origin or emission owner,
+    /// which this selector deliberately does not carry — and if they name the
+    /// *same* worker, the same eligibility included, there is one answer and it
+    /// is theirs. Only disagreement refuses. Picking the first, the lowest, or
+    /// any other sequence would make the caller the authority for a fact the
+    /// planner owns.
+    // `D7b` (one environment authority) and `D7c` (the callee consumer) are the
+    // production consumers, and both are held. Until one lands the only callers
+    // are this node's own tests, so the attribute below is load-bearing rather
+    // than habitual — and `D7b` is what retires it.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(in crate::cranelift_backend) fn composed_worker_view(
+        &self,
+        continuation_origin: StaticOriginId,
+        producer_alternative: u32,
+        recursive_position: u32,
+    ) -> Result<ComposedWorkerView, CraneliftBackendError> {
+        let mut answer: Option<ComposedWorkerView> = None;
+        for unit in &self.continuation_units()? {
+            if unit.continuation_origin() != continuation_origin
+                || unit.producer_alternative() != producer_alternative
+                || unit.recursive_position() != recursive_position
+            {
+                continue;
+            }
+            let candidate = self.composed_worker_view_of(unit, recursive_position)?;
+            match &answer {
+                None => answer = Some(candidate),
+                Some(established) if *established == candidate => {}
+                Some(_) => {
+                    return Err(planner_error(
+                        "two continuation specializations answer one composed worker selector \
+                         with different full worker identities; one composed frame position has \
+                         one static worker, and choosing between them would make the caller the \
+                         authority for a fact planning owns",
+                    ));
+                }
+            }
+        }
+        let answer = answer.ok_or_else(|| {
+            planner_error(
+                "no continuation specialization claims this computational frame, selected \
+                 alternative and ruled recursive position, so there is no planner-issued worker \
+                 provenance to project and nothing may be reconstructed from the closure \
+                 occurrence's shape instead",
+            )
+        })?;
+
+        // ⭐ Executability is checked on the RESOLVED answer, not per candidate,
+        // and the order is the design rather than a convenience. A group whose
+        // members disagree has no worker to ask this question about, so
+        // "ambiguous" is the primary defect and must be what a reader is told;
+        // asking each candidate first would report whichever member happened to
+        // be superseded and bury the ambiguity. Nothing is lost: agreement fixes
+        // the body origin, and executability is a function of the body alone.
+        if self
+            .template_only_worker_bodies()?
+            .contains(&answer.body_origin)
+        {
+            return Err(planner_error(
+                "the composed selector's raw worker body is template-only: every specialization \
+                 selecting it retargeted, so it keeps its descriptor and leaves the executable \
+                 population, and the raw route this view projects has no Function to reach",
+            ));
+        }
+        Ok(answer)
+    }
+
+    /// One unit's contribution to [`Self::composed_worker_view`], with the three
+    /// provenance re-checks that method documents. ⛔ The executability check is
+    /// deliberately **not** here — it belongs to the resolved answer, for the
+    /// reason recorded at its site.
+    ///
+    /// ⭐ Each check is against a fact derived **independently** of the one it
+    /// validates, which is what makes it a check rather than a restatement:
+    /// the position against the selector the caller supplied, the body through
+    /// the sole child-origin production point rather than the children list that
+    /// recorded it, and the captures against the ABI-validated ordinary
+    /// envelope rather than against themselves.
+    fn composed_worker_view_of(
+        &self,
+        unit: &ContinuationUnitView<'_>,
+        recursive_position: u32,
+    ) -> Result<ComposedWorkerView, CraneliftBackendError> {
+        let worker = &unit.key.worker;
+
+        // Position provenance. The intern path already required this against
+        // the producer's argument list; here it is re-checked against the
+        // selector the caller supplied, which is a different source for the
+        // same number.
+        if worker.sibling_position != recursive_position {
+            return Err(planner_error(
+                "a continuation specialization's static worker sits at a different constructor \
+                 sibling position than the composed selector names",
+            ));
+        }
+
+        // Body provenance. `child_static_origin` is the sole production point
+        // for a child's static name; the key's `body_origin` was taken from the
+        // closure's recorded child authority. Comparing them is a real join, not
+        // a value compared with itself.
+        if self.child_static_origin(worker.closure_origin, 0)? != worker.body_origin {
+            return Err(planner_error(
+                "a continuation specialization's static worker body is not its own closure \
+                 occurrence's body child, so the raw target this view would project is not the \
+                 body that closure denotes",
+            ));
+        }
+
+        // Capture provenance, against the ruled ordinary envelope — which is
+        // itself recompared against the validated `Parameter` slot run before it
+        // is returned, so this reaches the ABI rather than stopping at the key.
+        let envelope = unit.ordinary_envelope()?;
+        let carried = envelope
+            .iter()
+            .filter_map(|role| match role {
+                ContinuationOrdinaryEnvelopeRole::WorkerCapture {
+                    ordinal,
+                    owner,
+                    closure_origin,
+                    source,
+                    lifetime,
+                } => Some((*ordinal, *owner, *closure_origin, *source, *lifetime)),
+                ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        if carried.len() != worker.captures.len() {
+            return Err(planner_error(
+                "a continuation specialization's worker captures and its ruled ordinary \
+                 envelope's capture run are different lengths",
+            ));
+        }
+        for (position, (capture, carried)) in worker.captures.iter().zip(&carried).enumerate() {
+            if u32::try_from(position).ok() != Some(capture.ordinal)
+                || capture.closure_origin != worker.closure_origin
+                || (
+                    capture.ordinal,
+                    capture.owner,
+                    capture.closure_origin,
+                    capture.source,
+                    capture.lifetime,
+                ) != *carried
+            {
+                return Err(planner_error(
+                    "a continuation specialization's worker captures are not one exact ordered \
+                     envelope of its own closure occurrence",
+                ));
+            }
+        }
+
+        let route_eligibility = match self.continuation_context_for(unit.id(), worker.body_origin)? {
+            Some(context) => ComposedWorkerRouteEligibility::GeneratedContextIssued(context.id()),
+            None => ComposedWorkerRouteEligibility::RawOnly,
+        };
+
+        Ok(ComposedWorkerView {
+            closure_origin: worker.closure_origin,
+            body_origin: worker.body_origin,
+            declared_arity: worker.declared_arity,
+            captures: worker.captures.clone(),
+            route_eligibility,
+            recursive_position,
+        })
     }
 
     /// **`RT-DECL-CLOSURE-PORT` `D5a` — project already-issued causal authority
