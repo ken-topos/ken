@@ -40,23 +40,34 @@
 
 ### The one thing to do next
 
-**`D2b` is SCOPED BUT UNSTARTED, and the implementer was compacted mid-node to
-start it.** It accepted and scoped `D2b` at `evt_3nk9bbkr2bzpq`, then stopped
-deliberately at ctx 48% rather than strand a half-applied typed refactor;
-`runtime-leader` asked me to compact and re-release (`evt_4hca2c5cb12vm`).
-⛔ **Nothing is landed past `e6d4f085`** — the branch is clean and no `D2b`
-edit is in flight. The standing assignment is the leader's release
-`evt_2d39r6ctx7n5t`; the Architect ruled at `evt_44k69b55vhek2` that this
-belongs **inside this node**; ⛔ no new node.
+⛔ **NOTHING. THE IMPLEMENTER IS COMPACTED AND ITS ROUSE IS DELIBERATELY HELD.**
+⛔ **Do not wake `runtime-implementer`** until the Architect resolves the `D3`
+ABI-authority question at **`evt_c66k8f692sd0`**. `runtime-leader` set that hold
+explicitly (`evt_12766m4aybe6p`) when it asked for the compaction. ⛔ A
+compacted seat sitting at an empty composer is the exact shape of a seat that
+looks stranded and is not — **this one is idle ON PURPOSE.**
 
-⛔ **The implementer's scoping survives compaction because it POSTED it**
-(`evt_3nk9bbkr2bzpq`): one closed enum replacing the bare `immediate_slot`,
-three arms, no wildcard at any consumer — plus the warning that **production
-declines every producer-local candidate at the `D2` gate before projection, so
-neither new arm is reachable from any fixture.** Both discriminators must
-construct the arms directly and be mutation-proved. ⭐ That is the difference
-between a stop and a loss: it wrote the design down where compaction could not
-reach it. **`D3`, `D4`, candidate, QA, `D6` closure,
+**The Architect is awake on it** — confirmed by pane (`Working`, having pulled
+`get_recent_context`), not by the posted mention. So the ring is *blocked*, not
+*stalled*, and there is nothing to nudge.
+
+**`D2b` is QA-APPROVED at exact `7316e13a`** (`evt_3w4s25ta13hc4`), lineage
+`e6d4f085` (base) → `2bd724cd` (record) → `7316e13a`. `D3` was released on top
+(`evt_7rk80sgaq07fg`), the implementer scoped it and **made no edits**
+(`evt_5pqxd21sw5m57`) — branch free, tree clean. ⛔ No merge is owed by me: the
+node is mid-flight and the branch accumulates until the WP completes.
+
+**The question the wake waits on**, so it is not re-derived: resolving
+`ProducerLocal` through `binding_owner` via a domain-total provenance owner
+preserves owner meaning, but the existing `source_owner` cross-check then no
+longer distinguishes `EntryAbi {X, position}` from `ProducerLocal` in owner `X`.
+The alternative adds a domain discriminant to ABI authority. That is a real
+narrowing of a cross-check, which is why it is the Architect's call and not
+mine.
+
+⭐ **This ring keeps stopping clean rather than half-applying, twice now.** Both
+times it posted the scoping instead of holding it in context, so compaction cost
+none of it. Read the stops as the frames working, not as under-delivery. **`D3`, `D4`, candidate, QA, `D6` closure,
 `#27`/case-emission, the call-result SCC and downstream `D7` all remain held.**
 WIP clock: derive it from the latest reset event in the thread, never from a
 stamped deadline.
@@ -67,8 +78,8 @@ stamped deadline.
 |---|---|
 | `D0` `12d9612a` (zero delta), `D1` `77a24320` | accepted `evt_5zkydewv5kspb` |
 | `D2` identity + value contract | accepted preservation at exact `e6d4f085` |
-| `D2b` immediate availability | **NEW and REOPENED** — `evt_44k69b55vhek2` |
-| `D3` | **HELD behind `D2b`** — released 08:41Z, hard-stopped 08:49Z |
+| `D2b` immediate availability | **QA-APPROVED** exact `7316e13a` — `evt_3w4s25ta13hc4` |
+| `D3` | released `evt_7rk80sgaq07fg`, **scoped, zero edits** — held on `evt_c66k8f692sd0` |
 | `D4` | recut as SET EQUALITY, held |
 
 **`D2`'s route was blocked once and corrected twice, and both stops were
