@@ -2160,6 +2160,14 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
         // callee of each recorded causal emission is decoded back out of THIS
         // finished CLIF and compared with the planner-issued target.
         compiler.verify_emitted_continuation_calls(&func, bundle)?;
+        // `D8j` — the composed relation's own gate, beside the direct one and
+        // never inside it: the two answer different questions about different
+        // callees.
+        compiler.verify_recorded_composed_discharges(&func, bundle)?;
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d8j_discharged(
+            compiler.function_local.composed_discharges.keys().cloned(),
+        );
         if let Some(ledger) = compiler.continuation_claims.as_mut() {
             ledger.record_emitted(
                 compiler.function_local.continuation_emissions.keys().cloned(),
@@ -3364,6 +3372,13 @@ fn define_unit_body<M: Module>(
     // emission is decoded out of this CLIF and compared with the planner-issued
     // target; a disagreement rejects here rather than being emitted.
     compiler.verify_emitted_continuation_calls(&func, bundle)?;
+    // `D8j` — same placement in the ordinary unit-body pass. ⛔ Both passes
+    // gate, because a composed discharge can be claimed in either.
+    compiler.verify_recorded_composed_discharges(&func, bundle)?;
+    #[cfg(test)]
+    crate::cranelift_backend::lowering::record_d8j_discharged(
+        compiler.function_local.composed_discharges.keys().cloned(),
+    );
     // `4b` closeout control: verify this function's emissions but never
     // accumulate them, so whole-pass set equality has a population to miss.
     #[cfg(test)]

@@ -114,6 +114,8 @@ fn run_checked_bounded_nat_fixture(
             raw_worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
+            pending_composed_discharges: Vec::new(),
+            composed_discharges: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),

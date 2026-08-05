@@ -858,6 +858,8 @@ impl ArtifactHelpers<'_> {
             generated_context_captures: None,
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
+            pending_composed_discharges: Vec::new(),
+            composed_discharges: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit,
             terminal_result_origins: BTreeSet::new(),
@@ -1071,6 +1073,29 @@ struct FunctionLocalRefs {
     /// that was claimed and never called leaves no entry -- which is the whole
     /// reason the emission set is kept separately from the claim ledger.
     continuation_emissions: BTreeMap<ContinuationCallIdentity, cranelift_codegen::ir::Inst>,
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8j`** — composed discharges this function
+    /// has CLAIMED but not yet verified.
+    ///
+    /// ⛔ A claim is not a discharge. Entries land here at the source-machine
+    /// seat, after the raw-worker call is emitted and its result has returned
+    /// to unchanged source-machine control, and they move into
+    /// [`Self::composed_discharges`] only once the finished CLIF has been
+    /// consulted. Nothing outside `verify_recorded_composed_discharges` may
+    /// read this as a discharge.
+    pending_composed_discharges: Vec<PendingComposedDischarge>,
+    /// **`D8j` — the verified composed-discharge relation for this function.**
+    ///
+    /// ⛔⛔ **Deliberately NOT `continuation_emissions`.** That map's gate
+    /// requires the recorded instruction to decode to `identity.target()` — the
+    /// specialization the causal call names. A lawful composed instruction
+    /// targets the **raw worker**, so putting a composed record there would
+    /// either fail a gate it was never about or force that gate to be loosened
+    /// for every direct emission. Two relations, two contracts.
+    ///
+    /// ⛔ Populated only by `verify_recorded_composed_discharges`, only from
+    /// [`Self::pending_composed_discharges`], and only after all five
+    /// verifications pass. `D8k` owns whatever global closure reads it.
+    composed_discharges: BTreeMap<ContinuationCallIdentity, cranelift_codegen::ir::Inst>,
     declaration_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     /// The current function's closed trap-exit authority. Absence is an error
     /// state, never an implicit Root.
@@ -2993,9 +3018,10 @@ impl StaticWorkerBinding {
     /// on it, and read its target specialization and emission owner. It cannot
     /// read the call-site sequence and cannot construct one.
     ///
-    /// `D8j` is this method's production consumer; at `D8i` it is transport
-    /// with its own control.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// `D8j` is this method's production consumer, and the narrowed allowance
+    /// that stood here is DELETED rather than widened: the composed discharge
+    /// obtains its authority through this accessor, so a refusal is on the live
+    /// path rather than behind a `cfg`.
     fn composed_continuation_authority(
         &self,
     ) -> Result<&ContinuationCallIdentity, CraneliftBackendError> {
@@ -3011,6 +3037,51 @@ impl StaticWorkerBinding {
             )),
         }
     }
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8j` — what the shared static-worker emitter
+/// hands back beside the call's value.**
+///
+/// ⭐ The instruction is returned rather than recorded by the emitter, because
+/// the emitter serves BOTH consumers — direct descent and the source machine —
+/// and only one of them may discharge a composed obligation. An emitter that
+/// recorded would be deciding a question that belongs to its caller.
+#[derive(Clone, Copy)]
+struct StaticWorkerEmission {
+    /// The raw-worker call instruction actually written.
+    inst: cranelift_codegen::ir::Inst,
+    /// The operand run supplied to it: explicit arguments plus stored captures
+    /// plus any route suffix. Compared against the `D8b`/`D8d` target's own
+    /// declared contract at verification.
+    supplied_operands: usize,
+}
+
+/// **`D8j` — one CLAIMED composed discharge, awaiting the finished CLIF.**
+///
+/// ⛔ Every field is recorded at the seat from a value the seat already held.
+/// Nothing here is re-derived at verification time from another field, because
+/// then the verification would be comparing the record with itself.
+struct PendingComposedDischarge {
+    /// The opaque authority the binding transported.
+    identity: ContinuationCallIdentity,
+    /// The raw-worker call this discharge answers with.
+    inst: cranelift_codegen::ir::Inst,
+    /// The worker body the `D8b`/`D8d` target names — the callee the decoded
+    /// instruction must resolve to.
+    worker_body_origin: StaticOriginId,
+    /// The target's declared contract: arity plus stored captures.
+    declared_operands: usize,
+    /// What the emitter actually supplied.
+    supplied_operands: usize,
+    /// The call's result word, as it was handed back to source-machine control.
+    /// `None` when the result was not a carried word, which is itself a
+    /// verification failure — recorded rather than rejected at the seat so the
+    /// refusal happens in one place.
+    result: Option<cranelift_codegen::ir::Value>,
+    /// Live source continuations immediately before the emitter ran and
+    /// immediately after the result was placed. Equal means the result returned
+    /// into the continuation that was already in force.
+    source_control: (usize, usize),
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8i` — the closed causal-discharge facet.**
@@ -3476,6 +3547,72 @@ pub(in crate::cranelift_backend) fn d8i_discharges() -> Vec<D8iDischargeRecord> 
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn record_d8i_discharge(record: D8iDischargeRecord) {
     D8I_DISCHARGES.with(|log| log.borrow_mut().push(record));
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8j` — the composed-discharge defects.**
+///
+/// ⛔ Every one perturbs an INPUT the seat or the verifier is handed, never the
+/// check itself. Where an identity is substituted it is a real one taken from
+/// the planned population, because `ContinuationCallIdentity` has no
+/// constructor outside planning.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D8jMutation {
+    Exact,
+    /// Emit the raw call and record nothing. The relation stays empty on a
+    /// program that should have populated it.
+    SuppressDischargeAfterRealCall,
+    /// Present a different exact identity from the same population — the answer
+    /// a same-symbol shortcut would give, since the witness's targets share one
+    /// constructor symbol.
+    SubstituteAnotherExactIdentity,
+    /// Record some other instruction than the raw-worker call that was written.
+    RedirectRecordedInstruction,
+    /// Claim from a function that is not the identity's emission owner.
+    WrongClaimingOwner,
+    /// Attempt the composed discharge on an ordinary binding.
+    DischargeFromOrdinaryBinding,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D8J_MUTATION: std::cell::Cell<D8jMutation> =
+        const { std::cell::Cell::new(D8jMutation::Exact) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8j_mutation(mutation: D8jMutation) {
+    D8J_MUTATION.with(|cell| cell.set(mutation));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8j_mutation() -> D8jMutation {
+    D8J_MUTATION.with(std::cell::Cell::get)
+}
+
+/// **`D8j`** — the verified composed-discharge relation of the function most
+/// recently finalized, for the rows that assert it was populated.
+#[cfg(test)]
+thread_local! {
+    static D8J_DISCHARGED: std::cell::RefCell<Vec<ContinuationCallIdentity>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8j_discharged() -> Vec<ContinuationCallIdentity> {
+    D8J_DISCHARGED.with(|log| log.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8j_discharged(
+    identities: impl IntoIterator<Item = ContinuationCallIdentity>,
+) {
+    D8J_DISCHARGED.with(|log| log.borrow_mut().extend(identities));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_d8j_discharged() {
+    D8J_DISCHARGED.with(|log| log.borrow_mut().clear());
 }
 
 /// **`D8i` — hand an ordinary binding site a REAL composed authority whose
@@ -5342,6 +5479,190 @@ impl<'a> Lowering<'a> {
                 "the continuation calls this function actually emitted {observed_by_callee:?} are \
                  not the ones recorded against planned causal tokens {expected_by_callee:?}"
             )));
+        }
+        Ok(())
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8j` — verifications 3, 4 and 5, against
+    /// the FINISHED CLIF, and the only route into the composed relation.**
+    ///
+    /// A claim recorded at the source-machine seat proved what could be proved
+    /// then: the authority came from the exact paired planner target, and the
+    /// claiming function is that authority's own emission owner. Everything
+    /// remaining is a fact about instructions, and instructions are not
+    /// readable until the function is built.
+    ///
+    /// 3. **The finished stream contains the recorded call.** A record naming
+    ///    an instruction that is not in the layout is a record about a call
+    ///    this function did not make.
+    /// 4. **The decoded callee and the operand contract agree with the exact
+    ///    `D8b`/`D8d` target.** ⭐ The callee is decoded from the instruction
+    ///    and compared against the `FuncId` the BUNDLE gives the emittable unit
+    ///    whose origin is the target's worker body — two different producers.
+    ///    ⚠ The operand half is **not** decoded: this call passes its run
+    ///    through a frame slot rather than as call arguments, so what is
+    ///    compared is the run the emitter reported supplying against the run
+    ///    the planner target declares. That is still two producers, but it is
+    ///    not a CLIF fact and this comment is where that limit is written down.
+    /// 5. **The result returns into the unchanged source-machine
+    ///    continuation.** The value handed on must be a result of the recorded
+    ///    instruction — a CLIF fact — and the live source-continuation depth
+    ///    must be what it was before the emitter ran.
+    ///
+    /// ⛔ Records are promoted one at a time and a duplicate identity refuses:
+    /// one causal obligation cannot be answered twice.
+    fn verify_recorded_composed_discharges(
+        &mut self,
+        func: &Function,
+        bundle: &units::UnitBundle,
+    ) -> Result<(), CraneliftBackendError> {
+        let pending = std::mem::take(&mut self.function_local.pending_composed_discharges);
+        if pending.is_empty() {
+            return Ok(());
+        }
+        let mut emitted_insts = BTreeSet::new();
+        for block in func.layout.blocks() {
+            for inst in func.layout.block_insts(block) {
+                emitted_insts.insert(inst);
+            }
+        }
+        for record in pending {
+            // ⛔ `D8j` — the REDIRECT switch, applied to the verifier's input
+            // and only where a genuinely different call exists in the finished
+            // function. It moves the record onto another real instruction,
+            // which is what an attribution mistake would look like; a
+            // fabricated `Inst` would be caught by clause 3 instead and would
+            // prove the wrong guard.
+            #[cfg(test)]
+            let record = if d8j_mutation() == D8jMutation::RedirectRecordedInstruction {
+                let mut other = None;
+                'redirect: for block in func.layout.blocks() {
+                    for inst in func.layout.block_insts(block) {
+                        if inst == record.inst {
+                            continue;
+                        }
+                        if matches!(
+                            func.dfg.insts[inst],
+                            cranelift_codegen::ir::InstructionData::Call { .. }
+                        ) {
+                            other = Some(inst);
+                            break 'redirect;
+                        }
+                    }
+                }
+                match other {
+                    Some(inst) => PendingComposedDischarge { inst, ..record },
+                    None => record,
+                }
+            } else {
+                record
+            };
+            // 3 — the recorded call is in the finished stream.
+            if !emitted_insts.contains(&record.inst) {
+                return Err(backend_module(
+                    "a claimed composed discharge names an instruction the finished function \
+                     does not contain, so it answers with a call this function never made"
+                        .to_string(),
+                ));
+            }
+            // 4a — the decoded callee is the planner's own raw worker.
+            let unit = self
+                .static_transition_plan
+                .emittable_units()?
+                .into_iter()
+                .find(|unit| unit.origin() == record.worker_body_origin)
+                .ok_or_else(|| {
+                    backend_module(
+                        "a claimed composed discharge names a worker body with no emittable unit"
+                            .to_string(),
+                    )
+                })?;
+            let planned = bundle.function(unit.function()).ok_or_else(|| {
+                backend_module(
+                    "a claimed composed discharge names a worker unit that was never \
+                     forward-declared"
+                        .to_string(),
+                )
+            })?;
+            let decoded = Self::decode_direct_callee(func, record.inst)?;
+            if decoded != planned {
+                return Err(backend_module(format!(
+                    "a composed discharge's recorded instruction calls {decoded:?}, but the \
+                     D8b/D8d target's raw worker is {planned:?}; the call that was made is not \
+                     the call the authority stands for"
+                )));
+            }
+            // 4b — the operand contract, reported against declared.
+            if record.supplied_operands != record.declared_operands {
+                return Err(backend_module(format!(
+                    "a composed discharge supplied {} operands but its D8b/D8d target declares \
+                     {}; the raw worker's contract and the call that answers for it disagree",
+                    record.supplied_operands, record.declared_operands
+                )));
+            }
+            // 5 — the result returned into the unchanged continuation.
+            let result = record.result.ok_or_else(|| {
+                backend_module(
+                    "a composed discharge's call result was not a carried word, so nothing \
+                     returned into source-machine control for it to be"
+                        .to_string(),
+                )
+            })?;
+            // ⚠ **Downstream, not the call's own SSA result, and the
+            // difference is written here rather than papered over.** A declared
+            // unit returns through its callee frame: the emitter writes the
+            // operand run into a stack slot, calls, and LOADS the answer back.
+            // So there is no SSA result on the call instruction to compare
+            // against, and a check demanding one would assert a CLIF shape this
+            // ABI does not have.
+            //
+            // ⭐ What IS a CLIF fact, and what is checked: the value handed to
+            // source-machine control is defined at or after the recorded call,
+            // in the function's block layout. ⚠ NOT in the call's own block:
+            // the emitter branches on the callee's status word and loads the
+            // answer in a successor it creates for that purpose, so demanding
+            // the same block would refuse every lawful call. Nothing before the
+            // call can have produced the value, which is the property.
+            let mut reached = false;
+            let mut downstream = false;
+            'blocks: for block in func.layout.blocks() {
+                for inst in func.layout.block_insts(block) {
+                    if inst == record.inst {
+                        reached = true;
+                    }
+                    if reached && func.dfg.inst_results(inst).contains(&result) {
+                        downstream = true;
+                        break 'blocks;
+                    }
+                }
+            }
+            if !downstream {
+                return Err(backend_module(
+                    "a composed discharge's recorded result is not defined at or after its \
+                     recorded call in the finished block layout, so the value handed to \
+                     source-machine control cannot have come from the call that answered the \
+                     obligation"
+                        .to_string(),
+                ));
+            }
+            let (before, after) = record.source_control;
+            if before != after {
+                return Err(backend_module(format!(
+                    "a composed discharge ran with {before} live source continuations and \
+                     returned into {after}; the result did not return into the continuation \
+                     that was in force"
+                )));
+            }
+            if self
+                .function_local
+                .composed_discharges
+                .insert(record.identity, record.inst)
+                .is_some()
+            {
+                return Err(backend_module(
+                    "one causal identity was discharged twice in a single function".to_string(),
+                ));
+            }
         }
         Ok(())
     }

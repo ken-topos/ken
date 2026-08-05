@@ -105,6 +105,8 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
             raw_worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
+            pending_composed_discharges: Vec::new(),
+            composed_discharges: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
@@ -266,6 +268,8 @@ fn run_px8j_malformed_recursor_consumer(
             raw_worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
+            pending_composed_discharges: Vec::new(),
+            composed_discharges: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
@@ -2176,6 +2180,8 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
             raw_worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
+            pending_composed_discharges: Vec::new(),
+            composed_discharges: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
             trap_exit: None,
             terminal_result_origins: BTreeSet::new(),
@@ -17297,4 +17303,321 @@ fn with_d8e_witness_plan<T>(f: impl FnOnce(&StaticTransitionPlan<'_>) -> T) -> T
     )
     .expect("the D8e witness plans");
     f(&plan)
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8j` — the root-owned composed witness.**
+///
+/// `D8e`'s witness puts the composed elimination in a declaration-owned unit,
+/// where the `D5a` detached-result seat refuses **before** the function is
+/// finalized -- so its CLIF is never built and verifications 3, 4 and 5 have
+/// nothing to read. That refusal is the `89e36ec1` finding and is not this
+/// checkpoint's to repair.
+///
+/// ⭐ **The root unit is the lawful way past it, and it is production's own
+/// rule, not a workaround.** `define_unit_body` applies the detached-result
+/// seat on the non-root path only -- a root owning an undischarged projected
+/// call is left to the whole-pass claim closure -- so a root-owned composed
+/// producer finalizes its function, and the `D8j` gate runs on a real
+/// instruction stream.
+///
+/// ⚠ The program still does not compile: it stops LATER, in the specialization
+/// emission, at an unrelated ordinary-envelope refusal. The discharge relation
+/// is populated before that, which is what these rows measure, and the row says
+/// so rather than implying a compiling program.
+///
+/// **Two recursive positions**, and that is the whole reason this fixture is
+/// not `d8e_witness_declaration` reused: the planner interns one specialization
+/// per position, so the plan carries **two** targets at one producer
+/// `Construct` -- one constructor symbol, two identities. That is exactly the
+/// population a same-symbol shortcut would confuse, and without it the
+/// substitution discriminator has nothing lawful to substitute.
+#[cfg(test)]
+fn d8j_root_witness_entry() -> RuntimeExpr {
+    let wrap = "ctor:fixture::D8JWitness::Wrap";
+    let done = "ctor:fixture::D8JWitness::Done";
+    let unit = || RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+        args: Vec::new(),
+    };
+    let ok_unit = || RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Result::Ok".to_string(),
+        args: vec![unit()],
+    };
+    let worker = || RuntimeExpr::LexicalClosure {
+        captures: Vec::new(),
+        params: vec!["unit".to_string()],
+        body: Box::new(ok_unit()),
+    };
+    // The bridge: a computational eliminator over the selected field, so its
+    // case bodies are lowered by the source machine -- `D8e`'s seat.
+    //
+    // Environment inside a bridge case body:
+    //   0 bridge IH, 1 payload, 2 outer IH(1), 3 outer IH(0),
+    //   4 static worker(0), 5 static worker(1), 6 selected field, ...
+    let bridge = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Var(4)),
+        cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+            .into_iter()
+            .map(|constructor| crate::RuntimeComputationalMatchCase {
+                constructor: constructor.to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(4)),
+                    args: vec![unit()],
+                },
+            })
+            .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D8j witness bridge default".to_string(),
+        },
+    };
+    let selected_field = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Bool::True".to_string(),
+            args: Vec::new(),
+        }),
+        cases: [
+            ("ctor:prelude::Bool::True", "ctor:prelude::Result::Ok"),
+            ("ctor:prelude::Bool::False", "ctor:prelude::Result::Err"),
+        ]
+        .into_iter()
+        .map(|(constructor, result)| RuntimeMatchCase {
+            constructor: constructor.to_string(),
+            binders: 0,
+            body: RuntimeExpr::Construct {
+                constructor: result.to_string(),
+                args: vec![unit()],
+            },
+        })
+        .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "D8j witness selected-field default".to_string(),
+        },
+    };
+    RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: wrap.to_string(),
+                args: vec![worker(), worker(), selected_field],
+            }),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: wrap.to_string(),
+                    argument_binders: 3,
+                    recursive_positions: vec![0, 1],
+                    body: bridge,
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: done.to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: ok_unit(),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "D8j witness eliminator default".to_string(),
+            },
+        }),
+        body: Box::new(RuntimeExpr::Var(0)),
+    }
+}
+
+/// Compile the `D8j` root witness under one mutation and report what the
+/// composed relation ended up holding.
+#[cfg(test)]
+fn d8j_root_witness_compile(
+    label: &str,
+    mutation: crate::cranelift_backend::lowering::D8jMutation,
+) -> (
+    Option<CraneliftBackendError>,
+    usize,
+    (usize, usize),
+    Vec<crate::cranelift_backend::planning::ContinuationCallIdentity>,
+) {
+    use crate::cranelift_backend::lowering::{
+        d8d_bindings, d8e_consumptions, d8j_discharged, reset_d8d_bindings, reset_d8j_discharged,
+        set_d8j_mutation, D8jMutation,
+    };
+    let entry = d8j_root_witness_entry();
+    reset_d8j_discharged();
+    reset_d8d_bindings();
+    set_d8j_mutation(mutation);
+    let error = compile_expr_into_module(
+        new_object_module(label).expect("the object module builds"),
+        &format!("ken_{label}"),
+        Linkage::Export,
+        &entry,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .err();
+    set_d8j_mutation(D8jMutation::Exact);
+    (
+        error,
+        d8j_discharged().len(),
+        (d8d_bindings(), d8e_consumptions()),
+        d8j_discharged(),
+    )
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8j` — the composed authority is discharged
+/// once, after the call, and every way of getting there wrongly refuses.**
+///
+/// ## The positive route
+///
+/// On the root-owned witness the composed obligation is discharged **exactly
+/// once**, and the identity that entered the relation is the one the plan pairs
+/// with the target -- derived here from the plan, not read back off the record.
+/// Two bindings are installed and one is consumed, so the relation is not
+/// merely "one of everything": the second installed binding is never
+/// discharged, because it is never consumed.
+///
+/// ⚠ **The program does not compile**, and this row does not pretend otherwise.
+/// It stops later, in specialization emission, at an unrelated
+/// ordinary-envelope refusal. The relation is populated before that, at the
+/// point the root unit's CLIF is finalized, which is what is being measured.
+///
+/// ## What "discharge" is NOT
+///
+/// Installing the binding is not discharge -- two are installed and one is
+/// discharged. Beginning the argument run is not discharge -- the run reaches
+/// the seat through `CallArgument` and the claim happens after the emitter.
+/// Seeing a worker-shaped value is not discharge -- the value-position path
+/// refuses (`D8e`'s own row) and never reaches here.
+///
+/// ## The five discriminators
+///
+/// | switch | what it makes wrong | where it is caught |
+/// |---|---|---|
+/// | `SuppressDischargeAfterRealCall` | a real raw call, no record | the relation stays empty |
+/// | `SubstituteAnotherExactIdentity` | the other identity at the SAME constructor symbol | verification 1, at the seat |
+/// | `WrongClaimingOwner` | a claim from a function that is not the emission owner | verification 2, at the seat |
+/// | `RedirectRecordedInstruction` | the record moved onto another real call | verification 4, on the finished CLIF |
+/// | `DischargeFromOrdinaryBinding` | an ordinary clone of the same binding | the authority accessor |
+///
+/// ⭐ The substitution is the same-symbol shortcut made concrete: the witness
+/// interns **two** specializations at one producer `Construct` -- one
+/// constructor symbol, two identities -- so a pairing that keyed on the symbol
+/// would have to choose, and this switch installs the choice it would make.
+///
+/// **Promise class: durable invariant.** Relations over one program's relation
+/// and five refusals; the only literals are the arity of the population, which
+/// the fixture fixes.
+#[test]
+fn d8j_the_composed_authority_is_discharged_once_after_the_call() {
+    use crate::cranelift_backend::lowering::D8jMutation;
+
+    let (error, discharged, (bindings, consumptions), identities) =
+        d8j_root_witness_compile("d8j_exact", D8jMutation::Exact);
+    assert_eq!(
+        (bindings, consumptions),
+        (2, 1),
+        "the witness must install TWO composed bindings and consume ONE. Both halves matter: \
+         without two installs the relation's single entry could be explained by there being only \
+         one binding at all, and without exactly one consumption the discharge count is not \
+         attributable to the consumption"
+    );
+    assert_eq!(
+        discharged, 1,
+        "exactly one composed obligation is discharged, and it enters the relation only after \
+         the finished CLIF has been consulted. Zero means the claim never survived verification; \
+         two would mean an installed-but-unconsumed binding also discharged"
+    );
+    let paired = d8j_root_witness_identities();
+    assert!(
+        paired.len() == 2 && paired.contains(&identities[0]),
+        "the discharged identity must be one the PLAN pairs with a target, taken from the plan \
+         rather than from the record: a relation that recorded whatever it was handed would agree \
+         with itself. The population is two, which is what gives the substitution switch below \
+         something lawful to substitute ({} paired)",
+        paired.len()
+    );
+    let error = format!("{error:?}");
+    assert!(
+        !error.contains("composed discharge"),
+        "and nothing in the D8j gate may be what stops this program: it stops later, in \
+         specialization emission. A composed-discharge refusal here means the exact run is \
+         failing its own verification: {error}"
+    );
+
+    // The five discriminators, each at its own point.
+    for (mutation, expect, why) in [
+        (
+            D8jMutation::SubstituteAnotherExactIdentity,
+            "the authority and the callee come from different targets",
+            "the other identity at the same constructor symbol names the other position's \
+             worker, so the paired target no longer matches the binding being consumed",
+        ),
+        (
+            D8jMutation::WrongClaimingOwner,
+            "only the emitting owner may answer",
+            "the claim is made by a function that is not the identity's emission owner",
+        ),
+        (
+            D8jMutation::RedirectRecordedInstruction,
+            "is not the call the authority stands for",
+            "the record names another real call, so the decoded callee disagrees with the \
+             D8b/D8d target's raw worker",
+        ),
+        (
+            D8jMutation::DischargeFromOrdinaryBinding,
+            "carries no composed causal authority",
+            "an ordinary clone of the same binding has no authority to present",
+        ),
+    ] {
+        let (error, discharged, _, _) = d8j_root_witness_compile("d8j_defect", mutation);
+        assert_eq!(
+            discharged, 0,
+            "{mutation:?} must leave the relation EMPTY -- {why}"
+        );
+        let error = format!("{:?}", error.expect("the defect must refuse"));
+        assert!(
+            error.contains(expect),
+            "{mutation:?} must reach its own refusal -- {why} -- not one it also happens to trip \
+             further along: {error}"
+        );
+    }
+
+    // Suppression is the one defect with no refusal: a real raw call is emitted
+    // and nothing is recorded. ⛔ That is exactly why the relation has to be
+    // asserted positively above rather than inferred from the absence of an
+    // error -- this run has no error to distinguish it by.
+    let (_error, discharged, (bindings, consumptions), _) =
+        d8j_root_witness_compile("d8j_suppressed", D8jMutation::SuppressDischargeAfterRealCall);
+    assert_eq!(
+        (bindings, consumptions, discharged),
+        (2, 1, 0),
+        "suppressing the record after a REAL raw call must leave installation and consumption \
+         untouched and the relation empty. If discharged is still 1, the relation is being \
+         populated by something other than the claim seat"
+    );
+}
+
+/// The identities the `D8j` witness's own plan pairs with its targets.
+#[cfg(test)]
+fn d8j_root_witness_identities(
+) -> Vec<crate::cranelift_backend::planning::ContinuationCallIdentity> {
+    let entry = d8j_root_witness_entry();
+    let plan = plan_static_transition_graph_with_symbols(
+        &entry,
+        &BTreeMap::new(),
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .expect("the D8j witness plans");
+    plan.composed_call_targets()
+        .expect("targets")
+        .iter()
+        .map(|target| target.call_identity().clone())
+        .collect()
 }

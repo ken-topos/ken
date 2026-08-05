@@ -11489,7 +11489,13 @@ impl<'src> StaticTransitionPlan<'src> {
                 .continuation_call_binding_for(construct, frame, alternative, position)?
                 .ok_or_else(|| {
                     planner_error(
-                        "a composed-call target's own causal coordinate selects no continuation                          call binding, so there is no planner-issued identity to pair it with.                          This fails closed rather than minting an unpaired target: the two                          populations are interned together -- one call token per interned                          specialization, at the same coordinate -- so a target without a binding                          means those two have drifted, and a consumer handed an unpaired target                          would have to invent the identity that is missing",
+                        "a composed-call target's own causal coordinate selects no \
+                         continuation call binding, so there is no planner-issued identity to \
+                         pair it with. This fails closed rather than minting an unpaired \
+                         target: the two populations are interned together -- one call token \
+                         per interned specialization, at the same coordinate -- so a target \
+                         without a binding means those two have drifted, and a consumer handed \
+                         an unpaired target would have to invent the identity that is missing",
                     )
                 })?;
             // The FIFTH field, held rather than looked up. The lookup above is
@@ -11500,7 +11506,9 @@ impl<'src> StaticTransitionPlan<'src> {
             // interned unit and from the call token, must agree.
             if call_identity.emission_owner() != owner {
                 return Err(planner_error(
-                    "a composed-call target's paired causal identity names a different emission                      owner than the selector it was minted under, so the call token and the                      interned unit disagree about who emits this call",
+                    "a composed-call target's paired causal identity names a different \
+                     emission owner than the selector it was minted under, so the call token \
+                     and the interned unit disagree about who emits this call",
                 ));
             }
             targets.push(ComposedCallTarget {

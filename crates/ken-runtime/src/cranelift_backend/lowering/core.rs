@@ -3815,12 +3815,18 @@ impl<'a> Lowering<'a> {
                             // only the completion differs.
                             let mut remaining = args;
                             if remaining.is_empty() {
-                                let called = self.call_static_worker_with_inputs(
+                                let before = self.live_source_continuations;
+                                let (called, emission) = self.call_static_worker_with_inputs(
                                     builder,
                                     &worker,
                                     Vec::new(),
                                     static_origin,
                                 )?;
+                                // `D8j` — the call is emitted and its result is
+                                // in hand under the SAME `control` this arm was
+                                // entered with. Only now may a composed
+                                // obligation be claimed.
+                                self.claim_composed_discharge(&worker, emission, &called, before)?;
                                 SourceMachineState::Value {
                                     value: RoutedAnswer::direct(called),
                                     control,
@@ -4874,11 +4880,21 @@ impl<'a> Lowering<'a> {
                                         worker,
                                         static_origin,
                                     } => {
-                                        let called = self.call_static_worker_with_inputs(
-                                            builder,
-                                            &worker,
-                                            lowered,
-                                            static_origin,
+                                        let before = self.live_source_continuations;
+                                        let (called, emission) = self
+                                            .call_static_worker_with_inputs(
+                                                builder,
+                                                &worker,
+                                                lowered,
+                                                static_origin,
+                                            )?;
+                                        // `D8j` — the non-empty argument run
+                                        // reached here through `CallArgument`
+                                        // under the machine's own control, and
+                                        // the raw call is now written. This is
+                                        // the seat, and it is after all three.
+                                        self.claim_composed_discharge(
+                                            &worker, emission, &called, before,
                                         )?;
                                         SourceMachineState::Value {
                                             value: RoutedAnswer::direct(called),
@@ -7439,6 +7455,11 @@ impl<'a> Lowering<'a> {
             })
             .collect::<Result<Vec<_>, _>>()?;
         self.call_static_worker_with_inputs(builder, worker, inputs, static_origin)
+            // `D8j` — direct descent DISCARDS the emission handle. It is not a
+            // composed consumption and has no causal obligation to answer for;
+            // dropping the handle here is that statement, made where the
+            // decision belongs.
+            .map(|(operand, _)| operand)
     }
 
     /// **The route-selected static-worker emitter, from evaluated arguments
@@ -7450,7 +7471,7 @@ impl<'a> Lowering<'a> {
         worker: &StaticWorkerBinding,
         mut inputs: Vec<LoweringOperand>,
         static_origin: StaticOriginId,
-    ) -> Result<LoweringOperand, CraneliftBackendError> {
+    ) -> Result<(LoweringOperand, StaticWorkerEmission), CraneliftBackendError> {
         // ⛔ Arity is checked HERE, not in either caller. The explicit-argument
         // run is exactly `inputs` at entry -- captures are appended below -- so
         // this is the one place both consumers can be held to the declared
@@ -7655,7 +7676,16 @@ impl<'a> Lowering<'a> {
             supplied_operands: inputs.len(),
             route: worker.route,
         });
-        Ok(emitted.0)
+        // `D8j` — the instruction is HANDED BACK, not recorded. Which consumer
+        // may answer for a causal obligation with it is the caller's question,
+        // and both this emitter's callers reach here.
+        Ok((
+            emitted.0,
+            StaticWorkerEmission {
+                inst: emitted.1,
+                supplied_operands: inputs.len(),
+            },
+        ))
     }
 
     /// **`D2` -- the binder-lowering helper.** Lowers a `Let`'s bound value
@@ -9191,6 +9221,196 @@ impl<'a> Lowering<'a> {
             ContinuationDischarge::ComposedSourceContinuation(target.call_identity().clone()),
         )
         .map(Some)
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8j` — CLAIM one composed discharge.**
+    ///
+    /// Reached from `D8e`'s two source-machine static-worker completions and
+    /// from nowhere else. By the time it runs, the raw-worker call has been
+    /// emitted by the shared route-selected emitter and its result is in hand
+    /// under the control the seat was entered with.
+    ///
+    /// ⛔ **Installing the binding, beginning the argument run, or seeing a
+    /// worker-shaped value is not discharge, and none of those reaches here.**
+    /// The two callers are the completions, after the emitter.
+    ///
+    /// ⭐ This performs verifications 1 and 2 — the ones whose evidence exists
+    /// now — and records the rest for the finished CLIF. Verifications 3, 4 and
+    /// 5 need the instruction stream, which does not exist until the function
+    /// is finalized; claiming them here would mean asserting facts about
+    /// instructions nobody has read.
+    fn claim_composed_discharge(
+        &mut self,
+        worker: &StaticWorkerBinding,
+        emission: StaticWorkerEmission,
+        result: &LoweringOperand,
+        source_control_before: usize,
+    ) -> Result<(), CraneliftBackendError> {
+        // Whether a composed obligation is owed at all is the BINDING's own
+        // statement, read from the facet `D8i` transports.
+        //
+        // ⛔ The test switch below forces the attempt on an ordinary binding.
+        // That population is unreachable in production -- an ordinary binding
+        // owes nothing and this arm is not entered for one -- but it is
+        // reachable by a defect, which is what separates this guard from the
+        // owner-collision refusal `D8b` deleted: that one's population the
+        // planner proved impossible, and no switch could instantiate it.
+        // ⛔ Under the switch the binding itself is replaced by an ORDINARY
+        // clone of the very binding that was about to discharge -- same
+        // closure, body, arity, captures and route, direct facet. That is what
+        // makes the refusal below attributable to the facet and to nothing
+        // else. ⭐ The composed arm cannot be built here even to undo it: it
+        // needs a planner-issued identity.
+        #[cfg(test)]
+        let ordinary_clone;
+        #[cfg(test)]
+        let worker = if d8j_mutation() == D8jMutation::DischargeFromOrdinaryBinding {
+            ordinary_clone = StaticWorkerBinding {
+                discharge: ContinuationDischarge::DirectSpecializationCall,
+                ..worker.clone()
+            };
+            &ordinary_clone
+        } else {
+            worker
+        };
+        #[cfg(test)]
+        let attempt = matches!(
+            worker.discharge,
+            ContinuationDischarge::ComposedSourceContinuation(_)
+        ) || d8j_mutation() == D8jMutation::DischargeFromOrdinaryBinding;
+        #[cfg(not(test))]
+        let attempt = matches!(
+            worker.discharge,
+            ContinuationDischarge::ComposedSourceContinuation(_)
+        );
+        if !attempt {
+            return Ok(());
+        }
+        // ⭐ The authority is obtained THROUGH the accessor, which is what makes
+        // an ordinary binding refuse here rather than silently discharge
+        // nothing.
+        let identity = worker.composed_continuation_authority()?.clone();
+
+        // `D8j` verification 1 -- the identity came from the exact paired
+        // planner target.
+        //
+        // ⛔ Resolved by finding the target whose OWN pairing is this identity,
+        // then holding that target's worker provenance against the binding.
+        // Searching by body origin or by the binding's shape would be the
+        // reconstruction `D8h` forbids, and would also answer for the wrong
+        // layer wherever two layers share a body.
+        let targets = self.static_transition_plan.composed_call_targets()?;
+        #[cfg(test)]
+        let identity = match d8j_mutation() {
+            // A different EXACT identity, taken from the population -- the
+            // shape a same-symbol shortcut would produce. ⛔ Not fabricated:
+            // nothing outside planning can build one.
+            D8jMutation::SubstituteAnotherExactIdentity => targets
+                .iter()
+                .map(|target| target.call_identity().clone())
+                .find(|candidate| *candidate != identity)
+                .unwrap_or(identity),
+            _ => identity,
+        };
+        let mut paired = None;
+        for target in &targets {
+            if *target.call_identity() == identity {
+                if paired.is_some() {
+                    return Err(unsupported(
+                        "ContinuationDischarge",
+                        "two composed-call targets carry one causal identity, so a discharge \
+                         cannot say which coordinate it answers for",
+                    ));
+                }
+                paired = Some(target);
+            }
+        }
+        let paired = paired.ok_or_else(|| {
+            unsupported(
+                "ContinuationDischarge",
+                "a composed discharge presents a causal identity no composed-call target is \
+                 paired with, so the authority did not come from the planner target this \
+                 consumption is standing in for",
+            )
+        })?;
+        let declared_operands = paired
+            .worker()
+            .captures()
+            .len()
+            .checked_add(paired.worker().declared_arity() as usize)
+            .ok_or_else(|| {
+                unsupported("ContinuationDischarge", "declared operand run exceeds range")
+            })?;
+        if paired.worker().body_origin() != worker.body_origin
+            || paired.worker().declared_arity() != worker.declared_arity
+            || paired.worker().captures().len() != worker.captures.len()
+        {
+            return Err(unsupported(
+                "ContinuationDischarge",
+                format!(
+                    "a composed discharge's paired target names worker body {:?} with arity {} \
+                     and {} captures, but the binding being consumed names {:?} with arity {} \
+                     and {} captures; the authority and the callee come from different targets",
+                    paired.worker().body_origin(),
+                    paired.worker().declared_arity(),
+                    paired.worker().captures().len(),
+                    worker.body_origin,
+                    worker.declared_arity,
+                    worker.captures.len()
+                ),
+            ));
+        }
+
+        // `D8j` verification 2 -- the CLAIMING function is the identity's own
+        // emission owner.
+        //
+        // ⛔ Independent of `D8i`'s construction-time guard, and deliberately
+        // re-derived: that one asked whether the binding could be BUILT here,
+        // this asks whether this function may ANSWER with it. A binding can
+        // legitimately be constructed in one pass and, were it ever to travel,
+        // consumed in another.
+        #[cfg(test)]
+        let claiming = match d8j_mutation() {
+            D8jMutation::WrongClaimingOwner => None,
+            _ => self.defining_emission_owner,
+        };
+        #[cfg(not(test))]
+        let claiming = self.defining_emission_owner;
+        if claiming != Some(identity.emission_owner()) {
+            return Err(unsupported(
+                "ContinuationDischarge",
+                format!(
+                    "a composed discharge claims a causal call owned by {:?}, but the function \
+                     making the claim is {claiming:?}; only the emitting owner may answer for \
+                     its own causal call",
+                    identity.emission_owner()
+                ),
+            ));
+        }
+
+        // Recorded for the finished CLIF. ⛔ Suppressible under test so that
+        // "the call was emitted and nothing was discharged" is a state the row
+        // can distinguish from a correct run.
+        #[cfg(test)]
+        if d8j_mutation() == D8jMutation::SuppressDischargeAfterRealCall {
+            return Ok(());
+        }
+        let inst = emission.inst;
+        self.function_local
+            .pending_composed_discharges
+            .push(PendingComposedDischarge {
+                identity,
+                inst,
+                worker_body_origin: worker.body_origin,
+                declared_operands,
+                supplied_operands: emission.supplied_operands,
+                result: match result {
+                    LoweringOperand::Carried(word) => Some(word.word),
+                    LoweringOperand::Specialized(_) => None,
+                },
+                source_control: (source_control_before, self.live_source_continuations),
+            });
+        Ok(())
     }
 
     fn call_declared_recursive_position_unit(
