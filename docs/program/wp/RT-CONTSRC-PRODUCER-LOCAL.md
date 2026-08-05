@@ -1,10 +1,17 @@
 # RT-CONTSRC-PRODUCER-LOCAL — the producer-local continuation source coordinate
 
-**A value created mid-body is a third availability class. Continuation
+**A value created mid-body is a third ROOT-COORDINATE domain. Continuation
 specialization can name entry values and generated-context captures, and cannot
 name a host-effect result or a `Match` case binder — so the environment for
 those edges never closes and the specialization is never committed. This node
-adds that coordinate domain.**
+adds that coordinate domain, and separately replaces the availability
+representation the domain is consumed through.**
+
+⛔ **This summary said "a third AVAILABILITY class" until 2026-08-05. That was
+the false coupling itself** — it makes a root source kind imply an availability
+class. Root provenance answers *which value*; availability answers *where this
+consumer holds it*; neither determines the other (`D3b`, on the `D3c`
+measurement).
 
 **Owner:** Team Runtime. **Size:** L.
 **Node:** `docs/program/issues/RT-CONTSRC-PRODUCER-LOCAL.md`.
@@ -70,7 +77,13 @@ all six failing `D0` rows.
      slot-derived contract, **unchanged**.
   2. **Producer-local source** — an exact structural binding identity in the
      producer body, with planner-derived carrier / ownership / storage /
-     affinity, **and a separate immediate-availability projection (`D2b`)**.
+     affinity, **and separate consumer-specific availability claims (`D2b`)**.
+
+  ⭐ **`unchanged` on item 1 is CORRECT and stays.** The root-identity sum is
+  exactly what the `D3c` correction preserves — no added source domain,
+  position, offset or fallback. ⛔ Do not confuse it with the retired "Entry ABI
+  *availability* remains its existing case", which was a claim about
+  availability and was false. Root identity: unchanged. Availability: replaced.
 
   The source-position type is a **closed sum**: an entry position must not be
   representable as a local binding, or the reverse. ⛔ No default arm.
@@ -138,29 +151,51 @@ all six failing `D0` rows.
   against `source_abi_position` 0 and 1, so the index is the generated context's
   **own** operand position, not a root ABI position.
 
-  **One planner-issued, closed projection, separate from root provenance, with
-  two arms:**
+  ⛔ **THE LAW BELOW WAS REPLACED 2026-08-05 on the `D3c` measurement.** What
+  stood here was "one planner-issued, closed projection, separate from root
+  provenance, with two arms" — current-lexical availability and
+  generated-context capture availability — plus "Entry ABI availability remains
+  its existing case, untouched." **Both are false and neither is retained.** The
+  two-arm shape is root-adjacent: it reads an availability off the root
+  coordinate. The entry-ABI clause is the specific premise `D3c` destroyed —
+  an entry-ABI root's availability is **not** its root ABI position, and at
+  nonzero lexical depth production silently read the wrong operand.
 
-  1. **Current lexical availability** — keyed to the exact causal
-     producer/emission occurrence, carrying the exact environment origin **plus
-     post-shift index**, derived by the forward semantic environment walk.
-     Lowering may consume it **only at that exact seat while holding that exact
-     lexical environment**.
-  2. **Generated-context capture availability** — keyed to the exact generated
-     emission owner/context, carrying its **declared immediate capture slot**.
-     ⛔ It exists **only after** the full producer-local root coordinate is proved
-     present in that context's ordered capture projection.
+  **Availability is a CONSUMER-SPECIFIC planner-issued claim.** The projection
+  is not one availability with arms; it is a claim selected by the environment
+  the consumer actually holds, over two closed environment classes:
 
-  ⛔ **"Entry ABI availability remains its existing case, untouched" was the
-  premise here and it is FALSE — REPLACED 2026-08-05 on the `D3c` measurement,
-  not qualified.** An entry-ABI root's availability is **not** its root ABI
-  position: at nonzero lexical depth the two differ, and production silently
-  read the wrong operand. Entry-frame availability is lawful only where the
-  immediate environment really **is** the entry frame, proved as full-coordinate
-  membership in one exact frame. ⇒ The two arms above are superseded by the
-  three environment classes in `D3b`'s re-cut, where `GeneratedContextCapture`
-  is **subsumed** into the generated-context `EntryFrame` case rather than
-  standing as its own name. Read `D3b`, not this paragraph, for the law.
+  1. **`CurrentLexical`** — exact predeclared emission owner, producer/result
+     and emission occurrence, lexical-environment origin, and post-shift index,
+     derived by the forward semantic environment walk. Lowering may consume it
+     **only at that exact seat while holding that exact lexical environment**.
+  2. **`EntryFrame`** — an exact frame identity plus declared slot: a
+     predeclared function frame, or a generated context frame identified by its
+     `ContinuationContextId` and enclosing `ContinuationSpecializationId` with
+     that pairing revalidated. ⛔ It exists **only after** the full root
+     coordinate is proved present in that frame's ordered projection **exactly
+     once**.
+
+  ⛔ **`GeneratedContextCapture` is SUBSUMED into the generated-context
+  `EntryFrame` case.** It is not a third class and not a surviving second name
+  for the same environment class.
+
+  ⛔ **A projection consumed at direct emission and later reused as a
+  generated-context capture exposes TWO SEPARATELY VALIDATED VIEWS**, never one
+  availability reused twice — direct emission reads `producer_env`, capture
+  append reads `defining_abi_operands`, and one unqualified index cannot be
+  authority for both. An unkeyed vector, "first matching availability", or one
+  generic `immediate_slot` is unlawful.
+
+  ⛔ **Either root arm may take either environment class**, subject to the
+  membership proofs above. Root provenance answers *which value*; availability
+  answers *where this consumer holds it*. The one asymmetry is substrate, not
+  domain: a `ProducerLocal` member of a **predeclared** `EntryFrame` cannot be
+  invented and stays unavailable unless a separately authorized substrate later
+  declares it.
+
+  ⇒ `D3b` carries the full ruled statement, the four retired clauses and the
+  control list. **This paragraph is the law, not a pointer to it.**
 
   **Lawfulness of a generated-context capture:** carrying a producer-local value
   as a declared capture is lawful **only when the caller's exact current-lexical
@@ -172,9 +207,13 @@ all six failing `D0` rows.
   REJECTS** per the existing candidate/program boundary. Lowering must not
   reverse-search, infer a shift, reuse `Result`, or fabricate a capture.
 
-  **Fail closed on all five:** wrong emission origin · wrong post-shift index ·
-  wrong generated owner/context · missing full-coordinate capture membership ·
-  wrong immediate slot.
+  **Fail closed on all seven** (⛔ **the old list of five named `wrong immediate
+  slot`, a field now retired, and had no arm for a claim presented to the wrong
+  consumer — the defect `D3c` measured**): wrong emission owner/origin · wrong
+  lexical-environment root · wrong post-shift index · wrong frame identity
+  (predeclared frame, or context id and enclosing specialization id) · missing
+  or duplicate full-coordinate membership · wrong declared slot · **a
+  direct-emission claim presented to the ABI-frame consumer, and the converse**.
 
   **Two discriminators, and the first exists to defeat a specific vacuity:**
   - one with **at least one intervening binder**, so "introduction index equals
@@ -271,6 +310,11 @@ all six failing `D0` rows.
      full-coordinate generated-context lookup. Keep **both** lowering consumers
      explicitly refusing `CurrentLexical` **and** `GeneratedContextCapture`;
      keep the seam and the pending population **visible**.
+     ⛔ **NAMING ONLY, 2026-08-05:** `D3a` is discharged and the sentence above
+     is a true record of what it landed, so it is retained rather than rewritten.
+     But `GeneratedContextCapture` is now **subsumed** into the generated-context
+     `EntryFrame` case (`D3b`). ⛔ Do not carry that name into new work, and do
+     not read this line as authority for it being a separate class.
      ⛔ **`entry_abi_pending_producer_local` is RETAINED, and that is
      COMPLIANCE, not an exception** — the release conditioned its deletion on
      *"only when its live enumeration is empty"* (`evt_6zr8a4h90c7rp`). After
