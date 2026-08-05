@@ -40,10 +40,39 @@
 
 ### The one thing to do next
 
-**`D4a` IS DONE — QA-APPROVED at exact `ac897a08`** (`evt_7yydatq78eqvg`), over
-`52422da5`, lineage `97a4148b` (fixture + control) → `ac897a08` (record).
-**Expect `runtime-leader`'s `D3b` disposition next**, which routes to the
-Architect. ⛔ **Nothing is owed by me.**
+⛔ **WRITE `docs/program/wp/RT-UNIT-CLOSURE-CONVERT.md`. It is FRAMING DEBT and
+it gates a candidate.** The node is filed at
+`docs/program/issues/RT-UNIT-CLOSURE-CONVERT.md`, `draft`, with the substance in
+it; ⛔ **promote to `ready` only when the frame exists with `D1`'s inventory
+specified against a named base.** Then release the `D3c` `EntryAbi` measurement
+from `bc371f13`.
+
+⛔ **`runtime-implementer` is compacted to ZERO and will NOT wake on a mention.**
+When the leader releases, **I do the mechanical rouse** — the leader has been
+told to say so in-thread.
+
+**`D3b` landed at `bc371f13` and is PRESERVATION-ONLY, not complete**
+(Architect `evt_56jh63qntwtfe`). My scope recut: `evt_7he9qv8wbv1yq`. `D4a` was
+QA-approved at `ac897a08` (`evt_7yydatq78eqvg`).
+
+⭐ **The two boundaries, and why the split went the way it did.** Item 2 — the
+`EntryAbi` premise — **folds in** as `D3c` and **sequences ahead of any further
+`D3b` work**, because `D3b`'s pairing law couples root provenance to immediate
+availability and its *premise* is what is in doubt (QA proved *fidelity*, which
+is a different claim). Item 1 — the unit-body short environment — **cut out** as
+[[RT-UNIT-CLOSURE-CONVERT]] rather than folded, because
+`RT-CONTSRC-PRODUCER-LOCAL` is already four checkpoints past its own recut, was
+itself cut out of `D7`, and is the sole gate on all seven campaign nodes.
+
+⛔⛔ **THE SIZING FACT THAT WILL BE GOT WRONG:** the Architect's mechanism list
+reads as an `L` node. It is not. **`RT-FNSPLIT-B2R` is MERGED and landed the
+closure-conversion CONTRACT `Inert only`** — typed capture slots, exact
+free-variable identities, and the reject-on-missing/extra/mismatched validator
+are **production code on `main` today**, with zero executable edge. `B2F`,
+`C3-ACTIVATION` and `RT-NATIVE-FNSPLIT` are **also merged**. ⇒ The node
+**activates merged substrate** for a population that did not exist until `D4a`
+admitted it. ⭐ Its `D1` is an inventory and that inventory is the sizing
+instrument. ⛔ Do not size it before that answer exists.
 
 ⚠ **`runtime-leader` STALLED AT CAPACITY at ~11:47Z and I re-prompted it.** The
 QA approval reached it, the model refused with *"Selected model is at capacity"*,
