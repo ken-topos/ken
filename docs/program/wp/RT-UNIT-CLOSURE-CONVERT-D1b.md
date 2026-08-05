@@ -115,6 +115,15 @@ Nothing at this base can answer that:
 **fabricating a capture** would invent a slot the descriptor does not declare;
 **padding** would enlarge the frame around the gap.
 
+⚠ **`D1c` CORRECTS THE ROUTE NAMED BELOW.** The "corrected depth basis
+(upstream, different crate)" clause was an inference: the elaborator is the only
+*production* writer of `captures`, and I concluded it produced *these* units
+without checking. It does not — the five failing units are hand-built fixtures
+(`test_objects.rs:176`, `:220`) whose `captures: Vec::new()` is a literal, and
+the elaborator's three construction sites emit **zero** records across the suite
+that contains the failures. `runtime_depth` is irrelevant to them. See
+`RT-UNIT-CLOSURE-CONVERT-D1c.md`. Everything above about the substrate stands.
+
 ### The concrete missing route
 
 **`runtime_depth` returns 0 at the construction site for these closures, while
