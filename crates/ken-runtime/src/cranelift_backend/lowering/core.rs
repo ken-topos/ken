@@ -6671,9 +6671,15 @@ impl<'a> Lowering<'a> {
         // half.
         //
         // ⛔ **It observes and returns nothing**, exactly like `D4a`'s half
-        // above, and it is `#[cfg(test)]` throughout. `D3c` authorizes no
-        // production edit; the resolution below is untouched and still copies
-        // `source_abi_position` into the immediate slot.
+        // above, and it is `#[cfg(test)]` throughout.
+        //
+        // ⚠ This comment previously added that "the resolution below is
+        // untouched and still copies `source_abi_position` into the immediate
+        // slot". That was true while `D3c` was a measurement-only checkpoint and
+        // is now false: the resolution below consumes the planner-issued
+        // nearest-exact-alias availability, and copying a root ABI position is
+        // precisely the defect `D3c` measured and `D3b` removed. The observatory
+        // itself is unchanged — what changed is what it observes.
         //
         // ⭐ It records the emitting environment and the entry ABI operand run
         // **as production holds them**, and does no reasoning: the control

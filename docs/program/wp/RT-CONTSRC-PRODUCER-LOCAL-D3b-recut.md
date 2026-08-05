@@ -85,9 +85,10 @@ generated context capture carries no context-capture availability claim"*. That
 was 19 of the 33 mid-migration reds.
 
 ⭐ This is `D3c`'s two-environment result made concrete at one frame: the direct
-consumer needs the post-shift **lexical** index and the capture consumer needs
-the **entry-run** position, and `D3c` measured those two numbers diverging. One
-`availability` field repaired for either consumer silently mis-serves the other.
+consumer needs the nearest-exact-alias **lexical** index and the capture consumer
+needs the **entry-run** position, and `D3c` measured those two numbers diverging.
+One `availability` field repaired for either consumer silently mis-serves the
+other.
 
 ⛔ `predeclared_entry_frame_slot` returns `None` — no capture claim — when the
 frame declares no member. A `ProducerLocal` coordinate is a mid-body value with

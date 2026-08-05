@@ -1028,7 +1028,7 @@ pub(in crate::cranelift_backend) enum ContinuationEnvironmentClaimOver<Frame> {
     /// complete requested source slot `S`. See [`nearest_exact_alias`], which is
     /// the single definition of that rule and is re-run by the consumer.
     ///
-    /// ⛔ It is **not** a "nearest-alias index", and that retired spelling is not a
+    /// ⛔ It is **not** a "post-shift index", and that retired spelling is not a
     /// synonym. Post-shift named a count of binders pushed between the value's
     /// scope and the seat, which presumes the value occupies exactly one
     /// position; `let y = x` makes that false. The number here is selected from a
