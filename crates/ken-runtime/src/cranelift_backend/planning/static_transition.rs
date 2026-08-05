@@ -645,6 +645,13 @@ impl<'plan> ContinuationContextView<'plan> {
     pub(in crate::cranelift_backend) fn raw_owner(&self) -> PredeclaredFunctionId {
         self.planned.raw_owner
     }
+    /// `D3b` — this context's declared parameter count, so a consumer can check
+    /// a capture slot against the run it actually names. ⛔ A read of existing
+    /// authority: the capture run begins after the parameters, and that offset
+    /// is the planner's rather than this accessor's.
+    pub(in crate::cranelift_backend) fn parameters(&self) -> u32 {
+        self.planned.parameters
+    }
     pub(in crate::cranelift_backend) fn header(&self) -> AbiFrameHeader {
         self.header
     }
@@ -6145,6 +6152,74 @@ fn continuation_emission_seat_environment(
         )
     })?;
     Ok((source_root, reached))
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b`** — VERIFY that one producer-local
+/// coordinate really occupies the post-shift index a `CurrentLexical`
+/// availability names, at the emission seat that availability is keyed to.
+///
+/// ⭐ **This is verification, not derivation, and the direction is the whole
+/// point.** The index arrives from the projection; this walks the emission
+/// seat's own environment and asks whether that index is where the coordinate
+/// actually sits. Deriving the index *from* the environment here would be the
+/// reverse map `evt_609am4v7cdt5b` forbids — lowering would be re-answering a
+/// question the planner owns, and the two answers could then disagree with
+/// nothing to arbitrate them.
+///
+/// ⛔ **Why the emission consumer needs it at all.** A `CurrentLexical`
+/// availability is consumed by *indexing an environment*, and every incidental
+/// discriminator a consumer could otherwise check — carrier, ownership, storage
+/// owner, referent affinity, lowering shape — is **equal** across the positions
+/// of one seat environment in the measured population (`D4a`, exact
+/// `ac897a08`). So a consumer that indexed with the wrong number would read a
+/// well-formed operand of exactly the right contract and emit a call with the
+/// wrong value in it, silently. This is the check that makes that
+/// unrepresentable.
+///
+/// ⚠ **THE GAP, stated because it is easy to over-read.** This proves the
+/// consumer indexes with the number the planner assigned. It does **not**
+/// re-prove the assignment: it re-runs the planner's own walk, so a defect in
+/// that walk would be reproduced here rather than caught. `D2b`'s discriminator
+/// and `D3a`'s validator own that half.
+pub(in crate::cranelift_backend) fn verify_current_lexical_availability(
+    plan: &StaticTransitionPlan<'_>,
+    producer_owner: PredeclaredFunctionId,
+    producer_result_origin: StaticOriginId,
+    emission_origin: StaticOriginId,
+    lexical_environment_origin: StaticOriginId,
+    coordinate: ContinuationSourceCoordinate,
+    post_shift_index: u32,
+) -> Result<(), CraneliftBackendError> {
+    let environment = ContinuationProducerEnvironment {
+        producer_owner,
+        producer_result_origin,
+        producer_construct_origin: emission_origin,
+        consumer_owner: producer_owner,
+        inputs: Vec::new(),
+    };
+    let (source_root, seat) = continuation_emission_seat_environment(plan, &environment)?;
+    if source_root != lexical_environment_origin {
+        return Err(planner_error(
+            "a current-lexical availability names a lexical environment origin that is not the              emitting owner's own source root, so the index it carries counts binders in an              environment this seat never stands in",
+        ));
+    }
+    // ⛔ Reuses the projection's OWN locator, so "where the coordinate is" has
+    // exactly one definition in this plane. A second search written here would
+    // be a second authority that could drift from the first.
+    let derived =
+        current_lexical_availability(coordinate, source_root, emission_origin, &seat)?;
+    if derived
+        != (ContinuationImmediateAvailability::CurrentLexical {
+            emission_origin,
+            lexical_environment_origin,
+            post_shift_index,
+        })
+    {
+        return Err(planner_error(
+            "a continuation input is being consumed at an index the emission seat's own lexical              environment does not hold that coordinate at; RT-CONTSRC-PRODUCER-LOCAL D3b refuses              rather than emitting a call carrying a well-formed operand of the right contract and              the wrong value",
+        ));
+    }
+    Ok(())
 }
 
 /// **`D2b` arm 1** — locate one producer-local coordinate in the emission seat's

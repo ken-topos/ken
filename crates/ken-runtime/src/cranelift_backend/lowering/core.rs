@@ -6091,6 +6091,261 @@ impl<'a> Lowering<'a> {
     /// common — claim once under the defining owner, resolve this Function's
     /// own declared target, append the projected captures, emit one direct
     /// call, record the `Inst` — lives here exactly once.
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b`** — resolve one continuation input's
+    /// `(coordinate, availability)` pair to an index into the environment this
+    /// seam is about to read, or refuse.
+    ///
+    /// ⛔ **Exhaustive over the product, with no wildcard and no default.** Six
+    /// pairings exist; three are lawful and three are crossed. A crossed pair is
+    /// not an unhandled case — it is the projection and this seam disagreeing
+    /// about what the value is, and the only safe answer is to stop. ⛔ No
+    /// conversion, offset, fallback or same-value inference crosses a domain
+    /// boundary here, in either direction.
+    fn resolve_continuation_immediate(
+        &self,
+        coordinate: ContinuationSourceCoordinate,
+        availability: ContinuationImmediateAvailability,
+        defining_owner: ContinuationEmissionOwner,
+        seat: ContinuationImmediateSeat,
+    ) -> Result<ContinuationImmediateResolution, CraneliftBackendError> {
+        match (coordinate, availability) {
+            (
+                ContinuationSourceCoordinate::EntryAbi {
+                    source_owner,
+                    source_abi_position,
+                    ..
+                },
+                ContinuationImmediateAvailability::EntryAbi { immediate_slot },
+            ) => Ok(ContinuationImmediateResolution {
+                immediate_slot,
+                root: ContinuationImmediateRoot::EntryAbi {
+                    source_owner,
+                    source_abi_position,
+                },
+            }),
+            (
+                ContinuationSourceCoordinate::ProducerLocal { .. },
+                ContinuationImmediateAvailability::CurrentLexical {
+                    emission_origin,
+                    lexical_environment_origin,
+                    post_shift_index,
+                },
+            ) => {
+                // ⛔ A specialization emitter refuses BEFORE any index is
+                // produced. A generated context lowers a raw body and does not
+                // stand in the producer's semantic environment at all, so a
+                // post-shift index there counts binders of a scope this function
+                // never entered.
+                let ContinuationEmissionOwner::Predeclared(owner) = defining_owner else {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a continuation input is available as the current-lexical \
+                             producer-local {availability:?}, but the emitting context is the \
+                             generated {defining_owner:?}, which does not stand in the \
+                             producer's semantic environment; refusing before indexing is \
+                             deliberate, because that index counts binders of a scope this \
+                             function never entered"
+                        ),
+                    ));
+                };
+                let ContinuationImmediateSeat::Emission {
+                    producer_owner,
+                    producer_result_origin,
+                    emission_origin: seat_emission_origin,
+                } = seat
+                else {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a continuation input is available as the current-lexical \
+                             producer-local {availability:?} at a seam holding only an ABI \
+                             operand run and no semantic environment; a post-shift lexical index \
+                             has nothing to index here, and reading the ABI run with it would \
+                             name a different value"
+                        ),
+                    ));
+                };
+                // ⛔ The availability must be keyed to THIS emission. A
+                // projection built for another seat of the same owner is
+                // well-formed and names a different environment.
+                if emission_origin != seat_emission_origin {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a current-lexical availability is keyed to emission origin \
+                             {emission_origin:?} but is being consumed at \
+                             {seat_emission_origin:?}; the two seats hold different environments"
+                        ),
+                    ));
+                }
+                if producer_owner != owner {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a current-lexical availability names producer owner \
+                             {producer_owner:?}, which is not the unit currently being defined \
+                             ({defining_owner:?}); a lexical index is only meaningful in its own \
+                             owner's environment"
+                        ),
+                    ));
+                }
+                // ⭐ The check that makes a wrong index unrepresentable rather
+                // than merely unlikely: every incidental discriminator —
+                // carrier, ownership, storage owner, referent affinity, lowering
+                // shape — is EQUAL across the positions of one seat environment
+                // in the measured population, so nothing downstream would notice.
+                verify_current_lexical_availability(
+                    &self.static_transition_plan,
+                    producer_owner,
+                    producer_result_origin,
+                    emission_origin,
+                    lexical_environment_origin,
+                    coordinate,
+                    post_shift_index,
+                )
+                .map_err(|error| {
+                    unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a current-lexical continuation input failed its emission-seat \
+                             consistency check: {error}"
+                        ),
+                    )
+                })?;
+                Ok(ContinuationImmediateResolution {
+                    immediate_slot: post_shift_index,
+                    root: ContinuationImmediateRoot::ProducerLocal,
+                })
+            }
+            (
+                ContinuationSourceCoordinate::ProducerLocal { .. },
+                ContinuationImmediateAvailability::GeneratedContextCapture {
+                    context,
+                    owner,
+                    immediate_capture_slot,
+                },
+            ) => {
+                // ⛔ A predeclared emitter refuses: it holds its own entry run,
+                // not a generated context's capture run, and the two are
+                // different environments that happen to be indexed alike.
+                let ContinuationEmissionOwner::Specialization(defining_context) = defining_owner
+                else {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a continuation input is available as the generated-context capture \
+                             {availability:?}, but the emitting context is the predeclared \
+                             {defining_owner:?}, which holds no such capture run"
+                        ),
+                    ));
+                };
+                if context != defining_context {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a generated-context capture availability is keyed to context \
+                             {context:?} but is being consumed while defining \
+                             {defining_context:?}; a capture slot indexes one exact context's run"
+                        ),
+                    ));
+                }
+                let view = self
+                    .static_transition_plan
+                    .continuation_contexts()?
+                    .into_iter()
+                    .find(|candidate| candidate.enclosing_specialization() == context)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "a generated-context capture availability names context \
+                                 {context:?}, which has no projected view to check its capture \
+                                 run against"
+                            ),
+                        )
+                    })?;
+                if view.raw_owner() != owner {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a generated-context capture availability names owner {owner:?}, \
+                             which is not the raw owner {:?} of the context it is keyed to",
+                            view.raw_owner()
+                        ),
+                    ));
+                }
+                // Full ROOT-COORDINATE membership. ⛔ By whole coordinate, never
+                // by owner or position alone: a local binding must not be able
+                // to satisfy an entry position by carrying the same integer.
+                let captures = view.captures()?;
+                let matching = captures
+                    .iter()
+                    .filter(|capture| capture.coordinate == coordinate)
+                    .count();
+                if matching != 1 {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a generated-context capture availability names a coordinate its \
+                             context declares {matching} times among its captures; exactly one \
+                             occurrence is required, or the slot it names is not determined"
+                        ),
+                    ));
+                }
+                let position = captures
+                    .iter()
+                    .position(|capture| capture.coordinate == coordinate)
+                    .expect("membership was just counted");
+                let declared = view
+                    .parameters()
+                    .checked_add(u32::try_from(position).map_err(|_| {
+                        unsupported(
+                            "ContinuationSpecialization",
+                            "a generated-context capture position exhausted",
+                        )
+                    })?)
+                    .ok_or_else(|| {
+                        unsupported(
+                            "ContinuationSpecialization",
+                            "a generated-context capture slot position overflowed",
+                        )
+                    })?;
+                if declared != immediate_capture_slot {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a generated-context capture availability names immediate slot \
+                             {immediate_capture_slot} but this context declares that coordinate \
+                             at {declared}"
+                        ),
+                    ));
+                }
+                Ok(ContinuationImmediateResolution {
+                    immediate_slot: immediate_capture_slot,
+                    root: ContinuationImmediateRoot::ProducerLocal,
+                })
+            }
+            (
+                ContinuationSourceCoordinate::EntryAbi { .. },
+                ContinuationImmediateAvailability::CurrentLexical { .. }
+                | ContinuationImmediateAvailability::GeneratedContextCapture { .. },
+            )
+            | (
+                ContinuationSourceCoordinate::ProducerLocal { .. },
+                ContinuationImmediateAvailability::EntryAbi { .. },
+            ) => Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "a continuation input pairs the root coordinate {coordinate:?} with the \
+                     immediate availability {availability:?}, which belong to different domains; \
+                     RT-CONTSRC-PRODUCER-LOCAL D3b refuses a crossed pair rather than trusting \
+                     either half, because each is well-formed alone and only the pairing is wrong"
+                ),
+            )),
+        }
+    }
+
     fn claim_and_call_resolved_continuation(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -6306,6 +6561,7 @@ impl<'a> Lowering<'a> {
                 locator_operand,
             });
         }
+        let mut resolved_slots: Vec<(ContinuationSourceCoordinate, u32)> = Vec::new();
         for input in unit.continuation_inputs()? {
             // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — present a producer-local
             // coordinate to this seam, so its refusal is measured rather than
@@ -6325,24 +6581,14 @@ impl<'a> Lowering<'a> {
             // no default and no fallthrough: this seam indexes an environment,
             // and a domain it has not been taught to locate must refuse rather
             // than index with whatever integer it can reach.
-            let (source_owner, source_abi_position) = match input.coordinate {
+            // Retained for the `D5a` route mutation below, which rewrites an
+            // availability using the ROOT position and must keep doing so.
+            #[cfg(test)]
+            let source_abi_position = match input.coordinate {
                 ContinuationSourceCoordinate::EntryAbi {
-                    source_owner,
-                    source_abi_position,
-                    ..
-                } => (source_owner, source_abi_position),
-                ContinuationSourceCoordinate::ProducerLocal { binding, locator } => {
-                    return Err(unsupported(
-                        "ContinuationSpecialization",
-                        format!(
-                            "a continuation input names the producer-local binding \
-                             {binding:?} at {locator:?}; RT-CONTSRC-PRODUCER-LOCAL D1 \
-                             represents that coordinate and D3 teaches this seam to locate \
-                             it. Refusing is deliberate: the alternative is reading an entry \
-                             ABI position this value does not have"
-                        ),
-                    ));
-                }
+                    source_abi_position, ..
+                } => source_abi_position,
+                ContinuationSourceCoordinate::ProducerLocal { .. } => u32::MAX,
             };
             // `D5a` checkpoint 4 step 3 -- the capture projection's three
             // reaching mutations. ⛔ Each perturbs one COORDINATE the projection
@@ -6403,31 +6649,110 @@ impl<'a> Lowering<'a> {
             // anyway because "unreachable" is a claim about the current
             // projection, and this seam must not be the place that discovers it
             // was wrong.
-            let immediate_slot = match input.availability {
-                ContinuationImmediateAvailability::EntryAbi { immediate_slot } => immediate_slot,
-                ContinuationImmediateAvailability::CurrentLexical { .. }
-                | ContinuationImmediateAvailability::GeneratedContextCapture { .. } => {
-                    return Err(unsupported(
-                        "ContinuationSpecialization",
-                        format!(
-                            "a continuation input is immediately available only as the \
-                             producer-local {:?}; RT-CONTSRC-PRODUCER-LOCAL D2b projects that \
-                             availability and D3 teaches this seam to consume it. Refusing is \
-                             deliberate: the alternative is indexing this context's ABI operand \
-                             run with a lexical environment index",
-                            input.availability
-                        ),
-                    ));
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` — the seam resolves the
+            // (coordinate, availability) PAIR, not each half in turn, and it
+            // does so AFTER the `D5a` route mutations so that what they perturb
+            // is what this reads.
+            //
+            // ⛔ **Pairing is the unit because the domains are not independent.**
+            // The projection builds `EntryAbi` availability only for an entry
+            // coordinate and the two producer-local availabilities only for a
+            // producer-local one, so a crossed pair is not a case to handle but
+            // a statement that the projection and this seam disagree about what
+            // the value IS. Matching the halves separately lets a crossed pair
+            // through whenever both halves are individually well-formed, which
+            // is exactly the shape that reads as safe.
+            let resolution = self.resolve_continuation_immediate(
+                input.coordinate,
+                input.availability,
+                defining_owner,
+                ContinuationImmediateSeat::Emission {
+                    producer_owner: unit.producer_owner(),
+                    producer_result_origin: unit.producer_result_origin(),
+                    emission_origin: unit.producer_construct_origin(),
+                },
+            )?;
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` CONSUMER MUTATIONS. ⭐ `D4a`'s
+            // mutations proved the INSTRUMENT — that the post-shift slot and the
+            // locator slot hold different operands. These prove the CONSUMER:
+            // that the production seam notices when it reads the wrong one.
+            //
+            // ⛔ Applied only to a producer-local resolution. On an entry-ABI
+            // input the arm's own root-versus-immediate equality law catches
+            // them first, and the row would name this mutation while measuring
+            // that one.
+            #[cfg(test)]
+            let resolution = {
+                let mut resolution = resolution;
+                if let (
+                    ContinuationImmediateRoot::ProducerLocal,
+                    ContinuationSourceCoordinate::ProducerLocal { locator, .. },
+                ) = (resolution.root, input.coordinate)
+                {
+                    match d3b_consumer_mutation() {
+                        D3bConsumerMutation::Exact => {}
+                        D3bConsumerMutation::ConsumeLocatorIndex => {
+                            record_d3b_consumer_application();
+                            resolution.immediate_slot = locator.environment_index;
+                        }
+                        D3bConsumerMutation::ShiftProducerLocalSlot => {
+                            record_d3b_consumer_application();
+                            resolution.immediate_slot = resolution.immediate_slot.wrapping_add(1);
+                        }
+                    }
                 }
+                resolution
             };
+            let immediate_slot = resolution.immediate_slot;
+            // `D3b` — INJECTIVITY, **within the producer-local domain only**.
+            //
+            // ⛔ **Deliberately not across domains, and that is a measurement
+            // rather than a preference.** An entry-ABI input's `immediate_slot`
+            // is a position in the entry ABI frame; a producer-local input's
+            // `post_shift_index` is a position in the lexical frame. Comparing
+            // the two integers is the cross-frame conflation this node exists to
+            // forbid, and a first draft that did it refused five lawful bracket
+            // fixtures where a parameter at ABI position 0 and a case binder at
+            // lexical position 0 legitimately carry the same number.
+            //
+            // Within one domain the law is exact, and it is the consumption-side
+            // dual of the planner's refusal of a binding present at two
+            // positions of the seat environment: there, ambiguity is one value
+            // in two places; here it is two values claiming one place.
+            if matches!(resolution.root, ContinuationImmediateRoot::ProducerLocal) {
+                if let Some((seen, _)) = resolved_slots
+                    .iter()
+                    .find(|(_, slot)| *slot == immediate_slot)
+                {
+                    if *seen != input.coordinate {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "two distinct producer-local continuation inputs of one emission \
+                                 resolve to the same immediate slot {immediate_slot}: {seen:?} \
+                                 and {:?}. One position cannot hold both values, so at least one \
+                                 would be emitted carrying the other's operand",
+                                input.coordinate
+                            ),
+                        ));
+                    }
+                }
+                resolved_slots.push((input.coordinate, immediate_slot));
+            }
             // `D5a` -- ROOT provenance versus IMMEDIATE availability.
             //
             // ⛔ Exhaustive over the emission-owner classes with no catch-all:
             // the two answer the question "does this environment hold the value,
             // and at which index" differently, and a default arm here would be
             // the reverse-map `evt_609am4v7cdt5b` forbids.
-            match defining_owner {
-                ContinuationEmissionOwner::Predeclared(owner) => {
+            match (resolution.root, defining_owner) {
+                (
+                    ContinuationImmediateRoot::EntryAbi {
+                        source_owner,
+                        source_abi_position,
+                    },
+                    ContinuationEmissionOwner::Predeclared(owner),
+                ) => {
                     // The emitting function IS the root provenance owner, so
                     // root and immediate must coincide. Both halves are checked:
                     // the owner because it always was, and the equality because
@@ -6453,7 +6778,10 @@ impl<'a> Lowering<'a> {
                         ));
                     }
                 }
-                ContinuationEmissionOwner::Specialization(_) => {
+                (
+                    ContinuationImmediateRoot::EntryAbi { .. },
+                    ContinuationEmissionOwner::Specialization(_),
+                ) => {
                     // The emitting function is a generated context. Root
                     // provenance is deliberately NOT compared against it: the
                     // whole reason this context exists is that the root owner's
@@ -6463,6 +6791,12 @@ impl<'a> Lowering<'a> {
                     // capture position when it built the projection; the bounds
                     // check below is what makes that resolution answerable here.
                 }
+                // `D3b` — a producer-local root carries no ABI position in any
+                // emitting environment, so there is no root-versus-immediate
+                // equality to state. ⛔ Its identity was checked where it lives:
+                // against the emission seat's own lexical environment, or
+                // against the generated context's declared capture run.
+                (ContinuationImmediateRoot::ProducerLocal, _) => {}
             }
             let binding = producer_env
                 .get(immediate_slot as usize)
@@ -6472,10 +6806,11 @@ impl<'a> Lowering<'a> {
                         format!(
                             "a continuation input names immediate slot {} outside the emitting \
                              context's environment of {} bindings; note this is the IMMEDIATE \
-                             slot, not the root ABI position {} beside it",
+                             slot, whose meaning is fixed by the availability domain {:?} and \
+                             not by any root position beside it",
                             immediate_slot,
                             producer_env.len(),
-                            source_abi_position,
+                            input.availability,
                         ),
                     )
                 })?;
@@ -8464,48 +8799,38 @@ impl<'a> Lowering<'a> {
             // half. ⛔ Exhaustive over the coordinate domains with no default,
             // for the same reason as the specialization seam: this reads an ABI
             // operand run, which a producer-local value is not in.
-            let (source_owner, source_abi_position) = match capture.coordinate {
-                ContinuationSourceCoordinate::EntryAbi {
-                    source_owner,
-                    source_abi_position,
-                    ..
-                } => (source_owner, source_abi_position),
-                ContinuationSourceCoordinate::ProducerLocal { binding, locator } => {
-                    return Err(unsupported(
-                        "ContinuationSpecialization",
-                        format!(
-                            "a generated context capture names the producer-local binding \
-                             {binding:?} at {locator:?}; RT-CONTSRC-PRODUCER-LOCAL D1 \
-                             represents that coordinate and D3 teaches this seam to locate it"
-                        ),
-                    ));
-                }
-            };
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` — the same pairing resolver as
+            // the emission seam, told what THIS seam is holding.
+            //
+            // ⛔ `ContinuationImmediateSeat::AbiOperandRun` is not a weaker
+            // `Emission`: this seam holds an ABI operand run and no semantic
+            // environment at all, so a current-lexical post-shift index has
+            // nothing here to index and is refused rather than read as an ABI
+            // position. The generated-context capture arm IS resolvable here,
+            // because a capture slot is a position in exactly this run.
+            let resolution = self.resolve_continuation_immediate(
+                capture.coordinate,
+                capture.availability,
+                defining_owner,
+                ContinuationImmediateSeat::AbiOperandRun,
+            )?;
             // `RT-CONTSRC-PRODUCER-LOCAL` `D2b` — the availability domain, matched
             // exhaustively with no wildcard exactly as the coordinate domain is
             // above. `D3` teaches this seam the two producer-local arms; until
             // then it must not index `defining_abi_operands` — an ABI operand run
             // — with a lexical environment index.
-            let immediate_slot = match capture.availability {
-                ContinuationImmediateAvailability::EntryAbi { immediate_slot } => immediate_slot,
-                ContinuationImmediateAvailability::CurrentLexical { .. }
-                | ContinuationImmediateAvailability::GeneratedContextCapture { .. } => {
-                    return Err(unsupported(
-                        "ContinuationSpecialization",
-                        format!(
-                            "a generated context capture is immediately available only as the \
-                             producer-local {:?}; RT-CONTSRC-PRODUCER-LOCAL D2b projects that \
-                             availability and D3 teaches this seam to consume it",
-                            capture.availability
-                        ),
-                    ));
-                }
-            };
+            let immediate_slot = resolution.immediate_slot;
             // ROOT provenance versus IMMEDIATE availability, kept apart exactly
             // as at the specialization emission seam. Exhaustive over the owner
             // classes with no catch-all.
-            match defining_owner {
-                ContinuationEmissionOwner::Predeclared(owner) => {
+            match (resolution.root, defining_owner) {
+                (
+                    ContinuationImmediateRoot::EntryAbi {
+                        source_owner,
+                        source_abi_position,
+                    },
+                    ContinuationEmissionOwner::Predeclared(owner),
+                ) => {
                     if source_owner != owner {
                         return Err(unsupported(
                             "ContinuationSpecialization",
@@ -8522,11 +8847,18 @@ impl<'a> Lowering<'a> {
                         ));
                     }
                 }
-                ContinuationEmissionOwner::Specialization(_) => {
+                (
+                    ContinuationImmediateRoot::EntryAbi { .. },
+                    ContinuationEmissionOwner::Specialization(_),
+                ) => {
                     // A context calling another context reads the immediate
                     // slot alone; root provenance is retained and deliberately
                     // not compared against a function that never held it.
                 }
+                // `D3b` — a producer-local root has no ABI position to agree
+                // with; its identity was checked against the declared capture
+                // run inside the resolver.
+                (ContinuationImmediateRoot::ProducerLocal, _) => {}
             }
             let operand = self
                 .function_local
@@ -8536,10 +8868,10 @@ impl<'a> Lowering<'a> {
                     unsupported(
                         "ContinuationSpecialization",
                         format!(
-                            "a generated context capture names immediate slot {} outside the                              emitting function's {} ABI operands; note this is the IMMEDIATE                              slot, not the root ABI position {} beside it",
+                            "a generated context capture names immediate slot {} outside the                              emitting function's {} ABI operands; note this is the IMMEDIATE                              slot, whose meaning is fixed by the availability domain {:?}",
                             immediate_slot,
                             self.function_local.defining_abi_operands.len(),
-                            source_abi_position,
+                            capture.availability,
                         ),
                     )
                 })?
@@ -13214,4 +13546,44 @@ impl<'a> Lowering<'a> {
         // value re-entering the phase sum.
         lowered.map(LoweringOperand::Specialized)
     }
+}
+
+
+/// Which environment a `D3b` resolution's index is an index INTO, and what root
+/// provenance it carries. ⛔ Two fields, not one: the index alone cannot say
+/// which environment it belongs to, and that is the conflation the closed
+/// availability sum exists to prevent.
+#[derive(Clone, Copy, Debug)]
+struct ContinuationImmediateResolution {
+    immediate_slot: u32,
+    root: ContinuationImmediateRoot,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ContinuationImmediateRoot {
+    EntryAbi {
+        source_owner: PredeclaredFunctionId,
+        source_abi_position: u32,
+    },
+    /// ⛔ Carries no position, deliberately. A producer-local value has no ABI
+    /// position in any environment, and a field here would be a place for one to
+    /// be invented.
+    ProducerLocal,
+}
+
+/// What the consuming seam is holding, which decides whether a lexical index has
+/// anything to index at all.
+#[derive(Clone, Copy, Debug)]
+enum ContinuationImmediateSeat {
+    /// The specialization emission seam: it holds the producer's own lowering
+    /// environment at the exact emission occurrence.
+    Emission {
+        producer_owner: PredeclaredFunctionId,
+        producer_result_origin: StaticOriginId,
+        emission_origin: StaticOriginId,
+    },
+    /// A seam holding only an ABI operand run. ⛔ Not a lesser case of the
+    /// above: it is a different environment, and the distinction is what stops a
+    /// post-shift lexical index being read as an ABI position.
+    AbiOperandRun,
 }

@@ -89,6 +89,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,
     SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot, PlannedAggregateOwnership,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
+    verify_current_lexical_availability,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]
@@ -1289,6 +1290,59 @@ fn set_continuation_emission_mutation(mutation: ContinuationEmissionMutation) {
 thread_local! {
     static CONTINUATION_EMISSION_MUTATION: std::cell::Cell<ContinuationEmissionMutation> =
         const { std::cell::Cell::new(ContinuationEmissionMutation::Exact) };
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` — the CONSUMER mutations.**
+///
+/// ⭐ `D4a`'s mutations proved the *instrument*: that the post-shift slot and
+/// the locator slot hold different operands. These prove the *consumer*: that
+/// the production emission seam refuses when it reads the wrong one. The
+/// Architect's gate `evt_65xkzqppdqdaj` requires both, and passing the first
+/// does not discharge the second.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D3bConsumerMutation {
+    Exact,
+    /// Consume the locator's scope-relative introduction index instead of the
+    /// projection's post-shift index — the exact defect `D2b` reopened `D2` for,
+    /// now expressed at the consumption boundary.
+    ConsumeLocatorIndex,
+    /// Move the resolved slot by one. ⛔ Distinct from the above rather than
+    /// redundant with it: on a fixture whose locator and post-shift indices are
+    /// adjacent the two coincide, but this one also perturbs an emission with a
+    /// single producer-local input, where no collision exists to catch it.
+    ShiftProducerLocalSlot,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D3B_CONSUMER_MUTATION: std::cell::Cell<D3bConsumerMutation> =
+        const { std::cell::Cell::new(D3bConsumerMutation::Exact) };
+    static D3B_CONSUMER_APPLIED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d3b_consumer_mutation(mutation: D3bConsumerMutation) {
+    D3B_CONSUMER_MUTATION.with(|cell| cell.set(mutation));
+    D3B_CONSUMER_APPLIED.with(|cell| cell.set(0));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d3b_consumer_mutation() -> D3bConsumerMutation {
+    D3B_CONSUMER_MUTATION.with(std::cell::Cell::get)
+}
+
+/// ⛔ A mutation that never fired is not a control. This counter is what lets a
+/// row assert the perturbation actually reached the seam, rather than passing
+/// because nothing happened.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d3b_consumer_application() {
+    D3B_CONSUMER_APPLIED.with(|cell| cell.set(cell.get() + 1));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d3b_consumer_applications() -> usize {
+    D3B_CONSUMER_APPLIED.with(std::cell::Cell::get)
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D4a` — the lowering-side operand observatory.**
