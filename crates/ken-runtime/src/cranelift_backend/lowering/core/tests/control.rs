@@ -12851,31 +12851,6 @@ fn d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_
 /// `d5a_a_transplanted_generated_context_binding_refuses_at_the_retarget`, which
 /// hands one identity another's context and is refused.
 ///
-/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` STAGE 2 — every structural frame
-/// requirement resolves to exactly one context, and zero or multiple refuses.**
-///
-/// ⭐⭐ **This is the obligation the Architect kept in `D3b` rather than moving
-/// to `D4b`, and it is proved by direct planner controls because behavioural
-/// activation does not exist yet.** Measured at the time of writing: `0` of `60`
-/// consumer observations held a generated emission owner. So no compiled program
-/// reaches a generated `EntryFrame` claim, and a control that waited for one
-/// would never run.
-///
-/// ⛔ **That is exactly why the non-vacuity counter is asserted first.** A
-/// zero-or-multiple perturbation over an EMPTY requirement set succeeds
-/// trivially — nothing to resolve, nothing to refuse — and every row below would
-/// pass while measuring an empty loop. The counter is what distinguishes "the
-/// refusals fire" from "there was nothing to fire on".
-///
-/// ⚠ **MEASURED**: the witness carries generated frame requirements; they
-/// resolve under the real context population and refuse under both perturbations;
-/// and the publication gate refuses an unfinalized claim. **CLAIMED**: no
-/// half-stamped claim can reach a consumer, because the only conversion that
-/// builds a view requires a finalized entry. **THE GAP**: no *lowered* program
-/// consumes a generated frame identity today, so the three-sided consumer
-/// revalidation is exercised by construction rather than by execution; `D4b`
-/// supplies that.
-///
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D4b` — the generated-frame consumer is
 /// exercised BEHAVIOURALLY, on a fixture that compiles and runs.**
 ///
@@ -12957,6 +12932,41 @@ fn d4b_the_generated_frame_consumer_runs_on_a_real_compile() {
     );
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` STAGE 2 — every structural frame
+/// requirement resolves to exactly one context, and zero or multiple refuses.**
+///
+/// ⭐⭐ **This is the obligation the Architect kept in `D3b` rather than moving
+/// to `D4b`.** It is proved by direct planner controls because that is the
+/// plane the property lives in: finalization is a whole-plan pass, and whether
+/// it resolves *every* requirement is not something any single compiled program
+/// can witness.
+///
+/// ⚠ **A withdrawn premise, kept visible so it is not reconstructed.** This
+/// comment previously added that behavioural activation "does not exist yet",
+/// citing `0` of `60` consumer observations and concluding that no compiled
+/// program reaches a generated `EntryFrame` claim. **That figure was wrong** —
+/// it was measured while the capture-view defect was still live, so it recorded
+/// the path refusing rather than the path being absent. `D4b` re-measured it and
+/// exercises the same consumer behaviourally; see
+/// `d4b_the_generated_frame_consumer_runs_on_a_real_compile`. ⛔ Nothing in this
+/// row ever depended on that figure, and nothing here should be restated as if
+/// it did.
+///
+/// ⛔ **The non-vacuity counter is asserted first, and its premise is
+/// arithmetic.** A zero-or-multiple perturbation over an EMPTY requirement set
+/// succeeds trivially — nothing to resolve, nothing to refuse — and every row
+/// below would pass while measuring an empty loop. The counter is what
+/// distinguishes "the refusals fire" from "there was nothing to fire on". That
+/// is true whatever the route's reachability at any consumer.
+///
+/// ⚠ **MEASURED**: the witness carries generated frame requirements; they
+/// resolve under the real context population and refuse under both
+/// perturbations; and the publication gate refuses an unfinalized claim.
+/// **CLAIMED**: no half-stamped claim can reach a consumer, because the only
+/// conversion that builds a view requires a finalized entry. **THE GAP**: this
+/// proves the whole-plan pass resolves and refuses correctly; that a *consumer*
+/// then revalidates what it holds is `D4b`'s behavioural row, not this one.
+///
 /// **Promise class: durable invariant.**
 #[test]
 fn d3b_every_generated_frame_requirement_resolves_to_exactly_one_context() {

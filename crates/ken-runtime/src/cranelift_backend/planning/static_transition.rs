@@ -1245,10 +1245,15 @@ fn finalize_continuation_availability(
 /// ⛔⛔ **Whole-plan, and that is the obligation rather than a convenience.**
 /// Finalizing lazily — resolving each claim the first time some consumer asks
 /// for it — would leave a plan carrying an unresolvable frame *accepted*, and
-/// refused only if and when something happened to reach it. The measured
-/// `0/60` generated-owner consumptions is exactly the condition under which
-/// that gap would stay invisible. Every claim is resolved here, whether or not
-/// anything will ever read it.
+/// refused only if and when something happened to reach it. Every claim is
+/// resolved here, whether or not anything will ever read it.
+///
+/// ⛔ **The obligation does not rest on how reachable the route currently is,
+/// and must not be restated as if it did.** An accepted-but-unresolvable claim
+/// is the wrong state to publish whatever today's consumption looks like: a
+/// claim nothing reaches now may be reached by the next checkpoint, and a plan
+/// that cannot be built should fail when it is built. Reachability changes with
+/// fixtures; this refusal does not.
 fn finalize_continuation_availability_plan(
     plan: &mut StaticTransitionPlan<'_>,
 ) -> Result<(), CraneliftBackendError> {
@@ -1303,10 +1308,18 @@ pub(in crate::cranelift_backend) enum D3bFinalizationPerturbation {
 /// Re-run stage-2 finalization over a perturbed context population and report
 /// `(generated requirements resolved, claims finalized)`.
 ///
-/// ⛔ The first number is the **non-vacuity** counter. The measured `0/60`
-/// consumption boundary means a control could pass here while resolving no
-/// generated frame at all, and a zero/multiple perturbation over an empty
-/// requirement set succeeds trivially.
+/// ⛔ The first number is the **non-vacuity** counter, and its premise is
+/// arithmetic rather than empirical: a zero-or-multiple perturbation over an
+/// **empty** generated-requirement population succeeds trivially — there is
+/// nothing to resolve, so nothing can fail to resolve. A control that only
+/// asserted the two refusals would therefore pass on a plan carrying no
+/// generated requirement at all.
+///
+/// ⭐ So this counter is what proves that population **nonempty**, and that is
+/// the whole of its job. ⛔ It is **not** premised on how reachable the
+/// generated-frame route is at any consumer — that is a different question,
+/// owned by `D4b`'s behavioural control, and a reachability figure must not be
+/// reintroduced here as this control's justification.
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn d3b_refinalize(
     plan: &StaticTransitionPlan<'_>,
