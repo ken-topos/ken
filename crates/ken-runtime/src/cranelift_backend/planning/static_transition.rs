@@ -2037,6 +2037,22 @@ impl ComposedWorkerView {
 /// `target.worker().body_origin()`. A `body_origin()` on this type would be a
 /// second spelling of one field, and the check that compared the two was
 /// deleted in `D7a2` for comparing a value with itself.
+///
+/// ## `D8h` — the paired causal identity
+///
+/// The target additionally carries the exact opaque [`ContinuationCallIdentity`]
+/// that its **own** five-field causal coordinate selects, resolved through
+/// [`StaticTransitionPlan::continuation_call_binding_for`] — the planner lookup
+/// that already existed for this coordinate — and never rebuilt here.
+///
+/// ⛔ **The identity stays opaque and planner-owned.** It has no sequence
+/// accessor and no lowering constructor, so pairing it here adds no way to
+/// fabricate one: this type hands out a value it could not have made. Nothing
+/// in the pairing consults the worker's body, the constructor's symbol, the
+/// declared arity, the source position, or a same-shaped constructor. On the
+/// witness population **constructor-symbol equality cannot discriminate at
+/// all** — both targets name one symbol — which is what makes that exclusion a
+/// measured fact rather than a stated intention.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) struct ComposedCallTarget {
     emission_owner: ContinuationEmissionOwner,
@@ -2045,6 +2061,7 @@ pub(in crate::cranelift_backend) struct ComposedCallTarget {
     producer_alternative: u32,
     recursive_position: u32,
     worker: ComposedWorkerView,
+    call_identity: ContinuationCallIdentity,
 }
 
 // Read by this node's tests; `D8c` is the held production consumer.
@@ -2073,6 +2090,16 @@ impl ComposedCallTarget {
     pub(in crate::cranelift_backend) fn worker(&self) -> &ComposedWorkerView {
         &self.worker
     }
+    /// **`D8h`** — the opaque causal identity this target's own coordinate
+    /// selects.
+    ///
+    /// ⛔ Returned by reference and still opaque: a consumer can compare it,
+    /// key a map on it, and ask it for its target specialization and emission
+    /// owner. It cannot read the call-site sequence, and it cannot construct
+    /// one — which is what keeps the identity planner-owned across the pairing.
+    pub(in crate::cranelift_backend) fn call_identity(&self) -> &ContinuationCallIdentity {
+        &self.call_identity
+    }
 }
 
 /// `D8b` target-minting defects, for the controls that no well-formed plan can
@@ -2091,6 +2118,23 @@ pub(in crate::cranelift_backend) enum ComposedCallTargetDefect {
     /// Mint the first target under a sibling layer's construct origin while
     /// keeping its own worker provenance.
     TransplantConstruct,
+    /// **`D8h`** — pair the first target with the causal identity belonging to
+    /// a **different** target whose producer constructor carries the **same
+    /// symbol identity**.
+    ///
+    /// ⛔ This is not a fabricated identity and not an arbitrary swap: it is
+    /// exactly the value a pairing rule keyed on constructor-symbol equality
+    /// would have produced, taken from the real population by searching for
+    /// that equality. So the refusal below is attributable to the pairing rule
+    /// the release forbids, rather than to the identity being wrong in some
+    /// unrelated way. The selector and the carried worker are untouched, so
+    /// selector agreement still passes and only the pairing law can see it.
+    ///
+    /// ⚠ If no same-symbol sibling exists on the plan under test this leaves
+    /// the population exact, and the row that arms it asserts the sibling's
+    /// existence separately — so a population that cannot exhibit the defect
+    /// fails loudly instead of passing vacuously.
+    SameSymbolIdentity,
 }
 
 #[cfg(test)]
@@ -11431,6 +11475,31 @@ impl<'src> StaticTransitionPlan<'src> {
                 alternative,
                 position,
             )?;
+            // `D8h` — THE PAIRING, through the planner's own lookup.
+            //
+            // ⛔ The four arguments are this target's own causal coordinate and
+            // nothing else. No body, symbol, arity, source position or
+            // same-shaped constructor participates, and the sequence inside the
+            // identity is never seen here: `continuation_call_binding_for`
+            // returns the whole opaque value or refuses.
+            let call_identity = self
+                .continuation_call_binding_for(construct, frame, alternative, position)?
+                .ok_or_else(|| {
+                    planner_error(
+                        "a composed-call target's own causal coordinate selects no continuation                          call binding, so there is no planner-issued identity to pair it with.                          This fails closed rather than minting an unpaired target: the two                          populations are interned together -- one call token per interned                          specialization, at the same coordinate -- so a target without a binding                          means those two have drifted, and a consumer handed an unpaired target                          would have to invent the identity that is missing",
+                    )
+                })?;
+            // The FIFTH field, held rather than looked up. The lookup above is
+            // keyed on the four causal fields; the emission owner is the
+            // coordinate's remaining component, and the identity carries its
+            // own. ⭐ Comparing them is what makes the pairing five-field: two
+            // independently derived answers to "who emits this", from the
+            // interned unit and from the call token, must agree.
+            if call_identity.emission_owner() != owner {
+                return Err(planner_error(
+                    "a composed-call target's paired causal identity names a different emission                      owner than the selector it was minted under, so the call token and the                      interned unit disagree about who emits this call",
+                ));
+            }
             targets.push(ComposedCallTarget {
                 emission_owner: owner,
                 producer_construct_origin: construct,
@@ -11438,6 +11507,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 producer_alternative: alternative,
                 recursive_position: position,
                 worker,
+                call_identity,
             });
         }
 
@@ -11465,6 +11535,25 @@ impl<'src> StaticTransitionPlan<'src> {
                         .find(|construct| *construct != targets[0].producer_construct_origin);
                     if let Some(other) = other {
                         targets[0].producer_construct_origin = other;
+                    }
+                }
+                ComposedCallTargetDefect::SameSymbolIdentity => {
+                    // ⛔ SEARCHED, not hand-picked: the sibling is selected by
+                    // the very equality the forbidden rule would key on, so the
+                    // switch installs that rule's own answer.
+                    let symbol =
+                        self.constructor_symbol_identity(targets[0].producer_construct_origin)?;
+                    let mut sibling = None;
+                    for target in targets.iter().skip(1) {
+                        if self.constructor_symbol_identity(target.producer_construct_origin)?
+                            == symbol
+                        {
+                            sibling = Some(target.call_identity.clone());
+                            break;
+                        }
+                    }
+                    if let Some(sibling) = sibling {
+                        targets[0].call_identity = sibling;
                     }
                 }
             }
@@ -11518,6 +11607,36 @@ impl<'src> StaticTransitionPlan<'src> {
                     "a composed-call target's own selector resolves to a different worker than \
                      the target carries, so the callee was minted for one layer and attributed \
                      to another",
+                ));
+            }
+            // `D8h` — the pairing law, the second half of the same claim.
+            //
+            // ⭐ Re-resolved from the target's OWN coordinate through the same
+            // planner lookup that minted it, and compared whole. ⛔ The
+            // comparison is on the opaque identity, so it holds the call-site
+            // sequence too without this code ever seeing it -- which is the
+            // property a sequence accessor would have destroyed.
+            let paired = self
+                .continuation_call_binding_for(construct, frame, alternative, position)?
+                .ok_or_else(|| {
+                    planner_error(
+                        "a composed-call target's own causal coordinate selects no continuation \
+                         call binding at verification, so the identity it carries cannot be the \
+                         one that coordinate names",
+                    )
+                })?;
+            if paired != target.call_identity {
+                return Err(planner_error(
+                    "a composed-call target carries a causal identity its own five-field \
+                     coordinate does not select, so the identity was attributed by something \
+                     other than the coordinate -- a constructor symbol, a worker body, an arity \
+                     or a source position would each produce exactly this",
+                ));
+            }
+            if target.call_identity.emission_owner() != owner {
+                return Err(planner_error(
+                    "a composed-call target's paired causal identity names a different emission \
+                     owner than its own selector",
                 ));
             }
         }

@@ -16947,3 +16947,155 @@ fn d8e_off_the_source_machine_path_the_binding_is_refused_in_value_position() {
          downstream failure: {reason}"
     );
 }
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8h` — every composed-call target carries the
+/// causal identity its own coordinate selects, and nothing weaker could have
+/// chosen it.**
+///
+/// The subject is the pairing added to
+/// [`StaticTransitionPlan::composed_call_targets`]: one opaque
+/// [`ContinuationCallIdentity`] per target, resolved through the planner's own
+/// four-field lookup and held to the coordinate's fifth field.
+///
+/// ## Clause 1 — planner authority
+///
+/// The expected identity is derived **in this test** by calling
+/// `continuation_call_binding_for` on the target's own coordinate, and compared
+/// against what the target carries. ⛔ Two reads of the target would agree with
+/// each other whatever the minting did; this compares the target against the
+/// authority it claims to have used. The identity is compared **whole**, so the
+/// opaque call-site sequence participates without this row being able to see
+/// it — which is the property a sequence accessor would have destroyed.
+///
+/// ## Clause 2 — nothing weaker could have chosen it
+///
+/// **MEASURED**, on the witness plan: the two targets agree on their producer's
+/// **constructor symbol identity**, on declared **arity**, on **capture count**,
+/// and on all three source-position fields — continuation origin, producer
+/// alternative and recursive position — and carry **different** call identities.
+///
+/// **CLAIMED**: therefore none of constructor-symbol equality, arity, capture
+/// count or source position can be the rule that assigned them, because each is
+/// constant across a pair the pairing separates. Only the producer `Construct`
+/// origin (and with it the emission owner) distinguishes the two, which is
+/// `D7a`'s finding arriving at the identity.
+///
+/// **THE GAP**: the two workers' **body origins do differ** (each layer's
+/// producer construct is the other's worker body), so a body-keyed rule is
+/// excluded by the release's rule and by inspection of the minting code, **not**
+/// by this measurement. This row cannot separate it, and says so rather than
+/// implying a coverage it does not have.
+///
+/// ## Clause 3 — the forbidden rule's own answer is refused
+///
+/// `SameSymbolIdentity` installs exactly what a constructor-symbol-keyed pairing
+/// would have produced, found by searching the population for that equality
+/// rather than by hand. It leaves the selector and the worker untouched, so it
+/// passes selector agreement and can only be caught by the pairing law.
+///
+/// **Promise class: durable invariant.** It asserts relations over the planned
+/// population — equality against an independently resolved authority, and a
+/// separation between two targets — never a count or a literal identity.
+#[test]
+fn d8h_a_composed_call_target_carries_the_identity_its_own_coordinate_selects() {
+    use crate::cranelift_backend::planning::ComposedCallTargetDefect;
+
+    with_d8b_target_defect(ComposedCallTargetDefect::Exact, |plan| {
+        let targets = plan.composed_call_targets().expect("the targets mint");
+        assert!(
+            !targets.is_empty(),
+            "the witness must mint at least one composed-call target, or every clause here is \
+             vacuous"
+        );
+
+        // Clause 1 — against the planner's own lookup, not against the target.
+        for target in &targets {
+            let (owner, construct, frame, alternative, position) = target.selector();
+            let authority = plan
+                .continuation_call_binding_for(construct, frame, alternative, position)
+                .expect("the lookup resolves")
+                .expect(
+                    "every minted target's coordinate must select a planner-issued call binding; \
+                     a None here means the interned units and the call tokens have drifted apart \
+                     and the target is unpaired",
+                );
+            assert_eq!(
+                &authority,
+                target.call_identity(),
+                "the carried identity must be the one this target's own coordinate selects"
+            );
+            assert_eq!(
+                target.call_identity().emission_owner(),
+                owner,
+                "and the coordinate's fifth field must be the identity's own emission owner: the \
+                 interned unit and the call token are two derivations of who emits this call, and \
+                 the pairing is only five-field if they are held to agree"
+            );
+        }
+
+        // Clause 2 — the separated pair, and what it rules out.
+        let mut separated = None;
+        for (index, left) in targets.iter().enumerate() {
+            for right in targets.iter().skip(index + 1) {
+                let same_symbol = plan
+                    .constructor_symbol_identity(left.selector().1)
+                    .expect("symbol identity")
+                    == plan
+                        .constructor_symbol_identity(right.selector().1)
+                        .expect("symbol identity");
+                if same_symbol && left.call_identity() != right.call_identity() {
+                    separated = Some((left, right));
+                }
+            }
+        }
+        let (left, right) = separated.expect(
+            "the population must contain two targets whose producers name ONE constructor symbol \
+             and whose call identities DIFFER. Without that pair, a pairing keyed on the \
+             constructor symbol would agree with this one everywhere, and clause 3 would be \
+             refusing a defect the population cannot actually exhibit",
+        );
+        assert_eq!(
+            (
+                left.worker().declared_arity(),
+                left.worker().captures().len(),
+                left.selector().2,
+                left.selector().3,
+                left.selector().4,
+            ),
+            (
+                right.worker().declared_arity(),
+                right.worker().captures().len(),
+                right.selector().2,
+                right.selector().3,
+                right.selector().4,
+            ),
+            "and the separated pair must also agree on arity, capture count, continuation origin, \
+             alternative and recursive position -- each of those is a rule the release forbids, \
+             and each is ruled out only while it is CONSTANT across a pair the pairing separates. \
+             If this ever differs, that reconstruction rule has become able to discriminate here \
+             and is no longer excluded by measurement"
+        );
+        assert_ne!(
+            left.worker().body_origin(),
+            right.worker().body_origin(),
+            "THE GAP, asserted so it cannot drift silently: the body origins DO differ on this \
+             population, so a body-keyed rule is excluded by the release and by the minting code, \
+             not by the separation above. If these ever became equal, this row would gain that \
+             coverage and this assertion should be inverted rather than deleted"
+        );
+    });
+
+    // Clause 3 — the forbidden rule's own answer, refused at the pairing law.
+    with_d8b_target_defect(ComposedCallTargetDefect::SameSymbolIdentity, |plan| {
+        let refusal = plan
+            .verify_composed_call_targets()
+            .expect_err("a symbol-keyed identity must refuse at the pairing law");
+        let refusal = format!("{refusal:?}");
+        assert!(
+            refusal.contains("does not select"),
+            "SameSymbolIdentity must reach the PAIRING law, not selector agreement one step \
+             earlier: the selector and worker are untouched, so a refusal from anywhere else \
+             means the switch perturbed more than the identity: {refusal}"
+        );
+    });
+}
