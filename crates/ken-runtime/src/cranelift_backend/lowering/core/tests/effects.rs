@@ -2402,3 +2402,72 @@ fn repeating_a_complete_visit_is_lawful() {
         "the repeated visits did not cover the whole planned population: {closure:?}"
     );
 }
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — THE MASKING DISCRIMINATOR. Two visits with
+/// complementary omissions both reject, even though their union is the complete
+/// planned population.**
+///
+/// ⭐⭐ **This control runs on the process-pair fixture and not on the governed
+/// bracket, and that is the whole difficulty of writing it.** The bracket visits
+/// each effect occurrence exactly once (measured: six groups, fifteen claims,
+/// fifteen distinct seats), so complementary omissions there land on *different*
+/// occurrences and no union is ever formed — the row rejects, but it would
+/// reject under the accumulating design too, so it discriminates nothing. This
+/// fixture visits ONE occurrence TWICE (measured: two groups, four claims, image
+/// of two), so visit 1 dropping the capability and visit 2 dropping argument 0
+/// leaves a union that is exactly complete.
+///
+/// MEASURED: with the omissions active the compile is refused, and the refusal
+/// names an incomplete visit.
+///
+/// CLAIMED: completeness is asked per visit, at the visit's own close. Both
+/// counterfactuals were run, and only one of them masks:
+///
+/// | design | this control |
+/// |---|---|
+/// | completeness deferred to the whole-pass close over the per-`(body, occurrence)` union — what `6a09ed68` did | **green: the omissions are accepted** |
+/// | per-visit close, but unioning with prior visits to the same occurrence | red |
+/// | per-visit close over the visit's own claims (this) | red |
+///
+/// ⚠ The middle row is the one worth knowing, because it is the repair a reader
+/// would reach for first and it is NOT the one that matters: visit 1 closes
+/// before any prior visit exists, so its union is its own claims and it refuses
+/// on its own. What masks is deferring the check, not unioning it.
+///
+/// THE GAP: this shows the union is not accepted. It does not show every other
+/// way of splitting a read across visits is caught, only the two-visit
+/// complementary one.
+#[test]
+fn complementary_omissions_across_two_visits_both_reject_though_their_union_is_complete() {
+    use crate::cranelift_backend::lowering::{
+        set_effect_seat_visit_mutation, units::last_effect_seat_closure, EffectSeatVisitMutation,
+    };
+    set_effect_seat_visit_mutation(EffectSeatVisitMutation::Exact);
+    compile_b2f_process_pair_fixture().expect("the unmutated fixture compiles");
+    // ⛔ The premise the discriminator rests on, asserted rather than assumed:
+    // this fixture really does visit one occurrence more than once, over more
+    // than one slot. Without both, the omissions cannot be complementary and a
+    // green row below would mean nothing.
+    let closure = last_effect_seat_closure().expect("the seat ledger closed");
+    assert!(
+        closure.groups > 1 && closure.population > 1 && closure.image == closure.population,
+        "the fixture no longer repeats a multi-slot visit, so complementary omissions are \
+         impossible and this control is vacuous: {closure:?}"
+    );
+    set_effect_seat_visit_mutation(EffectSeatVisitMutation::OmitComplementary);
+    let refusal = compile_b2f_process_pair_fixture();
+    set_effect_seat_visit_mutation(EffectSeatVisitMutation::Exact);
+    let error = match refusal {
+        Ok(_) => panic!(
+            "two visits with complementary omissions were accepted, so completeness is being \
+             taken over their union rather than over each visit"
+        ),
+        Err(error) => error.to_string(),
+    };
+    assert!(
+        error.contains("read incompletely"),
+        "the refusal is not the incomplete-visit one: {error}"
+    );
+    set_effect_seat_visit_mutation(EffectSeatVisitMutation::Exact);
+    compile_b2f_process_pair_fixture().expect("the fixture compiles again once the mutation clears");
+}
