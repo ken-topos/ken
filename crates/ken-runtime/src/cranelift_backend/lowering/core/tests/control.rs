@@ -7986,28 +7986,45 @@ fn governed_nested_brackets_n3_through_n7_emit_complete_functionized_bundles() {
 ///   clause reds on that.
 /// - ⭐ A repair that appends the new member to the **tail** instead of placing
 ///   it in the argument segment produces `[worker, outer.., worker]`. The
-///   "nothing after the leading pair" clause reds on that, and it is the
-///   specific mis-repair worth guarding: it leaves the *last* index resolving
-///   to a plausible value, so a row keyed only on the reported `Var(2)` would
-///   pass while `Var(1)` is silently the wrong binding.
+///   "nothing after the leading pair" clause reds on that.
+///
+///   ⛔ **WITHDRAWN, and replaced by what was measured.** An earlier version of
+///   this note said the tail append would leave the *last* index resolving to a
+///   plausible value while an earlier one was silently wrong, so that a row
+///   keyed only on the reported `Var(2)` would pass. That is **false for this
+///   mechanism**. MEASURED by running exactly that mutation: the typed
+///   static-worker binding refuses it, because the tail position is read in a
+///   *value* position and [`LoweringEnvironmentBinding::value_at`] fails closed
+///   there — *"a Var in value position is a value-producing position and a
+///   static worker binding has no value representation"*. The mis-repair is
+///   loud, not silent. This clause is therefore retained for its **actual**
+///   discriminator — it names the wrong ORDER directly, at the plan level,
+///   without depending on whether some later read happens to fail closed.
 /// - A repair that binds the argument as a value rather than a callable
 ///   produces one worker and one more `Carried`. The count clause reds.
 ///
-/// ⛔ **STATED GAP — THIS fixture does not separate the two CALL ROUTES, and
-/// another one does.** MEASURED here: every specialization renders as
+/// ⛔ **STATED GAP — this witness is ROUTE-DEGENERATE, and that is lawful.**
+/// MEASURED here: every specialization renders as
 /// `[StaticWorker(RawWorker), StaticWorker(RawWorker), Carried..]`, because
 /// `continuation_context_for` issues **no** generated execution context for any
-/// of them — so the induction hypothesis lawfully takes the raw route too.
-/// CLAIMED by this row: only the **membership and order** of the two workers.
+/// of them. By the route law on [`StaticWorkerCallRoute`], the induction
+/// hypothesis then lawfully carries `RawWorker` too — the selected recursive
+/// argument always does — so the pair is *equal by rule, not by accident*.
+///
+/// ⛔ **Equal rendered routes are therefore NOT evidence that one binding was
+/// reused for both members**, and this row does not claim otherwise. CLAIMED
+/// here: only the **membership and order** of the two workers, which are
+/// exactly the facts that still separate the members when the routes coincide.
 /// THE GAP: [`StaticWorkerCallRoute`]'s two arms are *present and correct* but
-/// not *discriminated* by this witness. That gap is closed elsewhere rather
-/// than left open —
+/// not *discriminated* by this witness, so nothing here would catch a route set
+/// wrongly.
+///
+/// That gap is closed elsewhere rather than left open —
 /// [`d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_worker_call`]
-/// runs on a plan that **does** issue a context, and pins the mixed pair
-/// `[StaticWorker(GeneratedContext), .., StaticWorker(RawWorker), ..]`
-/// directly. Read the two rows together: this one says the members are there
-/// and in order even with no context in play, that one says the routes are
-/// genuinely two.
+/// runs on a plan that **does** issue a context, and asserts the exact mixed
+/// pair `[StaticWorker(GeneratedContext), .., StaticWorker(RawWorker), ..]`.
+/// It is the future `D6b` discriminator; this row is the membership-and-order
+/// control that holds even where no context is in play.
 ///
 /// **Promise class: durable invariant.** Every clause is a relation over the
 /// entries — how many static workers, and where they sit relative to the rest.
@@ -8066,9 +8083,9 @@ fn d6a_a_specialization_binds_two_leading_static_workers_for_the_ih_and_its_recu
                 .iter()
                 .all(|entry| !entry.starts_with("StaticWorker")),
             "nothing after the leading pair is a static worker. A member appended to the \
-             outer-frame tail instead of placed in the argument segment lands here, and it is \
-             the mis-repair that still resolves the LAST index to a plausible value while an \
-             earlier one is silently wrong: {body}"
+             outer-frame tail instead of placed in the argument segment lands here. This \
+             clause names that wrong ORDER directly, at the assembled environment, rather \
+             than relying on a later read to reject it: {body}"
         );
     }
     assert!(
@@ -12403,15 +12420,24 @@ fn d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_work
     // conflated them would disagree with the plan and refuse. This assertion
     // reads the environment the definition actually assembled.
     //
-    // ⭐ **`RT-CONTSRC-PRODUCER-LOCAL` `D6a` — this row now also pins the CALL
-    // ROUTE pair, because this witness is the one that separates them.** Its
-    // planner issues a generated execution context for specialization 0, so
-    // that body's induction hypothesis renders `GeneratedContext` while its
-    // selected recursive constructor argument renders `RawWorker`. The two
-    // bindings are otherwise identical — same closure occurrence, body origin,
-    // declared arity and captures — so without the route in the rendering the
-    // pair is indistinguishable and a collapse of the two routes would be
-    // invisible here.
+    // ⭐ **`RT-CONTSRC-PRODUCER-LOCAL` `D6a` — this row also pins the CALL
+    // ROUTE pair, because this witness is the one that separates them, and it
+    // is the future `D6b` discriminator.** Its planner issues a generated
+    // execution context for specialization 0 and that unit resolves it, so by
+    // the route law on `StaticWorkerCallRoute` this body's induction hypothesis
+    // renders `GeneratedContext` while its selected recursive constructor
+    // argument renders `RawWorker`. The two bindings are otherwise identical --
+    // same closure occurrence, body origin, declared arity and captures -- so
+    // without the route in the rendering the pair is indistinguishable.
+    //
+    // ⛔ The assertion is on the EXACT pair, deliberately. It is not "the two
+    // routes differ": that phrasing would be satisfied by the wrong assignment
+    // as readily as the right one, and its negation -- equal rendered routes --
+    // is a LAWFUL state elsewhere (the route-degenerate governed witness, where
+    // no context is issued and both members carry `RawWorker`). So equal routes
+    // must never be read as a reused binding, here or anywhere; what this row
+    // pins is that *this* unit, which did resolve a context, assigns
+    // `GeneratedContext` to the hypothesis and `RawWorker` to the argument.
     assert!(
         trace.iter().any(|entry| entry.contains(
             "env=[StaticWorker(GeneratedContext), Carried, StaticWorker(RawWorker), Carried, \
@@ -12426,9 +12452,12 @@ fn d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_work
          Carried, Carried]` read `recursive_position` as a lexical index; \
          `env=[StaticWorker(..), Carried, Carried, Carried]` is the pre-`D6a` \
          run that replaced the recursive argument with its own IH and shifted \
-         both continuation inputs one slot early; and a pair rendering the SAME \
-         route twice is a single binding reused for two members that must call \
-         different callees. Trace: {trace:?}"
+         both continuation inputs one slot early; and `RawWorker` on the \
+         leading member is this context-resolving unit failing to route its \
+         induction hypothesis through the context it resolved. (⛔ That last \
+         reading is specific to THIS unit. Equal routes are lawful wherever no \
+         context was issued, and are never by themselves evidence of a reused \
+         binding.) Trace: {trace:?}"
     );
 }
 

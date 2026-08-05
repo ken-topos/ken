@@ -2924,10 +2924,28 @@ struct StaticWorkerBinding {
 ///
 /// Two bindings can name the **same** closure occurrence, body origin, declared
 /// arity and ordered captures and still be different callables, because they
-/// reach that body by different routes. That is the whole content of `D6a`: a
-/// specialization's induction hypothesis and its selected recursive constructor
-/// argument are the same closure, and the *only* thing that separates them is
-/// this field.
+/// reach that body by different routes. A specialization's induction hypothesis
+/// and its selected recursive constructor argument are exactly that pair: the
+/// same closure, distinguished by where the call goes.
+///
+/// ⭐ **THE ROUTE LAW, and it is not symmetric.**
+///
+/// - [`Self::RawWorker`] is what a **`SelectedRecursiveArgument`** carries,
+///   **always**. The source scope binds the closure itself, so there is no
+///   condition to evaluate and no case in which it carries the other arm.
+/// - A **`InductionHypothesis`** carries [`Self::GeneratedContext`] **iff** the
+///   planner issued a generated execution context for this
+///   `(specialization, worker body)` pair *and* this unit resolved it.
+///   Otherwise it **lawfully carries `RawWorker` too**.
+///
+/// ⛔ **So equal routes on the two members is a LAWFUL state, not a defect.** A
+/// unit whose planner issued no context is *route-degenerate*: both members
+/// render `RawWorker`, and they remain two distinct bindings for two distinct
+/// environment positions. Reading "the two rendered routes are equal" as "one
+/// binding was reused for both members" is an invalid inference, and prose or a
+/// control that draws it is wrong about the mechanism rather than strict about
+/// it. The membership-and-order facts are what separate the members in the
+/// degenerate case; the route separates them only where a context exists.
 ///
 /// ⛔ **It is carried, never derived at the call site.** The pre-`D6a` code
 /// decided the suffix by comparing `generated_context_captures.worker_body_
@@ -2939,9 +2957,11 @@ struct StaticWorkerBinding {
 /// and "whichever target exists" are all equally blind for the same reason —
 /// which is why this is a field and not a predicate.
 ///
-/// The route is fixed by the **role the binding was constructed for**, and that
-/// role is a planner fact: the planner either issued a generated execution
-/// context for this `(specialization, worker body)` pair or it did not.
+/// The route is fixed at construction, from the role the binding is built for
+/// together with the planner's own issuance — the planner either issued a
+/// generated execution context for this `(specialization, worker body)` pair
+/// and this unit resolved it, or it did not. Neither input is recoverable at
+/// the call edge, which is why both are read here.
 ///
 /// ⛔ No `FuncRef` lives here. The route names *which declared-call table* a
 /// caller resolves its target from; the target itself is still minted into the
@@ -2951,16 +2971,25 @@ enum StaticWorkerCallRoute {
     /// The exact **raw worker body**, at its own unretargeted contract.
     ///
     /// Its operand run is the raw run and nothing else: explicit arguments,
-    /// then stored captures. It appends **no** continuation-input suffix. Every
-    /// binding built for an ordinary lexical closure takes this route, as does
-    /// `D6a`'s selected recursive constructor argument.
+    /// then stored captures. It appends **no** continuation-input suffix.
+    ///
+    /// Three populations take it: every binding built for an ordinary lexical
+    /// closure; `D6a`'s selected recursive constructor argument, **without
+    /// exception**; and an induction hypothesis in a unit that resolved no
+    /// generated execution context — the third being the route-degenerate case
+    /// described on the type above, and lawful.
     RawWorker,
     /// The **planner-issued generated execution context** that executes that
     /// same body on behalf of one enclosing specialization.
     ///
     /// The context's ABI has a capture run for the enclosing specialization's
-    /// continuation inputs, so a call on this route appends that suffix. This
-    /// is the route an induction hypothesis takes.
+    /// continuation inputs, so a call on this route appends that suffix.
+    ///
+    /// ⛔ Reached by an induction hypothesis **only when a context was issued
+    /// and resolved**, and by nothing else — never by a selected recursive
+    /// constructor argument. "The route an induction hypothesis takes" states
+    /// the implication in the wrong direction: this arm implies an induction
+    /// hypothesis, an induction hypothesis does not imply this arm.
     GeneratedContext,
 }
 

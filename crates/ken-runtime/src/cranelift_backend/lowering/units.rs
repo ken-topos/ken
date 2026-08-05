@@ -1025,7 +1025,11 @@ pub(in crate::cranelift_backend) enum ContinuationCaseBinderSource {
     ///
     /// `D6a`: this binding takes the
     /// [`StaticWorkerCallRoute::GeneratedContext`] route -- the planner-issued
-    /// execution context, which appends this frame's continuation-input suffix.
+    /// execution context, which appends this frame's continuation-input suffix
+    /// -- **iff** the planner issued such a context for this
+    /// `(specialization, worker body)` pair and this unit resolved it.
+    /// Otherwise it lawfully takes [`StaticWorkerCallRoute::RawWorker`], like
+    /// every pre-`D5a` specialization, and appends nothing.
     InductionHypothesis,
     /// The ordinary-envelope operand at this index. ⛔ An index into the
     /// envelope, never a constructor source position -- the two coincide only
@@ -1036,11 +1040,18 @@ pub(in crate::cranelift_backend) enum ContinuationCaseBinderSource {
     ///
     /// ⭐ This is a compiler-only member. It is not a new source occurrence,
     /// continuation input, ABI slot, carrier, tag or runtime descriptor: it is
-    /// the *same closure* the induction hypothesis names, reached by the
-    /// [`StaticWorkerCallRoute::RawWorker`] route instead. The unit already
+    /// the *same closure* the induction hypothesis names. The unit already
     /// carries every fact needed to build it -- the closure occurrence, body,
     /// declared arity, ordered capture provenance and the worker-capture
     /// operands -- so nothing crosses the ABI to represent it.
+    ///
+    /// It carries [`StaticWorkerCallRoute::RawWorker`] **unconditionally**: the
+    /// source scope binds the closure itself, so there is nothing to condition
+    /// on. ⛔ That is *not* a claim that it differs in route from the induction
+    /// hypothesis beside it. In a unit that resolved no generated context the
+    /// hypothesis lawfully carries `RawWorker` too, and the two members are
+    /// then separated by their positions in the run rather than by their
+    /// routes. See [`StaticWorkerCallRoute`] for the asymmetric law.
     ///
     /// ⛔ Before `D6a` this position was **skipped**, and the induction
     /// hypothesis silently stood in for the argument as well. That is a wrong
@@ -1156,8 +1167,15 @@ pub(super) fn continuation_case_binder_run(
     //
     // A nonrecursive field takes its operand from its own envelope role. A
     // recursive field takes the compiler-only `SelectedRecursiveArgument`
-    // member: it is the same closure the IH prefix names, differing only in
-    // call route, so it needs no envelope operand and no ABI slot.
+    // member: it is the same closure the IH prefix names, bound at a second
+    // environment position and reached by its own call route, so it needs no
+    // envelope operand and no ABI slot.
+    //
+    // ⛔ "Differing only in call route" would overstate it. The routes differ
+    // only where the planner issued a generated context; where it issued none,
+    // both members carry `RawWorker` and the difference is *which position of
+    // the run they occupy* -- which is precisely the difference this segment
+    // exists to restore.
     //
     // ⛔ `D6a`: this loop used to `continue` on a recursive position. The IH
     // then stood in for the argument as well as for the hypothesis, and every
@@ -1617,13 +1635,21 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 ));
             }
 
-            // `D6a` -- THE ROUTE, taken from the planner's own issuance.
+            // `D6a` -- THE INDUCTION HYPOTHESIS'S ROUTE, and only its.
             //
             // `retargeted_worker_body` is `Some` exactly when
             // `continuation_context_for` issued a generated execution context
-            // for this `(specialization, worker body)` pair. That is the
-            // planner-issued raw-body-versus-generated-context fact, read once
-            // here at construction, where the role is known.
+            // for this `(specialization, worker body)` pair AND the retarget
+            // below resolved it into this function. Both halves are required,
+            // which is why this reads the retarget's own outcome rather than
+            // re-asking the planner: an issued context this unit did not
+            // resolve is not a context this binding can name.
+            //
+            // ⭐ `None` is the ordinary, lawful answer -- every pre-`D5a`
+            // specialization, and every unit in the governed-bracket witness.
+            // The hypothesis then takes the raw route, appending nothing, and
+            // the two bindings below are route-identical. That is a degenerate
+            // route pair, not a collapsed one.
             //
             // ⛔ Not re-derived at the call site. Both bindings below name the
             // same body origin, so no comparison available there can tell them
@@ -1648,10 +1674,17 @@ pub(super) fn define_continuation_bodies<M: Module>(
             // ⭐ The SAME closure occurrence, body origin, declared arity and
             // ordered capture operands as the induction hypothesis above, built
             // through the same constructor and validated against the same raw
-            // template contract. The one difference is the route, and that is
-            // the whole representation: the argument is the closure the source
-            // scope binds, while the IH is that closure called through this
-            // specialization's generated context.
+            // template contract. What the two represent still differs: the
+            // argument is the closure the source scope binds, while the
+            // hypothesis is that closure as this specialization eliminates it.
+            //
+            // ⛔ The ROUTE is `RawWorker` unconditionally here, and that is not
+            // the same as saying it differs from the hypothesis's. When
+            // `induction_route` above resolved to `RawWorker` -- no context
+            // issued -- the two bindings are route-identical, and they are
+            // still two bindings for two positions of the run. The route is
+            // what will separate them at the call edge in `D6b` *where a
+            // context exists*; it is not what makes them two.
             //
             // ⛔ Nothing new crosses the ABI. This adds no slot, carrier, tag,
             // descriptor or source occurrence -- it is a second compiler-only
@@ -1763,6 +1796,14 @@ pub(super) fn define_continuation_bodies<M: Module>(
                     // arity, so an arm-only rendering shows two identical
                     // entries and a change collapsing the two routes would be
                     // invisible in this log.
+                    //
+                    // ⛔ The converse does not hold, and a reader of this log
+                    // must not assume it: two entries rendering the SAME route
+                    // is the lawful route-degenerate case (no context issued),
+                    // not evidence that one binding was reused for both
+                    // members. Only a witness whose planner issues a context
+                    // renders a mixed pair, and only there does this log
+                    // discriminate the routes at all.
                     .map(|binding| match binding {
                         LoweringEnvironmentBinding::StaticWorker(worker) => match worker.route {
                             StaticWorkerCallRoute::RawWorker => "StaticWorker(RawWorker)",
