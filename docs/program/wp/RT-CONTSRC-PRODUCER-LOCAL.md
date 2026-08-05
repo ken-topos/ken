@@ -166,9 +166,10 @@ all six failing `D0` rows.
   the consumer actually holds, over two closed environment classes:
 
   1. **`CurrentLexical`** — exact predeclared emission owner, producer/result
-     and emission occurrence, lexical-environment origin, and post-shift index,
-     derived by the forward semantic environment walk. Lowering may consume it
-     **only at that exact seat while holding that exact lexical environment**.
+     and emission occurrence, lexical-environment origin, and the **lexical index
+     issued by the nearest-exact-singleton-alias law** (see `D3b`), derived by
+     the forward semantic environment walk. Lowering may consume it **only at
+     that exact seat while holding that exact lexical environment**.
   2. **`EntryFrame`** — an exact frame identity plus declared slot: a
      predeclared function frame, or a generated context frame identified by its
      `ContinuationContextId` and enclosing `ContinuationSpecializationId` with
@@ -210,10 +211,19 @@ all six failing `D0` rows.
   **Fail closed on all seven** (⛔ **the old list of five named `wrong immediate
   slot`, a field now retired, and had no arm for a claim presented to the wrong
   consumer — the defect `D3c` measured**): wrong emission owner/origin · wrong
-  lexical-environment root · wrong post-shift index · wrong frame identity
-  (predeclared frame, or context id and enclosing specialization id) · missing
-  or duplicate full-coordinate membership · wrong declared slot · **a
-  direct-emission claim presented to the ABI-frame consumer, and the converse**.
+  lexical-environment root · wrong selected lexical index · wrong frame identity
+  (predeclared frame, or context id and enclosing specialization id) · **missing
+  eligible membership, or an ambiguous `Closed([S, T])` where an exact singleton
+  is required** · wrong declared slot · **a direct-emission claim presented to
+  the ABI-frame consumer, and the converse**.
+
+  ⛔ **"Duplicate" is NOT a refusal arm in the LEXICAL environment** (Architect
+  ruling on the `D3b` hard stop at exact `456ec7e6`, 2026-08-05). Two lexical
+  positions each holding exactly `Closed([S])` are **proved aliases of one
+  semantic source**, and the law selects the nearest. ⛔ Duplicate membership
+  **still refuses in a frame's ordered capture projection** — a different
+  structure, carrying a declared slot. `D3b` carries the full statement;
+  **do not collapse the two cases.**
 
   **Two discriminators, and the first exists to defeat a specific vacuity:**
   - one with **at least one intervening binder**, so "introduction index equals
@@ -391,7 +401,8 @@ all six failing `D0` rows.
 
      1. **`CurrentLexical`** — exact predeclared emission owner,
         producer/result and emission occurrence, lexical-environment origin,
-        and post-shift index.
+        and the **lexical index issued by the nearest-exact-singleton-alias
+        law** below.
      2. **`EntryFrame`** — an exact frame identity plus declared slot, either a
         predeclared function frame, or a generated context frame identified by
         its `ContinuationContextId` and enclosing `ContinuationSpecializationId`
@@ -410,9 +421,12 @@ all six failing `D0` rows.
      **Availability is selected from the environment actually held, never from
      the root-coordinate arm:**
      - at the measured predeclared direct-emission seat, **both** `EntryAbi` and
-       `ProducerLocal` roots use `CurrentLexical`; the existing forward semantic
-       environment walk must find the full coordinate **exactly once** and issue
-       its post-shift position;
+       `ProducerLocal` roots use `CurrentLexical`. The existing forward semantic
+       environment walk issues the position by the **nearest-exact-singleton-alias
+       law** below. ⛔ **The old requirement that the walk find the full
+       coordinate "exactly once" is FALSE and is retired** — it conflated *does
+       this position certainly hold `S`* with *is it the only position that holds
+       `S`*, and `D3b` needs only the first;
      - at a generated-context operand consumer, **either** root arm may use the
        generated-context `EntryFrame`, but only when that exact context
        descriptor's ordered capture projection contains the full coordinate
@@ -423,18 +437,101 @@ all six failing `D0` rows.
        today. **A `ProducerLocal` member cannot be invented** — it stays
        unavailable unless a separately authorized substrate later declares it.
 
+     **Preserved non-candidate checkpoint: exact `456ec7e6`** (`722 passed / 10
+     failed` — the 7 prior reds unchanged, 3 new ones sharing the one cause this
+     law fixes). Resume the bounded repair from it; it is not a candidate and does
+     not go to QA. ⛔ `41d2b1e5` appears in two posts and **is not an object on
+     the branch** — it was quoted from memory and corrected twice.
+
+     Two results from that turn stand and are not to be re-measured: **caller-frame
+     multiplicity is negative** (direct owner = emission owner 40/40; capture
+     indexed frame = enclosing spec's emission owner 20/20, and structurally so,
+     since `emission_owner` is a field of `ContinuationSpecializationKey`), and
+     the **capture consumer's source-frame defect is fixed**. ⛔ The earlier
+     specialization census that suggested multiplicity was a **per-compile-id
+     artifact** — its author retired it; do not reintroduce it as evidence.
+
+     ### The nearest-exact-singleton-alias law (lexical positions)
+
+     Architect ruling on the hard stop at exact `456ec7e6`, 2026-08-05. It
+     **replaces** coordinate-containment plus exact-once-position. The old law
+     was a mis-stated precondition — not a missing coordinate domain, SSA
+     identity oracle, caller-edge key, unit-frame edit, or new node.
+
+     **Why duplicates are lawful.** One `ContinuationValueSourceAuthority`
+     describes **one semantic value**, and `join` unions and deduplicates its
+     complete `ContinuationSourceSlotAuthority` records. So `Closed([S])` means
+     every represented path yields exact source slot `S`, while `Closed([S, T])`
+     means the value is ambiguous between distinct sources. ⇒ **Two positions
+     each holding `Closed([S])` are proved aliases of the same semantic source**,
+     even where lowering assigns them different SSA names. The measured
+     `let y = x` at indices 0 and 2 is exactly that case.
+
+     ⛔ **The `If` concern does not defeat this.** An `If` that can yield `S` or
+     `T` joins to `Closed([S, T])` and is **not** an exact alias. If both branches
+     yield `S` the join stays `Closed([S])` — which is precisely the proof
+     required. No SSA-equality instrument or alias tag is needed, and adding one
+     would duplicate a semantic-value fact the planner authority already states.
+
+     **The rule, in four steps:**
+     1. Derive against the **complete requested source-slot authority `S`** —
+        coordinate, carrier, ownership, storage owner, and referent affinity.
+     2. A lexical position is eligible **iff** its held authority is exactly
+        `Closed([S])`. ⛔ Merely containing `S.coordinate` is not eligibility,
+        and neither is `Closed([S, T])`.
+     3. Among eligible positions select the **minimum de Bruijn index** — the
+        nearest/innermost exact alias in the ordered environment.
+     4. Record that index in the existing exact-seat `CurrentLexical` claim. The
+        consumer **rederives** the same result from the same complete `S` and
+        exact seat before indexing.
+
+     ⛔ **This is NOT the banned "first matching availability."** It is one typed
+     `CurrentLexical` claim chosen by a **total** rule over an ordered semantic
+     environment, applied only **after** exact singleton equality has proved
+     every eligible position is an alias of one value. The banned forms stay
+     banned: first coordinate-containing member, an unkeyed availability vector,
+     fallback between consumer views, reverse search, shape or offset inference,
+     and any ambiguous source set.
+
      **RETIRE, do not annotate around:** `RootIsImmediate`; the "three lawful /
      three crossed" coordinate-product table; the equality requirement
-     `immediate_slot == source_abi_position`; and
+     `immediate_slot == source_abi_position`;
      `ContinuationImmediateResolution::root`, which duplicates the coordinate
-     domain after the caller already supplied the coordinate.
+     domain after the caller already supplied the coordinate; and **the
+     exact-once-lexical-position precondition together with its "present at two
+     positions refuses" clause.**
 
-     **The bounded re-cut is exactly four things:**
+     **The bounded re-cut is exactly five things:**
      1. planner construction of the two consumer-specific availability views;
      2. the direct-emission resolver and the ABI-only context-capture resolver;
      3. the corresponding ABI/view agreement checks and durable controls;
      4. **deliberate replacement of `D3c`'s old-defect observatory with the
-        corrected invariant** — see the `watch` note under `D3c`.
+        corrected invariant** — see the `watch` note under `D3c`;
+     5. the **two-stage `EntryFrame` construction** below.
+
+     ### The two-stage `EntryFrame` obligation stays in `D3b`
+
+     ⛔ **It is NOT moved to `D4b`** (Architect, 2026-08-05). `D3b` must mint all
+     context skeletons, resolve **every** structural generated-frame requirement
+     to exactly one `(ContinuationContextId, ContinuationSpecializationId)`,
+     publish only **immutable final** claims, and refuse zero-or-multiple
+     resolution. `ContinuationContextId` does not exist while
+     `exact_continuation_projection` interns a specialization key, so that phase
+     cannot build the final claim and later mutation of an interned projection is
+     unlawful. `(enclosing_specialization, worker_body_origin)` is a
+     **provisional interning key only**.
+
+     **Direct planner controls may prove that construction now**; `D4b` later
+     supplies behavioral activation. ⛔ The measured **0/60** generated-owner
+     consumptions explains the present evidence boundary and **does not authorize
+     a half-stamped accepted plan.**
+
+     **The generated `EntryFrame` ID names the SOURCE/CALLER frame** whose
+     `defining_abi_operands` are indexed — never the target `context` argument to
+     `call_declared_context` merely because that ID is already in hand.
+     `Predeclared(owner)` is that exact entry frame; `Specialization(owner)` is
+     the exact generated caller context resolved from the planner-owned selected
+     worker-body key.
 
      **The `D3c` witness must then prove**, on the same seat: `EntryAbi` root
      position 0 remains root provenance; its direct-emission `CurrentLexical`
@@ -446,11 +543,33 @@ all six failing `D0` rows.
 
      **Additional load-bearing controls, each reaching the real consumer before
      refusing:** swap or reuse the other input's availability claim; wrong
-     emission owner / origin / environment root / post-shift slot; wrong
+     emission owner / origin / environment root / selected lexical index; wrong
      predeclared frame; wrong context id, enclosing-specialization id, capture
-     membership, or declared slot; absent and duplicate full-coordinate
-     membership; and presenting a direct-emission claim to the ABI-frame
-     consumer and the converse.
+     membership, or declared slot; **absent eligible membership, and duplicate
+     membership in a frame's ordered capture projection**; and presenting a
+     direct-emission claim to the ABI-frame consumer and the converse.
+
+     **The alias law's own six required controls** (Architect, on `456ec7e6`).
+     The repair must prove all of them:
+
+     1. the measured `EntryAbi` source at lexical indices 0 and 2 **selects index
+        0** and reaches the real consumer;
+     2. perturbing that claim to index 2 is **refused by consumer revalidation**
+        — this proves *canonicality*, ⛔ **not** that the outer alias is a
+        different value;
+     3. an **inner `Closed([S, T])` plus an outer `Closed([S])` selects the outer
+        singleton** — this is the control that proves the rule is not first
+        coordinate-containment, and it is the one most easily omitted;
+     4. `Closed([S, T])` with **no** singleton `S` refuses;
+     5. the same coordinate with a **different carrier, ownership, storage owner,
+        or affinity does not qualify** — eligibility is the complete authority
+        `S`, not the coordinate;
+     6. the existing **zero-depth and shifted-index discriminators remain live**.
+
+     ⛔ **Control 3 is not a variant of control 1.** Selecting the *outer*
+     position in 3 and the *inner* in 1 is what distinguishes a total rule over
+     eligibility from a positional shortcut; a suite carrying only 1 and 2 passes
+     under either.
 
      **Preserve the accepted `ProducerLocal` `CurrentLexical` and
      generated-context evidence from `bc371f13`, retyped under this
@@ -724,6 +843,16 @@ all six failing `D0` rows.
   holding different environments.** An unkeyed vector, a "first matching
   availability" search, or one generic `immediate_slot` is unlawful even when
   root provenance is faithfully retained alongside it.
+
+  ⛔ **This ban does NOT reach the nearest-exact-singleton-alias law** (Architect,
+  2026-08-05). That law is a **total** rule over an ordered semantic environment,
+  applied only after exact `Closed([S])` equality has proved every eligible
+  position is an alias of one semantic value, and it yields **one typed
+  `CurrentLexical` claim per consumer** — not one index shared across consumers.
+  ⇒ **The discriminator is eligibility, not ordering.** "First match" is banned
+  because it selects from candidates that were never proved equivalent; selecting
+  the minimum index from a set already proved to be aliases is not that. Do not
+  cite this bullet against it.
 - ⛔ **A fourth pairing added to the retired coordinate-product table**, or any
   numeric equality, constant offset, padding, reverse search, same-shape or
   same-value inference, or consumer-side fallback bridging the domains.
