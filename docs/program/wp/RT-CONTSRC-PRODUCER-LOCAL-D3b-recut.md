@@ -1,6 +1,6 @@
 # `RT-CONTSRC-PRODUCER-LOCAL` `D3b` (re-cut) — consumer-specific availability
 
-Status: **partial, with one precise hard stop.** Not a candidate.
+Status: **complete.** Test-green at the baseline. Candidate for QA.
 
 Branch `wp/RT-DECL-CLOSURE-PORT-typed-units`, over the `D3c` record at
 `f5e4fa9f`.
@@ -94,96 +94,136 @@ frame declares no member. A `ProducerLocal` coordinate is a mid-body value with
 no position in any entry run, so the boundary **fails closed**; `D4b` owns making
 such a value capturable.
 
-## THE HARD STOP — a forwarded parameter occupies two lexical positions
+## The hard stop, and the law that replaced it
 
-The ruling states that at predeclared direct emission either root uses
-`CurrentLexical` **only when the forward lexical walk finds the full coordinate
-exactly once**. Three planner rows now fail because that precondition is
-**unsatisfiable for a program class that works today**.
+The exact-once `CurrentLexical` precondition was **unsatisfiable for a program
+class that works today**, and the Architect accepted the stop
+(`evt_cmcxf4h7v1st`).
 
-**Measured**, exactly:
+**Measured**, exactly: coordinate
+`EntryAbi { source_owner: 0, source_abi_position: 1, Parameter }` present at
+lexical indices **0 and 2** of a 3-element seat environment. Cause, read off the
+walk: `walk_continuation_value_environment`'s `Let` arm mints a producer-local
+value only for an `Effect`; otherwise it pushes **the bound expression's own
+authority**. So `let y = x` puts a parameter's identical coordinate at both its
+entry position and the binder position.
 
-```
-coordinate = EntryAbi { source_owner: 0, source_abi_position: 1, source: Parameter }
-present at lexical index 0 AND index 2, in a 3-element seat environment
-```
+The ruling identified the law as conflating two questions — *does this position
+certainly hold `S`* and *is it the only position that does* — and `D3b` needs
+only the first.
 
-**Cause, read off the walk rather than inferred.** `walk_continuation_value_environment`'s
-`Let` arm mints a producer-local value only when the bound expression is an
-`Effect`; otherwise it pushes **the bound expression's own value authority**. So
-`let y = x`, forwarding a parameter, puts that parameter's identical `EntryAbi`
-coordinate at both its entry position and the binder position. This is not a
-double-count in the seat construction — the two are legitimately different
-positions holding one **identity**, which is exactly what a root coordinate is.
+### The replacement: nearest exact alias
 
-The old law never met this: an entry root took its ABI position and never
-walked.
+One total rule, `nearest_exact_alias`, shared by the planner that issues the
+claim and the consumer that revalidates it:
 
-**Why this is not mine to settle.** The obvious resolution is *innermost
-occurrence* — index 0 is innermost, and de Bruijn lookup already designates it,
-so it is semantics rather than a search convenience. Relaxing to innermost was
-measured: the three rows pass and **nothing else regresses** (719 → 722). But:
+1. eligibility is **exact equality of the complete requested source-slot
+   authority** — coordinate, carrier, ownership, storage owner, referent
+   affinity — against a position holding exactly `Closed([S])`;
+2. among eligible positions, the **minimum de Bruijn index**.
 
-- it is textually "take the first", which the release **bans**; the ban exists
-  because a first match among candidates that might name *different* values is
-  unsound, and whether that applies here is the ruling;
-- the two positions need not hold the same **SSA value**. For `let y = x` they
-  do. But the walk's `If` arm joins its branches (`then_value.join(else_value)`),
-  so a binder can carry a coordinate whose value is a *different* SSA value with
-  the same root identity. Indexing either still yields that identity, but not
-  necessarily the same ownership or lifetime.
+⭐ **Why this is not the banned first-match.** The ban exists because choosing
+among candidates never proved equivalent silently picks one of several different
+values. Here every candidate is proved the same semantic value **before ordering
+is consulted at all**: the discriminator is eligibility, not ordering. The proof
+is the authority's own algebra — `join` unions and *deduplicates complete
+records*, so `Closed([S])` means every represented path yields exactly `S`, and
+`Closed([S, T])` is not an exact alias even though it contains `S`. My escalation
+worried that an `If` join could carry the same identity with a different SSA
+value; the ruling closed that directly — such a join is `Closed([S, T])` and is
+ineligible, while an `If` whose branches both yield `S` stays `Closed([S])`,
+which is exactly the proof needed. **No SSA-equality instrument was required.**
 
-⚠ **NOT MEASURED:** that the two positions hold the same SSA value at lowering.
-No lowering fixture in the corpus reaches an emission seat with a duplicate —
-the three affected rows are planner-only — so there was no instrument to put on
-it. The structural argument for `let y = x` is strong; the `If`-join case is the
-one that needs the ruling.
+⛔ `min` is written as a fold over the whole eligible set rather than an early
+break. The two agree today because the scan is ascending — which is precisely why
+the total rule is spelled out: an early break would *read* as "take the first",
+and a later reordering of the scan would silently change the answer.
 
-**The concrete edge, as the release asks for it:** predeclared direct emission,
-coordinate `EntryAbi { source_owner: 0, source_abi_position: 1, Parameter }`,
-seat environment length 3, occurrences at indices 0 and 2.
+⛔ Exact-once membership is **preserved** for ordered capture projections and
+predeclared `EntryFrame` membership. Those are declared slot runs, not semantic
+environments; the alias argument comes from `join` deduplicating in the semantic
+environment and does not transfer.
 
-## What is NOT built
+Every "post-shift index" spelling is retired — 78 occurrences across four files,
+including a test function name — because a reader who thinks of this number as a
+shift will reconstruct the exactly-once law it replaces.
 
-The **two-stage generated `EntryFrame` construction** is not implemented. The
-frame identity is still the provisional pair `(enclosing, worker_body_origin)`,
-resolved to a `ContinuationContextId` **at the consumer** rather than stamped
-into an immutable claim by a second planner phase.
+### The six required controls
 
-⛔ This is a deferral, not a silent partial. The ruling requires finalization to
-resolve the pair to exactly one `(ContinuationContextId,
-ContinuationSpecializationId)`, refusing on zero or multiple, and to never expose
-a half-stamped claim. Today the same zero/multiple refusal exists but fires at
-first use, which means a plan carrying an unresolvable frame is **accepted by
-planning** and only refused if and when something reaches it.
+1. the measured duplicate selects index 0 and the real consumer accepts it —
+   `d3b_the_duplicated_entry_source_selects_the_nearest_alias`
+2. perturbing that claim to index 2 is refused — same row
+3. inner `Closed([S,T])` + outer `Closed([S])` selects the **outer** —
+   `d3b_alias_eligibility_not_position_decides`
+4. `Closed([S,T])` with no singleton refuses — same row
+5. same coordinate, different contract does not qualify —
+   `contspec_parameter_affinity_comes_from_its_exact_source_slot`
+6. zero-depth and shifted-index discriminators stay live — `d3c_*`, `d4a_*`,
+   `d5a_the_capture_*`, all green
 
-⚠ **A sequencing fact, measured, that bears on when this should land.** The path
-the two-stage machinery governs is **planned but not consumed**. The planner
-takes the generated-context emitter arm 78 times, so those specializations do
-carry `EntryFrame{GeneratedContext}` claims — but across both lowering seams,
-**0 of 60** observations held a `Specialization` emission owner; every consumer
-held a predeclared frame. So the machinery would land **unexercised by any
-behavioural test**, and its zero/multiple-match refusals could only be reached by
-a directly constructed planner row. That is an argument about *validation
-strength*, not about whether to build it: a guard nothing reaches is exactly the
-kind that rots. Worth the Architect's attention when sequencing it against `D4b`,
-which is what would make generated-context emission reachable.
+⭐ **Controls 1 and 3 select opposite ends of the environment, and that pairing
+is the point.** A suite carrying only the nearest-alias case passes just as well
+under the banned positional shortcut, because there the first member *is* the
+answer. **Mutation-proved**: replacing the rule with "first coordinate-containing
+member" reds **only** control 3 (`left: 0, right: 2`) — controls 1 and 2 pass
+under it. Replacing `min` with `max` reds controls 1 and 2. Neither mutation is
+caught by the other's row.
 
-The design is settled and the blast radius is small: projections keep a draft
-typed with a `ContinuationFrameRequirement`; a pass after
-`plan_continuation_contexts` builds the finalized views into per-unit and
-per-context slices; `continuation_input_view` — the **single** conversion both
-populations go through — becomes fallible and errors when the finalized entry is
-absent. That gate is what makes a half-stamped claim unreachable rather than
-merely unwritten.
+Control 5 is discharged by a **real production perturbation on a landed
+fixture** rather than a synthetic environment: `ResultLifetimeProxy` narrows an
+input's affinity from `[NoReferent, PersistentStore, InvocationArena]` to
+`[NoReferent, PersistentStore]`, which the row could previously only *watch*
+reach the projection.
+
+## Two-stage `EntryFrame` finalization — built
+
+Stage 1 and stage 2 are **two types**, not one type with a sometimes-filled
+field: `ContinuationFrameRequirement` (structural, keyed on
+`(enclosing, worker_body_origin)`) and `ContinuationFrameIdentity` (exact,
+carrying the resolved `ContinuationContextId` **alongside** the key it resolved
+from). A requirement cannot be presented to a consumer — nothing converts one
+into an identity except finalization.
+
+`finalize_continuation_availability_plan` runs **once, whole-plan**, after every
+context is minted, over every specialization input and every context capture.
+⛔ Not lazily: lazy resolution leaves a plan carrying an unresolvable frame
+*accepted*, refused only if something reaches it — and the measured `0/60`
+generated-owner consumption is exactly the condition under which that gap stays
+invisible.
+
+`continuation_input_view` is the **publication gate** — the single conversion
+both populations pass through, now fallible, refusing when no finalized entry
+exists.
+
+The consumer revalidates all three sides: it re-resolves the recorded key against
+the plan in hand and checks the answer agrees with the recorded id. ⛔ Not
+redundant with finalization: finalization proves the key resolved uniquely *in
+the plan it ran over*; this proves the consumer holds that same plan.
+
+⚠ Two placement facts, both found by measurement. Finalization must run **after**
+`validate_continuation_specialization_plan` — that validator re-derives the whole
+plan and compares for exact equality, and a finalized sibling is state a
+re-derivation cannot produce; stamping first reddened **83 tests, none about the
+plan being wrong**. And it must run after the context ABI install, the earliest
+point any view can be built.
+
+⛔ Its control asserts **non-vacuity first**: a zero-or-multiple perturbation over
+an empty requirement set succeeds trivially, so the count of generated
+requirements is what distinguishes "the refusals fire" from "nothing to fire on".
+The witness carries them.
+
+⚠ **THE GAP, restated because it did not go away.** No *lowered* program consumes
+a generated frame identity today (`0/60`). The three-sided consumer revalidation
+is therefore exercised by construction, not by execution. `D4b` supplies the
+behavioural activation.
 
 ## Suite
 
-`ken-runtime` lib: **722 passed / 10 failed / 1 ignored**.
+`ken-runtime` lib: **728 passed / 7 failed / 1 ignored**.
 
 - **7 baseline reds, unchanged** — the two standing `D0` reds plus the five
   former `D4a` reds at their downstream `Var: no runtime binding` boundary.
-- **3 reds, all one issue** — the hard stop above.
+- **No other failures.**
 
 Both counts were taken against the same commit's tree; the 7 are the same seven
 named in the `D3c` record at `f5e4fa9f`. The workspace build, the `--locked`
