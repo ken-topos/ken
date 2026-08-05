@@ -30,6 +30,26 @@ slots="${KEN_BUILD_SLOTS:-1}"
 ken_tmpdir="${KEN_TMPDIR:-/workspaces/ken/tmp}"
 if [[ -d "$(dirname "$ken_tmpdir")" ]] && mkdir -p "$ken_tmpdir" 2>/dev/null; then
   export TMPDIR="$ken_tmpdir"
+
+  # Reap abandoned per-test scratch. The suites create named directories here
+  # (ken-runtime-*, ken-rt-parity-*) and do not remove them, so this directory
+  # only grows: measured 2026-08-05 at 49G across 1901 entries, which filled
+  # the 229G repo volume and made `ld` fail with "No space left on device".
+  #
+  # That surfaced as 42 spurious ken-runtime failures on a tree verified
+  # byte-identical to its base, and the count grew between runs — it reads
+  # exactly like a regression. This is the same misreading the TMPDIR
+  # redirection above was written to prevent, one volume over.
+  #
+  # Age-gated so it cannot touch a live run: no individual test here runs for
+  # hours, and the build mutex below serializes seats. Deliberately dumb —
+  # it decides nothing, reports nothing, and never fails the build.
+  # KEN_TMP_REAP_MINUTES=0 disables it.
+  reap_minutes="${KEN_TMP_REAP_MINUTES:-120}"
+  if [[ "$reap_minutes" -gt 0 ]]; then
+    find "$ken_tmpdir" -maxdepth 1 -mindepth 1 -mmin "+${reap_minutes}" \
+      -exec rm -rf -- {} + 2>/dev/null || true
+  fi
 fi
 
 # The build mutex must NOT follow TMPDIR. Two seats that resolve different lock
