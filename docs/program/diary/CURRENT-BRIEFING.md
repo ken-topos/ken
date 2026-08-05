@@ -33,23 +33,32 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~11:2xZ · `D4a` rd 2 gated + run; lane cleared, shift not yet
+## LIVE — 2026-08-05 ~12:4xZ · `D3c` released and RUNNING; framing debt CLEARED
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
+### State, in one line each
+
+- **`D3c` is released** (`evt_2f30t4866ensx`) from preserved `bc371f13`, and
+  `runtime-implementer` is **working it now**. No rouse was needed — it woke on
+  the release by itself. Do not read the "will not wake" caveat as retired; it
+  held for the two prior compactions.
+- **The framing debt is discharged.** `docs/program/wp/RT-UNIT-CLOSURE-CONVERT.md`
+  exists; the node is **`ready`** (framed and shovel-ready — *not* startable,
+  its dependency is unmerged). It enters the frontier when
+  `RT-CONTSRC-PRODUCER-LOCAL` merges, with no Steward pass in between.
+
 ### The one thing to do next
 
-⛔ **WRITE `docs/program/wp/RT-UNIT-CLOSURE-CONVERT.md`. It is FRAMING DEBT and
-it gates a candidate.** The node is filed at
-`docs/program/issues/RT-UNIT-CLOSURE-CONVERT.md`, `draft`, with the substance in
-it; ⛔ **promote to `ready` only when the frame exists with `D1`'s inventory
-specified against a named base.** Then release the `D3c` `EntryAbi` measurement
-from `bc371f13`.
+**Stay one release ahead: grep every node whose `depends_on` names
+`RT-CONTSRC-PRODUCER-LOCAL` and confirm each is `ready` with a written frame.**
+`blocks` and `depends_on` disagree in this corpus and `gen-progress.sh` reads
+`depends_on` — use that one. Frame whatever fails, flip it `ready`, publish
+doc-only.
 
-⛔ **`runtime-implementer` is compacted to ZERO and will NOT wake on a mention.**
-When the leader releases, **I do the mechanical rouse** — the leader has been
-told to say so in-thread.
+Then wait on `D3c`'s result. If the `EntryAbi` position moves, `D3b`'s arms get
+re-cut on it and that recut is mine.
 
 **`D3b` landed at `bc371f13` and is PRESERVATION-ONLY, not complete**
 (Architect `evt_56jh63qntwtfe`). My scope recut: `evt_7he9qv8wbv1yq`. `D4a` was
