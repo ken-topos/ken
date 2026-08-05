@@ -67,13 +67,15 @@ exact-once walk and the "two positions refuses" clause; the sweep also found
 `CurrentLexical` claim as carrying a "post-shift index", which is what an
 implementer builds the claim from.
 
-⭐ **The judgment call, flagged so it can be overturned in one edit:** I **kept**
+**The judgment call is SETTLED — CONFIRMED CORRECT, do not reopen.** I kept
 `exactly once` for a frame's **ordered capture projection** and for predeclared
-frame membership, on the grounds that the alias argument comes from `join` over
-the *semantic environment* and does not transfer to a capture projection with a
-declared slot. If wrong, it errs toward a false refusal. The frame says "do not
-collapse the two cases" so a later `exactly once` sweep does not read these as
-missed.
+frame membership; the Architect verified the landed blob and ruled it right, with
+a sharper reason than mine, now recorded in the frame: the lexical case is
+licensed by `Closed([S])` from the forward semantic walk **plus de Bruijn
+ordering**, and a frame projection has **neither** — it declares ordered ABI
+slots. Two frame members carrying one full coordinate make the declared source
+slot non-unique, and **selecting one would reintroduce the unkeyed first-member
+rule at the ABI boundary.**
 
 ⭐ **Two additions beyond the literal ruling**, both load-bearing: the six alias
 controls **with the note that control 3 is not a variant of control 1** (3
