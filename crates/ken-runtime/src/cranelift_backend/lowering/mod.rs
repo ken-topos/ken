@@ -8542,6 +8542,19 @@ impl<'a> ClaimedEffectSeats<'a> {
         Ok((record, operand))
     }
 
+    /// A view that authorizes NOTHING.
+    ///
+    /// ⭐ For the constructor-reconciliation tests, which build a synthesized
+    /// node directly rather than through a host-effect visit. It is the honest
+    /// spelling of what `&[]` used to say: this caller claimed no seat, so any
+    /// declared `SiteOperand` child refuses. A tree with no site-bound child —
+    /// which is every tree these tests build — asks it for nothing.
+    #[cfg(test)]
+    fn none() -> ClaimedEffectSeats<'static> {
+        static NONE: BTreeMap<EffectSeatSlot, PlannedEffectSeat> = BTreeMap::new();
+        ClaimedEffectSeats { claimed: &NONE, capability: None, arguments: &[] }
+    }
+
     /// Read one seat's compile-time template.
     ///
     /// ⛔ **Exhaustive over the two phases, and the refusal names the SEAT.**
@@ -8661,21 +8674,28 @@ impl<'a> Lowering<'a> {
     /// Project the seat's operand at `index` into a site-bound argument.
     ///
     /// ⭐ The only way to build a [`SynthesizedArgument::SiteOperand`] in
-    /// ordinary lowering, and it reads the operand list rather than accepting a
-    /// value — so the emitter states *which operand* it means and cannot hand
-    /// over a substitute by mistake.
+    /// ordinary lowering, and it reads the visit's CLAIMED seat rather than
+    /// accepting a value — so the emitter states *which operand* it means and
+    /// cannot hand over a substitute by mistake.
+    ///
+    /// ⛔ **The sole template projection, and it is driven by an exact declared
+    /// `SiteOperand(index)` use.** It used to read a dense `Vec<Lowered>` that
+    /// the caller built by demanding a specialized template for *every*
+    /// argument the operation has. That vector was the prohibited pre-operation
+    /// bulk conversion relocated after dispatch: operation knowledge made the
+    /// diagnostic narrower but did not authorize reading an unrelated seat, so
+    /// `BufferAllocate`'s capacity — which no synthesized node uses — was
+    /// re-read as a template here after its own arm had already consumed it,
+    /// and a carried capacity was refused by a consumer that never wanted it.
+    /// Demanding the template only at the seat a declared child names is what
+    /// makes the projection exact-use-driven rather than dense.
     fn site_operand_argument(
         &self,
         seat: StaticOriginId,
         index: u32,
-        operands: &[Lowered],
+        seats: &ClaimedEffectSeats<'_>,
     ) -> Result<SynthesizedArgument, CraneliftBackendError> {
-        let value = operands.get(index as usize).cloned().ok_or_else(|| {
-            unsupported(
-                "Constructor",
-                format!("the effect seat has no operand {index} to bind a site-bound child to"),
-            )
-        })?;
+        let value = seats.specialized(EffectSeatSlot::Argument(index))?.clone();
         Ok(SynthesizedArgument::SiteOperand { seat, index, value })
     }
 
@@ -8701,7 +8721,7 @@ impl<'a> Lowering<'a> {
         role: SynthesizedFixedConstructorRole,
         constructor: RuntimeSymbol,
         args: Vec<SynthesizedArgument>,
-        operands: &[Lowered],
+        seats: &ClaimedEffectSeats<'_>,
     ) -> Result<Lowered, CraneliftBackendError> {
         // ⚠ Every allocation-reachable use in an operation's tree HAS a record,
         // site-bound ones included -- `OptionSome`, `FileError`,
@@ -8757,7 +8777,7 @@ impl<'a> Lowering<'a> {
                     path,
                     SynthesizedConstructorRole::Fixed(role),
                 )?;
-            self.reconcile_declared_children(owner, seat, path, declared, &args, operands)?;
+            self.reconcile_declared_children(owner, seat, path, declared, &args, seats)?;
         }
         Ok(Lowered::Constructor {
             constructor,
@@ -8847,7 +8867,7 @@ impl<'a> Lowering<'a> {
         path: &SynthesizedAggregatePath,
         declared: &'static [SynthesizedAggregateNode],
         args: &[SynthesizedArgument],
-        operands: &[Lowered],
+        seats: &ClaimedEffectSeats<'_>,
     ) -> Result<(), CraneliftBackendError> {
         if declared.len() != args.len() {
             return Err(unsupported(
@@ -8948,26 +8968,40 @@ impl<'a> Lowering<'a> {
                     &path.field(position),
                     dynamic,
                 )?,
-                // ⭐ **All three provenance axes, against the operand list.**
+                // ⭐ **All three provenance axes, against the CLAIMED seat.**
                 //
                 // The planner derived this child's owners from the seat's
                 // operand `index`. So the value here must BE that operand:
                 // the seat must match, the index must be the declared one, and
-                // the value must still witness as `operands[index]`. Arity
-                // alone proves only the parent field position, and a value of
-                // the same shape and the same boundary disposition would
-                // otherwise inherit that operand's owner proof.
+                // the value must still witness as this visit's claimed
+                // `Argument(index)`. Arity alone proves only the parent field
+                // position, and a value of the same shape and the same boundary
+                // disposition would otherwise inherit that operand's owner
+                // proof.
+                //
+                // ⛔ **The projection happens HERE, at a declared use, and
+                // nowhere else.** The two coordinate checks run first so that a
+                // wrong seat or a wrong index is the ordinary child mismatch
+                // below rather than a projection error about the seat the
+                // emitter did not name.
+                //
+                // ⛔ A declared `SiteOperand` whose claimed operand is CARRIED
+                // refuses at that exact seat, propagated from `specialized`. It
+                // does not reconstruct a template, widen the carrier, borrow a
+                // sibling, or fall back — reconciliation needs a compile-time
+                // witness, and there is none.
                 (
                     SynthesizedAggregateNode::SiteOperand(declared_index),
                     SynthesizedArgument::SiteOperand { seat: bound, index, value },
                 ) => {
-                    let projected = operands.get(*index as usize);
-                    *bound == seat
-                        && index == declared_index
-                        && projected.is_some()
-                        && site_operand_witness(value).is_some()
-                        && site_operand_witness(value)
-                            == projected.and_then(site_operand_witness)
+                    if *bound != seat || index != declared_index {
+                        false
+                    } else {
+                        let projected =
+                            seats.specialized(EffectSeatSlot::Argument(*declared_index))?;
+                        site_operand_witness(value).is_some()
+                            && site_operand_witness(value) == site_operand_witness(projected)
+                    }
                 }
                 // ⛔ `Absent` marks a host-result arm that builds no aggregate,
                 // so it is never a child of a planned record.
@@ -9016,7 +9050,7 @@ impl<'a> Lowering<'a> {
         role: SynthesizedFixedConstructorRole,
         constructor: RuntimeSymbol,
         fields: Vec<SynthesizedArgument>,
-        operands: &[Lowered],
+        seats: &ClaimedEffectSeats<'_>,
     ) -> Result<DynamicConstructorAlternativeV1, CraneliftBackendError> {
         // Absent means no context is being defined, which is not an emission
         // this population covers -- the same boundary `synthesized_constructor`
@@ -9028,7 +9062,7 @@ impl<'a> Lowering<'a> {
             position,
             role,
             &fields,
-            operands,
+            seats,
         )?;
         Ok(DynamicConstructorAlternativeV1 {
             tag,
@@ -9202,7 +9236,7 @@ impl<'a> Lowering<'a> {
         position: u32,
         role: SynthesizedConstructorRole,
         fields: &[SynthesizedArgument],
-        operands: &[Lowered],
+        seats: &ClaimedEffectSeats<'_>,
     ) -> Result<Option<AggregateOccurrenceId>, CraneliftBackendError> {
         let Some(owner) = self.defining_emission_owner else {
             return Ok(None);
@@ -9220,7 +9254,7 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
-        self.reconcile_declared_children(owner, seat, &path, declared, fields, operands)?;
+        self.reconcile_declared_children(owner, seat, &path, declared, fields, seats)?;
         Ok(Some(self.static_transition_plan.synthesized_aggregate_occurrence(
             owner,
             seat,
@@ -9242,7 +9276,7 @@ impl<'a> Lowering<'a> {
         seat: StaticOriginId,
         parent: &SynthesizedAggregatePath,
         payload: Lowered,
-        operands: &[Lowered],
+        seats: &ClaimedEffectSeats<'_>,
     ) -> Result<Vec<DynamicConstructorAlternativeV1>, CraneliftBackendError> {
         let roles = self.static_transition_plan.synthesized_io_error_roles();
         if roles.len() != self.process_symbols.io_errors.len() {
@@ -9273,7 +9307,7 @@ impl<'a> Lowering<'a> {
                     })?,
                     role,
                     &fields,
-                    operands,
+                    seats,
                 )?;
                 Ok(DynamicConstructorAlternativeV1 {
                     tag: i64::try_from(position).map_err(|_| {

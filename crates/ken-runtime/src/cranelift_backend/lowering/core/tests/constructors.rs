@@ -2662,7 +2662,7 @@ fn c2_ac4_runtime_host_result_selects_a_separately_generated_nested_payload() {
                     value: false_word,
                     known: Some(false),
                 })],
-                &[],
+                &ClaimedEffectSeats::none(),
             )?;
             let host_result = Lowered::HostResult {
                 success,
@@ -5953,7 +5953,7 @@ fn a_construction_time_occurrence_lookup_fails_closed() {
                 SynthesizedFixedConstructorRole::Wrote,
                 symbols.wrote.clone(),
                 Vec::new(),
-                &[],
+                &ClaimedEffectSeats::none(),
             )
             .is_ok(),
         "with no emission owner there is no emission this population covers, \
@@ -5989,7 +5989,7 @@ fn a_construction_time_occurrence_lookup_fails_closed() {
                 SynthesizedFixedConstructorRole::Wrote,
                 symbols.wrote.clone(),
                 Vec::new(),
-                &[],
+                &ClaimedEffectSeats::none(),
             )
             .is_err(),
         "a synthesized construction whose exact record does not exist must \
@@ -6016,7 +6016,7 @@ fn a_construction_time_occurrence_lookup_fails_closed() {
                     occurrence: None,
                     args: Vec::new(),
                 })],
-                &[],
+                &ClaimedEffectSeats::none(),
             )
             .is_err(),
         "a nested child whose expected record does not exist must refuse; two \

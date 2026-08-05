@@ -10493,26 +10493,27 @@ impl<'a> Lowering<'a> {
             // one of them explicitly; nothing is rebound as the walk descends,
             // so a path in this file names exactly one node in the planner's
             // tree and the two can be compared.
-            // The seat's own lowered operands. A site-bound synthesized child
-            // is PROJECTED from this list rather than handed in, so the emitter
-            // states which operand it means and cannot substitute a look-alike.
-            // ⚠ A POSITIONAL projection, and deliberately not the conversion
-            // that was removed above. It is taken after the operation is known,
-            // each element is read through its own claimed seat, and a refusal
-            // names that seat -- the site-bound synthesized-aggregate consumer
-            // below needs an ordered list and cannot ask per seat.
-            let seat_operands: Vec<Lowered> = if operation == ken_host::HostOpV1::BufferFreeze {
-                Vec::new()
-            } else {
-                (0..lowered.len() as u32)
-                    .map(|ordinal| {
-                        seats
-                            .specialized(EffectSeatSlot::Argument(ordinal))
-                            .cloned()
-                    })
-                    .collect::<Result<Vec<_>, _>>()?
-            };
-            let seat_operands: &[Lowered] = &seat_operands;
+            // ⭐ **The claim-backed view itself is what reply synthesis
+            // carries** -- positional semantics, projected LAZILY.
+            //
+            // ⛔ A dense `Vec<Lowered>` used to be realized here by demanding a
+            // specialized template for every argument the operation has. That
+            // was the removed pre-operation bulk conversion RELOCATED after
+            // dispatch: knowing the operation narrowed the diagnostic but did
+            // not authorize reading a seat no synthesized node uses. Only two
+            // site-bound children exist in the measured trees -- the file-error
+            // path's `SiteOperand(0)` and `FsReadAt`'s private-buffer-span
+            // `SiteOperand(2)` -- so an operation with no `SiteOperand` child
+            // must project no template at all. `BufferAllocate`'s carried
+            // capacity is the case that made this load-bearing: its own arm
+            // consumes the seat, and the dense vector then refused it again on
+            // behalf of a consumer that never wanted it.
+            //
+            // ⚠ The `BufferFreeze` special case is gone rather than moved. It
+            // existed only to keep the dense realization off an operation whose
+            // seats are not templates; with the projection driven by declared
+            // uses, an operation with no site-bound child asks for nothing
+            // without needing to be named.
             let error_root =
                 SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultError);
             let ok_root = SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk);
@@ -10539,7 +10540,7 @@ impl<'a> Lowering<'a> {
                                 static_origin,
                                 node,
                                 payload,
-                                seat_operands,
+                                &seats,
                             )?,
                         },
                     ))
@@ -10551,8 +10552,12 @@ impl<'a> Lowering<'a> {
                     | ken_host::HostOpV1::FsChangeMode
                     | ken_host::HostOpV1::FsOpen
             ) {
-                let path = seats.specialized(SEAT_0)?.clone();
-                let _ = &path;
+                // ⛔ No eager read of the path seat here. It used to be
+                // demanded as a template and then dropped -- the same
+                // unauthorized eager demand at a smaller scale. The one thing
+                // that legitimately needs it is the `OptionSome` child below,
+                // which projects it through `site_operand_argument` at its
+                // declared `SiteOperand(0)`.
                 let (operation_role, operation_symbol) = match operation {
                     ken_host::HostOpV1::FsReadFile | ken_host::HostOpV1::FsOpen => (
                         SynthesizedFixedConstructorRole::FileOperationRead,
@@ -10574,7 +10579,7 @@ impl<'a> Lowering<'a> {
                     operation_role,
                     operation_symbol,
                     Vec::new(),
-                    seat_operands,
+                    &seats,
                 )?;
                 let path = self.synthesized_constructor(
                     static_origin,
@@ -10582,8 +10587,8 @@ impl<'a> Lowering<'a> {
                     SynthesizedFixedConstructorRole::OptionSome,
                     self.process_symbols.option_some.clone(),
                     // The seat's operand 0 — projected, not passed.
-                    vec![self.site_operand_argument(static_origin, 0, seat_operands)?],
-                    seat_operands,
+                    vec![self.site_operand_argument(static_origin, 0, &seats)?],
+                    &seats,
                 )?;
                 let io_error =
                     generic_io_error(self, builder, payload_int, &error_root.field(2))?;
@@ -10597,7 +10602,7 @@ impl<'a> Lowering<'a> {
                         SynthesizedArgument::Nested(path),
                         SynthesizedArgument::Dynamic(io_error),
                     ],
-                    seat_operands,
+                    &seats,
                 )?
             } else if matches!(
                 operation,
@@ -10638,7 +10643,7 @@ impl<'a> Lowering<'a> {
                                 static_origin,
                                 node,
                                 surface_io_payload_int.clone(),
-                                seat_operands,
+                                &seats,
                             )?,
                         },
                     ))
@@ -10667,7 +10672,7 @@ impl<'a> Lowering<'a> {
                                     SynthesizedFixedConstructorRole::ResourceKindFsHandle,
                                     this.process_symbols.resource_kind_fs_handle.clone(),
                                     Vec::new(),
-                                    seat_operands,
+                                    &seats,
                                 )?,
                                 this.synthesized_dynamic_alternative(
                                     static_origin,
@@ -10677,7 +10682,7 @@ impl<'a> Lowering<'a> {
                                     SynthesizedFixedConstructorRole::ResourceKindBuffer,
                                     this.process_symbols.resource_kind_buffer.clone(),
                                     Vec::new(),
-                                    seat_operands,
+                                    &seats,
                                 )?,
                             ],
                         },
@@ -10694,7 +10699,7 @@ impl<'a> Lowering<'a> {
                         SynthesizedArgument::Scalar(identity_low_int),
                         SynthesizedArgument::Scalar(identity_high_int),
                     ],
-                    seat_operands,
+                    &seats,
                 )?;
                 Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: surface_tag,
@@ -10711,7 +10716,7 @@ impl<'a> Lowering<'a> {
                                 builder,
                                 &error_root.alternative(0).field(0),
                             )?)],
-                            seat_operands,
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10721,7 +10726,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceClosed,
                             self.process_symbols.resource_closed.clone(),
                             Vec::new(),
-                            seat_operands,
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10731,7 +10736,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceMalformed,
                             self.process_symbols.resource_malformed.clone(),
                             Vec::new(),
-                            seat_operands,
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10744,7 +10749,7 @@ impl<'a> Lowering<'a> {
                                 SynthesizedArgument::Scalar(resource_required_int),
                                 SynthesizedArgument::Scalar(resource_held_int),
                             ],
-                            seat_operands,
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10766,7 +10771,7 @@ impl<'a> Lowering<'a> {
                                     &error_root.alternative(4).field(2),
                                 )?),
                             ],
-                            seat_operands,
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10787,7 +10792,7 @@ impl<'a> Lowering<'a> {
                                     &error_root.alternative(5).field(1),
                                 )?),
                             ],
-                            seat_operands,
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10797,7 +10802,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceBufferLimit,
                             self.process_symbols.resource_buffer_limit.clone(),
                             Vec::new(),
-                            seat_operands,
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10807,7 +10812,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceInvalidOffset,
                             self.process_symbols.resource_invalid_offset.clone(),
                             Vec::new(),
-                            seat_operands,
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10817,7 +10822,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceInvalidBounds,
                             self.process_symbols.resource_invalid_bounds.clone(),
                             Vec::new(),
-                            seat_operands,
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10827,7 +10832,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ResourceNoProgress,
                             self.process_symbols.resource_no_progress.clone(),
                             Vec::new(),
-                            seat_operands,
+                            &seats,
                         )?,
                     ],
                 })
@@ -10945,11 +10950,11 @@ impl<'a> Lowering<'a> {
                         // The seat's operand 2 — the buffer this span is bound
                         // to (`PX8-SPAN-PROV`), projected from the operand list
                         // rather than rebuilt from its destructured payload.
-                        self.site_operand_argument(static_origin, 2, seat_operands)?,
+                        self.site_operand_argument(static_origin, 2, &seats)?,
                         SynthesizedArgument::Scalar(reply_start_int),
                         SynthesizedArgument::Scalar(Lowered::BoundedNat(count)),
                     ],
-                    seat_operands,
+                    &seats,
                 )?;
                 let transferred = self.synthesized_constructor(
                     static_origin,
@@ -10960,7 +10965,7 @@ impl<'a> Lowering<'a> {
                         SynthesizedArgument::Scalar(Lowered::BoundedNat(predecessor)),
                         SynthesizedArgument::Scalar(Lowered::BoundedNat(remaining)),
                     ],
-                    seat_operands,
+                    &seats,
                 )?;
                 Lowered::DynamicConstructor(DynamicConstructorV1 {
                     discriminator: builder.ins().uextend(types::I64, nonzero),
@@ -10973,7 +10978,7 @@ impl<'a> Lowering<'a> {
                             SynthesizedFixedConstructorRole::ReadEof,
                             self.process_symbols.read_eof.clone(),
                             Vec::new(),
-                            seat_operands,
+                            &seats,
                         )?,
                         self.synthesized_dynamic_alternative(
                             static_origin,
@@ -10986,7 +10991,7 @@ impl<'a> Lowering<'a> {
                                 SynthesizedArgument::Nested(span),
                                 SynthesizedArgument::Nested(transferred),
                             ],
-                            seat_operands,
+                            &seats,
                         )?,
                     ],
                 })
@@ -11017,7 +11022,7 @@ impl<'a> Lowering<'a> {
                         SynthesizedArgument::Scalar(Lowered::BoundedNat(predecessor)),
                         SynthesizedArgument::Scalar(Lowered::BoundedNat(remaining)),
                     ],
-                    seat_operands,
+                    &seats,
                 )?;
                 self.synthesized_constructor(
                     static_origin,
@@ -11025,7 +11030,7 @@ impl<'a> Lowering<'a> {
                     SynthesizedFixedConstructorRole::Wrote,
                     self.process_symbols.wrote.clone(),
                     vec![SynthesizedArgument::Nested(transferred)],
-                    seat_operands,
+                    &seats,
                 )?
             } else if operation == ken_host::HostOpV1::FsHandleMetadata {
                 self.lower_unsigned_u64_int(builder, detail)?
@@ -11036,7 +11041,7 @@ impl<'a> Lowering<'a> {
                     SynthesizedFixedConstructorRole::Unit,
                     self.process_symbols.unit.clone(),
                     Vec::new(),
-                    seat_operands,
+                    &seats,
                 )?
             };
             // `D7` — the two ROOTS, which no node declares. Every other
