@@ -33,21 +33,96 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~12:4xZ · `D3c` released and RUNNING; framing debt CLEARED
+## LIVE — 2026-08-05 ~13:3xZ · `D3b` re-cut is PARTIAL at `e70ae04c`
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
-### State, in one line each
+### The one thing to do next
 
-- **`D3c` is released** (`evt_2f30t4866ensx`) from preserved `bc371f13`, and
-  `runtime-implementer` is **working it now**. No rouse was needed — it woke on
-  the release by itself. Do not read the "will not wake" caveat as retired; it
-  held for the two prior compactions.
-- **The framing debt is discharged.** `docs/program/wp/RT-UNIT-CLOSURE-CONVERT.md`
-  exists; the node is **`ready`** (framed and shovel-ready — *not* startable,
-  its dependency is unmerged). It enters the frontier when
-  `RT-CONTSRC-PRODUCER-LOCAL` merges, with no Steward pass in between.
+**Nothing waits on me.** `runtime-leader` holds the resume; the next act is
+bounded by the Architect's identity ruling and is Runtime's to execute. Watch
+for either a candidate or the multiplicity hard stop named below.
+
+### `D3b` PARTIAL — preserved, deliberately non-candidate, and RED by design
+
+Lineage `f5e4fa9f` (base) → **`1f6fc5cf`** (production, compiles) →
+**`e70ae04c`** (WIP). Both are contained by
+`wp/RT-DECL-CLOSURE-PORT-typed-units`; the implementer worktree is clean on
+`runtime-implementer/work` and the WP branch is free.
+
+**`e70ae04c` does not compile under `--profile test`** because the test
+migration is mid-flight. That is where the implementer chose to stop, not a
+regression. Do not route it to QA and do not read the red as a signal. Production
+(`cargo check -p ken-runtime`) compiles at both commits.
+
+**The stop was working budget, not a defect.** The implementer stopped short of
+a restructure rather than strand a half-done one, and handed over an exact
+state. Read it as the frame working.
+
+**What `1f6fc5cf` lands and is believed correct:** availability as two
+consumer-specific planner-issued claims over `CurrentLexical` and `EntryFrame`,
+in a closed record keyed by consumer kind — no unkeyed vector, no first-match,
+no generic immediate slot, no arm falling back to the other's. At a predeclared
+direct-emission seat every input takes `CurrentLexical`, entry root and
+producer-local alike. `GeneratedContextCapture` is subsumed. All four clauses
+retired by name. Both cross-presentation cases fail closed.
+
+The load-bearing feasibility fact: `continuation_owner_entry_sources` already
+seeds the forward walk with `EntryAbi` coordinates, so this needed **no new
+walk** — the existing search finds either root arm exactly-once-or-refuses.
+
+One gain worth keeping: the injectivity law at the emission seat could
+previously only be scoped to the producer-local domain, because comparing an
+ABI-frame slot against a lexical index *was* the conflation. Every claim at one
+seat now names a position in the same environment, so the law widens to the
+whole emission.
+
+### The ruling that landed MID-TURN and supersedes part of it
+
+Architect `evt_7e04y1zmvrnps` (13:22Z) arrived after `1f6fc5cf` and invalidates
+two of the three things built in that same turn. It is binding and requires no
+frame recut:
+
+1. **Two-stage construction.** `ContinuationContextId` does not exist while
+   `exact_continuation_projection` interns a specialization key, so that phase
+   cannot build the final generated-`EntryFrame` claim and later mutation of an
+   interned projection is unlawful. `(enclosing_specialization,
+   worker_body_origin)` is a **provisional interning key only**; finalization
+   resolves it to exactly one `(ContinuationContextId,
+   ContinuationSpecializationId)`. Zero or multiple matches refuse. Never expose
+   a half-stamped claim. **Not built** — the partial keys on the pair.
+2. **The frame ID names the SOURCE/CALLER frame** whose `defining_abi_operands`
+   are indexed, not the target `context` argument to `call_declared_context`.
+   **Not built** — the partial names the enclosing specialization.
+3. **Caller-class ambiguity is fail-closed, not a widened slot.** Never reached.
+
+### The measurement that must come first
+
+**If one target capture is consumed from more than one lawful source frame, a
+single target-level claim is insufficient** — planning must then issue claims
+per exact causal consumer/call edge, or hard-stop with the concrete edge. This
+is **unmeasured**: the test build was mid-migration, so the probe could not run.
+
+The 13 specialization-emitter census rows do **not** answer it. The Architect
+said explicitly they are evidence the validation path must exist, not that a
+shortcut is safe, and the implementer declined to carry the number forward as
+reassurance. Do not let it re-enter as one.
+
+**Three planner rows assert refusals the re-cut changed** — the crossed
+owner/context refusal (`"different producer owner"`) and the caller
+current-lexical proof (`"does not carry a current-"`). Their authority is not
+lost: under the re-cut the caller's proof lives in the enclosing
+specialization's own projection, built with a predeclared emitter and therefore
+carrying the `CurrentLexical` claim. **They must be re-cut onto that, not
+deleted.**
+
+### Framing debt: still clear
+
+`docs/program/wp/RT-UNIT-CLOSURE-CONVERT.md` exists and its node is `ready`
+(framed and shovel-ready — *not* startable, its dependency is unmerged). It
+enters the frontier when `RT-CONTSRC-PRODUCER-LOCAL` merges, with no Steward
+pass in between.
 
 ### `D3c` RETURNED: the position MOVES. `D3b`'s premise is FALSE.
 
@@ -61,7 +136,7 @@ emits a well-formed operand of the right contract carrying the wrong value.
 Zero-depth rows agree position-for-position in the same window, so the
 divergence is attributable to the binder.
 
-### The fidelity recut is LANDED. `D3b` is releasable.
+### The fidelity recut, and the block it had to clear (history)
 
 The Architect ruled (crossed-post confirmation): **the pairing table does not
 survive.** Availability becomes **consumer-specific planner-issued claims** over
@@ -94,12 +169,6 @@ hits were then deliberately KEPT with the reason recorded at each — `D3a`'s
 refusal sentence (a true record of what it landed; rewriting falsifies history)
 and `D1`'s `unchanged` on the Entry ABI **root source** (correct — root identity
 is preserved; only *availability* was replaced).
-
-### The one thing to do next
-
-**Wait for `runtime-leader` to resume `D3b` from `f5e4fa9f`, then watch for the
-candidate.** Nothing waits on me. If a fresh corrected SHA comes back, the node
-QA and `D4b` sequence resumes.
 
 **Three scope calls already made (`evt_3n4k9xx4mvq8b`), do not re-litigate:**
 
