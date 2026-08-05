@@ -17730,6 +17730,12 @@ fn d8j_root_witness_identities(
 ///    is why disjointness is asserted separately from coverage.
 /// 4. **A shortfall refuses.** Discharging nothing leaves the planned token in
 ///    neither half.
+/// 4b. **Suppression restores the old refusal, end to end.** Turning the
+///    composed discharge off on the declaration-owned witness removes the claim
+///    the residual filter reads, so the causal edge is detached again and the
+///    `D5a` seat refuses -- exactly where that witness refused at `89e36ec1`.
+///    ⭐ This is the strongest available statement that the repair is carried by
+///    the discharge rather than by the seat having been loosened.
 /// 5. **A wrong owner refuses.** A composed discharge claimed by a function
 ///    that is not the identity's emission owner is rejected before it can
 ///    enter either population.
@@ -17844,6 +17850,35 @@ fn d8k_the_causal_population_is_a_disjoint_partition_of_direct_and_composed() {
         "and the message must name both halves, so a reader can tell an unemitted token from one \
          discharged the other way: {refusal}"
     );
+
+    // Clause 4b — SUPPRESSION, end to end, on the declaration-owned witness.
+    //
+    // ⭐⭐ This is the clause that ties `D8j`'s claim to `D8k`'s repair, and it
+    // is the only one here that runs a whole compile. Suppressing the composed
+    // discharge removes the claim the residual filter reads, so the causal edge
+    // is detached again and the `D5a` seat refuses -- exactly where this witness
+    // refused at `89e36ec1`.
+    //
+    // ⛔ It is the strongest available statement that the repair is CARRIED by
+    // the discharge rather than by the seat having been loosened: turn the
+    // discharge off and the old refusal comes straight back.
+    {
+        use crate::cranelift_backend::lowering::{set_d8j_mutation, D8jMutation};
+        set_d8j_mutation(D8jMutation::SuppressDischargeAfterRealCall);
+        let (error, _counters, _markers) = d8e_witness_compile("d8k_suppressed", 3, true);
+        set_d8j_mutation(D8jMutation::Exact);
+        let refusal = format!(
+            "{:?}",
+            error.expect("with nothing discharged the causal edge is detached again")
+        );
+        assert!(
+            refusal.contains("detached-result seat"),
+            "suppressing the composed discharge must restore the D5a refusal this witness used \
+             to give. Any other refusal means the seat is being passed for a reason other than \
+             the discharge, and D8k's repair would then be resting on something unmeasured: \
+             {refusal}"
+        );
+    }
 
     // Clause 5 — wrong owner.
     let (mut ledger, _bundle) = open();
