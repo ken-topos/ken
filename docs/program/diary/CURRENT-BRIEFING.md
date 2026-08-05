@@ -49,12 +49,23 @@ the visit-open site, ctx 25%. The leader is idle-and-correct, waiting on that
 named checkpoint. Bulk conversion and the carried exact-`Int` route are
 explicitly deferred until this checkpoint is reviewed.
 
-**WIP audit clock: re-armed at 02:19, fires 03:19.** The leader's release is
-the reset event. A routine progress post does not reset it.
+**WIP audit clock — DERIVE IT, do not read a stamped deadline.** A fixed
+timestamp here goes stale on every reset event and then fires a spurious audit;
+it needed rewriting twice in the first hour. At tick time, take the **latest**
+of these in the WP thread and add 60 minutes:
 
-Superseded, for reading older posts only: the 01:36 release from `3d8f9b21`
-and its 02:36 deadline. That slice produced `6a09ed68`, which the Architect
-accepted as WIP substrate while ruling its ledger lifecycle too coarse.
+- a kickoff or re-kickoff (leader release),
+- an Architect audit, ruling, or review verdict,
+- a candidate or checkpoint handoff,
+- a genuine hard stop, or completion.
+
+**A routine progress post is not a reset event.** Counting those makes the
+trigger fire never while looking armed.
+
+On this ring the resets have been arriving every 5 to 15 minutes, so **the
+60-minute trigger has not come close to firing and probably will not while the
+cadence holds.** That is the healthy case, not a broken detector — but it is
+also why a stamped deadline was pure noise here.
 
 **Governing base, do not let it drift:** continue only from the `70887529`
 lineage. Rebase, merge, or cherry-pick of `fb8fd881`, `430798bf`, `548682c3`,
