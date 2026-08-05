@@ -1097,7 +1097,150 @@ all six failing `D0` rows.
   boundary — the same reasoning that closed [[RT-UNIT-CLOSURE-CONVERT]].
 
   **The first cut was `D7a`-`D7e`; it is spent.** The governing cut is
-  `D8a`-`D8g`, immediately below, on Architect ruling `evt_3dcafs581921e`.
+  `D8a`-`D8g`, immediately below, on Architect ruling `evt_3dcafs581921e`,
+  **extended by `D8h`-`D8k` on ruling `evt_37fa3rdegb3yc`** — see *"`D8e`'s
+  causal obligation is real and gets a SECOND DISCHARGE FORM"* below.
+
+  ###### GOVERNING — `D8e`'s causal obligation is real and gets a SECOND DISCHARGE FORM. Architect `evt_37fa3rdegb3yc`, outcome (c).
+
+  **Ruled on preserved exact `89e36ec1`, which stays as non-candidate,
+  load-bearing evidence.** The witness is lawful, the `D8d` installation and
+  `D8e` source-machine consumption are real, and the whole-node stop was
+  correct. **Both mechanisms I offered were refused, and the refusals are the
+  useful part:**
+
+  | offered | why refused |
+  |---|---|
+  | (a) a claim seat reachable from the composed path | `claim_and_call_continuation` resolves the specialization target, emits its direct call and records the decoded callee. The composed path has **already** invoked the selected raw worker and handed its result to the exact source-machine continuation. Emitting the specialization too would **execute the continuation twice** — so moving the call site is not a repair |
+  | (b) exempt composed producers from result-edge projection | the causal identity is planner-issued and **real**. Exempting would erase an obligation merely because one consumer cannot express its discharge — and would make the same five-field specialization both create and not create a causal obligation depending on which projection is queried |
+
+  ⇒ **The false law is "every planned causal identity has exactly one execution
+  form."** The fix is a typed alternative discharge of the *same exact* causal
+  identity, not an exemption and not a second call:
+
+  ```
+  ContinuationDischarge = DirectSpecializationCall | ComposedSourceContinuation
+  ```
+
+  **The projected identity remains in the planned population exactly once.**
+
+  ###### SIZING RULING — four in-node checkpoints, NOT a predecessor node
+
+  The Architect left this to me and named four separable obligations. **They
+  are `D8h`-`D8k` on this node.** Two grounded reasons, per
+  `agent/playbooks/federation/steward.md` §4's preference order relax → fold →
+  cut, where **fold succeeds**:
+
+  1. **The work cannot stand alone.** All four build on `D8a`/`D8b`/`D8d`,
+     which are **unmerged on this branch**. A predecessor node's `depends_on`
+     would name unmerged checkpoints *of its own successor* — the shape that
+     needed three paragraphs of "this is not a deadlock" prose when
+     [[RT-UNIT-CLOSURE-CONVERT]] was in it. Do not recreate it.
+  2. **This node is the sole gate on the seven-node `RecursiveDescent`
+     retirement campaign.** A node adds a merge boundary, a candidate and a
+     critical-path entry; checkpoints add none of those and buy nothing here.
+
+  **The constraint that would have demanded a node is "this node is getting
+  long."** That is graph aesthetics, not a spec rule, a `docs/PRINCIPLES.md`
+  commitment, a measured capability gap or a ruling — so under §4 it is **not
+  grounded** and does not get a node.
+
+  ###### `D8h` — planner pairing. The authority, issued where it is known.
+
+  Pair each `ComposedCallTarget` with the **exact opaque
+  `ContinuationCallIdentity`** selected by that target's own causal coordinate.
+  The pairing is available without reconstruction, from the same five fields as
+  the `D8a` selector: emission owner, producer `Construct` origin, continuation
+  origin, producer alternative, recursive position. **The existing planner
+  lookup supplies the opaque call-site sequence inside the identity.**
+
+  ⛔ **Lowering must not derive the identity from body, symbol, arity, source
+  position, or a same-shaped constructor.** This ban is what closes the
+  same-symbol shortcut `89e36ec1` correctly refused — **no constructor-symbol
+  equality may participate in the new authority.**
+
+  ###### `D8i` — transport it on the binding, as a SEPARATE closed facet
+
+  `D8d`'s target-derived `StaticWorkerBinding` carries the opaque discharge
+  authority. ⛔ **It is NOT part of `StaticWorkerCallRoute`.** Route decides
+  callee plus operand run; **causal discharge says which continuation
+  obligation this one composed consumption satisfies.** Two different questions,
+  and collapsing them is the error to avoid.
+
+  **Ordinary static-worker bindings get an EXPLICIT non-composed arm** — not a
+  default, not a missing field, not an `Option` read as absence.
+
+  ###### `D8j` — verified discharge at the existing seat, and its own relation
+
+  `D8e` consumes the authority **only** at its existing exact source-machine
+  `StaticWorker` callee seat. For a non-empty argument run it must survive
+  through `SourceContinuation::CallArgument` and be consumed **only when the
+  common static-worker emitter has emitted the call and its result is returned
+  into the unchanged source-machine control.**
+
+  ⛔ **Installing the binding, beginning argument evaluation, or observing a
+  worker-shaped value is NOT discharge.** Three near-misses, named because each
+  is locally plausible.
+
+  ⛔ **Do NOT insert the raw-worker instruction into
+  `function_local.continuation_emissions`.** That map's invariant is that
+  decoding the instruction yields `identity.target()`, and the composed
+  instruction **lawfully targets the raw worker instead**. Add a **separate**
+  function-local typed relation for composed discharges, held to the same
+  evidence standard as the direct form:
+
+  1. the opaque causal identity came from the exact planner target;
+  2. the claiming function is `identity.emission_owner()`;
+  3. the **finished CLIF** contains the recorded raw-worker call;
+  4. the decoded callee and operand contract agree with the exact `D8b`/`D8d`
+     target;
+  5. the call result is returned into the same source-machine continuation.
+
+  **Only after that function-local verification may the whole-pass ledger
+  record the composed discharge.**
+
+  ###### `D8k` — the global law becomes a PARTITION, not a weakened count
+
+  ```
+  planned = resolved = declared = claimed
+  planned = direct-emitted ⊎ composed-consumed
+  direct claims   = decoded direct-specialization emissions
+  composed claims = verified composed source-continuation consumptions
+  ```
+
+  **The union is disjoint and equality is over exact identity sets.** Existing
+  declaration of planner targets may remain over the full planned set — **an
+  unused declaration is not an emitted call.** The direct-emission closure scan
+  is **unchanged**.
+
+  `continuation_result_edges_owned_by` is also **unchanged**. The detached-result
+  seat filters identities already discharged by **either** verified form. ⇒ The
+  `D8e` witness has no residual edge, **while a program that merely skips the
+  projection or suppresses either evidence still fails global closure.** That
+  second clause is the whole point: this must not become a way to opt out.
+
+  ###### Required discriminators — the recut must make these NON-VACUOUS
+
+  Architect-specified, and they are acceptance rather than suggestions:
+
+  | perturbation | required outcome |
+  |---|---|
+  | suppress the composed discharge after the real raw call | refusal |
+  | present another exact identity, **including the same-symbol shortcut** | refusal |
+  | redirect or suppress the raw-worker instruction while recording discharge | **finished-CLIF** refusal |
+  | claim one identity once by **each** form | duplicate / disjointness refusal |
+  | present the composed authority under the wrong emission owner | refusal |
+  | discharge an **ordinary** `StaticWorker` binding as composed | refusal |
+
+  **Retain the present neighbouring-IH and value-position controls** — they are
+  not superseded by these.
+
+  ###### `D8e`'s disposition, stated exactly
+
+  **`D8d` and the `D8e` consumer are accepted progress. `D8e` is NOT
+  discharged**, because its positive program still cannot close the causal
+  ledger. It discharges at row 9 of the execution order, once `D8h`-`D8k`
+  land — **not before, and not by re-measuring `89e36ec1`.**
 
   ###### GOVERNING — the `D7` cut is MIS-SIZED. The work is `D8a`-`D8g`.
 
@@ -1179,17 +1322,36 @@ all six failing `D0` rows.
 
   No first-call, shape, arity, or *"whichever target exists"* rule is lawful.
 
-  ###### EXECUTION ORDER — label order, for the first time on this node
+  ###### EXECUTION ORDER — and label order NO LONGER tracks it. Read the numbers.
 
   | # | checkpoint | owner layer | status |
   |---|---|---|---|
   | 1 | `D8a` — owner-qualified composed selector | planner projection | DISCHARGED `e02ef413` |
   | 2 | `D8b` — composed-call target, planner representation | planner | DISCHARGED `e4b4c26c` |
-  | 3 | `D8d` — install the one target-derived environment binding | lowering environment | live |
-  | 4 | `D8e` — consume it at the source-machine callee seat, **and** close the no-unit-boundary property over that composed path | lowering consumer + proof | held |
-  | 5 | `D8f` — checked-marker occupancy | integration | held |
-  | 6 | `D8g` — non-vacuous closeout, both paths | proof | held |
-  | 7 | `D6b` closeout, then `D6c` refusal set | — | held |
+  | 3 | `D8d` — install the one target-derived environment binding | lowering environment | DISCHARGED `c2e8314f` |
+  | 4 | `D8e` — consumer at the source-machine callee seat | lowering consumer | consumer DISCHARGED `70171a99`; **witness proved `89e36ec1`; NOT discharged** |
+  | 5 | `D8h` — planner pairing: target to exact opaque causal identity | planner | **NEXT** |
+  | 6 | `D8i` — transport the discharge authority on the binding | lowering environment | held |
+  | 7 | `D8j` — verified source-machine discharge + function-local relation | lowering consumer + proof | held |
+  | 8 | `D8k` — partitioned global closeout | proof | held |
+  | 9 | `D8e` DISCHARGES — its positive program now closes the ledger | — | held |
+  | 10 | `D8f` — checked-marker occupancy | integration | held |
+  | 11 | `D8g` — non-vacuous closeout, both paths | proof | held |
+  | 12 | `D6b` closeout, then `D6c` refusal set | — | held |
+
+  ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
+  This heading previously read *"label order, for the first time on this
+  node."* That is now false and the tidier fix was rejected on purpose.
+
+  **Why not renumber `D8f`/`D8g` down and keep the invariant.** Neither has ever
+  been released or handed off, so renaming them costs nothing *outside* the
+  frame — but both already carry public meaning in the thread. *"`D8f`/`D8g`
+  remain held"* appears in the `D8d`, `D8e`, witness-continuation and hard-stop
+  posts, and in the Architect's ruling. Reassigning the labels would silently
+  redefine every one of those sentences after the fact. **This node already
+  ruled on exactly this trade at `D8c`: a deliberate gap beats reusing a spent
+  label for different content.** The same reasoning forbids the reuse here, so
+  the ordering invariant is what gives way.
 
   ###### `D8c` IS RETIRED — folded into `D8e`. Architect `evt_nwgvvr4vaf7y`.
 

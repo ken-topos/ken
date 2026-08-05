@@ -33,20 +33,46 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~20:5xZ · `D7` cut SPENT (outcome (c)); the work is `D8a`-`D8g`
+## LIVE — 2026-08-05 ~22:4xZ · causal projection RULED (c); work extends to `D8h`-`D8k`
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for the Architect's causal-projection ruling** (routed
-`evt_59dyjmzy6hqkw`), then size and cut the mechanism it names. Thread
-**`thr_6m43v75yndhtj`**; Runtime holds exact `89e36ec1`. `D8a` discharged
-`e02ef413`, `D8b` `e4b4c26c`, `D8d` `c2e8314f`; `D8c` retired; `D8e` proved but
-**not discharged**. Frame sections: *"`D8e` WITNESS BUILT at exact `89e36ec1`"*,
+**Release `D8h` to Runtime on preserved exact `89e36ec1`** — planner pairing:
+pair each `ComposedCallTarget` with the exact opaque `ContinuationCallIdentity`
+selected by the same five fields as the `D8a` selector. Thread
+**`thr_6m43v75yndhtj`**.
+
+**Architect ruling `evt_37fa3rdegb3yc` settled the fork as outcome (c) —
+BOTH mechanisms I offered were refused.** (a) would execute the continuation
+twice; (b) would erase a real planner-issued obligation and make one
+specialization both create and not create it depending on the query. The lawful
+fix is a **typed alternative discharge of the same exact causal identity**:
+`ContinuationDischarge = DirectSpecializationCall | ComposedSourceContinuation`.
+The identity stays in the planned population **exactly once**.
+
+**Sizing was mine and I ruled four in-node checkpoints, not a predecessor
+node** — the work builds on `D8a`/`D8b`/`D8d`, all unmerged on this branch, so
+a predecessor would depend on its own successor's unmerged checkpoints; and
+this node is the sole gate on the seven-node `RecursiveDescent` campaign.
+
+⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g` despite sorting after them.** Label
+order no longer tracks execution order on this node. Renumbering was rejected:
+`D8f`/`D8g` already carry public meaning across six thread posts, and this node
+already ruled at `D8c` that a gap beats reusing a spent label.
+
+Discharged: `D8a` `e02ef413`, `D8b` `e4b4c26c`, `D8d` `c2e8314f`. `D8c`
+retired. **`D8e`'s consumer is discharged (`70171a99`) and its witness proved
+(`89e36ec1`) — but `D8e` itself is NOT discharged** and does not discharge by
+re-measuring `89e36ec1`; it closes only once `D8h`-`D8k` land. Preserve
+`89e36ec1` as **non-candidate, load-bearing evidence**.
+
+Frame sections: *"`D8e`'s causal obligation is real and gets a SECOND DISCHARGE
+FORM"*, *"SIZING RULING — four in-node checkpoints"*, *"EXECUTION ORDER"*, and
 *"STANDING — satisfying a required fact can CREATE an undischargeable
-obligation"*, and *"STANDING — 'correct and unreachable' is the DEFAULT"*.
+obligation"*.
 
 ⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
 published *"new member at ordinal 2, not 3"*. So is the whole

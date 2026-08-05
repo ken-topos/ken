@@ -27,8 +27,13 @@ by the IH-requirement census at `evt_qttaeebtzjkt` (exact `e6d4f085`).
 the population behind those rows — are all-closed and IH-free.
 
 It is real work on a real capability gap. It is not the thing that unblocks
-anything. A reader looking for the next kickoff wants
-`RT-UNIT-CLOSURE-CONVERT` or a `RT-DECL-CLOSURE-PORT` successor, not this.
+anything. A reader looking for the next kickoff wants a
+`RT-DECL-CLOSURE-PORT` successor — `RT-SEED-CALL-PORT`, `RT-DESCENT-RETIRE`,
+`RT-CONTSPEC-LEDGER`, `NATIVE-HANDLE-CARRIER` or `PX8-ERRID-ALLOC` — not this.
+
+⛔ **This sentence used to route the reader to `RT-UNIT-CLOSURE-CONVERT`. That
+node is `closed`** (2026-08-05): its premise was measured false, nothing was
+built, and nothing should be. Do not follow that pointer anywhere it survives.
 
 ## 0a. The standing perishability clause
 
@@ -37,19 +42,22 @@ false against the landed code, say so and escalate — do not quietly build
 around it.**
 
 This frame is written by objective and acceptance for that reason. Its
-current-state claims are measured at `e6d4f085`, which is behind
-`RT-CONTSRC-PRODUCER-LOCAL`'s live branch by several checkpoints, and that
-node's `D3b` may yet be re-cut on `D3c`'s `EntryAbi` result. **Verify every
-section-1 measurement against the landed code, not against this line.**
+current-state claims are measured at `e6d4f085`. **That anchor is now far
+behind:** `RT-CONTSRC-PRODUCER-LOCAL` has since been recut past `D3c`/`D4b`
+onto a `D8a`-`D8g` series and holds at exact `89e36ec1`, so the distance is
+tens of checkpoints, not several. **Verify every section-1 measurement against
+the landed code, not against this line.**
 
 ---
 
 ## 1. Base and fixed inputs
 
 **Base:** whatever `RT-CONTSRC-PRODUCER-LOCAL` merges as. That node is
-unmerged with `D3c`, a possible `D3b` re-cut, `D4b` and its candidate still
-ahead. **Naming the exact base and re-deriving the three measurements below is
-`D0` of this node, not this section's claim.**
+unmerged, recut onto a `D8a`-`D8g` series, and holds at exact `89e36ec1` with
+`D8e` open on a whole-node causal-projection hard stop, plus `D8f`/`D8g`, the
+`D6b` closeout, `D6c`, QA and its candidate still ahead. **Naming the exact
+base and re-deriving the three measurements below is `D0` of this node, not
+this section's claim.**
 
 ### The three measurements that establish the boundary, at `e6d4f085`
 
@@ -93,14 +101,46 @@ inside the shape's own checked vocabulary?*
 | obligation | home in the shape as landed | status |
 |---|---|---|
 | this source has carrier C, ownership O, storage S | `ContinuationSourceSlotAuthority`'s value fields | has a home |
-| this source is a static callable with **no** value carrier | none — every field is a value field | **no home; this is the node** |
-| its lawful consumer is callee-only | none in production; `cfg(test)` only | **no home** |
+| this source is a static callable with **no** value carrier | none **on this surface** — every field is a value field | **no home here; this is the node** |
+| its lawful consumer is callee-only | none **on this surface** in production; `cfg(test)` only | **no home here** |
 | calling it yields representation R | deliberately **out of scope** — see section 5 | not this node's obligation |
 
 **The failure is an expressibility gap, not a missing enum arm.** That
 distinction is load-bearing: adding an arm to an existing value-shaped
 authority would give the obligation a home that still says "value," which is
 the shape the Architect's ruling forbids. The contract must split.
+
+### The "no home" cells are scoped to this surface, and that now matters
+
+**Two production closed sums with exactly this shape landed after this frame
+was written** — on `RT-CONTSRC-PRODUCER-LOCAL`'s branch at `89e36ec1`, both in
+`crates/ken-runtime/src/cranelift_backend/lowering/`:
+
+| sum | non-value arm | what it establishes |
+|---|---|---|
+| `LoweringEnvironmentBinding` (`mod.rs`) | `StaticWorker(StaticWorkerBinding)` — "compiler-only... never becomes a runtime value"; no word, tag, layout, vtable, descriptor or environment pointer | a lexical binder can be a static callable with no value carrier, in production |
+| `SourceCallee` (`mod.rs`) | `StaticWorker { worker, static_origin }` — a sum "rather than an operand, because a static worker **is not a value**" | a callee position can distinguish the two without widening the value slot |
+
+⇒ **The obligation this node exists to house already has a checked production
+home twice over — just not on the continuation-source surface.** Measurement 3
+still holds where it is stated: the only sites setting `BoundaryUseAvail::
+Callable` / `BoundaryUseNeed::PreserveCallableIdentity` are inside
+`mutate_projection_field`, a `cfg(test)` projection-mutation helper. Verified
+at `89e36ec1`, not inherited from `e6d4f085`.
+
+**Why this changes how the node is built rather than whether it is.** `D1`
+says the callable arm's identity comes from "the existing planned
+static-worker/member authority." That instruction now has a concrete referent
+to match rather than a description to satisfy, and the `SourceCallee` rationale
+is the argument for a sum over a widened slot, already made and already landed.
+**Diverging from those shapes on this surface is a choice that must be argued,
+not a default.**
+
+⚠ **What this is not.** It is not evidence the gap is closed, and it is not a
+licence to reuse `StaticWorkerBinding` as the continuation-source contract —
+that type carries no callable identity by deliberate design, which is the
+opposite of what `D1`'s callable arm must carry. **Two sums of the same shape
+on adjacent surfaces is a precedent, not a component.**
 
 ---
 
@@ -112,6 +152,24 @@ Record the exact SHA, branch, and the state of the three section-1
 measurements. State which survived and which moved. **If measurement 3 has
 changed — if a production callable domain now exists — stop and hand back;
 that changes the node.**
+
+**Measurement 3 is surface-specific, and you must test the right surface.**
+Section 2's table records two production static-callable sums that landed in
+`lowering/` after this frame was written. **They do not falsify measurement 3**,
+which is a claim about the continuation-source projection vocabulary. So `D0`
+answers two questions, separately:
+
+1. **On the projection surface** — are `BoundaryUseAvail::Callable` and
+   `BoundaryUseNeed::PreserveCallableIdentity` still reachable only from
+   `cfg(test)` mutation helpers? Answer by enumerating their setters, not by
+   grepping the names: at `89e36ec1` the sole setters sit in
+   `mutate_projection_field`, and a comment elsewhere *restates* the property
+   without being a setter. **A grep hit on a comment that asserts the
+   measurement is not a measurement.**
+2. **On the lowering surface** — are the two sums still as section 2 records
+   them, and did either grow a value carrier, ownership or storage field?
+
+Report both. **Only question 1 arms the hard stop.**
 
 ### `D1` — the closed sum
 
@@ -222,10 +280,16 @@ are outside-this-domain residuals, not unrepresentable
 **Depends on:** `RT-CONTSRC-PRODUCER-LOCAL` — this node splits the contract
 enclosing that node's coordinate, so it cannot precede it.
 
-**Contention:** one branch, one team, and it must not be run concurrently with
-`RT-UNIT-CLOSURE-CONVERT` — both edit the continuation-source contract surface.
-Sequence them; the unit-closure node goes first because it gates a candidate
-and this one does not.
+**Contention:** one branch, one team.
+
+⛔ **This section used to sequence this node behind `RT-UNIT-CLOSURE-CONVERT`
+— "the unit-closure node goes first." That node is `closed` and will never
+run, so read literally the clause held this node forever.** Deleted rather
+than annotated: a sequencing constraint whose predecessor cannot execute is
+not a weaker constraint, it is an unsatisfiable one.
+
+The live contention is with `RT-CONTSRC-PRODUCER-LOCAL` itself, which is the
+`depends_on` edge below and is handled by waiting for its merge.
 
 ---
 
@@ -233,8 +297,11 @@ and this one does not.
 
 Stop and hand back, without repairing, if:
 
-- `D0` finds measurement 3 changed — a production callable domain already
-  existing changes what this node is;
+- `D0` finds measurement 3 changed **on the projection surface** — a
+  production callable domain already existing there changes what this node is.
+  ⛔ **The two `lowering/` sums in section 2 do not trip this**; they were
+  measured and are expected. Tripping it means a non-`cfg(test)` setter of
+  `BoundaryUseAvail::Callable` or `BoundaryUseNeed::PreserveCallableIdentity`;
 - closing the IH edge requires a `ResultPhase`-to-carrier bridge, or any of
   section 5's banned shapes;
 - the consumer enumeration in `D2` cannot be shown complete — an unbounded
