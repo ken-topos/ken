@@ -68,6 +68,14 @@ population is **90** `LexicalClosure` with one capture, **30** with two, **7**
 five elements are driven off one input — `captures.len()` — and for one
 population that input is empty while the body still needs a binding.
 
+⚠ **`D1b` CORRECTS THE FRAMING BELOW.** This section reads the failure as "a
+free variable with no declared capture slot", which assumes the `Var` is valid
+and the captures are wrong. That assumption was not measured. `D1b` measured it:
+the failing units' lowering environment is **not** the frame's parameter/capture
+prefix — it is `[StaticWorker, carried, ...]`, and the `StaticWorker` occupies de
+Bruijn index 0. The hard stop stands, on a better-grounded mechanism; see
+`RT-UNIT-CLOSURE-CONVERT-D1b.md` before acting on anything below.
+
 ## ⛔⛔ THE HARD STOP
 
 Both `Var` failure sites (`lowering/core.rs:3661`, `:9638`) were instrumented at
