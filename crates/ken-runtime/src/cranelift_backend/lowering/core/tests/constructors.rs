@@ -2977,15 +2977,26 @@ fn ac_c7_project_edge(fields: [(&str, &str); 2], project: &str) -> (i64, u64, u6
         plan.child_static_origin(record_origin, position)
             .expect("a record field has a planned child origin")
     };
+    // ⭐ `D7` — the field SCHEMA travels on the template exactly as the
+    // producer occurrence does, resolved here for the same reason: this rig
+    // hand-builds what the `Record` lowering arm would otherwise have built,
+    // and a hand-built field with no planner-issued identity is a fail-closed
+    // absence rather than a licence to name it at the transfer coordinate.
+    let field_identity = |position: usize| {
+        plan.record_field_identity(record_origin, position)
+            .expect("a planned `Record` field has a planner-issued identity")
+    };
     let lowered_fields = vec![
-        (
-            fields[0].0.to_string(),
-            ac_c7_lowered_ctor(&plan, field_origin(0), fields[0].1),
-        ),
-        (
-            fields[1].0.to_string(),
-            ac_c7_lowered_ctor(&plan, field_origin(1), fields[1].1),
-        ),
+        LoweredRecordField {
+            name: fields[0].0.to_string(),
+            identity: Some(field_identity(0)),
+            value: ac_c7_lowered_ctor(&plan, field_origin(0), fields[0].1),
+        },
+        LoweredRecordField {
+            name: fields[1].0.to_string(),
+            identity: Some(field_identity(1)),
+            value: ac_c7_lowered_ctor(&plan, field_origin(1), fields[1].1),
+        },
     ];
     // ⭐ `D7` — the record's PRODUCER occurrence, resolved here because this
     // rig hand-builds the template that the `Record` lowering arm would
@@ -7536,24 +7547,30 @@ fn a_sibling_aggregates_producer_certificate_is_refused_before_any_allocation() 
     }
 }
 
-/// **`D7` — substituting an argument's call-USE coordinate is INERT, and that is
-/// why it cannot be cited as the ownership control.**
+/// **`D7` — the call-USE coordinate is INERT, and that is why it cannot be
+/// cited as the ownership control.**
 ///
-/// MEASURED, on the same two fixtures: with `SiblingCallInputOrigin` installed
-/// the seam fires (1 hit on each) and **both programs still compile**, emitting
-/// the same 6 and 8 raw allocations as their baselines.
+/// MEASURED, on the same two fixtures: with `CallInputTransferOrigin` installed
+/// every input is transferred at the program ROOT -- the maximally wrong
+/// coordinate -- the seam fires, and **both programs still compile**, emitting
+/// exactly their baselines' raw allocations.
 ///
 /// ⭐⭐ **This is the positive statement of a negative result, and it is the
-/// point of the row.** `aggregate_carrier_authority` prefers the occurrence the
-/// template CARRIES and consults the transfer coordinate only for a template
-/// that has none. Every aggregate on this route carries one, so moving the
-/// coordinate changes nothing that any check can see. ⛔ A control built on this
-/// mutation would be unbuildable rather than merely unwritten — no fixture makes
-/// it refuse — and reporting it as "I could not find a fixture" would invite
-/// someone to look for one.
+/// point of the row.** An aggregate's ownership record is the one its template
+/// CARRIES, and its schema -- constructor symbol, record field identities -- is
+/// recovered from that record rather than looked up at the coordinate. Nothing
+/// on this route reads the coordinate, so moving it changes nothing any check
+/// can see. ⛔ A control built on this mutation would be unbuildable rather than
+/// merely unwritten: no fixture makes it refuse.
+///
+/// ⚠ **It is what retired the per-argument occurrence pairing.** The pairing
+/// existed to give each argument its own transfer coordinate. This row is the
+/// measurement that the coordinate decides nothing, so the accumulator, the
+/// retained pending occurrence and the prefix template that mirrored it were
+/// carrying a fact nothing read.
 ///
 /// ⚠ The two mutations act at the SAME seam and are still different axes. That
-/// is what makes the pair informative: same call, same argument, same moment,
+/// is what makes the pair informative: same call, same arguments, same moment,
 /// and only the one that moves the certificate is observable.
 ///
 /// CLAIMED: use and production are distinct authorities, and only production
@@ -7563,17 +7580,24 @@ fn a_call_use_coordinate_substitution_is_inert_for_a_self_authorizing_aggregate(
     for (label, program) in [
         ("two constructors", d7_constructor_arguments()),
         ("two records", d7_record_arguments()),
+        ("forwarded constructors", d7_forwarded_constructor_arguments()),
+        ("forwarded records", d7_forwarded_record_arguments()),
     ] {
         let (_, baseline_hits, baseline_allocations, _) =
             d7_ownership_run(&program, GovernedAllocationMutation::None);
         assert_eq!(baseline_hits, 0, "{label}: the baseline installs no mutation");
+        assert!(
+            baseline_allocations > 0,
+            "{label}: the baseline must actually allocate, or 'the mutated run emits \
+             the baseline's allocations' is a comparison between two zeroes"
+        );
 
         let (result, hits, allocations, _) = d7_ownership_run(
             &program,
-            GovernedAllocationMutation::SiblingCallInputOrigin,
+            GovernedAllocationMutation::CallInputTransferOrigin,
         );
-        assert_eq!(
-            hits, 1,
+        assert!(
+            hits > 0,
             "{label}: the use-coordinate substitution must FIRE, or its inertness is \
              a statement about a call it never reached"
         );

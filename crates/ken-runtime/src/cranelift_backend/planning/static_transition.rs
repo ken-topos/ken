@@ -437,7 +437,7 @@ struct PlannedCaseEmission {
 /// `Persistent` is issued only when the complete source result is closed over
 /// persistent children. There is deliberately no promotion operation.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum PlannedReferentLifetime {
+pub(in crate::cranelift_backend) enum PlannedReferentLifetime {
     Persistent,
     ActivationOwned,
 }
@@ -2746,6 +2746,19 @@ pub(in crate::cranelift_backend) struct PlannedAggregateChild {
     /// with the parent's origin -- the aliasing that made a synthesized
     /// subtree indistinguishable from the expression it was emitted under.
     pub(in crate::cranelift_backend) origin: Option<StaticOriginId>,
+    /// **`RT-DECL-CLOSURE-PORT` `D7` — the ordered field identity a RECORD
+    /// producer plans at this position.**
+    ///
+    /// ⭐ Issued here, at the producer, and read nowhere else. A record's field
+    /// names are a producer fact in exactly the way its ownership record is, so
+    /// they travel with the template rather than being re-resolved at whatever
+    /// coordinate the record is finally transferred at.
+    ///
+    /// ⛔ `None` for a constructor child and for a synthesized child — an
+    /// absence, never a name to fall back on. A consumer comparing a record's
+    /// carried identity against `None` must refuse rather than skip: two
+    /// absences agreeing is the shape that let a grafted schema pass.
+    pub(in crate::cranelift_backend) field_identity: Option<FieldIdentity>,
     pub(in crate::cranelift_backend) lifetime: PlannedReferentLifetime,
     /// The **possible** referent owners of this child, never a determination.
     ///
@@ -3675,9 +3688,22 @@ fn build_aggregate_ownership_plan(
                     "aggregate producer child has no derivable referent owner",
                 ));
             }
+            // ⭐ The RECORD half of the producer schema, issued once beside the
+            // ownership record it belongs to. ⛔ Gated on the shape rather than
+            // attempted-and-recovered: a `Construct` occurrence has no field
+            // names at all, so asking for one and swallowing the failure would
+            // make "this producer plans no name here" and "the lookup did not
+            // work" the same answer.
+            let field_identity = match shape {
+                PlannedAggregateShape::Record => Some(
+                    plan.record_field_identity(origin, child.position as usize)?,
+                ),
+                PlannedAggregateShape::Constructor => None,
+            };
             children.push(PlannedAggregateChild {
                 position: child.position,
                 origin: Some(child.origin),
+                field_identity,
                 lifetime: child.lifetime,
                 owners,
             });
@@ -3750,6 +3776,9 @@ fn build_aggregate_ownership_plan(
                         })?,
                         // A synthesized child has no source occurrence of its own.
                         origin: None,
+                        // Every synthesized aggregate this population reaches is
+                        // a constructor node, so there is no field name to plan.
+                        field_identity: None,
                         lifetime: if owners.contains(&BoundaryReferentOwner::InvocationArena) {
                             PlannedReferentLifetime::ActivationOwned
                         } else {

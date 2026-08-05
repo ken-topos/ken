@@ -4733,11 +4733,6 @@ impl<'a> Lowering<'a> {
                                 let first = args.remove(0);
                                 control.continuation = SourceContinuation::CallArgument {
                                     callee: value,
-                                    // ⭐ Retained BEFORE the evaluation. The
-                                    // machine hands back a bare value, so this
-                                    // is the only moment the occurrence it came
-                                    // from is in hand.
-                                    pending: first.clone(),
                                     remaining: args,
                                     lowered: Vec::new(),
                                     env: env.clone(),
@@ -4752,19 +4747,12 @@ impl<'a> Lowering<'a> {
                         }
                         SourceContinuation::CallArgument {
                             callee,
-                            pending,
                             mut remaining,
                             mut lowered,
                             env,
                             next,
                         } => {
-                            // ⭐ The returned value is paired with the
-                            // occurrence retained when this frame was pushed —
-                            // appended together, never as a second vector.
-                            lowered.push(SourceCallInput {
-                                occurrence: pending,
-                                value,
-                            });
+                            lowered.push(value);
                             control.continuation = *next;
                             if remaining.is_empty() {
                                 match self
@@ -4777,7 +4765,6 @@ impl<'a> Lowering<'a> {
                                 let first = remaining.remove(0);
                                 control.continuation = SourceContinuation::CallArgument {
                                     callee,
-                                    pending: first.clone(),
                                     remaining,
                                     lowered,
                                     env: env.clone(),
@@ -5530,7 +5517,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         callee: LoweringOperand,
-        args: Vec<SourceCallInput>,
+        args: Vec<LoweringOperand>,
         env: Vec<LoweringEnvironmentBinding>,
         control: SourceControl<'b>,
     ) -> Result<SourceCallOutcome<'b>, CraneliftBackendError> {
@@ -5556,7 +5543,7 @@ impl<'a> Lowering<'a> {
                     ));
                 }
                 // Continued source evaluation: unwrap only, no crossing.
-                let mut call_env = bound_values(Self::source_call_operands(args));
+                let mut call_env = bound_values(args);
                 extend_specialized(&mut call_env, captures);
                 call_env.extend(env);
                 Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
@@ -5580,7 +5567,7 @@ impl<'a> Lowering<'a> {
                     // ⭐ Crossing into a declared generated unit: each
                     // argument crosses at its OWN paired occurrence, here,
                     // rather than at the callee's origin later.
-                    let args = self.carry_source_call_inputs(builder, args)?;
+                    let args = self.carry_source_call_inputs(builder, body, args)?;
                     let called = self.call_declaration_closure_unit(
                         builder, reference, &symbol, &params, captures, args,
                     )?;
@@ -5602,7 +5589,7 @@ impl<'a> Lowering<'a> {
                     symbol,
                     captures,
                     body,
-                    Self::source_call_operands(args),
+                    args,
                     env,
                     control,
                 )
@@ -5713,7 +5700,7 @@ impl<'a> Lowering<'a> {
                         )
                     }) {
                         let coordinates = carried_coordinates;
-                        let args = self.carry_source_call_inputs(builder, args)?;
+                        let args = self.carry_source_call_inputs(builder, body, args)?;
                         let value = self.call_declared_recursive_position_unit(
                             builder,
                             body,
@@ -5779,22 +5766,20 @@ impl<'a> Lowering<'a> {
                     }
                     // Two roles, as elsewhere on this path: ordered unit-call
                     // inputs, or an environment prefix. Only the second binds.
-                    // ⚠ The ARGUMENTS cross at their own occurrences; the
-                    // CAPTURES do not, and that is a stated boundary rather
-                    // than an oversight. A capture arrives inside an
-                    // already-lowered `Lowered::Closure` and carries no
-                    // occurrence of its own, so there is nothing here to pair
-                    // it with — and reusing an argument's authority for it
-                    // would be exactly the substitution this whole subclosure
-                    // exists to prevent. A specialized capture therefore still
-                    // reaches `call_declared_unit_target`'s fallback.
+                    // ⚠ The ARGUMENTS cross here; the CAPTURES do not, and that
+                    // is a stated boundary rather than an oversight. A capture
+                    // arrives inside an already-lowered `Lowered::Closure`, so
+                    // a specialized one still reaches
+                    // `call_declared_unit_target`'s fallback — where, since it
+                    // carries its own producer certificate, it authorizes
+                    // itself.
                     let mut call_inputs = if matches!(
                         self.body_emission_authority,
                         BodyEmissionAuthority::FunctionizedUnits
                     ) {
-                        self.carry_source_call_inputs(builder, args)?
+                        self.carry_source_call_inputs(builder, body, args)?
                     } else {
-                        Self::source_call_operands(args)
+                        args
                     };
                     call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
                     let mut suspended = armed.suspended;
@@ -9295,13 +9280,26 @@ impl<'a> Lowering<'a> {
                     .enumerate()
                     .map(|(position, (name, expr))| {
                         let expr = self.child_occurrence(static_origin, position, expr)?;
-                        Ok((name.clone(), self.lower_expr(builder, expr, env)?))
+                        Ok((position, name.clone(), self.lower_expr(builder, expr, env)?))
                     })
                     .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
                 let lowered_fields = lowered_fields
                     .into_iter()
-                    .map(|(name, value)| {
-                        Ok((name, value.specialized_at("a record field's value")?))
+                    .map(|(position, name, value)| {
+                        Ok(LoweredRecordField {
+                            name,
+                            // ⭐ `D7` — the field SCHEMA is resolved at the
+                            // producer, beside the ownership record, and for the
+                            // same reason: a record forwarded through a `Var` or
+                            // handed to a call arrives where the plan cannot
+                            // lawfully be re-queried for it. ⛔ The `name` above
+                            // is the compile-time spelling and is never the key.
+                            identity: Some(
+                                self.static_transition_plan
+                                    .record_field_identity(static_origin, position)?,
+                            ),
+                            value: value.specialized_at("a record field's value")?,
+                        })
                     })
                     .collect::<Result<Vec<_>, CraneliftBackendError>>()?;
                 Ok(LoweringOperand::Specialized(Lowered::Record {
@@ -9357,7 +9355,7 @@ impl<'a> Lowering<'a> {
                         };
                         fields
                             .into_iter()
-                            .find_map(|(name, value)| (name == *field).then_some(value))
+                            .find_map(|held| (held.name == *field).then_some(held.value))
                             .map(LoweringOperand::Specialized)
                             .ok_or_else(|| unsupported("Project", format!("missing field {field}")))
                     }

@@ -80,7 +80,8 @@ pub(in crate::cranelift_backend) use super::planning::{
     ContinuationContextId, ContinuationEmissionOwner,
     ContinuationInputView, ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge,
     ContinuationSpecializationId,
-    ContinuationUnitView, EmittableCallKind, EmittableUnit, JoinPlanToken,
+    ContinuationUnitView, EmittableCallKind, EmittableUnit, FieldIdentity, JoinPlanToken,
+    PlannedReferentLifetime,
     AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,
     SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot, PlannedAggregateOwnership,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
@@ -632,31 +633,6 @@ impl OwnedSourceOccurrence {
     }
 }
 
-/// **`RT-DECL-CLOSURE-PORT` `D7` — one evaluated source-call argument, with the
-/// caller-side occurrence it was evaluated FROM.**
-///
-/// ⭐ **One value, not two vectors.** The source machine evaluates a call's
-/// arguments one at a time and pushes each result onto a list; the occurrence
-/// it came from was known at push time and was thrown away. An aggregate
-/// argument then reached the callee frame still specialized, and
-/// `call_declared_unit_target` resolved its planned ownership record at
-/// `target.origin` — the callee's scheduling entry — rather than at the
-/// occurrence that produced it.
-///
-/// ⛔ A parallel `Vec<StaticOriginId>` beside the operands is the obvious
-/// alternative and is worse for the reason `MatchScrutinee` already records:
-/// two vectors can desync, and a desync here is undetectable — the wrong
-/// origin still resolves a real record and still allocates. Pairing them makes
-/// the desync unspellable.
-///
-/// ⛔ And not `Option<StaticOriginId>`. A nullable origin would need a fallback
-/// at every use, and the only fallback available is the callee's — which is the
-/// defect. There is no argument without an occurrence, so the type says so.
-#[derive(Clone)]
-struct SourceCallInput {
-    occurrence: OwnedSourceOccurrence,
-    value: LoweringOperand,
-}
 
 /// **Everything that is resolved into ONE generated `Function` and is
 /// meaningless in any other.**
@@ -2098,7 +2074,7 @@ enum Lowered {
         /// `RuntimeValue`, with no occurrence in the program — carries `None`
         /// and fails closed at the allocation rather than borrowing a lane.
         occurrence: Option<AggregateOccurrenceId>,
-        fields: Vec<(String, Lowered)>,
+        fields: Vec<LoweredRecordField>,
     },
     /// A retained closure. ⭐ **The body is the static origin and nothing else.**
     ///
@@ -2185,6 +2161,39 @@ enum Lowered {
     /// marker so it cannot be confused with an ordinary or terminal value.
     RecursiveBackedge,
     Trap(RuntimeTrap),
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — one field of a lowered record, with its
+/// producer-issued typed identity beside the value it names.**
+///
+/// ⭐ **The identity and the value are ONE member, never two lists.** A record's
+/// field names are a producer fact — resolved where the record is built and
+/// meaningless at any later coordinate — exactly as its ownership record is. A
+/// parallel `Vec<FieldIdentity>` beside the values would carry that fact, and
+/// would also make a desync spellable: a schema one element short, or ordered
+/// differently from the values, still resolves real identities and still emits.
+/// Pairing them makes the desync a type error instead of a wrong name.
+///
+/// ⛔ **`name` is NOT the identity, and the two may never be interchanged.** It
+/// is the compile-time spelling, retained because value-domain records and
+/// specialized projection are keyed on it; `identity` is the artifact-static
+/// word the carrier ABI stores and `Project` looks up (`D1`/`D2`). Deriving one
+/// from the other in either direction is the second derivation `D2` forbids —
+/// there is no `&str -> FieldIdentity` mapping and none may be added.
+#[derive(Clone)]
+pub(in crate::cranelift_backend) struct LoweredRecordField {
+    /// The compile-time spelling. ⛔ Never an identity.
+    pub(in crate::cranelift_backend) name: String,
+    /// The planner-issued typed identity, resolved at the record's producer.
+    ///
+    /// ⛔ `None` is a REFUSAL, never a default, for the same reason
+    /// [`Lowered::Record::occurrence`]'s absence is: a value-domain record has
+    /// no occurrence in the program and therefore no planned schema, and
+    /// emitting a name for it would mean inventing one. It fails closed at the
+    /// preflight rather than borrowing a name from the coordinate it is
+    /// transferred at.
+    pub(in crate::cranelift_backend) identity: Option<FieldIdentity>,
+    pub(in crate::cranelift_backend) value: Lowered,
 }
 
 /// The boundary-carrier helpers this generated function may call.
@@ -2699,18 +2708,104 @@ impl<'a> Lowering<'a> {
     /// what makes "refuses before any allocation" true of the whole tree rather
     /// than of its root.
     fn source_aggregate_preflight(&self, value: &Lowered) -> Result<(), CraneliftBackendError> {
-        let (shape, children): (PlannedAggregateShape, Vec<&Lowered>) = match value {
+        match value {
+            // ── the two source aggregates: reconciled AT THIS NODE ────────
             Lowered::Constructor { args, .. } => {
-                (PlannedAggregateShape::Constructor, args.iter().collect())
+                let children: Vec<&Lowered> = args.iter().collect();
+                self.reconcile_source_aggregate(
+                    value,
+                    PlannedAggregateShape::Constructor,
+                    &children,
+                    None,
+                )?;
+                for arg in args {
+                    self.source_aggregate_preflight(arg)?;
+                }
+                Ok(())
             }
-            Lowered::Record { fields, .. } => (
-                PlannedAggregateShape::Record,
-                fields.iter().map(|(_, field)| field).collect(),
-            ),
-            // Not an aggregate: nothing here names an ownership record, and
-            // nothing below it is reached through an aggregate edge.
-            _ => return Ok(()),
-        };
+            Lowered::Record { fields, .. } => {
+                let children: Vec<&Lowered> = fields.iter().map(|field| &field.value).collect();
+                self.reconcile_source_aggregate(
+                    value,
+                    PlannedAggregateShape::Record,
+                    &children,
+                    Some(fields),
+                )?;
+                for field in fields {
+                    self.source_aggregate_preflight(&field.value)?;
+                }
+                Ok(())
+            }
+
+            // ── recursive carriers that are not themselves aggregates ─────
+            //
+            // ⛔ These have no ownership record of their own and they are NOT
+            // leaves. A walk that stopped here would leave every aggregate
+            // below them unreconciled while reporting the tree admitted -- and
+            // both of these positions are reached: a host result's two arms are
+            // separate trees, and a dynamic alternative's fields are two levels
+            // down inside a `Vec` of alternative structs.
+            Lowered::HostResult { error, ok, .. } => {
+                self.source_aggregate_preflight(error)?;
+                self.source_aggregate_preflight(ok)
+            }
+            Lowered::DynamicConstructor(dynamic) => {
+                for alternative in &dynamic.alternatives {
+                    for field in &alternative.fields {
+                        self.source_aggregate_preflight(field)?;
+                    }
+                }
+                Ok(())
+            }
+
+            // ── values that cannot cross at all ───────────────────────────
+            //
+            // ⛔ Admitted HERE means "this walk has nothing to reconcile", not
+            // "this value may cross". Whether a closure has a boundary
+            // representation is `boundary_transfer_admissibility`'s question,
+            // it is decided before this walk runs on the same value, and it
+            // refuses all three. Re-deciding it here would put a second, weaker
+            // authority on a question that already has one -- and would report
+            // a nested closure as an ownership failure.
+            Lowered::Closure { .. }
+            | Lowered::DeclarationClosure { .. }
+            | Lowered::ComputationalRecursorClosure { .. } => Ok(()),
+
+            // ── true leaves: no `Lowered` child position exists ───────────
+            //
+            // ⛔ No `_` arm, by construction. A new variant with a child
+            // position is a compile error here rather than a subtree that
+            // silently stops being reconciled -- which is exactly how
+            // `HostResult` and `DynamicConstructor` were missed.
+            Lowered::Int { .. }
+            | Lowered::Bool { .. }
+            | Lowered::ProcessExitStatus { .. }
+            | Lowered::CapabilityToken { .. }
+            | Lowered::ResourceToken { .. }
+            | Lowered::BoundedNat(_)
+            | Lowered::StructuralNat(_)
+            | Lowered::ResponseBytes { .. }
+            | Lowered::Bytes(_)
+            | Lowered::BorrowedNativeValue { .. }
+            | Lowered::BorrowedOption { .. }
+            | Lowered::String(_)
+            | Lowered::RecursiveBackedge
+            | Lowered::Trap(_) => Ok(()),
+        }
+    }
+
+    /// Reconcile ONE source aggregate node against the ownership record its own
+    /// producer occurrence names.
+    ///
+    /// ⛔ Takes no origin, for the reason [`Self::source_aggregate_preflight`]
+    /// states: there is no coordinate to pass, so there is no wrong one.
+    fn reconcile_source_aggregate(
+        &self,
+        value: &Lowered,
+        shape: PlannedAggregateShape,
+        children: &[&Lowered],
+        record_fields: Option<&[LoweredRecordField]>,
+    ) -> Result<(), CraneliftBackendError> {
         let Some(occurrence) = value.source_aggregate_producer() else {
             return Err(unsupported(
                 lowered_value_kind(value),
@@ -2760,28 +2855,18 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
-        // ⚠ Gated to a SOURCE producer. A compiler-synthesized aggregate's
-        // children have no occurrence in the program, and their agreement with
-        // the plan is already established -- by path, role and disposition -- in
-        // [`Self::reconcile_declared_children`]. Re-deriving it here from source
-        // origins the planner deliberately recorded as absent would be a second,
-        // weaker authority for a question that already has one.
+        // ⭐ **The constructor SCHEMA, against the producer's own origin.**
+        // A source constructor's `synthesized_identity` was resolved at the
+        // producer and travels with the template for the same reason the
+        // occurrence does; here the two carried facts are made to agree with
+        // each other through the plan. A template that acquired one producer's
+        // occurrence and another's symbol -- the exact shape of a grafted or
+        // substituted certificate -- cannot satisfy both.
+        //
+        // ⚠ Gated to a SOURCE producer: a compiler-synthesized constructor's
+        // identity comes from the semantic plane's closed role capability and
+        // has no source origin to resolve against.
         if let Some(producer_origin) = planned.producer_origin() {
-            // ⭐ **The constructor SCHEMA, against the producer's own origin.**
-            // A source constructor's `synthesized_identity` was resolved at the
-            // producer and travels with the template for the same reason the
-            // occurrence does; here the two carried facts are made to agree with
-            // each other through the plan. A template that acquired one
-            // producer's occurrence and another's symbol -- the exact shape of a
-            // grafted or substituted certificate -- cannot satisfy both.
-            //
-            // ⚠ The RECORD half of the schema is not checked, and that is a
-            // stated gap rather than an oversight: a planned field name is a
-            // `FieldIdentity` span into the plan's own name arena, and there is
-            // no `&str -> FieldIdentity` direction to compare a template's field
-            // strings against. Supplying one would be a new planner search
-            // surface, which this release forbids. Record field ORDER and ARITY
-            // are covered above; field NAMING is not.
             if let Lowered::Constructor {
                 synthesized_identity: Some(carried),
                 ..
@@ -2798,43 +2883,216 @@ impl<'a> Lowering<'a> {
                     ));
                 }
             }
-            for (child, planned_child) in children.iter().zip(planned.children()) {
-                let Some(child_shape) = Self::lowered_aggregate_shape(child) else {
-                    continue;
-                };
-                let Some(child_origin) = planned_child.origin else {
-                    return Err(unsupported(
-                        lowered_value_kind(child),
-                        "a source aggregate's child is an aggregate, but the planner recorded \
-                         no source occurrence for it at that position",
-                    ));
-                };
-                let expected = self
-                    .static_transition_plan
-                    .source_aggregate_occurrence(child_origin, child_shape)?;
-                // ⭐ The child must carry the occurrence the planner planned AT
-                // THAT POSITION -- not merely some record of the same shape, and
-                // not the same producer's record reached from elsewhere in the
-                // tree. Swap two children, graft a sibling's subtree in, or hand
-                // a forwarded aggregate a neighbour's certificate, and the
-                // carried occurrence stops matching the position it sits at.
-                if child.source_aggregate_producer() != Some(expected) {
-                    return Err(unsupported(
-                        lowered_value_kind(child),
-                        format!(
-                            "child {} carries producer occurrence {:?} but the planner planned \
-                             {expected:?} at that position",
-                            planned_child.position,
-                            child.source_aggregate_producer(),
-                        ),
-                    ));
+        }
+        for (position, (child, planned_child)) in
+            children.iter().zip(planned.children()).enumerate()
+        {
+            // ⭐ **The RECORD half of the schema, compared EXACTLY and by
+            // TYPE.** The template carries the identity its producer was issued
+            // and the plan states the identity it planned at this position;
+            // both are `FieldIdentity`, so the comparison is the identity
+            // itself rather than a spelling. ⛔ There is no `&str ->
+            // FieldIdentity` direction and none may be added: comparing the
+            // template's field STRING against the plan would be the second
+            // derivation `D2` forbids, and it is what left field naming
+            // unreconciled while order and arity were covered.
+            if let Some(fields) = record_fields {
+                let held = fields[position].identity;
+                match (held, planned_child.field_identity) {
+                    // ⛔ Not `held != planned`. Two absences comparing equal is
+                    // the shape that admits a record with no schema at all
+                    // against a record the planner planned no schema for.
+                    (Some(held), Some(planned)) if held == planned => {}
+                    (held, planned) => {
+                        return Err(unsupported(
+                            lowered_value_kind(value),
+                            format!(
+                                "record field {position} carries identity {held:?} but its own \
+                                 producer occurrence names a record planned with {planned:?} \
+                                 at that position"
+                            ),
+                        ));
+                    }
                 }
             }
-        }
-        for child in children {
-            self.source_aggregate_preflight(child)?;
+            // ⭐ **The child's own possible-owner set, against the set the meet
+            // was taken over.** The planner's set is what the parent's lane was
+            // DERIVED from; this is what the sole disposition authority and the
+            // child's own static encoding say the emitter will actually build.
+            // A child that can be owned by something the meet never considered
+            // makes the parent's lane a conclusion from the wrong premises --
+            // and when that something is the invocation arena, a persistent
+            // parent ends up naming storage that dies first.
+            let held_owners = self.child_possible_referent_owners(child)?;
+            if let Some(escaped) = held_owners
+                .iter()
+                .find(|owner| !planned_child.owners.contains(owner))
+            {
+                return Err(unsupported(
+                    lowered_value_kind(child),
+                    format!(
+                        "child {} can be owned by {escaped:?}, which its own producer \
+                         occurrence's ownership record did not plan for that position \
+                         (planned {:?})",
+                        planned_child.position, planned_child.owners,
+                    ),
+                ));
+            }
+            // ⭐ The LIFETIME, read from the planner's OTHER field. The check
+            // above compares owner sets; this one compares against
+            // `planned_child.lifetime`, which the planner records beside them,
+            // so a record whose two fields ever disagree is caught here instead
+            // of the lowering trusting whichever it happened to read.
+            //
+            // ⛔ **Directional, and the direction is the whole content.** A held
+            // child may be LONGER-lived than the position planned for -- a
+            // persistent child sitting where the meet allowed an activation-
+            // owned one dangles nothing, and refusing it would red every
+            // spillable immediate, whose closed set is
+            // `{NoReferent, PersistentStore}` at a position the planner
+            // legitimately planned as `ActivationOwned` (measured: two
+            // fixtures). ⛔ It may never be SHORTER: that is the parent naming
+            // storage that dies first, which is the edge this subclosure
+            // exists to close.
+            //
+            // ⚠ Read from the owner set rather than from the value's shape:
+            // `Constructor` and `Record` are persistable shapes, so a
+            // shape-derived lifetime would answer `Persistent` for exactly the
+            // aggregates whose own record says otherwise.
+            let held_lifetime = Self::possible_owners_lifetime(&held_owners);
+            if held_lifetime == PlannedReferentLifetime::ActivationOwned
+                && planned_child.lifetime != PlannedReferentLifetime::ActivationOwned
+            {
+                return Err(unsupported(
+                    lowered_value_kind(child),
+                    format!(
+                        "child {} is held with a {held_lifetime:?} referent lifetime but its \
+                         own producer occurrence's ownership record planned {:?} at that \
+                         position",
+                        planned_child.position, planned_child.lifetime,
+                    ),
+                ));
+            }
+            // ⚠ Gated to a SOURCE producer. A compiler-synthesized aggregate's
+            // children have no occurrence in the program, and their agreement
+            // with the plan is already established -- by path, role and
+            // disposition -- in [`Self::reconcile_declared_children`].
+            // Re-deriving it here from source origins the planner deliberately
+            // recorded as absent would be a second, weaker authority for a
+            // question that already has one.
+            if planned.producer_origin().is_none() {
+                continue;
+            }
+            let Some(child_shape) = Self::lowered_aggregate_shape(child) else {
+                continue;
+            };
+            let Some(child_origin) = planned_child.origin else {
+                return Err(unsupported(
+                    lowered_value_kind(child),
+                    "a source aggregate's child is an aggregate, but the planner recorded \
+                     no source occurrence for it at that position",
+                ));
+            };
+            let expected = self
+                .static_transition_plan
+                .source_aggregate_occurrence(child_origin, child_shape)?;
+            // ⭐ The child must carry the occurrence the planner planned AT
+            // THAT POSITION -- not merely some record of the same shape, and
+            // not the same producer's record reached from elsewhere in the
+            // tree. Swap two children, graft a sibling's subtree in, or hand a
+            // forwarded aggregate a neighbour's certificate, and the carried
+            // occurrence stops matching the position it sits at.
+            if child.source_aggregate_producer() != Some(expected) {
+                return Err(unsupported(
+                    lowered_value_kind(child),
+                    format!(
+                        "child {} carries producer occurrence {:?} but the planner planned \
+                         {expected:?} at that position",
+                        planned_child.position,
+                        child.source_aggregate_producer(),
+                    ),
+                ));
+            }
         }
         Ok(())
+    }
+
+    /// The **closed** set of referent owners one held child can have.
+    ///
+    /// ⭐ Derived from the two authorities that already own the question and
+    /// from nothing else: [`Lowered::boundary_disposition`] for what the value
+    /// represents, and -- for an aggregate -- its OWN planned allocation lane
+    /// for what it will be allocated in. ⛔ Never re-derived from a runtime tag
+    /// and never guessed from the value's shape: `Constructor` and `Record` are
+    /// persistable shapes, which is precisely why the shape cannot answer this.
+    fn child_possible_referent_owners(
+        &self,
+        child: &Lowered,
+    ) -> Result<Vec<BoundaryReferentOwner>, CraneliftBackendError> {
+        match child.boundary_disposition() {
+            // An immediate with no spill class has no boundary node at any
+            // magnitude, so there is nothing for an arena or a store to own.
+            BoundaryDisposition::RepresentedImmediate { spill: None, .. } => {
+                Ok(vec![BoundaryReferentOwner::NoReferent])
+            }
+            // ⚠ A spillable immediate has TWO representations and the choice is
+            // a runtime magnitude, so both owners are possible and the set says
+            // so. Collapsing it to either one would be a determination this
+            // static walk is not entitled to make.
+            BoundaryDisposition::RepresentedImmediate { spill: Some(_), .. } => Ok(vec![
+                BoundaryReferentOwner::NoReferent,
+                BoundaryReferentOwner::PersistentStore,
+            ]),
+            BoundaryDisposition::RepresentedHandle { tag, .. } => {
+                let Some(_) = Self::lowered_aggregate_shape(child) else {
+                    // A non-aggregate handle's owner IS its tag's, exactly as
+                    // the closed discriminator product reads it.
+                    return Ok(vec![tag.referent_owner()]);
+                };
+                // ⭐ An aggregate's owner comes from its OWN ownership record's
+                // ruled lane, never from the tag its shape reached for. This is
+                // the same read the allocation itself makes, so a child whose
+                // lane disagrees with its position in the parent is caught here
+                // rather than after both are allocated.
+                let Some(occurrence) = child.source_aggregate_producer() else {
+                    return Err(unsupported(
+                        lowered_value_kind(child),
+                        "a source aggregate child reached the carrier with no planner-issued \
+                         producer occurrence, so its allocation lane -- and therefore its \
+                         referent owner -- has no authority",
+                    ));
+                };
+                let allocation = self
+                    .static_transition_plan
+                    .aggregate_record_view(occurrence)?
+                    .allocation();
+                Ok(vec![match allocation {
+                    PlannedAggregateAllocation::PersistentGround => {
+                        BoundaryReferentOwner::PersistentStore
+                    }
+                    PlannedAggregateAllocation::InvocationAggregate => {
+                        BoundaryReferentOwner::InvocationArena
+                    }
+                }])
+            }
+            BoundaryDisposition::ProtocolOnly { why }
+            | BoundaryDisposition::FailClosedForbidden { why } => {
+                Err(unsupported(lowered_value_kind(child), why))
+            }
+        }
+    }
+
+    /// The referent lifetime a closed possible-owner set encodes.
+    ///
+    /// ⛔ Membership, not a determination: a child is activation-owned exactly
+    /// when the invocation arena is a possible owner of it, which is the same
+    /// rule the planner's own meet is taken under.
+    fn possible_owners_lifetime(owners: &[BoundaryReferentOwner]) -> PlannedReferentLifetime {
+        if owners.contains(&BoundaryReferentOwner::InvocationArena) {
+            PlannedReferentLifetime::ActivationOwned
+        } else {
+            PlannedReferentLifetime::Persistent
+        }
     }
 
     /// The planned aggregate shape a template is, if it is an aggregate at all.
@@ -3405,22 +3663,19 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
-    /// Carry one generated-unit call input across the boundary **at its own
-    /// caller-side source occurrence**.
+    /// Carry one generated-unit call input across the boundary.
     ///
-    /// ⛔ **The origin is the input's, never the callee's.** A specialized
-    /// input left to be transferred inside `call_declared_unit_target` is
-    /// transferred at `target.origin`, which is the callee's scheduling entry —
-    /// so an aggregate input's planned ownership record is looked up at a
-    /// coordinate that names the callee body rather than the value being
-    /// carried. A source `Record` passed as an ordinary call argument resolved
-    /// the record planned for the closure's `Construct` body and was refused on
-    /// the shape cross-check, which is the discriminator this repair flips.
+    /// ⭐ A `Carried` input is already across and is returned untouched; a
+    /// `Specialized` one crosses here.
     ///
-    /// ⚠ The caller-side origin is not derived here and nothing is searched for
-    /// it: `child_occurrence` already issued the exact occurrence for every
-    /// argument and every capture at the site below, and this only stops that
-    /// answer being thrown away.
+    /// ⛔ **The origin is no longer the input's own, and that is a measured
+    /// simplification rather than a regression.** It used to be, because an
+    /// aggregate input's ownership record was resolved at whatever coordinate
+    /// it was transferred at. It is not any more: every source aggregate now
+    /// carries its producer occurrence and recovers its own schema from it, and
+    /// the whole-graph preflight refuses one that does not. MEASURED: forcing
+    /// every source-call input to cross at the program ROOT -- the maximally
+    /// wrong coordinate -- leaves the suite at its exact baseline.
     fn carry_call_input(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -3435,74 +3690,63 @@ impl<'a> Lowering<'a> {
         }
     }
 
-    /// Unwrap source-call inputs for **continued source evaluation**.
+    /// Carry a source-machine call's inputs across a **declared generated
+    /// unit** boundary.
     ///
-    /// ⛔ No carrier crossing happens here and none may: the values stay exactly
-    /// as they were lowered, and the occurrences are simply no longer needed
-    /// because no planned record is about to be resolved. Carrying them would
-    /// be a behaviour change dressed as a repair.
-    fn source_call_operands(inputs: Vec<SourceCallInput>) -> Vec<LoweringOperand> {
-        inputs.into_iter().map(|input| input.value).collect()
-    }
-
-    /// Carry source-call inputs across a **declared generated unit** boundary,
-    /// each at its OWN paired caller-side occurrence.
-    ///
-    /// ⭐ A `Carried` input is already across and is returned untouched. A
-    /// `Specialized` one crosses here, at the occurrence it was evaluated from
-    /// — which is the whole point: if it crosses later inside
-    /// `call_declared_unit_target` instead, the only origin in scope there is
-    /// the callee's.
+    /// ⛔ **No per-argument occurrence pairing, and its removal is the point.**
+    /// The pairing existed so that an aggregate argument's planned ownership
+    /// record would be resolved at the argument rather than at the callee's
+    /// scheduling entry. That question no longer has a coordinate answer:
+    /// ownership travels on the template and the schema is recovered from it,
+    /// so the accumulator, the retained pending occurrence and the prefix
+    /// template that mirrored it were carrying a fact nothing read.
     fn carry_source_call_inputs(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        inputs: Vec<SourceCallInput>,
+        origin: StaticOriginId,
+        inputs: Vec<LoweringOperand>,
     ) -> Result<Vec<LoweringOperand>, CraneliftBackendError> {
-        // ⭐ **`D7` — the A/B call-input authority discriminator's ONLY
-        // seam.** Under the mutation one argument keeps its value, its callee,
-        // its parameter slot, its shape and its lane, and takes a SIBLING
-        // argument's retained occurrence. Everything else about the call is
-        // unchanged, so a refusal is attributable to the coordinate alone.
-        #[cfg(test)]
-        let inputs = Self::substitute_sibling_call_input_origin(inputs);
         // ⭐ **`D7` — the A/B AGGREGATE-OWNERSHIP discriminator's only seam.**
-        // Same seam, different axis: this one moves the certificate the template
-        // carries rather than the coordinate it is transferred at.
+        // It moves the certificate the template carries; under it one argument
+        // keeps its value, its callee, its parameter slot, its shape and its
+        // lane, and takes a SIBLING argument's producer occurrence, so a
+        // refusal is attributable to the certificate alone.
         #[cfg(test)]
         let inputs = self.substitute_sibling_aggregate_producer(inputs);
+        // ⭐ **`D7` — the call-USE coordinate discriminator, at the same seam.**
+        // It moves the coordinate every input is transferred at while the
+        // certificate mutation above moves the certificate one input carries.
+        // Same call, same arguments, same moment, two axes.
+        #[cfg(test)]
+        let origin = self.call_input_transfer_origin_under_mutation(origin)?;
         let mut carried = Vec::with_capacity(inputs.len());
         for input in inputs {
-            let origin = input.occurrence.static_origin;
-            carried.push(self.carry_call_input(builder, origin, input.value)?);
+            carried.push(self.carry_call_input(builder, origin, input)?);
         }
         Ok(carried)
     }
 
-    /// Replace the FIRST input's retained occurrence with the second's, under
-    /// the A/B mutation only.
+    /// The coordinate source-call inputs are transferred at, under the
+    /// call-use mutation only.
     ///
-    /// ⚠ Returns the list unchanged when there are fewer than two inputs, so a
-    /// control must assert the HIT COUNT: without it, "this call had one
-    /// argument so nothing was substituted" and "the substitution happened and
-    /// was caught" are the same green.
-    ///
-    /// ⛔ Only the OCCURRENCE moves. The value stays, so the emitter builds
-    /// exactly what it built before and only the coordinate its planned record
-    /// is resolved at differs.
+    /// ⚠ **The hit is counted only when the coordinate actually CHANGES.** A
+    /// call already made at the root would otherwise report a substitution that
+    /// substituted nothing, which is indistinguishable from a well-defended one.
     #[cfg(test)]
-    fn substitute_sibling_call_input_origin(
-        mut inputs: Vec<SourceCallInput>,
-    ) -> Vec<SourceCallInput> {
+    fn call_input_transfer_origin_under_mutation(
+        &self,
+        origin: StaticOriginId,
+    ) -> Result<StaticOriginId, CraneliftBackendError> {
         if GOVERNED_ALLOCATION_MUTATION.with(std::cell::Cell::get)
-            != GovernedAllocationMutation::SiblingCallInputOrigin
+            != GovernedAllocationMutation::CallInputTransferOrigin
         {
-            return inputs;
+            return Ok(origin);
         }
-        if inputs.len() >= 2 {
+        let root = self.static_transition_plan.root_static_origin()?;
+        if root != origin {
             governed_allocation_hit();
-            inputs[0].occurrence = inputs[1].occurrence.clone();
         }
-        inputs
+        Ok(root)
     }
 
     /// Replace the FIRST argument's carried **producer occurrence** with the
@@ -3521,8 +3765,8 @@ impl<'a> Lowering<'a> {
     #[cfg(test)]
     fn substitute_sibling_aggregate_producer(
         &self,
-        mut inputs: Vec<SourceCallInput>,
-    ) -> Vec<SourceCallInput> {
+        mut inputs: Vec<LoweringOperand>,
+    ) -> Vec<LoweringOperand> {
         if GOVERNED_ALLOCATION_MUTATION.with(std::cell::Cell::get)
             != GovernedAllocationMutation::SiblingAggregateProducer
         {
@@ -3531,13 +3775,13 @@ impl<'a> Lowering<'a> {
         if inputs.len() < 2 {
             return inputs;
         }
-        let LoweringOperand::Specialized(sibling) = &inputs[1].value else {
+        let LoweringOperand::Specialized(sibling) = &inputs[1] else {
             return inputs;
         };
         let Some(sibling) = sibling.source_aggregate_producer() else {
             return inputs;
         };
-        let LoweringOperand::Specialized(target) = &mut inputs[0].value else {
+        let LoweringOperand::Specialized(target) = &mut inputs[0] else {
             return inputs;
         };
         let carried = match target {
@@ -4261,7 +4505,7 @@ impl<'a> Lowering<'a> {
                     value,
                     PlannedAggregateShape::Constructor,
                 )?;
-                let schema = self.aggregate_schema_coordinate(occurrence, origin)?;
+                let schema_origin = self.aggregate_schema_origin(occurrence, origin)?;
                 // ⭐ `D2` — the identity comes from the ONE artifact-static
                 // authority, via the typed newtype's own ABI-word method. ⛔ Not
                 // `intern_symbol`, which is dense insertion-order numbering over
@@ -4271,12 +4515,12 @@ impl<'a> Lowering<'a> {
                     Some(identity) => *identity,
                     None => self
                         .static_transition_plan
-                        .constructor_symbol_identity(schema.origin)
+                        .constructor_symbol_identity(schema_origin)
                         .map_err(|error| {
                             backend_module(format!(
                                 "constructor transfer for {constructor} at {:?} has no \
                                  resolved identity: {error}",
-                                schema.origin
+                                schema_origin
                             ))
                         })?,
                 }
@@ -4291,17 +4535,7 @@ impl<'a> Lowering<'a> {
                 )?;
                 self.emit_carrier_store_tag_id(builder, word, identity)?;
                 for (position, argument) in args.iter().enumerate() {
-                    let child_origin = if schema.synthesized {
-                        // A synthesized subtree has no occurrence in the
-                        // program, so its children are reached by path and role
-                        // rather than by source position; the parent's
-                        // coordinate travels down unchanged, as it always has.
-                        origin
-                    } else {
-                        self.static_transition_plan
-                            .child_static_origin(schema.origin, position)?
-                    };
-                    let child = self.emit_carrier_transfer(builder, child_origin, argument)?;
+                    let child = self.emit_carrier_transfer(builder, origin, argument)?;
                     self.emit_carrier_store_field(builder, word, position, child)?;
                 }
                 Ok(word)
@@ -4312,7 +4546,9 @@ impl<'a> Lowering<'a> {
                     value,
                     PlannedAggregateShape::Record,
                 )?;
-                let schema = self.aggregate_schema_coordinate(occurrence, origin)?;
+                // ⛔ No schema coordinate here, and its absence is the point:
+                // a record's field names now travel on the template, so this
+                // arm resolves NOTHING at the coordinate it is transferred at.
                 let word = self.emit_checked_aggregate_alloc(
                     builder,
                     GovernedAllocationSite::SourceRecord,
@@ -4321,22 +4557,37 @@ impl<'a> Lowering<'a> {
                     class,
                     fields.len(),
                 )?;
-                for (position, (_, field)) in fields.iter().enumerate() {
+                for (position, field) in fields.iter().enumerate() {
                     // ⭐ `D2` at the field-identity namespace: the name written
                     // here and the name `Project` looks up are the same word
-                    // from the same authority. ⚠ The `String` key in the tuple
+                    // from the same authority. ⚠ The `String` key on the field
                     // is deliberately NOT the identity — it is the compile-time
                     // spelling, and using it would be the second derivation
                     // `D2` forbids.
-                    let name = self
-                        .static_transition_plan
-                        .record_field_identity(schema.origin, position)?
-                        .name_abi_word()?;
-                    self.emit_carrier_store_name(builder, word, position, name)?;
-                    let child_origin = self
-                        .static_transition_plan
-                        .child_static_origin(schema.origin, position)?;
-                    let child = self.emit_carrier_transfer(builder, child_origin, field)?;
+                    //
+                    // ⭐⭐ **The identity EMITTED is the one the preflight
+                    // COMPARED.** It travels on the template from the producer
+                    // that was issued it, and the whole-graph walk has already
+                    // made it agree with the plan at this exact position. ⛔ Not
+                    // a fresh `record_field_identity` lookup: a second read at
+                    // emission is a second authority, and it answers from
+                    // whatever coordinate is in scope here rather than from the
+                    // fact that was checked.
+                    let Some(identity) = field.identity else {
+                        return Err(unsupported(
+                            "Record",
+                            format!(
+                                "record field {position} reached the carrier with no                                  planner-issued identity, so its name would have to be                                  invented at the coordinate it is transferred at"
+                            ),
+                        ));
+                    };
+                    self.emit_carrier_store_name(
+                        builder,
+                        word,
+                        position,
+                        identity.name_abi_word()?,
+                    )?;
+                    let child = self.emit_carrier_transfer(builder, origin, &field.value)?;
                     self.emit_carrier_store_field(builder, word, position, child)?;
                 }
                 Ok(word)
@@ -4493,25 +4744,31 @@ impl<'a> Lowering<'a> {
     /// names, so it is recovered rather than transported. Nothing here searches
     /// for it, and no caller may pass one.
     ///
-    /// ⚠ A compiler-synthesized aggregate has no source origin at all. Its
-    /// children are reached by path and role, and the transfer coordinate
-    /// travels down to them unchanged -- which is what `synthesized` says, and
-    /// why it is read from the PRODUCER rather than from the template's
-    /// `synthesized_identity`. That field is `Some` for every source
-    /// constructor too, so it cannot tell the two apart.
-    fn aggregate_schema_coordinate(
+    /// ⚠ A compiler-synthesized aggregate has no source origin at all, so it
+    /// keeps the transfer coordinate -- which for a synthesized subtree is the
+    /// seat its whole tree is rooted at, and is the coordinate its children are
+    /// reached under.
+    ///
+    /// ⛔ **There is no longer a `synthesized` flag here, and its removal is a
+    /// measurement rather than a tidy-up.** It selected between two child
+    /// coordinates that were genuinely DIFFERENT values -- 152 of 152 reached
+    /// emissions took the two arms to different origins, 38 of them with a
+    /// synthesized producer -- and the whole suite was green under either arm.
+    /// The coordinate a child is transferred at is inert: a leaf never reads
+    /// it, and an aggregate recovers its own from the record it carries. A
+    /// decision whose two answers are indistinguishable is not a decision, and
+    /// keeping it would have kept a `child_static_origin` lookup on the
+    /// emission path that nothing consumed.
+    fn aggregate_schema_origin(
         &self,
         occurrence: AggregateOccurrenceId,
         transfer: StaticOriginId,
-    ) -> Result<AggregateSchemaCoordinate, CraneliftBackendError> {
-        let producer = self
+    ) -> Result<StaticOriginId, CraneliftBackendError> {
+        Ok(self
             .static_transition_plan
             .aggregate_record_view(occurrence)?
-            .producer_origin();
-        Ok(AggregateSchemaCoordinate {
-            origin: producer.unwrap_or(transfer),
-            synthesized: producer.is_none(),
-        })
+            .producer_origin()
+            .unwrap_or(transfer))
     }
 
     fn aggregate_carrier_authority(
@@ -6818,8 +7075,8 @@ impl Lowered {
                 Ok(())
             }
             Lowered::Record { fields, .. } => {
-                for (_, value) in fields {
-                    value.boundary_transfer_admissibility()?;
+                for field in fields {
+                    field.value.boundary_transfer_admissibility()?;
                 }
                 Ok(())
             }
@@ -7127,16 +7384,16 @@ pub(crate) enum GovernedAllocationMutation {
     /// running the same host operation, retaining this seat's construction and
     /// operands. The A/B seat discriminator.
     SiblingEffectSeat,
-    /// Give one source-call argument a SIBLING argument's retained caller-side
-    /// occurrence, keeping its own value, callee, parameter slot, shape and
-    /// lane. The A/B call-input authority discriminator.
-    SiblingCallInputOrigin,
+    /// Transfer every source-call input at the program ROOT instead of at the
+    /// coordinate the call supplies, keeping every value, callee, parameter
+    /// slot, shape, lane and order. The call-USE coordinate discriminator.
+    CallInputTransferOrigin,
     /// Give one source-call argument's TEMPLATE a sibling argument's
     /// planner-issued **producer occurrence**, keeping its own value, args,
     /// constructor symbol, call use, callee, parameter slot, shape, lane and
     /// order. The A/B aggregate-ownership discriminator.
     ///
-    /// ⛔ **Not the same axis as [`Self::SiblingCallInputOrigin`], and it may
+    /// ⛔ **Not the same axis as [`Self::CallInputTransferOrigin`], and it may
     /// not be cited as this control.** That one moves the coordinate a value is
     /// *transferred at*; this one moves the certificate the value *carries*.
     /// Since `aggregate_carrier_authority` prefers the carried occurrence, a
@@ -7350,13 +7607,6 @@ impl CarrierAllocationRequest {
             PlannedAggregateShape::Record => BoundaryClass::Record,
         }
     }
-}
-
-/// Where one aggregate's schema is resolved, and whether it is synthesized.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct AggregateSchemaCoordinate {
-    origin: StaticOriginId,
-    synthesized: bool,
 }
 
 /// **`RT-DECL-CLOSURE-PORT` `D7` — the identity of one aggregate allocation
@@ -9969,13 +10219,8 @@ enum SourceContinuation<'a> {
     },
     CallArgument {
         callee: LoweringOperand,
-        /// ⭐ The argument **currently being evaluated**, retained before the
-        /// evaluation rather than recovered after it. The machine returns a
-        /// bare value, so the only moment this occurrence is in hand is the
-        /// moment the frame is pushed.
-        pending: OwnedSourceOccurrence,
         remaining: Vec<OwnedSourceOccurrence>,
-        lowered: Vec<SourceCallInput>,
+        lowered: Vec<LoweringOperand>,
         env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourceContinuation<'a>>,
     },
@@ -10094,14 +10339,8 @@ enum SourcePrefixTemplate {
     },
     CallArgument {
         callee: LoweringOperand,
-        /// Mirrors the continuation frame exactly. ⛔ A template that carried
-        /// the evaluated pairs but dropped the pending occurrence would
-        /// reintroduce the vacancy on every branch fan-out, and only on the
-        /// arms that were materialized from a template — which is the hardest
-        /// possible place to notice it.
-        pending: OwnedSourceOccurrence,
         remaining: Vec<OwnedSourceOccurrence>,
-        lowered: Vec<SourceCallInput>,
+        lowered: Vec<LoweringOperand>,
         env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourcePrefixTemplate>,
     },
@@ -12391,14 +12630,12 @@ impl<'a> Lowering<'a> {
             },
             SourceContinuation::CallArgument {
                 callee,
-                pending,
                 remaining: arguments,
                 lowered,
                 env,
                 next,
             } => SourceContinuation::CallArgument {
                 callee,
-                pending,
                 remaining: arguments,
                 lowered,
                 env,
@@ -12720,7 +12957,6 @@ impl<'a> Lowering<'a> {
             }
             SourceContinuation::CallArgument {
                 callee,
-                pending,
                 remaining,
                 lowered,
                 env,
@@ -12730,7 +12966,6 @@ impl<'a> Lowering<'a> {
                 (
                     SourcePrefixTemplate::CallArgument {
                         callee,
-                        pending,
                         remaining,
                         lowered,
                         env,
@@ -12871,14 +13106,12 @@ impl<'a> Lowering<'a> {
             }
             SourcePrefixTemplate::CallArgument {
                 callee,
-                pending,
                 remaining,
                 lowered,
                 env,
                 next,
             } => SourceContinuation::CallArgument {
                 callee: callee.clone(),
-                pending: pending.clone(),
                 remaining: remaining.clone(),
                 lowered: lowered.clone(),
                 env: env.clone(),
@@ -13589,7 +13822,15 @@ impl<'a> Lowering<'a> {
                 occurrence: None,
                 fields: fields
                     .iter()
-                    .map(|(name, value)| Ok((name.clone(), self.lower_value(builder, value)?)))
+                    .map(|(name, value)| {
+                        Ok(LoweredRecordField {
+                            name: name.clone(),
+                            // No occurrence, so no planned schema either. Both
+                            // absences are stated at the same place.
+                            identity: None,
+                            value: self.lower_value(builder, value)?,
+                        })
+                    })
                     .collect::<Result<Vec<_>, CraneliftBackendError>>()?,
             }),
             RuntimeValue::ClosureRef { .. } => Err(unsupported(
@@ -13715,7 +13956,11 @@ impl<'a> Lowering<'a> {
                 fields: fields
                     .iter()
                     .map(|(name, value)| {
-                        Ok((name.clone(), self.lower_ground_value(builder, value)?))
+                        Ok(LoweredRecordField {
+                            name: name.clone(),
+                            identity: None,
+                            value: self.lower_ground_value(builder, value)?,
+                        })
                     })
                     .collect::<Result<Vec<_>, CraneliftBackendError>>()?,
             }),
@@ -14610,7 +14855,7 @@ impl<'a> Lowering<'a> {
             Lowered::Record { fields, .. } => Ok(RuntimeGroundValue::Record {
                 fields: fields
                     .into_iter()
-                    .map(|(name, value)| Ok((name, self.ground_value(value)?)))
+                    .map(|field| Ok((field.name, self.ground_value(field.value)?)))
                     .collect::<Result<Vec<_>, CraneliftBackendError>>()?,
             }),
             Lowered::Closure { .. } | Lowered::DeclarationClosure { .. } => Err(unsupported(
@@ -14681,11 +14926,11 @@ fn same_recursive_argument_shapes(left: &[Lowered], right: &[Lowered]) -> bool {
                         && left
                             .iter()
                             .zip(right)
-                            .all(|((left_name, left), (right_name, right))| {
-                                left_name == right_name
+                            .all(|(left, right)| {
+                                left.name == right.name
                                     && same_recursive_argument_shapes(
-                                        std::slice::from_ref(left),
-                                        std::slice::from_ref(right),
+                                        std::slice::from_ref(&left.value),
+                                        std::slice::from_ref(&right.value),
                                     )
                             })
                 }
@@ -14769,10 +15014,10 @@ fn append_recursive_argument_values(
                 append_recursive_argument_values(builder, args, output, native_int_tags)?;
             }
             Lowered::Record { fields, .. } => {
-                for (_, field) in fields {
+                for field in fields {
                     append_recursive_argument_values(
                         builder,
-                        std::slice::from_ref(field),
+                        std::slice::from_ref(&field.value),
                         output,
                         native_int_tags,
                     )?;
@@ -14860,11 +15105,19 @@ fn rebuild_recursive_argument(
             occurrence: *occurrence,
             fields: fields
                 .iter()
-                .map(|(name, value)| {
-                    Ok((
-                        name.clone(),
-                        rebuild_recursive_argument(value, values, native_int_tags)?,
-                    ))
+                .map(|field| {
+                    Ok(LoweredRecordField {
+                        name: field.name.clone(),
+                        // The schema travels with the rebuilt template for the
+                        // same reason the occurrence above does: it is the
+                        // producer's fact, and this is the same producer.
+                        identity: field.identity,
+                        value: rebuild_recursive_argument(
+                            &field.value,
+                            values,
+                            native_int_tags,
+                        )?,
+                    })
                 })
                 .collect::<Result<Vec<_>, CraneliftBackendError>>()?,
         },

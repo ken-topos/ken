@@ -6062,7 +6062,13 @@ fn c1_d5_a_closure_is_inadmissible_at_the_root_and_at_every_depth() {
         occurrence: None,
         args: vec![Lowered::Record {
             occurrence: None,
-            fields: vec![("field:held".to_string(), c1_closure(origin))],
+            fields: vec![LoweredRecordField {
+                name: "field:held".to_string(),
+                // This rig exercises `boundary_transfer_admissibility`, which
+                // walks for closure PRESENCE and reads no schema at all.
+                identity: None,
+                value: c1_closure(origin),
+            }],
         }],
     };
 
@@ -6121,7 +6127,11 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
             Lowered::String("left".to_string()),
             Lowered::Record {
                 occurrence: None,
-                fields: vec![("field:right".to_string(), Lowered::Bytes(vec![7, 8]))],
+                fields: vec![LoweredRecordField {
+                    name: "field:right".to_string(),
+                    identity: None,
+                    value: Lowered::Bytes(vec![7, 8]),
+                }],
             },
         ],
     };
@@ -6143,7 +6153,11 @@ fn c1_d5_a_closure_free_constructor_is_admissible() {
             Lowered::String("left".to_string()),
             Lowered::Record {
                 occurrence: None,
-                fields: vec![("field:right".to_string(), c1_closure(origin))],
+                fields: vec![LoweredRecordField {
+                    name: "field:right".to_string(),
+                    identity: None,
+                    value: c1_closure(origin),
+                }],
             },
         ],
     };
