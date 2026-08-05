@@ -14399,6 +14399,13 @@ fn an_incomplete_duplicate_discarded_or_misobserved_visit_rejects() {
 /// CLAIMED: the body close is a real pre-definition gate, and it has not made
 /// the whole-pass backstop dead.
 ///
+/// ⭐ **Counterfactual, measured rather than argued:** with the `commit_body`
+/// call removed from `commit_aggregate_events` — so the discarded visit is
+/// caught only by the whole-pass backstop — this fixture defines **4** bodies
+/// before the refusal, against **0** with the gate in place. That number is what
+/// makes `defined == 0` a discrimination rather than a restatement of the
+/// refusal.
+///
 /// THE GAP: `defined == 0` is measured on this fixture, whose first emitted body
 /// contains an effect. It does not show a body with no effect in it could never
 /// be defined ahead of a later defective one.
