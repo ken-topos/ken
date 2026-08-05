@@ -151,7 +151,16 @@ all six failing `D0` rows.
      ⛔ It exists **only after** the full producer-local root coordinate is proved
      present in that context's ordered capture projection.
 
-  Entry ABI availability remains its existing case, untouched.
+  ⛔ **"Entry ABI availability remains its existing case, untouched" was the
+  premise here and it is FALSE — REPLACED 2026-08-05 on the `D3c` measurement,
+  not qualified.** An entry-ABI root's availability is **not** its root ABI
+  position: at nonzero lexical depth the two differ, and production silently
+  read the wrong operand. Entry-frame availability is lawful only where the
+  immediate environment really **is** the entry frame, proved as full-coordinate
+  membership in one exact frame. ⇒ The two arms above are superseded by the
+  three environment classes in `D3b`'s re-cut, where `GeneratedContextCapture`
+  is **subsumed** into the generated-context `EntryFrame` case rather than
+  standing as its own name. Read `D3b`, not this paragraph, for the law.
 
   **Lawfulness of a generated-context capture:** carrying a producer-local value
   as a declared capture is lawful **only when the caller's exact current-lexical
@@ -311,14 +320,102 @@ all six failing `D0` rows.
      - ⛔ **`contsrc_d2_both_binding_kinds_fixture` is untouched**, discriminator
        included. The new fixture is additive.
 
-  3. **`D3b` — lowering closure.** Implement the two lowering arms **only after
-     that evidence exists**:
-     - `CurrentLexical` requires the matching predeclared emitter plus exact
-       emission origin, lexical-environment origin, and post-shift index.
-     - `GeneratedContextCapture` requires the matching specialization context,
-       owner, and declared immediate-capture slot.
-     - Cross-domain pairings, missing identity, wrong owner, wrong index/slot,
-       and ambiguity **reject**.
+  3. **`D3b` — lowering closure. RE-CUT 2026-08-05 on the `D3c` result**
+     (Architect ruling at the `D3c` disposition; Steward fidelity recut). The
+     landing at `bc371f13` is **preservation-only evidence, not a candidate.**
+
+     **The law it landed is FALSE and is REPLACED, not qualified.**
+     `EntryAbi + CurrentLexical` is not a crossed pair — it is the **measured
+     lawful answer at nonzero lexical depth**, and an `EntryAbi` root may also
+     be available through a generated-context capture. **Root provenance
+     answers *which value*; availability answers *where this consumer holds
+     it*. Neither determines the other.**
+
+     **Why a fourth pairing does not fix it.**
+     `ContinuationInputProjection::availability` is reused by consumers that do
+     not hold the same environment: direct continuation-call emission reads
+     `producer_env`, the exact environment at the producer/emission seat, while
+     generated-context capture append reads
+     `function_local.defining_abi_operands`, an entry-frame operand run. **One
+     unqualified index cannot be authority for both.**
+
+     **The ruled representation.** `ContinuationSourceCoordinate` stays
+     unchanged as the closed root-identity sum — no added source domain,
+     position, offset or fallback. What is replaced is the single root-coupled
+     availability, which becomes **consumer-specific planner-issued
+     availability claims** over two closed environment classes:
+
+     1. **`CurrentLexical`** — exact predeclared emission owner,
+        producer/result and emission occurrence, lexical-environment origin,
+        and post-shift index.
+     2. **`EntryFrame`** — an exact frame identity plus declared slot, either a
+        predeclared function frame, or a generated context frame identified by
+        its `ContinuationContextId` and enclosing `ContinuationSpecializationId`
+        with that pairing revalidated.
+
+     **`GeneratedContextCapture` is subsumed into the generated-context
+     `EntryFrame` case.** Do not retain two names for one environment class.
+
+     A projection consumed at direct emission and later reused as a
+     generated-context capture exposes **two separately validated views**, never
+     one availability reused twice. A fixed pair of consumer views, or a closed
+     claim record keyed by those two consumer kinds, is lawful; **an unkeyed
+     vector, "first matching availability", or one generic `immediate_slot` is
+     not.**
+
+     **Availability is selected from the environment actually held, never from
+     the root-coordinate arm:**
+     - at the measured predeclared direct-emission seat, **both** `EntryAbi` and
+       `ProducerLocal` roots use `CurrentLexical`; the existing forward semantic
+       environment walk must find the full coordinate **exactly once** and issue
+       its post-shift position;
+     - at a generated-context operand consumer, **either** root arm may use the
+       generated-context `EntryFrame`, but only when that exact context
+       descriptor's ordered capture projection contains the full coordinate
+       exactly once and the declared slot agrees;
+     - at a predeclared `EntryFrame` consumer, either root arm is representable
+       only when that exact predeclared descriptor has a planner-issued member
+       for the full coordinate. An ordinary `EntryAbi` member can satisfy this
+       today. **A `ProducerLocal` member cannot be invented** — it stays
+       unavailable unless a separately authorized substrate later declares it.
+
+     **RETIRE, do not annotate around:** `RootIsImmediate`; the "three lawful /
+     three crossed" coordinate-product table; the equality requirement
+     `immediate_slot == source_abi_position`; and
+     `ContinuationImmediateResolution::root`, which duplicates the coordinate
+     domain after the caller already supplied the coordinate.
+
+     **The bounded re-cut is exactly four things:**
+     1. planner construction of the two consumer-specific availability views;
+     2. the direct-emission resolver and the ABI-only context-capture resolver;
+     3. the corresponding ABI/view agreement checks and durable controls;
+     4. **deliberate replacement of `D3c`'s old-defect observatory with the
+        corrected invariant** — see the `watch` note under `D3c`.
+
+     **The `D3c` witness must then prove**, on the same seat: `EntryAbi` root
+     position 0 remains root provenance; its direct-emission `CurrentLexical`
+     position is 1; the emitted operand is the entry oracle's exact SSA value;
+     and substituting root position 0 for the planner-issued lexical position
+     **fails at the consumer boundary** while both positions stay in bounds and
+     same-shape. The zero-depth rows remain positive agreement evidence, and
+     **no equality law is derived from them.**
+
+     **Additional load-bearing controls, each reaching the real consumer before
+     refusing:** swap or reuse the other input's availability claim; wrong
+     emission owner / origin / environment root / post-shift slot; wrong
+     predeclared frame; wrong context id, enclosing-specialization id, capture
+     membership, or declared slot; absent and duplicate full-coordinate
+     membership; and presenting a direct-emission claim to the ABI-frame
+     consumer and the converse.
+
+     **Preserve the accepted `ProducerLocal` `CurrentLexical` and
+     generated-context evidence from `bc371f13`, retyped under this
+     representation.** The consumer-mutation apparatus and the
+     membership machinery are not work to redo from zero — the premise is what
+     was false, not their fidelity.
+
+     No reverse search in lowering, numeric shift, constant offset, padding,
+     same-shape or same-value inference, or consumer-side fallback is lawful.
 
      Delete the seam only when its closed population is empty.
 
@@ -326,47 +423,63 @@ all six failing `D0` rows.
      controls: `interned = V`, `declined = R`, with no extra route modality and
      no special case.
 
-  5. ⛔⛔ **`D3c` — the `EntryAbi` immediate-availability MEASUREMENT. INSERTED
-     2026-08-05 (Architect `evt_56jh63qntwtfe`, Steward recut
-     `evt_7he9qv8wbv1yq`), and it SEQUENCES BEFORE ANY FURTHER `D3b` WORK** —
-     numbered last only because renumbering would break live references.
+  5. **`D3c` — the `EntryAbi` immediate-availability measurement. DISCHARGED
+     2026-08-05 at QA-approved exact `f5e4fa9f` over preserved `bc371f13`.**
+     Inserted per Architect `evt_56jh63qntwtfe` and Steward recut
+     `evt_7he9qv8wbv1yq`; numbered last only because renumbering would have
+     broken live references. It ran **before** further `D3b` work, which is the
+     whole reason `D3b`'s false law was caught before anything was built on it.
 
-     **Why it leads.** `D3b` landed a "three lawful / three crossed" pairing law
-     over the product of coordinate domain and availability domain. In
-     `exact_continuation_projection`, the `RootIsImmediate` branch copies an
-     `EntryAbi` root's `source_abi_position` straight into `immediate_slot`, and
-     `D3b` then requires those integers equal. But the same predeclared consumer
-     indexes `producer_env`, which `D4a` established is the **current lexical
-     environment with intervening binders prepended** — so at nonzero lexical
-     depth an entry value's root ABI position **need not** be its immediate
-     lexical position.
+     **THE RESULT: the position MOVES.** At a real predeclared emission seat
+     under one intervening binder:
 
-     ⇒ ⭐ **The landed law couples root provenance to immediate availability —
-     the two facts `D1` deliberately separated.** QA proved `D3b` faithful to
-     that law; ⛔ **the law's PREMISE is what is in doubt, and a fidelity
-     verdict says nothing about it.** Building further on it is how a green
-     suite gets erected on a false law — the defect class this node has already
-     paid for four times.
+     ```
+     source_abi_position          = 0
+     defining_abi_operands[0]     = specialized-scalar(v15)   <- the entry oracle
+     producer_env                 = [ specialized-scalar(v44),   <- index 0
+                                      specialized-scalar(v15),   <- index 1
+                                      specialized-scalar(v21) ]
+     measured immediate position  = 1
+     ```
 
-     **The bounded measurement, all four conditions at one emission:**
-     1. one real predeclared emission **under an intervening binder**;
-     2. the same required vector holds at least one `EntryAbi`-root input **and**
-        one `ProducerLocal`-root input;
-     3. an **independent lowering-side** oracle identifies the `EntryAbi` value
-        at entry and its actual operand at the emission seat;
-     4. substituting `source_abi_position` for the measured immediate position
-        **flips** — ⛔ not via a bounds or shape mismatch.
+     Production reads `producer_env[0]` and gets **`v44`**, the producer-local
+     the binder pushed, where the entry parameter `v15` belongs. **Nothing at
+     that seam can see it:** the index is in bounds, the lowering shape is
+     identical, and `D3b`'s own consistency law `immediate_slot ==
+     source_abi_position` **passes**, because both are 0. The seam emits a
+     well-formed operand of exactly the right contract carrying the wrong
+     value — the precise class this checkpoint's Option 3 rejection names.
 
-     ⛔ **NO PRODUCTION EDIT IS AUTHORIZED BY THIS MEASUREMENT.**
+     **Attribution, which is the half that makes it a finding rather than a
+     divergence:** the same armed window compiles the `D5a`
+     `px8tr_nested_post_effect` witness at **zero** binder depth, where the two
+     agree position for position, and the control refuses to proceed if that
+     agreement set is empty. So the oracle is correct exactly where the
+     projection's assumption holds and divergent exactly where a binder was
+     pushed. The two coincide **only at zero binder depth**, and every
+     pre-`D4a` population was at zero depth — which is why nothing ever had to
+     tell them apart. No production edit; every added line is `#[cfg(test)]`,
+     and no fixture was authored — the seat was selected from the existing
+     production population by the property, never by ordinal.
 
-     **If the position moves, the correction is structural:** immediate
-     availability is orthogonal to root provenance. A current-lexical seat and a
-     generated-context capture may make **either** root-coordinate arm
-     available, provided exact seat/capture membership proves it; entry-frame
-     availability is lawful only where the immediate environment really **is**
-     the entry frame. ⛔ No numeric equality, constant offset, padding, reverse
-     search or fallback may bridge the domains. `D3b`'s arms are then re-cut on
-     the corrected representation.
+     **The severity question, ruled by the Steward rather than left open.** The
+     implementer correctly noted this is not shown reachable in a program that
+     compiles green today, because the population already dies downstream at the
+     unit-body boundary. **That does not make it latent.**
+     [[RT-UNIT-CLOSURE-CONVERT]] exists to clear that boundary, so **landing it
+     is what unmasks this defect** — the correction lands before or with that
+     node. A defect masked by a second defect is not lower priority when the
+     mask is itself scheduled work.
+
+     **`f5e4fa9f` is preservation-only.** The correction is `D3b`'s re-cut
+     above, and it is *not* a fourth pairing.
+
+     **watch — this checkpoint's own control is scheduled for deliberate
+     replacement.** The `D3c` observatory pins a relation, not an index or SSA
+     word, so it is durable by construction: **if the representation is
+     corrected so the two agree, this control must be re-cut deliberately, and
+     its going red is the correction announcing itself.** That replacement is
+     item 4 of `D3b`'s bounded re-cut. Do not read its red as a regression.
 
   ⛔ **THE CANDIDATE IS ALSO GATED ON [[RT-UNIT-CLOSURE-CONVERT]], AND THAT IS
   PROSE HERE RATHER THAN A `depends_on` EDGE** (an edge both ways is a cycle).
@@ -405,13 +518,23 @@ all six failing `D0` rows.
   run**; the same numeric index has no authority to name a value in the retained
   lexical environment.
 
-  ⇒ **Seam 1 must REJECT `CurrentLexical` whenever the active emitter is a
-  specialization, before indexing any operand run.** The lawful local arm there
-  is `GeneratedContextCapture`, matching the exact generated context,
-  specialization owner, full root-coordinate membership, and declared
-  immediate-capture slot. **Conversely a predeclared emitter must reject
-  `GeneratedContextCapture`.** ⛔ No conversion, offset, fallback, or
-  "same value" inference crosses the domains.
+  ⇒ **Seam 1 must REJECT a `CurrentLexical` claim for a predeclared retained
+  environment whenever the consumer holds a generated-context frame, before
+  indexing any operand run**, and conversely a generated-context frame claim
+  must not index a predeclared lexical environment. The lawful local claim at a
+  specialization consumer is the **generated-context `EntryFrame`**, matching
+  the exact context id, enclosing specialization id, full root-coordinate
+  membership exactly once, and declared slot. ⛔ No conversion, offset,
+  fallback, or "same value" inference crosses the domains.
+
+  ⛔ **RESTATED 2026-08-05 — the rejection is by CONSUMER ENVIRONMENT IDENTITY,
+  not by root domain.** This finding's substance survives the `D3c` correction
+  intact; what changes is its basis. The earlier phrasing keyed the refusal to
+  the *emitter class* standing in for the root domain, and that coupling is
+  exactly the false premise `D3c` destroyed. **Do not carry the emitter-class
+  phrasing forward** — a root arm no longer implies an environment class, so a
+  refusal justified by the root domain is unsound even where its verdict
+  happens to be right.
 
   ⛔ **The Architect corrected its own earlier "any mismatch is a hard stop" as
   OVERBROAD.** The hard-stop comparison applies to a `CurrentLexical` authority
@@ -493,9 +616,24 @@ all six failing `D0` rows.
   stated per row. ⛔ A pass/fail count is not evidence: it reads identically
   before and after, and that is what hid two of this campaign's false laws —
   and, per `AC-1` above, it also hides that the red rows are two populations.
-- **`AC-2` — the closed sum is enforced by the type, not by convention.** A new
-  source kind must be unable to compile until every one of `D3`'s three
-  consumers assigns it. ⛔ No wildcard arm.
+- **`AC-2` — the closed sums are enforced by the type, not by convention.** ⛔
+  **"`D3`'s three consumers" is SUPERSEDED — the count is ten** (`D3` header,
+  corrected at `evt_1srfqjmkp5eh8`); do not discharge this against three.
+
+  ⛔ **REPLACED 2026-08-05 on the `D3c` correction: there are now TWO closed
+  sums and this AC binds both.** A new **root source kind** must be unable to
+  compile until every one of `D3`'s ten consumers assigns it; and a new
+  **availability claim kind** must be unable to compile until both
+  consumer-specific views — direct emission and ABI-only context capture —
+  assign it. ⛔ No wildcard arm in either.
+
+  ⛔ **The type cannot enforce the part that matters most, so say so here rather
+  than let it read as covered.** Exhaustiveness proves every consumer *handles*
+  a claim; it cannot prove a consumer holds the environment its claim names.
+  That is the defect `D3c` measured — a well-typed, in-bounds, same-shape read
+  of the wrong value — and it is guarded by the per-consumer claim-kind, frame
+  and seat checks in `D3b`, with `D3b`'s control list as the evidence. A green
+  exhaustive match is not evidence for it.
 - **`AC-3` — every instance in `V` is accounted for individually.** ⛔ **The
   "34 newly-interning edges" this AC used to name is SUPERSEDED.** That figure
   predated `D2` and counted only declining edges; the census
@@ -533,8 +671,18 @@ all six failing `D0` rows.
 - ⛔ **Claiming a mid-body value exists at function entry** — widening
   parameters/captures to seat it, inventing an entry position, or reusing
   `AbiSlotKind::Result` (a different boundary direction).
-- ⛔ **Exempting the new arm from `validate_continuation_source_slot`**, or
-  using `immediate_slot` alone and discarding root provenance.
+- ⛔ **Exempting the new arm from `validate_continuation_source_slot`.**
+- ⛔ **One generic availability index serving both consumers.** ⛔ **RESTATED
+  2026-08-05 — the old wording "using `immediate_slot` alone and discarding root
+  provenance" named a field that is now RETIRED**, and its rationale was the
+  weaker half. The ban is not merely that root provenance must be kept; it is
+  that a **single unqualified index cannot be authority for two consumers
+  holding different environments.** An unkeyed vector, a "first matching
+  availability" search, or one generic `immediate_slot` is unlawful even when
+  root provenance is faithfully retained alongside it.
+- ⛔ **A fourth pairing added to the retired coordinate-product table**, or any
+  numeric equality, constant offset, padding, reverse search, same-shape or
+  same-value inference, or consumer-side fallback bridging the domains.
 - ⛔ **Any route-modality or edge-selection authority.** Broad admission
   dissolves the need. If you find yourself needing one, that is a finding about
   `D4`'s scope — hard-stop and return it.
