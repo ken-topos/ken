@@ -33,7 +33,96 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~06:4xZ · D7 `1d` answered NEGATIVE; `1e` released
+## LIVE — 2026-08-05 ~07:0xZ · `1e` FALSIFIED; `RT-CONTSRC-PRODUCER-LOCAL` cut
+
+**`origin/main`: `a8e37a3d`** (PR #1412). New node `RT-CONTSRC-PRODUCER-LOCAL`
+is `ready` with a frame; `D7` checkpoint `1f` withdraws `1e`. Verify; do not
+trust this line.
+
+### The one thing to do next
+
+**Nothing — released and CONFIRMED LIVE at 07:08Z.** `runtime-leader` dispatched
+(`evt_7tcvf241ws3j9` in the new thread, `evt_4xhv3q7cq6avp` in `D7`'s), and
+`runtime-implementer` is working. **WIP audit clock armed from the 07:05:59Z
+kickoff, so due ~08:06Z.** The kick minted thread **`thr_6m43v75yndhtj`**.
+
+⚠ **A live-verb grep nearly reported this ring idle.** The implementer's footer
+read `✻ Actualizing… (1m 9s)` — a verb absent from the tick's pattern list, so
+the sweep printed a blank status. **The busy-check is wrong in both directions
+and the verb list is open-ended: a missing verb reads exactly like idle.**
+Resolve any blank or `(no-footer)` status by reading the pane, never by
+extending the pattern and trusting it.
+
+- Kick (fresh root, its own thread): **`evt_7h92n2tr7pbrm`**.
+- `D7` rescope-in-place, posted in `thr_3rx07jfewhjhf`: `evt_14a9cee7fkv2s`.
+- Handoff gate ran on all three seats (all 0 ahead, 0 dirty, so the
+  `reset --hard` was safe). **Confirmed:** implementer ctx 0% with skills
+  restored, both Codex seats show `Context compacted`.
+
+**The wake asymmetry is the thing to watch.** `runtime-leader` and `runtime-qa`
+are **Codex** (`gpt-5.6-terra`) and woke on the mention via the tmux backend —
+the leader was Working within a minute. **`runtime-implementer` is Claude
+(Opus 5) and its mention push never reaches the session.** So the leader's
+dispatch to it will not wake it either. If it sits idle at an empty composer,
+rouse mechanically: `tmux send-keys -t moot-runtime-implementer -l "<one line:
+run get_recent_context, pick up evt_7h92n2tr7pbrm; re-orient per CLAUDE.md>"`
+then a **separate** `Enter`. A wake is not task routing and does not breach
+Steward-never-to-implementer.
+
+### The branch trap — RESOLVED 07:1xZ, kept because it recurs every release
+
+**Confirmed clear by an independent instrument:** the handoff gate's own
+post-compaction worktree read shows `runtime-implementer` at
+**`179af863 (wp/RT-DECL-CLOSURE-PORT-typed-units)`**, so it is building on the
+proved lineage, not bare `main`. No `preserved/` refs were created — nothing was
+ahead. The description below is the standing hazard, not an open item.
+
+**`179af863` is contained by exactly ONE ref —
+`wp/RT-DECL-CLOSURE-PORT-typed-units` — and NO worktree has it checked out.**
+All three runtime seats sit on their own `*/work` branches at 0 ahead of `main`.
+⇒ The implementer must **explicitly check out that branch** before touching the
+new node. If it starts on `runtime-implementer/work` it builds on bare `main`
+without checkpoints 1/`1b`/`1c`, and a grep for its own `D7` symbols comes back
+empty — which reads as missing work rather than as a wrong branch.
+
+### What `1e` got wrong, and the defect is reusable
+
+`1e` ruled the minimal scope was the host-effect-result slot alone. **Falsified**
+(`evt_5ngh190h9b1k5`) and the design rejected by the Architect
+(`evt_75k8cydbj5127`): every effect-bearing closure needs **two** `Open` inputs,
+ordinal 0 an effect result and ordinal 1 a case binder, so the
+effect-result-only population is **zero** and closing it moves no row.
+
+**The defect: `1d`'s census recorded the DECLINING ordinal — the first `Open` —
+and I read it as a REQUIREMENT census.** "6 effect edges = the 6 failing rows"
+was a pair count short-circuited at the first `Open`, compared against a `161`
+in a different unit. Corrected closure-edge census: **34 case-binder-only, 4
+mixed, 1 `Construct`-only.** A first-failure statistic is silent about every
+input after the one that failed, so it cannot support a minimality claim.
+
+**Also settled:** there is no lawful ABI seat for a mid-body value — the
+Architect closed all five exits. A producer-local value is a **third
+availability class**, which is why this is a representation boundary and not a
+missing enum arm.
+
+### The rulings now standing
+
+- **BROAD admission.** All newly representable candidates may intern, not the 4
+  `D0` edges alone — the narrow option needs a real edge-selection authority
+  with every cheap substitute forbidden. This **dissolves** route modality.
+- **~34 edges newly intern**, changing emitted code on green programs. Expected;
+  the per-row `D0` and `718/2` baselines are the control.
+- **`D7` retired the clause** blocking candidate/QA/`D6`/`AC-4` "while the row
+  stands unreached" — it could never be discharged by the node holding it.
+
+### Four stops on this node were MY framing, not Runtime
+
+checkpoint 1 (mislocalized), `1b` (`1/1/1`), `1c` (forward reading), `1e`
+(first-`Open` as requirement). **The instruction to measure rather than comply
+caught every one.** Keep writing frames that way. This is not a sizing problem
+and should not be read as one later.
+
+## SUPERSEDED — 2026-08-05 ~06:4xZ · D7 `1d` answered NEGATIVE; `1e` released
 
 **`origin/main` at last check: `3eeeb5ed`** (the `1e` ruling, PR #1410; D7 frame
 blob `b5c240e6`). Verify it; do not trust this line.

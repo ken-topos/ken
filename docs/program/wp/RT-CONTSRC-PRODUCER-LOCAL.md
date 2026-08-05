@@ -80,12 +80,29 @@ all six failing `D0` rows.
   exact `Match` case binder, as **distinct** structural bindings. A later common
   local-binding representation may subsume them; this node does not assume one.
 
-- **`D3` — the three consumers, each handled explicitly.**
+- **`D3` — the consumers, each handled explicitly. THE COUNT IS TEN, NOT
+  THREE.** ⛔ **Corrected 2026-08-05 by `evt_1srfqjmkp5eh8`; the original three
+  below were a Steward guess and `D3` must not be cut on that number.**
+
+  The three this frame named:
   - `validate_continuation_source_slot` re-derives the same arm and contract.
     ⛔ No exemption for the new arm — it is the only exact validator.
   - Generated-context capture lookup compares the **full** source coordinate.
   - The emission resolver handles the local arm **explicitly**. ⛔ No default,
     no fallthrough.
+
+  The seven the ring measured beyond them: the ABI plane's
+  `append_continuation_descriptor`,
+  `append_continuation_context_descriptor` and
+  `AbiPlane::validate_continuation_specializations`, and the two
+  view-agreement checks.
+
+  **The live enumeration is in the tree, not in this list.** The seam function
+  `entry_abi_pending_producer_local` exists to be `grep`ed: it *is* what `D3`
+  owes, and it is deleted when the list empties. ⇒ **Size `D3` from that grep,
+  never from this frame's prose.** A frame-side count of a code-side population
+  goes stale the moment the code moves, which is how it was wrong the first
+  time.
 
 - **`D4` — broad admission.** Every exact producer-local value is represented
   and **all** newly representable candidates may lawfully intern. Report the
@@ -99,9 +116,24 @@ all six failing `D0` rows.
   real producer and returns `InvalidBounds` at the exact `264 -> 262 /
   position 1` consumer, with shared-host dispatch count **zero**. Removing the
   carried-capacity arm recreates the refusal at that exact seat.
+
+  ⛔⛔ **THE SIX RED ROWS ARE TWO POPULATIONS, NOT ONE — measured at `D0`
+  (`evt_1srfqjmkp5eh8`).** The `AC-1` row refuses at a different site from the
+  other five:
+
+  | rows | refusal |
+  |---|---|
+  | `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds` (`AC-1`) | `Match: scrutinee is not a constructor value` |
+  | the other five | `ComputationalMatch: tree-producing match scrutinee is not Bool or a constructor` |
+
+  ⇒ **Greening the five does NOT discharge `AC-1`, and greening `AC-1` says
+  nothing about the five.** Five-and-one at two distinct sites is invisible in
+  the `1 passed / 6 failed` total, which is precisely what a total is for.
+  Report the two populations separately, always.
 - **`AC-1b` — per row, never a total.** Every row green in `D0` is still green,
   stated per row. ⛔ A pass/fail count is not evidence: it reads identically
-  before and after, and that is what hid two of this campaign's false laws.
+  before and after, and that is what hid two of this campaign's false laws —
+  and, per `AC-1` above, it also hides that the red rows are two populations.
 - **`AC-2` — the closed sum is enforced by the type, not by convention.** A new
   source kind must be unable to compile until every one of `D3`'s three
   consumers assigns it. ⛔ No wildcard arm.
@@ -111,10 +143,17 @@ all six failing `D0` rows.
   passes while one of N contributors defects.
 - **`AC-4` (no-regression).** Workspace green **in CI** — ⛔ never a local
   `--workspace` run (`COORDINATION §12`).
-- **`AC-5` — `1c`'s converse survives.** The interned-to-member law and its four
-  mutation controls remain intact and **non-vacuous**: show each still fails
-  when its target is mutated. Broad admission changes the interned population,
-  which is exactly the condition under which a control can silently go vacuous.
+- **`AC-5` — `1c`'s converse survives. DISCHARGED AT `D4`, NOT BEFORE.** The
+  interned-to-member law and its four mutation controls remain intact and
+  **non-vacuous**: show each still fails when its target is mutated.
+
+  **The timing is not bookkeeping.** `AC-5` exists because **broad admission
+  changes the interned population**, which is the condition under which a
+  control silently goes vacuous. Until `D4` admits something, that condition is
+  unreachable and a "controls still green" report would be **true and
+  meaningless** — it would measure an unchanged population and read as having
+  cleared the risk. ⛔ Do not accept `AC-5` from any deliverable that admits
+  nothing; `D1` correctly declined to claim it.
 
 ## 5. Banned scope
 
