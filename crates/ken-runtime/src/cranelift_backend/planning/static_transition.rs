@@ -5117,20 +5117,18 @@ enum ProducerLocalKind {
 /// **Where each fact comes from, stated because "planner-derived" is not an
 /// answer:**
 ///
-/// | fact | host-effect result | `Match` case binder |
+/// | fact | host-effect result | constructor **argument** binder |
 /// |---|---|---|
-/// | carrier | `abi::result_carrier` on the `Effect` shape — the existing "carrier an occurrence's result travels in" authority, and this binding *is* that result | ⚠ `ValueWord`, **derived here for the first time** — see below |
+/// | carrier | `abi::result_carrier` on the `Effect` shape — the existing "carrier an occurrence's result travels in" authority, and this binding *is* that result | `abi::result_carrier` on the **scrutinee's** shape, gated by `slot_referent_affinity` |
 /// | ownership | `AbiCarrier::ownership` | `AbiCarrier::ownership` |
 /// | storage owner | `AbiCarrier::storage_owner` | `AbiCarrier::storage_owner` |
 /// | referent affinity | the `Effect` occurrence's own lifetime authority | the scrutinee child's lifetime authority |
 ///
-/// ⚠ **The one fact no prior authority stated.** A case binder is not an
-/// occurrence's result, so `result_carrier` does not answer for it and nothing
-/// else did either. `ValueWord` is this plane's carrier for an ordinary in-body
-/// Ken value — it is what `result_carrier` assigns every expression shape that
-/// is not `Trap` or `ImportedDeclarationRef` — and a binder is exactly that.
-/// Recorded as a `D2` derivation rather than presented as a pre-existing
-/// reading.
+/// ⛔ **Recursive IH binders are not in this table and take no contract here.**
+/// They are a separate subrun of a `ComputationalMatch` case and stay `Open`;
+/// see the walk for why none can be read. ⛔ There is no blanket carrier for
+/// "a case binder": a constructor argument's carrier is the **scrutinee's**,
+/// read from the existing authority, and nothing else is claimed.
 ///
 /// ⭐ The binder's referent lifetime is **not** conservatively floored, because
 /// it does not have to be: `PlannedReferentLifetime::Persistent` is issued only
@@ -19857,18 +19855,24 @@ mod tests {
     /// row can tell the two local kinds apart from each other *and* from the
     /// entry domain, which three separate fixtures could not.
     ///
+    /// ⛔ Both local values here are an **ordinary `Match` case's constructor
+    /// argument binder** and a host-effect result. No recursive IH binder is in
+    /// this fixture's environment; the IH/argument split is a separate row.
+    ///
     /// MEASURED: at the consumer inside the case body the environment is
-    /// `[case binder, effect result, entry ...]`; the two local bindings differ
-    /// in `binding_origin`; each carries `ValueWord` with the ownership and
-    /// storage owner `AbiCarrier` derives, and a non-empty referent affinity.
+    /// `[argument binder, effect result, entry ...]`; the two local bindings
+    /// differ in `binding_origin`; each carries the carrier its own authority
+    /// supplies — the scrutinee's for the argument binder, the `Effect` shape's
+    /// for the effect result — with the ownership and storage owner
+    /// `AbiCarrier` derives from it, and a non-empty referent affinity.
     /// CLAIMED: `D2` populates both kinds through one derivation that restates
     /// no other record's fact. THE GAP: nothing here admits either binding —
     /// the candidate still declines, which is the next row.
     ///
     /// ⭐ The locator/binding split is asserted, not assumed: for the effect
     /// result the two origins **differ** (the `Effect` creates the value, the
-    /// `Let` body holds it), and for the case binder they coincide. If a future
-    /// change collapsed the two fields, the effect row would red.
+    /// `Let` body holds it), and for the argument binder they coincide. If a
+    /// future change collapsed the two fields, the effect row would red.
     ///
     /// **Promise class: durable invariant.**
     #[test]
@@ -19918,9 +19922,23 @@ mod tests {
         );
 
         // The contract, derived once and consistent with the entry plane's
-        // reading of the same carrier.
-        for (label, source) in [("case binder", binder_source), ("effect result", effect_source)] {
-            assert_eq!(source.carrier, AbiCarrier::ValueWord, "{label} carrier");
+        // reading of the same carrier. ⛔ The carrier is asserted against the
+        // authority that supplies it, never against a literal: on this fixture
+        // both authorities answer `ValueWord`, and writing that constant here
+        // would state a blanket rule the derivation deliberately does not have.
+        let expected_argument_carrier = abi::result_carrier(SemanticSourceKind::Expression(
+            RuntimeExprShape::Construct,
+        ))
+        .expect("the fixture's Match scrutinee is a Construct");
+        let expected_effect_carrier =
+            abi::result_carrier(SemanticSourceKind::Expression(RuntimeExprShape::Effect))
+                .expect("the Effect shape has a result carrier");
+        assert_eq!(binder_source.carrier, expected_argument_carrier);
+        assert_eq!(effect_source.carrier, expected_effect_carrier);
+        for (label, source) in [
+            ("argument binder", binder_source),
+            ("effect result", effect_source),
+        ] {
             assert_eq!(
                 source.ownership,
                 source.carrier.ownership(),
