@@ -1671,6 +1671,10 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 unit.worker_capture_count,
                 worker_captures.clone(),
                 induction_route,
+                // `D8i` — an induction hypothesis answers for no composed
+                // source continuation. Stated explicitly: this is a positive
+                // claim about the hypothesis's role, not the absence of one.
+                ContinuationDischarge::DirectSpecializationCall,
             )?;
 
             // `D6a` -- the selected recursive constructor argument.
@@ -1700,6 +1704,13 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 unit.worker_capture_count,
                 worker_captures,
                 StaticWorkerCallRoute::RawWorker,
+                // `D8i` — the SPECIALIZATION's selected recursive argument.
+                // ⛔ Direct, and the contrast with `D8d`'s composed argument is
+                // the point: the same source closure at the same position
+                // carries an authority on the composed path and none here,
+                // because only the composed consumption stands in for a causal
+                // call the producer never made.
+                ContinuationDischarge::DirectSpecializationCall,
             )?;
 
             // Exact body recovery: the selected case of the computational

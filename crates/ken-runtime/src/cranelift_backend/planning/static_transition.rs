@@ -2064,8 +2064,11 @@ pub(in crate::cranelift_backend) struct ComposedCallTarget {
     call_identity: ContinuationCallIdentity,
 }
 
-// Read by this node's tests; `D8c` is the held production consumer.
-#[cfg_attr(not(test), allow(dead_code))]
+// `D8i` is the production consumer: `composed_recursive_argument_binding` reads
+// `selector()`, `worker()` and `call_identity()` to build and to authorize the
+// composed binding. ⛔ The dead-code allowance that stood here is DELETED rather
+// than narrowed -- it existed while nothing outside tests read this type, and
+// keeping it now would hide the next accessor that ships unread.
 impl ComposedCallTarget {
     /// The exact `D8a` five-field selector this target was minted under.
     pub(in crate::cranelift_backend) fn selector(

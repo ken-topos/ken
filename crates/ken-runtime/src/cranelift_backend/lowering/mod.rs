@@ -2954,6 +2954,104 @@ struct StaticWorkerBinding {
     /// `closure_origin` above intends — silencing it would turn an open
     /// checkpoint into an invisible one.
     route: StaticWorkerCallRoute,
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8i`** — which causal obligation this
+    /// binding's consumption may satisfy. See [`ContinuationDischarge`].
+    ///
+    /// ⛔ **A separate facet from `route`, deliberately.** The route decides the
+    /// callee and the operand run; the discharge decides which causal call, if
+    /// any, a consumption of this binding is allowed to answer for. They are
+    /// independent: the composed selected recursive argument is `RawWorker` and
+    /// carries an authority, while an ordinary `RawWorker` induction hypothesis
+    /// carries none. Folding the authority into the route would make "which
+    /// callee" and "which obligation" one field, and `D6b` already showed what
+    /// happens when two contracts share one discriminator.
+    ///
+    /// ⛔ **The open checkpoint is visible on the READER, not on this field.**
+    /// The field is read by [`StaticWorkerBinding::
+    /// composed_continuation_authority`], so the compiler does not name it
+    /// unread — and it would be wrong to claim it does. That accessor is what
+    /// carries the narrowed allowance until `D8j` supplies its production
+    /// consumer, and it is the thing to check when asking whether `D8i` is
+    /// still transport-only.
+    discharge: ContinuationDischarge,
+}
+
+impl StaticWorkerBinding {
+    /// **`D8i` — the composed causal authority this binding carries, or a
+    /// refusal.**
+    ///
+    /// ⛔ **An ordinary binding is REJECTED, not answered with `None`.** A
+    /// caller asking this question is asking "which composed obligation may I
+    /// discharge with this", and for a [`ContinuationDischarge::
+    /// DirectSpecializationCall`] binding the answer is not "none available" —
+    /// it is that the question does not apply to it. `None` would let a caller
+    /// treat the two cases alike with `unwrap_or_default`, `is_some`, or an
+    /// `if let` that silently skips; a `Result` makes ignoring it a written
+    /// decision.
+    ///
+    /// ⭐ Returned by reference and still opaque. A caller can compare it, key
+    /// on it, and read its target specialization and emission owner. It cannot
+    /// read the call-site sequence and cannot construct one.
+    ///
+    /// `D8j` is this method's production consumer; at `D8i` it is transport
+    /// with its own control.
+    #[cfg_attr(not(test), allow(dead_code))]
+    fn composed_continuation_authority(
+        &self,
+    ) -> Result<&ContinuationCallIdentity, CraneliftBackendError> {
+        match &self.discharge {
+            ContinuationDischarge::ComposedSourceContinuation(identity) => Ok(identity),
+            ContinuationDischarge::DirectSpecializationCall => Err(unsupported(
+                "StaticWorkerBinding",
+                "an ordinary static-worker binding carries no composed causal authority: its \
+                 discharge is a direct specialization call, which answers for no composed \
+                 source continuation. This refuses rather than reporting an absence, because a \
+                 consumption that reached here has already decided it is discharging a composed \
+                 obligation and there is none to discharge",
+            )),
+        }
+    }
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8i` — the closed causal-discharge facet.**
+///
+/// ```text
+/// ContinuationDischarge =
+///   DirectSpecializationCall
+/// | ComposedSourceContinuation(opaque ContinuationCallIdentity)
+/// ```
+///
+/// ⭐ **Two arms, both explicit, no default and no `Option`.** Every
+/// [`StaticWorkerBinding`] states its arm at construction because
+/// [`Lowering::construct_static_worker_binding`] takes it as a required
+/// argument — omission is a compile error, not a silent
+/// [`Self::DirectSpecializationCall`]. That is the whole reason it is a
+/// parameter rather than a field the composed path patches afterwards: a
+/// defaulted facet would make "this binding carries no authority" and "nobody
+/// said" the same value, and those are the two states this type exists to keep
+/// apart.
+///
+/// ⛔ **Transport only, at this checkpoint.** Nothing here consumes, records or
+/// closes the authority. The authority is carried opaquely — a
+/// [`ContinuationCallIdentity`] has no sequence accessor and no lowering
+/// constructor — so a binding can hand one on but can never mint one, and no
+/// path can invent an obligation it is entitled to discharge.
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum ContinuationDischarge {
+    /// The ordinary binding: its call is a direct specialization call and
+    /// answers for **no** composed causal obligation.
+    ///
+    /// ⛔ This is a positive statement, not an absence. Induction hypotheses,
+    /// selected recursive arguments built by a specialization context, and
+    /// lexical-closure capsules all carry it explicitly.
+    DirectSpecializationCall,
+    /// **The composed selected recursive argument.** Carries the exact opaque
+    /// identity `D8h` paired with the [`ComposedCallTarget`] this binding was
+    /// derived from — the identity that target's own five-field coordinate
+    /// selects, transported unchanged.
+    ///
+    /// [`ComposedCallTarget`]: crate::cranelift_backend::planning::ComposedCallTarget
+    ComposedSourceContinuation(ContinuationCallIdentity),
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D6a` — the closed compiler-only call route.**
@@ -3340,6 +3438,71 @@ pub(in crate::cranelift_backend) fn reset_d8d_bindings() {
     D8D_STATIC_WORKER_BINDINGS.with(|count| count.set(0));
     D8D_RECURSIVE_SITES.with(|count| count.set(0));
     D8E_CONSUMPTIONS.with(|count| count.set(0));
+    D8I_DISCHARGES.with(|log| log.borrow_mut().clear());
+}
+
+/// **`D8i` — what discharge facet each constructed binding actually carried.**
+///
+/// ⛔ An OBSERVATION of the transported value, not a second authority: the
+/// record is written inside the constructor, from the argument the call site
+/// supplied, after every validation has passed. It exists because `D8i` is
+/// transport with no production reader until `D8j`, so "both arms occur, each
+/// at the site its role dictates" is otherwise unobservable — and a facet that
+/// were defaulted or inferred rather than stated would be indistinguishable
+/// from one that is stated correctly.
+///
+/// `None` is [`ContinuationDischarge::DirectSpecializationCall`]. The composed
+/// arm records the identity's two readable facts; the call-site sequence stays
+/// unread here as everywhere else.
+#[cfg(test)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct D8iDischargeRecord {
+    pub(in crate::cranelift_backend) body_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) composed:
+        Option<(ContinuationEmissionOwner, ContinuationSpecializationId)>,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D8I_DISCHARGES: std::cell::RefCell<Vec<D8iDischargeRecord>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8i_discharges() -> Vec<D8iDischargeRecord> {
+    D8I_DISCHARGES.with(|log| log.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8i_discharge(record: D8iDischargeRecord) {
+    D8I_DISCHARGES.with(|log| log.borrow_mut().push(record));
+}
+
+/// **`D8i` — hand an ordinary binding site a REAL composed authority whose
+/// emission owner is not this unit's.**
+///
+/// ⛔ The authority is taken from the plan's own target population, searched
+/// for an emission owner that differs from the defining one. It is not
+/// fabricated, and it could not be: `ContinuationCallIdentity` has no
+/// constructor outside planning, which is exactly why this switch has to find a
+/// real one rather than build a wrong one.
+///
+/// ⭐ It perturbs the constructor's INPUT — the facet a call site supplies —
+/// and leaves the guard untouched, so the refusal is attributable to the guard
+/// rather than to the mutation being the guard.
+#[cfg(test)]
+thread_local! {
+    static D8I_FOREIGN_AUTHORITY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8i_foreign_authority(armed: bool) {
+    D8I_FOREIGN_AUTHORITY.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8i_foreign_authority() -> bool {
+    D8I_FOREIGN_AUTHORITY.with(std::cell::Cell::get)
 }
 
 #[cfg(test)]

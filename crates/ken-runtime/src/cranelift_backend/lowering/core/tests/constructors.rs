@@ -5046,6 +5046,11 @@ fn attempt_worker_construction(
         // validated identically on both routes. The raw route is the one an
         // ordinary lexical closure takes, so it is the honest default here.
         StaticWorkerCallRoute::RawWorker,
+        // `D8i` — likewise route-independent: these rows validate the
+        // descriptor contract, which runs before the discharge facet is even
+        // looked at. The ordinary arm is what an ordinary lexical closure
+        // carries.
+        ContinuationDischarge::DirectSpecializationCall,
     )
 }
 
@@ -5265,6 +5270,10 @@ fn lower_against_static_worker(
         declared_arity,
         captures: vec![LoweringOperand::Specialized(Lowered::Bytes(b"cap".to_vec()))],
         route: StaticWorkerCallRoute::RawWorker,
+        // `D8i` — a hand-built ordinary binding. ⛔ The composed arm is not
+        // constructible here even in a test: it needs a planner-issued
+        // `ContinuationCallIdentity`, which has no constructor outside planning.
+        discharge: ContinuationDischarge::DirectSpecializationCall,
     })];
     let mut func = Function::with_name_signature(
         UserFuncName::user(0, 0),
@@ -8159,6 +8168,8 @@ fn attempt_capture_contract(
         captures,
         // `D6a` — the capture-phase contract is route-independent.
         StaticWorkerCallRoute::RawWorker,
+        // `D8i` — and discharge-independent, for the same reason.
+        ContinuationDischarge::DirectSpecializationCall,
     )
 }
 

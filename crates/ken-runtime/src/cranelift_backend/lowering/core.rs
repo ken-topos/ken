@@ -7781,6 +7781,9 @@ impl<'a> Lowering<'a> {
             // for this occurrence and the raw body is the only callee it can
             // ever have named.
             StaticWorkerCallRoute::RawWorker,
+            // `D8i` — a lexical-closure capsule answers for no composed causal
+            // obligation. Stated, not defaulted.
+            ContinuationDischarge::DirectSpecializationCall,
         )
         .map(LoweringEnvironmentBinding::StaticWorker)
     }
@@ -7989,6 +7992,12 @@ impl<'a> Lowering<'a> {
         source_capture_count: usize,
         captures: Vec<LoweringOperand>,
         route: StaticWorkerCallRoute,
+        // `D8i` — REQUIRED, so omission is a compile error rather than a silent
+        // `DirectSpecializationCall`. ⛔ Not an `Option`, not defaulted, and not
+        // inferred from `route`: the two facets are independent, and a caller
+        // that has not decided which causal obligation its binding may answer
+        // for has not finished building it.
+        discharge: ContinuationDischarge,
     ) -> Result<StaticWorkerBinding, CraneliftBackendError> {
         // 1. The capture vector agrees with the retained definition. The caller
         //    builds it from the retained children, so a disagreement means the
@@ -8136,12 +8145,80 @@ impl<'a> Lowering<'a> {
             declared_arity as usize,
             &captures,
         )?;
+        // `D8i` — the defect switch, applied to the SUPPLIED facet and only to
+        // an ordinary one. ⛔ It substitutes a real, planner-issued authority
+        // taken from the target population, searched for an emission owner that
+        // is not this unit's. Nothing here fabricates an identity, because
+        // nothing outside planning can.
+        #[cfg(test)]
+        let discharge = if crate::cranelift_backend::lowering::d8i_foreign_authority()
+            && matches!(discharge, ContinuationDischarge::DirectSpecializationCall)
+        {
+            let mut foreign = None;
+            for target in self.static_transition_plan.composed_call_targets()? {
+                if Some(target.call_identity().emission_owner()) != self.defining_emission_owner {
+                    foreign = Some(target.call_identity().clone());
+                    break;
+                }
+            }
+            match foreign {
+                Some(identity) => ContinuationDischarge::ComposedSourceContinuation(identity),
+                None => discharge,
+            }
+        } else {
+            discharge
+        };
+
+        // ⭐⭐ `D8i` — THE AUTHORITY GUARD, and it is about the OWNER.
+        //
+        // A composed authority names the emission owner its own causal call
+        // belongs to; `D8h` held the target and the token to that agreement at
+        // minting. This binding is being built inside one defining emission
+        // owner's pass. If the two differ, the binding would transport an
+        // obligation belonging to a function that is not the one emitting it,
+        // and a later discharge would answer for a call this frame cannot make.
+        //
+        // ⛔ Refused, not corrected: there is no lawful repair, because the
+        // right authority for this owner may not exist at all. And checked HERE
+        // rather than at consumption -- a binding that never should have
+        // carried the authority must not exist to be consumed, and `D8j` must
+        // not have to re-litigate provenance it was handed.
+        if let ContinuationDischarge::ComposedSourceContinuation(identity) = &discharge {
+            if Some(identity.emission_owner()) != self.defining_emission_owner {
+                return Err(unsupported(
+                    "StaticWorkerBinding",
+                    format!(
+                        "a composed causal authority names emission owner {:?}, but this binding \
+                         is being constructed under {:?}; a binding cannot transport an \
+                         obligation that belongs to a different emitter",
+                        identity.emission_owner(),
+                        self.defining_emission_owner
+                    ),
+                ));
+            }
+        }
+
+        // The observation, written AFTER every validation, from the facet the
+        // call site supplied.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d8i_discharge(
+            crate::cranelift_backend::lowering::D8iDischargeRecord {
+                body_origin,
+                composed: match &discharge {
+                    ContinuationDischarge::DirectSpecializationCall => None,
+                    ContinuationDischarge::ComposedSourceContinuation(identity) => {
+                        Some((identity.emission_owner(), identity.target()))
+                    }
+                },
+            },
+        );
         Ok(StaticWorkerBinding {
             closure_origin,
             body_origin,
             declared_arity,
             captures,
             route,
+            discharge,
         })
     }
 
@@ -9106,6 +9183,12 @@ impl<'a> Lowering<'a> {
             worker.captures().len(),
             captures.clone(),
             StaticWorkerCallRoute::RawWorker,
+            // ⭐ `D8i` — the transported authority, taken from `D8h`'s pairing
+            // on this exact target and carried unchanged. ⛔ Not resolved again
+            // here: the target already carries the identity its own five-field
+            // coordinate selects, and a second lookup would be a second
+            // authority for one fact.
+            ContinuationDischarge::ComposedSourceContinuation(target.call_identity().clone()),
         )
         .map(Some)
     }

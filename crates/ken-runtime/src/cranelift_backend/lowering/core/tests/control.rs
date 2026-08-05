@@ -17099,3 +17099,202 @@ fn d8h_a_composed_call_target_carries_the_identity_its_own_coordinate_selects() 
         );
     });
 }
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8i` — the discharge facet is transported,
+/// stated at every site, and refuses both ways it can be wrong.**
+///
+/// The subject is [`ContinuationDischarge`] as a **separate closed facet** from
+/// [`StaticWorkerCallRoute`]: the route decides callee and operand run, the
+/// discharge decides which causal obligation a consumption may answer for.
+///
+/// ## Clause 1 — both arms occur, each at the site its role dictates
+///
+/// **MEASURED** on the `D8e` witness: the composed selected recursive argument
+/// carries [`ContinuationDischarge::ComposedSourceContinuation`] with the exact
+/// identity `D8h` paired to that target — same emission owner, same target
+/// specialization — and it is the **only** composed record on that program.
+/// **MEASURED** on the `D5a` witness, which builds induction hypotheses and
+/// specialization-owned recursive arguments through the same constructor: every
+/// record is [`ContinuationDischarge::DirectSpecializationCall`].
+///
+/// **CLAIMED**: the facet is stated per site rather than defaulted or inferred.
+/// A default would make one arm universal; an inference from `route` would tie
+/// it to `RawWorker`, which **both** populations carry — the composed argument
+/// and the ordinary hypothesis are route-identical here, which is precisely why
+/// route cannot be the discriminator and why this is a second field.
+///
+/// **THE GAP**: "no default" is also a type-level fact — the constructor takes
+/// the facet as a required argument, so omission is a compile error. That half
+/// is not asserted here, because asserting it would mean testing the source
+/// text. It was observed instead: adding the parameter reded three existing
+/// call sites until each stated its arm.
+///
+/// ## Clause 2 — wrong-owner authority is refused at construction
+///
+/// An ordinary site is handed a **real** planner-issued authority whose
+/// emission owner is not the defining one. It cannot be fabricated —
+/// `ContinuationCallIdentity` has no constructor outside planning — so the
+/// switch searches the target population for one, which is what makes the
+/// refusal attributable to the owner disagreement rather than to a malformed
+/// value.
+///
+/// ## Clause 3 — an ordinary binding is rejected, not answered with `None`
+///
+/// [`StaticWorkerBinding::composed_continuation_authority`] refuses on the
+/// direct arm. A caller reaching it has already decided it is discharging a
+/// composed obligation; "there isn't one" is an error, not an absence to be
+/// `unwrap_or_default`-ed past.
+///
+/// **Promise class: durable invariant.** Relations over the two populations and
+/// two refusals, never a count of bindings.
+#[test]
+fn d8i_the_discharge_facet_is_transported_stated_and_refuses_both_ways() {
+    use crate::cranelift_backend::lowering::{
+        d8i_discharges, reset_d8d_bindings, set_d8i_foreign_authority,
+    };
+
+    // Clause 1a — the composed program.
+    let (error, (_sites, bindings, consumptions), _markers) =
+        d8e_witness_compile("d8i_composed", 3, true);
+    assert_eq!(
+        (bindings, consumptions),
+        (1, 1),
+        "the witness must still install and consume exactly as D8e measured it; D8i changes \
+         transport only, and a drift here means the facet altered the binding path"
+    );
+    assert!(
+        format!("{error:?}").contains("detached-result seat"),
+        "and it must still refuse at the same place: D8i must not move D8e's outcome"
+    );
+    let records = d8i_discharges();
+    let composed = records
+        .iter()
+        .filter_map(|record| record.composed.as_ref())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        composed.len(),
+        1,
+        "exactly one binding on this program may carry a composed authority -- the selected \
+         recursive argument D8d installs. More means the facet leaked onto an ordinary binding; \
+         none means it was dropped in transport. Records: {records:?}"
+    );
+    let plan_target = with_d8e_witness_plan(|plan| {
+        let targets = plan.composed_call_targets().expect("targets");
+        assert_eq!(
+            targets.len(),
+            1,
+            "the witness plan mints one target, so the identity below is unambiguous"
+        );
+        (
+            targets[0].call_identity().emission_owner(),
+            targets[0].call_identity().target(),
+        )
+    });
+    assert_eq!(
+        *composed[0], plan_target,
+        "and the transported authority must be D8h's pairing for that exact target, derived here \
+         from the plan rather than read back off the binding: transport that rebuilt the identity \
+         would agree with itself but not with the planner"
+    );
+
+    // Clause 1b — the ordinary program, through the same constructor.
+    reset_d8d_bindings();
+    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "ken_d8i_ordinary",
+        false,
+    )
+    .expect("the D5a witness compiles");
+    let ordinary = d8i_discharges();
+    assert!(
+        !ordinary.is_empty(),
+        "the D5a witness must build static-worker bindings, or clause 1b is vacuous and proves \
+         nothing about the ordinary arm"
+    );
+    assert!(
+        ordinary.iter().all(|record| record.composed.is_none()),
+        "every binding the D5a witness builds -- induction hypotheses and the specialization's \
+         own selected recursive argument -- must carry the DIRECT arm. A composed authority here \
+         would mean the specialization path had acquired one it never asked for: {ordinary:?}"
+    );
+
+    // Clause 2 — a real foreign authority at an ordinary site.
+    reset_d8d_bindings();
+    set_d8i_foreign_authority(true);
+    let foreign = crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "ken_d8i_foreign",
+        false,
+    );
+    set_d8i_foreign_authority(false);
+    let refusal = format!(
+        "{:?}",
+        foreign.err().expect(
+            "an ordinary binding handed an authority belonging to another emitter must refuse at \
+             construction. If this compiles, either the guard is gone or the D5a plan no longer \
+             carries a target whose emission owner differs from every defining one -- check which \
+             before touching the guard"
+        )
+    );
+    assert!(
+        refusal.contains("belongs to a different emitter"),
+        "and the refusal must be the owner guard, not an incidental failure downstream of the \
+         substitution: {refusal}"
+    );
+
+    // Clause 3 — the reader rejects an ordinary binding.
+    //
+    // ⛔ The binding is built here as a literal, which is the strongest form
+    // this clause can take: the composed arm is NOT constructible at this seat
+    // even deliberately, because it needs a planner-issued identity. So the
+    // only binding a test can hand this accessor is a direct one, and the
+    // accessor's contract for that case is the whole subject.
+    let ordinary_binding = StaticWorkerBinding {
+        closure_origin: inert_test_static_origin(),
+        body_origin: inert_test_static_origin(),
+        declared_arity: 0,
+        captures: Vec::new(),
+        route: StaticWorkerCallRoute::RawWorker,
+        discharge: ContinuationDischarge::DirectSpecializationCall,
+    };
+    let refusal = format!(
+        "{:?}",
+        ordinary_binding
+            .composed_continuation_authority()
+            .err()
+            .expect(
+                "composed_continuation_authority must REFUSE on a direct binding. An Ok here \
+                 means an ordinary binding can be read as authorizing a composed discharge; a \
+                 None-shaped answer would mean a caller could skip past it with unwrap_or_default"
+            )
+    );
+    assert!(
+        refusal.contains("carries no composed causal authority"),
+        "and the refusal must name the facet rather than fail for some unrelated reason: {refusal}"
+    );
+}
+
+/// The `D8e` witness as a planned graph, for reading its target population
+/// directly. Mirrors [`with_d5a_witness_plan`] over this node's own witness.
+#[cfg(test)]
+fn with_d8e_witness_plan<T>(f: impl FnOnce(&StaticTransitionPlan<'_>) -> T) -> T {
+    let symbol = "decl:fixture::d8e::d8i_plan".to_string();
+    let declaration = d8e_witness_declaration(&symbol, 3, true);
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: symbol.clone(),
+        }),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let declarations = BTreeMap::from([(symbol.as_str(), &declaration)]);
+    let plan = plan_static_transition_graph_with_symbols(
+        &entry,
+        &declarations,
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .expect("the D8e witness plans");
+    f(&plan)
+}
