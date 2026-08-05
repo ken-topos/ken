@@ -41,11 +41,12 @@
 ### The one thing to do next
 
 **Nothing, until Runtime hands back.** `runtime-implementer` is mid-turn on the
-`RT-DECL-CLOSURE-PORT` D7 **operation-arm dispatch and carried exact-`Int`
-route**, resumed from exact `69c68e6e` on the governed `70887529` lineage,
-released by `runtime-leader` at 02:48 (`evt_26aa34zwcnzkb`). Confirmed engaged
-by pane at 02:51, ctx 32%. The leader is idle-and-correct, waiting on that
-named checkpoint.
+**lazy site-operand correction and the carried capacity route**, resumed from
+exact `f6958b95`, released by `runtime-leader` at 03:01
+(`evt_6jrzzfqg1t2xy`) after the Architect's outcome-(b) disposition at 02:58
+(`evt_see9dbnftqaz`: the positional projection is lawful, the eager full-list
+realization is not). Confirmed engaged by pane at 03:06 — live turn, ctx 14%.
+The leader is idle-and-correct.
 
 **THE DISPATCH IS NO LONGER HELD — as of the Architect's 02:47 review
 (`evt_7vxssfyfdh0m1`).** Read every earlier post's "bulk conversion and the
@@ -54,7 +55,20 @@ closure, the call-result SCC, and the `#27` / case-emission populations.
 
 Checkpoint lineage since my recut, each an accepted parent of the next:
 `6a09ed68` (population substrate) → `727b51a1` (per-visit claim group) →
-`69c68e6e` (pre-definition body close) → in flight.
+`69c68e6e` (pre-definition body close) → `f6958b95` (operation-arm claim
+consumption; bulk pre-operation conversion removed) → in flight.
+
+**I compacted `runtime-implementer` at `f6958b95` (03:00), on the leader's
+request.** Used a direct `/compact`, **not `handoff-gate-compact.sh`** — that
+script's `git reset --hard origin/main` is right for a before-new-work gate and
+wrong mid-WP. Nothing is owed by me on it.
+
+> **Measured, and it contradicts the playbook: the freshly compacted seat DID
+> wake on the leader's ordinary mention**, unaided, within minutes. The standing
+> rule is that a just-compacted seat sits idle at an empty composer and needs a
+> pane rouse; I had promised the leader that nudge and it turned out unnecessary.
+> **Check the pane before sending one — a nudge into a live turn
+> double-delivers.** One observation, not yet a retraction of the rule.
 
 **WIP audit clock — DERIVE IT, do not read a stamped deadline.** A fixed
 timestamp here goes stale on every reset event and then fires a spurious audit;
