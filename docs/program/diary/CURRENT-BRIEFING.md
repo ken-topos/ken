@@ -33,24 +33,51 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~10:0xZ · `D2b` QA-APPROVED; `D3` BUILDING after the ruling
+## LIVE — 2026-08-05 ~10:1xZ · `D3` recut into FOUR; `D3a` BUILDING
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Nothing — `D3` is BUILDING.** ⭐ **The rouse hold is LIFTED and this file no
-longer asks you to withhold a wake.** The Architect ruled at
-**`evt_3xyy1fq66tyvp`** (09:48) and `runtime-leader` re-released `D3` at
-**`evt_6zr8a4h90c7rp`** (09:51); `runtime-implementer` picked it up and was
-`Architecting` at 4m, ctx 11%. Next expected event is the `D3` report.
+**Nothing — `D3a` is BUILDING.** `D3` was **recut into FOUR ordered
+checkpoints** and `runtime-leader` released `D3a` at `evt_5wvankf3zpg0g`;
+the implementer picked it up unprompted. Frame blob `fffb8db0`.
 
-⛔ **The ruling, so it is not re-litigated:** `AbiContinuationInputAuthority`
+⛔ **THE BINDING ORDER IS FOUR, NOT MY TWO** (Architect `evt_7vc8zh0rvqyps`,
+superseding my own `evt_11esqaep9awbs`):
+
+1. **`D3a`** — non-lowering closure; both lowering consumers explicitly refuse;
+   seam and pending population stay **visible**. In flight.
+2. **`D4a`** — bounded admission and measurement. ⭐ **MAY BE DELIBERATELY RED.**
+   It exists to produce real reaching producer-local emissions so nonzero-depth
+   `CurrentLexical` correspondence can be measured. ⛔ A red here is the
+   instrument working, **not** a regression to chase.
+3. **`D3b`** — lowering closure, only after that evidence exists; seam deleted
+   only when its closed population is empty.
+4. **`D4b`** — closeout: `interned = V`, `declined = R`.
+
+⛔ **My recut said `D3b` lands "with or after `D4`" and that was
+under-specified where it counts** — `D4` as one unit cannot both *create* the
+population and *prove* the partition, so it never named what produces `D3b`'s
+evidence. `D4a` is that mechanism. ⭐ Same defect class as the `D1` clause: a
+load-bearing sequencing term left ambiguous across two things.
+
+⛔ **Option 2 is INVALID, not merely worse:** `D4` cannot safely admit before
+the lowering consumers are explicitly fail-closed — hence `D3a` before `D4a`.
+
+⛔ **The ABI ruling, so it is not re-litigated:** `AbiContinuationInputAuthority`
 carries a **closed tagged provenance sum** — `EntryAbi { source_owner }` |
 `ProducerLocal { binding_owner }` — keeping ordinal and affinity. A domain-total
 bare owner was **rejected as lossy**: it collapses `EntryAbi { source_owner: X }`
 and `ProducerLocal { binding_owner: X }` into the same value.
+
+⛔ **"Any mismatch is a hard stop" is CORRECTED as overbroad**
+(`evt_6p6vf0aqnjn3g`). Seam 1 must reject `CurrentLexical` at a specialization
+emitter before indexing any operand run; a predeclared emitter must reject
+`GeneratedContextCapture`. Applying the `CurrentLexical` comparison to a
+specialization emitter is **itself a category error**. ⛔ Do not carry the old
+phrasing forward from earlier posts in the thread.
 
 ⚠ **It woke on the mention, and that contradicts this file's own wake-asymmetry
 claim below.** The standing note says a Claude implementer's mention push never
@@ -68,10 +95,10 @@ node is mid-flight and the branch accumulates until the WP completes.
 times it posted the scoping instead of holding it in context, so compaction cost
 none of it. Read the stops as the frames working, not as under-delivery.
 
-**`D4`, candidate, QA, `D6` closure, `#27`/case-emission, the call-result SCC
-and downstream `D7` all remain held.** ⛔ `D3` is NOT among them any more — it is
-in flight. WIP clock: derive it from the latest reset event in the thread, never
-from a stamped deadline.
+**`D4a`, `D3b`, `D4b`, candidate, QA, `D6` closure, `#27`/case-emission, the
+call-result SCC and downstream `D7` all remain held.** ⛔ `D3a` is NOT among
+them — it is in flight. WIP clock: derive it from the latest reset event in the
+thread, never from a stamped deadline.
 
 ### Where the node stands
 
@@ -80,8 +107,12 @@ from a stamped deadline.
 | `D0` `12d9612a` (zero delta), `D1` `77a24320` | accepted `evt_5zkydewv5kspb` |
 | `D2` identity + value contract | accepted preservation at exact `e6d4f085` |
 | `D2b` immediate availability | **QA-APPROVED** exact `7316e13a` — `evt_3w4s25ta13hc4` |
-| `D3` | **BUILDING** — re-released `evt_6zr8a4h90c7rp` after ruling `evt_3xyy1fq66tyvp` |
-| `D4` | recut as SET EQUALITY, held |
+| `D3a` | **BUILDING** — released `evt_5wvankf3zpg0g`; recut `evt_7vc8zh0rvqyps` |
+| `D4a` / `D3b` / `D4b` | held, in that order — `D4a` may be deliberately RED |
+
+⛔ **There is no undivided `D4` any more.** The SET EQUALITY definition below
+still governs — it is what **`D4b`** discharges; **`D4a`** admits `V` to create
+the population `D3b` needs to measure.
 
 **`D2`'s route was blocked once and corrected twice, and both stops were
 sound.** `a5a6ce9b` stamped one blanket `ValueWord` contract across a
