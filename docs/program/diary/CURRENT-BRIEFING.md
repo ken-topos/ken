@@ -49,10 +49,40 @@
   its dependency is unmerged). It enters the frontier when
   `RT-CONTSRC-PRODUCER-LOCAL` merges, with no Steward pass in between.
 
+### `D3c` RETURNED: the position MOVES. `D3b`'s premise is FALSE.
+
+QA-approved at exact **`f5e4fa9f`** over preserved `bc371f13`; production
+unchanged, every added line test-gated. At a real predeclared seat under one
+intervening binder, `source_abi_position = 0` but the entry operand `v15` is at
+immediate position **1** — production reads `producer_env[0]` and gets `v44`,
+the producer-local the binder pushed. In bounds, identical lowering shape, and
+**`D3b`'s own consistency law passes**, because both numbers are 0. The seam
+emits a well-formed operand of the right contract carrying the wrong value.
+Zero-depth rows agree position-for-position in the same window, so the
+divergence is attributable to the binder.
+
 ### The one thing to do next
 
-**Wait on `D3c`'s result. If the `EntryAbi` position moves, `D3b`'s arms get
-re-cut on it and that recut is mine.**
+**Re-cut `D3b`'s checkpoint text the moment the Architect answers the mechanism
+question at `evt_3n4k9xx4mvq8b`.** The axis: `D3b`'s product table assumed root
+provenance constrains immediate availability. If the two are orthogonal, then
+`EntryAbi`/`EntryAbi` is not a pairing readable off the coordinate at all —
+entry-frame availability becomes a **proved membership fact**, not a lawful
+pairing. That answer sizes the re-cut; do not guess it.
+
+**Three scope calls already made (`evt_3n4k9xx4mvq8b`), do not re-litigate:**
+
+1. The correction **folds in** as the re-cut `D3b`. No new node — same seam,
+   same node, and this node's own `D1` already separated the two facts.
+2. `D3b`'s landed arms stay **directionally accepted evidence**. The premise is
+   what is false, so the re-cut takes the resolution law and the consistency
+   check, not the `GeneratedContextCapture` membership machinery or the
+   consumer-mutation apparatus.
+3. **The masking defect is scheduled work, so this is not latent.** The
+   implementer correctly noted the defect is unreachable in green programs
+   today because that population already dies at the unit-body boundary.
+   `RT-UNIT-CLOSURE-CONVERT` exists to clear that boundary — **landing it is
+   what unmasks this.** The correction lands before or with that node.
 
 The one-release-ahead sweep is **done and clean**: both nodes whose
 `depends_on` names `RT-CONTSRC-PRODUCER-LOCAL` — `RT-UNIT-CLOSURE-CONVERT` and
