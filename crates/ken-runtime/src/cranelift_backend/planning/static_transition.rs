@@ -3833,6 +3833,45 @@ pub(in crate::cranelift_backend) struct PlannedEffectSeat {
     pub(in crate::cranelift_backend) avail: EffectSeatAvail,
 }
 
+/// **Erase one axis of the seat key, or collapse every seat onto one
+/// contract.**
+///
+/// ⛔ Applied ONLY inside [`build_host_effect_seat_plan`], never in the
+/// re-derivation the close performs. That asymmetry is the whole mechanism: the
+/// rebuild-equality validation mutates on both sides and so cannot see any of
+/// these, which is correct — it checks the derivation is a function, not that
+/// the function is right. What sees them is the independent recomputation of
+/// the contract from the operation and the slot at the ledger close.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum EffectSeatPlanMutation {
+    Exact,
+    /// The operation stops being part of the key: every seat records the first
+    /// admitted operation.
+    EraseOperation,
+    /// The ordinal stops being part of the key: every argument seat becomes
+    /// argument 0.
+    EraseOrdinal,
+    /// The need stops being part of the authority: every seat records one need.
+    EraseNeed,
+    /// Every seat takes one contract, which is the "all argument seats are the
+    /// same kind of thing" collapse the full-seat key exists to refuse.
+    CollapseContract,
+}
+
+#[cfg(test)]
+thread_local! {
+    static EFFECT_SEAT_PLAN_MUTATION: std::cell::Cell<EffectSeatPlanMutation> =
+        const { std::cell::Cell::new(EffectSeatPlanMutation::Exact) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_effect_seat_plan_mutation(
+    mutation: EffectSeatPlanMutation,
+) {
+    EFFECT_SEAT_PLAN_MUTATION.with(|cell| cell.set(mutation));
+}
+
 /// **The host operations this backend represents as consumers.**
 ///
 /// ⛔ It lives in PLANNING because the seat population is derived here and the
@@ -4082,7 +4121,7 @@ fn build_host_effect_seat_plan(
                     operation
                 )));
             };
-            records.push(PlannedEffectSeat {
+            let record = PlannedEffectSeat {
                 effect_origin,
                 child_origin: child.origin,
                 position,
@@ -4093,11 +4132,62 @@ fn build_host_effect_seat_plan(
                 semantic_operation,
                 need,
                 avail,
-            });
+            };
+            #[cfg(test)]
+            let record = mutate_planned_effect_seat(record);
+            records.push(record);
         }
     }
     records.sort();
     Ok(records)
+}
+
+#[cfg(test)]
+fn mutate_planned_effect_seat(record: PlannedEffectSeat) -> PlannedEffectSeat {
+    let tag = (
+        EffectSeatOperation::SelectClosedTag,
+        EffectSeatNeed::ConstructorTag,
+        EffectSeatAvail::SPECIALIZED_ONLY,
+    );
+    match EFFECT_SEAT_PLAN_MUTATION.with(std::cell::Cell::get) {
+        EffectSeatPlanMutation::Exact => record,
+        EffectSeatPlanMutation::EraseOperation => PlannedEffectSeat {
+            operation: CRANELIFT_HOST_EFFECT_CONSUMERS_V1[0],
+            ..record
+        },
+        EffectSeatPlanMutation::EraseOrdinal => PlannedEffectSeat {
+            slot: match record.slot {
+                EffectSeatSlot::Capability => EffectSeatSlot::Capability,
+                EffectSeatSlot::Argument(_) => EffectSeatSlot::Argument(0),
+            },
+            ..record
+        },
+        EffectSeatPlanMutation::EraseNeed => PlannedEffectSeat {
+            need: EffectSeatNeed::ConstructorTag,
+            ..record
+        },
+        EffectSeatPlanMutation::CollapseContract => PlannedEffectSeat {
+            semantic_operation: tag.0,
+            need: tag.1,
+            avail: tag.2,
+            ..record
+        },
+    }
+}
+
+/// **The contract one operation/slot pair has, recomputed from nothing but the
+/// pair.**
+///
+/// ⭐ This is the INDEPENDENT side of the seat authority's contract half. The
+/// planned population records a semantic operation, a need and an availability;
+/// this recomputes them at the close from the two key axes alone. Without it
+/// `need` would be diagnostic text — nothing would read it, so erasing it would
+/// change no decision and no gate could see the erasure.
+pub(in crate::cranelift_backend) fn host_effect_seat_contract_of(
+    operation: ken_host::HostOpV1,
+    slot: EffectSeatSlot,
+) -> Option<(EffectSeatOperation, EffectSeatNeed, EffectSeatAvail)> {
+    host_effect_seat_contract(operation, slot)
 }
 
 /// Every record names a DISTINCT seat.

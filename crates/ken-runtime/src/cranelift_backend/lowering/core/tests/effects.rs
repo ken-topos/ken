@@ -2185,3 +2185,154 @@ fn d7_non_unit_fixed_role_reaches_ordinary_aggregate_allocation() {
     )
     .expect("the FsWriteAt carrier fixture compiles and reaches the aggregate arm");
 }
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the seat contract is total over the admitted
+/// set, and it is derived from the operation and the slot alone.**
+///
+/// ⛔ **Nothing here compiles or runs a program.** The point of the seat
+/// authority is that the population is STATIC: it is a fact about the 13
+/// admitted operations, not about the arms some execution happened to take. A
+/// control that established it by compiling a fixture would prove the property
+/// only for the seats that fixture reaches, which is the row-driven discovery
+/// the frame forbids.
+///
+/// MEASURED: for each admitted operation the ordinals carrying a contract are
+/// exactly `0..n` for some `n >= 1`, the capability slot carries one for
+/// exactly the four FS-path operations, and no unadmitted lane carries one at
+/// any slot.
+///
+/// CLAIMED: the table has no hole and no wildcard, so an operation cannot be
+/// admitted while some seat of it silently has no contract.
+///
+/// THE GAP: this says nothing about whether `n` is the arity the emitter reads
+/// -- that is the ledger's per-body occurrence completeness law, which is a
+/// statement about a compilation and cannot be made here.
+#[test]
+fn every_admitted_host_operation_has_a_gapless_seat_contract_derived_from_its_key() {
+    // The admitted set itself comes from `ken_host`, not from this backend.
+    assert_eq!(
+        CRANELIFT_HOST_EFFECT_CONSUMERS_V1,
+        ken_host::NATIVE_TESTED_TARGETS_V1
+    );
+    let capability_bearing = [
+        ken_host::HostOpV1::FsReadFile,
+        ken_host::HostOpV1::FsWriteFile,
+        ken_host::HostOpV1::FsChangeMode,
+        ken_host::HostOpV1::FsOpen,
+    ];
+    for operation in CRANELIFT_HOST_EFFECT_CONSUMERS_V1 {
+        assert_eq!(
+            host_effect_seat_contract_of(operation, EffectSeatSlot::Capability).is_some(),
+            capability_bearing.contains(&operation),
+            "{operation:?} capability seat"
+        );
+        // Search well past any real arity, so a contract stranded beyond a hole
+        // is found rather than assumed absent.
+        let carried = (0..16u32)
+            .filter(|ordinal| {
+                host_effect_seat_contract_of(operation, EffectSeatSlot::Argument(*ordinal))
+                    .is_some()
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            !carried.is_empty(),
+            "{operation:?} is admitted but has no argument seat at all"
+        );
+        assert_eq!(
+            carried,
+            (0..carried.len() as u32).collect::<Vec<_>>(),
+            "{operation:?} argument seats are not a gapless 0..n range"
+        );
+    }
+    for operation in [
+        ken_host::HostOpV1::ConsoleRead,
+        ken_host::HostOpV1::ClockWallNow,
+        ken_host::HostOpV1::ClockMonotonicNow,
+        ken_host::HostOpV1::ClockSleepUntil,
+        ken_host::HostOpV1::FsAppendFile,
+        ken_host::HostOpV1::FsMetadata,
+        ken_host::HostOpV1::FsReadDirectory,
+        ken_host::HostOpV1::FsCreateDirectory,
+        ken_host::HostOpV1::FsRemoveFile,
+        ken_host::HostOpV1::FsRemoveDirectory,
+        ken_host::HostOpV1::FsRename,
+        ken_host::HostOpV1::EntropyRandomBytes,
+    ] {
+        assert!(
+            !CRANELIFT_HOST_EFFECT_CONSUMERS_V1.contains(&operation),
+            "{operation:?} is not an unadmitted lane"
+        );
+        assert!(
+            host_effect_seat_contract_of(operation, EffectSeatSlot::Capability).is_none(),
+            "{operation:?} is unadmitted but carries a capability contract"
+        );
+        for ordinal in 0..16u32 {
+            assert!(
+                host_effect_seat_contract_of(operation, EffectSeatSlot::Argument(ordinal))
+                    .is_none(),
+                "{operation:?} is unadmitted but carries a contract at argument {ordinal}"
+            );
+        }
+    }
+}
+
+/// **`D7` — the full seat is the key, so equal structural kinds with different
+/// operations, ordinals or needs stay distinct records.**
+///
+/// ⭐ The four pairs below are chosen so that each ISOLATES one axis. Every one
+/// of them is a structurally identical seat -- an operand at a position of a
+/// host effect -- and the only reason each pair must not collapse is the axis
+/// under test. A pair differing on two axes at once would be discriminated by
+/// either, and would prove nothing about the one it was chosen for.
+#[test]
+fn seats_of_equal_structural_kind_stay_distinct_on_operation_ordinal_and_need() {
+    let contract = |operation, slot| {
+        host_effect_seat_contract_of(operation, slot)
+            .unwrap_or_else(|| panic!("{operation:?} {slot:?} has no contract"))
+    };
+    // OPERATION alone. Same slot, same structural kind, same `Int`-shaped
+    // operand; different operations, and the availabilities differ because
+    // only one of them has a carrier route.
+    let allocate = contract(
+        ken_host::HostOpV1::BufferAllocate,
+        EffectSeatSlot::Argument(0),
+    );
+    let freeze_length = contract(ken_host::HostOpV1::BufferFreeze, EffectSeatSlot::Argument(1));
+    assert_eq!(allocate.1, EffectSeatNeed::ExactIntU64);
+    assert_eq!(freeze_length.1, EffectSeatNeed::ExactIntU64);
+    assert_ne!(
+        allocate, freeze_length,
+        "two exact-Int seats at the same ordinal of different operations collapsed"
+    );
+    // ORDINAL alone. One operation, two argument seats, different needs.
+    let write_tag = contract(ken_host::HostOpV1::FsWriteFile, EffectSeatSlot::Argument(1));
+    let write_bytes = contract(ken_host::HostOpV1::FsWriteFile, EffectSeatSlot::Argument(2));
+    assert_ne!(
+        write_tag, write_bytes,
+        "two argument seats of one operation collapsed across the ordinal"
+    );
+    // CAPABILITY versus ARGUMENT 0. The seat the post-capability offset exists
+    // to keep apart: both are FsOpen slots and neither is the other.
+    let open_capability = contract(ken_host::HostOpV1::FsOpen, EffectSeatSlot::Capability);
+    let open_argument = contract(ken_host::HostOpV1::FsOpen, EffectSeatSlot::Argument(0));
+    assert_ne!(
+        open_capability, open_argument,
+        "FsOpen's capability collapsed onto its first semantic argument"
+    );
+    // NEED alone, at equal semantic operations. Both observe an opaque scalar
+    // through the same emitted read; a single need spanning them would let a
+    // capability seat be satisfied by a resource handle.
+    assert_eq!(
+        open_capability.0,
+        EffectSeatOperation::ObserveCapabilityToken
+    );
+    assert_eq!(
+        contract(ken_host::HostOpV1::ResourceRelease, EffectSeatSlot::Argument(0)).0,
+        EffectSeatOperation::ObserveResourceHandle
+    );
+    assert_ne!(
+        open_capability.1,
+        contract(ken_host::HostOpV1::ResourceRelease, EffectSeatSlot::Argument(0)).1,
+        "a capability token and a resource handle share one need"
+    );
+}

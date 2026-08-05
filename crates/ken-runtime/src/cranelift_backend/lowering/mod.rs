@@ -82,7 +82,8 @@ pub(in crate::cranelift_backend) use super::planning::{
     ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, FieldIdentity, JoinPlanToken,
     PlannedReferentLifetime,
-    EffectSeatPhase, EffectSeatSlot, PlannedEffectSeat,
+    host_effect_seat_contract_of, EffectSeatNeed, EffectSeatOperation, EffectSeatPhase,
+    EffectSeatSlot, PlannedEffectSeat,
     AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,
     SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot, PlannedAggregateOwnership,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
@@ -265,6 +266,8 @@ fn scale_b_record_unit_body(function: &Function) {
 // the emitter's admission check and the planner's population read the same
 // list; a local copy could disagree with it silently.
 use crate::cranelift_backend::planning::CRANELIFT_HOST_EFFECT_CONSUMERS_V1;
+#[cfg(test)]
+use crate::cranelift_backend::planning::{set_effect_seat_plan_mutation, EffectSeatPlanMutation};
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BoundedNatLoweringMutation {
@@ -8103,6 +8106,21 @@ impl EffectSeatLedger {
                 "host effect seat ledger: {extra:?} was consumed but is not in the planned \
                  population"
             )));
+        }
+        // ⛔ Every consumed record's contract, RECOMPUTED from its operation and
+        // its slot and nothing else. This is what makes all three of operation,
+        // slot and need equality-bearing at a gate rather than only in a
+        // comment: erase any one of them in the population and the two sides
+        // disagree here.
+        for ((function, _, _), (record, _)) in &self.claimed {
+            let recomputed = host_effect_seat_contract_of(record.operation, record.slot);
+            if recomputed != Some((record.semantic_operation, record.need, record.avail)) {
+                return Err(backend_module(format!(
+                    "host effect seat ledger: function {function} consumed {record:?}, whose \
+                     operation and slot recompute to {recomputed:?}, so the seat's recorded \
+                     contract is not the one its own key names"
+                )));
+            }
         }
         // Every (body, occurrence) the emitter reached owes every planned slot
         // of that occurrence.

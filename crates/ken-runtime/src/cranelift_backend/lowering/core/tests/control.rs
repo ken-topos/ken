@@ -14243,3 +14243,70 @@ fn d6a_the_frame_field_must_not_overwrite_an_incoming_checked_route() {
         "the erased route must land on the exact planned checked-ITree default"
     );
 }
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — erasing any axis of the seat key, or
+/// collapsing every seat onto one contract, rejects before the artifact is
+/// finished.**
+///
+/// ⭐ **The mutation is applied in the POPULATION BUILDER only, never in the
+/// recomputation the ledger close performs.** That asymmetry is what gives the
+/// control its force: the planner's own rebuild-equality validation mutates on
+/// both sides and cannot see any of these, so a green row here has to come from
+/// the independent side actually running.
+///
+/// ⛔ The fixture is the governed nested bracket rather than the process pair,
+/// and the reason is a near miss worth recording: the process pair's only
+/// effect has ONE argument seat, so collapsing every argument ordinal to `0`
+/// changed nothing and `EraseOrdinal` passed while measuring an identity. This
+/// fixture's `BufferFreeze` and `FsReadAt` seats carry four and five arguments,
+/// so the ordinal axis has something to erase.
+///
+/// MEASURED: the unmutated fixture compiles; each of the four erasures refuses
+/// it; it compiles again once the mutation clears.
+///
+/// CLAIMED: operation, ordinal and need are load-bearing at a gate rather than
+/// recorded and unread.
+///
+/// THE GAP: this measures the four erasures written here. It is not a proof
+/// that no other perturbation of a seat record is admitted.
+#[test]
+fn erasing_a_seat_key_axis_or_collapsing_the_contract_rejects() {
+    use crate::cranelift_backend::planning::{
+        governed_nested_resource_bracket, set_effect_seat_plan_mutation, EffectSeatPlanMutation,
+    };
+    let expr = governed_nested_resource_bracket(3);
+    set_effect_seat_plan_mutation(EffectSeatPlanMutation::Exact);
+    recursive_port_process_compiles(&expr)
+        .expect("the unmutated bracket compiles, so the rows below are not vacuous");
+    for mutation in [
+        EffectSeatPlanMutation::EraseOperation,
+        EffectSeatPlanMutation::EraseOrdinal,
+        EffectSeatPlanMutation::EraseNeed,
+        EffectSeatPlanMutation::CollapseContract,
+    ] {
+        set_effect_seat_plan_mutation(mutation);
+        let refusal = recursive_port_process_compiles(&expr);
+        set_effect_seat_plan_mutation(EffectSeatPlanMutation::Exact);
+        let error = match refusal {
+            Ok(()) => panic!("{mutation:?} left the seat authority satisfied"),
+            Err(error) => error.to_string(),
+        };
+        // ⛔ The discriminating half. Refusing is not enough: the ruling is that
+        // a seat that cannot be satisfied is refused AS THAT SEAT, never handed
+        // to the generic specialized-only failure. So the refusal must name a
+        // seat, and must not be the generic surface's.
+        assert!(
+            error.contains("seat"),
+            "{mutation:?} was refused without naming a seat: {error}"
+        );
+        assert!(
+            !error.contains("is a specialized-only surface"),
+            "{mutation:?} fell through to the generic specialized-only refusal: {error}"
+        );
+    }
+    // ⛔ Restored, and re-measured rather than assumed: a mutation left set
+    // would make every later test in this binary run against a mutated plan.
+    set_effect_seat_plan_mutation(EffectSeatPlanMutation::Exact);
+    recursive_port_process_compiles(&expr)
+        .expect("the bracket compiles again once the mutation clears");
+}
