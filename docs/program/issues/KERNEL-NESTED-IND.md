@@ -1,7 +1,7 @@
 ---
 id: KERNEL-NESTED-IND
 title: "admit nested strictly-positive inductives in the kernel — structural positivity through declared parameter positions, generated and checked dependent eliminators with one lifted IH per contained recursive occurrence, iota, and surface consumability"
-status: active
+status: ready
 owner: kernel
 size: L
 gate: none

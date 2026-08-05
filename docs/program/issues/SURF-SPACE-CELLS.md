@@ -1,7 +1,7 @@
 ---
 id: SURF-SPACE-CELLS
 title: "The `space` block surface — cells and `becomes` — is unbuilt, while its entire desugaring target (the `State` effect: Get/Put/run_state) is built and live"
-status: active
+status: draft
 owner: language
 size: M–L
 gate: none
@@ -19,8 +19,15 @@ origin: Steward measurement 2026-07-27 at `origin/main = aea07d62`, taken while 
 >
 > ⛔ **The node is NOT done and no successor is scheduled.** Under the operator's
 > ABI wind-down (2026-07-28) Team Language takes no new work after this landing,
-> so the P2 residual below is **parked, not dropped**. It stays `active` so a
-> reader cannot mistake a merged phase for a merged node.
+> so the P2 residual below is **parked, not dropped**.
+>
+> ⛔ **Status is `draft`, and `draft` here does NOT mean unstarted** — P1 landed.
+> It means the P2 residual has no frame, which is the generator's own legend
+> (`draft` = not framed / deps unmet). This node previously read `active` on the
+> reasoning that a reader would otherwise mistake a merged phase for a merged
+> node. That reasoning was wrong twice over: `active` means **a team is
+> building**, no team is, and the anti-merged signal it was reaching for is
+> carried by this block, not by the status field. Corrected 2026-08-05.
 >
 > ⚠ The two blockers the Architect raised against the earlier candidate
 > `31e5f097` are **carried into the parked residual**, not fixed by P1:

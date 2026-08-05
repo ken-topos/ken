@@ -35,9 +35,9 @@
 
 ## LIVE — 2026-08-05 ~07:0xZ · `1e` FALSIFIED; `RT-CONTSRC-PRODUCER-LOCAL` cut
 
-**`origin/main`: `a8e37a3d`** (PR #1412). New node `RT-CONTSRC-PRODUCER-LOCAL`
-is `ready` with a frame; `D7` checkpoint `1f` withdraws `1e`. Verify; do not
-trust this line.
+**`origin/main`: `d4f27582`** (PR #1413). `RT-CONTSRC-PRODUCER-LOCAL` is
+`active` with a frame; `D7` checkpoint `1f` withdraws `1e`. Verify; do not trust
+this line.
 
 ### The one thing to do next
 
@@ -300,10 +300,29 @@ re-measurement.
 | **Doc** | stood down after `DOC-PROGRAM-WAVE-RECONCILE` merged |
 | **Architect** | serving the Runtime ring; last act was the identity acceptance of `70887529` |
 
-**Tracker `active` flags are stale on three nodes** — `KERNEL-NESTED-IND`,
-`SPEC-MISSION-GROUNDING`, `SURF-SPACE-CELLS` all read `active` while their rings
-report no authorized WP. Reconcile at the next tracker pass; an `active` node
-whose ring is idle reads as in-flight work to anyone but me.
+**Tracker statuses reconciled 2026-08-05 ~07:45Z** — four were wrong against the
+generator's own legend, where `active` means **a team is building**:
+
+| node | was | now | why |
+|---|---|---|---|
+| `RT-CONTSRC-PRODUCER-LOCAL` | `ready` | `active` | it IS in flight |
+| `KERNEL-NESTED-IND` | `active` | `ready` | deps met, framed inline, no seat |
+| `SPEC-MISSION-GROUNDING` | `active` | `ready` | three ACs open, no seat |
+| `SURF-SPACE-CELLS` | `active` | `draft` | P1 landed, P2 residual unframed |
+
+**Both of the two nodes that argued for `active` in their own prose used it to
+mean "not merged".** `SURF-SPACE-CELLS` said it stays `active` "so a reader
+cannot mistake a merged phase for a merged node"; `SPEC-MISSION-GROUNDING` said
+the AC reconciliation "is the reason it is `active` rather than `merged`." The
+anti-merged signal those blocks wanted is carried by the blocks themselves. Both
+operative sentences are rewritten, not appended to.
+
+⇒ The releasable-frontier list now shows `KERNEL-NESTED-IND` and
+`SPEC-MISSION-GROUNDING`. **That is accurate and is not a kick order** — the
+single-threaded hold is a release decision, not a dependency, and the tracker is
+generated so it cannot carry the hold. `SPEC-MISSION-GROUNDING` in particular is
+**not** releasable by me: `AC-M3` names a pass `COORDINATION §10⁻a` forbids the
+Steward to request.
 
 ### Unlanded finished work — research, 4 days old
 
