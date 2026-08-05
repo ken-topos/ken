@@ -75,7 +75,8 @@ pub(super) use static_transition::{
 // test profile cannot see.
 #[cfg(test)]
 pub(super) use static_transition::{
-    set_composed_raw_target_defect, set_composed_raw_target_retention, ComposedRawTargetDefect,
+    set_composed_raw_target_defect, set_composed_raw_target_retention,
+    set_continuation_descent_owner_duplication, ComposedRawTargetDefect,
 };
 
 // `D3b` stage-2 controls. ⛔ `#[cfg(test)]` on the RE-EXPORT as well as on the

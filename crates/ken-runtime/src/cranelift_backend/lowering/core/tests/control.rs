@@ -15705,13 +15705,22 @@ fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder()
 /// **Promise class: durable invariant.**
 #[test]
 fn d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_refusal() {
-    use crate::cranelift_backend::planning::ComposedWorkerRouteEligibility;
+    use crate::cranelift_backend::planning::{
+        ComposedWorkerRouteEligibility, ContinuationEmissionOwner,
+    };
     use std::collections::{BTreeMap, BTreeSet};
 
-    type Selector = (StaticOriginId, StaticOriginId, u32, u32);
+    type Selector = (
+        ContinuationEmissionOwner,
+        StaticOriginId,
+        StaticOriginId,
+        u32,
+        u32,
+    );
 
     fn selector_of(unit: &ContinuationUnitView<'_>) -> Selector {
         (
+            unit.emission_owner(),
             unit.producer_construct_origin(),
             unit.continuation_origin(),
             unit.producer_alternative(),
@@ -15739,8 +15748,9 @@ fn d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_ref
         let mut reached_answer = 0usize;
 
         for (selector, members) in &groups {
-            let answered =
-                plan.composed_worker_view(selector.0, selector.1, selector.2, selector.3);
+            let answered = plan.composed_worker_view(
+                selector.0, selector.1, selector.2, selector.3, selector.4,
+            );
 
             let identities = members
                 .iter()
@@ -15840,19 +15850,51 @@ fn d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_ref
             .expect(
                 "the plan must carry some origin no specialization claims as a construct or                  frame origin, or these two controls cannot be posed at all",
             );
+        // ⛔ `D8a` — an owner no unit at any selector carries. Computed the
+        // same way and for the same reason as `foreign` above: reaching for a
+        // neighbouring owner would name a real one.
+        let claimed_owners = units
+            .iter()
+            .map(|unit| unit.emission_owner())
+            .collect::<BTreeSet<_>>();
+        let foreign_owner = units
+            .iter()
+            .map(|unit| ContinuationEmissionOwner::Predeclared(unit.consumer_owner()))
+            .chain(
+                units
+                    .iter()
+                    .map(|unit| ContinuationEmissionOwner::Predeclared(unit.producer_owner())),
+            )
+            .find(|owner| !claimed_owners.contains(owner))
+            .expect(
+                "the plan must carry some predeclared function no specialization names as an \
+                 emission owner, or the owner control cannot be posed at all",
+            );
         for unit in &units {
             let exact = selector_of(unit);
             for (label, perturbed) in [
                 (
-                    "producer Construct occurrence",
-                    (foreign, exact.1, exact.2, exact.3),
+                    "emission owner",
+                    (foreign_owner, exact.1, exact.2, exact.3, exact.4),
                 ),
-                ("frame origin", (exact.0, foreign, exact.2, exact.3)),
-                ("selected alternative", (exact.0, exact.1, exact.2 + 1, exact.3)),
-                ("recursive position", (exact.0, exact.1, exact.2, exact.3 + 1)),
+                (
+                    "producer Construct occurrence",
+                    (exact.0, foreign, exact.2, exact.3, exact.4),
+                ),
+                ("frame origin", (exact.0, exact.1, foreign, exact.3, exact.4)),
+                (
+                    "selected alternative",
+                    (exact.0, exact.1, exact.2, exact.3 + 1, exact.4),
+                ),
+                (
+                    "recursive position",
+                    (exact.0, exact.1, exact.2, exact.3, exact.4 + 1),
+                ),
             ] {
                 let refusal = plan
-                    .composed_worker_view(perturbed.0, perturbed.1, perturbed.2, perturbed.3)
+                    .composed_worker_view(
+                        perturbed.0, perturbed.1, perturbed.2, perturbed.3, perturbed.4,
+                    )
                     .expect_err(
                         "a selector no specialization claims must refuse, so that a consumer \
                          cannot be handed a neighbour's worker",
@@ -15887,6 +15929,7 @@ fn d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_ref
                      discriminating than the three-field one it replaced"
                 );
                 let transplant = plan.composed_worker_view(
+                    right.emission_owner(),
                     right.producer_construct_origin(),
                     left.continuation_origin(),
                     left.producer_alternative(),
@@ -15967,14 +16010,23 @@ fn d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_ref
 /// either.
 #[test]
 fn d7a_the_three_field_selector_collides_where_the_four_field_selector_resolves() {
+    use crate::cranelift_backend::planning::ContinuationEmissionOwner;
     use std::collections::{BTreeMap, BTreeSet};
 
     fn check(plan: &StaticTransitionPlan<'_>) {
         let units = plan.continuation_units().expect("continuation units");
 
         let mut by_text: BTreeMap<(StaticOriginId, u32, u32), Vec<usize>> = BTreeMap::new();
-        let mut by_cause: BTreeMap<(StaticOriginId, StaticOriginId, u32, u32), Vec<usize>> =
-            BTreeMap::new();
+        let mut by_cause: BTreeMap<
+            (
+                ContinuationEmissionOwner,
+                StaticOriginId,
+                StaticOriginId,
+                u32,
+                u32,
+            ),
+            Vec<usize>,
+        > = BTreeMap::new();
         for (index, unit) in units.iter().enumerate() {
             let text = (
                 unit.continuation_origin(),
@@ -15983,7 +16035,13 @@ fn d7a_the_three_field_selector_collides_where_the_four_field_selector_resolves(
             );
             by_text.entry(text).or_default().push(index);
             by_cause
-                .entry((unit.producer_construct_origin(), text.0, text.1, text.2))
+                .entry((
+                    unit.emission_owner(),
+                    unit.producer_construct_origin(),
+                    text.0,
+                    text.1,
+                    text.2,
+                ))
                 .or_default()
                 .push(index);
         }
@@ -16025,7 +16083,9 @@ fn d7a_the_three_field_selector_collides_where_the_four_field_selector_resolves(
             // singleton groups and a conflicting answer would mean the selector
             // in production reads fewer fields than this grouping does.
             if let Err(refusal) =
-                plan.composed_worker_view(selector.0, selector.1, selector.2, selector.3)
+                plan.composed_worker_view(
+                    selector.0, selector.1, selector.2, selector.3, selector.4,
+                )
             {
                 assert!(
                     !format!("{refusal:?}").contains("different full worker identities"),
@@ -16188,9 +16248,9 @@ fn d7a2_the_reconciliation_retains_exactly_the_required_raw_targets() {
         let answered = requirements
             .iter()
             .map(|requirement| {
-                let (construct, frame, alternative, position) = requirement.selector();
+                let (owner, construct, frame, alternative, position) = requirement.selector();
                 let view = plan
-                    .composed_worker_view(construct, frame, alternative, position)
+                    .composed_worker_view(owner, construct, frame, alternative, position)
                     .unwrap_or_else(|error| {
                         panic!("every reconciled selector must answer: {error:?}")
                     });
@@ -16250,6 +16310,7 @@ fn d7a2_the_reconciliation_retains_exactly_the_required_raw_targets() {
                     omitted_selector.1,
                     omitted_selector.2,
                     omitted_selector.3,
+                    omitted_selector.4,
                 )
                 .expect_err("a selector whose raw target was not retained must refuse");
             assert!(
@@ -16263,23 +16324,38 @@ fn d7a2_the_reconciliation_retains_exactly_the_required_raw_targets() {
 
     // ── clause 2: the two inconsistent minting defects ──────────────────
     //
-    // ⛔ Both reach the SAME law, and that is the finding rather than a
-    // weakness: a wrong body and a transplanted construct origin are one defect
-    // seen from two sides — a demand attributed to a selector that does not
-    // resolve to it. Both name real origins, so neither is visible to a check
-    // that only asks whether the body exists.
-    for defect in [
-        ComposedRawTargetDefect::WrongBody,
-        ComposedRawTargetDefect::TransplantConstruct,
+    // ⛔ The two defects reach DIFFERENT laws under `D8a`, and the difference is
+    // itself a measurement rather than bookkeeping.
+    //
+    // Under the four-field selector both reached selector agreement, because
+    // both were the same defect from two sides: a demand attributed to a
+    // selector that does not resolve to it. Owner-qualifying the selector splits
+    // them. A transplanted construct origin now pairs one layer's owner with
+    // another's construct, and the population carries no such pair — so it is
+    // refused by the *selector*, one step earlier, before any worker is
+    // compared. A wrong body leaves the selector intact and is still caught by
+    // agreement. ⇒ The owner does not merely qualify the key; it moves where a
+    // cross-layer transplant is detected.
+    for (defect, expected, why) in [
+        (
+            ComposedRawTargetDefect::WrongBody,
+            "minted for one layer",
+            "the selector still resolves, so only the worker comparison can see this",
+        ),
+        (
+            ComposedRawTargetDefect::TransplantConstruct,
+            "no continuation specialization claims",
+            "owner and construct come from different layers, a pair no unit carries",
+        ),
     ] {
         with_d7a2_reconciliation(true, defect, |plan| {
             let refusal = plan
                 .verify_raw_target_reconciliation()
                 .expect_err("an inconsistently minted requirement must refuse at the gate");
             assert!(
-                format!("{refusal:?}").contains("minted for one layer"),
-                "{defect:?} must reach the selector-agreement refusal, not one it also happens \
-                 to trip further along: {refusal:?}"
+                format!("{refusal:?}").contains(expected),
+                "{defect:?} must reach its own refusal — {why} — not one it also happens to \
+                 trip further along: {refusal:?}"
             );
         });
     }
@@ -16361,4 +16437,176 @@ fn d7a2_the_retained_raw_target_cannot_be_defined_because_its_result_carries_a_r
          incidental failure further along. Anything else means the retained body was blocked \
          somewhere other than the route this row is about: {refusal}"
     );
+}
+
+
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8a` — the emission owner is a function of the
+/// four source coordinates, and the released fork resolves to that branch.**
+///
+/// ## The fork, measured before it was chosen
+///
+/// Either the planner structurally forbids two emission owners for one set of
+/// four source coordinates, or it does not and the owner is a real
+/// discriminator. **It forbids them, for two independent reasons**, and the
+/// second was found by trying to violate the first.
+///
+/// **Reason one — the walks are disjoint.** `continuation_result_origins` does
+/// not descend into `Closure` or `LexicalClosure`; both sit in its no-descent
+/// arm. Every descent root is `worker.body_origin`, a closure's own body child.
+/// So for one `continuation_origin` the seed walk stops at exactly the closure
+/// whose body a descent later roots at, and two descent roots are
+/// nested-or-disjoint because origins form a tree. A producer `Construct` is
+/// reached by exactly one discovery, and its emission owner — decided solely by
+/// that discovery's `enclosing_specialization` — is fixed by where it sits.
+///
+/// **Reason two — availability, and this one is measured.**
+/// `set_continuation_descent_owner_duplication` removes reason one exactly:
+/// every descent is pushed a second time with `enclosing_specialization: None`,
+/// so the same nested producers are discovered as though top-level. That does
+/// **not** yield two owners. Planning refuses first, on both plans, with
+///
+/// ```text
+/// a continuation coordinate is not present in the lexical environment in force
+/// at the emission seat
+/// ```
+///
+/// ⇒ A nested producer's continuation coordinate is not available in the raw
+/// owner's environment, so the second owner cannot be constructed even when the
+/// traversal is made to offer it. That is the `D5a` availability law standing
+/// behind the traversal, and it is why this is a structural fact rather than an
+/// artifact of one walk's shape.
+///
+/// **MEASURED**: the invariant holds exhaustively on both plans over a
+/// non-degenerate population — more than one source coordinate, and more than
+/// one owner across them, so "one owner each" is distinguished from "one owner
+/// overall". Removing reason one produces a refusal, not a collision, on both
+/// plans, with the disarmed run as its positive control.
+///
+/// **THE GAP**: the owner-collision refusal encoded in
+/// `composed_worker_view` is therefore **unreachable and unexercised** — read it
+/// as defence in depth against a future change to the walk, not as a tested
+/// guard. Nothing available here can present a plan carrying two owners at one
+/// coordinate, because the planner refuses to build one. The owner's *selector*
+/// role is separately live: supplying an owner no unit carries reaches the
+/// zero-answer refusal, controlled in
+/// [`d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_refusal`].
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d8a_one_emission_owner_answers_one_composed_source_coordinate() {
+    use crate::cranelift_backend::planning::{
+        set_continuation_descent_owner_duplication, ContinuationEmissionOwner,
+    };
+    use std::collections::{BTreeMap, BTreeSet};
+
+    type Source = (StaticOriginId, StaticOriginId, u32, u32);
+
+    fn owners_by_source(
+        plan: &StaticTransitionPlan<'_>,
+    ) -> BTreeMap<Source, BTreeSet<ContinuationEmissionOwner>> {
+        let mut grouped: BTreeMap<Source, BTreeSet<ContinuationEmissionOwner>> = BTreeMap::new();
+        for unit in plan.continuation_units().expect("units").iter() {
+            grouped
+                .entry((
+                    unit.producer_construct_origin(),
+                    unit.continuation_origin(),
+                    unit.producer_alternative(),
+                    unit.recursive_position(),
+                ))
+                .or_default()
+                .insert(unit.emission_owner());
+        }
+        grouped
+    }
+
+    let exact = |plan: &StaticTransitionPlan<'_>| {
+        let grouped = owners_by_source(plan);
+        for (source, owners) in &grouped {
+            assert_eq!(
+                owners.len(),
+                1,
+                "source coordinate {source:?} carries {owners:?}. A producer Construct is reached \
+                 by exactly one continuation discovery, so more than one owner here means the \
+                 seed and descent walks stopped being disjoint"
+            );
+        }
+        // ⛔ Two non-vacuity clauses, and the second is the one that matters.
+        // With a single coordinate the law is trivially true; with a single
+        // owner in the whole plan, "one owner per coordinate" is
+        // indistinguishable from "one owner overall" and the row would stay
+        // green under a planner that had lost the distinction entirely.
+        assert!(
+            grouped.len() > 1,
+            "the plan must carry more than one source coordinate, or the law holds trivially"
+        );
+        let distinct = grouped.values().flatten().copied().collect::<BTreeSet<_>>();
+        assert!(
+            distinct.len() > 1,
+            "the plan must carry at least two DISTINCT emission owners across its coordinates, \
+             or nothing here separates 'one owner per coordinate' from 'one owner overall': \
+             {distinct:?}"
+        );
+        assert!(
+            distinct
+                .iter()
+                .any(|owner| matches!(owner, ContinuationEmissionOwner::Predeclared(_)))
+                && distinct
+                    .iter()
+                    .any(|owner| matches!(owner, ContinuationEmissionOwner::Specialization(_))),
+            "and the two must be one of each CLASS -- two predeclared ids would leave the \
+             specialization-owned arm unrepresented: {distinct:?}"
+        );
+    };
+
+    // ⛔ The positive control, run FIRST and with the hook provably disarmed:
+    // both plans build. Without it, the refusal below is equally consistent with
+    // a witness that never planned.
+    set_continuation_descent_owner_duplication(false);
+    with_d5a_witness_plan(exact);
+    let expr = crate::cranelift_backend::planning::contspec_nested_fixture();
+    let nested = plan_static_transition_graph(&expr, &BTreeMap::new())
+        .expect("the nested continuation fixture plans with the hook disarmed");
+    exact(&nested);
+
+    // ── removing reason one does not produce reason one's collision ─────
+    let plan_both = |armed: bool| {
+        set_continuation_descent_owner_duplication(armed);
+        let (entry, declarations) =
+            crate::cranelift_backend::test_objects::px8tr_nested_post_effect_planning_inputs();
+        let declarations = declarations
+            .iter()
+            .map(|declaration| (declaration.symbol.as_str(), declaration))
+            .collect::<BTreeMap<_, _>>();
+        let witness = plan_static_transition_graph_with_symbols(
+            &entry,
+            &declarations,
+            &crate::NativeProcessSymbols::legacy_prelude(),
+            AbiRootIngress::Value,
+            true,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"));
+        let expr = crate::cranelift_backend::planning::contspec_nested_fixture();
+        let nested = plan_static_transition_graph(&expr, &BTreeMap::new())
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"));
+        set_continuation_descent_owner_duplication(false);
+        (witness, nested)
+    };
+
+    let (witness, nested) = plan_both(true);
+    for (label, outcome) in [("the D5a witness", witness), ("contspec_nested", nested)] {
+        let refusal = outcome.expect_err(&format!(
+            "{label}: discovering a nested producer as though top-level must refuse. If it \
+             planned, the second owner IS constructible and D8a resolves to the discriminator \
+             branch instead -- which would make the invariant above wrong, not merely untested"
+        ));
+        assert!(
+            refusal.contains("not present in the lexical environment in force at the emission seat"),
+            "{label}: the refusal must be the availability law -- that is the second, independent \
+             reason the second owner cannot exist. Another refusal would mean the duplication \
+             broke something else and says nothing about owners: {refusal}"
+        );
+    }
 }

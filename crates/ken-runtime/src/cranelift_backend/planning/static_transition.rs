@@ -2014,6 +2014,7 @@ impl ComposedWorkerView {
 /// layers could both plausibly name.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) struct ComposedRawTargetRequirement {
+    emission_owner: ContinuationEmissionOwner,
     producer_construct_origin: StaticOriginId,
     continuation_origin: StaticOriginId,
     producer_alternative: u32,
@@ -2027,8 +2028,15 @@ impl ComposedRawTargetRequirement {
     /// The exact four-field causal selector this requirement was minted under.
     pub(in crate::cranelift_backend) fn selector(
         &self,
-    ) -> (StaticOriginId, StaticOriginId, u32, u32) {
+    ) -> (
+        ContinuationEmissionOwner,
+        StaticOriginId,
+        StaticOriginId,
+        u32,
+        u32,
+    ) {
         (
+            self.emission_owner,
             self.producer_construct_origin,
             self.continuation_origin,
             self.producer_alternative,
@@ -7561,6 +7569,32 @@ struct ContinuationDiscovery {
 #[cfg(test)]
 thread_local! {
     static WEAKEN_CONTINUATION_DECREASING_MEASURE: Cell<bool> = const { Cell::new(false) };
+    static DUPLICATE_DESCENT_AS_TOP_LEVEL: Cell<bool> = const { Cell::new(false) };
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8a` — instantiate the second emission owner.**
+///
+/// Armed, every descent into a selected worker body is pushed a **second** time
+/// with `enclosing_specialization: None`, so the same nested producer
+/// `Construct` occurrences are also discovered as though they sat at a top-level
+/// computational frame. Those discoveries intern real specializations, through
+/// the real interning path, whose four source coordinates are identical to the
+/// genuine ones and whose emission owner is `Predeclared` instead of
+/// `Specialization`.
+///
+/// ⛔ This is the only way to instantiate the second owner, and that is the
+/// measurement rather than a limitation of the instrument: production cannot
+/// produce it. `continuation_result_origins` does not descend into
+/// `Closure`/`LexicalClosure`, and every descent root is a closure's body child,
+/// so for one `continuation_origin` the seed walk and each descent walk cover
+/// **disjoint** occurrence subtrees. A producer `Construct` inside a worker body
+/// is therefore reachable from exactly one discovery, and its emission owner is
+/// a function of its source coordinates. Arming this hook removes precisely that
+/// disjointness — nothing else — which is what makes the resulting refusal
+/// attributable to the owner and not to some other damage.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_continuation_descent_owner_duplication(armed: bool) {
+    DUPLICATE_DESCENT_AS_TOP_LEVEL.with(|cell| cell.set(armed));
 }
 
 fn build_continuation_specialization_plan(
@@ -7837,6 +7871,16 @@ fn build_continuation_specialization_plan(
                             result_root: worker.body_origin,
                             enclosing_specialization: Some(target),
                         });
+                        // `D8a` — the same descent, as though it were top level.
+                        // See `set_continuation_descent_owner_duplication`.
+                        #[cfg(test)]
+                        if DUPLICATE_DESCENT_AS_TOP_LEVEL.with(Cell::get) {
+                            pending.push(ContinuationDiscovery {
+                                continuation_origin: discovery.continuation_origin,
+                                result_root: worker.body_origin,
+                                enclosing_specialization: None,
+                            });
+                        }
                     }
                 }
             }
@@ -11339,12 +11383,14 @@ impl<'src> StaticTransitionPlan<'src> {
     #[cfg_attr(not(test), allow(dead_code))]
     pub(in crate::cranelift_backend) fn composed_worker_view(
         &self,
+        emission_owner: ContinuationEmissionOwner,
         producer_construct_origin: StaticOriginId,
         continuation_origin: StaticOriginId,
         producer_alternative: u32,
         recursive_position: u32,
     ) -> Result<ComposedWorkerView, CraneliftBackendError> {
         let answer = self.composed_worker_view_unreconciled(
+            emission_owner,
             producer_construct_origin,
             continuation_origin,
             producer_alternative,
@@ -11405,6 +11451,7 @@ impl<'src> StaticTransitionPlan<'src> {
             .iter()
             .map(|unit| {
                 (
+                    unit.emission_owner(),
                     unit.producer_construct_origin(),
                     unit.continuation_origin(),
                     unit.producer_alternative(),
@@ -11416,10 +11463,16 @@ impl<'src> StaticTransitionPlan<'src> {
         selectors.dedup();
 
         let mut requirements = Vec::with_capacity(selectors.len());
-        for (construct, frame, alternative, position) in selectors {
-            let worker = self
-                .composed_worker_view_unreconciled(construct, frame, alternative, position)?;
+        for (owner, construct, frame, alternative, position) in selectors {
+            let worker = self.composed_worker_view_unreconciled(
+                owner,
+                construct,
+                frame,
+                alternative,
+                position,
+            )?;
             requirements.push(ComposedRawTargetRequirement {
+                emission_owner: owner,
                 producer_construct_origin: construct,
                 continuation_origin: frame,
                 producer_alternative: alternative,
@@ -11543,9 +11596,14 @@ impl<'src> StaticTransitionPlan<'src> {
         let requirements = self.composed_raw_target_requirements()?;
 
         for requirement in &requirements {
-            let (construct, frame, alternative, position) = requirement.selector();
-            let resolved = self
-                .composed_worker_view_unreconciled(construct, frame, alternative, position)?;
+            let (owner, construct, frame, alternative, position) = requirement.selector();
+            let resolved = self.composed_worker_view_unreconciled(
+                owner,
+                construct,
+                frame,
+                alternative,
+                position,
+            )?;
             if resolved != requirement.worker {
                 return Err(planner_error(
                     "a raw-target requirement's own four-field selector resolves to a different \
@@ -11607,14 +11665,47 @@ impl<'src> StaticTransitionPlan<'src> {
     /// the split; only the population question is deferred.
     fn composed_worker_view_unreconciled(
         &self,
+        emission_owner: ContinuationEmissionOwner,
         producer_construct_origin: StaticOriginId,
         continuation_origin: StaticOriginId,
         producer_alternative: u32,
         recursive_position: u32,
     ) -> Result<ComposedWorkerView, CraneliftBackendError> {
+        let units = self.continuation_units()?;
+
+        // ⭐ `D8a` — the owner invariant, checked before the owner is used to
+        // select. The four source coordinates determine the emission owner:
+        // `continuation_result_origins` does not descend into closures and every
+        // descent root is a closure's body child, so for one frame the seed walk
+        // and each descent walk cover disjoint occurrence subtrees and a
+        // producer `Construct` is reached by exactly one discovery.
+        //
+        // ⛔ It is encoded rather than assumed because that disjointness lives in
+        // a traversal two planes away from here. A reader of this method cannot
+        // see it, a change to the walk would not red anything here, and the cost
+        // of being wrong is a consumer handed one of two owners' workers with no
+        // signal. `set_continuation_descent_owner_duplication` removes exactly
+        // that disjointness and this refusal is what catches it.
+        let mut owners = BTreeSet::new();
+        for unit in &units {
+            if unit.producer_construct_origin() == producer_construct_origin
+                && unit.continuation_origin() == continuation_origin
+                && unit.producer_alternative() == producer_alternative
+                && unit.recursive_position() == recursive_position
+            {
+                owners.insert(unit.emission_owner());
+            }
+        }
+        if owners.len() > 1 {
+            return Err(planner_error(
+                "two emission owners answer one composed source coordinate; a producer Construct                  occurrence is reached by exactly one continuation discovery, so this is a                  planner invariant failure and never a choice between owners",
+            ));
+        }
+
         let mut answer: Option<ComposedWorkerView> = None;
-        for unit in &self.continuation_units()? {
-            if unit.producer_construct_origin() != producer_construct_origin
+        for unit in &units {
+            if unit.emission_owner() != emission_owner
+                || unit.producer_construct_origin() != producer_construct_origin
                 || unit.continuation_origin() != continuation_origin
                 || unit.producer_alternative() != producer_alternative
                 || unit.recursive_position() != recursive_position
@@ -11638,10 +11729,10 @@ impl<'src> StaticTransitionPlan<'src> {
         }
         let answer = answer.ok_or_else(|| {
             planner_error(
-                "no continuation specialization claims this producer Construct occurrence, \
-                 computational frame, selected alternative and ruled recursive position, so \
-                 there is no planner-issued worker provenance to project and nothing may be \
-                 reconstructed from the closure occurrence's shape instead",
+                "no continuation specialization claims this emission owner, producer Construct \
+                 occurrence, computational frame, selected alternative and ruled recursive \
+                 position, so there is no planner-issued worker provenance to project and \
+                 nothing may be reconstructed from the closure occurrence's shape instead",
             )
         })?;
         Ok(answer)
