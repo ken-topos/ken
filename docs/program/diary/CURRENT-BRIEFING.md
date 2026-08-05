@@ -33,23 +33,30 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~09:5xZ · `D2b` QA-APPROVED; `D3` held on an ABI ruling
+## LIVE — 2026-08-05 ~10:0xZ · `D2b` QA-APPROVED; `D3` BUILDING after the ruling
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-⛔ **NOTHING. THE IMPLEMENTER IS COMPACTED AND ITS ROUSE IS DELIBERATELY HELD.**
-⛔ **Do not wake `runtime-implementer`** until the Architect resolves the `D3`
-ABI-authority question at **`evt_c66k8f692sd0`**. `runtime-leader` set that hold
-explicitly (`evt_12766m4aybe6p`) when it asked for the compaction. ⛔ A
-compacted seat sitting at an empty composer is the exact shape of a seat that
-looks stranded and is not — **this one is idle ON PURPOSE.**
+**Nothing — `D3` is BUILDING.** ⭐ **The rouse hold is LIFTED and this file no
+longer asks you to withhold a wake.** The Architect ruled at
+**`evt_3xyy1fq66tyvp`** (09:48) and `runtime-leader` re-released `D3` at
+**`evt_6zr8a4h90c7rp`** (09:51); `runtime-implementer` picked it up and was
+`Architecting` at 4m, ctx 11%. Next expected event is the `D3` report.
 
-**The Architect is awake on it** — confirmed by pane (`Working`, having pulled
-`get_recent_context`), not by the posted mention. So the ring is *blocked*, not
-*stalled*, and there is nothing to nudge.
+⛔ **The ruling, so it is not re-litigated:** `AbiContinuationInputAuthority`
+carries a **closed tagged provenance sum** — `EntryAbi { source_owner }` |
+`ProducerLocal { binding_owner }` — keeping ordinal and affinity. A domain-total
+bare owner was **rejected as lossy**: it collapses `EntryAbi { source_owner: X }`
+and `ProducerLocal { binding_owner: X }` into the same value.
+
+⚠ **It woke on the mention, and that contradicts this file's own wake-asymmetry
+claim below.** The standing note says a Claude implementer's mention push never
+reaches the session. It did here. ⛔ Do not rely on either reading — **read the
+pane before rousing**, which is what caught it. I did not establish the
+mechanism, so this is an observation, not a retraction.
 
 **`D2b` is QA-APPROVED at exact `7316e13a`** (`evt_3w4s25ta13hc4`), lineage
 `e6d4f085` (base) → `2bd724cd` (record) → `7316e13a`. `D3` was released on top
@@ -57,21 +64,14 @@ looks stranded and is not — **this one is idle ON PURPOSE.**
 (`evt_5pqxd21sw5m57`) — branch free, tree clean. ⛔ No merge is owed by me: the
 node is mid-flight and the branch accumulates until the WP completes.
 
-**The question the wake waits on**, so it is not re-derived: resolving
-`ProducerLocal` through `binding_owner` via a domain-total provenance owner
-preserves owner meaning, but the existing `source_owner` cross-check then no
-longer distinguishes `EntryAbi {X, position}` from `ProducerLocal` in owner `X`.
-The alternative adds a domain discriminant to ABI authority. That is a real
-narrowing of a cross-check, which is why it is the Architect's call and not
-mine.
-
 ⭐ **This ring keeps stopping clean rather than half-applying, twice now.** Both
 times it posted the scoping instead of holding it in context, so compaction cost
 none of it. Read the stops as the frames working, not as under-delivery.
 
-**`D3`, `D4`, candidate, QA, `D6` closure, `#27`/case-emission, the call-result
-SCC and downstream `D7` all remain held.** WIP clock: derive it from the latest
-reset event in the thread, never from a stamped deadline.
+**`D4`, candidate, QA, `D6` closure, `#27`/case-emission, the call-result SCC
+and downstream `D7` all remain held.** ⛔ `D3` is NOT among them any more — it is
+in flight. WIP clock: derive it from the latest reset event in the thread, never
+from a stamped deadline.
 
 ### Where the node stands
 
@@ -80,7 +80,7 @@ reset event in the thread, never from a stamped deadline.
 | `D0` `12d9612a` (zero delta), `D1` `77a24320` | accepted `evt_5zkydewv5kspb` |
 | `D2` identity + value contract | accepted preservation at exact `e6d4f085` |
 | `D2b` immediate availability | **QA-APPROVED** exact `7316e13a` — `evt_3w4s25ta13hc4` |
-| `D3` | released `evt_7rk80sgaq07fg`, **scoped, zero edits** — held on `evt_c66k8f692sd0` |
+| `D3` | **BUILDING** — re-released `evt_6zr8a4h90c7rp` after ruling `evt_3xyy1fq66tyvp` |
 | `D4` | recut as SET EQUALITY, held |
 
 **`D2`'s route was blocked once and corrected twice, and both stops were
