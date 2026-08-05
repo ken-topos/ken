@@ -2416,16 +2416,62 @@ family — that is a measurement nobody has taken.
      **The control is therefore two ordered cumulative checkpoints, not one
      pair.** Neither may be skipped, and the second may not be measured first:
 
-     1. **Restore the framed `#23` producer on the current lineage**, under the
-        contract this frame already states in *What the replacement owes*: the
-        complete ordered capture contract revalidated at consumption (ordinal,
-        source provenance, owner, expected phase/lane, lifetime, exact-once
-        producer authority — `capture_count` alone is insufficient); the entire
-        environment preflighted before allocation; carried ordinary captures
-        passing unchanged; specialized ordinary captures crossing the existing
-        one-way producer exactly once; and nested callable/control capsules
-        still refusing before allocation with every allocation and publication
-        counter at zero. `D5a`'s marker semantics are preserved, not adjusted.
+     1. **Make the retained callable's capture edge phase-bearing, and close its
+        pre-emission gate** — under the contract this frame already states in
+        *What the replacement owes*: the complete ordered capture contract
+        revalidated at consumption (ordinal, source provenance, owner, expected
+        phase/lane, lifetime, exact-once producer authority — `capture_count`
+        alone is insufficient); the entire environment preflighted before
+        allocation; carried ordinary captures passing unchanged; specialized
+        ordinary captures crossing the existing one-way producer exactly once;
+        and nested callable/control capsules still refusing before allocation
+        with every allocation and publication counter at zero. `D5a`'s marker
+        semantics are preserved, not adjusted.
+
+        > **LOCALIZED 2026-08-05 (Architect `evt_4wgqmy49rtszv`) — this
+        > checkpoint said "restore the framed `#23` producer", and the `#23`
+        > producer is not what refuses.** Measured on `ae64f687`: `lower_binder`'s
+        > mixed-phase route is present and correct, and the row never reaches it.
+        > The first refusal is the **generic `LexicalClosure` value arm of
+        > `lower_expr`** — `lowering/core.rs`, the site commented *D7, site 2 of
+        > 3* — which has no mixed-phase route and folds unconditionally through
+        > `specialized_operands_at(.., "a closure capture")`. The exact seat is
+        > closure origin `381` / body origin `375`, five ordinary captures with
+        > phases `S,S,C,C,C`, at **constructor-field position 1** of `Vis` parent
+        > `386`. Body `375` is already in `worker_templates`, so this is a **real
+        > planned static-worker member reaching the late generic `Closure` arm** —
+        > the case this frame's own matrix-omission law says must fail in
+        > planning and may not fall through there.
+        >
+        > **It is not a capsule**, so the nested-callable hard stop does not fire;
+        > `D5a`'s marker semantics were neither reverted, weakened, nor
+        > special-cased. The `#23` attribution above still holds for **ownership**
+        > — this is that population — but the **repair site** is the
+        > closure-capture edge, not the producer.
+        >
+        > **The mechanism is already framed and needs no exception.** Per the
+        > *Row: the closure-capture cell* section, `Closure` and
+        > `DeclarationClosure` stay specialized invocation-local control capsules
+        > while their **capture edges become `LoweringOperand`**, expressly
+        > superseding `C1`/`AC-C4`'s single-field statement for capture edges
+        > only. So: `Lowered::Closure.captures` and
+        > `Lowered::DeclarationClosure.captures` become `Vec<LoweringOperand>`; a
+        > carried capture gains **no** `LoweredVariant`, disposition, encoding,
+        > inverse conversion, carrier tag, or durable slot; site-2 lexical
+        > captures keep the operands lowering already produced (`S,S,C,C,C` stays
+        > `S,S,C,C,C`); seed captures are wrapped explicitly `Specialized`;
+        > `lower_binder` and `StaticWorkerBinding` keep their narrower semantics,
+        > so a constructor field does **not** become a `StaticWorkerBinding` and
+        > the value / aggregate-field / match-scrutinee refusals stay correct.
+        > Every consumer of the widened field dispatches
+        > `Specialized`/`Carried` **exhaustively** — no wildcard, no
+        > `specialized_operands_at` fallback.
+        >
+        > **The Architect ruled that no recut was required to unblock this**; the
+        > correction above is to the checkpoint's own localization, so QA does not
+        > verify a producer that was never broken. No scope, node, lane, or
+        > disposition changes: no `AC-C4` exception, no callable carrier, no
+        > `B2F` lane, no planner-population or ABI-shape widening.
      2. **Then close the exact `264 -> 262 / position 1` consumer** with the
         retained `ae64f687` mechanism: the exact planned seat is claimed, the
         real row returns `InvalidBounds`, and shared-host dispatch count is
