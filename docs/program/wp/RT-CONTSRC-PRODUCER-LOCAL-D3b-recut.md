@@ -157,6 +157,18 @@ a half-stamped claim. Today the same zero/multiple refusal exists but fires at
 first use, which means a plan carrying an unresolvable frame is **accepted by
 planning** and only refused if and when something reaches it.
 
+⚠ **A sequencing fact, measured, that bears on when this should land.** The path
+the two-stage machinery governs is **planned but not consumed**. The planner
+takes the generated-context emitter arm 78 times, so those specializations do
+carry `EntryFrame{GeneratedContext}` claims — but across both lowering seams,
+**0 of 60** observations held a `Specialization` emission owner; every consumer
+held a predeclared frame. So the machinery would land **unexercised by any
+behavioural test**, and its zero/multiple-match refusals could only be reached by
+a directly constructed planner row. That is an argument about *validation
+strength*, not about whether to build it: a guard nothing reaches is exactly the
+kind that rots. Worth the Architect's attention when sequencing it against `D4b`,
+which is what would make generated-context emission reachable.
+
 The design is settled and the blast radius is small: projections keep a draft
 typed with a `ContinuationFrameRequirement`; a pass after
 `plan_continuation_contexts` builds the finalized views into per-unit and
