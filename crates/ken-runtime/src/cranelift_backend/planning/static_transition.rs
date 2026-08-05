@@ -6415,11 +6415,26 @@ fn exact_continuation_source_environment(
             "computational continuation lacks its complete semantic value environment",
         ));
     }
-    // `D4b` — record this candidate's FULL required vector and the outcome the
-    // take-loop below will reach. ⛔ Recorded before the loop runs, and the
-    // outcome is computed from the same two clauses rather than from the loop's
-    // return: the control's whole subject is that `admitted` is exactly
-    // "every required position closed and unambiguous", with no third modality.
+    // `D4b` — record this candidate's FULL required vector, and let the
+    // take-loop below decide the outcome.
+    //
+    // ⭐ **The mechanism, exactly.** The vector is captured here, before the
+    // loop runs, and the record is pushed carrying `false` — NOT admitted. The
+    // only thing that ever flips it to `true` is the assignment after the loop
+    // (below), which is reachable only when the loop has fallen through every
+    // required position without returning. So the recorded outcome is
+    // **production's own control flow**: reaching that line is what "admitted"
+    // means, and the loop's two `return Ok(None)` clauses simply leave the
+    // record as it was pushed.
+    //
+    // ⛔⛔ **This is deliberately NOT a predicate written beside the loop, and
+    // the earlier form was.** That form recomputed the outcome as
+    // "every position closed and unambiguous" right here — which made the
+    // control compare the instrument with itself, so an extra route modality
+    // installed in the real loop passed unnoticed. That was measured, not
+    // supposed: a mutation admitting an all-`Open` vector survived until this
+    // was restructured. The control's subject is that admission *equals* that
+    // predicate, so the instrument must not be allowed to assume it.
     #[cfg(test)]
     let recorded = if D4B_ADMISSION_ARMED.with(std::cell::Cell::get) {
         let verdicts = reached
@@ -6435,12 +6450,9 @@ fn exact_continuation_source_environment(
                 }
             })
             .collect::<Vec<_>>();
-        // ⛔⛔ Recorded as NOT admitted, and flipped only where the take-loop
-        // below actually falls through. The outcome must be production's own
-        // control flow, never a predicate written beside it -- a re-implemented
-        // decision here would make the control compare the instrument with
-        // itself, and an extra route modality installed in the real loop would
-        // pass unnoticed. (Measured: it did, before this was restructured.)
+        // Pushed as NOT admitted. ⛔ The `false` is load-bearing, not a
+        // placeholder -- see the mechanism note above; nothing here may compute
+        // the outcome.
         Some(D4B_ADMISSION.with(|ledger| {
             let mut ledger = ledger.borrow_mut();
             ledger.push((verdicts, false));
