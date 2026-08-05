@@ -1,7 +1,7 @@
 ---
 id: RT-UNIT-CLOSURE-CONVERT
 title: "Activate function-unit closure conversion for predeclared units — a retained nested body's free de Bruijn references become declared typed capture slots, reconstructed at unit entry from exact caller operands"
-status: active
+status: closed
 owner: runtime
 size: TBD
 gate: none
@@ -116,7 +116,42 @@ a `depends_on` edge**, because an edge both ways is a cycle the generator
 cannot resolve. Same pattern as `RT-CONTSRC-PRODUCER-LOCAL` itself against
 `RT-DECL-CLOSURE-PORT`: both `active`, one branch, sequenced by the frame.
 
-## Status: `active` — this node does NOT wait for a merge
+## ⛔ CLOSED 2026-08-05 — the premise was FALSE. Read this before anything below.
+
+**`closed` means resolved-without-landing.** Nothing here was built, and
+**nothing below this section should be built.** Everything from "The gap,
+exactly" onward is retained as the record of a premise that measurement
+retired — ⛔ **it is history, not a specification.** Nothing depends on this
+node (`blocks: []`, and no other node's `depends_on` names it), so closing it
+strands no work.
+
+**What three measurement passes established**, on
+`wp/RT-DECL-CLOSURE-PORT-typed-units` (records at
+`docs/program/wp/RT-UNIT-CLOSURE-CONVERT-D1{,b,c}.md`):
+
+| pass | finding |
+|---|---|
+| `D1` `bc754c03` | the runtime closure-conversion substrate is **complete** — all five `RT-FNSPLIT-B2R` elements present, none a stub, live for 127 closures |
+| `D1b` `a8b66c5c` | production's capture basis is `(0..runtime_depth).map(Var)` — **positional and total by construction**; nothing inspects a body |
+| `D1c` `e27d297a` | the five failing units **never reach that path**: zero records across the whole `ken-runtime` **and** `ken-elaborator` lib suites. The empty list is a **fixture literal** in `test_objects.rs` |
+
+**Architect ruling `evt_5g7kaec1xzaf6` then settled the contract:**
+`LexicalClosure.captures` must be **total** for its body's ambient lexical
+demand, with no lawful undeclared caller tail. ⇒ The two fixtures are
+**malformed**; there is **no closure-conversion substrate gap** and this node
+had nothing to activate.
+
+⭐ **The residual work — correcting those two fixtures — is
+[[RT-CONTSRC-PRODUCER-LOCAL]] `D5`**, folded there because it is small, in the
+same crate, on the same branch, and is that node's own candidate gate. ⛔ Do not
+re-open this node to hold it.
+
+⛔ **Do not resurrect the title's mechanism.** "Free de Bruijn references become
+declared typed capture slots" describes work the ruling says must **not** be
+done — no `CaptureSlot` identity field, no synthesized capture, no padding or
+`Var` shifting, no caller tail.
+
+## Superseded: Status `active` — this node does NOT wait for a merge
 
 **Released `D1` only, 2026-08-05, from exact `b3ba2820` on
 `wp/RT-DECL-CLOSURE-PORT-typed-units`** (Steward sequencing ruling; Architect
