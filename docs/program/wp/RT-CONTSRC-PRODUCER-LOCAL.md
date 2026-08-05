@@ -1536,6 +1536,101 @@ all six failing `D0` rows.
   > hard-stops to me rather than being worked around. No production mechanism
   > change is authorized by the witness continuation.
 
+  ###### `D8e` WITNESS BUILT at exact `89e36ec1` — POSITIVE ROUTE PROVED, and a WHOLE-NODE HARD STOP
+
+  **`745 passed / 2 failed / 1 ignored`**, up exactly the three new rows from
+  `70171a99`; no new reds, both failures the unchanged `d86be55d` baseline pair;
+  production and test profiles checked separately; **test-only, no production
+  file touched.**
+
+  **The four facts DO coincide, lawfully, through the ordinary production
+  path.** The witness proves one `D8d` binding, one `D8e` consumption before the
+  value-only path, and an emitted `RawWorker` call with the exact raw run — one
+  source argument, zero captures, no generated-context suffix. **The emitted
+  call is read back from `WorkerCallEmitted`** — the emitter's own log, written
+  **after the instruction exists**, not the binding that requested it. Because
+  the call has a non-empty argument run, that same event is the evidence the
+  arguments went through `CallArgument`; a zero-arg call would bypass it.
+
+  **Two discriminating controls.** Moving the callee one index onto the
+  neighbouring induction hypothesis — a **real, live, adjacent binding of the
+  same call arity**, not a fabricated index — leaves installation at 1 and
+  consumption at 0, so consumption is attributable to **the exact binding**
+  rather than to "some callable in scope". Swapping the bridge to an ordinary
+  `Match`, so `lower_expr` lowers the same call, installs the same binding and
+  **refuses in value position** — `D8d`'s fail-closed guard surviving `D8e`.
+  Mutation-proved after the real work was committed: disarming the consumer reds
+  only the positive row at `(1, 0)`; disarming the installation reds all three at
+  `(0, 0)`. **The two mutations red different clauses**, which is what makes the
+  rows separable rather than one aggregate.
+
+  > ###### CORRECTION — my stated whole-node condition did NOT fire. A DIFFERENT one did.
+  >
+  > The block above says the whole-node finding is *"the four cannot be made to
+  > coincide lawfully."* **They did coincide.** The blocker is **not the
+  > conjunction — it is what the conjunction NECESSARILY CREATES.**
+  >
+  > **Interning the specialization that supplies the `D8a` target necessarily
+  > projects a causal call onto the same emitting unit.**
+  > `continuation_result_edges_owned_by` is keyed on the emission owner and
+  > admits **every** projected call, so the edge is **not optional — it is the
+  > same act as satisfying fact 4.**
+  >
+  > That edge has exactly two discharges and the composed deferred-constructor
+  > path can perform **neither**:
+  >
+  > | discharge | why the composed path cannot |
+  > |---|---|
+  > | a claim | `claim_and_call_continuation` has **one** call site in the crate, on the ordinary producer branch of the same `Construct` arm the composed path returns **before**. The early return to the selected field is what makes it unreachable |
+  > | a unit result that **is** the planned producer constructor | the composed path exists precisely to **eliminate that constructor in place** |
+  >
+  > So the compile refuses at the **`D5a` detached-result seat**, and the row
+  > asserts that exact refusal. **The outer raw-body unit-result closure refusal
+  > — the one my law named — is independently NOT reached.**
+  >
+  > **My condition was necessary but not exhaustive.** I anticipated failing to
+  > reach the conjunction and wrote only that trigger; the real failure is
+  > downstream of a conjunction that succeeded. **A reader matching against the
+  > written condition alone would conclude no whole-node finding occurred.**
+
+  **THE FABRICATION THAT WOULD HAVE GONE GREEN, found and refused.** Giving the
+  unit a **different occurrence of the same constructor** as its result reaches
+  the second discharge — **the identity check is per-symbol** — while emitting a
+  specialization call for the **wrong occurrence**. Recorded so nobody
+  rediscovers it as a fix. A witness bought that way is worse than the stop.
+
+  **Three shape constraints, each measured and recorded at the fixture:** the
+  declaration body may not **be** the `ComputationalMatch` (the source root is
+  the planned seed node, which for that shape is the producer `Construct`, so
+  the continuation value-environment walk starts **below its own
+  continuation**); the wrapper may not be a `Match` (that is the
+  `MatchScrutineeRecursor` residual, which selects `RecursiveDescent`, and that
+  lane **defines no units**, so fact 3 fails **silently**); and the selected
+  field's arms must be **statically selectable**.
+
+  **`D8d`'s sentinel is RE-SCOPED, not deleted.** Its wider claim — the
+  preconditions *"do not coincide anywhere in this suite"* — is now false, and
+  the retirement is recorded in the row with a note **not to restore the
+  wording**. What survives is the narrower fact about the two populations `D8d`
+  landed with: **neither crosses over**. That is the control keeping `D8e`'s
+  witness a **construction rather than an inheritance**.
+
+  **The refusal assertion is a labelled sentinel: it reds the moment the
+  composed path acquires a lawful discharge**, and when it does, the three
+  counter clauses above it are already the positive route, green.
+
+  ###### STANDING, third occurrence — SATISFYING a required fact can CREATE an undischargeable obligation
+
+  `D7a` refused the very target `D7b` had to make callable. `D7a2`'s retention
+  reopened the exact boundary the generated context exists to avoid. Now fact 4
+  **projects an edge the composed path cannot discharge**. **Each surfaced only
+  when something downstream tried to use the thing**, never when the fact itself
+  was established.
+
+  **So a checkpoint that establishes a required fact owes a statement of what
+  that fact OBLIGES, not only what it provides.** On this node, ask it at the
+  point the fact is minted rather than at the point it is consumed.
+
   **`D8f` — checked-marker occupancy.** The witness places an ordinary
   selected-argument call **before** the checked IH call inside one checked
   wrapper. So *"a marker is pending"* **cannot** mean *"the next static-worker

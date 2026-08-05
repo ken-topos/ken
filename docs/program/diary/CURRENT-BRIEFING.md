@@ -40,11 +40,13 @@
 
 ### The one thing to do next
 
-**Nothing — the ring is working `D8e`** on exact `c2e8314f`. Thread
-**`thr_6m43v75yndhtj`**. `D8a` discharged `e02ef413`, `D8b` `e4b4c26c`, `D8d`
-`c2e8314f`; `D8c` retired. No candidate, no QA route. Frame sections: *"GOVERNING
-— the `D7` cut is MIS-SIZED"*, *"`D8c` IS RETIRED"*, and *"STANDING — on this
-node 'correct and unreachable' is the DEFAULT"*.
+**Wait for the Architect's causal-projection ruling** (routed
+`evt_59dyjmzy6hqkw`), then size and cut the mechanism it names. Thread
+**`thr_6m43v75yndhtj`**; Runtime holds exact `89e36ec1`. `D8a` discharged
+`e02ef413`, `D8b` `e4b4c26c`, `D8d` `c2e8314f`; `D8c` retired; `D8e` proved but
+**not discharged**. Frame sections: *"`D8e` WITNESS BUILT at exact `89e36ec1`"*,
+*"STANDING — satisfying a required fact can CREATE an undischargeable
+obligation"*, and *"STANDING — 'correct and unreachable' is the DEFAULT"*.
 
 ⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
 published *"new member at ordinal 2, not 3"*. So is the whole
@@ -96,30 +98,48 @@ gap, not a missing fixture** — the released bounded witness repair could never
 have discharged it, because the only source shape that exercises the raw table
 is refused earlier. That is why its wrong-table mutation stays green.
 
-**Next: confirm both Runtime seats compacted, then tell the leader to re-release
-`D8e` for its WITNESS ONLY** on exact `70171a99`. ⚠ **A compacted Claude seat
-does not wake on a mention** — rouse the pane.
+**Next: WAIT for the Architect's causal-projection ruling.** Routed at
+`evt_59dyjmzy6hqkw`. Runtime holds exact `89e36ec1`; `D8f`/`D8g`, `D6b`
+closeout, `D6c`, QA, candidate, `D6` closure and downstream all held. ⛔ **The
+mechanism fork is the Architect's, not mine** — (a) a claim seat reachable from
+the composed path, (b) an exemption for composed producers from result-edge
+projection, or (c) something unnamed. **I size and cut it once ruled.**
 
-⛔ **`D8e` is NOT discharged.** Consumer complete and inert at exact `70171a99`
-(`742/2/1`, both profiles clean); **the witness was not built.** ⭐ The
-implementer **ran out of runway, not into a wall** — so this is *not yet* the
-whole-node finding.
+⛔⛔ **`D8e` WHOLE-NODE HARD STOP at exact `89e36ec1`.** The witness is **lawful
+and the positive route is PROVED** — `745/2/1`, exactly three new rows, no new
+reds, both profiles clean, test-only.
 
-⭐ **The witness's required conjunction, now known:**
-`requires_heterogeneous_deforestation` **plus** an immediate-binder eliminator,
-coinciding with **functionized-unit definition** **and** an **interned
-specialization at the exact selector**. All four at once. ⛔ Build it through the
-ordinary production planner/lowering path — **no hand-constructed plan, no
-fabricated target or identity.** ⛔ **If the four cannot lawfully coincide, THAT
-is the whole-node finding** and it hard-stops to me.
+⭐⭐ **MY STATED WHOLE-NODE CONDITION DID NOT FIRE — a different one did.** I
+wrote *"if the four cannot lawfully coincide."* **They DID coincide.** The
+blocker is **what the conjunction NECESSARILY CREATES**: interning the
+specialization projects a causal call onto the same emitting unit
+(`continuation_result_edges_owned_by` is keyed on emission owner and admits
+every projected call), so **the edge is the same act as satisfying fact 4.** Its
+only two discharges are both impossible here — the sole
+`claim_and_call_continuation` site sits on the ordinary producer branch the
+composed path returns **before**, and a unit result that **is** the planned
+producer constructor is the very thing the composed path **eliminates in
+place**. ⇒ Refuses at the **`D5a` detached-result seat**; the outer raw-body
+closure refusal my law named is **independently NOT reached**.
 
-**The consumer sits AHEAD of the callee's own evaluation, and that placement is
-the mechanism** — a `Var` callee evaluated first goes through the value arm,
-which calls `value_at` and fails closed on a static worker by design. ⇒ **The
-binding is consumed there or refused everywhere; no third outcome.** Sentinel now
-carries a **third counter** recording consumption at zero.
+⛔ **The fabrication that would have gone GREEN, found and refused:** a
+**different occurrence of the same constructor** as the unit result reaches the
+second discharge — **the identity check is per-symbol** — while emitting a
+specialization call for the **wrong occurrence**.
 
-`D8a`/`D8b`/`D8d` all discharged.
+⚠ **`D8d`'s sentinel is RE-SCOPED, not deleted** — its "do not coincide
+anywhere" wording is now false; ⛔ do not restore it. The surviving narrower fact
+(neither of `D8d`'s two populations crosses over) is what keeps the witness a
+**construction rather than an inheritance**. The refusal assertion is a
+**labelled sentinel: it reds the moment a lawful discharge exists.**
+
+⭐ **STANDING, third occurrence: satisfying a required fact can CREATE an
+undischargeable obligation** (`D7a`→`D7b`, `D7a2`'s retention, now fact 4). Each
+surfaced only when something **downstream** used it. ⇒ **A checkpoint owes a
+statement of what its fact OBLIGES, not only what it provides.**
+
+`D8a`/`D8b`/`D8d` discharged; `D8e` consumer + witness proved but **not
+discharged**.
 
 ⭐ **`D8d` DISCHARGED at exact `c2e8314f`** (`742/2/1`). The target-derived
 `StaticWorkerBinding` is installed at the selected recursive source-order
