@@ -16482,7 +16482,7 @@ fn d8a_one_emission_owner_answers_one_composed_source_coordinate() {
 #[test]
 fn d8d_the_composed_binding_site_is_live_and_no_current_fixture_installs_a_target() {
     use crate::cranelift_backend::lowering::{
-        d8d_bindings, d8d_recursive_sites, reset_d8d_bindings,
+        d8d_bindings, d8d_recursive_sites, d8e_consumptions, reset_d8d_bindings,
     };
 
     // (1) and (2) — the site is live, and installs nothing.
@@ -16509,6 +16509,13 @@ fn d8d_the_composed_binding_site_is_live_and_no_current_fixture_installs_a_targe
         px8j_capture_source_trace(&deferred, false, "ken_d8d_composed_site");
     result.expect("the deferred-constructor producer path lowers");
     let (sites, bindings) = (d8d_recursive_sites(), d8d_bindings());
+    assert_eq!(
+        d8e_consumptions(),
+        0,
+        "and with no binding installed there is nothing for D8e's consumer to consume; a \
+         non-zero count here without a binding would mean the consumer fired on something it \
+         did not resolve from the environment"
+    );
     assert!(
         sites > 0,
         "the composed site must be REACHED at a recursive position, or this row is measuring \
@@ -16529,8 +16536,8 @@ fn d8d_the_composed_binding_site_is_live_and_no_current_fixture_installs_a_targe
     )
     .expect("the D5a witness compiles");
     assert_eq!(
-        (d8d_recursive_sites(), d8d_bindings()),
-        (0, 0),
+        (d8d_recursive_sites(), d8d_bindings(), d8e_consumptions()),
+        (0, 0, 0),
         "the D5a witness -- the one plan carrying composed-call targets -- must not reach the \
          composed site. If it does, the two preconditions have met and this sentinel is retired"
     );

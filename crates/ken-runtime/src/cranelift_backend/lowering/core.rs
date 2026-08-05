@@ -3777,15 +3777,83 @@ impl<'a> Lowering<'a> {
                                 self.owned_child_occurrence(static_origin, 1 + position, arg)
                             })
                             .collect::<Result<Vec<_>, _>>()?;
-                        control.continuation = SourceContinuation::CallCallee {
-                            args,
-                            env: env.clone(),
-                            next: Box::new(control.continuation),
+                        // **`RT-CONTSRC-PRODUCER-LOCAL` `D8e` — THE SOLE
+                        // SOURCE-MACHINE CONSUMER of a `D8d` binding.**
+                        //
+                        // ⛔ It sits **ahead of the callee's own evaluation**,
+                        // and that placement is the mechanism, not a
+                        // convenience. Evaluating a `Var` callee first routes it
+                        // through the machine's value arm, which calls
+                        // `value_at` and fails closed on a static worker by
+                        // design. So the binding is either consumed here or
+                        // refused everywhere — there is no third outcome, and a
+                        // `Var` resolving to `Value` falls through to the
+                        // pre-existing route untouched.
+                        //
+                        // ⭐ Deliberately the same shape as the direct descent's
+                        // sole consumer: an exact `Var`, read out of the
+                        // environment by index, no shape inference and no
+                        // planner query. The environment already holds the
+                        // answer because `D8d` put it there; asking the planner
+                        // again here would be the consumer-side target lookup
+                        // this checkpoint excludes, and a second authority for
+                        // one binding.
+                        let static_worker = match callee.as_ref() {
+                            RuntimeExpr::Var(index) => match env.get(*index as usize) {
+                                Some(LoweringEnvironmentBinding::StaticWorker(worker)) => {
+                                    Some(worker.clone())
+                                }
+                                _ => None,
+                            },
+                            _ => None,
                         };
-                        SourceMachineState::Eval {
-                            expr: self.owned_child_occurrence(static_origin, 0, *callee)?,
-                            env,
-                            control,
+                        if let Some(worker) = static_worker {
+                            #[cfg(test)]
+                            d8e_record_consumption();
+                            // Arguments are evaluated under the machine's own
+                            // control and phase, exactly as for a value callee;
+                            // only the completion differs.
+                            let mut remaining = args;
+                            if remaining.is_empty() {
+                                let called = self.call_static_worker_with_inputs(
+                                    builder,
+                                    &worker,
+                                    Vec::new(),
+                                    static_origin,
+                                )?;
+                                SourceMachineState::Value {
+                                    value: RoutedAnswer::direct(called),
+                                    control,
+                                }
+                            } else {
+                                let first = remaining.remove(0);
+                                control.continuation = SourceContinuation::CallArgument {
+                                    callee: SourceCallee::StaticWorker {
+                                        worker,
+                                        static_origin,
+                                    },
+                                    remaining,
+                                    lowered: Vec::new(),
+                                    env: env.clone(),
+                                    next: Box::new(control.continuation),
+                                };
+                                SourceMachineState::Eval {
+                                    expr: first,
+                                    env,
+                                    control,
+                                }
+                            }
+                        } else {
+                            control.continuation = SourceContinuation::CallCallee {
+                                args,
+                                env: env.clone(),
+                                next: Box::new(control.continuation),
+                            };
+                            SourceMachineState::Eval {
+                                expr: self.owned_child_occurrence(static_origin, 0, *callee)?,
+                                env,
+                                control,
+                            }
                         }
                     }
                     RuntimeExpr::ComputationalMatch {
@@ -4768,7 +4836,7 @@ impl<'a> Lowering<'a> {
                             } else {
                                 let first = args.remove(0);
                                 control.continuation = SourceContinuation::CallArgument {
-                                    callee: value,
+                                    callee: SourceCallee::Value(value),
                                     remaining: args,
                                     lowered: Vec::new(),
                                     env: env.clone(),
@@ -4791,11 +4859,38 @@ impl<'a> Lowering<'a> {
                             lowered.push(value);
                             control.continuation = *next;
                             if remaining.is_empty() {
-                                match self
-                                    .source_call_state(builder, callee, lowered, env, control)?
-                                {
-                                    SourceCallOutcome::Continue(state) => state,
-                                    SourceCallOutcome::Complete(value) => return Ok(value),
+                                match callee {
+                                    // **`D8e` — the sole consumer's completion.**
+                                    //
+                                    // ⛔ Straight into the SHARED route-selected
+                                    // emitter with the arguments the machine
+                                    // just evaluated. Nothing is re-evaluated,
+                                    // no target is looked up again, and no
+                                    // operand run is assembled here: captures,
+                                    // the route's suffix and the route's table
+                                    // all live in the one emitter the direct
+                                    // descent uses.
+                                    SourceCallee::StaticWorker {
+                                        worker,
+                                        static_origin,
+                                    } => {
+                                        let called = self.call_static_worker_with_inputs(
+                                            builder,
+                                            &worker,
+                                            lowered,
+                                            static_origin,
+                                        )?;
+                                        SourceMachineState::Value {
+                                            value: RoutedAnswer::direct(called),
+                                            control,
+                                        }
+                                    }
+                                    SourceCallee::Value(callee) => match self
+                                        .source_call_state(builder, callee, lowered, env, control)?
+                                    {
+                                        SourceCallOutcome::Continue(state) => state,
+                                        SourceCallOutcome::Complete(value) => return Ok(value),
+                                    },
                                 }
                             } else {
                                 let first = remaining.remove(0);
@@ -7325,7 +7420,42 @@ impl<'a> Lowering<'a> {
         static_origin: StaticOriginId,
         env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let supplied = u32::try_from(args.len()).map_err(|_| {
+        // Explicit arguments in source order: argument `i` is child `1 + i` of
+        // the `Call` occurrence, the callee being child `0`.
+        //
+        // ⛔ **This is the direct descent's argument phase and only its own.**
+        // `D8e`'s source-machine consumer evaluates its arguments under the
+        // machine's control and phase instead, and enters at
+        // [`Self::call_static_worker_with_inputs`] below. The two share every
+        // line after this point, which is the whole reason the split is here and
+        // not lower: captures, the route's suffix, the route's table and the
+        // emitted call are one assembly with one owner.
+        let inputs = args
+            .iter()
+            .enumerate()
+            .map(|(position, argument)| {
+                let argument = self.child_occurrence(static_origin, 1 + position, argument)?;
+                self.lower_expr(builder, argument, env)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        self.call_static_worker_with_inputs(builder, worker, inputs, static_origin)
+    }
+
+    /// **The route-selected static-worker emitter, from evaluated arguments
+    /// onward.** Shared verbatim by the direct descent and by `D8e`'s
+    /// source-machine consumer; neither reassembles any part of it.
+    fn call_static_worker_with_inputs(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        worker: &StaticWorkerBinding,
+        mut inputs: Vec<LoweringOperand>,
+        static_origin: StaticOriginId,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        // ⛔ Arity is checked HERE, not in either caller. The explicit-argument
+        // run is exactly `inputs` at entry -- captures are appended below -- so
+        // this is the one place both consumers can be held to the declared
+        // arity without either restating it.
+        let supplied = u32::try_from(inputs.len()).map_err(|_| {
             unsupported("Call", "call argument count exceeds addressable range")
         })?;
         if supplied != worker.declared_arity {
@@ -7337,17 +7467,6 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
-
-        // Explicit arguments in source order: argument `i` is child `1 + i` of
-        // the `Call` occurrence, the callee being child `0`.
-        let mut inputs = args
-            .iter()
-            .enumerate()
-            .map(|(position, argument)| {
-                let argument = self.child_occurrence(static_origin, 1 + position, argument)?;
-                self.lower_expr(builder, argument, env)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
 
         // Stored captures follow, unchanged. A carried capture stays carried:
         // there is deliberately no conversion on this edge, which is the whole

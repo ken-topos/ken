@@ -3309,6 +3309,27 @@ pub(in crate::cranelift_backend) fn d8d_recursive_sites() -> usize {
     D8D_RECURSIVE_SITES.with(std::cell::Cell::get)
 }
 
+/// **`D8e` — how many source-machine `Var` callees resolved to a `D8d`
+/// binding and were consumed through the shared emitter.**
+///
+/// The third counter in the pair `D8d` established, and it exists for the same
+/// reason: "the consumer is correct but unreached" and "the consumer is wrong"
+/// are indistinguishable from a green suite.
+#[cfg(test)]
+thread_local! {
+    static D8E_CONSUMPTIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8e_record_consumption() {
+    D8E_CONSUMPTIONS.with(|count| count.set(count.get() + 1));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8e_consumptions() -> usize {
+    D8E_CONSUMPTIONS.with(std::cell::Cell::get)
+}
+
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn d8d_record_binding() {
     D8D_STATIC_WORKER_BINDINGS.with(|count| count.set(count.get() + 1));
@@ -3318,6 +3339,7 @@ pub(in crate::cranelift_backend) fn d8d_record_binding() {
 pub(in crate::cranelift_backend) fn reset_d8d_bindings() {
     D8D_STATIC_WORKER_BINDINGS.with(|count| count.set(0));
     D8D_RECURSIVE_SITES.with(|count| count.set(0));
+    D8E_CONSUMPTIONS.with(|count| count.set(0));
 }
 
 #[cfg(test)]
@@ -11549,11 +11571,37 @@ enum SourceContinuation<'a> {
         next: Box<SourceContinuation<'a>>,
     },
     CallArgument {
-        callee: LoweringOperand,
+        callee: SourceCallee,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<LoweringOperand>,
         env: Vec<LoweringEnvironmentBinding>,
         next: Box<SourceContinuation<'a>>,
+    },
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8e` — what a source-machine call is calling.**
+///
+/// ⛔ A sum rather than an operand, because a static worker **is not a value**.
+/// The capsule has no value representation, so it cannot be carried in the
+/// operand slot the value route uses, and widening that slot to hold it would
+/// undo exactly the fail-closed property `D8d` installed it for.
+///
+/// ⭐ The two arms differ only in where the argument run goes once it is
+/// evaluated. Argument evaluation itself is identical and happens under the
+/// machine's own control and phase for both, which is why the split is at the
+/// completion and not at the entry.
+#[derive(Clone)]
+enum SourceCallee {
+    /// The pre-existing route: a lowered callee consumed by
+    /// `source_call_state`.
+    Value(LoweringOperand),
+    /// **`D8e`** — an exact `Var` that resolved to a `D8d` target-derived
+    /// binding. ⛔ Resolved once, at the `Call` occurrence, before the callee
+    /// would otherwise have been evaluated as a value; there is no second
+    /// lookup and no planner query on this path.
+    StaticWorker {
+        worker: StaticWorkerBinding,
+        static_origin: StaticOriginId,
     },
 }
 enum SourceContinuationTerminal<'a> {
@@ -11669,7 +11717,7 @@ enum SourcePrefixTemplate {
         next: Box<SourcePrefixTemplate>,
     },
     CallArgument {
-        callee: LoweringOperand,
+        callee: SourceCallee,
         remaining: Vec<OwnedSourceOccurrence>,
         lowered: Vec<LoweringOperand>,
         env: Vec<LoweringEnvironmentBinding>,
