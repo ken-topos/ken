@@ -9,6 +9,11 @@ closure-seed → callable-unit machinery at the call site.**
 **Risk:** low–medium — the machinery is built by [[RT-DECL-CLOSURE-PORT]];
 this is its second application point.
 
+⚠ **The `M` predates the 2026-08-05 `D1` correction and does not include
+building the enumerator.** It was set on the premise that the instrument was
+inherited. Treat it as covering `D2`/`D3` only; report the `D1` cost at pickup
+and the Steward re-sizes then. ⛔ Do not silently absorb it into `M`.
+
 ⛔ **Read `docs/program/16-recursive-descent-retirement.md` first.** It carries
 the campaign's binding traps and the schedule. This frame does not repeat
 them.
@@ -59,31 +64,57 @@ general, little or nothing remains here.
   produce it — see the campaign doc's **Trap 2**, where this cost
   [[RT-DECL-CLOSURE-PORT]] a candidate. ⭐ If `D1` closes this node for free, no
   delta is ever applied and `D0` is moot; run it only if you proceed to build.
-- **`D1` — Measure before building, and be willing to stop.** Using the
-  full-residual enumeration built by [[RT-DECL-CLOSURE-PORT]]'s `D1`, report
-  whether `SeedClosureCall` still fires on any measured program.
+- **`D1` — Measure before building, and be willing to stop.** Report whether
+  `SeedClosureCall` still fires on any measured program.
+
+  **The enumeration is not durable on `main`, and this frame previously said it
+  was.** [[RT-DECL-CLOSURE-PORT]]'s `D1` permits "a temporary or permanent
+  enumeration"; it was rebuilt at `38b05ac9` in a detached scratch worktree
+  against the preserved deltas, so it never entered the candidate lineage.
+  Measured at `origin/main = 8558d4e6`, the tree carries only
+  `recursive_descent_residual` (`core.rs:151`), which returns
+  `Option<RecursiveDescentResidual>` — the short-circuited **first** reason, and
+  the exact instrument that node's `D1` ruled inadequate. `control.rs:5080` is a
+  per-route classifier-accounting pin, not a program-level set.
+
+  ⇒ **Carrying in or rebuilding the enumerator is inside this node's `D1`, not
+  a precondition already met.** Size it that way, and record which you did.
   - ⭐ **If it does not fire anywhere: post that, stop, and hand the node back to
     the Steward to close** — ⚠ **but only after `D1a` below.** ⛔ Do not build a
     port for a class with no population, and ⛔ do not go looking for a real
     program that would resurrect it.
   - If it fires, `D1` names the exact programs and proceeds.
-- **⛔⛔ `D1a` — THE FREE-CLOSE GATE. A positive control on the instrument, on
-  THIS tree, required before any close-on-absence.** Construct or temporarily
-  reintroduce a program that *does* fire `SeedClosureCall`, and show the
-  enumeration **reports it**. Restore byte-identically. **Only then** is a "fires
-  nowhere" result admissible as a close.
+- **⛔⛔ `D1a` — THE FREE-CLOSE GATE. An EXACT-SET positive control on the
+  instrument, on THIS tree, required before any close-on-absence.** Construct or
+  temporarily reintroduce a program that *does* fire `SeedClosureCall`, and show
+  the enumeration reports **the exact set of variants that program fires** — not
+  merely that `SeedClosureCall` appears somewhere among them. Restore
+  byte-identically. **Only then** is a "fires nowhere" result admissible as a
+  close.
 
-  ⭐ **Why this node needs it and the others do not.** A free close is this
+  ⛔ **A reachability control does not discharge this, and this frame asked for
+  one until 2026-08-05.** [[RT-DECL-CLOSURE-PORT]] measured the difference on
+  2026-08-03 at `38b05ac9`: under a short-circuit mutation the exact-set control
+  went red while the all-variants-reachable control **stayed green**, because
+  each witness fires exactly one variant, so short-circuiting cannot change its
+  answer. That frame names this node when it says a later node re-proving only
+  reachability has re-proved nothing about short-circuiting.
+
+  ⭐ **Why this node needs the gate and the others do not.** A free close is this
   node's *predicted* outcome — [[RT-DECL-CLOSURE-PORT]] is expected to subsume
   this class. ⇒ An **empty result is exactly what everyone expects to see**, so a
   broken or mis-aimed instrument produces the anticipated answer and nobody looks
   twice. That is campaign **Trap 3** at its most dangerous: the absence is not
   merely unproved, it is *welcome*.
 
-  ⚠ **The instrument's validation at [[RT-DECL-CLOSURE-PORT]]'s `AC-2` does not
-  transfer here.** That node rewrites `core.rs` and retires a class between then
-  and now; an enumerator proven live on the earlier tree is not thereby live on
-  this one. ⛔ Re-prove it, cheaply, at the point of use.
+  ⛔⛔ **And that is precisely why the shape matters: a short-circuiting
+  enumerator is one such break, and a reachability gate passes while it
+  short-circuits.** The gate as previously written was blind to the one defect it
+  exists to catch.
+
+  ⚠ **No earlier validation transfers here.** That node rewrites `core.rs` and
+  retires a class between then and now, and its instrument never landed. ⛔ Prove
+  it on this tree, at the point of use.
 - **`D2` — Callee-position seed units.** A `Call` whose callee is a closure seed
   reaches a separately owned callable unit, reusing
   [[RT-DECL-CLOSURE-PORT]]'s transport rather than a parallel one.
@@ -106,8 +137,14 @@ general, little or nothing remains here.
   this: it quantifies over the firing set, and the regression population is its
   complement (campaign doc, Trap 2).
 - **`AC-2`.** `D1`'s enumeration is recorded in the tree with the class's full
-  population named. ⛔ **If the node closes on an empty population, `D1a`'s
-  positive control is recorded too.** A close-on-absence without it is not a
+  population named, **and the enumerator itself lands in the candidate lineage,
+  not only its output.** ⛔ Recording the result while the instrument stays in a
+  scratch worktree is what left this frame asserting a durable enumeration that
+  did not exist; three later nodes in this campaign consume the same instrument,
+  so a result-only record reproduces the defect at each of them.
+
+  ⛔ **If the node closes on an empty population, `D1a`'s positive control is
+  recorded too.** A close-on-absence without it is not a
   measurement that the class is retired — it is a measurement that the
   instrument reported nothing.
 - **`AC-3` (no-regression).** Workspace green **in CI** — ⛔ never a local
