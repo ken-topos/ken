@@ -178,6 +178,16 @@ all six failing `D0` rows.
   work. That judgement is correct and is now frame law: ⛔ **do not land a
   partial `D3`.**
 
+  ⛔ **READ THE LAW WITH ITS RATIONALE — 2026-08-05, Steward.** The banned thing
+  is **a fragment that leaves the seam no longer naming its own remaining
+  work.** It is *not* a ban on cutting `D3` into smaller whole deliverables. A
+  landing that **retains** `entry_abi_pending_producer_local` with a non-empty,
+  truthful enumeration does not commit the defect this law exists to prevent.
+  ⇒ `D3` is recut into `D3a` and `D3b` below; **each is whole**, and the law
+  stands unweakened over both. A blanket imperative whose rationale names a
+  narrower defect is a frame-authoring defect of mine, not a constraint to
+  route around silently.
+
 - **`D3` — the consumers, each handled explicitly. THE COUNT IS TEN, NOT
   THREE.** ⛔ **HELD until `D2b` is populated and mutation-proved.** The
   `entry_abi_pending_producer_local` seam stays intact until then.
@@ -211,6 +221,64 @@ all six failing `D0` rows.
   never from this frame's prose.** A frame-side count of a code-side population
   goes stale the moment the code moves, which is how it was wrong the first
   time.
+
+  ### ⛔ `D3` IS RECUT INTO `D3a` AND `D3b` — Steward ruling, 2026-08-05
+
+  **Grounds: the correspondence probe** (`evt_gp162jb84s8b`, exact `2bd724cd`,
+  reverted byte-identical). 58 of 58 predeclared-emitter records **match** — the
+  positive result the first `D3` attempt lacked, ruling out a different base, a
+  reversal and a constant offset. But **every match is at depth zero**:
+  `env_len == seat_len == 2`, the producer owner's entry parameter count, across
+  2 construct origins and 1 owner. No reaching emission sits under an
+  intervening binder, and **`post_shift_index` is distinguishable from the root
+  ABI position only when a binder intervenes.**
+
+  ⇒ **The post-shift axis is UNMEASURED, not passed.** Confirmed from the other
+  side: all 85 reaching records carry `availability=EntryAbi`; **zero
+  producer-local availabilities reach lowering at all**, because the `D2` gate
+  declines every candidate before projection.
+
+  ⛔ **THE SEQUENCING DEFECT IS MINE.** `D3`'s lowering half consumes a
+  population **only `D4` creates**, and this frame ordered `D3` before `D4`.
+  `D3` as cut bundled two consumer groups with **different measurability** into
+  one all-or-nothing deliverable. That is a sizing defect in my cut, not a
+  Runtime execution problem, and the recut is the fix.
+
+  - **`D3a` — the consumers measurable NOW. A WHOLE deliverable.** The validator
+    re-derivation, the tagged ABI provenance sum and its ABI-plane consumers,
+    and the generated-context full-coordinate lookup. Both lowering emission
+    seams **keep refusing** the local arms. Tested by exactly `D2b`'s
+    discipline: construct the arms directly and mutation-prove each property,
+    since production still declines every candidate.
+    ⛔ **`entry_abi_pending_producer_local` is RETAINED, and that is
+    COMPLIANCE, not an exception** — the release conditioned its deletion on
+    *"only when its live enumeration is empty"* (`evt_6zr8a4h90c7rp`). After
+    `D3a` it enumerates exactly the two lowering arms, so it still names its own
+    remaining work.
+
+  - **`D3b` — the two lowering emission arms, plus the seam deletion. A WHOLE
+    deliverable.** ⛔ **Sequenced against a population that actually reaches the
+    seam at nonzero depth**, i.e. with or after `D4`. Its release additionally
+    waits on the Architect's disposition of the probe's Finding 2 (below).
+
+  ⛔ **OPTION 3 IS REJECTED, and not for cost.** "Accept direct-construction
+  testing of the lowering arm with the unmeasured plane correspondence
+  recorded" would write `producer_env.get(post_shift_index)` resting on the two
+  planes agreeing at depth zero. If that inference is wrong **the seam does not
+  refuse — it reads a different value, silently.** A silent wrong value at an
+  emission seam is precisely the failure class `D2b`'s guards were built to
+  prevent. ⛔ Do not re-propose it as a schedule recovery.
+
+  ⚠ **Finding 2 is the Architect's, and it gates `D3b` only.** All 27 of 27
+  specialization-emitter records are non-corresponding — 26 out-of-range, 1
+  pointing at a different owner's parameter (`env_len=3` against `seat_len=1`) —
+  a perfect separation by emitter class with zero exceptions. The implementer
+  reads this as correct-by-design (the generated context's operand run is a
+  genuinely different environment, which the seam's own comment already states,
+  and is what `GeneratedContextCapture` exists to serve) but ⭐ **declined to
+  classify a mismatch as the benign one on its own authority**, because the
+  ruling said any mismatch is a hard stop. That refusal is correct. ⛔ `D3a` does
+  not depend on the answer — under `D3a` both seams refuse everything local.
 
 - **`D4` — broad admission, stated as SET EQUALITY over the census's explicit
   unit.** ⛔ **Recut 2026-08-05 by Architect gate `evt_38yd5sd1ht0kk` on the
