@@ -2142,6 +2142,28 @@ family — that is a measurement nobody has taken.
   > ledger/claim lifecycle** before proceeding to operation-specific consumption.
   > The lowering and exact-`Int` slice remain held.
 
+  > **RESUME POINT ADVANCED, 2026-08-05 — exact
+  > `ae64f687fe1cc5a0d2bcac8ec78a8fb0b9819443`** (Architect `evt_4enxcfe742ta8`),
+  > a descendant of `6a09ed68` on this lineage. **Preserve it; it is accepted
+  > WIP substrate, preservation-only, not a candidate.** It supersedes the
+  > `6a09ed68` resume point above, which stands as the record of what was
+  > accepted when.
+  >
+  > Accepted in it, cumulative over `727b51a1` (per-visit claim group),
+  > `69c68e6e` (pre-definition body close) and `f6958b95` (operation-arm claim
+  > consumption): reply projection is lazy and exact-use-driven through the
+  > claimed `SiteOperand`; `BufferAllocate` consumes its exact capacity seat with
+  > no dense conversion reappearing; the specialized and carried exact-`Int`
+  > routes converge on one `(sign, len, limbs)` rule; the persistent branch uses
+  > `sign == 0 && len == 1` and reads limb 0 only on that path; malformed
+  > carrier state stays distinct from semantic `InvalidBounds`; and the phase,
+  > taxonomy, seat, disposition, closure and sign-bit controls are landed.
+  >
+  > **What it does not discharge:** the exact reaching-row, lowering-closure, and
+  > cumulative no-regression obligations — because the linked row never reaches
+  > this machinery. See "Required acceptance evidence" item 1, which is recut
+  > into two ordered checkpoints for exactly that reason.
+
   Those tips and `70887529` share merge-base `f7cea8fd` and are **competing
   historical implementations, not independent halves awaiting assembly.** The
   older line lacks the accepted source-aggregate preflight, the typed `Record`
@@ -2365,11 +2387,68 @@ family — that is a measurement nobody has taken.
      **Corrected 2026-08-05 (`evt_73b1t4nkewftw`): the row must carry the NEW
      planner-issued seat identity for that effect/child/position. The
      `BoundaryUseIdentity` spelling and the old diagnostic string are NOT
-     required and must not be reconstructed.** State the control as a
-     before/after pair on the governing base: **before** the repair the seat
-     reaches the **generic host-effect specialized-only refusal**; **after** the
-     repair the exact planned seat is **claimed**, and the row returns
-     `InvalidBounds` with zero dispatch.
+     required and must not be reconstructed.**
+
+     **RECUT 2026-08-05 (Architect `evt_4enxcfe742ta8`) — the single before/after
+     pair this item used to demand is unmeasurable, because its chronology is
+     false on the governing lineage.** It said that *before* the repair the seat
+     reaches the generic host-effect specialized-only refusal. The row never gets
+     that far: it refuses earlier, at the `#23` producer, as a closure capture.
+
+     **This frame already measured that, and the clause contradicted it.** The
+     exact per-row `D0` table above records this row's base result as
+     `FAIL — BoundaryCarrier: a closure capture is a specialized-only surface`,
+     measured 2026-07-29 on `483ef7ab`. Runtime's 2026-08-05 bisection agrees and
+     locates when the current lineage exposed it: `origin/main` `9bceb8c5`
+     through `c2be588b` pass, `c85179ce` (`D5a` checkpoint 4 step 3, consuming the
+     checked-IH marker at the static-worker call edge) is the first failure, and
+     the message is unchanged from there through `ae64f687`.
+
+     **That bisection says when the lineage exposed the refusal, not who owns
+     it.** The attribution this frame already carries stands unchanged: producer
+     is the `#23` mixed-phase static-worker ordinary-capture transport, consumer
+     is this node's exact `264 -> 262 / position 1` semantic-eliminator seat. The
+     row stops at the producer, so it has not reached the consumer. **The `D5a`
+     checked-IH law — consume the marker on the complete application occurrence
+     before the static-worker call is emitted — is accepted, and may not be
+     reverted, weakened, or special-cased to make this row advance.**
+
+     **The control is therefore two ordered cumulative checkpoints, not one
+     pair.** Neither may be skipped, and the second may not be measured first:
+
+     1. **Restore the framed `#23` producer on the current lineage**, under the
+        contract this frame already states in *What the replacement owes*: the
+        complete ordered capture contract revalidated at consumption (ordinal,
+        source provenance, owner, expected phase/lane, lifetime, exact-once
+        producer authority — `capture_count` alone is insufficient); the entire
+        environment preflighted before allocation; carried ordinary captures
+        passing unchanged; specialized ordinary captures crossing the existing
+        one-way producer exactly once; and nested callable/control capsules
+        still refusing before allocation with every allocation and publication
+        counter at zero. `D5a`'s marker semantics are preserved, not adjusted.
+     2. **Then close the exact `264 -> 262 / position 1` consumer** with the
+        retained `ae64f687` mechanism: the exact planned seat is claimed, the
+        real row returns `InvalidBounds`, and shared-host dispatch count is
+        **zero**. Removing the carried-capacity arm must recreate the refusal at
+        that exact seat.
+
+     All existing mixed-phase, owner/order/provenance, zero-allocation capsule,
+     `D5a` marker, phase/taxonomy and `AC-4` controls remain **cumulative**
+     across both checkpoints.
+
+     **The row may NOT be replaced by a synthetic or direct carried-capacity
+     witness.** Such a witness proves the consumer locally and cannot prove that
+     the real producer reaches it — which is the entire content of this item. So
+     while the row stands unreached: no replacement reaching witness, no
+     acceptance of the closure-capture refusal as standing branch state, and no
+     candidate, QA route, `D6` closure, or `AC-4` claim.
+
+     **This is a sequencing and evidence recut only.** It creates no node, lane,
+     disposition, or atomic participant; atomic scope remains `D7` +
+     [[RT-RECURSOR-TRANSPORT]]. **If restoring `#23` requires changing the `D5a`
+     application-marker meaning, inventing a callable carrier, or widening
+     planner/ABI beyond the already-framed capture contract — HARD STOP and
+     return the concrete edge.**
   2. **Exact-`Int` phase pair.** Specialized and carried inputs produce
      **identical** narrowing outcomes for `-1`, `0`, `1`, `u64::MAX`,
      `u64::MAX + 1`, and a negative wide magnitude — covering **both** carried
