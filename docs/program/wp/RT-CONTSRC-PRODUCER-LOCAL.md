@@ -326,6 +326,57 @@ all six failing `D0` rows.
      controls: `interned = V`, `declined = R`, with no extra route modality and
      no special case.
 
+  5. ⛔⛔ **`D3c` — the `EntryAbi` immediate-availability MEASUREMENT. INSERTED
+     2026-08-05 (Architect `evt_56jh63qntwtfe`, Steward recut
+     `evt_7he9qv8wbv1yq`), and it SEQUENCES BEFORE ANY FURTHER `D3b` WORK** —
+     numbered last only because renumbering would break live references.
+
+     **Why it leads.** `D3b` landed a "three lawful / three crossed" pairing law
+     over the product of coordinate domain and availability domain. In
+     `exact_continuation_projection`, the `RootIsImmediate` branch copies an
+     `EntryAbi` root's `source_abi_position` straight into `immediate_slot`, and
+     `D3b` then requires those integers equal. But the same predeclared consumer
+     indexes `producer_env`, which `D4a` established is the **current lexical
+     environment with intervening binders prepended** — so at nonzero lexical
+     depth an entry value's root ABI position **need not** be its immediate
+     lexical position.
+
+     ⇒ ⭐ **The landed law couples root provenance to immediate availability —
+     the two facts `D1` deliberately separated.** QA proved `D3b` faithful to
+     that law; ⛔ **the law's PREMISE is what is in doubt, and a fidelity
+     verdict says nothing about it.** Building further on it is how a green
+     suite gets erected on a false law — the defect class this node has already
+     paid for four times.
+
+     **The bounded measurement, all four conditions at one emission:**
+     1. one real predeclared emission **under an intervening binder**;
+     2. the same required vector holds at least one `EntryAbi`-root input **and**
+        one `ProducerLocal`-root input;
+     3. an **independent lowering-side** oracle identifies the `EntryAbi` value
+        at entry and its actual operand at the emission seat;
+     4. substituting `source_abi_position` for the measured immediate position
+        **flips** — ⛔ not via a bounds or shape mismatch.
+
+     ⛔ **NO PRODUCTION EDIT IS AUTHORIZED BY THIS MEASUREMENT.**
+
+     **If the position moves, the correction is structural:** immediate
+     availability is orthogonal to root provenance. A current-lexical seat and a
+     generated-context capture may make **either** root-coordinate arm
+     available, provided exact seat/capture membership proves it; entry-frame
+     availability is lawful only where the immediate environment really **is**
+     the entry frame. ⛔ No numeric equality, constant offset, padding, reverse
+     search or fallback may bridge the domains. `D3b`'s arms are then re-cut on
+     the corrected representation.
+
+  ⛔ **THE CANDIDATE IS ALSO GATED ON [[RT-UNIT-CLOSURE-CONVERT]], AND THAT IS
+  PROSE HERE RATHER THAN A `depends_on` EDGE** (an edge both ways is a cycle).
+  At `bc371f13` seven rows are red: the two standing `D0` reds, plus the five
+  `D4a` coordinate reds which **moved rather than cleared** — they now pass the
+  emission seam and fail at `Var: no runtime binding`, a predeclared unit body
+  whose lowering environment is shorter than its own de Bruijn depth. That is a
+  substrate boundary, ⛔ **not** a bounded repair here, and Runtime makes **no
+  unit-frame edit** meanwhile.
+
   ⛔ **Option 2 as offered is INVALID, not merely worse:** `D4` cannot safely
   admit the population before the lowering consumers are explicitly fail-closed.
   That is why `D3a` precedes `D4a` rather than the reverse.

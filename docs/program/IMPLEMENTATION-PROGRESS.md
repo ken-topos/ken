@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-05 08:38:39Z — from 162 issue file(s) in `docs/program/issues/`.
+2026-08-05 12:27:02Z — from 163 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -173,6 +173,7 @@ the committed file matches the generator's output.
 | `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
 | `RT-SYMLINK-LANE` | SymlinkPolicy is honoured by the interpreter lane and unreachable in the native lane — FollowWithinScope has no native behaviour | draft | runtime | TBD | none | — |
+| `RT-UNIT-CLOSURE-CONVERT` | Activate function-unit closure conversion for predeclared units — a retained nested body's free de Bruijn references become declared typed capture slots, reconstructed at unit entry from exact caller operands | draft | runtime | TBD | none | — |
 | `RT-VALUE-TOTALITY` | Make every total traversal of Value non-recursive in the host stack, and remove the closure capabilities the landed closure boundary forbids | merged | runtime | L | none | — |
 | `RT-WORKER-BIND` | compiler-only static-worker binding and transport substrate — lowering cannot bind a worker's carried capture operands into a selected semantic body, and continuation specialization cannot emit a target without it | merged | runtime | L | none | — |
 | `SEAL-2` | carrier producer closure, over a derived enumeration | merged | foundation | M | none | PR #912 @ 4ac9141e (origin/main, CI green) |
@@ -260,6 +261,7 @@ is itself not yet `merged`/`closed`:
 - `RT-PRODUCER-MATCH-PORT` blocked by `RT-SEED-CALL-PORT` (status: ready)
 - `RT-RECURSOR-TRANSPORT` blocked by `RT-CONTSPEC-WITNESS` (status: ready)
 - `RT-SEED-CALL-PORT` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
+- `RT-UNIT-CLOSURE-CONVERT` blocked by `RT-CONTSRC-PRODUCER-LOCAL` (status: active)
 
 ## Gate progress
 
