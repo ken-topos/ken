@@ -275,6 +275,42 @@ all six failing `D0` rows.
      nonzero-depth `CurrentLexical` correspondence. `R` remains declined.
      ⛔ A red here is the instrument working, not a regression to chase.
 
+     **`D4a` ran two extension rounds. Round 1 hard-stopped, structurally.**
+     Admission landed at `52422da5` and produced exactly one reaching
+     `CurrentLexical` emission — at depth 1, but with
+     `post_shift_index == locator.environment_index == 0`, so the pass-through
+     defect stays observationally identical. The Architect's bounded extension
+     (`evt_tkzyc61rmd3`) sent the durable shifted fixture
+     `contsrc_d2_both_binding_kinds_fixture` through real lowering; it emits
+     **zero seam records**. Its `Let`-bound effect is `HostOpV1::ConsoleRead`,
+     absent from the fixed 13-element `CRANELIFT_HOST_EFFECT_CONSUMERS_V1`, so
+     `lower_process_host_effect` refuses it as an unavailable lane before the
+     emission seam. ⭐ **The fixture is shifted precisely BY the construct that
+     makes it unlowerable** — it has always been planner-level. Hard stop
+     `evt_7xwdw87mgf1q3`, QA-verified `evt_5nd65hwfh941k`.
+
+     **Round 2 — a lowerable shifted fixture is AUTHORIZED** (Steward ruling
+     `evt_28xx7t69z7j76`). This lifts exactly one prohibition from the bounded
+     extension, *"do not add a new population member"*, and lifts nothing else:
+     alternate lowering routes, ABI/lane widening, selectors, fallbacks,
+     permanent side maps and direct construction all stand. Three constraints:
+
+     - ⭐ **The fixture supplies the POPULATION; the MUTATION supplies the
+       discrimination.** A fixture built to exhibit
+       `post_shift_index != locator.environment_index` and then observed to
+       exhibit it measures nothing. Soundness rests on requirement 5 of
+       `evt_tkzyc61rmd3` — the bounded wrong-index/swap mutation must flip the
+       discriminator. ⛔ **If that row cannot be written, the fixture is not
+       worth adding**, and the result is a hard stop rather than a green suite.
+     - ⛔ **Do not inherit the effect lane from `D2b`'s fixture.** The
+       requirement is a shifted lowerable producer-local emission; whether the
+       shifted value is a host-effect result or a case binder is
+       **unconstrained**, and case binders are already in `V`. If no admitted
+       lane's result can be `Let`-bound *and* no non-effect route shifts, that
+       is a larger fact to report, not to work around.
+     - ⛔ **`contsrc_d2_both_binding_kinds_fixture` is untouched**, discriminator
+       included. The new fixture is additive.
+
   3. **`D3b` — lowering closure.** Implement the two lowering arms **only after
      that evidence exists**:
      - `CurrentLexical` requires the matching predeclared emitter plus exact
@@ -356,6 +392,18 @@ all six failing `D0` rows.
   `declined = R`** — no additional residual, ⛔ no member/corpus/closure
   predicate, ⛔ no first-`Open` classification. The full-vector walk remains the
   authority.
+
+  ⛔ **`C` = 83 and `V` = 80 are MEASUREMENTS AT `e6d4f085`, not invariants —
+  `R` is the invariant** (Steward ruling `evt_28xx7t69z7j76`, 2026-08-05). The
+  discharge condition above says *post-admission* census for a reason: it is a
+  procedure re-run at the base being closed, which is also why the program
+  fingerprint is part of the identity. Adding a corpus fixture therefore moves
+  `C` and `V` and does **not** violate this deliverable.
+
+  What is pinned is `R`'s **three named causes** — `OPEN[ih-binder]`,
+  `OPEN[let-value:Construct]`, `AMBIG2[let-value:If]`. A new fixture that adds a
+  member to `R` is a real finding about the contract domain: stop and report it.
+  One that adds only to `V` leaves the partition intact.
 
   ⛔ **The program fingerprint is load-bearing, not decoration.**
   `StaticOriginId`s are allocated per compile, so without it edges from

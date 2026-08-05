@@ -33,47 +33,60 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~10:5xZ · `D3a` QA-APPROVED; `D4a` HARD-STOPPED
+## LIVE — 2026-08-05 ~11:0xZ · `D4a` bind RULED; awaiting one Architect gate
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for QA, then expect a ruling request.** `D3a` is **QA-APPROVED at exact
-`14b111ae`**. `D4a` was released (`evt_5j8a7v9hrjdek`) and **HARD-STOPPED at
-`evt_7xwdw87mgf1q3`**; `runtime-qa` is verifying that stop
-(`evt_4x4fvqq1m9eyg`). ⛔ **Nothing is owed by me until QA returns.** Frame blob
-`fffb8db0`.
+**Wait for the Architect's confirming gate on my ruling `evt_28xx7t69z7j76`.**
+`D3a` is **QA-APPROVED at exact `14b111ae`**. `D4a` admitted `V` at `52422da5`,
+then its bounded extension **hard-stopped structurally** (`evt_7xwdw87mgf1q3`),
+QA-verified (`evt_5nd65hwfh941k`). I ruled the disposition rather than deferring
+it. ⛔ **Nothing is owed by me until the Architect answers** — and
+`runtime-leader` was told explicitly to **release on the Architect, not on my
+post.**
 
-### ⛔ THE `D4a` BIND — read this before ruling anything
+### THE `D4a` BIND — RULED. Do not re-derive it.
 
-The Architect required (`evt_tkzyc61rmd3`) a four-part proof at **one exact
-predeclared emission**: a reaching `CurrentLexical` with
-`post_shift_index != locator.environment_index`, the real operand at each of
-those two indices, an **independent lowering-side** discrimination that does not
-re-run the planner walk as its oracle, and a bounded wrong-index mutation.
+**The bind was:** the Architect required (`evt_tkzyc61rmd3`) a four-part proof at
+one exact predeclared emission — a reaching `CurrentLexical` with
+`post_shift_index != locator.environment_index`, the real operand at each index,
+an **independent lowering-side** discrimination that does not re-run the planner
+walk as its oracle, and a bounded wrong-index mutation. But the only durable
+shifted fixture emits **zero seam records**: its `Let`-bound effect is
+`HostOpV1::ConsoleRead`, absent from the fixed 13-element
+`CRANELIFT_HOST_EFFECT_CONSUMERS_V1`, so lowering refuses it as an unavailable
+lane before the seam. ⭐ **The fixture is shifted precisely BY the construct that
+makes it unlowerable.** Every route to the seam was already prohibited, so the
+required evidence was unobtainable and choosing what gives was a ruling.
 
-⛔ **The only existing shifted fixture CANNOT REACH LOWERING, structurally.**
-`contsrc_d2_both_binding_kinds_fixture` fails at
-`Err(Unsupported(... "effect Console.257 is a represented unavailable lane"))`.
-Its shift comes from a `Let`-bound **host-effect result** under an intervening
-`Match` binder — ⭐ **the effect-result binding IS the shifted value** — and
-that effect is `HostOpV1::ConsoleRead`, which is **not** in the constant
-`CRANELIFT_HOST_EFFECT_CONSUMERS_V1` (`ConsoleWrite`, `ConsoleFlush`,
-`ConsoleIsTerminal` are). No symbol set, prelude or flag changes it; the
-implementer checked rather than assumed.
+**My ruling: a lowerable shifted fixture is AUTHORIZED**, as a second bounded
+`D4a` extension round. ⛔ **No new node** — it folds. It lifts exactly one
+prohibition (*"do not add a new population member"*) and nothing else. Full text
+is now in the frame under checkpoint `D4a`; the three constraints are:
 
-⇒ **The fixture is shifted precisely because of the construct that makes it
-unlowerable.** It has always been planner-level; nothing ever lowered it.
+1. ⭐ **The fixture supplies the POPULATION; the MUTATION supplies the
+   discrimination.** Building a fixture to exhibit the shift and then observing
+   the shift measures nothing. ⛔ **No mutation row ⇒ no fixture**, and the
+   outcome is a hard stop, not a green suite.
+2. ⛔ **Do not inherit `D2b`'s effect lane.** The shifted value may be a case
+   binder; those are already in `V`. Reaching for `ConsoleWrite` is analogy from
+   the old fixture's shape, not derivation from the requirement.
+3. ⛔ **`contsrc_d2_both_binding_kinds_fixture` is untouched.** Additive only.
 
-⛔ **Every route to the seam is already prohibited** — swapping the lane alters
-the durable fixture, adding `ConsoleRead` to the consumer set is ABI/lane
-widening, an alternate lowering route is banned, and hand-building the
-environment is direct construction (the option I rejected on merit, one level
-down). ⇒ **The required evidence is unobtainable under the current prohibitions.
-Something must give, and choosing what is a RULING, not an implementation
-choice.** Do not resolve it by relaxing a ban silently.
+**And `D4b`'s counts are now correct in the frame:** `C`=83 / `V`=80 are
+**measurements at `e6d4f085`, not invariants** — the discharge condition already
+said *post-admission* census. ⛔ **`R`'s three named causes are the invariant.**
+A new fixture adding to `R` is a real finding; adding to `V` leaves the partition
+intact.
+
+⚠ **The grounding move worth repeating:** the prohibition I lifted was the
+Architect's, and their own release named this outcome as *"the new boundary"* and
+handed it back. A boundary is a scope call, so it was mine — but the soundness
+axis stays theirs, which is why this is one confirming gate and not a
+notification.
 
 ⛔ **`D4a` measurement is a distinct axis from `D4a` admission.** `52422da5`
 already proves admission, a real depth-one predeclared emission, length
@@ -134,8 +147,9 @@ none of it. Read the stops as the frames working, not as under-delivery.
 
 **`D3b`, `D4b`, candidate, `D6` closure, `#27`/case-emission, the call-result
 SCC and downstream `D7` all remain held.** ⛔ `D3a` is DONE (QA-approved) and
-`D4a` is stopped, not building — neither is merely held. WIP clock: derive it from the latest reset event in the
-thread, never from a stamped deadline.
+`D4a` is ruled-but-ungated, not building — neither is merely held. WIP clock:
+derive it from the latest reset event in the thread, never from a stamped
+deadline.
 
 ### Where the node stands
 
@@ -145,7 +159,7 @@ thread, never from a stamped deadline.
 | `D2` identity + value contract | accepted preservation at exact `e6d4f085` |
 | `D2b` immediate availability | **QA-APPROVED** exact `7316e13a` — `evt_3w4s25ta13hc4` |
 | `D3a` | **QA-APPROVED** exact `14b111ae` — `evt_62g4pganvk6f6` |
-| `D4a` | **HARD STOP** `evt_7xwdw87mgf1q3` at `52422da5`; QA verifying |
+| `D4a` | `V` admitted at `52422da5`; extension rd 1 **HARD STOP** `evt_7xwdw87mgf1q3`, QA-verified; **rd 2 RULED** `evt_28xx7t69z7j76` — awaiting Architect gate |
 | `D3b` / `D4b` | held, in that order |
 
 ⛔ **There is no undivided `D4` any more.** The SET EQUALITY definition below
