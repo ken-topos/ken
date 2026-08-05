@@ -40,11 +40,13 @@
 
 ### The one thing to do next
 
-**Release `D2b` — the immediate-availability projection — then `D3`.** The
-Architect ruled at `evt_44k69b55vhek2` that this belongs **inside this node**;
-⛔ no new node. **`D3`, `D4`, candidate, QA, `D6` closure, `#27`/case-emission,
-the call-result SCC and downstream `D7` all remain held.** WIP clock: derive it
-from the latest reset event in the thread, never from a stamped deadline.
+**Nothing — `D2b` is in flight.** Released at `evt_41ksf39gnqds3` (08:5xZ),
+leader dispatched, frame blob `d7c426e7`. Next expected event is the `D2b`
+report. The Architect ruled at `evt_44k69b55vhek2` that this belongs **inside
+this node**; ⛔ no new node. **`D3`, `D4`, candidate, QA, `D6` closure,
+`#27`/case-emission, the call-result SCC and downstream `D7` all remain held.**
+WIP clock: derive it from the latest reset event in the thread, never from a
+stamped deadline.
 
 ### Where the node stands
 
