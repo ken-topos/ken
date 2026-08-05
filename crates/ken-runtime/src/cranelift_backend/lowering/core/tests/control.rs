@@ -14926,3 +14926,203 @@ fn d3b_the_consumer_refuses_an_index_the_emission_seat_does_not_hold() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// `RT-CONTSRC-PRODUCER-LOCAL` `D3c` — does an entry-ABI value's ROOT ABI
+// position remain its IMMEDIATE position at a predeclared emission seat that
+// sits under an intervening binder?
+// ---------------------------------------------------------------------------
+
+/// Compile the bracket population through the production entry under one
+/// position selection, and return the entry-ABI rows of the seats that satisfy
+/// the Architect's conditions 1 and 2 together.
+///
+/// ⛔ **No fixture is authored here.** `governed_nested_resource_bracket` is the
+/// existing production planner population that five landed controls already
+/// compile; `D3c` measures it rather than building a shape to exhibit an answer.
+/// The compile is expected to end in an error — this population reaches the
+/// unit-body environment boundary recorded at `D3b` — and the observation is
+/// taken at the emission seat, upstream of it.
+fn d3c_observe(
+    selection: crate::cranelift_backend::lowering::D3cPositionSelection,
+) -> Vec<crate::cranelift_backend::lowering::D3cSeatObservation> {
+    use crate::cranelift_backend::lowering::{
+        d3c_set_armed, d3c_set_position_selection, d3c_take_seat, D3cPositionSelection,
+    };
+    use crate::cranelift_backend::planning::governed_nested_resource_bracket;
+
+    let _ = d3c_take_seat();
+    d3c_set_armed(true);
+    d3c_set_position_selection(selection);
+    let _ = recursive_port_process_compiles(&governed_nested_resource_bracket(3));
+    d3c_set_armed(false);
+    d3c_set_position_selection(D3cPositionSelection::MeasuredImmediate);
+
+    // Selected by the two conditions themselves, never by ordinal: a population
+    // whose seats reorder must not silently measure a different emission.
+    d3c_take_seat()
+        .into_iter()
+        .filter(|seat| {
+            seat.entry_abi_inputs > 0
+                && seat.producer_local_inputs > 0
+                && seat.emission_environment.len() > seat.abi_operands
+        })
+        .collect()
+}
+
+/// The descriptor's shape, with the SSA word dropped — `specialized-scalar` out
+/// of `specialized-scalar(v15)`. Used only to prove a difference is **not** a
+/// shape difference.
+fn d3c_shape(operand: &str) -> &str {
+    match operand.find('(') {
+        Some(open) => &operand[..open],
+        None => operand,
+    }
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3c` — an entry-ABI value's root ABI position
+/// is NOT its immediate position at a predeclared emission seat under an
+/// intervening binder.**
+///
+/// This is the Architect's bounded measurement (`evt_56jh63qntwtfe`, Steward
+/// recut `evt_7he9qv8wbv1yq`), and ⛔ **it authorizes no production edit.** The
+/// projection's `RootIsImmediate` arm still copies `source_abi_position` into
+/// `immediate_slot`, and the emission seam still reads `producer_env` there.
+///
+/// MEASURED: compiling the existing `governed_nested_resource_bracket(3)`
+/// population through the production planner and lowering path reaches a
+/// predeclared emission seat whose required vector holds **both** an
+/// `EntryAbi`-root input and a `ProducerLocal`-root input, with an emission
+/// environment longer than the entry ABI operand run. At that seat, the operand
+/// production's own entry walk recorded for ABI position `p` is **not** the
+/// operand the emission environment holds at index `p`; the entry operand is
+/// present in that environment exactly once, at a **different** index; and the
+/// operand sitting at `p` is in bounds and of the identical lowering shape.
+///
+/// CLAIMED: the `RootIsImmediate` copy is unsound at nonzero lexical depth. A
+/// predeclared emitter reading `producer_env[source_abi_position]` obtains a
+/// well-formed operand of exactly the right contract that is **a different
+/// value** — the silent-wrong-value class this node exists to prevent, and the
+/// class no bounds check or contract check can see.
+///
+/// THE GAP: this measures **one** population at **one** depth. It does not
+/// establish how the corrected representation should be spelled, and it does not
+/// measure whether any *currently accepted* program reaches this seat — the
+/// population it was found in already fails downstream for an unrelated reason.
+/// ⛔ Per the checkpoint, the repair is structural and is not attempted here.
+///
+/// Promise class: **durable invariant** — it asserts a relation between two
+/// independently derived answers to "which value is this", and no literal index
+/// or count is pinned. If a later checkpoint corrects the representation so the
+/// two agree, this control is the thing that must be re-cut deliberately, and
+/// its failure would be the correction announcing itself.
+#[test]
+fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder() {
+    use crate::cranelift_backend::lowering::D3cPositionSelection;
+
+    let measured = d3c_observe(D3cPositionSelection::MeasuredImmediate);
+    let [seat] = measured.as_slice() else {
+        panic!(
+            "expected exactly one entry-ABI input at a predeclared seat holding both root \
+             domains under an intervening binder, got {measured:#?}"
+        );
+    };
+
+    // Positive control on the oracle itself. An entry walk that recorded
+    // nothing would make every comparison below pass for the wrong reason.
+    assert_ne!(
+        seat.entry_operand, "none",
+        "the entry ABI walk recorded no operand at position {}, so this row measures a missing \
+         oracle rather than a moved position: {seat:#?}",
+        seat.source_abi_position
+    );
+
+    // ⛔ The flip must not be a BOUNDS mismatch. The root position is a lawful
+    // index into the emission environment; production reads it without error.
+    let at_root = seat
+        .emission_environment
+        .get(seat.source_abi_position as usize)
+        .unwrap_or_else(|| {
+            panic!(
+                "the root ABI position {} is outside the emission environment, so the difference \
+                 below would be a bounds failure rather than an operand-identity one: {seat:#?}",
+                seat.source_abi_position
+            )
+        });
+
+    // The measurement. Two independently derived answers to "which value sits
+    // at ABI position p", and they disagree.
+    assert_ne!(
+        at_root, &seat.entry_operand,
+        "the emission environment holds the entry ABI operand at the root position, so this \
+         population does not exhibit the shift the checkpoint asks about: {seat:#?}"
+    );
+
+    // ⛔ Nor a SHAPE mismatch. The displacing operand is the same lowering shape,
+    // which is exactly why no contract check at the seam can see the difference.
+    assert_eq!(
+        d3c_shape(at_root),
+        d3c_shape(&seat.entry_operand),
+        "the two operands differ in lowering shape, so the difference above could be read as a \
+         representation mismatch rather than a moved position: {seat:#?}"
+    );
+
+    // A SHIFT, not an absence: the entry value is still in the environment, once,
+    // somewhere else. Uniqueness matters — two occurrences would make "where it
+    // is" ambiguous and the measured position meaningless.
+    let occurrences = seat
+        .emission_environment
+        .iter()
+        .enumerate()
+        .filter(|(_, operand)| **operand == seat.entry_operand)
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    let [immediate] = occurrences.as_slice() else {
+        panic!(
+            "the entry ABI operand must appear exactly once in the emission environment for its \
+             immediate position to be well defined, found it at {occurrences:?}: {seat:#?}"
+        );
+    };
+    assert_ne!(
+        *immediate as u32, seat.source_abi_position,
+        "the measured immediate position equals the root ABI position, which is the very \
+         equality this measurement exists to test: {seat:#?}"
+    );
+
+    // The instrument agrees with the control's own derivation.
+    assert_eq!(
+        seat.observed_position,
+        Some(*immediate as u32),
+        "the instrument's measured position disagrees with the position this control derived \
+         from the recorded environment: {seat:#?}"
+    );
+    assert_eq!(
+        seat.observed_operand, seat.entry_operand,
+        "reading the measured immediate position must yield the entry operand: {seat:#?}"
+    );
+
+    // ⭐ Condition 4 — substituting the root ABI position for the measured
+    // immediate one FLIPS, and flips on operand identity. Production is
+    // otherwise unchanged; only the position this instrument reads moves.
+    let substituted = d3c_observe(D3cPositionSelection::SourceAbiPosition);
+    let [substituted] = substituted.as_slice() else {
+        panic!("the substituted run must reach the same one seat, got {substituted:#?}");
+    };
+    assert_eq!(
+        substituted.observed_position,
+        Some(seat.source_abi_position),
+        "the substitution must read the root ABI position: {substituted:#?}"
+    );
+    assert_ne!(
+        substituted.observed_operand, substituted.entry_operand,
+        "substituting the root ABI position must yield a DIFFERENT operand than the entry walk \
+         recorded — if it yields the same one, the position did not move and there is nothing to \
+         correct: {substituted:#?}"
+    );
+    assert_eq!(
+        d3c_shape(&substituted.observed_operand),
+        d3c_shape(&substituted.entry_operand),
+        "the substituted operand must be the same lowering shape, so the flip is carried by \
+         identity alone: {substituted:#?}"
+    );
+}

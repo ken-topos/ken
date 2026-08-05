@@ -1512,6 +1512,120 @@ pub(in crate::cranelift_backend) fn d4a_describe_binding(
     }
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3c` — the entry-ABI immediate-availability
+/// observatory.**
+///
+/// ⭐ **An INSTRUMENT, not a mechanism**, on the same terms as `D4a` above:
+/// `#[cfg(test)]` throughout, disarmed by default, consulted by no lowering
+/// decision. ⛔ **`D3c` authorizes no production edit**, and nothing here is one.
+///
+/// **The question.** `exact_continuation_projection`'s `RootIsImmediate` arm
+/// copies an `EntryAbi` root's `source_abi_position` straight into
+/// `immediate_slot`, and the emission seam then reads `producer_env` at that
+/// slot. `D4a` established that `producer_env` at a predeclared seat is the
+/// **current lexical environment, with intervening binders prepended** — not the
+/// entry ABI operand run. So the copy is only sound at zero binder depth, and
+/// every population before `D4a` was at zero binder depth.
+///
+/// **The oracle, and why it is independent.** Production already records the
+/// entry ABI operands, in ABI-position order, at unit entry: `D5a` built
+/// `defining_abi_operands` from the same single slot walk that seeds the entry
+/// environment, so "index `i` is ABI position `i`" holds there by construction.
+/// That record is keyed by ABI position and never by an environment index, so
+/// comparing it against `producer_env[source_abi_position]` is a comparison of
+/// two independently-derived answers to "which value is this", not a walk
+/// checked against itself.
+///
+/// ⛔ **The identity reported is the Cranelift SSA `Value`**, for `D4a`'s reason:
+/// the carrier, the phase and the lowering shape all agree between the entry
+/// parameter and the local binding that displaces it, so only the SSA word can
+/// discriminate.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D3cPositionSelection {
+    /// Read the emission environment where the entry value **actually is**,
+    /// located by operand identity against the entry oracle.
+    MeasuredImmediate,
+    /// `D3c` mutation — read at `source_abi_position` instead, which is exactly
+    /// what production does today. ⭐ This is the Architect's condition 4: the
+    /// substitution must flip the observed operand, and flip it because the two
+    /// positions hold **different values**, not because one is out of bounds or
+    /// of a different shape.
+    SourceAbiPosition,
+}
+
+#[cfg(test)]
+thread_local! {
+    /// ⛔ Disarmed by default. Only `D3c`'s own control arms it.
+    static D3C_ARMED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static D3C_POSITION_SELECTION: std::cell::Cell<D3cPositionSelection> =
+        const { std::cell::Cell::new(D3cPositionSelection::MeasuredImmediate) };
+    static D3C_SEAT: std::cell::RefCell<Vec<D3cSeatObservation>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// One entry-ABI continuation input at one real predeclared emission seat.
+///
+/// ⭐ The row is deliberately **raw**: it carries the whole emission environment
+/// and the entry operand, and does no locating of its own beyond the selection
+/// the mutation drives. The control re-derives the measured position from these
+/// fields, so the instrument cannot quietly become the oracle.
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub(in crate::cranelift_backend) struct D3cSeatObservation {
+    /// How many inputs of this seat's required vector carry an `EntryAbi` root.
+    pub(in crate::cranelift_backend) entry_abi_inputs: usize,
+    /// How many carry a `ProducerLocal` root — the Architect's condition 2 needs
+    /// at least one of each **in the same vector**.
+    pub(in crate::cranelift_backend) producer_local_inputs: usize,
+    /// This input's root ABI position, which the projection also used as its
+    /// `immediate_slot`.
+    pub(in crate::cranelift_backend) source_abi_position: u32,
+    /// Production's own entry-walk record at that ABI position — the oracle.
+    pub(in crate::cranelift_backend) entry_operand: String,
+    /// Length of the entry ABI operand run.
+    pub(in crate::cranelift_backend) abi_operands: usize,
+    /// The whole emission-seat environment, in order.
+    pub(in crate::cranelift_backend) emission_environment: Vec<String>,
+    /// The position this instrument read, under the active selection.
+    pub(in crate::cranelift_backend) observed_position: Option<u32>,
+    /// The operand found there.
+    pub(in crate::cranelift_backend) observed_operand: String,
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d3c_set_armed(armed: bool) {
+    D3C_ARMED.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d3c_armed() -> bool {
+    D3C_ARMED.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d3c_set_position_selection(selection: D3cPositionSelection) {
+    D3C_POSITION_SELECTION.with(|cell| cell.set(selection));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d3c_position_selection() -> D3cPositionSelection {
+    D3C_POSITION_SELECTION.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d3c_record_seat(observation: D3cSeatObservation) {
+    if !d3c_armed() {
+        return;
+    }
+    D3C_SEAT.with(|cell| cell.borrow_mut().push(observation));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d3c_take_seat() -> Vec<D3cSeatObservation> {
+    D3C_SEAT.with(|cell| std::mem::take(&mut *cell.borrow_mut()))
+}
+
 /// **`AC-5` -- the two executable mutation controls for the static-worker
 /// substrate.**
 ///

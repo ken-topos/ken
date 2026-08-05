@@ -6591,6 +6591,84 @@ impl<'a> Lowering<'a> {
                 locator_operand,
             });
         }
+        // `RT-CONTSRC-PRODUCER-LOCAL` `D3c` — the entry-ABI observatory's seat
+        // half.
+        //
+        // ⛔ **It observes and returns nothing**, exactly like `D4a`'s half
+        // above, and it is `#[cfg(test)]` throughout. `D3c` authorizes no
+        // production edit; the resolution below is untouched and still copies
+        // `source_abi_position` into the immediate slot.
+        //
+        // ⭐ It records the emitting environment and the entry ABI operand run
+        // **as production holds them**, and does no reasoning: the control
+        // re-derives where the entry value actually sits. The instrument must
+        // not be the oracle it is used to test.
+        #[cfg(test)]
+        if crate::cranelift_backend::lowering::d3c_armed()
+            && matches!(defining_owner, ContinuationEmissionOwner::Predeclared(_))
+        {
+            use crate::cranelift_backend::lowering::{
+                d3c_position_selection, d3c_record_seat, d4a_describe_binding,
+                ContinuationSourceCoordinate as D3cCoordinate, D3cPositionSelection,
+                D3cSeatObservation,
+            };
+            let vector = unit.continuation_inputs()?;
+            let entry_abi_inputs = vector
+                .iter()
+                .filter(|i| matches!(i.coordinate, D3cCoordinate::EntryAbi { .. }))
+                .count();
+            let producer_local_inputs = vector
+                .iter()
+                .filter(|i| matches!(i.coordinate, D3cCoordinate::ProducerLocal { .. }))
+                .count();
+            let emission_environment = producer_env
+                .iter()
+                .map(|binding| d4a_describe_binding(Some(binding)))
+                .collect::<Vec<_>>();
+            let abi_operands = self.function_local.defining_abi_operands.len();
+            for input in &vector {
+                let D3cCoordinate::EntryAbi {
+                    source_abi_position, ..
+                } = input.coordinate
+                else {
+                    continue;
+                };
+                // The entry oracle: production's own record of the operand that
+                // arrived at this ABI position, taken at unit entry from the
+                // slot walk, with no environment index in play.
+                let entry_operand = d4a_describe_binding(
+                    self.function_local
+                        .defining_abi_operands
+                        .get(source_abi_position as usize)
+                        .map(|operand| LoweringEnvironmentBinding::Value(operand.clone()))
+                        .as_ref(),
+                );
+                // `D3c` mutation point. ⭐ The selection perturbs WHICH POSITION
+                // of the real emission environment the instrument reads — the
+                // measured one, or the root ABI position production uses.
+                let observed_position = match d3c_position_selection() {
+                    D3cPositionSelection::SourceAbiPosition => Some(source_abi_position),
+                    D3cPositionSelection::MeasuredImmediate => emission_environment
+                        .iter()
+                        .position(|operand| *operand == entry_operand)
+                        .and_then(|position| u32::try_from(position).ok()),
+                };
+                let observed_operand = match observed_position {
+                    Some(position) => d4a_describe_binding(producer_env.get(position as usize)),
+                    None => "none".to_string(),
+                };
+                d3c_record_seat(D3cSeatObservation {
+                    entry_abi_inputs,
+                    producer_local_inputs,
+                    source_abi_position,
+                    entry_operand,
+                    abi_operands,
+                    emission_environment: emission_environment.clone(),
+                    observed_position,
+                    observed_operand,
+                });
+            }
+        }
         let mut resolved_slots: Vec<(ContinuationSourceCoordinate, u32)> = Vec::new();
         for input in unit.continuation_inputs()? {
             // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — present a producer-local
