@@ -188,9 +188,11 @@ into an identity except finalization.
 `finalize_continuation_availability_plan` runs **once, whole-plan**, after every
 context is minted, over every specialization input and every context capture.
 ⛔ Not lazily: lazy resolution leaves a plan carrying an unresolvable frame
-*accepted*, refused only if something reaches it — and the measured `0/60`
-generated-owner consumption is exactly the condition under which that gap stays
-invisible.
+*accepted*, refused only if something reaches it. ⚠ The `0/60` figure originally
+cited here as making that gap invisible is **retracted** — see the note below and
+`RT-CONTSRC-PRODUCER-LOCAL-D4b.md`. The argument for whole-plan finalization does
+not rest on it: a claim nothing reaches today may be reached tomorrow, and
+"accepted but unresolvable" is the wrong state to publish either way.
 
 `continuation_input_view` is the **publication gate** — the single conversion
 both populations pass through, now fallible, refusing when no finalized entry
@@ -213,10 +215,14 @@ an empty requirement set succeeds trivially, so the count of generated
 requirements is what distinguishes "the refusals fire" from "nothing to fire on".
 The witness carries them.
 
-⚠ **THE GAP, restated because it did not go away.** No *lowered* program consumes
-a generated frame identity today (`0/60`). The three-sided consumer revalidation
-is therefore exercised by construction, not by execution. `D4b` supplies the
-behavioural activation.
+⚠ **THE GAP AS FIRST WRITTEN — RETRACTED BY `D4b`.** This said no lowered
+program consumes a generated frame identity (`0/60`), so the revalidation was
+exercised by construction rather than execution. **That figure was wrong.** It
+was measured while the capture-view defect was still live, so the probe recorded
+the path refusing rather than the path being absent. `D4b` re-measured on the
+repaired tree: the generated-frame arm is taken **30 times** across ordinary
+lowering tests, including one that emits and executes a real object. See
+`RT-CONTSRC-PRODUCER-LOCAL-D4b.md`.
 
 ## Suite
 
