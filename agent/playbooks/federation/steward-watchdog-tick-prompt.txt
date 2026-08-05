@@ -11,14 +11,19 @@ STEP 0 — 60-MIN WIP AUDIT CLOCK (playbook §5a-iii). Read the ARMED deadline i
 
 STEP 1 — COMPOSER STRAND SWEEP, before any convo read. A post can land in a composer UNSUBMITTED; no convo read sees that.
 
-for p in runtime-leader runtime-implementer runtime-qa architect foundation-leader foundation-implementer; do printf "%-24s " "$p"; tmux capture-pane -t moot-$p -p -S -200 2>/dev/null | awk '/^[[:space:]]*• (Working|Waiting)/{st=$0} /^─ Worked for/{st=$0} /Retry with a faster model/{m=1} /^›/{c=$0} END{ s = st ? substr(st,1,42) : (m ? "[SAFETY-MODAL]" : "(no-footer)"); printf "%-44s | %s\n", s, (c ~ /Pasted Content|<channel>/ ? "STRAND" : "ok") }'; done
+for p in runtime-leader runtime-implementer runtime-qa architect foundation-leader foundation-implementer; do b=$(tmux capture-pane -t moot-$p -p -S -200 2>/dev/null); f=$(printf '%s' "$b" | tail -14); if printf '%s' "$f" | grep -qE '…|esc to interrupt|▰'; then s=LIVE; elif printf '%s' "$f" | grep -qE ' for [0-9]+m ?[0-9]*s'; then s=DONE; elif printf '%s' "$b" | grep -q 'Retry with a faster model'; then s='[SAFETY-MODAL]'; else s='(no-footer)'; fi; c=$(printf '%s' "$f" | grep -E '^[›❯]' | tail -1); printf "%-24s %-14s | %s\n" "$p" "$s" "$(printf '%s' "$c" | grep -qE 'Pasted Content|<channel>' && echo STRAND || echo ok)"; done
 
--S -200 (short capture = FALSE IDLE). Anchor on the `›` composer line ONLY. Busy by VERB FORM: "• Working (Nm Ns…)" = LIVE · "─ Worked for Nm Ns ─" = FINISHED.
+-S -200 (short capture = FALSE IDLE). Busy by VERB FAMILY, never by a verb:
+- LIVE = present participle + ellipsis, or "esc to interrupt", or a "▰▱" progress bar.
+- DONE = past tense + "for Nm Ns".
+BOTH families are open-ended and BOTH have burned this sweep. Live verbs seen: Composing, Actualizing, Baked, Grooving, Cooking, Wibbling. Finished verbs seen: "Worked for", "Cogitated for", "Baked for". Do NOT extend a verb list and trust it — the check above matches the families, which is why it does not care what the next verb is. A missed live verb renders as a suspicious "(no-footer)"; a missed FINISHED verb is silent and leaves a wait loop running against a seat that already stopped.
 A counter DROP is a real turn boundary; a lockstep rise proves ONE continuous turn, not the absence of a compaction.
 - STRAND + idle = worst case, will NEVER fire: tmux send-keys -t moot-<seat> Enter, then confirm "• Working". STRAND + busy = clear it anyway.
 - Composer placeholders ("Write tests for @filename") = NOT strands. Do NOT press Enter.
+- The composer prefix carries NO information: `❯` and `›` BOTH render placeholders, and a placeholder is the seat's last submitted prompt, so it is by construction a plausible pending instruction. The STRAND column above only catches pasted/channel text; plain instruction text in a composer is invisible to it and reads "ok". The ONLY sound test is to type two throwaway characters: REPLACES the line = empty (placeholder), APPENDS = real unsubmitted input. Probe BEFORE saying "stranded" out loud, not before repairing it.
 - "Additional safety checks" modal = NEVER press Enter (option 1 downgrades the model); it needs no answer.
-- (no-footer) is a RENDERING state — not idle, not a Codex marker. Resolve by reading the pane.
+- (no-footer) is a RENDERING state — not idle. Resolve by reading the pane.
+- Codex seats (last line "gpt-… · /workspaces/…") render NO timing footer, so they sit at (no-footer) in both directions and this sweep cannot classify them. That is the expected reading for them, not a fresh anomaly to investigate each tick — but it is also NOT evidence of idleness. Read those panes.
 
 STEP 2 — TRANSPORT: NEVER get_transcript (kills the stdio transport). For bodies use the HTTP read path, YOUR OWN credential: GET {api_url}/api/spaces/spc_4q7g0se87rgje/events?limit=100 — oldest-first, newest LAST; time field is `timestamp` (`created_at` is null).
 
