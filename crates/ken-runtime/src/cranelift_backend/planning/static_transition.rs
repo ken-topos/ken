@@ -929,6 +929,23 @@ struct ContinuationInputProjection {
     availability: ContinuationAvailabilityViews,
 }
 
+impl ContinuationAvailabilityViews {
+    /// The direct-emission claim's index, for a test that has already
+    /// established the claim exists. ⛔ Test-only and panicking on purpose:
+    /// production consumers must go through the fail-closed resolvers, never
+    /// assert their way past the "which environment" question.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn expect_direct_emission_slot(self) -> u32 {
+        match self.direct_emission {
+            Some(ContinuationEnvironmentClaim::CurrentLexical {
+                post_shift_index, ..
+            }) => post_shift_index,
+            Some(ContinuationEnvironmentClaim::EntryFrame { declared_slot, .. }) => declared_slot,
+            None => panic!("expected a direct-emission availability claim, found none"),
+        }
+    }
+}
+
 /// **`D3b` re-cut — which frame will emit this continuation call.**
 ///
 /// ⛔ Deliberately an enum over the two emitting-frame classes rather than an
@@ -20087,9 +20104,9 @@ mod tests {
              incidentally"
         );
 
-        // The projection's `RootIsImmediate` arm. An entry coordinate takes the
-        // entry position; a fabricated local coordinate takes the `D2b` lexical
-        // derivation, which cannot find it and refuses.
+        // `D3b` re-cut — the predeclared emitter's arm. BOTH coordinate domains
+        // now take the forward lexical derivation; a fabricated local coordinate
+        // is not in the seat environment, so it refuses.
         let entry_environment = ContinuationProducerEnvironment {
             producer_owner: unit.key.producer_owner,
             producer_result_origin: unit.key.producer_result_origin,
@@ -20101,7 +20118,7 @@ mod tests {
             &plan,
             &entry_environment,
             unit.key.ordinary_parameters,
-            &ContinuationImmediateResolution::RootIsImmediate,
+            &ContinuationEmitterFrame::Predeclared(entry_environment.producer_owner),
         )
         .expect("the entry-coordinate projection must succeed, or this row proves nothing");
 
@@ -20113,9 +20130,9 @@ mod tests {
             &plan,
             &local_environment,
             unit.key.ordinary_parameters,
-            &ContinuationImmediateResolution::RootIsImmediate,
+            &ContinuationEmitterFrame::Predeclared(local_environment.producer_owner),
         )
-        .expect_err("the projection must refuse a producer-local coordinate at RootIsImmediate");
+        .expect_err("the projection must refuse a coordinate the seat environment does not hold");
         assert!(
             format!("{refusal:?}").contains("not present in the lexical environment"),
             "the projection must refuse because the forward walk does not place this binding at \
@@ -20658,7 +20675,7 @@ mod tests {
             &plan,
             &environment,
             0,
-            &ContinuationImmediateResolution::RootIsImmediate,
+            &ContinuationEmitterFrame::Predeclared(environment.producer_owner),
         )
         .expect("a producer-local coordinate present at the seat must project");
         assert_eq!(
@@ -20696,7 +20713,7 @@ mod tests {
             &plan,
             &wrong_seat,
             0,
-            &ContinuationImmediateResolution::RootIsImmediate,
+            &ContinuationEmitterFrame::Predeclared(environment.producer_owner),
         )
         .expect_err("an emission seat off its own result edge must refuse");
         assert!(
@@ -20715,7 +20732,7 @@ mod tests {
                 ..environment
             },
             0,
-            &ContinuationImmediateResolution::RootIsImmediate,
+            &ContinuationEmitterFrame::Predeclared(environment.producer_owner),
         )
         .expect_err("a binding absent from the seat environment must refuse");
         assert!(
@@ -20793,7 +20810,13 @@ mod tests {
         // A decoy ahead of it, so the capture POSITION is not zero and cannot
         // be confused with the introduction index.
         let decoy = ContinuationInputProjection {
-            availability: ContinuationImmediateAvailability::EntryAbi { immediate_slot: 0 },
+            availability: ContinuationAvailabilityViews {
+                direct_emission: Some(ContinuationEnvironmentClaim::EntryFrame {
+                    frame: ContinuationFrameIdentity::Predeclared(owner),
+                    declared_slot: 0,
+                }),
+                context_capture: None,
+            },
             coordinate: ContinuationSourceCoordinate::EntryAbi {
                 source_owner: owner,
                 source_abi_position: 0,
@@ -20815,12 +20838,12 @@ mod tests {
         fn resolution<'plan>(
             context: ContinuationSpecializationId,
             inputs: &'plan [ContinuationInputProjection],
-            owner: PredeclaredFunctionId,
+            worker_body_origin: StaticOriginId,
             parameters: u32,
-        ) -> ContinuationImmediateResolution<'plan> {
-            ContinuationImmediateResolution::GeneratedContext {
-                context,
-                owner,
+        ) -> ContinuationEmitterFrame<'plan> {
+            ContinuationEmitterFrame::GeneratedContext {
+                enclosing: context,
+                worker_body_origin,
                 context_parameters: parameters,
                 enclosing_inputs: inputs,
             }
@@ -20830,7 +20853,7 @@ mod tests {
             &plan,
             &environment,
             0,
-            &resolution(context, &enclosing_inputs, owner, CONTEXT_PARAMETERS),
+            &resolution(context, &enclosing_inputs, body_origin, CONTEXT_PARAMETERS),
         )
         .expect("a captured producer-local value with a caller proof must project");
         assert_eq!(
@@ -20851,7 +20874,7 @@ mod tests {
             &plan,
             &environment,
             0,
-            &resolution(context, &enclosing_inputs[..1], owner, CONTEXT_PARAMETERS),
+            &resolution(context, &enclosing_inputs[..1], body_origin, CONTEXT_PARAMETERS),
         )
         .expect_err("a value absent from the capture projection must refuse");
         assert!(
@@ -20871,7 +20894,7 @@ mod tests {
             &plan,
             &environment,
             0,
-            &resolution(context, &enclosing_inputs, other_owner, CONTEXT_PARAMETERS),
+            &resolution(context, &enclosing_inputs, other_body_origin, CONTEXT_PARAMETERS),
         )
         .expect_err("a crossed owner/context pair must refuse");
         assert!(
