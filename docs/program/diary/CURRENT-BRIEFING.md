@@ -33,22 +33,59 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~10:1xZ · `D3` recut into FOUR; `D3a` BUILDING
+## LIVE — 2026-08-05 ~10:5xZ · `D3a` QA-APPROVED; `D4a` HARD-STOPPED
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Nothing — `D3a` is BUILDING.** `D3` was **recut into FOUR ordered
-checkpoints** and `runtime-leader` released `D3a` at `evt_5wvankf3zpg0g`;
-the implementer picked it up unprompted. Frame blob `fffb8db0`.
+**Wait for QA, then expect a ruling request.** `D3a` is **QA-APPROVED at exact
+`14b111ae`**. `D4a` was released (`evt_5j8a7v9hrjdek`) and **HARD-STOPPED at
+`evt_7xwdw87mgf1q3`**; `runtime-qa` is verifying that stop
+(`evt_4x4fvqq1m9eyg`). ⛔ **Nothing is owed by me until QA returns.** Frame blob
+`fffb8db0`.
+
+### ⛔ THE `D4a` BIND — read this before ruling anything
+
+The Architect required (`evt_tkzyc61rmd3`) a four-part proof at **one exact
+predeclared emission**: a reaching `CurrentLexical` with
+`post_shift_index != locator.environment_index`, the real operand at each of
+those two indices, an **independent lowering-side** discrimination that does not
+re-run the planner walk as its oracle, and a bounded wrong-index mutation.
+
+⛔ **The only existing shifted fixture CANNOT REACH LOWERING, structurally.**
+`contsrc_d2_both_binding_kinds_fixture` fails at
+`Err(Unsupported(... "effect Console.257 is a represented unavailable lane"))`.
+Its shift comes from a `Let`-bound **host-effect result** under an intervening
+`Match` binder — ⭐ **the effect-result binding IS the shifted value** — and
+that effect is `HostOpV1::ConsoleRead`, which is **not** in the constant
+`CRANELIFT_HOST_EFFECT_CONSUMERS_V1` (`ConsoleWrite`, `ConsoleFlush`,
+`ConsoleIsTerminal` are). No symbol set, prelude or flag changes it; the
+implementer checked rather than assumed.
+
+⇒ **The fixture is shifted precisely because of the construct that makes it
+unlowerable.** It has always been planner-level; nothing ever lowered it.
+
+⛔ **Every route to the seam is already prohibited** — swapping the lane alters
+the durable fixture, adding `ConsoleRead` to the consumer set is ABI/lane
+widening, an alternate lowering route is banned, and hand-building the
+environment is direct construction (the option I rejected on merit, one level
+down). ⇒ **The required evidence is unobtainable under the current prohibitions.
+Something must give, and choosing what is a RULING, not an implementation
+choice.** Do not resolve it by relaxing a ban silently.
+
+⛔ **`D4a` measurement is a distinct axis from `D4a` admission.** `52422da5`
+already proves admission, a real depth-one predeclared emission, length
+agreement and planner-side placement. **Equal indices make the pass-through
+defect observationally identical**, and length agreement does not identify the
+lowering value — which is why the Architect did not discharge it.
 
 ⛔ **THE BINDING ORDER IS FOUR, NOT MY TWO** (Architect `evt_7vc8zh0rvqyps`,
 superseding my own `evt_11esqaep9awbs`):
 
 1. **`D3a`** — non-lowering closure; both lowering consumers explicitly refuse;
-   seam and pending population stay **visible**. In flight.
+   seam and pending population stay **visible**. **DONE, QA-approved.**
 2. **`D4a`** — bounded admission and measurement. ⭐ **MAY BE DELIBERATELY RED.**
    It exists to produce real reaching producer-local emissions so nonzero-depth
    `CurrentLexical` correspondence can be measured. ⛔ A red here is the
@@ -95,9 +132,9 @@ node is mid-flight and the branch accumulates until the WP completes.
 times it posted the scoping instead of holding it in context, so compaction cost
 none of it. Read the stops as the frames working, not as under-delivery.
 
-**`D4a`, `D3b`, `D4b`, candidate, QA, `D6` closure, `#27`/case-emission, the
-call-result SCC and downstream `D7` all remain held.** ⛔ `D3a` is NOT among
-them — it is in flight. WIP clock: derive it from the latest reset event in the
+**`D3b`, `D4b`, candidate, `D6` closure, `#27`/case-emission, the call-result
+SCC and downstream `D7` all remain held.** ⛔ `D3a` is DONE (QA-approved) and
+`D4a` is stopped, not building — neither is merely held. WIP clock: derive it from the latest reset event in the
 thread, never from a stamped deadline.
 
 ### Where the node stands
@@ -107,8 +144,9 @@ thread, never from a stamped deadline.
 | `D0` `12d9612a` (zero delta), `D1` `77a24320` | accepted `evt_5zkydewv5kspb` |
 | `D2` identity + value contract | accepted preservation at exact `e6d4f085` |
 | `D2b` immediate availability | **QA-APPROVED** exact `7316e13a` — `evt_3w4s25ta13hc4` |
-| `D3a` | **BUILDING** — released `evt_5wvankf3zpg0g`; recut `evt_7vc8zh0rvqyps` |
-| `D4a` / `D3b` / `D4b` | held, in that order — `D4a` may be deliberately RED |
+| `D3a` | **QA-APPROVED** exact `14b111ae` — `evt_62g4pganvk6f6` |
+| `D4a` | **HARD STOP** `evt_7xwdw87mgf1q3` at `52422da5`; QA verifying |
+| `D3b` / `D4b` | held, in that order |
 
 ⛔ **There is no undivided `D4` any more.** The SET EQUALITY definition below
 still governs — it is what **`D4b`** discharges; **`D4a`** admits `V` to create
