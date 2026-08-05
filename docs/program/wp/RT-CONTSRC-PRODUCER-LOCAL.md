@@ -908,18 +908,32 @@ all six failing `D0` rows.
   ContinuationInput(0)
   ```
 
-  **The call-route distinction is load-bearing.** The two compiler-only
-  bindings share source closure/body provenance but name different call
-  semantics: the **IH** calls the exact generated continuation context and
-  appends that context's continuation-input suffix; the **selected recursive
-  argument** calls the exact raw worker and appends **no** suffix. The current
-  body-origin-only `worker_calls` lookup and `generated_context_captures` guard
-  **cannot distinguish them**. A closed compiler-only call-route discriminator
-  is authorized, keyed to the planner-issued raw-body versus generated-context
-  target; it may live on the static-worker binding and in the function-local
-  declared-call table. ⛔ It must **not** be inferred from body shape, arity,
-  use site, environment length, or which target is available, and no `FuncRef`
-  may cross a function boundary.
+  **The call-route distinction is load-bearing, and it is CONDITIONAL.** A
+  closed compiler-only call-route discriminator is authorized, keyed to the
+  planner-issued raw-body versus generated-context target; it may live on the
+  static-worker binding and in the function-local declared-call table. ⛔ It
+  must **not** be inferred from body shape, arity, use site, environment
+  length, or which target is available, and no `FuncRef` may cross a function
+  boundary. The current body-origin-only `worker_calls` lookup and
+  `generated_context_captures` guard cannot distinguish the two bindings, which
+  is why it is authorized.
+
+  > ⛔ **CORRECTED 2026-08-05 by measurement (Architect `evt_3hx267n11sm9k`).**
+  > This paragraph used to say, unconditionally, *"the IH calls the exact
+  > generated continuation context and appends that context's
+  > continuation-input suffix; the selected recursive argument calls the raw
+  > worker and appends none."* **The first half is false.** The exact law:
+  >
+  > 1. `SelectedRecursiveArgument` **always** carries `RawWorker`.
+  > 2. `InductionHypothesis` carries `GeneratedContext` **iff** the planner
+  >    issued and this unit resolved that generated context; **otherwise it
+  >    lawfully carries `RawWorker`.**
+  >
+  > ⇒ The governed fixture's **Raw/Raw** pair is **lawful**, not a defect. The
+  > route field separates call semantics **where a generated context exists**;
+  > it does **not** make every IH/argument pair different callables. Suffix
+  > presence attaches to an IH route that **resolved** a generated context, not
+  > to every IH.
 
   ⇒ This **narrows** the old statement that `StaticWorkerBinding` carries no
   call identity: it still carries no runtime callable value, but it must carry
@@ -939,10 +953,27 @@ all six failing `D0` rows.
   **`D6b` — consumption and the positive.** Lowering consumes both members.
   Governed positive: `Var(0)` is the IH, `Var(1)` is the exact `ScopeArgument`,
   `Var(2)` is the existing `BufferAllocate` success payload, and execution
-  advances to the original `D4a` boundary. Plus the **discriminating control**:
-  the IH and the selected argument used as **different callees**, so aliasing
-  both to the generated context cannot pass. ⚠ Assert the **whole run**, never
-  `Var(2)` alone — a wrong ordinal passes a `Var(2)`-only positive.
+  advances to the original `D4a` boundary.
+
+  ⛔ **The discriminating control must run on the MIXED witness, not the
+  governed one.** The governed fixture is **Raw/Raw** and is therefore
+  **degenerate on route** — it cannot separate the two bindings. The
+  **landed-object fixture's `GeneratedContext`/`RawWorker` pair is the
+  nondegenerate discriminator.** Assert the **exact mixed route pair
+  directly**; ⛔ do **not** infer from equal rendered routes that one binding
+  was reused.
+
+  ⚠ **Assert the whole run, never `Var(2)` alone** — but state the real reason.
+  **The earlier rationale is RETRACTED:** a tail-appended member does **not**
+  silently pass. The typed worker binding **refuses in value position** and
+  five rows redden (measured). The whole-run control is still required; it is
+  not required by the silent-pass story this frame used to tell.
+
+  ⚠ **`D6b` also owes the raw-target declared-call-table representation**,
+  which `D6a` leaves honestly inert: the existing body-origin lookup is
+  overwritten by the generated context and the raw body is removed from the
+  executable population, so a raw route is not yet consumable in a retargeted
+  specialization.
 
   **`D6c` — the refusal set, pre-emission.** Refuse on omission, duplicate,
   wrong source position, wrong closure/body, wrong capture run, wrong order,
@@ -951,8 +982,33 @@ all six failing `D0` rows.
   position and worker provenance; exact binder-run cardinality `IH count +
   argument_binders + continuation_inputs`; no added ABI Parameter/Capture/Result
   slot and unchanged continuation-input count; raw-route versus
-  generated-context-route exactness, including **suffix presence only on the IH
-  route**.
+  generated-context-route exactness, with **suffix presence only on an IH route
+  that resolved a generated context** — ⛔ not on every IH, per the corrected
+  conditional law above.
+
+  ###### `D6a` STATUS — mechanism ACCEPTED at exact `625b7860`, held for fidelity
+
+  Architect review `evt_3hx267n11sm9k`, parent `e27d297a`, tree `80471947`.
+  Measured `730 passed / 7 failed / 1 ignored` to **`736 / 2 / 1`** — five rows
+  repaired, including the governed `Var(2)` failure, whose run is now
+  `[IH RawWorker, SelectedRecursiveArgument RawWorker, ContinuationInput(BufferAllocate Ok)]`
+  at ordinals 0/1/2, reaching the original `D4a` boundary. Both profiles clean.
+  The repaired rows are a consequence of installing the missing binder, **not**
+  an unauthorized route consumer: production call emission does not read the
+  route, and the only read is the `cfg(test)` environment trace.
+
+  ⛔ **`625b7860` does NOT discharge `D6a`** — its comments state the false
+  unconditional route law this frame carried. A **comment-only child** of exact
+  `625b7860` is authorized, correcting at minimum: `lowering/units.rs` (the
+  `InductionHypothesis` docs, the segment-2 *"differing only in call route"*
+  statement, the recursive-argument construction comment); `lowering/mod.rs`
+  (the route-type prose asserting the two bindings are always different
+  callables, and the `GeneratedContext` arm prose); and
+  `lowering/core/tests/control.rs` (the withdrawn *"tail append silently leaves
+  a plausible value"* explanation — keep the control, state its real
+  discriminator). ⛔ **No executable change is authorized by this correction.**
+  Preserve the tests, binder plan, route enum and construction, provenance
+  checks, and the held `D6b` boundary.
 
   **Preserved, unchanged:** the existing hard stop for any additional recursive
   position for which the unit projects no worker. ⛔ Do **not** generalize this

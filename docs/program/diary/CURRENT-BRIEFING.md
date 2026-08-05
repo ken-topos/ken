@@ -61,12 +61,28 @@ frame]`. The functionized construction **replaces the selected recursive
 argument with its IH** — that is the defect. Frame text is fixed; source
 comments carry the same false law and are the implementer's to correct.
 
-**Authorized:** one compiler-only `SelectedRecursiveArgument` unit-environment
-member (from `recursive_position` + `ContinuationWorkerProvenance`), plus a
-closed compiler-only call-route discriminator — the IH calls the generated
-context and appends its suffix; the selected argument calls the raw worker and
-appends none. Cut into **`D6a`** (representation), **`D6b`** (consumption +
-governed positive + discriminating control), **`D6c`** (the refusal set).
+**`D6a`'s mechanism is ACCEPTED at exact `625b7860`** (Architect review
+`evt_3hx267n11sm9k`): `730/7/1` to **`736/2/1`**, five rows repaired including
+the governed `Var(2)`, run `[IH RawWorker, SelectedRecursiveArgument RawWorker,
+ContinuationInput(BufferAllocate Ok)]`, `D4a` boundary reached. **Held for
+fidelity only** — a comment-only child of `625b7860` is authorized, no
+executable change.
+
+⛔ **I wrote a FALSE ROUTE LAW into the frame and it is corrected.** The
+conditional law: `SelectedRecursiveArgument` **always** carries `RawWorker`;
+`InductionHypothesis` carries `GeneratedContext` **iff** the planner issued and
+this unit resolved one, else it lawfully carries `RawWorker`. So the governed
+fixture's **Raw/Raw is lawful** and **degenerate on route** — `D6b`'s
+discriminating control must use the **mixed landed-object witness**
+(`GeneratedContext`/`RawWorker`) and assert the exact pair directly.
+
+⚠ Also retracted: *"a tail-appended member silently passes."* It does not — the
+typed worker binding refuses in value position and five rows redden. **Keep the
+whole-run control; the silent-pass rationale was wrong.**
+
+**`D6b`** owes consumption, the governed positive, the mixed discriminating
+control, **and** the raw-target declared-call-table representation `D6a` leaves
+inert. **`D6c`** is the refusal set. Both held.
 
 ### ⛔⛔ I PUBLISHED A FALSE CONCLUSION AND IT IS WITHDRAWN
 
