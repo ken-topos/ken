@@ -8578,6 +8578,13 @@ impl<'a> ClaimedEffectSeats<'a> {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    /// `(specialized, carried)` emissions of the `BufferAllocate` capacity arm.
+    static CAPACITY_PHASE_DISPATCH: std::cell::Cell<(usize, usize)> =
+        const { std::cell::Cell::new((0, 0)) };
+}
+
 /// One argument to a compiler-synthesized constructor, in the FORM the tree
 /// declares it.
 ///
@@ -14095,6 +14102,176 @@ impl<'a> Lowering<'a> {
             .ins()
             .load(types::I64, MemFlags::trusted(), output, 0);
         Ok((value, valid))
+    }
+
+    /// **`RT-DECL-CLOSURE-PORT` `D7` — the CARRIED exact-`Int` narrowing, over
+    /// the existing carrier ABI.** `(u64, valid)`, emitted, for a capacity that
+    /// reaches its seat as a boundary word rather than a compile-time template.
+    ///
+    /// ⭐ **One range rule, stated ONCE, over both carried representations.**
+    /// The two decoders converge on `narrowed` as the same
+    /// `(sign, len, limbs)` triple — the identical shape
+    /// `ken_boundary_int_view_local` converges on internally — and the rule
+    /// `sign == 0 && len == 1` is applied after they merge. An immediate is
+    /// given a one-limb table of its own scalar rather than a second magnitude
+    /// encoding, which is what lets the merged code be representation-blind.
+    /// Testing the range twice would let the two spellings drift, and the drift
+    /// would be invisible: each arm is exercised by different magnitudes, so a
+    /// suite can be green with one of them wrong.
+    ///
+    /// ⛔ **`sign` is a BIT, not a number.** `0` is non-negative and `1` is
+    /// negative — `ken_boundary_store_int_limbs_local` refuses anything else,
+    /// and the native decoder writes `uextend(payload < 0)`. So the test is
+    /// `sign == 0`; a signed `sign >= 0` is **always true** and would admit
+    /// every negative `Int` at its magnitude. `len >= 1` always holds for the
+    /// same reason — an empty magnitude denotes no integer — so `len == 1` is
+    /// the exact "fits one unsigned limb" test rather than a bound.
+    ///
+    /// ⛔ **Limb 0 is loaded ONLY on the valid path.** A wide magnitude is
+    /// refused on `len` before its table is read at all.
+    ///
+    /// ⛔ **`valid == 0` is the ONLY `InvalidBounds` outcome, and it means
+    /// exactly one thing: a well-formed exact `Int` whose value does not fit
+    /// `u64`.** Everything else — a word that is not an `Int`, a wrong class or
+    /// owner, an unsealed magnitude, a helper that fails — leaves through
+    /// `require_i64(.., BOUNDARY_OK)` as a carrier error. That separation is the
+    /// framed contract: a caller must not be able to read "out of range" off a
+    /// word that never denoted a number.
+    ///
+    /// ⚠ **The tag branch is a discrimination, not a validation.** It selects
+    /// which decoder can read the word; it does not decide the word is good.
+    /// Every non-`ImmediateInt` word goes to `int_view`, whose own guards are
+    /// the authority — `resolve` rejects a wrong tag or owner, the class guard
+    /// rejects a non-`Int` node, and the region path rejects an unsealed
+    /// magnitude. Re-deriving any of those here would be a second copy of a rule
+    /// that already has one.
+    #[cfg(test)]
+    fn record_capacity_phase_dispatch(carried: bool) {
+        CAPACITY_PHASE_DISPATCH.with(|cell| {
+            let (specialized, carried_count) = cell.get();
+            cell.set(if carried {
+                (specialized, carried_count + 1)
+            } else {
+                (specialized + 1, carried_count)
+            });
+        });
+    }
+
+    #[cfg(not(test))]
+    fn record_capacity_phase_dispatch(_carried: bool) {}
+
+    fn narrow_carried_int_u64(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        target: CarriedBoundaryWord,
+    ) -> Result<(cranelift_codegen::ir::Value, cranelift_codegen::ir::Value), CraneliftBackendError>
+    {
+        use cranelift_codegen::ir::condcodes::IntCC;
+        let refs = self.carrier_refs()?;
+        let boundary_arena = self.carrier_arena()?;
+        let pointer_type = builder.func.dfg.value_type(boundary_arena);
+
+        let tag = builder
+            .ins()
+            .band_imm(target.word, crate::boundary_value::BOUNDARY_TAG_MASK as i64);
+        let is_immediate_int = builder.ins().icmp_imm(
+            IntCC::Equal,
+            tag,
+            crate::boundary_value::BoundaryTag::ImmediateInt as i64,
+        );
+        let immediate = builder.create_block();
+        let viewed = builder.create_block();
+        // `(sign, len, limbs)` — the canonical triple, from either decoder.
+        let narrowed = builder.create_block();
+        builder.append_block_param(narrowed, types::I64);
+        builder.append_block_param(narrowed, types::I64);
+        builder.append_block_param(narrowed, pointer_type);
+        builder
+            .ins()
+            .brif(is_immediate_int, immediate, &[], viewed, &[]);
+
+        // ── the immediate payload ────────────────────────────────────────
+        //
+        // The exact tag is validated by the branch above; the scalar comes from
+        // the carrier's own helper rather than a shift written here, so the
+        // immediate decode has one implementation and this is a caller of it.
+        builder.switch_to_block(immediate);
+        let scalar = self.emit_carrier_scalar(builder, target)?;
+        // The sign BIT, spelled as the decoder spells it.
+        let negative = builder.ins().icmp_imm(IntCC::SignedLessThan, scalar, 0);
+        let immediate_sign = builder.ins().uextend(types::I64, negative);
+        let immediate_len = builder.ins().iconst(types::I64, 1);
+        // ⭐ A one-limb table holding the scalar. An immediate's whole
+        // magnitude IS one limb, so giving it a table makes the merged rule
+        // read it exactly as it reads a persistent one — no second encoding,
+        // and no branch below that has to know which arm it came from.
+        let immediate_slot = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            8,
+            3,
+        ));
+        builder.ins().stack_store(scalar, immediate_slot, 0);
+        let immediate_limbs = builder.ins().stack_addr(pointer_type, immediate_slot, 0);
+        builder.ins().jump(
+            narrowed,
+            &[immediate_sign.into(), immediate_len.into(), immediate_limbs.into()],
+        );
+
+        // ── the sealed persistent / native `Int` view ────────────────────
+        builder.switch_to_block(viewed);
+        let view_slot = builder.create_sized_stack_slot(StackSlotData::new(
+            StackSlotKind::ExplicitSlot,
+            24,
+            3,
+        ));
+        let view = builder.ins().stack_addr(pointer_type, view_slot, 0);
+        let call = builder
+            .ins()
+            .call(refs.int_view, &[boundary_arena, target.word, view]);
+        Self::require_i64(builder, builder.inst_results(call)[0], BOUNDARY_OK);
+        let view_sign = builder.ins().stack_load(types::I64, view_slot, 0);
+        let view_len = builder.ins().stack_load(types::I64, view_slot, 8);
+        let view_limbs = builder.ins().stack_load(pointer_type, view_slot, 16);
+        builder.ins().jump(
+            narrowed,
+            &[view_sign.into(), view_len.into(), view_limbs.into()],
+        );
+
+        // ── the shared rule ──────────────────────────────────────────────
+        builder.switch_to_block(narrowed);
+        let sign = builder.block_params(narrowed)[0];
+        let len = builder.block_params(narrowed)[1];
+        let limbs = builder.block_params(narrowed)[2];
+        let non_negative = builder.ins().icmp_imm(IntCC::Equal, sign, 0);
+        let one_limb = builder.ins().icmp_imm(IntCC::Equal, len, 1);
+        let in_range = builder.ins().band(non_negative, one_limb);
+        let read_limb = builder.create_block();
+        let out_of_range = builder.create_block();
+        let done = builder.create_block();
+        builder.append_block_param(done, types::I64);
+        builder.append_block_param(done, types::I8);
+        builder
+            .ins()
+            .brif(in_range, read_limb, &[], out_of_range, &[]);
+
+        builder.switch_to_block(read_limb);
+        let value = builder
+            .ins()
+            .load(types::I64, MemFlags::trusted(), limbs, 0);
+        let valid = builder.ins().iconst(types::I8, 1);
+        builder.ins().jump(done, &[value.into(), valid.into()]);
+
+        // ⛔ The magnitude is NOT read here. A wide `Int` is refused on its
+        // length before its limb table is touched, which is what makes "loading
+        // limb 0 only on the valid path" a property of the emitted code rather
+        // than of the values a fixture happens to pass.
+        builder.switch_to_block(out_of_range);
+        let absent = builder.ins().iconst(types::I64, 0);
+        let invalid = builder.ins().iconst(types::I8, 0);
+        builder.ins().jump(done, &[absent.into(), invalid.into()]);
+
+        builder.switch_to_block(done);
+        Ok((builder.block_params(done)[0], builder.block_params(done)[1]))
     }
 
     fn lower_dynamic_small_int(

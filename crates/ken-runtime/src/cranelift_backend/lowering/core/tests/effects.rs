@@ -2471,3 +2471,335 @@ fn complementary_omissions_across_two_visits_both_reject_though_their_union_is_c
     set_effect_seat_visit_mutation(EffectSeatVisitMutation::Exact);
     compile_b2f_process_pair_fixture().expect("the fixture compiles again once the mutation clears");
 }
+
+
+// ---------------------------------------------------------------------------
+// `RT-DECL-CLOSURE-PORT` `D7` — the carried exact-`Int` capacity route
+// ---------------------------------------------------------------------------
+
+/// What the scripted host saw at the `BufferAllocate` seat.
+///
+/// ⭐ **`capacity` is the load-bearing field, not `calls`.** A control that
+/// asserted only "the program returned Ok" would pass on a narrowing that
+/// produced the wrong `u64`, and the two carried representations decode
+/// magnitudes in genuinely different ways — the immediate through the scalar
+/// helper, the persistent through a limb table. The number that reached the
+/// wire is the only thing that separates "the range rule said valid" from "the
+/// value crossed intact".
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct CapacityWireProbe {
+    calls: usize,
+    capacity: u64,
+}
+
+#[cfg(test)]
+extern "C" fn capacity_probe_dispatch(
+    host_context: *const std::ffi::c_void,
+    operation: i64,
+    request: *const std::ffi::c_void,
+    request_size: i64,
+    reply: *mut std::ffi::c_void,
+) -> i64 {
+    // SAFETY: the direct context points at the live probe for the duration of
+    // the compiled call and is never retained by the dispatcher.
+    let probe = unsafe { &mut *(host_context.cast_mut().cast::<CapacityWireProbe>()) };
+    if operation != ken_host::HostOpV1::BufferAllocate as i64 {
+        return -1;
+    }
+    let wire = ken_host::host_effect_wire_layout_v1(ken_host::HostOpV1::BufferAllocate)
+        .expect("BufferAllocate has a generated wire layout");
+    if request_size != i64::from(wire.request_size) {
+        return -1;
+    }
+    probe.calls += 1;
+    // SAFETY: the offset is generated from the target-C layout for this exact
+    // request record, whose size the lowering supplied and which was checked
+    // above.
+    probe.capacity = unsafe {
+        *(request
+            .cast::<u8>()
+            .add(wire.request_offsets[0] as usize)
+            .cast::<u64>())
+    };
+    // SAFETY: the reply pointer names the target-C-sized stack record the
+    // compiled caller supplied for this operation.
+    unsafe { std::ptr::write_bytes(reply.cast::<u8>(), 0, wire.reply_size as usize) };
+    let store = |offset: u32, value: u64| {
+        // SAFETY: generated offsets are aligned u64 fields within the zeroed
+        // reply record above.
+        unsafe { *(reply.cast::<u8>().add(offset as usize).cast::<u64>()) = value };
+    };
+    store(wire.reply_tag_offset, wire.reply_resource_tag);
+    store(wire.reply_detail_offset, 11);
+    0
+}
+
+/// `Err(InvalidBounds) -> 71`, `Ok(_) -> 41`, anything else traps.
+///
+/// ⛔ Both outcomes are *values*, not one value and one trap. A fixture that
+/// trapped on success could not tell "narrowed to invalid" from "narrowed to
+/// valid and then failed later", and those are exactly the two the phase pair
+/// has to distinguish.
+fn capacity_outcome_fixture(
+    symbols: &crate::NativeProcessSymbols,
+    capacity: RuntimeExpr,
+) -> RuntimeExpr {
+    RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Effect {
+            family: "FS".to_string(),
+            operation: ken_host::HostOpV1::BufferAllocate,
+            capability: None,
+            args: vec![capacity],
+        }),
+        cases: vec![
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_err.clone(),
+                binders: 1,
+                body: RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![crate::RuntimeMatchCase {
+                        constructor: symbols.resource_invalid_bounds.clone(),
+                        binders: 0,
+                        body: px8n_failure(
+                            symbols,
+                            RuntimeExpr::Value(RuntimeValue::Int(71.into())),
+                        ),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "capacity error was not InvalidBounds".to_string(),
+                    },
+                },
+            },
+            crate::RuntimeMatchCase {
+                constructor: symbols.result_ok.clone(),
+                binders: 1,
+                body: px8n_failure(
+                    symbols,
+                    RuntimeExpr::Value(RuntimeValue::Int(41.into())),
+                ),
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "capacity result default".to_string(),
+        },
+    }
+}
+
+/// The same fixture with the capacity delivered through a closure PARAMETER.
+///
+/// ⭐ **This is what makes the operand carried, and it is the whole reason the
+/// control exists.** The value crosses a declared ABI slot to reach the body,
+/// and a value that arrives that way is a boundary word rather than a
+/// compile-time template — a fact about the enclosing unit's parameters, not
+/// about the value.
+fn carried_capacity_fixture(
+    symbols: &crate::NativeProcessSymbols,
+    capacity: RuntimeExpr,
+) -> RuntimeExpr {
+    RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::LexicalClosure {
+            captures: Vec::new(),
+            params: vec!["capacity".to_string()],
+            body: Box::new(capacity_outcome_fixture(symbols, RuntimeExpr::Var(0))),
+        }),
+        args: vec![capacity],
+    }
+}
+
+fn run_capacity_fixture(
+    build: &dyn Fn(&crate::NativeProcessSymbols) -> RuntimeExpr,
+) -> Result<(i64, CapacityWireProbe), CraneliftBackendError> {
+    let isa = native_isa().unwrap();
+    let mut builder = JITBuilder::with_isa(isa, default_libcall_names());
+    builder.symbol("ken_host_dispatch_v1", capacity_probe_dispatch as *const u8);
+    let symbols = crate::NativeProcessSymbols::legacy_prelude();
+    let compiled = compile_expr_into_module(
+        JITModule::new(builder),
+        "d7_carried_capacity",
+        Linkage::Local,
+        &build(&symbols),
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        Some(&symbols),
+        Some(crate::cranelift_backend::test_support::test_only_distinguished_root_join_plan()),
+        None,
+    )?;
+    let input = BorrowedFixtureValue {
+        kind: 1,
+        tag: 0,
+        data: std::ptr::null(),
+        len: 0,
+    };
+    let mut probe = CapacityWireProbe::default();
+    let invocation = RootIngressFixture {
+        process_input: &input,
+        host_context: (&mut probe as *mut CapacityWireProbe).cast(),
+        capability: 0,
+    };
+    let (_, result) = compiled
+        .run(Some((&invocation as *const RootIngressFixture).cast()))
+        .unwrap();
+    Ok((result.unwrap(), probe))
+}
+
+/// The framed capacity values, each with the outcome the range rule gives it.
+///
+/// ⛔ `u64::MAX` is IN range and `u64::MAX + 1` is not, so the pair straddles
+/// the exact boundary rather than sampling either side of it. `-1` and the
+/// negative wide magnitude are the two ways to be negative — one limb and
+/// several — because `sign` is a bit and a rule that read it as a signed number
+/// would accept both.
+fn framed_capacity_rows() -> Vec<(&'static str, RuntimeExpr, i64, u64)> {
+    vec![
+        (
+            "-1",
+            RuntimeExpr::Value(RuntimeValue::Int((-1).into())),
+            71,
+            0,
+        ),
+        ("0", RuntimeExpr::Value(RuntimeValue::Int(0.into())), 41, 0),
+        ("1", RuntimeExpr::Value(RuntimeValue::Int(1.into())), 41, 1),
+        (
+            "u64::MAX",
+            big(crate::Sign::NonNegative, &[u64::MAX]),
+            41,
+            u64::MAX,
+        ),
+        (
+            "u64::MAX + 1",
+            big(crate::Sign::NonNegative, &[0, 1]),
+            71,
+            0,
+        ),
+        (
+            "negative wide",
+            big(crate::Sign::Negative, &[0, 1]),
+            71,
+            0,
+        ),
+        // ⭐ **The row that isolates the VIEWED decoder's sign bit, and none of
+        // the six framed values does.** `-1` is negative but within the
+        // immediate range, so it exercises the immediate arm's sign test; both
+        // two-limb rows are refused on LENGTH before their sign is consulted.
+        // Without this row a rule that dropped `sign == 0` from the viewed arm
+        // stays green on the whole framed set -- and `sign` there is a BIT, so
+        // the natural wrong spelling of the test is one that always passes.
+        //
+        // A one-limb magnitude past the immediate range is the only shape that
+        // reaches the viewed decoder with `len == 1` and `sign == 1`.
+        (
+            "negative one-limb past the immediate range",
+            big(crate::Sign::Negative, &[1 << 62]),
+            71,
+            0,
+        ),
+    ]
+}
+
+/// **The framed exact-`Int` phase pair.** A specialized capacity and a carried
+/// one narrow identically, over both carried representations.
+///
+/// MEASURED: for each of the six framed values, the specialized fixture and
+/// the carried fixture return the same code, dispatch the same number of times,
+/// and put the same `u64` on the wire — and the dispatch census confirms the
+/// two fixtures really did compile different arms.
+///
+/// CLAIMED: the carried route implements the same range rule as the specialized
+/// one, over both `ImmediateInt` and the sealed persistent `Int` view.
+///
+/// THE GAP: identical outcomes do not prove identical *implementations* — two
+/// routes could agree on these six values and diverge on a seventh. What closes
+/// it as far as six values can is that the values are chosen at the rule's own
+/// discontinuities (the sign bit, the one-limb boundary, and the immediate
+/// range's edge), not sampled from the middle.
+#[test]
+fn a_carried_capacity_narrows_exactly_as_a_specialized_one_over_both_representations() {
+    // The premise that the wide rows exercise the VIEWED decoder rather than
+    // the immediate one, grounded on the ABI's own range predicate instead of
+    // on belief about how a fixture lowers.
+    assert!(
+        crate::boundary_value::BoundaryWord::int_fits_immediate(-1)
+            && crate::boundary_value::BoundaryWord::int_fits_immediate(0)
+            && crate::boundary_value::BoundaryWord::int_fits_immediate(1),
+        "the three small rows must be representable as ImmediateInt"
+    );
+    assert!(
+        !crate::boundary_value::BoundaryWord::int_fits_immediate(-(1i64 << 62)),
+        "the negative one-limb row must be past the immediate range, or it \
+         exercises the immediate decoder's sign test rather than the view's"
+    );
+    assert!(
+        !crate::boundary_value::BoundaryWord::int_fits_immediate(i64::MAX),
+        "the immediate range must stop below i64::MAX, so a magnitude at or \
+         above u64::MAX cannot be an ImmediateInt and the wide rows must reach \
+         the sealed-view decoder"
+    );
+
+    for (name, capacity, expected_code, expected_capacity) in framed_capacity_rows() {
+        let specialized_capacity = capacity.clone();
+        crate::cranelift_backend::lowering::units::reset_capacity_phase_dispatch();
+        let (specialized_code, specialized_probe) =
+            run_capacity_fixture(&move |symbols| {
+                capacity_outcome_fixture(symbols, specialized_capacity.clone())
+            })
+            .unwrap_or_else(|error| panic!("{name}: specialized capacity compiles: {error:?}"));
+        let specialized_census =
+            crate::cranelift_backend::lowering::units::capacity_phase_dispatch();
+
+        let carried_capacity = capacity.clone();
+        crate::cranelift_backend::lowering::units::reset_capacity_phase_dispatch();
+        let (carried_code, carried_probe) = run_capacity_fixture(&move |symbols| {
+            carried_capacity_fixture(symbols, carried_capacity.clone())
+        })
+        .unwrap_or_else(|error| panic!("{name}: carried capacity compiles: {error:?}"));
+        let carried_census = crate::cranelift_backend::lowering::units::capacity_phase_dispatch();
+
+        // ⛔ The premise, asserted before the equality. Without it "the two
+        // fixtures agree" is satisfied by two fixtures that both took the
+        // specialized arm, and the carried route would be untested while every
+        // assertion below still passed.
+        assert_eq!(
+            specialized_census,
+            (1, 0),
+            "{name}: the specialized fixture must emit the specialized arm and only it"
+        );
+        assert_eq!(
+            carried_census,
+            (0, 1),
+            "{name}: the carried fixture must emit the carried arm and only it"
+        );
+
+        assert_eq!(
+            specialized_code, expected_code,
+            "{name}: the specialized narrowing's outcome"
+        );
+        assert_eq!(
+            carried_code, specialized_code,
+            "{name}: the carried narrowing must reach the same outcome as the specialized one"
+        );
+        assert_eq!(
+            carried_probe, specialized_probe,
+            "{name}: the carried narrowing must put the same value on the wire, \
+             the same number of times"
+        );
+        if expected_code == 41 {
+            assert_eq!(
+                carried_probe,
+                CapacityWireProbe {
+                    calls: 1,
+                    capacity: expected_capacity,
+                },
+                "{name}: a valid capacity dispatches exactly once, carrying its own magnitude"
+            );
+        } else {
+            assert_eq!(
+                carried_probe.calls, 0,
+                "{name}: an out-of-range capacity performs ZERO host dispatches"
+            );
+        }
+    }
+}

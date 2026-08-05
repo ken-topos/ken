@@ -10162,8 +10162,31 @@ impl<'a> Lowering<'a> {
                         "buffer allocation carried a capability",
                     ));
                 }
-                let capacity = seats.specialized(SEAT_0)?;
-                let (capacity, valid) = self.narrow_native_int_u64(builder, capacity)?;
+                // ⭐ **The one seat whose `Avail` admits BOTH phases and now
+                // has a route for each.** The claim is consumed here and the
+                // observed phase selects the decoder, so the dispatch is bound
+                // to the exact operand this arm reads rather than to a
+                // conversion performed on its behalf.
+                //
+                // ⛔ Exhaustive, no wildcard. Both arms return `(u64, valid)`
+                // and feed the SAME `InvalidBounds` lane below, so a capacity
+                // that does not fit is one outcome regardless of how it
+                // arrived — which is the point: the phase is a fact about how
+                // the value reached the seat, never about what the program
+                // means.
+                let (_, capacity_operand) = seats.operand(SEAT_0)?;
+                let (capacity, valid) = match capacity_operand {
+                    LoweringOperand::Specialized(lowered) => {
+                        let lowered = lowered.clone();
+                        Self::record_capacity_phase_dispatch(false);
+                        self.narrow_native_int_u64(builder, &lowered)?
+                    }
+                    LoweringOperand::Carried(word) => {
+                        let word = *word;
+                        Self::record_capacity_phase_dispatch(true);
+                        self.narrow_carried_int_u64(builder, word)?
+                    }
+                };
                 let invalid = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
                     valid,

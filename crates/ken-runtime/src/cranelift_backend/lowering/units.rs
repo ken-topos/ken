@@ -2596,6 +2596,29 @@ pub(in crate::cranelift_backend) fn last_effect_seat_closure() -> Option<EffectS
     LAST_EFFECT_SEAT_CLOSURE.with(|cell| cell.borrow().clone())
 }
 
+/// How the `BufferAllocate` capacity seat was DISPATCHED, as `(specialized,
+/// carried)`, since the last reset on this thread.
+///
+/// ⭐ **The premise a carried-capacity control cannot do without.** "The
+/// compile succeeded and returned `InvalidBounds`" is the same green whether
+/// the capacity took the carried route or the specialized one, so a fixture
+/// that quietly stops carrying its capacity would leave the carried arm
+/// untested and every assertion about it still passing. This is the only
+/// instrument that separates those two worlds.
+///
+/// ⚠ It counts EMISSIONS, not executions: one compiled arm may run many times
+/// or none. A control that wants "the carried route ran" needs the program's
+/// own result, and this to know which route was compiled.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn capacity_phase_dispatch() -> (usize, usize) {
+    super::CAPACITY_PHASE_DISPATCH.with(std::cell::Cell::get)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_capacity_phase_dispatch() {
+    super::CAPACITY_PHASE_DISPATCH.with(|cell| cell.set((0, 0)));
+}
+
 /// **`D5a` checkpoint 4 step 1 — declare every generated context into ONE
 /// generated function.**
 ///
