@@ -9911,22 +9911,67 @@ impl<'a> Lowering<'a> {
                 self.lower_expr(builder, argument, env)
             })
             .collect::<Result<Vec<_>, _>>()?;
-        // ⭐ `D7` — claim the planned record for every argument seat, in the
-        // phase the operand is ACTUALLY in, before any of it is read. The claim
-        // is made here rather than inside the operation arms because the arms
-        // are what the next release restructures; the population, the phase
-        // agreement and the exact planned-versus-consumed closure are settled
-        // first, on the emitter as it stands.
+        // ⛔ The capability is lowered HERE rather than inside the FS arm, and
+        // the reason is the claim group's window. An operand's own lowering can
+        // visit a nested effect, so every operand must be in hand before the
+        // group opens — a capability lowered inside the arm would lower while
+        // this occurrence's group was open and its nested claims would land in
+        // the wrong visit.
+        let capability_operand = match capability {
+            Some(capability) => {
+                // Present ⇒ the capability value is child 0 of this occurrence.
+                let value = self.child_occurrence(static_origin, 0, &capability.value)?;
+                Some(self.lower_expr(builder, value, env)?)
+            }
+            None => None,
+        };
+        // ⭐ `D7` — ONE claim group per compiler-side visit to this occurrence,
+        // opened before any seat of it is observed and closed before dispatch.
+        // Completeness is asked of this visit alone: a ledger accumulating
+        // claims per occurrence would accept two visits that each read half the
+        // seats, and two half-reads are the defect.
+        let group = self.open_host_effect_seat_group(static_origin, operation)?;
+        #[cfg(test)]
+        let omitted = match effect_seat_visit_mutation() {
+            // Alternate which slot this visit drops, so successive visits'
+            // omissions are complementary and their union is complete.
+            EffectSeatVisitMutation::OmitComplementary => {
+                let slots = self
+                    .static_transition_plan
+                    .host_effect_seat_slots(static_origin)
+                    .into_iter()
+                    .collect::<Vec<_>>();
+                let index = effect_seat_next_visit_index();
+                slots.get(index % slots.len().max(1)).copied()
+            }
+            _ => None,
+        };
+        #[cfg(not(test))]
+        let omitted: Option<EffectSeatSlot> = None;
+        let mut claim = |lowering: &mut Self, slot, operand: &LoweringOperand| {
+            if omitted == Some(slot) {
+                return Ok(());
+            }
+            lowering
+                .claim_host_effect_seat(group, static_origin, slot, operand)
+                .map(|_| ())
+        };
+        if let Some(operand) = &capability_operand {
+            claim(self, EffectSeatSlot::Capability, operand)?;
+        }
         for (ordinal, operand) in lowered.iter().enumerate() {
             let ordinal = u32::try_from(ordinal).map_err(|_| {
                 unsupported("Effect", "host effect argument ordinal exceeds the seat space")
             })?;
-            self.claim_host_effect_seat(
-                static_origin,
-                EffectSeatSlot::Argument(ordinal),
-                operand.effect_seat_phase(),
-            )?;
+            claim(self, EffectSeatSlot::Argument(ordinal), operand)?;
         }
+        #[cfg(test)]
+        if effect_seat_visit_mutation() == EffectSeatVisitMutation::DuplicateWithinVisit {
+            if let Some(operand) = lowered.first() {
+                claim(self, EffectSeatSlot::Argument(0), operand)?;
+            }
+        }
+        self.close_host_effect_seat_group(group)?;
         // BufferFreeze has two ruled phase-bearing resource seats. Every other
         // host operation remains specialized-only and crosses the typed phase
         // boundary only after the checked operation is known.
@@ -10015,20 +10060,10 @@ impl<'a> Lowering<'a> {
                 let lowered = specialized_lowered
                     .as_deref()
                     .expect("non-BufferFreeze operands crossed the specialized boundary");
-                let capability = capability
+                // Lowered and claimed above, with every other operand, so the
+                // claim group's window contains no operand lowering.
+                let capability_operand = capability_operand
                     .ok_or_else(|| unsupported("Effect", "FS operation has no live capability"))?;
-                // Present ⇒ the capability value is child 0 of this occurrence.
-                let capability_value =
-                    self.child_occurrence(static_origin, 0, &capability.value)?;
-                let capability_operand = self.lower_expr(builder, capability_value, env)?;
-                // The capability is a consumed seat with its own need, not
-                // argument ordinal 0 -- it authorizes the operation rather than
-                // naming an object, and it is observable in either phase.
-                self.claim_host_effect_seat(
-                    static_origin,
-                    EffectSeatSlot::Capability,
-                    capability_operand.effect_seat_phase(),
-                )?;
                 let token = match capability_operand {
                     LoweringOperand::Specialized(Lowered::CapabilityToken { value }) => value,
                     LoweringOperand::Carried(word) => self.emit_carrier_scalar(builder, word)?,

@@ -2554,11 +2554,31 @@ pub(super) fn close_host_effect_seat_ledger(
         .static_transition_plan
         .host_effect_seat_records()
         .to_vec();
-    compiler
+    let closure = compiler
         .host_effect_seats
         .take()
         .ok_or_else(|| backend_module("the host effect seat ledger went missing".to_string()))?
-        .close(&planned)
+        .close(&planned)?;
+    #[cfg(test)]
+    LAST_EFFECT_SEAT_CLOSURE.with(|cell| *cell.borrow_mut() = Some(closure.clone()));
+    Ok(closure)
+}
+
+/// What the last completed seat closeout on this thread measured.
+///
+/// ⚠ Like `b2f_last_unit_emission`, this carries no statement about WHICH
+/// compile produced it: a compile that fails before the closeout leaves the
+/// previous reading standing. Read it only where one compile is known to have
+/// closed.
+#[cfg(test)]
+thread_local! {
+    static LAST_EFFECT_SEAT_CLOSURE: std::cell::RefCell<Option<EffectSeatClosure>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn last_effect_seat_closure() -> Option<EffectSeatClosure> {
+    LAST_EFFECT_SEAT_CLOSURE.with(|cell| cell.borrow().clone())
 }
 
 /// **`D5a` checkpoint 4 step 1 — declare every generated context into ONE

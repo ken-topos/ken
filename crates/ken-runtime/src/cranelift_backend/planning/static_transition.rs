@@ -7931,6 +7931,23 @@ impl<'src> StaticTransitionPlan<'src> {
         &self.host_effect_seats
     }
 
+    /// **The planned slot population of ONE effect occurrence.**
+    ///
+    /// ⛔ This is what a visit's completeness is measured against, so it is
+    /// derived from the population rather than from the occurrence's argument
+    /// list: a visit that read every argument it happened to lower would be
+    /// complete by construction.
+    pub(in crate::cranelift_backend) fn host_effect_seat_slots(
+        &self,
+        effect_origin: StaticOriginId,
+    ) -> BTreeSet<EffectSeatSlot> {
+        self.host_effect_seats
+            .iter()
+            .filter(|record| record.effect_origin == effect_origin)
+            .map(|record| record.slot)
+            .collect()
+    }
+
     /// **Claim the ONE planned record for an exact seat.**
     ///
     /// ⛔ Keyed on the occurrence and the slot, never on the operation alone: a

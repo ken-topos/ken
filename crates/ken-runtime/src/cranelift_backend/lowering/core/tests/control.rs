@@ -14310,3 +14310,69 @@ fn erasing_a_seat_key_axis_or_collapsing_the_contract_rejects() {
     recursive_port_process_compiles(&expr)
         .expect("the bracket compiles again once the mutation clears");
 }
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — a visit that reads an effect occurrence
+/// incompletely is rejected as that visit, and two visits cannot cover for each
+/// other.**
+///
+/// ⭐⭐ **`OmitComplementary` is the masking discriminator, and it is the row
+/// this control exists for.** It drops a DIFFERENT slot on each successive
+/// visit, so across two visits the union of what was read is the complete
+/// planned population while neither visit read it. A ledger that accumulated
+/// claims per `(body, occurrence)` — which is exactly what `6a09ed68` did —
+/// sees that complete union and accepts. Completeness asked per visit cannot:
+/// the first incomplete visit refuses at its own close, so the union is never
+/// formed.
+///
+/// The other four rows close the lifecycle around it: a duplicate inside one
+/// visit, a group dropped instead of closed, and an observed phase reported as
+/// the opposite of what the operand actually is.
+///
+/// MEASURED: the unmutated fixture compiles; each of the four perturbations
+/// refuses it; it compiles again once the mutation clears.
+///
+/// CLAIMED: the group is the unit of completeness, its close is mandatory, and
+/// the retained observed phase is checked against the seat's own `Avail`.
+///
+/// THE GAP: the phase row proves the observation is checked at the seat. It does
+/// not prove the arm that later READS the operand is the one the claim was bound
+/// to — the arms still read the bulk vector, and that binding lands with the
+/// dispatch release.
+#[test]
+fn an_incomplete_duplicate_discarded_or_misobserved_visit_rejects() {
+    use crate::cranelift_backend::lowering::{
+        set_effect_seat_visit_mutation, EffectSeatVisitMutation,
+    };
+    use crate::cranelift_backend::planning::governed_nested_resource_bracket;
+    let expr = governed_nested_resource_bracket(3);
+    set_effect_seat_visit_mutation(EffectSeatVisitMutation::Exact);
+    recursive_port_process_compiles(&expr)
+        .expect("the unmutated bracket compiles, so the rows below are not vacuous");
+    for mutation in [
+        EffectSeatVisitMutation::OmitComplementary,
+        EffectSeatVisitMutation::DuplicateWithinVisit,
+        EffectSeatVisitMutation::DiscardGroup,
+        EffectSeatVisitMutation::PerturbObservedPhase,
+    ] {
+        set_effect_seat_visit_mutation(mutation);
+        let refusal = recursive_port_process_compiles(&expr);
+        set_effect_seat_visit_mutation(EffectSeatVisitMutation::Exact);
+        let error = match refusal {
+            Ok(()) => panic!("{mutation:?} left the seat lifecycle satisfied"),
+            Err(error) => error.to_string(),
+        };
+        // The refusal must name a seat or a visit, and must never be the generic
+        // specialized-only surface's.
+        assert!(
+            error.contains("seat"),
+            "{mutation:?} was refused without naming a seat: {error}"
+        );
+        assert!(
+            !error.contains("is a specialized-only surface"),
+            "{mutation:?} fell through to the generic specialized-only refusal: {error}"
+        );
+    }
+    set_effect_seat_visit_mutation(EffectSeatVisitMutation::Exact);
+    recursive_port_process_compiles(&expr)
+        .expect("the bracket compiles again once the mutation clears");
+}

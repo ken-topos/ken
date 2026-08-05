@@ -1270,6 +1270,33 @@ fn match_selected_call_returned_host_result_keeps_established_dynamic_lane() {
         "ken_px7o_match_selected_call_returned_host_result",
     )
     .expect("match-selected HostResult remains owned by ordinary dynamic matching");
+    // ⭐ `D7` — the UNREACHED control lives here because this fixture is its
+    // only witness in the suite: it plans four host-effect seats and reaches
+    // two, because the occurrence carrying the other two sits in a body this
+    // compilation never emits. Extracting the fixture to give the control its
+    // own home would leave the witness and the assertion free to drift apart.
+    //
+    // MEASURED: the compile SUCCEEDS with a nonzero unreached count.
+    //
+    // CLAIMED: `P` is an authorization population, not an execution obligation
+    // -- the same law the aggregate relation carries. This is the row that would
+    // red if `image(claims) = P` were ever reimposed; whole-population equality
+    // was written first and reddened exactly this test.
+    //
+    // THE GAP: it says nothing about a HALF-read occurrence, which is refused by
+    // the group-local completeness equality and not by anything here.
+    let closure = crate::cranelift_backend::lowering::units::last_effect_seat_closure()
+        .expect("the seat ledger closed");
+    assert!(
+        closure.unreached > 0,
+        "this fixture no longer witnesses an unreached planned seat, so the lawfulness of one \
+         is untested: {closure:?}"
+    );
+    assert_eq!(
+        closure.image + closure.unreached,
+        closure.population,
+        "the reported unreached count is not P minus the image: {closure:?}"
+    );
 }
 #[test]
 fn recursive_computational_host_result_keeps_established_dynamic_lane() {
@@ -2334,5 +2361,44 @@ fn seats_of_equal_structural_kind_stay_distinct_on_operation_ordinal_and_need() 
         open_capability.1,
         contract(ken_host::HostOpV1::ResourceRelease, EffectSeatSlot::Argument(0)).1,
         "a capability token and a resource handle share one need"
+    );
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — repeating a complete visit is lawful.**
+///
+/// ⭐ Together with the unreached control above, this is what makes `P` an
+/// AUTHORIZATION population rather than an execution obligation. Asserting only
+/// the unreached half would leave "each planned seat is claimed exactly once"
+/// available as a plausible reading of the close; this excludes it.
+///
+/// MEASURED on the process-pair fixture: two groups close complete over one
+/// occurrence's two seats — four claims against an image of two. The visits
+/// repeat because recursive-descent emission lowers one static occurrence more
+/// than once.
+///
+/// CLAIMED: a second complete visit is not a duplicate. The group is the unit
+/// of completeness, so two of them covering the same seats is lawful, while a
+/// second claim of one seat INSIDE a group is not.
+///
+/// THE GAP: `claims > image` shows repetition happened. It does not by itself
+/// show the two groups covered the SAME occurrence — the equality against
+/// `population` below is what pins that here, and it holds only because this
+/// fixture has exactly one effect occurrence.
+#[test]
+fn repeating_a_complete_visit_is_lawful() {
+    use crate::cranelift_backend::lowering::units::last_effect_seat_closure;
+    compile_b2f_process_pair_fixture().expect("the process-pair fixture compiles");
+    let closure = last_effect_seat_closure().expect("the seat ledger closed");
+    assert!(
+        closure.groups > 1,
+        "only one visit closed, so repetition is untested here: {closure:?}"
+    );
+    assert!(
+        closure.claims > closure.image,
+        "no seat was claimed by more than one visit: {closure:?}"
+    );
+    assert_eq!(
+        closure.image, closure.population,
+        "the repeated visits did not cover the whole planned population: {closure:?}"
     );
 }
