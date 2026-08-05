@@ -1089,19 +1089,274 @@ all six failing `D0` rows.
   descriptor in the carrier would widen the ABI/runtime boundary, duplicate the
   static authority, and violate the compiler-only closure-capsule ruling.
 
-  ###### The cut: `D7a`–`D7e`, ordered
+  ###### The cut — RECUT TWICE. Read the `D8` block below, not this paragraph.
 
   **In-node checkpoints, not a predecessor node** (Steward sizing call, which the
   ruling leaves to me). It lands on the same branch in the same candidate, so a
   node adds a tracker object and a critical-path entry while buying **no** merge
-  boundary — the same reasoning that closed [[RT-UNIT-CLOSURE-CONVERT]]. Five
-  checkpoints because the interface has five pieces with real dependencies, and
-  because bundling is what spent `D5a` twice and `D6b` once.
+  boundary — the same reasoning that closed [[RT-UNIT-CLOSURE-CONVERT]].
 
-  ###### EXECUTION ORDER — read this table, never the letters
+  **The first cut was `D7a`-`D7e`; it is spent.** The governing cut is
+  `D8a`-`D8g`, immediately below, on Architect ruling `evt_3dcafs581921e`.
 
-  ⚠ **Labels are allocation order. This table is execution order.** It is the
-  only ordering statement in this frame that is authoritative.
+  ###### GOVERNING — the `D7` cut is MIS-SIZED. The work is `D8a`-`D8g`.
+
+  **Architect ruling `evt_3dcafs581921e`, 2026-08-05, outcome (c).** Ruled on
+  preserved exact `f3427dae` (`D7a`) and its child `9f21ff0e` (`D7a2`). Both are
+  preserved as **non-candidate evidence**. `D7b`-`D7e`, `D6b` closeout, `D6c`,
+  QA, candidate, `D6` closure and downstream are **frozen**.
+
+  **The `D8` series is allocated so that label order IS execution order.** The
+  `D7` letters were allocation order and misled twice, which is why this frame
+  needed a separate ordering table at all. Do not allocate a `D8x2`; if a
+  checkpoint needs splitting, renumber the tail.
+
+  **Everything below this block about `D7a`, `D7a2`, `D7b` and `D7e` is spent
+  except where a `D8` checkpoint names it as preserved.**
+
+  ###### Finding 1 — `f3427dae` is BLOCKED: the four-field selector is owner-incomplete
+
+  Adding `producer_construct_origin` was necessary and its provenance re-checks
+  are sound. It is **not sufficient as the final identity.**
+
+  The planner already distinguishes discoveries by `enclosing_specialization`,
+  interns specialization keys with `emission_owner`, and **deliberately interns
+  distinct generated contexts for the same raw worker reached under different
+  continuation identities.** The lowerer retains `defining_emission_owner` as an
+  independent fact. Yet `composed_worker_view` searches all units on the four
+  source coordinates alone, and **its own contract admits multiple answers
+  differing only in emission owner.**
+
+  **That multiplicity is not harmless.** A generated route carries
+  `GeneratedContextIssued(context_id)`, so two enclosing specialization owners
+  can name **different exact callees** while sharing all four source
+  coordinates. The caller holds the owner needed to tell them apart. Collapsing
+  them and accepting only when their complete views happen to agree makes
+  **agreement, rather than causal identity, the selector.**
+
+  **The false step was mine.** I justified the four-field selector as "the same
+  causal coordinate `continuation_call_binding_for` already uses". That lookup
+  may **fail closed on duplicate call tokens**; the composed view instead
+  **projects an owner-specific generated-route answer**. The two are not
+  analogous, and the analogy is what made four fields look sufficient.
+
+  ###### Finding 2 — `9f21ff0e` FALSIFIES `D7a2`'s own execution premise
+
+  The hard stop is **accepted**. Retaining the required raw body defines a
+  standalone `Function` whose result is a `Constructor` containing a raw
+  `Closure`; all 25 newly-red rows stop at the permanent unit-result closure
+  boundary, and the toggle is causally isolated to one retention predicate
+  (`741/2` unarmed, `716/27` armed).
+
+  **This is not a missing predicate.** It proves that *"make the raw body a
+  declared-and-defined `Function`"* **reopens the exact boundary the
+  generated-context design exists to avoid.**
+
+  **Withdrawn, and all three are withdrawals of my own frame text:**
+
+  | withdrawn | where I wrote it |
+  |---|---|
+  | `D7a2`'s raw-body **executable-set equality** | the four-step population closure, from `evt_7x6knchb4rb1n` §2 |
+  | `D7e`'s *"prove the raw target is both declared and defined"* | same |
+  | the four-field selector as **final identity** | the `D7a` recut published at `f0167927` |
+
+  **Banned, restated because the measurement makes each one look plausible:** no
+  closure carrier, no ABI/runtime lane, no boundary exemption. Do **not** flip
+  the test-only retention predicate. Do **not** substitute the existing IH
+  `GeneratedContext` — it has **different semantics and operands**.
+
+  ###### The lawful mechanism family: a planner-issued COMPOSED-CALL TARGET
+
+  It is **distinct from both** the standalone `RawWorker` `Function` and the
+  existing IH `GeneratedContext`. It must:
+
+  - **preserve** the selected recursive argument's raw argument and capture
+    semantics;
+  - **consume its result in the exact source-machine continuation**, with the
+    closure-valued result **never crossing a unit boundary**;
+  - carry an **owner-qualified** identity, and an **occurrence-qualified** one
+    wherever more than one source call can consume the binding.
+
+  No first-call, shape, arity, or *"whichever target exists"* rule is lawful.
+
+  ###### EXECUTION ORDER — label order, for the first time on this node
+
+  | # | checkpoint | owner layer |
+  |---|---|---|
+  | 1 | `D8a` — owner-qualified composed selector | planner projection |
+  | 2 | `D8b` — composed-call target, planner representation | planner |
+  | 3 | `D8c` — the consumption seam | lowering / emission |
+  | 4 | `D8d` — one environment authority | lowering environment |
+  | 5 | `D8e` — source-machine callee consumer | lowering consumer |
+  | 6 | `D8f` — checked-marker occupancy | integration |
+  | 7 | `D8g` — non-vacuous closeout, both paths | proof |
+  | 8 | `D6b` closeout, then `D6c` refusal set | — |
+
+  **Still in-node checkpoints, not a predecessor node** (Steward sizing call).
+  The reasoning is unchanged and the new finding does not touch it: this lands
+  on the same branch in the same candidate, so a node buys **no** merge boundary
+  while adding a tracker object and a critical-path entry. Same reasoning that
+  closed [[RT-UNIT-CLOSURE-CONVERT]].
+
+  ###### The base, and what it still carries
+
+  **Base for `D8a` is preserved exact `9f21ff0e`**, not `f3427dae` (Steward
+  call). `D8b` names specific `9f21ff0e` work as preserved — the split of
+  `composed_worker_view`, the selector-agreement law — and rebasing to
+  `f3427dae` would throw that away to re-do it.
+
+  **So the branch carries withdrawn machinery through `D8a`, deliberately.** The
+  raw-body executable-set equality and the test-only retention predicate are
+  **removed in `D8b`**, where their replacement is decided. Nothing merges
+  meanwhile: `9f21ff0e` is non-candidate evidence and the candidate is held, so
+  the only cost is that the branch is briefly inconsistent with its own frame.
+  **Do not remove them in `D8a`** — the selector correction is what `D8a` is,
+  and bundling the removal is the mistake that spent `D5a` twice.
+
+  **`D8a` — the owner-qualified composed selector.**
+
+  ```rust
+  pub(in crate::cranelift_backend) fn composed_worker_view(
+      &self,
+      emission_owner: /* the existing owner fact, not a new identity */,
+      producer_construct_origin: StaticOriginId,
+      continuation_origin: StaticOriginId,
+      producer_alternative: u32,
+      recursive_position: u32,
+  ) -> Result<ComposedWorkerView, CraneliftBackendError>
+  ```
+
+  **This does not require changing every four-field lookup** (Architect, same
+  ruling). It is the composed view that projects an owner-specific answer.
+
+  **Preserved from `f3427dae` — do not rebuild:** the
+  `producer_construct_origin` field itself, the three-field collision evidence,
+  the independent field-drop controls, the construct-origin transplant that
+  selects the other layer's actual worker, and the body-child and
+  ordered-capture provenance checks. All sound, and all still required to be
+  **independently live**.
+
+  **What `f3427dae`'s controls do NOT establish:** they prove uniqueness only in
+  **the two present fixture populations.** The owner discriminator needs its
+  own — the same four source fields under **two distinct emission owners**
+  resolve **separately**, and **transplanting the owner refuses**.
+
+  **The fork, and the implementer measures it rather than picking it:** if the
+  planner can prove that two-owner population **structurally impossible**, then
+  **encode that invariant and mutation-prove it** instead of building a
+  discriminator. **Either answer discharges `D8a`.** What does not discharge it
+  is the present evidence — the code **explicitly says the population is
+  possible**, so a control that never instantiates a second owner cannot settle
+  the question either way.
+
+  **`D8b` — the composed-call target, planner side.** Mint the target as a
+  planner fact under the `D8a` selector, carrying the **full
+  `ComposedWorkerView` provenance**.
+
+  **The `D7a2` requirement object's shape is retained as scaffolding** and was
+  accepted as such: unconstructible outside the planner, one per exact selector,
+  carrying the **whole view rather than a bare body origin**, so a consumer
+  compares provenance rather than an origin that two layers could both
+  plausibly name. Demand is the existence of a specialization at a selector,
+  which is an interned planner fact.
+
+  **Do not rebuild the `D7a`/`D7a2` circularity.** It bit this node once
+  already: `D7a` refused the very target `D7b` was required to make callable, so
+  `D7b` could never lawfully start. **`D8b`'s target must not gate on an
+  executability check that `D8c` is what satisfies.** Split the question exactly
+  as `9f21ff0e` already did — unreconciled resolution separate from the
+  executability question — and state, per check, which side it lives on.
+
+  **Its executability is established by `D8c`, not asserted by `D8b`.** No
+  standalone `Function`, no declared-and-defined raw-body population, no
+  `EmittableCallEdge` before `D8e` emits a call, no forced declaration in
+  lowering, no source re-walk.
+
+  **Preserved from `9f21ff0e` — do not rebuild:** the split of
+  `composed_worker_view` into unreconciled resolution plus the executability
+  question, and the **selector-agreement** law.
+
+  **Do not restore `required_body_origin()`'s self-comparison.** The implementer
+  deleted it rather than repairing it because it was **defined as**
+  `worker.body_origin` and so compared a value with itself and could not fail.
+  Selector agreement is the real law and catches **both** minting defects,
+  because they are one defect seen from two sides: a demand attributed to a
+  selector that does not resolve to it.
+
+  **Honest residual carried forward, and this is its second carry:** the
+  reconciliation gate's **third** check (declaration/definition agreement) was
+  **unexercised** at `9f21ff0e` — deleting it left the row green — because every
+  required body on these plans has an emittable descriptor by construction and
+  the only reaching perturbation trips plane bounds first, proving the wrong
+  guard. **If `D8b` retains any form of that check it must be exercised or
+  deleted. It does not get a third carry.**
+
+  **`D8c` — the consumption seam.** The selected recursive argument's result is
+  consumed **in the exact source-machine continuation**, and the closure-valued
+  result **never crosses a unit boundary**. Raw argument and capture semantics
+  are preserved exactly.
+
+  **This is the checkpoint the whole recut exists for, and the one with no
+  landed precedent.** `9f21ff0e`'s trace names the seat it must avoid:
+
+  ```text
+  UNIT-BODY entry function=PredeclaredFunctionId(2) origin=StaticOriginId(36)
+    UNIT-RESULT transfer origin=StaticOriginId(36) value=Constructor
+    BOUNDARY-REFUSAL first closure child variant=Closure
+  ```
+
+  **Positive:** that refusal is **not reached**, and the target is consumed with
+  the selected argument's exact raw operands.
+
+  **Hard stop, expected rather than exceptional:** if deriving the form from the
+  three mechanism-family properties admits **more than one materially different
+  form**, stop and return the alternatives to me. Do not pick one, and do not
+  build both. **A single well-founded derivation is not a hard stop** — build
+  it.
+
+  **`D8d` — one environment authority, not two.** When the composed and
+  source-machine case environment installs the constructor-argument segment, the
+  selected recursive position installs that exact compiler-only
+  `StaticWorkerBinding` at its **source-order binder position**, routed to the
+  `D8b` composed-call target rather than to a standalone `RawWorker` `Function`.
+  Nonrecursive arguments stay `Value`; the IH prefix and outer frame are
+  unchanged. No parallel side map, no carrier facet. Value-position use of the
+  closure capsule **continues to fail closed**, exactly as in the functionized
+  unit.
+
+  **`D8e` — source-machine callee consumer.** An exact `Var` callee resolving to
+  that binding is consumed **before** the value-only `Var` path. Arguments are
+  still evaluated under the existing source-machine control and phase, then
+  handed to the **same** route-selected static-worker emitter direct descent
+  uses. No duplicated target or operand assembly; no shortcut through
+  `lower_expr` that bypasses source control.
+
+  **`D8f` — checked-marker occupancy.** The witness places an ordinary
+  selected-argument call **before** the checked IH call inside one checked
+  wrapper. So *"a marker is pending"* **cannot** mean *"the next static-worker
+  call consumes it."* The selected-argument call **leaves the marker pending**;
+  only the exact planner-issued checked call occurrence may consume it. Use the
+  existing checked **occurrence authority** or a faithful projection of it,
+  never route, arity, binder-index coincidence, or first-call order. Omission,
+  duplicate, transplant and wrong occurrence must all refuse.
+
+  **`D8g` — non-vacuous closeout, both paths.** Re-run the ordinary A/B source
+  witness through **both** composed and functionized paths. It must reach a
+  same-body `GeneratedContext` IH and a selected-argument emission through the
+  composed-call target, make the wrong-table mutation **red**, and keep the
+  context-suffix mutation **red**. **The declared-and-defined standalone
+  `Function` clause is withdrawn** — see Finding 2. `D6c`'s refusal set follows
+  only after this positive closes.
+
+  **Watch, carried from the implementer's own handoff:** the reconciliation gate
+  **refuses in production by design** at `9f21ff0e`. Anything that starts
+  calling it before the route is settled will read that refusal as a
+  **regression** rather than as the checkpoint's own finding.
+
+  ###### SPENT — the `D7a`-`D7e` cut. Superseded by `D8a`-`D8g` above.
+
+  Retained because `D8a` and `D8b` name specific pieces of it as preserved. The
+  ordering table below is **no longer authoritative**; the `D8` table above is.
 
   | # | checkpoint | owner layer |
   |---|---|---|
@@ -1496,6 +1751,17 @@ all six failing `D0` rows.
 - ⛔ **Any route-modality or edge-selection authority.** Broad admission
   dissolves the need. If you find yourself needing one, that is a finding about
   `D4`'s scope — hard-stop and return it.
+
+  **This ban does NOT reach the `D8b` composed-call target** (Steward, on
+  Architect ruling `evt_3dcafs581921e`). The bullet forbids an authority that
+  **selects among admissible edges at emission**. The composed-call target is a
+  **planner-issued identity**, minted under the `D8a` selector from provenance
+  the planner already holds, and it is exactly what removes the need to choose
+  at emission. The same reading already applies to the landed
+  `StaticWorkerCallRoute`, accepted at `D6a` under this bullet. Do not cite this
+  bullet against `D8b` or `D8d` — the ruling that authorizes them postdates it,
+  and a first-call, shape, arity or *"whichever target exists"* rule stays
+  banned by `D8b`'s own text.
 - ⛔ **Corpus identity, closure identity, first-`Open` reason, or planned-member
   status as a predicate.** All four are forbidden substitutes for a real
   authority, and `member=true` is measured constant across all 612 declines and

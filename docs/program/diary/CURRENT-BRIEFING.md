@@ -33,16 +33,17 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~16:1xZ · `D4b` DISCHARGED; unit-convert `D1` released
+## LIVE — 2026-08-05 ~20:5xZ · `D7` cut SPENT (outcome (c)); the work is `D8a`-`D8g`
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Release `D6a` to Runtime.** Thread **`thr_6m43v75yndhtj`**, on Architect
-ruling **`evt_760m5azkrdrzq`**. Hold exact `e27d297a`; no candidate, no QA
-route. Frame section: *"GOVERNING — `D5a-1`/`D5a-2` are SPENT"*.
+**Release `D8a` to Runtime.** Thread **`thr_6m43v75yndhtj`**, on Architect
+ruling **`evt_3dcafs581921e`**. Base is preserved exact `9f21ff0e`; no
+candidate, no QA route. Frame section: *"GOVERNING — the `D7` cut is MIS-SIZED.
+The work is `D8a`-`D8g`."*
 
 ⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
 published *"new member at ordinal 2, not 3"*. So is the whole
@@ -94,38 +95,60 @@ gap, not a missing fixture** — the released bounded witness repair could never
 have discharged it, because the only source shape that exercises the raw table
 is refused earlier. That is why its wrong-table mutation stays green.
 
-**Next: wait for `D7a2`.** Released by the leader at `evt_6w8ca76mtz5gb`;
-implementer working it. Substrate is cut as in-node checkpoints. ⚠ **Labels are
-allocation order; the frame's EXECUTION ORDER table is authoritative.** Order:
-`D7a` → `D7a2` (raw-target population) → `D7b` (one environment authority) →
-`D7c` (source-machine callee consumer) → `D7d` (checked-marker occupancy) →
-`D7e` (non-vacuous closeout, both paths) → `D6b` closeout → `D6c`.
+**Next: release `D8a` to Runtime.** The `D7a`-`D7e` cut is **SPENT** — Architect
+ruling `evt_3dcafs581921e` returned **outcome (c), mis-sized**, on preserved
+exact `f3427dae` (`D7a`) and `9f21ff0e` (`D7a2`). Both are **non-candidate
+evidence**. The governing cut is `D8a`-`D8g`, and the `D8` series is allocated
+so that **label order IS execution order** — the `D7` letters were allocation
+order and misled twice.
 
-⭐ **`D7a` corrected checkpoint delivered at exact `f3427dae`** (on `ab741989`):
-`739 passed / 2 failed / 1 ignored`, the two being the `d86be55d` baseline pair;
-production and test profiles both clean. **The four-field selector bought the
-thing that was missing** — under the three-field selector every group was
-ambiguous and the projection was **all refusals**; with the causal field the
-inner layer resolves on its own worker facts and the outer refuses on its
-superseded body. ⇒ **The positive branch is now exercised, not claimed.**
+Order: `D8a` (owner-qualified selector) → `D8b` (composed-call target, planner)
+→ `D8c` (the consumption seam) → `D8d` (one environment authority) → `D8e`
+(source-machine callee consumer) → `D8f` (checked-marker occupancy) → `D8g`
+(non-vacuous closeout) → `D6b` closeout → `D6c`.
 
-⚠ **Watch: `f3427dae` has NOT been Architect-reviewed** — the leader sequenced
-`D7a2` straight after it. Defensible (the candidate is held, so nothing merges
-unreviewed), but every Architect review on this node so far has found something
-real, so `D7a2` may be building on an unreviewed base.
+**Finding 1 — the selector is FIVE fields, owner-qualified.** Four was
+necessary and not sufficient. The planner **deliberately interns distinct
+generated contexts for the same raw worker under different continuation
+identities**, so two `emission_owner`s can name **different exact callees**
+while sharing all four source coordinates. Accepting only when the complete
+views agree makes **agreement, not causal identity, the selector**. My analogy
+to `continuation_call_binding_for` was the false step — that lookup may fail
+closed on duplicate tokens; the composed view **projects an owner-specific
+answer**.
 
-**The selector is FOUR fields** — the triple names a source *position*, and two
-dynamic recursion layers instantiate the same one. Different construct origins
-are **different questions, not conflicting answers**.
+**Finding 2 — `9f21ff0e` FALSIFIED `D7a2`'s own premise.** Retaining the
+required raw body defines a standalone `Function` whose result is a
+`Constructor` containing a raw `Closure`; all 25 newly-red rows stop at the
+permanent unit-result closure boundary (`741/2` unarmed, `716/27` armed, one
+predicate). ⇒ *"Make the raw body declared-and-defined"* **reopens the exact
+boundary the generated-context design exists to avoid.**
 
-⛔ **`D7a2` exists because of a CIRCULARITY:** `D7a` refuses the very raw target
-`D7b` must make callable, so `D7b` can never lawfully start. The planner mints
-one unconstructible raw-target requirement and re-runs executability against the
-**final** population first. ⛔ Do **not** weaken the unexecutable-target refusal
-— against today's population it is telling the truth.
+**Withdrawn — all three are MY text:** `D7a2`'s raw-body executable-set
+equality; `D7e`'s *"prove the raw target is both declared and defined"*; the
+four-field selector as final identity.
 
-⛔ Banned: accepting the raw table as a permanently unwitnessed residual, and
-any carrier callable/helper route.
+**The lawful mechanism is a planner-issued COMPOSED-CALL TARGET**, distinct from
+both the standalone `RawWorker` `Function` and the IH `GeneratedContext`:
+preserve the selected argument's raw argument/capture semantics, consume its
+result **in the exact source-machine continuation**, with the closure-valued
+result **never crossing a unit boundary**; owner-qualified, and
+occurrence-qualified where more than one source call can consume the binding.
+
+⛔ Banned: closure carrier, ABI/runtime lane, boundary exemption, flipping the
+test-only retention predicate, substituting the IH `GeneratedContext` (different
+semantics and operands), accepting the raw table as a permanently unwitnessed
+residual, any carrier callable/helper route.
+
+⚠ **The reconciliation gate now REFUSES IN PRODUCTION by design** at `9f21ff0e`.
+Anything that starts calling it before the route is settled reads that as a
+**regression** rather than as the checkpoint's own finding.
+
+⭐ **The concurrent review was worth requesting.** `D7a2` was already built on
+`f3427dae` when I routed it; the review found the base incomplete, which is
+exactly the coupling that mattered — `D7a2`'s exact-set equality is keyed on
+`D7a`'s selector, so both sides of that equality would have been derived from
+the same wrong key.
 
 ### ⛔⛔ I PUBLISHED A FALSE CONCLUSION AND IT IS WITHDRAWN
 
@@ -781,7 +804,8 @@ population. ⛔ **The `env_len` observations were the tell and I read them as th
 obstacle:** growing to 5 while "the index" stayed 0 was the probe holding ordinal
 0 fixed, not the program refusing to shift.
 
-**MEASURED at the production planner and lowering path** (`recursive_port_process_compiles`):
+**MEASURED at the production planner and lowering path**
+(`recursive_port_process_compiles`):
 
 ```
 post_shift_index = 1        locator.environment_index = 0
