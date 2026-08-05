@@ -818,7 +818,46 @@ all six failing `D0` rows.
   3. Retain a **negative** showing an undeclared ambient lexical reference does
      **not** acquire a caller tail or a fabricated capture.
 
-  ### The recursion question — the capture list is DERIVED, not chosen
+  ### ⛔⛔ RECUT 2026-08-05 — THE CAPTURE LITERAL IS INNOCENT. `D5`'s edit is the fixture's SCOPE TRACKING.
+
+  **The "correct the capture literal" edit is WITHDRAWN.** Measured at
+  `:12038`: `closure_scope` is built from an **empty** `BinderScope::default()`
+  and binds only `AllocatedBuffer`, which **is** the closure's own `"buffer"`
+  parameter, so its `Var(1)` is that parameter and the closure's ambient demand
+  is **zero**. ⇒ `captures: Vec::new()` is **correct there too**, and adding a
+  capture would fabricate one.
+
+  **The defect is outside the closure**, twenty lines on:
+  `allocation_scope = BinderScope::default().bind(AllocatedBuffer)` presumes an
+  ambient `AllocatedBuffer` **at the `ComputationalMatch` level that nothing
+  there binds** — the case declares `argument_binders: 1,
+  recursive_positions: [0]`, binding only `ScopeArgument` and
+  `InductionHypothesis`, while the buffer is bound *inside* the closure. So
+  `bracket_case_scope.var(AllocatedBuffer)` yields the failing `Var(2)`.
+
+  ⭐ **This is short by exactly one OUTERMOST binding, matching `D1b`'s
+  measurement**, and confirms once more that the `StaticWorker` at de Bruijn 0
+  is non-causal: it sits innermost, the missing binding is outermost.
+
+  ⭐⭐ **THE CONCLUSION FOR THE CAMPAIGN: the five reds are the runtime
+  CORRECTLY REJECTING a malformed fixture.** `Var: no runtime binding` is the
+  right answer to an IR referencing a binder nobody bound. ⛔ **No Ken defect is
+  implicated**, and nothing here is evidence of a substrate gap.
+
+  **Pending an Architect semantics ruling** (routed `evt_1e3bz0c973egh`): should
+  the governed buffer be in scope at the match level (bind `AllocatedBuffer`
+  around it), or should `allocation_scope` be corrected so the case body does not
+  reference it? Both change what the fixture **means**, which is why it is not
+  the Steward's call. ⛔ Do not repair before that ruling.
+
+  ⚠ **The repair must also establish, and it is UNMEASURED:** the construction
+  recurs at every depth and a nested call builds indices from a **fresh
+  `BinderScope::default()`** while landing under enclosing binders. Whether that
+  compounds the same defect per level, or the single unbound `AllocatedBuffer` is
+  the whole of it, belongs to the repair's evidence — ⛔ not to another
+  measurement round.
+
+  ### Superseded: the recursion question — the capture list is DERIVED, not chosen
 
   `governed_nested_resource_bracket` recurses on `depth - 1`, so one construction
   site produces a closure at every depth, and the ring asked whether the fix is
