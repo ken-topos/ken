@@ -40,10 +40,11 @@
 
 ### The one thing to do next
 
-**Nothing — the ring is working `D8b`.** Thread **`thr_6m43v75yndhtj`**, on
-Architect ruling **`evt_3dcafs581921e`**. `D8a` discharged at exact `e02ef413`;
-`D8b` released at `evt_3jp0rpq7jp13g`. No candidate, no QA route. Frame section:
-*"GOVERNING — the `D7` cut is MIS-SIZED. The work is `D8a`-`D8g`."*
+**Release `D8d` to Runtime** on exact `e4b4c26c`. Thread
+**`thr_6m43v75yndhtj`**, on Architect ruling **`evt_nwgvvr4vaf7y`**. `D8a`
+discharged `e02ef413`, `D8b` discharged `e4b4c26c`, `D8c` retired. No candidate,
+no QA route. Frame sections: *"GOVERNING — the `D7` cut is MIS-SIZED"* and
+*"`D8c` IS RETIRED — folded into `D8e`"*.
 
 ⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
 published *"new member at ordinal 2, not 3"*. So is the whole
@@ -95,8 +96,38 @@ gap, not a missing fixture** — the released bounded witness repair could never
 have discharged it, because the only source shape that exercises the raw table
 is refused earlier. That is why its wrong-table mutation stays green.
 
-**Next: wait for `D8b`.** Released by the leader at `evt_3jp0rpq7jp13g` on exact
-`e02ef413`; implementer working it.
+**Next: release `D8d` to Runtime** on exact `e4b4c26c`, and carry the queued
+owner-collision-guard deletion to its handoff.
+
+⛔ **`D8c` IS RETIRED — folded into `D8e`** (Architect `evt_nwgvvr4vaf7y`,
+**outcome (c) at the CHECKPOINT boundary, not the whole-node boundary; the node
+remains well-sized**). Order is now `D8d` (install the target-derived binding) →
+`D8e` (consume at the callee seat **and** close the no-unit-boundary law) →
+`D8f` → `D8g` → `D6b` closeout → `D6c`. ⛔ The label `D8c` is **not reused**.
+
+**My error:** `D8c`'s consumption statement is an **integration property, not a
+predecessor mechanism** — I read the mechanism family's three properties as
+three checkpoints when the third is a property of the **composition** of the
+other two. `D8d` owns binding, `D8e` owns consumption, and only together can
+they establish it.
+
+⛔ **Build neither returned form.** Resolving the target in `source_call_state`
+from a threaded selector is a **second target-selection authority** and is not
+self-authenticating; installing a target-derived `Lowered::Closure` as `Value`
+is a **second callable representation** that lets the template enter value
+positions. ⛔ **No temporary `Value(Closure)` bridge and no consumer-side lookup
+that `D8d`/`D8e` later replace** — a scaffold the next checkpoint deletes is not
+a checkpoint.
+
+⭐ **`D8b` DISCHARGED at exact `e4b4c26c`** — `ComposedCallTarget` minted,
+withdrawn retention machinery removed, no fork returned. The raw-body-versus-
+route-resolved-callee question **dissolved** (the view already carries route
+eligibility, so the target is a representation, not a route decision) and stays
+dissolved despite citing the now-retired `D8c`.
+
+⭐ **The `D8c` hard-stop clause worked as written** — the implementer returned
+two forms rather than choosing, built nothing, and left the tree clean at
+`e4b4c26c`.
 
 ⭐ **`D8a` DISCHARGED at exact `e02ef413`** (`742/2/1`, both failures the
 `d86be55d` baseline pair). **The fork resolved to the STRUCTURAL branch and was
