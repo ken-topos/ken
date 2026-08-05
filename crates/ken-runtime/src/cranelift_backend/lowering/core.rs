@@ -6190,6 +6190,36 @@ impl<'a> Lowering<'a> {
                         ),
                     ));
                 }
+                // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` CONSUMER MUTATIONS.
+                //
+                // ⭐ `D4a`'s mutations proved the INSTRUMENT — that the
+                // post-shift slot and the locator slot hold different operands.
+                // These prove the CONSUMER: that the production seam refuses
+                // when it selects the wrong one. The Architect's gate requires
+                // both, and passing the first does not discharge the second.
+                //
+                // ⛔ Applied HERE, ahead of the verification and not after it.
+                // A mutation applied to the resolved index downstream would slip
+                // past the very check that is supposed to catch it, and the row
+                // would then prove only that the index changed — which is the
+                // instrument's claim, not the consumer's.
+                #[cfg(test)]
+                let post_shift_index = match d3b_consumer_mutation() {
+                    D3bConsumerMutation::Exact => post_shift_index,
+                    D3bConsumerMutation::ConsumeLocatorIndex => {
+                        record_d3b_consumer_application();
+                        let ContinuationSourceCoordinate::ProducerLocal { locator, .. } =
+                            coordinate
+                        else {
+                            unreachable!("this arm matched a producer-local coordinate")
+                        };
+                        locator.environment_index
+                    }
+                    D3bConsumerMutation::ShiftProducerLocalSlot => {
+                        record_d3b_consumer_application();
+                        post_shift_index.wrapping_add(1)
+                    }
+                };
                 // ⭐ The check that makes a wrong index unrepresentable rather
                 // than merely unlikely: every incidental discriminator —
                 // carrier, ownership, storage owner, referent affinity, lowering
@@ -6672,37 +6702,6 @@ impl<'a> Lowering<'a> {
                     emission_origin: unit.producer_construct_origin(),
                 },
             )?;
-            // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` CONSUMER MUTATIONS. ⭐ `D4a`'s
-            // mutations proved the INSTRUMENT — that the post-shift slot and the
-            // locator slot hold different operands. These prove the CONSUMER:
-            // that the production seam notices when it reads the wrong one.
-            //
-            // ⛔ Applied only to a producer-local resolution. On an entry-ABI
-            // input the arm's own root-versus-immediate equality law catches
-            // them first, and the row would name this mutation while measuring
-            // that one.
-            #[cfg(test)]
-            let resolution = {
-                let mut resolution = resolution;
-                if let (
-                    ContinuationImmediateRoot::ProducerLocal,
-                    ContinuationSourceCoordinate::ProducerLocal { locator, .. },
-                ) = (resolution.root, input.coordinate)
-                {
-                    match d3b_consumer_mutation() {
-                        D3bConsumerMutation::Exact => {}
-                        D3bConsumerMutation::ConsumeLocatorIndex => {
-                            record_d3b_consumer_application();
-                            resolution.immediate_slot = locator.environment_index;
-                        }
-                        D3bConsumerMutation::ShiftProducerLocalSlot => {
-                            record_d3b_consumer_application();
-                            resolution.immediate_slot = resolution.immediate_slot.wrapping_add(1);
-                        }
-                    }
-                }
-                resolution
-            };
             let immediate_slot = resolution.immediate_slot;
             // `D3b` — INJECTIVITY, **within the producer-local domain only**.
             //

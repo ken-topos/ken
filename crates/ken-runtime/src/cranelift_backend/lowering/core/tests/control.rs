@@ -14842,3 +14842,87 @@ fn d4a_the_post_shift_slot_holds_the_operand_built_for_that_binding() {
          two reads are not the pair the exact row asserted about"
     );
 }
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` — the CONSUMER refuses a wrong index at
+/// the actual consumption boundary.**
+///
+/// ⭐ **This is the half `D4a` could not prove, and the distinction is the
+/// Architect's gate `evt_65xkzqppdqdaj`.** `D4a` proved the *instrument*: that
+/// the post-shift slot and the locator slot of `d4a_shifted_lowerable_fixture`
+/// hold different Cranelift SSA operands. That says nothing about whether
+/// production notices when it reads the wrong one — and it could not, because
+/// until `D3b` production refused every producer-local coordinate before
+/// reaching an index at all. This row is the consumer's proof.
+///
+/// **Why a check is needed at all, rather than trusting the projection.** Every
+/// incidental discriminator a consumer could otherwise rely on is EQUAL across
+/// the positions of one seat environment: `D4a` measured both of this fixture's
+/// inputs carrying `ValueWord` / `OwnedByFrame` / `ActivationFrame` and the same
+/// referent affinity, and both operands lowering to a `HostResult` with the same
+/// constructor pair. A consumer indexing with the wrong number would therefore
+/// obtain a well-formed operand of exactly the right contract and emit a call
+/// carrying the wrong value, silently.
+///
+/// MEASURED: with the consumer unmutated, this fixture's emission passes the
+/// seat-consistency check and lowering proceeds past the emission seam. Under
+/// each of the two committed consumer mutations it is refused *at that check*,
+/// and the perturbation is confirmed to have fired.
+///
+/// CLAIMED: the seam consumes the projection's post-shift index and no other
+/// number.
+///
+/// THE GAP: the check re-runs the planner's own walk, so it proves the consumer
+/// indexes with the number the planner assigned — **not** that the assignment is
+/// right. `D2b`'s discriminator and `D3a`'s validator own that half.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d3b_the_consumer_refuses_an_index_the_emission_seat_does_not_hold() {
+    use crate::cranelift_backend::lowering::{
+        d3b_consumer_applications, set_d3b_consumer_mutation, D3bConsumerMutation,
+    };
+
+    let compile = |mutation| {
+        set_d3b_consumer_mutation(mutation);
+        let outcome = recursive_port_process_compiles(&d4a_shifted_lowerable_fixture());
+        let applications = d3b_consumer_applications();
+        set_d3b_consumer_mutation(D3bConsumerMutation::Exact);
+        (format!("{outcome:?}"), applications)
+    };
+
+    // The positive control. ⛔ It deliberately does NOT assert a successful
+    // compile: this fixture stops later, at a unit-body environment boundary
+    // that is not this seam's and that `D3b` did not touch. What it asserts is
+    // the discriminating fact — that the failure is not *this* check.
+    let (exact, exact_applications) = compile(D3bConsumerMutation::Exact);
+    assert_eq!(
+        exact_applications, 0,
+        "the unmutated route must not record a perturbation"
+    );
+    assert!(
+        !exact.contains("emission-seat consistency check"),
+        "the unmutated consumer must pass the seat-consistency check, or every mutation row \
+         below is measuring a failure that was already there: {exact}"
+    );
+
+    for mutation in [
+        D3bConsumerMutation::ConsumeLocatorIndex,
+        D3bConsumerMutation::ShiftProducerLocalSlot,
+    ] {
+        let (refusal, applications) = compile(mutation);
+        assert!(
+            applications > 0,
+            "{mutation:?} never fired, so this row measured the unmutated route"
+        );
+        assert!(
+            refusal.contains("emission-seat consistency check"),
+            "{mutation:?} must be refused by the seat-consistency check itself, not by an \
+             incidental failure downstream: {refusal}"
+        );
+        assert!(
+            refusal.contains("does not hold that coordinate at"),
+            "{mutation:?} must be refused for naming an index the seat does not hold this \
+             coordinate at, which is the exact proposition: {refusal}"
+        );
+    }
+}
