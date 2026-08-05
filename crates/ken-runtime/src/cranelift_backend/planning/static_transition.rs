@@ -21040,6 +21040,68 @@ mod tests {
         );
     }
 
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3a` — the ABI provenance construction is
+    /// DOMAIN-PRESERVING, on the one input where a domain-total helper looks
+    /// identical.**
+    ///
+    /// ⭐ The whole ruling is about *one* case: the same owner id reached
+    /// through two different coordinate domains. Any helper — including the
+    /// domain-total `provenance_owner()` this replaced — agrees with this one
+    /// on every other input, so a row that varied the owner would pass against
+    /// the rejected design. This holds the owner FIXED and varies only the
+    /// domain.
+    ///
+    /// MEASURED: two coordinates carrying the identical `PredeclaredFunctionId`
+    /// in different domains produce provenance values that are not equal, and
+    /// each lands in its own arm. CLAIMED: an entry-ABI authority and a
+    /// producer-local authority in the same owner are distinguishable at this
+    /// plane. THE GAP: this is the constructor's law only; that the ABI
+    /// cross-check actually *uses* it is
+    /// `contspec_abi_refuses_owner_lifetime_and_affinity_disagreement`.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_d3a_abi_provenance_separates_the_domains_at_one_owner() {
+        let owner = PredeclaredFunctionId(11);
+        let entry = abi::AbiContinuationInputProvenance::of(
+            ContinuationSourceCoordinate::EntryAbi {
+                source_owner: owner,
+                source_abi_position: 0,
+                source: ContinuationInputSource::Parameter,
+            },
+        );
+        let local = abi::AbiContinuationInputProvenance::of(
+            ContinuationSourceCoordinate::ProducerLocal {
+                binding: ProducerLocalBinding {
+                    binding_owner: owner,
+                    binding_origin: StaticOriginId(4),
+                    binding_ordinal: 0,
+                },
+                locator: ProducerLocalLocator {
+                    environment_origin: StaticOriginId(4),
+                    environment_index: 0,
+                },
+            },
+        );
+        assert_eq!(
+            entry,
+            abi::AbiContinuationInputProvenance::EntryAbi {
+                source_owner: owner
+            }
+        );
+        assert_eq!(
+            local,
+            abi::AbiContinuationInputProvenance::ProducerLocal {
+                binding_owner: owner
+            }
+        );
+        // ⛔ The kill: a domain-total owner projection makes these equal.
+        assert_ne!(
+            entry, local,
+            "the same owner reached through two domains must not collapse to one provenance"
+        );
+    }
+
     /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3a` — the seam is retained, and its own
     /// refusal contract stays measured while it has no caller.**
     ///
