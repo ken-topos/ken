@@ -53,6 +53,7 @@ pub(super) use static_transition::{
     // accessor that answers "which ABI position" without the domain.
     ContinuationAvailabilityViews, ContinuationEnvironmentClaim, ContinuationFrameIdentity,
     ContinuationSourceCoordinate,
+    ContinuationSourceSlotAuthority,
     ContinuationSpecializationId,
     // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` — the emission consumer's fail-closed
     // check that it is indexing where the coordinate actually sits.

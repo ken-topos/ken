@@ -6103,11 +6103,15 @@ impl<'a> Lowering<'a> {
     /// what must hold is that the claim names *this* seat or *this* frame.
     fn resolve_direct_emission_claim(
         &self,
-        coordinate: ContinuationSourceCoordinate,
+        requested: &ContinuationSourceSlotAuthority,
         views: ContinuationAvailabilityViews,
         defining_owner: ContinuationEmissionOwner,
         seat: ContinuationDirectEmissionSeat,
     ) -> Result<u32, CraneliftBackendError> {
+        // ⛔ The complete requested slot is threaded in, not reassembled here.
+        // The alias rule tests exact equality of the whole record, so a seam that
+        // rebuilt it would be a second definition of "the same value".
+        let coordinate = requested.coordinate;
         let Some(claim) = views.direct_emission else {
             return Err(unsupported(
                 "ContinuationSpecialization",
@@ -6125,7 +6129,7 @@ impl<'a> Lowering<'a> {
                 producer_result_origin,
                 emission_origin,
                 lexical_environment_origin,
-                post_shift_index,
+                nearest_alias_index,
             } => {
                 // ⛔ A current-lexical claim is authority over a PREDECLARED
                 // retained environment. A generated context lowers a raw body
@@ -6136,7 +6140,7 @@ impl<'a> Lowering<'a> {
                         "ContinuationSpecialization",
                         "a current-lexical availability claim was presented to a generated \
                          emission context, which holds no retained lexical environment for the \
-                         producer; its post-shift index has nothing here to index and \
+                         producer; its nearest-alias index has nothing here to index and \
                          RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than reading it as a \
                          frame slot",
                     ));
@@ -6175,13 +6179,13 @@ impl<'a> Lowering<'a> {
                 // row asserts `applications > 0` before it asserts anything about
                 // the refusal.
                 #[cfg(test)]
-                let post_shift_index = {
+                let nearest_alias_index = {
                     use crate::cranelift_backend::lowering::{
                         d3b_consumer_mutation, record_d3b_consumer_application,
                         D3bConsumerMutation,
                     };
                     match d3b_consumer_mutation() {
-                        D3bConsumerMutation::Exact => post_shift_index,
+                        D3bConsumerMutation::Exact => nearest_alias_index,
                         D3bConsumerMutation::ConsumeLocatorIndex => {
                             match coordinate {
                                 ContinuationSourceCoordinate::ProducerLocal {
@@ -6196,16 +6200,16 @@ impl<'a> Lowering<'a> {
                                 // and a substitute would measure an invented
                                 // number.
                                 ContinuationSourceCoordinate::EntryAbi { .. } => {
-                                    post_shift_index
+                                    nearest_alias_index
                                 }
                             }
                         }
                         D3bConsumerMutation::ShiftProducerLocalSlot => match coordinate {
                             ContinuationSourceCoordinate::ProducerLocal { .. } => {
                                 record_d3b_consumer_application();
-                                post_shift_index.wrapping_add(1)
+                                nearest_alias_index.wrapping_add(1)
                             }
-                            ContinuationSourceCoordinate::EntryAbi { .. } => post_shift_index,
+                            ContinuationSourceCoordinate::EntryAbi { .. } => nearest_alias_index,
                         },
                     }
                 };
@@ -6218,10 +6222,10 @@ impl<'a> Lowering<'a> {
                     producer_result_origin,
                     emission_origin,
                     lexical_environment_origin,
-                    coordinate,
-                    post_shift_index,
+                    requested,
+                    nearest_alias_index,
                 )?;
-                Ok(post_shift_index)
+                Ok(nearest_alias_index)
             }
             ContinuationEnvironmentClaim::EntryFrame {
                 frame,
@@ -6241,7 +6245,7 @@ impl<'a> Lowering<'a> {
     ///
     /// ⛔ A current-lexical claim is **refused outright** here: this consumer
     /// holds an entry-frame operand run and no semantic environment at all, so a
-    /// post-shift index has nothing to index. That refusal is by **consumer
+    /// nearest-alias index has nothing to index. That refusal is by **consumer
     /// environment identity**, not by root domain.
     fn resolve_context_capture_claim(
         &self,
@@ -6266,7 +6270,7 @@ impl<'a> Lowering<'a> {
                 "ContinuationSpecialization",
                 "a current-lexical availability claim was presented to the entry-frame capture \
                  consumer, which holds an ABI operand run and no semantic environment; a \
-                 post-shift lexical index is not a frame slot and \
+                 nearest-alias lexical index is not a frame slot and \
                  RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than indexing with it",
             )),
             ContinuationEnvironmentClaim::EntryFrame {
@@ -6618,7 +6622,7 @@ impl<'a> Lowering<'a> {
             // current-lexical claim": taking the context-capture view here would
             // measure an operand run this seat does not hold.
             let Some(ContinuationEnvironmentClaim::CurrentLexical {
-                post_shift_index, ..
+                nearest_alias_index, ..
             }) = input.availability.direct_emission
             else {
                 continue;
@@ -6628,11 +6632,11 @@ impl<'a> Lowering<'a> {
             // instrument reads, which is exactly the choice a `D3b` consumer
             // will have to make. Production is not routed through it.
             let selected = match d4a_slot_selection() {
-                D4aSlotSelection::Exact | D4aSlotSelection::SwapSlots => post_shift_index,
+                D4aSlotSelection::Exact | D4aSlotSelection::SwapSlots => nearest_alias_index,
                 D4aSlotSelection::UseLocatorIndex => locator_index,
             };
             let at = |index: u32| d4a_describe_binding(producer_env.get(index as usize));
-            let (post_shift_operand, locator_operand) =
+            let (nearest_alias_operand, locator_operand) =
                 if d4a_slot_selection() == D4aSlotSelection::SwapSlots {
                     (at(locator_index), at(selected))
                 } else {
@@ -6640,9 +6644,9 @@ impl<'a> Lowering<'a> {
                 };
             d4a_record_seam(D4aSeamObservation {
                 binding_origin: binding.binding_origin,
-                post_shift_index,
+                nearest_alias_index,
                 locator_index,
-                post_shift_operand,
+                nearest_alias_operand,
                 locator_operand,
             });
         }
@@ -6792,7 +6796,7 @@ impl<'a> Lowering<'a> {
                         }
                     }
                     // ⛔ Scoped to the PREDECLARED arm, whose direct-emission
-                    // claim is current-lexical. `+1` moves the post-shift index
+                    // claim is current-lexical. `+1` moves the nearest-alias index
                     // off the binder depth the planner walked, which the
                     // revalidation must catch.
                     D5aRouteMutation::PerturbPredeclaredImmediateSlot => {
@@ -6837,7 +6841,7 @@ impl<'a> Lowering<'a> {
             // through whenever both halves are individually well-formed, which
             // is exactly the shape that reads as safe.
             let immediate_slot = self.resolve_direct_emission_claim(
-                input.coordinate,
+                &input.requested_source_slot(),
                 input.availability,
                 defining_owner,
                 ContinuationDirectEmissionSeat {
@@ -8884,7 +8888,7 @@ impl<'a> Lowering<'a> {
             //
             // ⛔ `ContinuationImmediateSeat::AbiOperandRun` is not a weaker
             // `Emission`: this seam holds an ABI operand run and no semantic
-            // environment at all, so a current-lexical post-shift index has
+            // environment at all, so a current-lexical nearest-alias index has
             // nothing here to index and is refused rather than read as an ABI
             // position. The generated-context capture arm IS resolvable here,
             // because a capture slot is a position in exactly this run.
@@ -13633,8 +13637,8 @@ struct ContinuationDirectEmissionSeat {
 fn d3b_claim_index(claim: ContinuationEnvironmentClaim) -> u32 {
     match claim {
         ContinuationEnvironmentClaim::CurrentLexical {
-            post_shift_index, ..
-        } => post_shift_index,
+            nearest_alias_index, ..
+        } => nearest_alias_index,
         ContinuationEnvironmentClaim::EntryFrame { declared_slot, .. } => declared_slot,
     }
 }
@@ -13652,13 +13656,13 @@ fn d3b_replace_claim_index(
             producer_result_origin,
             emission_origin,
             lexical_environment_origin,
-            post_shift_index: _,
+            nearest_alias_index: _,
         } => ContinuationEnvironmentClaim::CurrentLexical {
             emission_owner,
             producer_result_origin,
             emission_origin,
             lexical_environment_origin,
-            post_shift_index: index,
+            nearest_alias_index: index,
         },
         ContinuationEnvironmentClaim::EntryFrame { frame, .. } => {
             ContinuationEnvironmentClaim::EntryFrame {

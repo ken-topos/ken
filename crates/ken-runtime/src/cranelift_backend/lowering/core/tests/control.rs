@@ -13305,7 +13305,7 @@ fn d5a_the_retargeted_worker_call_carries_the_raw_run_plus_the_context_capture_s
 /// it is written for:
 ///
 /// - a **predeclared** emitter's direct-emission claim is `CurrentLexical`, so
-///   moving its post-shift index off the depth the planner walked is caught by
+///   moving its nearest-alias index off the depth the planner walked is caught by
 ///   re-walking the seat. ⛔ Not by an equality against the root ABI position:
 ///   `D3c` measured that equality false at nonzero binder depth, so it was the
 ///   defect and never the guard.
@@ -14548,7 +14548,7 @@ fn a_discarded_visit_refuses_before_its_body_is_defined() {
 // ---------------------------------------------------------------------------
 // `RT-CONTSRC-PRODUCER-LOCAL` `D4a` — the lowerable shifted producer-local
 // population, and the control that measures which operand the emitting
-// environment actually holds at the post-shift index.
+// environment actually holds at the nearest-alias index.
 // ---------------------------------------------------------------------------
 
 fn d4a_unit() -> RuntimeExpr {
@@ -14628,7 +14628,7 @@ fn d4a_parameter_match(case_body: RuntimeExpr) -> RuntimeExpr {
 /// exhibit a shifted producer-local emission that reaches lowering, and being
 /// observed to exhibit one proves nothing about the derivation. The
 /// discrimination is carried by the creation-seat attribution and the two
-/// mutations in [`d4a_the_post_shift_slot_holds_the_operand_built_for_that_binding`].
+/// mutations in [`d4a_the_nearest_alias_slot_holds_the_operand_built_for_that_binding`].
 ///
 /// **The shape, and why each piece is there:**
 ///
@@ -14647,7 +14647,7 @@ fn d4a_parameter_match(case_body: RuntimeExpr) -> RuntimeExpr {
 /// that fixture and its `D2b` discriminator stand exactly as they were.
 fn d4a_shifted_lowerable_fixture() -> RuntimeExpr {
     RuntimeExpr::Let {
-        value: Box::new(d4a_console_write(b"post-shift")),
+        value: Box::new(d4a_console_write(b"nearest-alias")),
         body: Box::new(RuntimeExpr::Match {
             scrutinee: Box::new(RuntimeExpr::Construct {
                 constructor: "ctor:fixture::Contspec::Node".to_string(),
@@ -14693,7 +14693,7 @@ fn d4a_observe(
     // different input.
     let shifted = seam
         .iter()
-        .filter(|observation| observation.post_shift_index != observation.locator_index)
+        .filter(|observation| observation.nearest_alias_index != observation.locator_index)
         .cloned()
         .collect::<Vec<_>>();
     let [shifted] = shifted.as_slice() else {
@@ -14718,23 +14718,23 @@ fn d4a_observe(
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D4a` — the emitting environment holds, at the
-/// post-shift index, the operand lowering built for that exact binding.**
+/// nearest-alias index, the operand lowering built for that exact binding.**
 ///
 /// This is the property `D4a` exists to supply `D3b`, and the one the previous
 /// round could not reach: at `52422da5` the single reaching emission had
-/// `post_shift_index == locator.environment_index == 0`, which makes a real
-/// post-shift walk and a locator pass-through observationally identical.
+/// `nearest_alias_index == locator.environment_index == 0`, which makes a real
+/// nearest-alias selection and a locator pass-through observationally identical.
 ///
 /// MEASURED: compiling `d4a_shifted_lowerable_fixture` through the production
 /// planner and lowering path yields exactly one producer-local continuation
-/// input whose `post_shift_index` differs from its locator's
+/// input whose `nearest_alias_index` differs from its locator's
 /// `environment_index`; the operand the emitting context's environment holds at
-/// that post-shift index is **the same Cranelift SSA value** lowering recorded
+/// that nearest-alias index is **the same Cranelift SSA value** lowering recorded
 /// at the binder-creation seat for that binding's own occurrence; and the
 /// operand at the locator index is a **different** SSA value of the same
 /// carrier, phase and lowering shape.
 ///
-/// CLAIMED: a consumer indexing this environment with `post_shift_index`
+/// CLAIMED: a consumer indexing this environment with `nearest_alias_index`
 /// obtains the producer-local value, and one indexing it with the locator's
 /// introduction index does not.
 ///
@@ -14751,7 +14751,7 @@ fn d4a_observe(
 ///
 /// **Promise class: durable invariant.**
 #[test]
-fn d4a_the_post_shift_slot_holds_the_operand_built_for_that_binding() {
+fn d4a_the_nearest_alias_slot_holds_the_operand_built_for_that_binding() {
     use crate::cranelift_backend::lowering::D4aSlotSelection;
 
     let (exact, built) = d4a_observe(D4aSlotSelection::Exact);
@@ -14760,17 +14760,17 @@ fn d4a_the_post_shift_slot_holds_the_operand_built_for_that_binding() {
     // fixture was built for this, so it is not evidence — it is what makes
     // everything below discriminating instead of vacuous.
     assert_ne!(
-        exact.post_shift_index, exact.locator_index,
+        exact.nearest_alias_index, exact.locator_index,
         "the fixture must reach a genuinely shifted emission; equal indices make the wrong \
          answer indistinguishable from the right one, which is the defect this checkpoint \
          exists to close"
     );
 
-    // ⭐ THE PROPERTY. Attribution, not agreement: the operand at the post-shift
+    // ⭐ THE PROPERTY. Attribution, not agreement: the operand at the nearest-alias
     // slot is the one lowering built for this binding's own occurrence.
     assert_eq!(
-        exact.post_shift_operand, built,
-        "the emitting environment does not hold, at the post-shift index, the operand lowering \
+        exact.nearest_alias_operand, built,
+        "the emitting environment does not hold, at the nearest-alias index, the operand lowering \
          built for binding origin {:?}",
         exact.binding_origin
     );
@@ -14781,8 +14781,8 @@ fn d4a_the_post_shift_slot_holds_the_operand_built_for_that_binding() {
     // are unequal.
     assert_ne!(
         exact.locator_operand, built,
-        "the locator index holds the same operand as the post-shift index, so nothing here \
-         distinguishes a real post-shift walk from passing the introduction index through"
+        "the locator index holds the same operand as the nearest-alias index, so nothing here \
+         distinguishes a real nearest-alias selection from passing the introduction index through"
     );
 
     // The decoy is same-shaped on every incidental axis, so the row above
@@ -14794,9 +14794,9 @@ fn d4a_the_post_shift_slot_holds_the_operand_built_for_that_binding() {
             .unwrap_or_else(|| operand.to_string())
     };
     assert_eq!(
-        shape(&exact.post_shift_operand),
+        shape(&exact.nearest_alias_operand),
         shape(&exact.locator_operand),
-        "the decoy must match the post-shift operand's carrier, phase and lowering shape, or an \
+        "the decoy must match the nearest-alias operand's carrier, phase and lowering shape, or an \
          incidental refusal could carry this test instead of the index"
     );
 
@@ -14808,7 +14808,7 @@ fn d4a_the_post_shift_slot_holds_the_operand_built_for_that_binding() {
          its path and must record the same operand"
     );
     assert_ne!(
-        mutated.post_shift_operand, mutated_built,
+        mutated.nearest_alias_operand, mutated_built,
         "reading the locator index still produced the operand built for this binding, so the \
          instrument cannot tell the two slots apart and proves nothing about the index"
     );
@@ -14819,8 +14819,8 @@ fn d4a_the_post_shift_slot_holds_the_operand_built_for_that_binding() {
     let (swapped, swapped_built) = d4a_observe(D4aSlotSelection::SwapSlots);
     assert_eq!(swapped_built, built, "the creation seat is off the swap's path");
     assert_ne!(
-        swapped.post_shift_operand, swapped_built,
-        "swapping the slots left the post-shift position holding this binding's operand, so the \
+        swapped.nearest_alias_operand, swapped_built,
+        "swapping the slots left the nearest-alias position holding this binding's operand, so the \
          pairing is not what the oracle reads"
     );
     assert_eq!(
@@ -14835,7 +14835,7 @@ fn d4a_the_post_shift_slot_holds_the_operand_built_for_that_binding() {
 ///
 /// ⭐ **This is the half `D4a` could not prove, and the distinction is the
 /// Architect's gate `evt_65xkzqppdqdaj`.** `D4a` proved the *instrument*: that
-/// the post-shift slot and the locator slot of `d4a_shifted_lowerable_fixture`
+/// the nearest-alias slot and the locator slot of `d4a_shifted_lowerable_fixture`
 /// hold different Cranelift SSA operands. That says nothing about whether
 /// production notices when it reads the wrong one — and it could not, because
 /// until `D3b` production refused every producer-local coordinate before
@@ -14855,7 +14855,7 @@ fn d4a_the_post_shift_slot_holds_the_operand_built_for_that_binding() {
 /// each of the two committed consumer mutations it is refused *at that check*,
 /// and the perturbation is confirmed to have fired.
 ///
-/// CLAIMED: the seam consumes the projection's post-shift index and no other
+/// CLAIMED: the seam consumes the projection's nearest-alias index and no other
 /// number.
 ///
 /// THE GAP: the check re-runs the planner's own walk, so it proves the consumer

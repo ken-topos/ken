@@ -938,8 +938,8 @@ impl ContinuationAvailabilityViews {
     pub(in crate::cranelift_backend) fn expect_direct_emission_slot(self) -> u32 {
         match self.direct_emission {
             Some(ContinuationEnvironmentClaim::CurrentLexical {
-                post_shift_index, ..
-            }) => post_shift_index,
+                nearest_alias_index, ..
+            }) => nearest_alias_index,
             Some(ContinuationEnvironmentClaim::EntryFrame { declared_slot, .. }) => declared_slot,
             None => panic!("expected a direct-emission availability claim, found none"),
         }
@@ -1007,15 +1007,25 @@ enum ContinuationEmitterFrame<'plan> {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub(in crate::cranelift_backend) enum ContinuationEnvironmentClaim {
     /// The value sits in the retained lexical environment at one exact
-    /// predeclared emission seat. The index is **post-shift**: it counts the
-    /// binders actually pushed between the value's scope and the seat, obtained
-    /// by the forward semantic environment walk.
+    /// predeclared emission seat.
+    ///
+    /// ⭐ The index is the **nearest exact alias**: the minimum de Bruijn index
+    /// among the positions whose held authority is exactly `Closed([S])` for the
+    /// complete requested source slot `S`. See [`nearest_exact_alias`], which is
+    /// the single definition of that rule and is re-run by the consumer.
+    ///
+    /// ⛔ It is **not** a "nearest-alias index", and that retired spelling is not a
+    /// synonym. Post-shift named a count of binders pushed between the value's
+    /// scope and the seat, which presumes the value occupies exactly one
+    /// position; `let y = x` makes that false. The number here is selected from a
+    /// set of proved aliases, and a reader who thinks of it as a shift will
+    /// reconstruct the exactly-once law this replaced.
     CurrentLexical {
         emission_owner: PredeclaredFunctionId,
         producer_result_origin: StaticOriginId,
         emission_origin: StaticOriginId,
         lexical_environment_origin: StaticOriginId,
-        post_shift_index: u32,
+        nearest_alias_index: u32,
     },
     /// The value arrives as a declared slot of one exactly identified frame's
     /// operand run.
@@ -1095,17 +1105,17 @@ pub(in crate::cranelift_backend) struct ContinuationAvailabilityViews {
 /// A persistent function result does not narrow a `ValueWord` input that may
 /// still name invocation-owned storage.
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct ContinuationSourceSlotAuthority {
+pub(in crate::cranelift_backend) struct ContinuationSourceSlotAuthority {
     /// `D1` — the closed coordinate domain. The contract fields below are
     /// slot-derived for the `EntryAbi` arm and planner-derived for the
     /// `ProducerLocal` one; that difference is in how they are *obtained*, not
     /// in what they mean, so they stay beside the coordinate rather than
     /// inside it.
-    coordinate: ContinuationSourceCoordinate,
-    carrier: AbiCarrier,
-    ownership: AbiOwnership,
-    storage_owner: AbiStorageOwner,
-    referent_affinity: Vec<BoundaryReferentOwner>,
+    pub(in crate::cranelift_backend) coordinate: ContinuationSourceCoordinate,
+    pub(in crate::cranelift_backend) carrier: AbiCarrier,
+    pub(in crate::cranelift_backend) ownership: AbiOwnership,
+    pub(in crate::cranelift_backend) storage_owner: AbiStorageOwner,
+    pub(in crate::cranelift_backend) referent_affinity: Vec<BoundaryReferentOwner>,
 }
 
 /// One semantic value's closed source-ABI provenance while walking the exact
@@ -1578,6 +1588,27 @@ pub(in crate::cranelift_backend) struct ContinuationInputView {
     /// actually holds; there is no field here that answers "which index"
     /// without first answering "which environment, and whose".
     pub(in crate::cranelift_backend) availability: ContinuationAvailabilityViews,
+}
+
+impl ContinuationInputView {
+    /// **The complete requested source slot `S` this input names.**
+    ///
+    /// ⭐ One derivation, on the view, because the alias rule is stated over the
+    /// WHOLE record and a consumer that rebuilt it field-by-field at the seam
+    /// would be a second definition able to drift from the planner's. The
+    /// eligibility test in [`nearest_exact_alias`] is exact equality against
+    /// this, so a field omitted here would silently widen it.
+    pub(in crate::cranelift_backend) fn requested_source_slot(
+        &self,
+    ) -> ContinuationSourceSlotAuthority {
+        ContinuationSourceSlotAuthority {
+            coordinate: self.coordinate,
+            carrier: self.carrier,
+            ownership: self.ownership,
+            storage_owner: self.storage_owner,
+            referent_affinity: self.referent_affinity.clone(),
+        }
+    }
 }
 
 /// `D1` — a read-only view of one already-validated continuation call token,
@@ -6098,7 +6129,7 @@ fn exact_continuation_source_environment(
 /// targeting the emission occurrence yields the environment the emitter is
 /// standing in — binders pushed by every intervening `Let`, `Match` case and
 /// `ComputationalMatch` case already applied. That is precisely what
-/// "post-shift" names, and it is why no new authority is needed: the binder
+/// "nearest-alias" names, and it is why no new authority is needed: the binder
 /// push rules are read off the walk rather than restated here.
 ///
 /// ⛔ **Fail-closed path 1 of 5 — wrong emission origin.** The seat must be an
@@ -6134,14 +6165,14 @@ fn continuation_emission_seat_environment(
     let reached = reached.ok_or_else(|| {
         planner_error(
             "a continuation emission seat is outside its producer owner's source subtree, so the \
-             forward semantic environment walk never reaches it and no post-shift index exists",
+             forward semantic environment walk never reaches it and no nearest-alias index exists",
         )
     })?;
     Ok((source_root, reached))
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b`** — VERIFY that one producer-local
-/// coordinate really occupies the post-shift index a `CurrentLexical`
+/// coordinate really occupies the nearest-alias index a `CurrentLexical`
 /// availability names, at the emission seat that availability is keyed to.
 ///
 /// ⭐ **This is verification, not derivation, and the direction is the whole
@@ -6173,8 +6204,8 @@ pub(in crate::cranelift_backend) fn verify_current_lexical_availability(
     producer_result_origin: StaticOriginId,
     emission_origin: StaticOriginId,
     lexical_environment_origin: StaticOriginId,
-    coordinate: ContinuationSourceCoordinate,
-    post_shift_index: u32,
+    requested: &ContinuationSourceSlotAuthority,
+    nearest_alias_index: u32,
 ) -> Result<(), CraneliftBackendError> {
     let producer_owner = emission_owner;
     let environment = ContinuationProducerEnvironment {
@@ -6194,7 +6225,7 @@ pub(in crate::cranelift_backend) fn verify_current_lexical_availability(
     // exactly one definition in this plane. A second search written here would
     // be a second authority that could drift from the first.
     let derived = current_lexical_availability(
-        coordinate,
+        requested,
         emission_owner,
         producer_result_origin,
         source_root,
@@ -6207,7 +6238,7 @@ pub(in crate::cranelift_backend) fn verify_current_lexical_availability(
             producer_result_origin,
             emission_origin,
             lexical_environment_origin,
-            post_shift_index,
+            nearest_alias_index,
         })
     {
         return Err(planner_error(
@@ -6320,62 +6351,120 @@ fn predeclared_entry_frame_slot(
         .transpose()
 }
 
-/// **`D3b` re-cut, the `CurrentLexical` arm** — locate one coordinate in the
-/// emission seat's environment, and refuse if it is not exactly there.
+/// **`D3b` (alias repair) — THE NEAREST EXACT ALIAS**, the one total rule that
+/// selects a lexical position, shared by the planner that issues the claim and
+/// the consumer that revalidates it.
 ///
-/// ⛔ **Fail-closed — wrong post-shift index.** The index is *searched for by
-/// full-coordinate identity*, never assumed equal to the introduction index, the
-/// projection ordinal, or a root ABI position. A coordinate absent from the seat
-/// environment, or present at two positions, produces an error rather than a
-/// plausible number.
+/// ⭐⭐ **Why this is not the banned "first match", stated where the rule lives.**
+/// The ban exists because choosing among candidates *never proved equivalent*
+/// silently picks one of several different values. Here every candidate is
+/// proved to be the same semantic value **before** ordering is consulted at all:
+/// eligibility is exact equality of the complete
+/// [`ContinuationSourceSlotAuthority`], and the discriminator is **eligibility,
+/// not ordering**. Ordering only canonicalizes among proved aliases.
+///
+/// The proof comes from the authority's own algebra, not from an assumption:
+/// [`ContinuationValueSourceAuthority::join`] unions and **deduplicates complete
+/// records**, so
+///
+/// - `Closed([S])` means every represented path yields exactly source slot `S`;
+/// - `Closed([S, T])` means the value is ambiguous between distinct sources and
+///   is **not** an exact alias, even though it contains `S`;
+/// - two positions each holding `Closed([S])` are proved aliases of one semantic
+///   source, whatever names lowering later assigns them.
+///
+/// ⛔ **The retired law, named so it is not reconstructed.** This previously
+/// required the coordinate to occur **exactly once** and refused two positions as
+/// ambiguous. That was measured false against `let y = x`: a non-`Effect` `Let`
+/// pushes the bound expression's own authority, so one root identity lawfully
+/// occupies two bindings. The old law conflated *"does this position certainly
+/// hold `S`"* with *"is it the only position that does"*; `D3b` needs the first
+/// and never the second.
+///
+/// ⛔ Eligibility is the **complete** record — coordinate, carrier, ownership,
+/// storage owner and referent affinity. A position carrying the same coordinate
+/// under a different contract is a different value and does not qualify.
+fn nearest_exact_alias(
+    requested: &ContinuationSourceSlotAuthority,
+    seat_environment: &[ContinuationValueSourceAuthority],
+) -> Result<u32, CraneliftBackendError> {
+    let mut eligible: Vec<u32> = Vec::new();
+    // Two witnesses kept apart on purpose: they make the three refusals below
+    // distinguishable, so a control naming one cannot pass by tripping another.
+    let mut ambiguous = false;
+    let mut contract_mismatch = false;
+    for (index, value) in seat_environment.iter().enumerate() {
+        let ContinuationValueSourceAuthority::Closed(sources) = value else {
+            continue;
+        };
+        let index = u32::try_from(index).map_err(|_| {
+            planner_capacity_error("continuation lexical environment index exhausted")
+        })?;
+        match sources.as_slice() {
+            // ⭐ Exactly `Closed([S])`, compared as the WHOLE record.
+            [only] if only == requested => eligible.push(index),
+            [only] if only.coordinate == requested.coordinate => contract_mismatch = true,
+            many if many.iter().any(|source| source.coordinate == requested.coordinate) => {
+                ambiguous = true;
+            }
+            _ => {}
+        }
+    }
+    // ⛔ `min`, written as a fold over the whole eligible set rather than as an
+    // early exit from the loop above. The two agree today because the scan is
+    // ascending -- and that is exactly why the total rule is spelled out here:
+    // an early `break` would read as "take the first", and a later reordering of
+    // the scan would silently change the answer.
+    if let Some(selected) = eligible.iter().copied().min() {
+        return Ok(selected);
+    }
+    if ambiguous {
+        return Err(planner_error(
+            "the emission seat holds this continuation coordinate only inside an ambiguous \
+             source set (a Closed([S, T]) join), which does not prove any position certainly \
+             yields the requested value; RT-CONTSRC-PRODUCER-LOCAL D3b requires an exact \
+             singleton and refuses rather than selecting a position that may yield another \
+             source",
+        ));
+    }
+    if contract_mismatch {
+        return Err(planner_error(
+            "the emission seat holds this continuation coordinate under a different carrier, \
+             ownership, storage owner or referent affinity, so it is a different value with the \
+             same root identity; RT-CONTSRC-PRODUCER-LOCAL D3b matches the complete source-slot \
+             authority and refuses rather than indexing on the coordinate alone",
+        ));
+    }
+    Err(planner_error(
+        "a continuation coordinate is not present in the lexical environment in force at the \
+         emission seat, so the value is not immediately available there; this fails closed \
+         rather than reverse-searching for a position that happens to hold a similar value",
+    ))
+}
+
+/// **`D3b` re-cut, the `CurrentLexical` arm** — select the nearest exact alias of
+/// one requested source slot in the emission seat's environment.
 ///
 /// ⭐ **Either root arm reaches here, and that is the `D3c` correction.** The
 /// seat environment is seeded by `continuation_owner_entry_sources`, whose
 /// members carry `EntryAbi` coordinates, and then walked forward with binders
-/// prepended. So an entry value's post-shift position is found by the same
-/// search that finds a producer-local one — which is exactly why the old
-/// "an entry root takes its ABI position" shortcut was wrong.
+/// prepended. So an entry value's lexical position is found by the same rule
+/// that finds a producer-local one — which is exactly why the old "an entry root
+/// takes its ABI position" shortcut was wrong.
 fn current_lexical_availability(
-    coordinate: ContinuationSourceCoordinate,
+    requested: &ContinuationSourceSlotAuthority,
     emission_owner: PredeclaredFunctionId,
     producer_result_origin: StaticOriginId,
     lexical_environment_origin: StaticOriginId,
     emission_origin: StaticOriginId,
     seat_environment: &[ContinuationValueSourceAuthority],
 ) -> Result<ContinuationEnvironmentClaim, CraneliftBackendError> {
-    let mut found: Option<u32> = None;
-    for (index, value) in seat_environment.iter().enumerate() {
-        let ContinuationValueSourceAuthority::Closed(sources) = value else {
-            continue;
-        };
-        if !sources.iter().any(|source| source.coordinate == coordinate) {
-            continue;
-        }
-        let index = u32::try_from(index).map_err(|_| {
-            planner_capacity_error("continuation lexical environment index exhausted")
-        })?;
-        if found.is_some() {
-            return Err(planner_error(
-                "a continuation coordinate is present at two positions of the emission seat's \
-                 lexical environment, so its post-shift index is ambiguous; an exact structural \
-                 identity must occur at most once and this refuses rather than taking the first",
-            ));
-        }
-        found = Some(index);
-    }
-    let post_shift_index = found.ok_or_else(|| {
-        planner_error(
-            "a continuation coordinate is not present in the lexical environment in force at the \
-             emission seat, so the value is not immediately available there; this fails closed \
-             rather than reverse-searching for a position that happens to hold a similar value",
-        )
-    })?;
     Ok(ContinuationEnvironmentClaim::CurrentLexical {
         emission_owner,
         producer_result_origin,
         emission_origin,
         lexical_environment_origin,
-        post_shift_index,
+        nearest_alias_index: nearest_exact_alias(requested, seat_environment)?,
     })
 }
 
@@ -6419,7 +6508,7 @@ fn exact_continuation_projection(
                         ),
                     };
                     let claim = current_lexical_availability(
-                        input.coordinate,
+                        input,
                         *emission_owner,
                         environment.producer_result_origin,
                         *lexical_environment_origin,
@@ -6432,7 +6521,7 @@ fn exact_continuation_projection(
                     //
                     // The direct-emission consumer above reads this predeclared
                     // frame's retained LEXICAL environment, so it takes a
-                    // post-shift index. The capture-append consumer reads the
+                    // nearest-alias index. The capture-append consumer reads the
                     // same frame's ENTRY ABI RUN, so it takes that run's
                     // position. `D3c` measured those two numbers diverging at
                     // nonzero binder depth — which is exactly why one field could
@@ -19870,26 +19959,54 @@ mod tests {
             ]
         );
 
+        // ⭐⭐ **`D3b` alias repair — this row's mutation is now REFUSED, not
+        // merely observable, and that is a strengthening rather than a change of
+        // subject.**
+        //
+        // The mutation replaces every input's referent affinity with a proxy
+        // derived from the consumer's body-result lifetime, narrowing this
+        // input's affinity from `[NoReferent, PersistentStore, InvocationArena]`
+        // to `[NoReferent, PersistentStore]`. Until the alias repair the row
+        // could only *watch* that narrowing reach the projection: the lexical
+        // search matched on coordinate alone, so a wrong contract was never
+        // consulted and flowed through unchallenged.
+        //
+        // Eligibility is now exact equality of the **complete** source-slot
+        // authority, so the narrowed record no longer matches the authority the
+        // seat actually holds, and planning fails closed.
+        //
+        // ⛔ This is the Architect's required alias control 5 — "the same
+        // coordinate with a different carrier, ownership, storage owner, or
+        // affinity does not qualify" — discharged by a REAL production
+        // perturbation on a landed fixture rather than a synthetic environment.
+        // A value whose affinity omits `InvocationArena` genuinely cannot point
+        // into invocation-owned storage, so it is a different value wearing the
+        // same root identity; indexing it would emit a call carrying an operand
+        // of the wrong lifetime class.
         CONTINUATION_PRODUCTION_MUTATION
             .with(|mutation| mutation.set(ContinuationProductionMutation::ResultLifetimeProxy));
-        let wrong = plan_static_transition_graph_with_symbols(
+        let refusal = plan_static_transition_graph_with_symbols(
             expr,
             &BTreeMap::new(),
             &symbols,
             AbiRootIngress::Process,
             false,
         )
-        .expect("compile-valid result-lifetime proxy plans");
+        .map(|_| ())
+        .expect_err(
+            "the result-lifetime proxy narrows this input's referent affinity, and the D3b \
+             alias rule must refuse it; a successful plan means eligibility fell back to \
+             matching the coordinate alone",
+        );
         CONTINUATION_PRODUCTION_MUTATION
             .with(|mutation| mutation.set(ContinuationProductionMutation::Exact));
-        assert_eq!(
-            wrong.continuation_specializations[0].key.continuation_inputs[0]
-                .referent_affinity,
-            vec![
-                BoundaryReferentOwner::NoReferent,
-                BoundaryReferentOwner::PersistentStore,
-            ],
-            "the production mutation must exhibit the rejected narrowing",
+        assert!(
+            format!("{refusal:?}").contains(
+                "under a different carrier, ownership, storage owner or referent affinity"
+            ),
+            "the refusal must be the contract-mismatch one, not the absent-member or ambiguous \
+             one -- those name different defects and would let this row pass while measuring \
+             something else: {refusal:?}"
         );
     }
 
@@ -20395,7 +20512,7 @@ mod tests {
         panic!(
             "the fixture has no lawful emission seat holding {coordinate:?} past an intervening \
              binder; without one this row would measure the unshifted case and could not tell a \
-             real post-shift walk from returning the introduction index"
+             real nearest-alias selection from returning the introduction index"
         );
     }
 
@@ -20677,7 +20794,7 @@ mod tests {
     /// ⭐ **So the fixture is chosen for the intervening binder.** The
     /// host-effect result is introduced at index 0 of the `Let` body, and the
     /// enclosing `Match` case pushes its own binder before the emission seat, so
-    /// the value has moved by the time it is emitted. `post_shift_index` and
+    /// the value has moved by the time it is emitted. `nearest_alias_index` and
     /// `environment_index` are therefore *different numbers on this row* —
     /// which is what makes "introduction index equals emission index" a failing
     /// answer here rather than an indistinguishable one.
@@ -20740,7 +20857,7 @@ mod tests {
         assert!(
             !holds(introduction_index),
             "the introduction index still holds this binding at the emission seat, so nothing \
-             here distinguishes a real post-shift walk from passing the locator through"
+             here distinguishes a real nearest-alias selection from passing the locator through"
         );
 
         let projected = exact_continuation_projection(
@@ -20758,7 +20875,7 @@ mod tests {
                     producer_result_origin: result_origin,
                     emission_origin: construct_origin,
                     lexical_environment_origin: source_root,
-                    post_shift_index: seat_index,
+                    nearest_alias_index: seat_index,
                 }),
                 // ⛔ The re-cut's load-bearing half of this row. A predeclared
                 // emitter projects NO context-capture claim, so the capture
@@ -20768,7 +20885,7 @@ mod tests {
                 context_capture: None,
             },
             "the direct-emission claim must be keyed to the exact emission occurrence, owner and \
-             lexical environment and carry the post-shift index, and a predeclared emitter must \
+             lexical environment and carry the nearest-alias index, and a predeclared emitter must \
              project no capture claim at all"
         );
         assert_ne!(
@@ -20804,7 +20921,7 @@ mod tests {
             "the refusal must be the emission-origin one, not an incidental error: {refusal:?}"
         );
 
-        // ⛔ Fail-closed 2 of 5 — wrong post-shift index. A binding the walk
+        // ⛔ Fail-closed 2 of 5 — wrong nearest-alias index. A binding the walk
         // does not place at the seat gets no index at all.
         let mut absent = effect_source.clone();
         absent.coordinate = ContinuationSourceCoordinate::producer_local_probe();
@@ -20886,7 +21003,7 @@ mod tests {
                     producer_result_origin: result_origin,
                     emission_origin: construct_origin,
                     lexical_environment_origin: source_root,
-                    post_shift_index: seat_index,
+                    nearest_alias_index: seat_index,
                 }),
                 context_capture: None,
             },

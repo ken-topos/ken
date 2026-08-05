@@ -82,6 +82,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     ContinuationInputView, ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge,
     ContinuationAvailabilityViews, ContinuationEnvironmentClaim, ContinuationFrameIdentity,
     ContinuationSourceCoordinate,
+    ContinuationSourceSlotAuthority,
     ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, FieldIdentity, JoinPlanToken,
     PlannedReferentLifetime,
@@ -1295,7 +1296,7 @@ thread_local! {
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` — the CONSUMER mutations.**
 ///
-/// ⭐ `D4a`'s mutations proved the *instrument*: that the post-shift slot and
+/// ⭐ `D4a`'s mutations proved the *instrument*: that the nearest-alias slot and
 /// the locator slot hold different operands. These prove the *consumer*: that
 /// the production emission seam refuses when it reads the wrong one. The
 /// Architect's gate `evt_65xkzqppdqdaj` requires both, and passing the first
@@ -1305,11 +1306,11 @@ thread_local! {
 pub(in crate::cranelift_backend) enum D3bConsumerMutation {
     Exact,
     /// Consume the locator's scope-relative introduction index instead of the
-    /// projection's post-shift index — the exact defect `D2b` reopened `D2` for,
+    /// projection's nearest-alias index — the exact defect `D2b` reopened `D2` for,
     /// now expressed at the consumption boundary.
     ConsumeLocatorIndex,
     /// Move the resolved slot by one. ⛔ Distinct from the above rather than
-    /// redundant with it: on a fixture whose locator and post-shift indices are
+    /// redundant with it: on a fixture whose locator and nearest-alias indices are
     /// adjacent the two coincide, but this one also perturbs an emission with a
     /// single producer-local input, where no collision exists to catch it.
     ShiftProducerLocalSlot,
@@ -1352,7 +1353,7 @@ pub(in crate::cranelift_backend) fn d3b_consumer_applications() -> usize {
 /// part; production compiles as if it did not exist, and nothing here is
 /// consulted by any lowering decision. Its whole job is to answer one question
 /// the planner cannot be asked without becoming its own oracle: *which actual
-/// operand does the emitting context's environment hold at the post-shift
+/// operand does the emitting context's environment hold at the nearest-alias
 /// index, and is it the operand lowering built for that exact binding?*
 ///
 /// ⛔ **The identity it reports is the Cranelift SSA `Value`, deliberately.**
@@ -1368,7 +1369,7 @@ pub(in crate::cranelift_backend) fn d3b_consumer_applications() -> usize {
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) enum D4aSlotSelection {
-    /// Production's own answer: the projection's `post_shift_index`.
+    /// Production's own answer: the projection's `nearest_alias_index`.
     Exact,
     /// `D4a` mutation 1 — consume the locator's scope-relative introduction
     /// index instead. This is the defect `D2b` reopened `D2` for, expressed at
@@ -1400,12 +1401,12 @@ thread_local! {
 pub(in crate::cranelift_backend) struct D4aSeamObservation {
     /// The binding this input names — the join key into the creation record.
     pub(in crate::cranelift_backend) binding_origin: StaticOriginId,
-    /// The projection's post-shift index into the emitting environment.
-    pub(in crate::cranelift_backend) post_shift_index: u32,
+    /// The projection's nearest-alias index into the emitting environment.
+    pub(in crate::cranelift_backend) nearest_alias_index: u32,
     /// The locator's scope-relative introduction index.
     pub(in crate::cranelift_backend) locator_index: u32,
-    /// The actual operand at the selected post-shift slot.
-    pub(in crate::cranelift_backend) post_shift_operand: String,
+    /// The actual operand at the selected nearest-alias slot.
+    pub(in crate::cranelift_backend) nearest_alias_operand: String,
     /// The actual operand at the locator slot — the decoy.
     pub(in crate::cranelift_backend) locator_operand: String,
 }
