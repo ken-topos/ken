@@ -6161,6 +6161,54 @@ impl<'a> Lowering<'a> {
                          depth in force here",
                     ));
                 }
+                // `D3b` — the two CONSUMPTION-boundary mutations.
+                //
+                // ⛔ Applied here, between the claim and its revalidation, and
+                // nowhere else. They perturb what this consumer INDEXES WITH,
+                // which is the decision the revalidation below exists to check;
+                // perturbing the claim earlier would measure the planner instead.
+                //
+                // ⚠ **Re-seated by the re-cut.** These previously fired inside
+                // `resolve_continuation_immediate`, which the re-cut deleted, and
+                // for one commit they fired nowhere at all -- the row kept
+                // asserting while measuring the unmutated route. That is why the
+                // row asserts `applications > 0` before it asserts anything about
+                // the refusal.
+                #[cfg(test)]
+                let post_shift_index = {
+                    use crate::cranelift_backend::lowering::{
+                        d3b_consumer_mutation, record_d3b_consumer_application,
+                        D3bConsumerMutation,
+                    };
+                    match d3b_consumer_mutation() {
+                        D3bConsumerMutation::Exact => post_shift_index,
+                        D3bConsumerMutation::ConsumeLocatorIndex => {
+                            match coordinate {
+                                ContinuationSourceCoordinate::ProducerLocal {
+                                    locator, ..
+                                } => {
+                                    record_d3b_consumer_application();
+                                    locator.environment_index
+                                }
+                                // ⛔ Declines rather than perturbing an entry
+                                // root: an entry coordinate carries no locator,
+                                // so there is no introduction index to consume
+                                // and a substitute would measure an invented
+                                // number.
+                                ContinuationSourceCoordinate::EntryAbi { .. } => {
+                                    post_shift_index
+                                }
+                            }
+                        }
+                        D3bConsumerMutation::ShiftProducerLocalSlot => match coordinate {
+                            ContinuationSourceCoordinate::ProducerLocal { .. } => {
+                                record_d3b_consumer_application();
+                                post_shift_index.wrapping_add(1)
+                            }
+                            ContinuationSourceCoordinate::EntryAbi { .. } => post_shift_index,
+                        },
+                    }
+                };
                 // ⭐ The claim's index is CHECKED against the planner's own walk
                 // of this seat, never re-derived here. See
                 // `verify_current_lexical_availability`.

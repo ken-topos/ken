@@ -13301,51 +13301,85 @@ fn d5a_the_retargeted_worker_call_carries_the_raw_run_plus_the_context_capture_s
 /// **`D5a` — the capture projection indexes the emitting environment with the
 /// IMMEDIATE slot, and both of its guards are reachable.**
 ///
-/// Two reaching mutations, each scoped to the emission-owner class whose guard
+/// Three reaching mutations, each scoped to the emission-owner class whose guard
 /// it is written for:
 ///
-/// - a **predeclared** emitter is its own inputs' root provenance, so the two
-///   coordinates index one environment and must agree. Moving the immediate
-///   slot off the root ABI position reds that consistency law.
-/// - a **specialization** emitter's coordinates index different environments,
-///   so nothing may compare them — what makes the planner's resolution
-///   answerable here is the bounds test. Pushing the immediate slot one past
-///   the environment reds it, with a message naming both numbers.
+/// - a **predeclared** emitter's direct-emission claim is `CurrentLexical`, so
+///   moving its post-shift index off the depth the planner walked is caught by
+///   re-walking the seat. ⛔ Not by an equality against the root ABI position:
+///   `D3c` measured that equality false at nonzero binder depth, so it was the
+///   defect and never the guard.
+/// - a **specialization** emitter's claim is an `EntryFrame` one, so an
+///   out-of-range slot is refused by frame membership *before* any environment
+///   is indexed.
+/// - the **root-position substitution** itself, which is in range and identically
+///   shaped, and is refused by that same membership check.
 ///
 /// ⛔ The out-of-range mutation is scoped to the specialization arm on purpose.
-/// Applied to a predeclared emitter it is caught by the equality law first, and
-/// the row would name the bounds guard while measuring the consistency one —
-/// which is what the first draft did, measured before it was committed.
+/// Applied to a predeclared emitter the current-lexical revalidation refuses
+/// first, and the row would name the membership guard while measuring the
+/// revalidation one — which is what the first draft did, measured before it was
+/// committed.
 ///
-/// ⚠ **MEASURED**: both guards red under their own mutations. **CLAIMED**:
-/// lowering reads the immediate slot rather than the root ABI position.
-/// **THE GAP, stated because it is real**: swapping the two — indexing with
-/// `source_abi_position` — **COMPILES on this witness**, measured, `Ok(())`
-/// with the perturbation confirmed applied four times. Both coordinates are in
-/// range, and the operands they select are untyped boundary words, so the swap
-/// binds different values with nothing to notice. No independent oracle exists
-/// at this seat: the immediate slot *is* the planner's answer to "where does
-/// this environment hold it", so there is nothing else to check it against
-/// without inventing planner semantics this checkpoint forbids. ⇒ What pins the
-/// split is
-/// `d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_slot`
-/// on the plan, plus the fact that exactly one field is read at exactly one
-/// site. **A reader must not take this row as evidence that a swapped read
-/// would be caught. It would not be.**
+/// ⭐⭐ **The residual this row used to carry is DISCHARGED, and saying so is
+/// the point.** Until the `D3b` re-cut this comment recorded a measured gap:
+/// indexing with `source_abi_position` **compiled**, `Ok(())`, because both
+/// numbers were in range and the operands were untyped boundary words, and the
+/// sibling sentinel
+/// `d5a_reading_the_root_position_as_the_immediate_slot_is_currently_undetectable`
+/// asserted exactly that. The re-cut supplies the independent oracle that was
+/// missing — a frame's own declared membership, which is not the same answer as
+/// "where does this environment hold it" and so can disagree with it. The
+/// sentinel fired on good news and was deleted; its claim is the third row here,
+/// inverted into a refusal.
+///
+/// ⚠ **MEASURED**: all three guards red under their own mutations, each with the
+/// perturbation confirmed applied. **CLAIMED**: lowering resolves each consumer's
+/// own claim against the environment that consumer actually holds. **THE GAP**:
+/// this says nothing about whether the planner ASSIGNED the right index — it
+/// re-runs the planner's own walk, so a defect there would be reproduced rather
+/// than caught. `D2b`'s discriminator and `D3a`'s validator own that half.
 ///
 /// **Promise class: durable invariant.**
 #[test]
 fn d5a_the_capture_projection_reads_the_immediate_slot_and_bounds_it() {
     let rows = [
+        // ⭐ The predeclared emitter's claim is CURRENT-LEXICAL after the re-cut,
+        // so moving its index off the walked binder depth is caught by the
+        // planner's own re-walk of the seat -- not by the retired equality
+        // against a root ABI position, which `D3c` measured as the defect rather
+        // than the guard.
         (
-            "the predeclared emitter's consistency law",
+            "the predeclared emitter's current-lexical revalidation",
             D5aRouteMutation::PerturbPredeclaredImmediateSlot,
-            "immediate slot that disagrees with its root ABI position",
+            "does not hold that coordinate at",
         ),
+        // ⭐ The specialization emitter's claim is an ENTRY-FRAME one, so an
+        // out-of-range slot is caught by frame membership before any environment
+        // is indexed. That is a strengthening: the old row reached the bounds
+        // test, which fires only after a wrong-but-in-range slot has already been
+        // read.
         (
-            "the specialization emitter's bounds test",
+            "the specialization emitter's entry-frame slot agreement",
             D5aRouteMutation::PerturbImmediateSlotOutOfRange,
-            "outside the emitting context's environment",
+            "the two disagree",
+        ),
+        // ⭐⭐ **The retired sentinel, folded in exactly where it said to fold
+        // it.** `d5a_reading_the_root_position_as_the_immediate_slot_is_currently_undetectable`
+        // asserted this substitution COMPILES, and named its retiring event as
+        // "any mechanism that makes a swapped read detectable at this seat". The
+        // `D3b` re-cut is that mechanism, so the sentinel goes red on good news
+        // and its claim survives here inverted -- as a refusal rather than a
+        // documented gap.
+        //
+        // ⛔ Same guard as the row above, different STIMULUS: that one moves the
+        // slot out of range, this one substitutes the root ABI position, which is
+        // in range and identically shaped. `D3c` measured that exact substitution
+        // selecting a different operand with nothing to notice.
+        (
+            "the root-position substitution D3c measured as silent",
+            D5aRouteMutation::ReadRootPositionAsImmediateSlot,
+            "the two disagree",
         ),
     ];
     for (label, mutation, expected) in rows {
@@ -13378,28 +13412,35 @@ fn d5a_the_capture_projection_reads_the_immediate_slot_and_bounds_it() {
     }
 }
 
-/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` — a producer-local coordinate carrying an
-/// entry-ABI availability is a CROSSED PAIR, and the resolver refuses it.**
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` — a coordinate the emission seat does not
+/// hold is refused, whatever its domain.**
 ///
-/// ⭐ **`D3b` is the event this row's `D1` sentinel named, and the row is
-/// inverted rather than deleted.** As a sentinel it asserted the seam refused
-/// *every* producer-local coordinate; `D3b` teaches the seam to resolve two of
-/// the three producer-local pairings, so that assertion is retired. What
-/// survives is stronger and permanent: the perturbation injects a producer-local
-/// coordinate while leaving the entry-ABI availability in place, and that pair
-/// belongs to two different domains. Deleting the row would leave a gap exactly
-/// where a law used to be.
+/// ⭐ **This row's authority MOVED under the re-cut; it was not lost, and it is
+/// now stronger.** Its `D1` sentinel asserted the seam refused *every*
+/// producer-local coordinate. `D3b` first replaced that with a CROSSED-PAIR law:
+/// a producer-local coordinate carrying an entry-ABI availability was refused
+/// because the two halves named different coordinate spaces. The re-cut retires
+/// that law too — availability is no longer keyed to a root domain, so there is
+/// no crossed pair left to detect, and a row still asserting one would be
+/// asserting about a distinction the representation no longer draws.
 ///
-/// ⚠ **MEASURED**: the object emission refuses with the crossed-pair message,
-/// and the perturbation is confirmed to have fired. **CLAIMED**: the resolver
-/// dispatches on the *pairing*, not on either half alone — each half here is
-/// individually well-formed and only their combination is wrong. **THE GAP**:
-/// this says nothing about which index the two lawful producer-local pairings
-/// resolve to; that is the emission-seat consistency check's row.
+/// ⛔ What the perturbation now meets is a **stronger** refusal, and the
+/// difference matters: the old one refused a TYPE-LEVEL mismatch between two
+/// tags, which a later extension that widened either domain would have silently
+/// dissolved. The new one refuses because the injected coordinate **is genuinely
+/// not in the environment standing at this seat** — a fact about the program,
+/// checked by walking it, which no widening of a tag can make true.
 ///
-/// **Promise class: durable invariant.** A crossed domain pair must never
-/// resolve, under any later extension that keeps the two coordinate spaces
-/// distinct.
+/// ⚠ **MEASURED**: the object emission refuses for absence from the seat
+/// environment, with the perturbation confirmed fired. **CLAIMED**: a coordinate
+/// the seat does not hold cannot be indexed, regardless of which domain names it.
+/// **THE GAP**: this says nothing about which index a coordinate the seat DOES
+/// hold resolves to; `d3b_the_consumer_refuses_an_index_the_emission_seat_does_not_hold`
+/// owns that half.
+///
+/// **Promise class: durable invariant.** A value absent from the emission seat's
+/// environment must never resolve to a position in it, under any later extension
+/// of either coordinate domain.
 #[test]
 fn contsrc_the_emission_resolver_refuses_a_producer_local_coordinate() {
     let refusal = with_d5a_route_mutation(
@@ -13413,9 +13454,9 @@ fn contsrc_the_emission_resolver_refuses_a_producer_local_coordinate() {
                 .map(|_| ())
                 .map_err(|error| format!("{error:?}"))
                 .expect_err(
-                    "the emission resolver must refuse a producer-local coordinate paired with \
-                     an entry-ABI availability; a compile means the pairing match is inert on \
-                     the route that reaches it",
+                    "the emission resolver must refuse a coordinate the seat environment does \
+                     not hold; a compile means the seat revalidation is inert on the route \
+                     that reaches it",
                 );
             assert!(
                 d5a_route_applications() > 0,
@@ -13425,9 +13466,9 @@ fn contsrc_the_emission_resolver_refuses_a_producer_local_coordinate() {
         },
     );
     assert!(
-        refusal.contains("belong to different domains"),
-        "the refusal must be the crossed-pair one this arm raises, not an incidental failure \
-         downstream: {refusal}"
+        refusal.contains("not present in the lexical environment"),
+        "the refusal must be the seat-absence one, not an incidental failure downstream: \
+         {refusal}"
     );
 }
 
@@ -13660,60 +13701,6 @@ fn d5a_a_specialization_is_interned_before_the_descent_that_produced_it() {
     });
 }
 
-/// **`D5a` — the measured residual: swapping the two capture coordinates is
-/// NOT caught.**
-///
-/// ⛔⛔ **This row asserts that a wrong read COMPILES.** It exists because the
-/// alternative is a paragraph of prose admitting the gap, and a residual stated
-/// only in a comment is the one thing nobody re-checks. Executable, it cannot
-/// drift away from the truth.
-///
-/// Indexing the emitting environment with `source_abi_position` instead of
-/// `immediate_slot` binds different operands on a specialization-owned edge —
-/// they are indices into different environments. Both are in range on this
-/// witness, and the values they select are untyped boundary words, so nothing
-/// refuses. The compile succeeds and the artifact is wrong.
-///
-/// **Promise class: transition sentinel**, and stated as one honestly:
-///
-/// - it is named for the **boundary**, not for a count;
-/// - **the event that retires it** is any mechanism that makes a swapped read
-///   detectable at this seat — a planner-supplied cross-check on the capture
-///   run, or a typed operand that distinguishes the two environments. Neither
-///   exists today and neither is authorized by this checkpoint, which forbids
-///   new planner/ABI semantics;
-/// - when that lands, this row goes **red on good news**, and the correct
-///   response is to delete it and fold the claim into
-///   `d5a_the_capture_projection_reads_the_immediate_slot_and_bounds_it`.
-///
-/// ⚠ Until then: `d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_slot`
-/// pins the split on the plan, and the fact that exactly one field is read at
-/// exactly one site is what carries the rest. That is weaker than a guard and
-/// this row is the record of how much weaker.
-#[test]
-fn d5a_reading_the_root_position_as_the_immediate_slot_is_currently_undetectable() {
-    let (outcome, applications) = with_d5a_route_mutation(D5aRouteMutation::ReadRootPositionAsImmediateSlot, || {
-        let outcome =
-            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
-                "d5a_coordinate_swap",
-                false,
-            )
-            .map(|_| ())
-            .map_err(|error| format!("{error:?}"));
-        (outcome, d5a_route_applications())
-    });
-    assert!(
-        applications > 0,
-        "the swap must actually have been applied, or this row records a residual it never \
-         reached"
-    );
-    assert!(
-        outcome.is_ok(),
-        "GOOD NEWS, and this row is now the wrong shape. Something now detects a swapped \
-         capture coordinate at this seat. Delete this sentinel and fold the claim into the \
-         positive control that names the guard: {outcome:?}"
-    );
-}
 
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -14899,10 +14886,15 @@ fn d3b_the_consumer_refuses_an_index_the_emission_seat_does_not_hold() {
         exact_applications, 0,
         "the unmutated route must not record a perturbation"
     );
+    // ⛔ The marker is the re-cut guard's OWN sentence, not the retired
+    // "emission-seat consistency check" phrase. That phrase named the equality
+    // against a root ABI position, which `D3c` measured false and the re-cut
+    // deleted; left here it would have matched nothing, so the positive control
+    // would have passed vacuously and every row below with it.
     assert!(
-        !exact.contains("emission-seat consistency check"),
-        "the unmutated consumer must pass the seat-consistency check, or every mutation row \
-         below is measuring a failure that was already there: {exact}"
+        !exact.contains("does not hold that coordinate at"),
+        "the unmutated consumer must pass the seat revalidation, or every mutation row below \
+         is measuring a failure that was already there: {exact}"
     );
 
     for mutation in [
@@ -14915,14 +14907,10 @@ fn d3b_the_consumer_refuses_an_index_the_emission_seat_does_not_hold() {
             "{mutation:?} never fired, so this row measured the unmutated route"
         );
         assert!(
-            refusal.contains("emission-seat consistency check"),
-            "{mutation:?} must be refused by the seat-consistency check itself, not by an \
-             incidental failure downstream: {refusal}"
-        );
-        assert!(
             refusal.contains("does not hold that coordinate at"),
             "{mutation:?} must be refused for naming an index the seat does not hold this \
-             coordinate at, which is the exact proposition: {refusal}"
+             coordinate at, which is the exact proposition -- not by an incidental failure \
+             downstream: {refusal}"
         );
     }
 }
