@@ -14954,19 +14954,39 @@ fn d3c_observe(
     let _ = d3c_take_seat();
     d3c_set_armed(true);
     d3c_set_position_selection(selection);
+    // The population that reaches a seat under an intervening binder.
     let _ = recursive_port_process_compiles(&governed_nested_resource_bracket(3));
+    // ⭐ And the `D5a` witness, which reaches predeclared emission seats at
+    // **zero** binder depth and compiles GREEN. It supplies the agreement half:
+    // without it the divergence measured in the other population would be
+    // equally consistent with an oracle that never lines up.
+    let _ = crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "d3c_zero_depth_agreement",
+        false,
+    );
     d3c_set_armed(false);
     d3c_set_position_selection(D3cPositionSelection::MeasuredImmediate);
 
-    // Selected by the two conditions themselves, never by ordinal: a population
-    // whose seats reorder must not silently measure a different emission.
     d3c_take_seat()
-        .into_iter()
+}
+
+/// The seats satisfying the Architect's conditions 1 and 2 **together**: a
+/// predeclared emission holding both root domains in one required vector, whose
+/// environment is longer than its entry ABI run because a binder intervened.
+///
+/// ⛔ Selected by those conditions, never by ordinal: a population whose seats
+/// reorder must not silently measure a different emission.
+fn d3c_shifted(
+    seats: &[crate::cranelift_backend::lowering::D3cSeatObservation],
+) -> Vec<crate::cranelift_backend::lowering::D3cSeatObservation> {
+    seats
+        .iter()
         .filter(|seat| {
             seat.entry_abi_inputs > 0
                 && seat.producer_local_inputs > 0
                 && seat.emission_environment.len() > seat.abi_operands
         })
+        .cloned()
         .collect()
 }
 
@@ -15020,13 +15040,44 @@ fn d3c_shape(operand: &str) -> &str {
 fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder() {
     use crate::cranelift_backend::lowering::D3cPositionSelection;
 
-    let measured = d3c_observe(D3cPositionSelection::MeasuredImmediate);
+    let observed = d3c_observe(D3cPositionSelection::MeasuredImmediate);
+    let measured = d3c_shifted(&observed);
     let [seat] = measured.as_slice() else {
         panic!(
             "expected exactly one entry-ABI input at a predeclared seat holding both root \
              domains under an intervening binder, got {measured:#?}"
         );
     };
+
+    // ⭐⭐ **The discriminating control, and the reason this measurement is about
+    // the BINDER rather than about a misaligned oracle.**
+    //
+    // At the seats of this same population where NO binder intervenes -- the
+    // emission environment is exactly the entry ABI run -- the two answers
+    // agree, position for position. So the entry oracle is not offset in
+    // general; it is correct wherever the projection's assumption holds, and
+    // divergent exactly where a binder has been pushed. ⛔ Without this row the
+    // measurement above is equally consistent with an oracle that never lines
+    // up, which would establish nothing.
+    let flush = observed
+        .iter()
+        .filter(|seat| seat.emission_environment.len() == seat.abi_operands)
+        .collect::<Vec<_>>();
+    assert!(
+        !flush.is_empty(),
+        "no zero-depth seat was observed, so the agreement half of this measurement is vacuous \
+         and the divergence below cannot be attributed to the binder: {observed:#?}"
+    );
+    for seat in &flush {
+        assert_eq!(
+            seat.emission_environment
+                .get(seat.source_abi_position as usize),
+            Some(&seat.entry_operand),
+            "at zero binder depth the emission environment must hold the entry ABI operand at \
+             its own root position; if it does not, the oracle is misaligned generally and the \
+             shifted row proves nothing: {seat:#?}"
+        );
+    }
 
     // Positive control on the oracle itself. An entry walk that recorded
     // nothing would make every comparison below pass for the wrong reason.
@@ -15105,6 +15156,7 @@ fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder()
     // immediate one FLIPS, and flips on operand identity. Production is
     // otherwise unchanged; only the position this instrument reads moves.
     let substituted = d3c_observe(D3cPositionSelection::SourceAbiPosition);
+    let substituted = d3c_shifted(&substituted);
     let [substituted] = substituted.as_slice() else {
         panic!("the substituted run must reach the same one seat, got {substituted:#?}");
     };
