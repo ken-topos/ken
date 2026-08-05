@@ -2716,8 +2716,50 @@ family — that is a measurement nobody has taken.
         an entry in the graph and no independent mergeability. **Folding costs
         nothing that cutting would buy.**
 
-        **The scope, and it is minimal by measurement.** Mint the
-        **host-effect-result** slot only:
+        > **FALSIFIED 2026-08-05 by `evt_5ngh190h9b1k5`. The scope ruling below
+        > is DEAD and must not be executed — it bans the one slot every `D0` row
+        > requires.** Read this block before the struck text under it.
+        >
+        > **Measured, by a full environment-vector probe cross-checked against
+        > the production walk.** Every effect-bearing closure has **two**
+        > required `Open` inputs: ordinal 0 is `Let value=Effect`, ordinal 1 is
+        > a Match case binder. **The effect-only population is 0**, so closing
+        > the effect result closes **zero** edges. The declined closure-edge
+        > census is **34 case-binder-only, 4 effect-plus-case-binder, 1
+        > `Construct`-only**; the 4 mixed parity edges span all six failing
+        > `D0` rows. ⇒ **No `D0` row can move without the case-binder slot the
+        > ruling banned.**
+        >
+        > **And the authorized variant has no lawful ABI seat.** The owner input
+        > run admits only `Parameter`/`Capture`; a mid-body effect result is
+        > neither. A position for it requires ABI/input-run widening, a new
+        > mid-body position population, or an exemption from its only validator
+        > — each exceeds `1e`.
+        >
+        > **Route modality is unaddressable, and not for the reason given
+        > below.** The environment never becomes closed, so the hoped-for
+        > closed-vs-`Open` discriminator does not materialize at all.
+        >
+        > ### The defect that produced the ruling, because it will recur
+        >
+        > **`1d`'s census recorded the DECLINING ordinal — the FIRST `Open` —
+        > and the Steward read it as a REQUIREMENT census.** "6 edges are
+        > effect-result" meant *6 edges decline first at an effect result*, not
+        > *6 edges need only an effect-result slot*. A first-failure statistic
+        > cannot support a minimality claim, because it is silent about every
+        > input after the one that failed.
+        >
+        > **The `161` was also the wrong unit** — pair-level/first-`Open`, not
+        > closure-edge. Closure-edge scope is 34 lib + 9 parity. The ruling
+        > compared a 6 in one unit against a 161 in another and called the
+        > result minimal.
+        >
+        > ⇒ **Before scoping from a census, state the unit and confirm it
+        > answers "what does this edge REQUIRE", not "where did it first
+        > stop."**
+
+        **The scope, and it is minimal by measurement. FALSIFIED — see above; do
+        not execute.** Mint the **host-effect-result** slot only:
 
         - a fourth `ContinuationInputSource` variant
           (`static_transition.rs:410`, today `Parameter` / `LexicalCapture` /
@@ -2751,6 +2793,77 @@ family — that is a measurement nobody has taken.
         it** — three of this node's stops were exactly that error. If a route
         modality is genuinely required, HARD STOP and return the concrete edge;
         that one is a real substrate question and the Steward will cut it a node.
+
+        **ANSWERED, and it does not hold — `evt_5ngh190h9b1k5`.** The ring
+        reported exactly as instructed rather than assuming. The prediction
+        failed at its root: the environment never closes, so there is no
+        closed-vs-`Open` discriminator to appear. Route modality is not
+        "probably unnecessary"; it is **unaddressable from this grant**. That
+        made this the fourth stop of the same shape, and the instruction to
+        measure rather than comply is what caught it — keep writing it that way.
+
+     **1f. `1e` IS WITHDRAWN. The linked row leaves `D7`.** Steward, 2026-08-05,
+        on the ring's `evt_5ngh190h9b1k5` and the Architect gate
+        `evt_75k8cydbj5127` (REJECT the one-slot representation, accept the
+        hard stop).
+
+        **Settled, and not reopened.** There is no lawful ABI seat for a
+        mid-body value at `179af863`. The Architect enumerated the exits and
+        closed all five: inventing an entry position, widening
+        parameters/captures (which would falsely claim the value exists at
+        function entry), reusing `AbiSlotKind::Result` (a different boundary
+        direction), exempting the variant from
+        `validate_continuation_source_slot` (its only exact validator), or
+        using `immediate_slot` alone and discarding root provenance. The
+        emission seam agrees independently: its exhaustive two-class resolution
+        covers an entry value in its root owner and a value captured by a
+        generated context, and **a producer-local value created mid-body is a
+        third availability class with no authority here.**
+
+        ⇒ **This is a representation and population boundary, not a missing
+        enum arm.** It cannot close inside `D7` under any scope `D7` can grant
+        itself, and a fourth `ContinuationInputSource` case would be the wrong
+        shape even if it were authorized — the enclosing record still requires
+        an entry-ABI coordinate that a producer-local value does not have.
+
+        **Ruling 1 — BROAD admission.** The recut represents **every** exact
+        producer-local value, and **all** newly representable candidates may
+        lawfully intern. Not the four `D0` mixed edges alone.
+
+        **Why, and it is the Architect's own conditional.** Interning only the
+        four while leaving the 34 same-shaped case-binder candidates declined
+        **requires a real edge-selection authority**, with corpus, closure
+        identity, first-`Open` reason, and planned-member status all forbidden
+        as substitutes. No such authority exists, and minting one to justify
+        treating identical shapes differently is the manufactured discriminator
+        this ring already caught once. Broad admission implies **no
+        route-modality authority at all** — the question `1d` and `1e` both
+        chased is dissolved rather than answered.
+
+        **The consequence, stated plainly:** roughly 34 additional edges newly
+        intern, changing emitted code on programs that are green today. That is
+        correct — they were declined only because the representation could not
+        name their environment — and the per-row `D0` and `718/2` baselines are
+        the control that catches it if it is not.
+
+        **Ruling 2 — the work is substrate and it gets its own node:**
+        [[RT-CONTSRC-PRODUCER-LOCAL]]. Grounded in a measured capability gap and
+        an Architect ruling, which is what `1d`'s node claim lacked. `D7` does
+        **not** attempt it.
+
+        **Ruling 3 — `D7`'s disposition.** Checkpoints 1, `1b` and `1c` stand as
+        proved. The linked row's obligation, checkpoint 2, and every claim gated
+        on the row move to [[RT-CONTSRC-PRODUCER-LOCAL]]. **The frame's standing
+        clause that no candidate, QA route, `D6` closure or `AC-4` claim may
+        proceed "while the row stands unreached" is RETIRED** — it was written
+        when the row was believed reachable here, and it now forbids `D7` from
+        ever landing anything. A constraint that can never be discharged by the
+        node holding it is not a gate, it is a deadlock.
+
+        **`1e`'s bans are void, not suspended.** They were derived from a
+        falsified premise. The case-binder slot is required, and the successor
+        node covers both it and the host-effect result as distinct structural
+        bindings.
 
         **Architect gate.** This is a Steward scope ruling plus **one**
         confirming gate on the axis the fork turns on: the Architect confirms

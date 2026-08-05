@@ -33,22 +33,51 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~06:2xZ · D7 `1c` closed; Runtime owes the `1d` inventory
+## LIVE — 2026-08-05 ~06:4xZ · D7 `1d` answered NEGATIVE; `1e` released
 
-**`origin/main` at last check: `8a3ff7e0`** (the `RT-SEED-CALL-PORT` recut, PR
-#1409; frame blob `6ccc48d7`). Verify it; do not trust this line.
+**`origin/main` at last check: `3eeeb5ed`** (the `1e` ruling, PR #1410; D7 frame
+blob `b5c240e6`). Verify it; do not trust this line.
 
 ### The one thing to do next
 
-**Nothing, until Runtime returns the `1d` inventory.** I posted the recut and
-release request at `evt_14gsxh986c963` (06:14Z); `runtime-leader` released from
-exact `179af863` at `evt_1cyxsqrjhkcq6` (06:15:35Z). **Confirmed picked up:** at
-06:19Z `runtime-implementer` is live at ctx 10%, running a `KEN_D7_PROBE` pass
-over `-p ken-runtime --lib` that records `case_emission` / `producer_kind` /
-arity / capture count per emission site. That is the inventory being measured,
-not a mechanism being built — which is what `1d` asked for.
+**Nothing, until Runtime returns `1e`'s answer.** I ruled at `evt_2tsq017qgvtgh`
+(06:41Z); `runtime-leader` released `1e` from exact `179af863` and the Architect
+picked up the confirming gate — **both confirmed by pane transition, not just a
+posted mention.**
 
-**WIP audit clock: armed from 06:15:35Z (the leader release), so due 07:15:35Z.**
+**WIP audit clock: armed from the ~06:43Z leader release, so due ~07:43Z.**
+
+### What `1d` settled, and what `1e` is
+
+`1d` came back **negative over 1110 candidate records** (`evt_5kws532ac99c9`) —
+no existing authority both proves the closure-`381` edge mandatory and supplies
+an exact edge-local closed environment. Three results outlive the checkpoint:
+
+- **`member=true` on all 612 declines AND all 489 interns** — `1c`'s finding at
+  1101-row scale. Closure-level membership is retired as an edge-local
+  predicate permanently, not provisionally.
+- **`case_emission` is INAPPLICABLE, not insufficient** —
+  `build_case_emission_plan` never iterates `ComputationalMatch`. A later node
+  reaching for it finds nothing, and now knows why.
+- The ring **declined a near-miss discriminator** ("`Open` because of an effect
+  result") as confounded with corpus identity: `Effect` occurs in 0 of 1057 lib
+  ancestor chains and 60 of 60 parity chains, so it separates two test suites.
+
+**`1e` is folded into `D7` — there is NO new node.** `1d`'s "requires a separate
+substrate node" was my prose, not a ruling; the preference order is relax, fold,
+then cut, and `179af863` is not on `main`, so a separate node would branch from
+an unmerged branch for no independent mergeability.
+
+**Scope is minimal by the inventory's own counts:** the host-effect-result
+`ContinuationInputSource` variant plus its ABI position — 6 edges, exactly the 6
+failing `D0` rows. **The case-binder slot is OUT** — 161 edges in a corpus at
+718/2, no failing row demanding them.
+
+**I refused the second minting.** A route-modality authority's only source is
+`1d`'s own distinguish-before-interning requirement, which was a constraint of
+the projection-only framing that `1e` retires. Stated to the ring as a question
+to measure, not a law — three of this node's stops were exactly that error. **If
+they report it IS genuinely required, that one gets a real node.**
 
 **`1d` hard-stops TO ME.** If the inventory finds that satisfying it would mint
 a new representation, population, identity, or planner/ABI authority, that needs
