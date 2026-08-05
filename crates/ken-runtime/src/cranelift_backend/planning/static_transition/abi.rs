@@ -1534,6 +1534,26 @@ fn push_slots(
     Ok(())
 }
 
+/// **`D7` — the capture slot a unit of this provenance MUST declare at
+/// `ordinal`, projected from the authority that lays it.**
+///
+/// ⭐ **This exists so the consumer-side capture-contract gate has no policy of
+/// its own.** The gate must reject a descriptor whose capture slot disagrees on
+/// carrier, ownership, storage owner, width, alignment or ordinal — and the only
+/// sound way to know what it should have been is to ask the same function
+/// [`push_slots`] asked. Re-deriving those six fields in the lowering would be a
+/// second authority on the capture ABI, and the two could drift silently in
+/// exactly the direction a gate is supposed to catch.
+///
+/// ⛔ Mints nothing and widens nothing: it is [`slot`] applied to
+/// [`AbiCaptureProvenance::carrier`], which is where both facts already live.
+pub(in crate::cranelift_backend) const fn expected_capture_slot(
+    provenance: AbiCaptureProvenance,
+    ordinal: u32,
+) -> AbiSlot {
+    slot(AbiSlotKind::Capture, provenance.carrier(), ordinal)
+}
+
 const fn slot(kind: AbiSlotKind, carrier: AbiCarrier, ordinal: u32) -> AbiSlot {
     AbiSlot {
         kind,

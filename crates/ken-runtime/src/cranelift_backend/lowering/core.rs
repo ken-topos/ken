@@ -1249,7 +1249,7 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
-        extend_specialized(&mut call_env, captures.iter().cloned());
+        extend_captures(&mut call_env, captures.iter().cloned());
         call_env.extend_from_slice(saved_producer_env);
         self.lower_computational_producer_expr(
             builder,
@@ -1591,7 +1591,8 @@ impl<'a> Lowering<'a> {
                                 {
                                     let argument =
                                         self.child_occurrence(static_origin, 1, &args[0])?;
-                                    let frame_env = env_with(captures.clone(), producer_env);
+                                    let frame_env =
+                                        env_with_operands(captures.clone(), producer_env);
                                     let mut composed = Vec::with_capacity(eliminators.len() + 1);
                                     composed.push(EliminatorFrame::Ordinary(
                                         OrdinaryEliminatorFrame {
@@ -1652,7 +1653,7 @@ impl<'a> Lowering<'a> {
                         // lexical environment. They stay operands here, and
                         // only the environment role crosses the binding
                         // authority -- there is no route back the other way.
-                        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                        call_inputs.extend(captures);
                         match self.body_emission_authority {
                             BodyEmissionAuthority::RecursiveDescent => {
                                 let call_env = env_with_operands(call_inputs, producer_env);
@@ -1856,7 +1857,7 @@ impl<'a> Lowering<'a> {
                         // Two roles, as above: ordered unit-call inputs, or the
                         // prefix of a lexical environment. Only the second
                         // crosses the binding authority.
-                        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                        call_inputs.extend(captures);
                         self.enter_oriented_semantic_region(installed.checked);
                         let returned = match self.body_emission_authority {
                             BodyEmissionAuthority::RecursiveDescent => {
@@ -5548,7 +5549,7 @@ impl<'a> Lowering<'a> {
                 }
                 // Continued source evaluation: unwrap only, no crossing.
                 let mut call_env = bound_values(args);
-                extend_specialized(&mut call_env, captures);
+                extend_captures(&mut call_env, captures);
                 call_env.extend(env);
                 Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
                     expr: self.machine_body_occurrence(body)?,
@@ -5789,7 +5790,7 @@ impl<'a> Lowering<'a> {
                     } else {
                         args
                     };
-                    call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                    call_inputs.extend(captures);
                     let mut suspended = armed.suspended;
                     suspended.continuation = self.install_recursor_invocation(
                         suspended.continuation,
@@ -5834,7 +5835,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         symbol: RuntimeSymbol,
-        captures: Vec<Lowered>,
+        captures: Vec<LoweringOperand>,
         body: OwnedSourceOccurrence,
         args: Vec<LoweringOperand>,
         env: Vec<LoweringEnvironmentBinding>,
@@ -5843,7 +5844,7 @@ impl<'a> Lowering<'a> {
         let _checked_invocation = self.consume_checked_recursive_invocation_call(&symbol)?;
         if !self.declaration_is_recursive(&symbol) {
             let mut call_env = bound_values(args);
-            extend_specialized(&mut call_env, captures);
+            extend_captures(&mut call_env, captures);
             call_env.extend(env);
             return Ok(SourceCallOutcome::Continue(SourceMachineState::Eval {
                 expr: body,
@@ -5958,7 +5959,7 @@ impl<'a> Lowering<'a> {
             .rev()
             .map(LoweringOperand::Specialized)
             .collect::<Vec<_>>();
-        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+        call_inputs.extend(captures);
         let call_env = env_with_operands(call_inputs, &env);
         let lowered = self.lower_source_machine_with_continuation(builder, body, call_env, control);
         self.active_recursive_declarations.pop();
@@ -6928,9 +6929,21 @@ impl<'a> Lowering<'a> {
         let narrowing_restored = false;
         if carried == 0 || narrowing_restored {
             // All-specialized: preserve the existing compile-time closure.
+            //
+            // ⭐ **The narrowing STAYS on this branch, and deleting it would
+            // make `AC-5` mutation 1 vacuous.** `captures` is now phase-bearing,
+            // so storing the operands unchanged would compile — and under
+            // `RestoreCarriedCaptureNarrowing` a carried capture would then sail
+            // through the very fold the mutation exists to force it into,
+            // turning the control into the identity. On the exact path
+            // `carried == 0`, so this is a total unwrap-and-reassert; under the
+            // mutation it is the pre-node refusal, unchanged.
             return Ok(LoweringEnvironmentBinding::Value(
                 LoweringOperand::Specialized(Lowered::Closure {
-                    captures: specialized_operands_at(&lowered_captures, "a closure capture")?,
+                    captures: specialized_operands_at(&lowered_captures, "a closure capture")?
+                        .into_iter()
+                        .map(LoweringOperand::Specialized)
+                        .collect(),
                     params: params.clone(),
                     body: body.static_origin,
                 }),
@@ -6951,6 +6964,172 @@ impl<'a> Lowering<'a> {
             lowered_captures,
         )
         .map(LoweringEnvironmentBinding::StaticWorker)
+    }
+
+    /// **`D7` -- THE PRE-EMISSION CAPTURE-CONTRACT GATE for a retained callable
+    /// whose environment is mixed-phase.**
+    ///
+    /// ⭐⭐ **Membership in `worker_templates` is necessary and INSUFFICIENT, and
+    /// that is the whole reason this exists.** The measured stop that opened this
+    /// checkpoint had a template for its body origin and still could not be
+    /// represented; "the planner knows this closure" answers *whether* a contract
+    /// was issued, never *what it says*. A capsule that closes over a carried
+    /// word commits the callee to reading that word out of an activation-frame
+    /// slot at an exact ordinal, so every one of those facts is checked **before
+    /// any function definition or object emission**, not discovered when the
+    /// callee loads the wrong offset.
+    ///
+    /// ⛔ **No policy is invented here.** The expected capture slot is projected
+    /// from [`expected_capture_slot`], the same authority that laid the
+    /// descriptor, so carrier, ownership, storage owner, width, alignment and
+    /// ordinal are compared against the planner's own answer rather than against
+    /// a second copy of the rule that could drift from it.
+    ///
+    /// The one fact this layer adds is **phase admissibility**, which the ABI
+    /// plane cannot state because it has no operands: a `Carried` capture is an
+    /// invocation-time SSA word, so it is lawful only in a slot the **activation
+    /// frame** owns. `ArtifactStatic` material is minted before execution begins
+    /// -- a seed capture's lane -- and no word this activation computes can be
+    /// that, so a carried capture in a seed slot is refused rather than stored.
+    fn validate_retained_callable_capture_contract(
+        &self,
+        closure_origin: StaticOriginId,
+        body_origin: StaticOriginId,
+        provenance: AbiCaptureProvenance,
+        declared_arity: usize,
+        captures: &[LoweringOperand],
+    ) -> Result<(), CraneliftBackendError> {
+        // 1. Exactly one planner-issued template for this exact body.
+        //
+        // ⭐ Uniqueness is upstream and structural: `worker_templates` is keyed
+        // by body origin, and the population walk that fills it already refuses
+        // when "two emittable units claim the same body origin". So the only
+        // failure this lookup can still see is OMISSION -- which is the half a
+        // keyed map cannot make unrepresentable.
+        let target = self
+            .function_local
+            .worker_templates
+            .get(&body_origin)
+            .ok_or_else(|| {
+                unsupported(
+                    "RetainedCallableCaptureContract",
+                    format!(
+                        "a mixed-phase retained callable at {closure_origin:?} has no planner-issued \
+                         worker template for body origin {body_origin:?} in this function"
+                    ),
+                )
+            })?;
+
+        // 2. The record is keyed by the callable SOURCE BODY, so a disagreement
+        //    here is a wrong-body contract rather than a lookup miss.
+        if target.call_site_origin != body_origin {
+            return Err(unsupported(
+                "RetainedCallableCaptureContract",
+                format!(
+                    "the worker template reached for body origin {body_origin:?} is keyed by \
+                     source body {:?}",
+                    target.call_site_origin
+                ),
+            ));
+        }
+
+        // 3. Declared arity and capture count, against the descriptor header.
+        if target.header.parameters as usize != declared_arity {
+            return Err(unsupported(
+                "RetainedCallableCaptureContract",
+                format!(
+                    "worker descriptor declares {} parameters but the retained callable declares \
+                     {declared_arity}",
+                    target.header.parameters
+                ),
+            ));
+        }
+        if target.header.captures as usize != captures.len() {
+            return Err(unsupported(
+                "RetainedCallableCaptureContract",
+                format!(
+                    "worker descriptor declares {} captures but {} were projected from the \
+                     retained definition",
+                    target.header.captures,
+                    captures.len()
+                ),
+            ));
+        }
+
+        // 4. The ORDERED capture run, taken in slot order. Its length must agree
+        //    with the header independently -- the header and the slot run are two
+        //    recorded facts, and a gate that trusted one to speak for the other
+        //    would be blind to exactly the descriptor it exists to reject.
+        let capture_slots = target
+            .slots
+            .iter()
+            .filter(|slot| slot.kind == AbiSlotKind::Capture)
+            .collect::<Vec<_>>();
+        if capture_slots.len() != captures.len() {
+            return Err(unsupported(
+                "RetainedCallableCaptureContract",
+                format!(
+                    "worker descriptor's slot run declares {} capture slots against a header of \
+                     {} and {} projected captures",
+                    capture_slots.len(),
+                    target.header.captures,
+                    captures.len()
+                ),
+            ));
+        }
+
+        for (position, (slot, capture)) in capture_slots.iter().zip(captures).enumerate() {
+            let ordinal = u32::try_from(position).map_err(|_| {
+                unsupported(
+                    "RetainedCallableCaptureContract",
+                    "retained callable capture count exceeds addressable range",
+                )
+            })?;
+            // 5. Ordinal, provenance, owner and lifetime in ONE comparison
+            //    against the planner's own projection. ⛔ Comparing field by
+            //    field here would let a field added to `AbiSlot` later go
+            //    unchecked; whole-slot equality cannot.
+            //
+            //    Ordinal density falls out of this rather than needing its own
+            //    pass: slot *i* of the capture run must carry ordinal *i*, so a
+            //    duplicated, permuted or gapped ordinal fails here.
+            let expected = expected_capture_slot(provenance, ordinal);
+            if **slot != expected {
+                return Err(unsupported(
+                    "RetainedCallableCaptureContract",
+                    format!(
+                        "capture {position} of the retained callable at {closure_origin:?} \
+                         declares slot {slot:?} but its {provenance:?} provenance projects \
+                         {expected:?}"
+                    ),
+                ));
+            }
+            // 6. Phase admissibility. ⛔ Exhaustive -- no wildcard, and no
+            //    `specialized_operands_at` fallback that would silently answer
+            //    for the carried case.
+            match capture {
+                // A compile-time template is lawful in any capture slot: it is
+                // read where the descriptor says, whatever owns that storage.
+                LoweringOperand::Specialized(_) => {}
+                // ⛔ An invocation-time word cannot inhabit storage minted
+                // before execution began, nor the persistent store.
+                LoweringOperand::Carried(_) => {
+                    if slot.storage_owner != AbiStorageOwner::ActivationFrame {
+                        return Err(unsupported(
+                            "RetainedCallableCaptureContract",
+                            format!(
+                                "capture {position} of the retained callable at \
+                                 {closure_origin:?} arrived carried, but its slot's storage is \
+                                 owned by {:?} -- an invocation-time word cannot inhabit storage \
+                                 that outlives the activation that computes it",
+                                slot.storage_owner
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// **`D2` -- THE SOLE CONSTRUCTION ROUTE for a static worker binding.**
@@ -7112,6 +7291,18 @@ impl<'a> Lowering<'a> {
             ));
         }
 
+        // ⭐ `D7` — the ORDERED capture contract, on the route that already
+        // owned the count. Checks 1-6 above validate the descriptor's shape;
+        // this validates the capture RUN against it, so the binder route and the
+        // value route are gated by one function rather than two spellings that
+        // can drift.
+        self.validate_retained_callable_capture_contract(
+            closure_origin,
+            body_origin,
+            AbiCaptureProvenance::Lexical,
+            declared_arity as usize,
+            &captures,
+        )?;
         Ok(StaticWorkerBinding {
             closure_origin,
             body_origin,
@@ -9383,7 +9574,13 @@ impl<'a> Lowering<'a> {
                 let body = self.child_occurrence(static_origin, 0, body)?;
                 let lowered_captures = captures
                     .iter()
-                    .map(|symbol| self.lower_seed_capture(builder, symbol))
+                    .map(|symbol| {
+                        // Seed captures are resolved to JIT-time ground values,
+                        // so this arm asserts the phase; there is no carried
+                        // seed capture for it to lose.
+                        self.lower_seed_capture(builder, symbol)
+                            .map(LoweringOperand::Specialized)
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(LoweringOperand::Specialized(Lowered::Closure {
                     captures: lowered_captures,
@@ -9412,8 +9609,44 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, capture, env)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
+                // ⭐⭐ **`D7` — THE closure-capture cell, and the seat the
+                // framed reaching row stops at.**
+                //
+                // A lexical capture reaches this closure at its own phase, and a
+                // capture that arrived through a declared ABI slot is `Carried`.
+                // The former `specialized_operands_at` fold demanded a
+                // compile-time template for every one of them, so a lawfully
+                // mixed environment had no representation at all and refused
+                // here — even when, as measured, the enclosing aggregate stays a
+                // specialized template and nothing ever crosses a boundary.
+                //
+                // ⛔ Storing the operands unchanged does not make the capsule
+                // transferable. `boundary_transfer_admissibility` still refuses
+                // the outer closure **before** descending into these captures,
+                // so a carried capture cannot become a way to reach the carrier
+                // through a callable that is itself refused.
+                //
+                // ⭐ The gate runs on the MIXED case only, and the scoping is
+                // deliberate. An all-specialized lexical closure is the
+                // pre-existing shape and does not require a planner-issued
+                // worker template to exist at all; demanding one would reject
+                // programs this node never touched. A carried capture is what
+                // creates the obligation, because it is what commits the callee
+                // to loading an exact activation-frame slot.
+                if captures
+                    .iter()
+                    .any(|capture| matches!(capture, LoweringOperand::Carried(_)))
+                {
+                    self.validate_retained_callable_capture_contract(
+                        static_origin,
+                        body.static_origin,
+                        AbiCaptureProvenance::Lexical,
+                        params.len(),
+                        &captures,
+                    )?;
+                }
                 Ok(LoweringOperand::Specialized(Lowered::Closure {
-                    captures: specialized_operands_at(&captures, "a closure capture")?,
+                    captures,
                     params: params.clone(),
                     body: body.static_origin,
                 }))
@@ -9627,7 +9860,7 @@ impl<'a> Lowering<'a> {
                         // exactly its arguments and captures, so the
                         // environment role is the bare installation with no
                         // enclosing spine behind it.
-                        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                        call_inputs.extend(captures);
                         match self.body_emission_authority {
                             BodyEmissionAuthority::RecursiveDescent => {
                                 let call_env = bound_values(call_inputs);
@@ -9780,7 +10013,7 @@ impl<'a> Lowering<'a> {
                         }
                         // Two roles, as above: ordered unit-call inputs, or an
                         // environment prefix. Only the second is bound.
-                        call_inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+                        call_inputs.extend(captures);
                         if matches!(
                             self.body_emission_authority,
                             BodyEmissionAuthority::FunctionizedUnits
@@ -11118,7 +11351,7 @@ impl<'a> Lowering<'a> {
         builder: &mut FunctionBuilder<'_>,
         join_origin: StaticOriginId,
         symbol: &RuntimeSymbol,
-        captures: &[Lowered],
+        captures: &[LoweringOperand],
         argument: Lowered,
         zero_body: SourceOccurrence<'_>,
         suc_body: SourceOccurrence<'_>,
@@ -11142,7 +11375,7 @@ impl<'a> Lowering<'a> {
             Lowered::BoundedNat(BoundedNatV1::derived_from_validated(zero))
         };
         let mut zero_env = env_with([zero_nat], &[]);
-        extend_specialized(&mut zero_env, captures.iter().cloned());
+        extend_captures(&mut zero_env, captures.iter().cloned());
         zero_env.extend_from_slice(producer_env);
         let zero_lowered = self.lower_expr(builder, zero_body, &zero_env)?;
         let (initial, result_kind) =
@@ -11212,7 +11445,7 @@ impl<'a> Lowering<'a> {
         // A Suc case sees its predecessor first, followed by the retained
         // scrutinee and the declaration's outer environment.
         let mut suc_env = env_with([predecessor, successor], &[]);
-        extend_specialized(&mut suc_env, captures.iter().cloned());
+        extend_captures(&mut suc_env, captures.iter().cloned());
         suc_env.extend_from_slice(producer_env);
         let next = self.lower_expr(builder, suc_body, &suc_env);
         self.active_recursive_declarations.pop();
@@ -11246,7 +11479,7 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         symbol: &RuntimeSymbol,
-        captures: &[Lowered],
+        captures: &[LoweringOperand],
         params: &[String],
         body: SourceOccurrence<'_>,
         args: &[RuntimeExpr],
@@ -11339,7 +11572,7 @@ impl<'a> Lowering<'a> {
                 .rev()
                 .map(LoweringOperand::Specialized)
                 .collect::<Vec<_>>();
-            call_inputs.extend(captures.iter().cloned().map(LoweringOperand::Specialized));
+            call_inputs.extend(captures.iter().cloned());
             let call_env = env_with_operands(call_inputs, producer_env);
             return if let Some(eliminators) = eliminators {
                 self.lower_computational_producer_expr(builder, body, &call_env, eliminators)
@@ -11445,7 +11678,7 @@ impl<'a> Lowering<'a> {
             .rev()
             .map(LoweringOperand::Specialized)
             .collect::<Vec<_>>();
-        call_inputs.extend(captures.iter().cloned().map(LoweringOperand::Specialized));
+        call_inputs.extend(captures.iter().cloned());
         let call_env = env_with_operands(call_inputs, producer_env);
         let lowered = if let Some(eliminators) = eliminators {
             self.lower_computational_producer_expr(builder, body, &call_env, eliminators)
@@ -11538,7 +11771,13 @@ impl<'a> Lowering<'a> {
                 let body = self.child_occurrence(declaration_origin, 0, body)?;
                 let captures = captures
                     .iter()
-                    .map(|capture| self.lower_seed_capture(builder, capture))
+                    .map(|capture| {
+                        // Seed captures resolve to JIT-time ground values, so
+                        // this arm ASSERTS the phase rather than preserving
+                        // one: there is no carried seed capture to lose.
+                        self.lower_seed_capture(builder, capture)
+                            .map(LoweringOperand::Specialized)
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
                 Some((captures, params.clone(), body.static_origin))
             }
@@ -11567,11 +11806,11 @@ impl<'a> Lowering<'a> {
                         self.lower_expr(builder, capture, &[])
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                Some((
-                    specialized_operands_at(&captures, "a declaration closure capture")?,
-                    params.clone(),
-                    body.static_origin,
-                ))
+                // `D7` — a declaration closure's LEXICAL captures reach it at
+                // their own phases, exactly as a lexical closure's do, so they
+                // are stored unchanged. The former `specialized_operands_at`
+                // fold here is the same narrowing removed at the lexical sites.
+                Some((captures, params.clone(), body.static_origin))
             }
             _ => None,
         };
@@ -11650,7 +11889,7 @@ impl<'a> Lowering<'a> {
         reference: StaticOriginId,
         symbol: &RuntimeSymbol,
         params: &[String],
-        captures: Vec<Lowered>,
+        captures: Vec<LoweringOperand>,
         args: Vec<LoweringOperand>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
         // ⛔⛔ **The pending checked-recursion marker is CONSUMED here.**
@@ -11698,7 +11937,10 @@ impl<'a> Lowering<'a> {
             None => None,
         };
         let mut inputs = args;
-        inputs.extend(captures.into_iter().map(LoweringOperand::Specialized));
+        // `D7` — the captures are already phase-bearing: a carried capture
+        // passes as its existing word and a specialized one is unchanged. The
+        // former `map(Specialized)` here asserted a phase the edge now owns.
+        inputs.extend(captures);
         self.call_declared_declaration_unit(builder, reference, &inputs, checked_template)
     }
 

@@ -69,6 +69,7 @@ pub(super) use static_transition::{
 pub(super) use static_transition::{
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition, EmittableUnit,
+    expected_capture_slot,
     EmittableCallKind, PredeclaredFunctionId,
 };
 

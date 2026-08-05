@@ -75,6 +75,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     plan_static_transition_graph_with_symbols, validate_oriented_subcontinuation_transport,
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
+    expected_capture_slot,
     CheckedOrientedMarkerSets, ConstructorIdentity, ContinuationCallIdentity, ContinuationCallView,
     DeclarationCallTargetClass,
     ContinuationContextId, ContinuationEmissionOwner,
@@ -2191,7 +2192,27 @@ enum Lowered {
     /// re-lowers the resolved term in its own whole configuration — that is
     /// symptom-inventory entry 2, and it stays open for `RT-FNSPLIT-B2F`.
     Closure {
-        captures: Vec<Lowered>,
+        /// **`D7` — the PHASE-BEARING capture edge.**
+        ///
+        /// A retained callable is an invocation-local compiler control capsule:
+        /// the capsule itself is specialized, but the values it closes over
+        /// reached it at their own phases, and a capture that arrived through a
+        /// declared ABI slot is `Carried`. Storing `Lowered` here forced every
+        /// such capture to be read as a compile-time template, which is why a
+        /// lawfully mixed environment could not be represented at all.
+        ///
+        /// ⛔ **A carried capture does not become a `Lowered` value.** It gains
+        /// no [`LoweredVariant`], no [`BoundaryDisposition`], no encoding
+        /// policy, no inverse conversion, no carrier tag, no durable slot and no
+        /// independent callable identity. The governing line is **phase
+        /// identity, not transitive Rust containment**: the word stays typed as
+        /// a [`LoweringOperand`] end to end.
+        ///
+        /// ⛔ **The capsule stays unconditionally non-transferable**, and
+        /// [`Lowering::boundary_transfer_admissibility`] refuses it **before**
+        /// descending into these captures — a carried capture must never become
+        /// a way to reach the carrier through a callable that is itself refused.
+        captures: Vec<LoweringOperand>,
         params: Vec<String>,
         body: StaticOriginId,
     },
@@ -2209,7 +2230,12 @@ enum Lowered {
         /// callable-body identity, exactly as `AC-1` requires.
         reference: StaticOriginId,
         symbol: RuntimeSymbol,
-        captures: Vec<Lowered>,
+        /// **`D7` — the same phase-bearing capture edge as
+        /// [`Lowered::Closure::captures`], for the same reason.** A declaration
+        /// closure's *lexical* captures reach it at their own phases; its *seed*
+        /// captures are resolved to JIT-time ground values and are therefore
+        /// always constructed as explicit `Specialized`.
+        captures: Vec<LoweringOperand>,
         params: Vec<String>,
         body: StaticOriginId,
     },
@@ -2747,6 +2773,26 @@ fn extend_specialized(
             .into_iter()
             .map(|lowered| LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(lowered))),
     );
+}
+
+/// Append a retained callable's **phase-bearing captures** after operands
+/// already in an environment.
+///
+/// ⭐ **The counterpart to [`extend_specialized`] for the `D7` capture edge, and
+/// the distinction is the point.** `extend_specialized` takes templates and
+/// *asserts* a phase by wrapping each one `Specialized`. A capture edge already
+/// carries its own phase, so asserting one here would be exactly the narrowing
+/// that made a mixed environment unrepresentable: a `Carried` capture would
+/// either be refused or, worse, re-labelled as a template it has no bytes for.
+///
+/// ⛔ There is no classification to perform. An environment binding holds a
+/// [`LoweringOperand`], so this is a total, phase-preserving move — **not** a
+/// wildcard that silently absorbs the carried case.
+fn extend_captures(
+    env: &mut Vec<LoweringEnvironmentBinding>,
+    captures: impl IntoIterator<Item = LoweringOperand>,
+) {
+    env.extend(captures.into_iter().map(LoweringEnvironmentBinding::Value));
 }
 
 /// ⭐ The inverse direction, which needs **no** boundary at all: a freshly

@@ -35,6 +35,7 @@ use semantic_ir::{
 pub(in crate::cranelift_backend) use abi::{
     AbiCaptureProvenance, AbiCarrier, AbiFrameHeader, AbiOwnership, AbiProcessParameter,
     AbiRootIngress, AbiSchedulingIngress, AbiSlot, AbiSlotKind, AbiStorageOwner, AbiUnitDefinition,
+    expected_capture_slot,
 };
 #[cfg(test)]
 pub(in crate::cranelift_backend) use semantic_ir::with_last_io_error_role_omitted;
