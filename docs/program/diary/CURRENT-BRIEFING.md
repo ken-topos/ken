@@ -80,9 +80,24 @@ ABI availability remains its existing case, untouched"; Finding 2's rejection
 rule, whose basis was emitter-class-for-root-domain; and `AC-2`, which named
 three consumers when the count is ten.
 
+⛔ **The first recut was BLOCKED by the Architect and is now corrected.** I
+transcribed the `D3b` ruling faithfully and left `D2b`'s operative two-arm law
+standing three hundred lines up, with a paragraph under it saying to read `D3b`
+instead — annotation around an operative deliverable. Corrected at
+`evt_5s943gevnthec`; `origin/main` **`10f492aa`**, frame blob
+**`07f49bac4b5a6ce98b359d0efb96928c31fb7a7e`**, object-verified. `D3b` unfrozen.
+
+⭐ **The reusable half:** I treated text as historical because the checkpoint
+that wrote it was discharged. **What makes text operative is whether a reader
+would build from it, not whether its author is done.** Sweep by that test. Two
+hits were then deliberately KEPT with the reason recorded at each — `D3a`'s
+refusal sentence (a true record of what it landed; rewriting falsifies history)
+and `D1`'s `unchanged` on the Entry ABI **root source** (correct — root identity
+is preserved; only *availability* was replaced).
+
 ### The one thing to do next
 
-**Wait for `runtime-leader` to release `D3b` from `f5e4fa9f`, then watch for the
+**Wait for `runtime-leader` to resume `D3b` from `f5e4fa9f`, then watch for the
 candidate.** Nothing waits on me. If a fresh corrected SHA comes back, the node
 QA and `D4b` sequence resumes.
 
