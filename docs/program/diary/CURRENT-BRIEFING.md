@@ -40,10 +40,67 @@
 
 ### The one thing to do next
 
-**Wait for the Architect's CONTRACT ruling**, routed at `evt_7p0jwvxm9kwmw` in
-thread **`thr_668pxy8mez8hb`** (kick anchor `evt_1zj6yp3p35v9f`):
+**Wait for the Architect's FIXTURE-SEMANTICS ruling**, routed at
+`evt_1e3bz0c973egh` in `RT-CONTSRC-PRODUCER-LOCAL`'s thread
+**`thr_6m43v75yndhtj`**:
+
+> **In `governed_nested_resource_bracket`, should the governed buffer be in
+> scope at the `ComputationalMatch` level?** Bind `AllocatedBuffer` around the
+> match, or correct `allocation_scope` so the case body does not reference it.
+
+Both change what the fixture **means**, which is why it is not mine. ⛔ **Do not
+repair before that ruling**, and do not let the ring pick.
+
+### ⭐⭐ THE CAMPAIGN CONCLUSION — the five reds are NOT a Ken defect
+
+**The runtime is correctly rejecting a malformed fixture.** `Var: no runtime
+binding` is the right answer to an IR referencing a binder nobody bound.
+`governed_nested_resource_bracket`'s `allocation_scope` presumes an ambient
+`AllocatedBuffer` **at the match level that nothing there binds** — the buffer
+is bound *inside* the closure. ⛔ **No substrate gap, no Ken defect, nothing on
+the critical path but a test-fixture repair.**
+
+**How far this moved:** from "a large closure-conversion substrate node gating
+all seven `RecursiveDescent` nodes" to "one fixture presumes a binder it never
+binds." Three inventory passes plus **three hard stops**, every stop the ring
+correctly refusing to fabricate something.
+
+### `D5` — recut TWICE; both earlier edits are WITHDRAWN
+
+`D5` is `RT-CONTSRC-PRODUCER-LOCAL`'s **last deliverable** and clears the
+candidate gate. Its authorized edit is now the fixture's **scope tracking**.
+
+| withdrawn edit | why |
+|---|---|
+| correct `test_objects.rs:176`/`:220` capture literals | ⛔ **wrong anchor.** Those bodies are genuinely closed — zero `Var` nodes — so `captures: Vec::new()` is right and editing them fabricates captures |
+| correct the `:12038` capture literal | ⛔ **also innocent.** `closure_scope` is an empty `BinderScope` binding only the closure's own `"buffer"` param, so its `Var(1)` is that param; ambient demand is **zero** |
+
+⛔ **The wrong anchor rode through THREE artifacts** — `D1c` named it from a
+grep rather than a probe, then the Architect's ruling and my own `D5` release
+each inherited it as measured. ⭐ **A `file:line` in a code fence reads as
+measured and is only a claim.**
+
+⭐ **Standing:** `LexicalClosure.captures` must be **total** for ambient lexical
+demand (Architect `evt_5g7kaec1xzaf6`) — a **totality** ruling, not a
+minimality one; a conservative run may be larger, never shorter. And the
+`StaticWorker` at de Bruijn 0 is **non-causal** — it sits innermost, the missing
+binding is outermost, so ⛔ `Var` shifting stays banned.
+
+⚠ **Unmeasured, and it belongs to the repair's evidence — NOT another
+measurement round:** the construction recurs at every depth and a nested call
+builds indices from a fresh `BinderScope::default()` under enclosing binders.
+Whether that compounds per level is open.
+
+⛔ **Whatever the ruling, the corrected fixture must still be a `D4a` witness,
+proved by a discriminator** — a fixture that stops reaching the boundary is a
+deletion wearing a fix's clothes.
+
+### Superseded — the contract question, ANSWERED
+
+Routed at `evt_7p0jwvxm9kwmw`, answered `evt_5g7kaec1xzaf6`:
 
 > **Must `LexicalClosure.captures` cover every free index its `body` reaches?**
+> **YES** — total for ambient lexical demand, no lawful undeclared caller tail.
 
 ⛔ **INVENTORY IS CLOSED. There will be no `D1d`.** Three passes (`D1`, `D1b`,
 `D1c`) each corrected its predecessor's premise; I said `D1c` terminates it and
