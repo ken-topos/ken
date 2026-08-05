@@ -969,6 +969,35 @@ all six failing `D0` rows.
   five rows redden (measured). The whole-run control is still required; it is
   not required by the silent-pass story this frame used to tell.
 
+  ⛔ **`D6b` also owes a NON-VACUOUS raw-call emission witness** (Architect
+  `evt_21ytnjgdw147`, on partial progress `d86be55d`). The route consumer and
+  the two function-local target tables are accepted and preserved — but **the
+  landed-object row proves the mixed binding pair is in the environment without
+  ever calling the selected recursive argument.** The corpus therefore never
+  consumes `raw_worker_calls` in the retargeted case, and the mutation *"resolve
+  `RawWorker` through `worker_calls`"* **survives**. ⚠ **A green suite cannot
+  discharge a callee-selection law whose wrong table is observationally inert.**
+
+  The witness is a test fixture built from **existing source constructs on the
+  ordinary planner/lowering path**, where the selected recursive argument is
+  actually **called**. Ordinary source syntax in a fixture is authorized; ⛔ a
+  new production occurrence kind, authority, fabricated identity, population
+  mechanism, or hand-constructed plan is not. It must prove: same exact
+  closure/body provenance yields a `GeneratedContext` IH and a `RawWorker`
+  selected argument; the argument is invoked at the planner-derived binder
+  position with its real raw arity and captures; the emitted raw event carries
+  **no** generated-context suffix and resolves through `raw_worker_calls`;
+  substituting `worker_calls` for that lookup **reddens** it; and the existing
+  `GeneratedContext` append-nothing mutation **stays red**.
+
+  ⛔ **Fail closed on the population edge:** if the ordinary fixture reaches a
+  template-only raw body and `raw_worker_calls` cannot be populated without
+  declaring an undefined function, **stop and report that exact edge.** Do not
+  force-declare a body to make the test green.
+
+  This belongs to `D6b`, **not** `D6c` — `D6c` owns the refusal closure *after*
+  this positive is established.
+
   ⚠ **`D6b` also owes the raw-target declared-call-table representation**,
   which `D6a` leaves honestly inert: the existing body-origin lookup is
   overwritten by the generated context and the raw body is removed from the
