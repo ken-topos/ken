@@ -2162,7 +2162,32 @@ family — that is a measurement nobody has taken.
   > **What it does not discharge:** the exact reaching-row, lowering-closure, and
   > cumulative no-regression obligations — because the linked row never reaches
   > this machinery. See "Required acceptance evidence" item 1, which is recut
-  > into two ordered checkpoints for exactly that reason.
+  > into ordered checkpoints for exactly that reason.
+
+  > **RESUME POINT ADVANCED AGAIN, 2026-08-05 — exact
+  > `50092c59e21720cc8ad7c102fb6ceb925da4ecdd`** (Architect `evt_50tq0x2qy5489`),
+  > two commits on `ae64f687`. **Accepted checkpoint 1, preservation-only, not a
+  > candidate.** Runtime lib 715 passed / 2 standing reds, unchanged.
+  >
+  > Accepted in it: both retained callable forms carry `Vec<LoweringOperand>`
+  > while their outer capsules stay `Specialized` and unconditionally
+  > non-transferable; lexical captures retain their exact phase and seed captures
+  > are explicitly `Specialized`; the generic retained-callable seat and
+  > `StaticWorkerBinding` share one complete pre-emission capture gate, reusing
+  > the existing worker-template and ABI-slot authority to check body/source
+  > identity, arity, count, ordinal, provenance, owner, phase/lifetime, and
+  > whole-slot equality **before allocation**; every capture consumer is
+  > phase-exhaustive; and no callable carrier, marker change, planner population,
+  > ABI shape, tag, inverse, or boundary lane was added.
+  >
+  > **The evidence that makes it an advance, per-row and never a count:** the
+  > linked row's first refusal moved off the closure-capture seat, and the five
+  > `fs_*` rows keep their exact framed `D0` refusal text — so nothing regressed
+  > to buy the advance.
+  >
+  > **What it does not discharge:** the row still does not reach this node's
+  > consumer. Its new first refusal is the Host-`Vis` producer arity
+  > inconsistency, which checkpoint `1b` below owns.
 
   Those tips and `70887529` share merge-base `f7cea8fd` and are **competing
   historical implementations, not independent halves awaiting assembly.** The
@@ -2472,6 +2497,57 @@ family — that is a measurement nobody has taken.
         > verify a producer that was never broken. No scope, node, lane, or
         > disposition changes: no `AC-C4` exception, no callable carrier, no
         > `B2F` lane, no planner-population or ABI-shape widening.
+     **1b. Correct the Host-`Vis` computational-IH producer so one application
+        has ONE arity.** Added 2026-08-05, Architect `evt_50tq0x2qy5489`, on
+        accepted checkpoint 1 (`50092c59`). **This is numbered `1b` rather than
+        renumbering the consumer**, so that "checkpoint 2" keeps meaning what
+        every post in this thread already uses it to mean.
+
+        > **Why it exists.** Checkpoint 1 did not create this refusal; it made
+        > the row *reach* an existing fail-closed check. With the closure-capture
+        > seat passed, the row's first refusal is now
+        > `OrientedSubcontinuationPlanV1: computational IH invocation marker
+        > wraps a call of 1 arguments but its checked template names arity 0`.
+        >
+        > **One application is described by two arities.** The Host-`Vis`
+        > producer records `CheckedComputationalIHCallSeed::arity =
+        > checked_arguments.len()` — so a nullary force records `0` —
+        > `lower_checked_host_computation` consumes that seed at the same checked
+        > count, and then that same `Vis` route builds the complete Runtime call
+        > by lowering the checked arguments **and appending
+        > `RuntimeExpr::Var(0)`, the host result**. The emitted application
+        > therefore carries 1 argument against a template naming 0.
+        >
+        > **The marker law is correct and is NOT what changes.** A
+        > `CheckedComputationalIHCallTemplateV1` describes one complete
+        > application, and both marker entry and static-worker consumption
+        > compare the wrapped `RuntimeExpr::Call` argument count against the
+        > immutable `arity`. ⛔ Do not relax, special-case, or widen those
+        > checks to make the row advance — the defect is the producer naming an
+        > incomplete application, not the check catching it.
+
+        **What the correction owes.** Make the Host-`Vis` call seed and template
+        name the **full erased Runtime application, including the injected result
+        operand**, and bind seed, marker body, and consumer to that one arity.
+
+        **Required controls:**
+
+        - a **nullary** Host-`Vis` continuation is `1 / 1 / 1` — seed, marker
+          body, and consumer all naming the same single arity;
+        - an **n-argument** Host-`Vis` continuation is `n + 1` throughout;
+        - an **ordinary non-Host** application remains `n`, so the correction is
+          scoped to the injecting route and does not shift every application;
+        - **omitting or double-counting the injected result refuses before
+          emission** — both directions, since a correction that can only be
+          wrong one way is half-measured;
+        - all existing `D5a` marker controls and the exact `50092c59` capture
+          controls remain green.
+
+        **Scope.** Existing `D7` / [[RT-RECURSOR-TRANSPORT]] atomic scope. No new
+        node, carrier lane, disposition, representation, or third participant.
+        Runtime holds exact `50092c59`; **no candidate, no QA route, and no
+        checkpoint-2 work until this lands.**
+
      2. **Then close the exact `264 -> 262 / position 1` consumer** with the
         retained `ae64f687` mechanism: the exact planned seat is claimed, the
         real row returns `InvalidBounds`, and shared-host dispatch count is
@@ -2480,7 +2556,7 @@ family — that is a measurement nobody has taken.
 
      All existing mixed-phase, owner/order/provenance, zero-allocation capsule,
      `D5a` marker, phase/taxonomy and `AC-4` controls remain **cumulative**
-     across both checkpoints.
+     across all three checkpoints.
 
      **The row may NOT be replaced by a synthetic or direct carried-capacity
      witness.** Such a witness proves the consumer locally and cannot prove that
