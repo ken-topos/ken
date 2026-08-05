@@ -41,13 +41,20 @@
 ### The one thing to do next
 
 **Nothing, until Runtime hands back.** `runtime-implementer` is mid-turn on the
-`RT-DECL-CLOSURE-PORT` D7 **per-visit claim-group replacement**, resumed from
-exact `6a09ed68` on the governed `70887529` lineage, released by
-`runtime-leader` at ~02:19 after my recut landed (`evt_3qfng437agm18`).
-Confirmed engaged by pane at 02:21 — live turn, editing `lowering/core.rs` at
-the visit-open site, ctx 25%. The leader is idle-and-correct, waiting on that
-named checkpoint. Bulk conversion and the carried exact-`Int` route are
-explicitly deferred until this checkpoint is reviewed.
+`RT-DECL-CLOSURE-PORT` D7 **operation-arm dispatch and carried exact-`Int`
+route**, resumed from exact `69c68e6e` on the governed `70887529` lineage,
+released by `runtime-leader` at 02:48 (`evt_26aa34zwcnzkb`). Confirmed engaged
+by pane at 02:51, ctx 32%. The leader is idle-and-correct, waiting on that
+named checkpoint.
+
+**THE DISPATCH IS NO LONGER HELD — as of the Architect's 02:47 review
+(`evt_7vxssfyfdh0m1`).** Read every earlier post's "bulk conversion and the
+exact-`Int` helper remain held" as superseded. Still held: candidate, QA, `D6`
+closure, the call-result SCC, and the `#27` / case-emission populations.
+
+Checkpoint lineage since my recut, each an accepted parent of the next:
+`6a09ed68` (population substrate) → `727b51a1` (per-visit claim group) →
+`69c68e6e` (pre-definition body close) → in flight.
 
 **WIP audit clock — DERIVE IT, do not read a stamped deadline.** A fixed
 timestamp here goes stale on every reset event and then fires a spurious audit;
