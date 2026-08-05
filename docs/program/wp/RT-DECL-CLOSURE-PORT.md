@@ -2680,6 +2680,96 @@ family — that is a measurement nobody has taken.
         **Scope.** Existing `D7` / [[RT-RECURSOR-TRANSPORT]] atomic scope **for
         the inventory only**. It adds no third production predicate.
 
+        **ANSWERED 2026-08-05 by `evt_5kws532ac99c9` — the inventory is
+        NEGATIVE, and it is accepted.** 1110 candidate records (1057
+        `ken-runtime --lib` + 60 `D0` parity), 612 declines, 489 interns, 169
+        distinct declined edges across 34 tests; probe reverted, branch
+        unchanged at exact `179af863`. Nine candidate authorities enumerated;
+        none both proves the edge mandatory and supplies an exact edge-local
+        closed environment. Three findings are load-bearing downstream:
+
+        - `member=true` on **all 612 declines and all 489 interns** — `1c`'s
+          finding, now measured over 1101 rows rather than 23 fixtures.
+        - `case_emission=None` on all 1110: `build_case_emission_plan` iterates
+          `RuntimeExpr::Match` only and never `ComputationalMatch`, so that
+          authority is **inapplicable**, not merely insufficient.
+        - The ring **declined a near-miss discriminator it could have reported**
+          ("`Open` because of an effect result" — true for the witness family,
+          false for every green peer). It is perfectly confounded with corpus:
+          `Effect` occurs in 0 of 1057 lib ancestor chains and 60 of 60 parity
+          chains, so the predicate separates two **test suites**. That is the
+          corpus-identity ban in a different spelling, and catching it was
+          correct.
+
+     **1e. Mint the host-effect-result continuation input source.** Steward
+        scope ruling 2026-08-05, decided FROM the `1d` inventory as `1d`
+        required. **This authorizes exactly one representation and supersedes
+        `1d`'s no-minting ban for that one only.**
+
+        **Why this is folded into `D7` and NOT cut as a separate node.** `1d`
+        said the outcome "requires a separate substrate node." That sentence was
+        Steward prose, not a ruling — the Architect left the graph shape to the
+        Steward, and this frame's own constraint test says to ask whether the
+        constraint is real, not which node it becomes. It is not real: the
+        preference order is relax, then fold, then cut; and `179af863` is not on
+        `main`, so a separate node would branch from an unmerged branch, gaining
+        an entry in the graph and no independent mergeability. **Folding costs
+        nothing that cutting would buy.**
+
+        **The scope, and it is minimal by measurement.** Mint the
+        **host-effect-result** slot only:
+
+        - a fourth `ContinuationInputSource` variant
+          (`static_transition.rs:410`, today `Parameter` / `LexicalCapture` /
+          `SeedCapture`), and
+        - whatever assigns it an ABI position, since
+          `validate_continuation_source_slot` resolves a slot by finding it
+          among `continuation_owner_entry_sources`. **That second half is not
+          optional** — the inventory says so explicitly.
+
+        **The scrutinee-field / case-binder slot is OUT OF SCOPE.** The
+        inventory's own counts decide it: the host-effect-result slot covers
+        **6** distinct edges, which are exactly the 6 failing `D0` rows; the
+        case-binder slot covers **161** distinct edges, all in a `ken-runtime`
+        lib corpus standing at **718 passed / 2 failed**. No failing row demands
+        it, and closing those edges would newly intern 161 edges on green
+        programs. Minting it here would be a change with no measurement behind
+        it. If a later row demands it, that is its own question.
+
+        **First deliverable is an ANSWER, not a mechanism — the third time on
+        this node, and the pattern has paid twice.** The `1d` hard stop named
+        two mintings. The second — a route-modality authority expressing "this
+        edge must have a route" — is **not authorized, and is probably not
+        needed.** Its only source is `1d`'s own requirement to distinguish `381`
+        from the peers *before interning*, and that was a constraint of the
+        projection-only framing, which this checkpoint retires. Once the
+        environment closes exactly, closed-vs-`Open` **is** the discriminator:
+        the witness closes, the 22 peers stay `Open` because their ordinal 0 is
+        a case binder, which is a different missing slot and stays missing.
+
+        **Report whether that holds. Do not assume it because the Steward wrote
+        it** — three of this node's stops were exactly that error. If a route
+        modality is genuinely required, HARD STOP and return the concrete edge;
+        that one is a real substrate question and the Steward will cut it a node.
+
+        **Architect gate.** This is a Steward scope ruling plus **one**
+        confirming gate on the axis the fork turns on: the Architect confirms
+        the **representation design** — the variant's shape and how it earns an
+        ABI position. Scope is settled and is not reopened by that gate.
+
+        **Bans.** All `1d` bans carry except the no-minting clause this
+        checkpoint supersedes: do not reject all `Open` real members, retire the
+        candidate-only law, special-case closure `381`, use corpus identity as a
+        predicate, weaken the generic `Closure` refusal, or declare the witness
+        closed from the converse. Additionally: do not mint the case-binder slot,
+        do not mint a route-modality authority, and do not let the near-miss
+        effect-result *provenance* become a production predicate — the slot is a
+        representation, not a reason string.
+
+        **Evidence.** Per-row, never a count. The 6 `D0` rows move by their own
+        texts; `718/2` and `108/0` do not regress; `1c`'s member-population law
+        and its four mutation controls stay intact and non-vacuous.
+
      2. **Then close the exact `264 -> 262 / position 1` consumer** with the
         retained `ae64f687` mechanism: the exact planned seat is claimed, the
         real row returns `InvalidBounds`, and shared-host dispatch count is

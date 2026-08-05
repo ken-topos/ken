@@ -35,8 +35,8 @@
 
 ## LIVE — 2026-08-05 ~06:2xZ · D7 `1c` closed; Runtime owes the `1d` inventory
 
-**`origin/main` at last check: `8558d4e6`** (the `1c`/`1d` recut, PR #1408;
-frame blob `da785093`). Verify it; do not trust this line.
+**`origin/main` at last check: `8a3ff7e0`** (the `RT-SEED-CALL-PORT` recut, PR
+#1409; frame blob `6ccc48d7`). Verify it; do not trust this line.
 
 ### The one thing to do next
 
