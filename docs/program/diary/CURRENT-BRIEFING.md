@@ -40,30 +40,33 @@
 
 ### The one thing to do next
 
-**Wait for `D5a-1` from Runtime.** The ring is working it in thread
-**`thr_6m43v75yndhtj`**; `runtime-leader` owes the release, and the implementer
-was compacted at a clean seam (`e27d297a`, no edit) before it starts.
+**Release `D6a` to Runtime.** Thread **`thr_6m43v75yndhtj`**, on Architect
+ruling **`evt_760m5azkrdrzq`**. Hold exact `e27d297a`; no candidate, no QA
+route. Frame section: *"GOVERNING — `D5a-1`/`D5a-2` are SPENT"*.
 
-**The `D5a` hard stop is ANSWERED: no new planner or ABI authority is needed.**
-`ContinuationCaseBinderSource::ContinuationInput` (`lowering/units.rs:1022`),
-ordered by `continuation_case_binder_run` (`units.rs:1615`), already states the
-required closed order. Nothing is owed to the Architect on this.
+⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
+published *"new member at ordinal 2, not 3"*. So is the whole
+continuation-input projection: `ContinuationInput(0)` **already is** the outer
+success binder with exact case-body provenance, and a second input is the
+banned fabricated availability. So is the `ContinuationOrdinaryEnvelopeRole` +
+ABI `Parameter(ValueWord)` route — the selected recursive argument is a
+**closure capsule** with no lawful `ValueWord` form.
 
-**I cut `D5a` into `D5a-1` (the projection) and `D5a-2` (the five pre-emission
-refusals)** — `evt_62ee5f2dvmvp1`, frame section *"`D5a` is CUT into two
-checkpoints"*. Reason: two consecutive implementer turns ended out of budget
-with no edit, both spent on work I asked for. **The sizing was my defect.** Both
-checkpoints land in the same candidate; nothing is dropped.
+⚠ **Each of those three would have passed a `Var(2)`-only positive.** At
+ordinal 2, `Var(2)` still resolves to a success payload while `Var(1)` is
+silently wrong. **Assert the whole run.**
 
-**The omission is measured, at the producer, with an instrument** (not from the
-fixture): run `[InductionHypothesis, ContinuationInput(0)]`, length 2, matching
-`D1b`'s `env_len=2` independently. `cont_inputs = 1` omits the outer
-`BufferAllocate` `Result::Ok` success binder. **No design question is open** —
-seam, order, member kind and omission are all settled.
+**The corrected law:** `[IHs, ALL constructor arguments in source order, outer
+frame]`. The functionized construction **replaces the selected recursive
+argument with its IH** — that is the defect. Frame text is fixed; source
+comments carry the same false law and are the implementer's to correct.
 
-⚠ **`arg_binders=1` does NOT mean an argument is in the run.** The sole argument
-binder is recursive, so segment 2 contributes zero and the new member lands at
-ordinal **2**, not 3.
+**Authorized:** one compiler-only `SelectedRecursiveArgument` unit-environment
+member (from `recursive_position` + `ContinuationWorkerProvenance`), plus a
+closed compiler-only call-route discriminator — the IH calls the generated
+context and appends its suffix; the selected argument calls the raw worker and
+appends none. Cut into **`D6a`** (representation), **`D6b`** (consumption +
+governed positive + discriminating control), **`D6c`** (the refusal set).
 
 ### ⛔⛔ I PUBLISHED A FALSE CONCLUSION AND IT IS WITHDRAWN
 
