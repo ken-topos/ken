@@ -41,42 +41,77 @@ this line.
 
 ### The one thing to do next
 
-**Nothing — the `D2` correction is in flight.** `RT-CONTSRC-PRODUCER-LOCAL` is
-live in thread **`thr_6m43v75yndhtj`**; `origin/main = f5ffdcd3`.
+**Nothing — the IH-requirement census is in flight, and its answer is MY next
+decision.** `RT-CONTSRC-PRODUCER-LOCAL` is live in `thr_6m43v75yndhtj`.
 
-- `D0` (`12d9612a`, zero delta), `D1` (`77a24320`) **accepted**
-  (`evt_5zkydewv5kspb`), `D2` delivered at exact `a5a6ce9b` with no hard stop.
-- **`D2` is BLOCKED by the Architect** at `evt_9krmbv834z9p` (08:00:58Z);
-  `a5a6ce9b` preserved as bounded progress. Leader dispatched the bounded
-  correction at `evt_3grwb2yc4esd0` (08:01:24Z); implementer working it.
-- **`D3` and `D4` remain unreleased**, with candidate, QA, `D6` closure,
-  `#27`/case-emission and the call-result SCC still held.
-- **Nothing owed by me.** **WIP clock re-armed on the 08:00:58Z ruling — derive
-  it; do not read a stamped deadline.**
+- `D0` (`12d9612a`), `D1` (`77a24320`) accepted. `D2` blocked at `a5a6ce9b`
+  (`evt_9krmbv834z9p`), corrected at exact **`5377d2ab`**, and the correction is
+  **accepted as sound partial progress** — but **not as complete `D2`**
+  (`evt_4h2v01dc7g8s4`, 08:17:20Z).
+- **My disposition: `evt_7q2mztg9n7dva`.** Leader released the census only at
+  `evt_361zdh159edv0` (08:19Z); implementer working it. **`D3`, `D4`,
+  candidate, QA, `D6` closure, `#27`/case-emission, the call-result SCC and
+  downstream `D7` all remain held.**
+- **WIP clock re-armed on the 08:19Z release — derive it, never read a stamped
+  deadline.**
 
-**The block, because it changes a frame-level fact.** A `ComputationalMatch`
-case environment is ordered `[recursive IH binders, constructor argument
-binders, outer environment]`, and **those two runs are not homogeneous** —
-existing law gives IH binders `ActivationOwned` with a phase-derived contract
-while argument binders preserve the scrutinee representation. `D2` looped the
-combined count and stamped one `ValueWord` + scrutinee-lifetime contract across
-both. Identity `(case body, binder ordinal)` survives; the ordinal's *role* is
-what must be read off the case header.
+### The fork I have NOT decided, and the one measurement that decides it
 
-⇒ **`AC-3` is affected and I owe an edit once `D2` is accepted.** It requires
-the ~34 newly-interning edges to be "accounted for individually", and the frame
-never says that the case-binder population splits into an IH sub-run and an
-argument sub-run. An aggregate over a heterogeneous run is exactly what `AC-3`
-exists to forbid. ⛔ **Do not amend the frame while the correction is in
-flight** — the leader's dispatch already carries the instruction verbatim, and a
-mid-flight frame edit would duplicate a live instruction and drag its guardrails
-section along. Amend when the contract is settled, not while it is being
-derived.
+The Architect found an **expressibility boundary**: `D1`'s producer-local arm is
+enclosed by `ContinuationSourceSlotAuthority`, which is unconditionally a
+**value-slot** contract, and a recursive IH is not a value — lowering already
+holds it as a compiler-only `LoweringEnvironmentBinding::StaticWorker` with no
+word, tag, descriptor or carrier. Three measured grounds: no `ResultPhase` to
+`AbiCarrier` map exists; the IH's phase depends on whole-plan
+`functionized_units`, so `(case body, ordinal)` does not determine it; and the
+production continuation-input vocabulary has **no callable domain at all**
+(`BoundaryUseAvail::Callable` is `#[cfg(test)]`-only). Leaving the prefix `Open`
+is declining to represent, not defaulting — and it is the only sound behaviour.
 
-**This stop is NOT my framing.** It is an execution defect caught at the gate,
-which is the gate working. Four earlier stops on this campaign were my frames
-asserting laws the measured plane does not support; this one is a different
-class and should not be counted with them.
+The Architect asked me to **recut this node to add a closed callable-contract
+substrate, or sequence a precursor node.** ⛔ **I refused to choose yet**, and
+the reason must survive: the fork turns on whether the edges `D4` must admit
+**actually contain IH binders**, and nobody has measured that. If the answer is
+zero, the boundary is real and off `D4`'s path, and a substrate node would
+lengthen the critical path to represent a value no edge needs.
+
+**This node has already been stopped once by exactly that error, and it was
+mine** — `1e` read a first-`Open` census as a requirement census and ruled a
+minimal scope over an empty population. Section 6 of the frame came out of it
+and binds me first: decide the graph shape FROM the inventory, never before it.
+
+**What each answer means, so no one has to guess:**
+
+| census result | disposition |
+|---|---|
+| **zero** IH-bearing edges | boundary recorded as a named residual, `D2` completes at `5377d2ab`, `D3`/`D4` proceed against the single value contract, **no new node** |
+| **nonzero** | the closed callable-contract substrate gets its **own node**, cut from the Architect's ruling; `D3` waits, because every consumer must exhaustively distinguish the two contracts and `D3`-against-one-contract would be built twice |
+
+⛔ The census must be a **vector over the full required environment**. A
+first-`Open` census cannot answer it and reporting one reproduces `1e` exactly.
+
+### What I owe regardless of the answer
+
+**`AC-3` never says the case-binder population splits into an IH sub-run and an
+argument sub-run**, while requiring the newly-interning edges to be accounted for
+individually — an aggregate over a heterogeneous run is what `AC-3` exists to
+forbid. Amend when the contract is settled. ⛔ Not mid-correction, where a frame
+edit duplicates a live instruction and drags its guardrails section along.
+
+**The two stale comments are folded into the census unit, not left to "any
+successor".** `producer_local_source`'s table and the `D2` positive's prose still
+state the blanket `ValueWord` the gate rejected. A comment asserting a rejected
+contract is not a stale note — it is what a later reader builds from.
+
+**Neither stop here is my framing.** The heterogeneous-run defect was caught at
+the gate and the IH boundary was found by building; that is the only way it
+could have been found. Four earlier stops on this campaign *were* my frames
+asserting laws the measured plane does not support. Do not count these with
+them, and do not read this node as mis-sized.
+
+⭐ **The implementer retired its own invented `ValueWord` blanket before the gate
+ruled on it**, and reported the IH half as three measured grounds rather than
+picking a default. That is what these frames are written to produce.
 
 > ### The mistake I made at 07:36Z, because the shape recurs
 >
