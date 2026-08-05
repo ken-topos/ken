@@ -20941,6 +20941,237 @@ mod tests {
         );
     }
 
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` alias controls 3, 4 and 5 — the rule
+    /// selects by ELIGIBILITY, and order only canonicalizes among proved aliases.**
+    ///
+    /// ⭐⭐ **Controls 1 and 3 select OPPOSITE ENDS of the environment, and that
+    /// is the whole point of having both.** A suite carrying only the
+    /// nearest-alias case passes just as well under a positional shortcut —
+    /// "take the first member containing the coordinate" — because on that
+    /// fixture the first member *is* the answer. Control 3 puts an ambiguous
+    /// `Closed([S, T])` at the inner position and the exact singleton at the
+    /// outer one, so a positional shortcut answers `0` and the ruled rule answers
+    /// `2`. Only the pair distinguishes them.
+    ///
+    /// ⚠ **MEASURED**: eligibility is exact equality of the complete source-slot
+    /// authority, and selection among eligible positions is the minimum index.
+    /// **CLAIMED**: the rule is total over the environment — every position is
+    /// classified before any is chosen. **THE GAP**: this exercises the rule as a
+    /// function; that the planner and the consumer both *call* it is
+    /// `d3b_the_duplicated_entry_source_selects_the_nearest_alias` below.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn d3b_alias_eligibility_not_position_decides() {
+        let expr = Box::leak(Box::new(contspec_complete_environment_fixture()));
+        let symbols = crate::NativeProcessSymbols::legacy_prelude();
+        let plan = plan_static_transition_graph_with_symbols(
+            expr,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+            false,
+        )
+        .expect("the complete-environment fixture plans");
+        let owner = plan.continuation_specializations[0].key.consumer_owner;
+        // ⛔ Real authorities, not hand-built ones: eligibility is whole-record
+        // equality, so a synthetic S could differ from anything production ever
+        // produces and the row would prove nothing about the live rule.
+        let sources = continuation_owner_entry_sources(&plan, owner).expect("entry sources");
+        assert!(
+            sources.len() >= 2,
+            "the fixture must supply two distinct source slots, or S and T cannot be told apart"
+        );
+        let s = sources[0].clone();
+        let t = sources[1].clone();
+        assert_ne!(s, t, "S and T must be distinct records");
+        assert_ne!(
+            s.coordinate, t.coordinate,
+            "S and T must differ in COORDINATE, or the contract-mismatch arm would fire where \
+             the rows below expect the ambiguity or absence one"
+        );
+        let closed = |sources: Vec<ContinuationSourceSlotAuthority>| {
+            ContinuationValueSourceAuthority::Closed(sources)
+        };
+
+        // Control 1's shape, as a unit: two exact aliases, the nearer wins.
+        let both = vec![closed(vec![s.clone()]), closed(vec![t.clone()]), closed(vec![s.clone()])];
+        assert_eq!(
+            nearest_exact_alias(&s, &both).expect("two exact aliases are eligible"),
+            0,
+            "among proved aliases the minimum de Bruijn index is selected"
+        );
+
+        // ⛔ Control 3 — inner ambiguous, outer exact. The OUTER is selected.
+        let outer = vec![
+            closed(vec![s.clone(), t.clone()]),
+            closed(vec![t.clone()]),
+            closed(vec![s.clone()]),
+        ];
+        assert_eq!(
+            nearest_exact_alias(&s, &outer).expect("the outer singleton is eligible"),
+            2,
+            "an ambiguous Closed([S, T]) at the inner position is NOT an alias, so the rule must \
+             reach past it; answering 0 here would mean it is selecting the first member that \
+             merely contains the coordinate"
+        );
+
+        // ⛔ Control 4 — ambiguous with no singleton anywhere refuses.
+        let ambiguous = vec![closed(vec![s.clone(), t.clone()])];
+        let refusal = nearest_exact_alias(&s, &ambiguous)
+            .expect_err("an ambiguous source set proves nothing and must refuse");
+        assert!(
+            format!("{refusal:?}").contains("ambiguous source set"),
+            "the refusal must be the ambiguity one, not absence: {refusal:?}"
+        );
+
+        // ⛔ Control 5, unit form — same coordinate, different contract.
+        let mut narrowed = s.clone();
+        narrowed.referent_affinity = Vec::new();
+        assert_ne!(narrowed, s, "the narrowing must actually change the record");
+        assert_eq!(narrowed.coordinate, s.coordinate, "and must keep the coordinate");
+        let mismatched = vec![closed(vec![narrowed])];
+        let refusal = nearest_exact_alias(&s, &mismatched)
+            .expect_err("a different contract under the same coordinate must refuse");
+        assert!(
+            format!("{refusal:?}").contains("different carrier, ownership, storage owner"),
+            "the refusal must be the contract-mismatch one: {refusal:?}"
+        );
+
+        // ⛔ Absent entirely — the third refusal, kept distinguishable.
+        let absent = vec![closed(vec![t])];
+        let refusal =
+            nearest_exact_alias(&s, &absent).expect_err("an absent coordinate must refuse");
+        assert!(
+            format!("{refusal:?}").contains("not present in the lexical environment"),
+            "the refusal must be the absence one: {refusal:?}"
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` alias controls 1, 2 and 6 — the
+    /// measured duplicate selects index 0, and the real consumer rederives it.**
+    ///
+    /// ⭐ This is the exact environment that produced the hard stop: `let y = x`
+    /// forwards process parameter 1, so `EntryAbi { .., 1, Parameter }` occupies
+    /// lexical indices **0 and 2**. The old exact-once law refused it outright.
+    ///
+    /// ⛔ **Control 2 is the canonicality half, and it is deliberately NOT stated
+    /// as "index 2 holds a different value".** It does not — index 2 is a proved
+    /// alias holding the same semantic source. What the consumer refuses is a
+    /// claim that is not the *canonical* selection, and that distinction is the
+    /// reason this rule is safe to share between two planes: planner and consumer
+    /// run one function, so a claim either is what that function returns or is
+    /// rejected.
+    ///
+    /// ⚠ **MEASURED**: the issued claim carries index 0; the production consumer
+    /// accepts it and refuses index 2. **CLAIMED**: the claim a consumer indexes
+    /// with is the planner's own answer, re-derived rather than trusted. **THE
+    /// GAP**: this re-runs the planner's rule, so a defect in the rule itself
+    /// would be reproduced rather than caught — `d3b_alias_eligibility_not_position_decides`
+    /// owns that half.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn d3b_the_duplicated_entry_source_selects_the_nearest_alias() {
+        let expr = Box::leak(Box::new(contspec_complete_environment_fixture()));
+        let symbols = crate::NativeProcessSymbols::legacy_prelude();
+        let plan = plan_static_transition_graph_with_symbols(
+            expr,
+            &BTreeMap::new(),
+            &symbols,
+            AbiRootIngress::Process,
+            false,
+        )
+        .expect("the complete-environment fixture plans");
+        let unit = &plan.continuation_specializations[0];
+        let input = &unit.key.continuation_inputs[0];
+        let requested = ContinuationSourceSlotAuthority {
+            coordinate: input.coordinate,
+            carrier: input.carrier,
+            ownership: input.ownership,
+            storage_owner: input.storage_owner,
+            referent_affinity: input.referent_affinity.clone(),
+        };
+
+        // The duplicate is real and MEASURED here, not assumed from the fixture's
+        // name. ⛔ Without this the row could pass on an environment holding the
+        // coordinate once, where nearest-alias and exact-once agree.
+        let seat_environment = continuation_emission_seat_environment(
+            &plan,
+            &ContinuationProducerEnvironment {
+                producer_owner: unit.key.producer_owner,
+                producer_result_origin: unit.key.producer_result_origin,
+                producer_construct_origin: unit.key.producer_construct_origin,
+                consumer_owner: unit.key.consumer_owner,
+                inputs: Vec::new(),
+            },
+        )
+        .expect("the emission seat has an environment")
+        .1;
+        let exact_positions = seat_environment
+            .iter()
+            .enumerate()
+            .filter(|(_, value)| {
+                matches!(value, ContinuationValueSourceAuthority::Closed(sources)
+                    if sources.as_slice() == [requested.clone()])
+            })
+            .map(|(index, _)| index)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            exact_positions,
+            vec![0, 2],
+            "this row's whole subject is a coordinate at TWO exact-alias positions; one position \
+             would make nearest-alias and the retired exact-once law indistinguishable"
+        );
+
+        let Some(ContinuationEnvironmentClaim::CurrentLexical {
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            nearest_alias_index,
+        }) = input.availability.direct_emission
+        else {
+            panic!("a predeclared emitter must issue a current-lexical direct-emission claim");
+        };
+        // ⛔ Control 1 — the nearer of the two proved aliases.
+        assert_eq!(
+            nearest_alias_index, 0,
+            "the issued claim must carry the minimum eligible index"
+        );
+
+        // The REAL consumer accepts it.
+        verify_current_lexical_availability(
+            &plan,
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            &requested,
+            nearest_alias_index,
+        )
+        .expect("the production consumer must accept the planner's own answer");
+
+        // ⛔ Control 2 — the outer alias is refused as non-canonical.
+        let refusal = verify_current_lexical_availability(
+            &plan,
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            &requested,
+            2,
+        )
+        .expect_err(
+            "a claim naming the outer alias must be refused; accepting it would mean the \
+             consumer indexes with whatever number it is handed as long as something lives there",
+        );
+        assert!(
+            format!("{refusal:?}").contains("does not hold that coordinate at"),
+            "the refusal must be the seat revalidation: {refusal:?}"
+        );
+    }
+
     /// **`RT-CONTSRC-PRODUCER-LOCAL` `D2b` DISCRIMINATOR 2 — generated-context
     /// capture availability, with the root and immediate positions DIFFERENT.**
     ///
