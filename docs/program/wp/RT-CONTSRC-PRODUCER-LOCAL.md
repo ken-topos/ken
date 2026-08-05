@@ -76,13 +76,39 @@ all six failing `D0` rows.
   The source-position type is a **closed sum**: an entry position must not be
   representable as a local binding, or the reverse. ⛔ No default arm.
 
-- **`D2` — coverage of both binding kinds.** The host-effect result **and** the
-  exact `Match` case binder, as **distinct** structural bindings. A later common
-  local-binding representation may subsume them; this node does not assume one.
+- **`D2` — coverage of both binding kinds. COMPLETE at exact `e6d4f085`**
+  (Architect gate `evt_38yd5sd1ht0kk`, 2026-08-05), for its two ruled
+  value-binding kinds. The host-effect result **and** the exact `Match` case
+  binder, as **distinct** structural bindings. A later common local-binding
+  representation may subsume them; this node does not assume one.
+
+  ⛔ **A `ComputationalMatch` case binder run is NOT homogeneous, and this frame
+  did not say so.** The case environment is ordered `[recursive IH binders,
+  constructor argument binders, outer environment]`. For
+  `ordinal < recursive_positions.len()` the binder is a **recursive IH**; the
+  rest are **constructor arguments**, whose carrier is `abi::result_carrier` on
+  the **scrutinee's** shape through `slot_referent_affinity`. Identity stays
+  `(case body, binder ordinal)` — the ordinal's **role** is read off the case
+  header. ⛔ There is no blanket `ValueWord` rule and no `ResultPhase` to
+  `AbiCarrier` map; the first `D2` candidate invented one and was blocked
+  (`evt_9krmbv834z9p`).
+
+  ⛔ **The recursive-IH prefix takes no contract here and stays `Open`.** An IH
+  is a compiler-only `LoweringEnvironmentBinding::StaticWorker` with no runtime
+  word, tag, descriptor or carrier. Leaving it `Open` is **declining to
+  represent**, not defaulting. It is [[RT-CONTSRC-CALLABLE-CONTRACT]]'s scope.
 
 - **`D3` — the consumers, each handled explicitly. THE COUNT IS TEN, NOT
   THREE.** ⛔ **Corrected 2026-08-05 by `evt_1srfqjmkp5eh8`; the original three
   below were a Steward guess and `D3` must not be cut on that number.**
+
+  ⭐ **`D3`'s exhaustiveness is scoped to the CURRENT closed value-slot contract
+  version, deliberately** (Architect gate `evt_38yd5sd1ht0kk`). Build against
+  one contract. [[RT-CONTSRC-CALLABLE-CONTRACT]] adds a second arm later and
+  **owns revisiting every exhaustive consumer** — that is named in its scope, so
+  `D3` is not incomplete for stopping here. ⛔ Do not pre-build a second arm, and
+  do not write `D3`'s exhaustiveness as if the value-slot contract were the
+  permanent whole.
 
   The three this frame named:
   - `validate_continuation_source_slot` re-derives the same arm and contract.
@@ -104,10 +130,40 @@ all six failing `D0` rows.
   goes stale the moment the code moves, which is how it was wrong the first
   time.
 
-- **`D4` — broad admission.** Every exact producer-local value is represented
-  and **all** newly representable candidates may lawfully intern. Report the
-  resulting intern/decline census as a **vector over the full required
-  environment**.
+- **`D4` — broad admission, stated as SET EQUALITY over the census's explicit
+  unit.** ⛔ **Recut 2026-08-05 by Architect gate `evt_38yd5sd1ht0kk` on the
+  census `evt_qttaeebtzjkt`. The earlier wording — "all newly representable
+  candidates may lawfully intern" — is REPLACED, not qualified.**
+
+  **`D4` is not an all-programs / all-source-kinds closure theorem.** It
+  completes over the closed contract domain this node owns, with an exact named
+  declined set. The unit is **one call to
+  `exact_continuation_source_environment`**, identified by **program fingerprint
+  + consumer owner + continuation origin + producer construct origin + recursive
+  position + closure origin**.
+
+  | set | contents |
+  |---|---|
+  | `C` | all **83** `(identity, full required vector)` instances |
+  | `V` | the **80** whose entire required vector is closed under the current value-slot authority, including the two empty vectors |
+  | `R = C \ V` | exactly **3**: `OPEN[ih-binder]`, `OPEN[let-value:Construct]`, `AMBIG2[let-value:If]` |
+
+  **`D4` discharges when the post-admission census proves `interned = V` and
+  `declined = R`** — no additional residual, ⛔ no member/corpus/closure
+  predicate, ⛔ no first-`Open` classification. The full-vector walk remains the
+  authority.
+
+  ⛔ **The program fingerprint is load-bearing, not decoration.**
+  `StaticOriginId`s are allocated per compile, so without it edges from
+  different fixtures collide on identity and the census silently undercounts —
+  measured: a first pass reported 58 identities of which six were collisions.
+
+  ⛔ **Call the three "outside-this-contract-domain residuals", never
+  "unrepresentable"** (Architect, same gate). `Construct` and joined-`If` are
+  simply not authorized by this node; nothing here claims no future authority
+  can represent them.
+
+  ⭐ **All 17 parity instances are in `V`** — that is the critical-path fact.
 
 ## 4. Acceptance criteria
 
@@ -137,10 +193,21 @@ all six failing `D0` rows.
 - **`AC-2` — the closed sum is enforced by the type, not by convention.** A new
   source kind must be unable to compile until every one of `D3`'s three
   consumers assigns it. ⛔ No wildcard arm.
-- **`AC-3` — the 34 newly-interning edges are accounted for individually.** Name
-  them, and show for each that interning is lawful. ⛔ An aggregate "no
-  regressions" claim does not discharge this — a differential over an aggregate
-  passes while one of N contributors defects.
+- **`AC-3` — every instance in `V` is accounted for individually.** ⛔ **The
+  "34 newly-interning edges" this AC used to name is SUPERSEDED.** That figure
+  predated `D2` and counted only declining edges; the census
+  (`evt_qttaeebtzjkt`) enumerates the **whole candidate population** at the unit
+  `D4` states, which is why 83 replaces 39 — and it found an instance the old
+  partition did not contain at all, the `AMBIG2[let-value:If]`.
+
+  Name each of the **80** instances in `V` and show for each that interning is
+  lawful. ⛔ An aggregate "no regressions" claim does not discharge this — a
+  differential over an aggregate passes while one of N contributors defects.
+
+  ⛔ **A case-binder position is not one population.** It resolves to a recursive
+  IH or to a constructor argument, and those take different contracts (`D2`).
+  An account that treats the case-binder run as homogeneous is the exact defect
+  the `D2` gate blocked, one level up.
 - **`AC-4` (no-regression).** Workspace green **in CI** — ⛔ never a local
   `--workspace` run (`COORDINATION §12`).
 - **`AC-5` — `1c`'s converse survives. DISCHARGED AT `D4`, NOT BEFORE.** The
