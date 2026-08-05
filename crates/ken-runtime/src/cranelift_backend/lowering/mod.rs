@@ -291,6 +291,12 @@ pub(in crate::cranelift_backend) enum EffectSeatVisitMutation {
     DiscardGroup,
     /// Report the opposite phase of the one the operand is actually in.
     PerturbObservedPhase,
+    /// Drop one COMMITTED group after every body close has passed and before
+    /// the whole-pass close. ⭐ The only way to ask whether the whole-pass
+    /// backstop is still doing work now that the body close catches the same
+    /// condition earlier — every ordinary route to a discarded group is now
+    /// stopped before it can reach the backstop.
+    DropCommittedGroupBeforeGlobalClose,
 }
 
 #[cfg(test)]
@@ -5073,12 +5079,29 @@ impl<'a> Lowering<'a> {
 
     /// Commit the open body's pairs, after finalization and verification and
     /// **before** `define_function`.
+    /// ⭐ **`D7` — the effect-seat body close runs HERE, and this is the only
+    /// place it can.** All four emitters reach this one boundary after
+    /// finalization and verification and before `define_function`; a close
+    /// installed in any single emitter would leave the other three ungated, and
+    /// one installed at the whole-pass closeout would notice a discarded visit
+    /// only after its body was already in the module.
+    ///
+    /// ⛔ `defining_function_id` is cleared only after BOTH closes succeed. It
+    /// is the body the closes are asked about, so clearing it first would make
+    /// the question unaskable at exactly the moment it is due.
     fn commit_aggregate_events(&mut self) -> Result<(), CraneliftBackendError> {
-        self.defining_function_id = None;
-        match self.aggregate_allocations.as_mut() {
+        if let Some(function) = self.defining_function_id {
+            if let Some(ledger) = self.host_effect_seats.as_mut() {
+                ledger.commit_body(function)?;
+            }
+        }
+        let committed = match self.aggregate_allocations.as_mut() {
             Some(ledger) => ledger.commit(),
             None => Ok(()),
-        }
+        };
+        committed?;
+        self.defining_function_id = None;
+        Ok(())
     }
 
     /// **`D7` — ergonomic sugar over a `PlannedAggregate` request.**
@@ -8186,7 +8209,12 @@ pub(in crate::cranelift_backend) struct EffectSeatLedger {
     /// before its group opens, so a second open means a visit began inside
     /// another visit's window and their claims could interleave.
     open: Option<OpenEffectSeatGroup>,
-    opened: BTreeSet<EffectSeatGroupId>,
+    /// ⛔ Every opened group, keyed to the EXACT body it was opened for. A bare
+    /// set of ids cannot answer "was every group this body opened committed
+    /// before this body was defined" -- it can only answer that question over
+    /// the whole compilation, which is too late: the body is already in the
+    /// module. The `FuncId` is what makes the question askable per body.
+    opened: BTreeMap<EffectSeatGroupId, FuncId>,
     committed: BTreeMap<EffectSeatGroupId, CommittedEffectSeatGroup>,
 }
 
@@ -8229,7 +8257,7 @@ impl EffectSeatLedger {
             )));
         }
         let id = effect_seat_group::mint(&mut self.next_group);
-        self.opened.insert(id);
+        self.opened.insert(id, function);
         self.open = Some(OpenEffectSeatGroup {
             id,
             function,
@@ -8346,6 +8374,64 @@ impl EffectSeatLedger {
         self.open = None;
     }
 
+    /// Drop one committed group, leaving its `opened` entry, so the whole-pass
+    /// `opened = committed` backstop can be asked whether it still fires on its
+    /// own. No production path does this either.
+    #[cfg(test)]
+    fn drop_one_committed_group_for_tests(&mut self) {
+        if let Some(id) = self.committed.keys().next().copied() {
+            self.committed.remove(&id);
+        }
+    }
+
+    /// **Close one BODY, before it is defined.**
+    ///
+    /// ⭐ **This is the gate the whole-pass close cannot be.** The whole-pass
+    /// version states the same law over the compilation, but it runs after every
+    /// `define_function` — so a body that discarded a visit's claims is already
+    /// in the module when the contradiction is noticed. The artifact is refused
+    /// either way; what changes is whether the defective body was ever defined.
+    ///
+    /// ⛔ Two clauses, and the second needs the `FuncId` association: no group
+    /// for THIS body may still be open, and every group this body opened must be
+    /// committed AND committed with this same body. A group opened here and
+    /// committed under another `FuncId` would satisfy a bare id comparison.
+    fn commit_body(&mut self, function: FuncId) -> Result<(), CraneliftBackendError> {
+        if let Some(open) = &self.open {
+            if open.function == function {
+                return Err(backend_module(format!(
+                    "host effect seat ledger: the visit to {:?} is still open as function \
+                     {function} is defined, so its claims were never closed",
+                    open.effect_origin
+                )));
+            }
+        }
+        for (id, opened_for) in &self.opened {
+            if *opened_for != function {
+                continue;
+            }
+            match self.committed.get(id) {
+                Some(committed) if committed.function == function => {}
+                Some(committed) => {
+                    return Err(backend_module(format!(
+                        "host effect seat ledger: {id:?} was opened for function {function} but \
+                         committed under {}, so a visit's claims belong to a body that did not \
+                         make them",
+                        committed.function
+                    )));
+                }
+                None => {
+                    return Err(backend_module(format!(
+                        "host effect seat ledger: {id:?} was opened for function {function} and \
+                         never committed, so a visit's claims were discarded before the body was \
+                         defined"
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// **Close the whole compilation.**
     ///
     /// ⛔ Every opened group committed, and `image(claims) ⊆ P`.
@@ -8367,11 +8453,12 @@ impl EffectSeatLedger {
             )));
         }
         let committed = self.committed.keys().copied().collect::<BTreeSet<_>>();
-        if committed != self.opened {
+        let opened = self.opened.keys().copied().collect::<BTreeSet<_>>();
+        if committed != opened {
             return Err(backend_module(format!(
                 "host effect seat ledger: {} visits opened but {} committed, so a visit's claims \
                  were discarded",
-                self.opened.len(),
+                opened.len(),
                 committed.len()
             )));
         }

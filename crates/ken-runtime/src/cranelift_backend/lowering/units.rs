@@ -2554,6 +2554,14 @@ pub(super) fn close_host_effect_seat_ledger(
         .static_transition_plan
         .host_effect_seat_records()
         .to_vec();
+    #[cfg(test)]
+    if effect_seat_visit_mutation()
+        == EffectSeatVisitMutation::DropCommittedGroupBeforeGlobalClose
+    {
+        if let Some(ledger) = compiler.host_effect_seats.as_mut() {
+            ledger.drop_one_committed_group_for_tests();
+        }
+    }
     let closure = compiler
         .host_effect_seats
         .take()
