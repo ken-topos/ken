@@ -864,6 +864,62 @@ all six failing `D0` rows.
   existing one. That is substrate expansion, the Architect's to authorize, and
   must not be discovered mid-repair.
 
+  ##### `D5a` is CUT into two checkpoints (Steward, 2026-08-05, `evt_62ee5f2dvmvp1`)
+
+  **The hard stop above is ANSWERED: no.** The representation already exists —
+  `ContinuationCaseBinderSource::ContinuationInput` at `lowering/units.rs:1022`,
+  ordered by `continuation_case_binder_run` (consumed at `units.rs:1615`), whose
+  own stated contract is *"the IH prefix, the constructor arguments in source
+  order, then this frame's continuation inputs"* — the required closed order,
+  already ruled and already load-bearing. The outer-frame member rides as a
+  **continuation input**, so it is an explicit typed member structurally, not by
+  convention. No substrate expansion; no Architect authorization owed.
+
+  **The omission, re-derived at the producer with an instrument** (not from the
+  fixture) for `governed_nested_brackets_n3`:
+
+  ```
+  ihs=1  arg_binders=1  cont_inputs=1  run_len=2  envelope_len=0
+  ```
+
+  Run = `[InductionHypothesis, ContinuationInput(0)]`, length **2**, matching
+  `D1b`'s independently measured lowering environment `[worker | carried(v10)]`,
+  `env_len=2`. Two independent measurements agree, so the run **is** the
+  environment and the producer is the seam. Against the well-founded source
+  scope, `Var(2)` needs a **third** member: `cont_inputs = 1` omits the outer
+  `BufferAllocate` `Result::Ok` success binder. Segment 3 is a bare
+  `0..continuation_inputs` count, so the omission is upstream in **what the
+  planner projects as this frame's continuation inputs** — not in the ordering.
+
+  **Why the cut:** the implementer ended two consecutive turns on `D5a` out of
+  working budget with no edit. Both turns delivered what was asked (the
+  authority audit, then the instrumented re-derivation), so the pace was not the
+  problem — `D5a` as written is a planner projection change **plus** five
+  fail-closed laws **plus** their controls, which is not a one-hour turn. **The
+  sizing was the Steward's defect.**
+
+  **`D5a-1` — the projection.** At the producer of `continuation_inputs` for
+  functionized frames, derive the outer `BufferAllocate` `Result::Ok` success
+  binder from its exact success-binder provenance and include it as an explicit
+  `ContinuationInput`, preserving `IHs ++ arguments ++ outer frame`.
+  **Positive:** the run for `governed_nested_brackets_n3` goes **2 to 3**,
+  `Var(2)` resolves to the actual `BufferAllocate` success payload, and the
+  original `D4a` boundary is still reached.
+
+  ⚠ **`arg_binders=1` does not mean an argument is present in the run.** The
+  sole argument binder is a recursive position, so **segment 2 contributes
+  zero** and the new member lands at ordinal **2**, not 3. Placing it at 3 is
+  exactly the "wrong order" case that `D5a-2` refuses.
+
+  **`D5a-2` — the five pre-emission refusals.** Omission, redirection, wrong
+  provenance, wrong order, fabricated availability — each with its control, plus
+  the negative: drop or redirect **only** that planned outer-frame member and
+  observe the **pre-emission** refusal.
+
+  **The split drops nothing.** Both checkpoints land on the same branch in the
+  same candidate, and neither is a merge boundary — the Architect's fail-closed
+  obligation is discharged by `D5a-2` before anything is routed for review.
+
   #### `D5b` — lowering side: consume it, and prove it
 
   5. Lowering consumes **that exact planned member**.

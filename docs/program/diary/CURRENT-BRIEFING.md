@@ -40,12 +40,30 @@
 
 ### The one thing to do next
 
-**`D5a` is released and Runtime is working it.** Recut posted at
-`evt_4c4wx22dhedfb` in `RT-CONTSRC-PRODUCER-LOCAL`'s thread
-**`thr_6m43v75yndhtj`**, on Architect ruling `evt_5gvgzp6bzj64t`. **`D5a`
-hard-stops to me** if the member needs a **new** planner/ABI authority rather
-than an added typed member on an existing one — that is substrate expansion and
-the Architect's to authorize.
+**Wait for `D5a-1` from Runtime.** The ring is working it in thread
+**`thr_6m43v75yndhtj`**; `runtime-leader` owes the release, and the implementer
+was compacted at a clean seam (`e27d297a`, no edit) before it starts.
+
+**The `D5a` hard stop is ANSWERED: no new planner or ABI authority is needed.**
+`ContinuationCaseBinderSource::ContinuationInput` (`lowering/units.rs:1022`),
+ordered by `continuation_case_binder_run` (`units.rs:1615`), already states the
+required closed order. Nothing is owed to the Architect on this.
+
+**I cut `D5a` into `D5a-1` (the projection) and `D5a-2` (the five pre-emission
+refusals)** — `evt_62ee5f2dvmvp1`, frame section *"`D5a` is CUT into two
+checkpoints"*. Reason: two consecutive implementer turns ended out of budget
+with no edit, both spent on work I asked for. **The sizing was my defect.** Both
+checkpoints land in the same candidate; nothing is dropped.
+
+**The omission is measured, at the producer, with an instrument** (not from the
+fixture): run `[InductionHypothesis, ContinuationInput(0)]`, length 2, matching
+`D1b`'s `env_len=2` independently. `cont_inputs = 1` omits the outer
+`BufferAllocate` `Result::Ok` success binder. **No design question is open** —
+seam, order, member kind and omission are all settled.
+
+⚠ **`arg_binders=1` does NOT mean an argument is in the run.** The sole argument
+binder is recursive, so segment 2 contributes zero and the new member lands at
+ordinal **2**, not 3.
 
 ### ⛔⛔ I PUBLISHED A FALSE CONCLUSION AND IT IS WITHDRAWN
 
