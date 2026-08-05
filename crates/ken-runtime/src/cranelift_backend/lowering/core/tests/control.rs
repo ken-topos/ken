@@ -7970,6 +7970,114 @@ fn governed_nested_brackets_n3_through_n7_emit_complete_functionized_bundles() {
     }
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6a` — a specialization's case environment
+/// binds the induction hypothesis and the selected recursive constructor
+/// argument as TWO static-worker members, and they LEAD the environment.**
+///
+/// The subject is the **assembled lowering environment**, not the plan.
+/// [`continuation_case_binder_run`]'s own rows pin the plan; they cannot see
+/// whether the plan's `SelectedRecursiveArgument` reached a real binding, nor
+/// where in the installed environment it landed. Those are the facts `D6a`
+/// adds, so they need an oracle downstream of the plan.
+///
+/// **The discriminators, chosen before the positive case:**
+/// - Pre-`D6a` the argument position was **skipped**, so the environment held
+///   **one** static worker and the outer frame sat one slot early. The count
+///   clause reds on that.
+/// - ⭐ A repair that appends the new member to the **tail** instead of placing
+///   it in the argument segment produces `[worker, outer.., worker]`. The
+///   "nothing after the leading pair" clause reds on that, and it is the
+///   specific mis-repair worth guarding: it leaves the *last* index resolving
+///   to a plausible value, so a row keyed only on the reported `Var(2)` would
+///   pass while `Var(1)` is silently the wrong binding.
+/// - A repair that binds the argument as a value rather than a callable
+///   produces one worker and one more `Carried`. The count clause reds.
+///
+/// ⛔ **STATED GAP — THIS fixture does not separate the two CALL ROUTES, and
+/// another one does.** MEASURED here: every specialization renders as
+/// `[StaticWorker(RawWorker), StaticWorker(RawWorker), Carried..]`, because
+/// `continuation_context_for` issues **no** generated execution context for any
+/// of them — so the induction hypothesis lawfully takes the raw route too.
+/// CLAIMED by this row: only the **membership and order** of the two workers.
+/// THE GAP: [`StaticWorkerCallRoute`]'s two arms are *present and correct* but
+/// not *discriminated* by this witness. That gap is closed elsewhere rather
+/// than left open —
+/// [`d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_worker_call`]
+/// runs on a plan that **does** issue a context, and pins the mixed pair
+/// `[StaticWorker(GeneratedContext), .., StaticWorker(RawWorker), ..]`
+/// directly. Read the two rows together: this one says the members are there
+/// and in order even with no context in play, that one says the routes are
+/// genuinely two.
+///
+/// **Promise class: durable invariant.** Every clause is a relation over the
+/// entries — how many static workers, and where they sit relative to the rest.
+/// A fixture that grows fields, inputs or units keeps it green; only a change
+/// to which bindings a case environment installs, or to their order, reds it,
+/// and that is a contract decision.
+#[test]
+fn d6a_a_specialization_binds_two_leading_static_workers_for_the_ih_and_its_recursive_argument() {
+    let expr = crate::cranelift_backend::planning::governed_nested_resource_bracket(3);
+    reset_d5a_trace();
+    recursive_port_process_compiles(&expr)
+        .unwrap_or_else(|error| panic!("the governed depth-3 fixture must compile: {error}"));
+    let trace = take_d5a_trace();
+
+    let bodies = trace
+        .iter()
+        .filter(|entry| entry.contains("SPEC-BODY"))
+        .collect::<Vec<_>>();
+    assert!(
+        !bodies.is_empty(),
+        "the fixture must actually reach the specialization-body seat, or this row proves \
+         nothing about the environment it installs: {trace:?}"
+    );
+
+    let mut with_workers = 0usize;
+    for body in &bodies {
+        let (_, rendered) = body
+            .split_once("env=[")
+            .unwrap_or_else(|| panic!("every SPEC-BODY entry renders its environment: {body}"));
+        let rendered = rendered
+            .strip_suffix(']')
+            .unwrap_or_else(|| panic!("the rendered environment is bracketed: {body}"));
+        let entries = rendered.split(", ").collect::<Vec<_>>();
+        let workers = entries
+            .iter()
+            .filter(|entry| entry.starts_with("StaticWorker"))
+            .count();
+        if workers == 0 {
+            continue;
+        }
+        with_workers += 1;
+        assert_eq!(
+            workers, 2,
+            "this case has one recursive constructor argument, so its environment binds two \
+             static workers: the induction hypothesis, then the argument itself. One means \
+             the argument position was skipped and the IH stood in for it -- the pre-`D6a` \
+             defect, which shifted every later binder down one slot: {body}"
+        );
+        assert!(
+            entries[0].starts_with("StaticWorker") && entries[1].starts_with("StaticWorker"),
+            "the IH prefix and the argument segment both precede the outer frame, so the two \
+             workers are entries 0 and 1: {body}"
+        );
+        assert!(
+            entries[2..]
+                .iter()
+                .all(|entry| !entry.starts_with("StaticWorker")),
+            "nothing after the leading pair is a static worker. A member appended to the \
+             outer-frame tail instead of placed in the argument segment lands here, and it is \
+             the mis-repair that still resolves the LAST index to a plausible value while an \
+             earlier one is silently wrong: {body}"
+        );
+    }
+    assert!(
+        with_workers > 0,
+        "no specialization body installed a static worker at all, so every clause above ran \
+         vacuously: {bodies:?}"
+    );
+}
+
 fn rt_scale_b_peak_rss_kib() -> Result<usize, String> {
     let status = std::fs::read_to_string("/proc/self/status")
         .map_err(|error| format!("could not read /proc/self/status: {error}"))?;
@@ -12294,15 +12402,33 @@ fn d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_work
     // `method_binder_ordinal` (0) as separate fields, so a lowering that
     // conflated them would disagree with the plan and refuse. This assertion
     // reads the environment the definition actually assembled.
+    //
+    // ⭐ **`RT-CONTSRC-PRODUCER-LOCAL` `D6a` — this row now also pins the CALL
+    // ROUTE pair, because this witness is the one that separates them.** Its
+    // planner issues a generated execution context for specialization 0, so
+    // that body's induction hypothesis renders `GeneratedContext` while its
+    // selected recursive constructor argument renders `RawWorker`. The two
+    // bindings are otherwise identical — same closure occurrence, body origin,
+    // declared arity and captures — so without the route in the rendering the
+    // pair is indistinguishable and a collapse of the two routes would be
+    // invisible here.
     assert!(
-        trace.iter().any(|entry| entry
-            .contains("env=[StaticWorker, Carried, Carried, Carried]")),
+        trace.iter().any(|entry| entry.contains(
+            "env=[StaticWorker(GeneratedContext), Carried, StaticWorker(RawWorker), Carried, \
+             Carried]"
+        )),
         "the specialization body must be assembled in the ruled order — the IH \
-         prefix first, then the nonrecursive constructor field, then the two \
-         continuation inputs. Both rejected orders are visible here: the \
-         original `env=[StaticWorker, Carried, Carried]` omitted the field \
-         entirely, and `env=[Carried, StaticWorker, Carried, Carried]` read \
-         `recursive_position` as a lexical index. Trace: {trace:?}"
+         prefix first, then ALL the constructor arguments in source order (the \
+         nonrecursive field at position 0, then the selected recursive argument \
+         at position 1), then the two continuation inputs. Every rejected shape \
+         is visible in this one vector: `env=[StaticWorker, Carried, Carried]` \
+         omitted the nonrecursive field entirely; `env=[Carried, StaticWorker, \
+         Carried, Carried]` read `recursive_position` as a lexical index; \
+         `env=[StaticWorker(..), Carried, Carried, Carried]` is the pre-`D6a` \
+         run that replaced the recursive argument with its own IH and shifted \
+         both continuation inputs one slot early; and a pair rendering the SAME \
+         route twice is a single binding reused for two members that must call \
+         different callees. Trace: {trace:?}"
     );
 }
 
@@ -12585,15 +12711,19 @@ fn continuation_case_binder_run_puts_the_ih_prefix_first_at_a_nonzero_recursive_
         vec![
             ContinuationCaseBinderSource::InductionHypothesis,
             ContinuationCaseBinderSource::Ordinary(0),
+            ContinuationCaseBinderSource::SelectedRecursiveArgument { source_position: 1 },
             ContinuationCaseBinderSource::ContinuationInput(0),
             ContinuationCaseBinderSource::ContinuationInput(1),
         ],
-        "the IH prefix leads, the nonrecursive field is read at its IH-offset \
-         position, and the continuation inputs tail in ordinal order"
+        "the IH prefix leads, then EVERY constructor argument in source order — \
+         the nonrecursive field at position 0 and the selected recursive \
+         argument at position 1 — and the continuation inputs tail in ordinal \
+         order"
     );
 
-    // ⭐ Stated separately because these two are the ruled discriminator, and an
-    // exact-vector assertion alone does not say which part of it was the defect.
+    // ⭐ Stated separately because these three are the ruled discriminator, and
+    // an exact-vector assertion alone does not say which part of it was the
+    // defect.
     assert_eq!(
         run[0],
         ContinuationCaseBinderSource::InductionHypothesis,
@@ -12607,6 +12737,25 @@ fn continuation_case_binder_run_puts_the_ih_prefix_first_at_a_nonzero_recursive_
         ContinuationCaseBinderSource::Ordinary(0),
         "the nonrecursive field is read at its IH-offset position, not at its \
          constructor source position"
+    );
+    // ⛔ `RT-CONTSRC-PRODUCER-LOCAL` `D6a` — the recursive argument is a member
+    // of the run in its own right, NOT a position the IH prefix already stands
+    // for. Skipping it is what shifted every later binder down one slot, so the
+    // ordinal of the FIRST continuation input is the load-bearing consequence:
+    // it is 3 here, and the pre-`D6a` construction put it at 2.
+    assert_eq!(
+        run[2],
+        ContinuationCaseBinderSource::SelectedRecursiveArgument { source_position: 1 },
+        "the selected recursive constructor argument occupies its own source \
+         position in the argument segment; the IH standing in for it is the \
+         defect `D6a` repairs"
+    );
+    assert_eq!(
+        run[3],
+        ContinuationCaseBinderSource::ContinuationInput(0),
+        "the outer-frame tail therefore begins one slot LATER than it did \
+         before `D6a` — the shift is the observable half of the repair, and a \
+         row asserting only the new member's presence would not see it"
     );
 }
 
@@ -12628,11 +12777,14 @@ fn continuation_case_binder_run_agrees_with_the_rejected_reading_at_source_posit
         run,
         vec![
             ContinuationCaseBinderSource::InductionHypothesis,
+            ContinuationCaseBinderSource::SelectedRecursiveArgument { source_position: 0 },
             ContinuationCaseBinderSource::Ordinary(0),
             ContinuationCaseBinderSource::ContinuationInput(0),
         ],
         "with the recursive field at source position 0, the IH prefix and the \
-         rejected lexical reading both put the worker at slot 0"
+         rejected lexical reading both put the worker at slot 0; the recursive \
+         argument then leads the argument segment, because source order is \
+         source order"
     );
 }
 
@@ -12658,12 +12810,13 @@ fn continuation_case_binder_run_resolves_a_field_by_source_position_not_envelope
         vec![
             ContinuationCaseBinderSource::InductionHypothesis,
             ContinuationCaseBinderSource::Ordinary(1),
+            ContinuationCaseBinderSource::SelectedRecursiveArgument { source_position: 1 },
             ContinuationCaseBinderSource::Ordinary(0),
         ],
-        "constructor arguments follow SOURCE order (0 then 2) while each one's \
-         operand is fetched from its own envelope index (1 then 0); an \
-         implementation that walked the envelope in order would produce \
-         `[IH, Ordinary(0), Ordinary(1)]`"
+        "constructor arguments follow SOURCE order (0, then the recursive 1, \
+         then 2) while each nonrecursive one's operand is fetched from its own \
+         envelope index (1 then 0); an implementation that walked the envelope \
+         in order would produce `[IH, Ordinary(0), .., Ordinary(1)]`"
     );
 }
 

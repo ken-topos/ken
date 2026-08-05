@@ -5040,6 +5040,10 @@ fn attempt_worker_construction(
         declared_arity,
         source_capture_count,
         captures,
+        // `D6a` — these rows are about the descriptor contract, which is
+        // validated identically on both routes. The raw route is the one an
+        // ordinary lexical closure takes, so it is the honest default here.
+        StaticWorkerCallRoute::RawWorker,
     )
 }
 
@@ -5258,6 +5262,7 @@ fn lower_against_static_worker(
         body_origin,
         declared_arity,
         captures: vec![LoweringOperand::Specialized(Lowered::Bytes(b"cap".to_vec()))],
+        route: StaticWorkerCallRoute::RawWorker,
     })];
     let mut func = Function::with_name_signature(
         UserFuncName::user(0, 0),
@@ -8150,6 +8155,8 @@ fn attempt_capture_contract(
         declared_arity,
         phases.len(),
         captures,
+        // `D6a` — the capture-phase contract is route-independent.
+        StaticWorkerCallRoute::RawWorker,
     )
 }
 

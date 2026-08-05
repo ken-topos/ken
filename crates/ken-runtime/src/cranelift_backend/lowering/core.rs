@@ -7553,6 +7553,11 @@ impl<'a> Lowering<'a> {
             declared_arity,
             captures.len(),
             lowered_captures,
+            // `D6a` — an ordinary lexical closure binder. There is no enclosing
+            // specialization here, so the planner issued no generated context
+            // for this occurrence and the raw body is the only callee it can
+            // ever have named.
+            StaticWorkerCallRoute::RawWorker,
         )
         .map(LoweringEnvironmentBinding::StaticWorker)
     }
@@ -7746,6 +7751,13 @@ impl<'a> Lowering<'a> {
     /// rejects before any worker call could be emitted. `captures` arrive as
     /// `LoweringOperand` and are stored unchanged: a carried capture stays
     /// carried, and nothing here converts a phase.
+    ///
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D6a`** — `route` is supplied by the
+    /// caller, which is the only party that knows the **role** the binding is
+    /// being built for. Nothing here derives it: every check below is against
+    /// the raw template contract and is identical on both routes, which is
+    /// exactly why the route cannot be recovered from anything this function
+    /// validates. See [`StaticWorkerCallRoute`].
     pub(super) fn construct_static_worker_binding(
         &self,
         closure_origin: StaticOriginId,
@@ -7753,6 +7765,7 @@ impl<'a> Lowering<'a> {
         declared_arity: u32,
         source_capture_count: usize,
         captures: Vec<LoweringOperand>,
+        route: StaticWorkerCallRoute,
     ) -> Result<StaticWorkerBinding, CraneliftBackendError> {
         // 1. The capture vector agrees with the retained definition. The caller
         //    builds it from the retained children, so a disagreement means the
@@ -7905,6 +7918,7 @@ impl<'a> Lowering<'a> {
             body_origin,
             declared_arity,
             captures,
+            route,
         })
     }
 

@@ -1022,11 +1022,31 @@ pub(in crate::cranelift_backend) fn resolve_continuation_targets(
 pub(in crate::cranelift_backend) enum ContinuationCaseBinderSource {
     /// The projected `StaticWorker`, standing for one recursive field's
     /// **induction hypothesis**.
+    ///
+    /// `D6a`: this binding takes the
+    /// [`StaticWorkerCallRoute::GeneratedContext`] route -- the planner-issued
+    /// execution context, which appends this frame's continuation-input suffix.
     InductionHypothesis,
     /// The ordinary-envelope operand at this index. ⛔ An index into the
     /// envelope, never a constructor source position -- the two coincide only
     /// when no `WorkerCapture` role precedes the field.
     Ordinary(usize),
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D6a`** -- the selected **recursive
+    /// constructor argument**, at its own constructor source position.
+    ///
+    /// ⭐ This is a compiler-only member. It is not a new source occurrence,
+    /// continuation input, ABI slot, carrier, tag or runtime descriptor: it is
+    /// the *same closure* the induction hypothesis names, reached by the
+    /// [`StaticWorkerCallRoute::RawWorker`] route instead. The unit already
+    /// carries every fact needed to build it -- the closure occurrence, body,
+    /// declared arity, ordered capture provenance and the worker-capture
+    /// operands -- so nothing crosses the ABI to represent it.
+    ///
+    /// ⛔ Before `D6a` this position was **skipped**, and the induction
+    /// hypothesis silently stood in for the argument as well. That is a wrong
+    /// program, not a missing one: every later binder shifted down by one, so
+    /// the case body's outer-frame references landed one slot early.
+    SelectedRecursiveArgument { source_position: u32 },
     /// The continuation input at this ordinal.
     ContinuationInput(usize),
 }
@@ -1041,9 +1061,20 @@ pub(in crate::cranelift_backend) enum ContinuationCaseBinderSource {
 ///
 /// ```text
 /// [IH bindings, recursive-position order REVERSED]
-///   ++ [constructor arguments, source order]
+///   ++ [ALL constructor arguments, source order]
 ///   ++ [frame/tail environment]
 /// ```
+///
+/// ⭐ **`RT-CONTSRC-PRODUCER-LOCAL` `D6a` -- "ALL" is load-bearing and was the
+/// defect.** The middle segment covers **every** constructor argument in source
+/// order, the selected recursive one included. The pre-`D6a` construction
+/// *replaced* the selected recursive argument with its own induction
+/// hypothesis: it emitted the IH in segment 1 and then skipped that position in
+/// segment 2, so a case body with one recursive field and one outer reference
+/// got a two-member run where the source scope has three. Every binder after
+/// the skipped position was off by one, which is why the measured symptom was
+/// an out-of-range `Var` at the *tail* (`Var: no runtime binding for index 2`)
+/// rather than anything at the position actually omitted.
 ///
 /// ⭐ **`recursive_position` is a constructor SOURCE-FIELD coordinate, not a
 /// lexical environment index.** Reading it as the latter is the exact defect
@@ -1054,13 +1085,18 @@ pub(in crate::cranelift_backend) enum ContinuationCaseBinderSource {
 /// `Unsupported(Call, "callee is not a closure")` -- `Var(0)` reading a `Unit`.
 ///
 /// The specialization eliminates **one** selected recursive callable, so its
-/// projected `StaticWorker` is that position's IH-prefix binding. The selected
-/// recursive field itself is deliberately absent from the constructor-argument
-/// segment, because
+/// projected `StaticWorker` is that position's IH-prefix binding.
+///
+/// The selected recursive field is **absent from the ordinary envelope** --
 /// [`ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField`] is by
-/// construction the population that excludes it -- so the run's length is
-/// exactly `argument_binders`, one IH per recursive position and one operand
-/// per remaining field.
+/// construction the population that excludes it. ⛔ `D6a`: that is a fact about
+/// the *envelope*, and reading it as a fact about the *binder run* is the
+/// defect. The field has no envelope operand because it needs none: it is a
+/// compiler-only [`ContinuationCaseBinderSource::SelectedRecursiveArgument`],
+/// built from the unit's own worker provenance. So the run's length is
+/// `argument_binders + recursive_positions.len()` -- one IH per recursive
+/// position, then one member per constructor argument -- which is exactly the
+/// binder count the planner's own demand walk uses for this case.
 ///
 /// ⛔ Worker-capture `Parameter` slots are **not** case binders. They construct
 /// the `StaticWorker`; they never enter this run.
@@ -1094,7 +1130,8 @@ pub(super) fn continuation_case_binder_run(
         )));
     }
 
-    let mut run = Vec::with_capacity(argument_binders + continuation_inputs);
+    let mut run =
+        Vec::with_capacity(argument_binders + recursive_positions.len() + continuation_inputs);
 
     // Segment 1 -- the IH prefix, recursive positions reversed.
     //
@@ -1115,18 +1152,31 @@ pub(super) fn continuation_case_binder_run(
         run.push(ContinuationCaseBinderSource::InductionHypothesis);
     }
 
-    // Segment 2 -- the constructor arguments in SOURCE order, each taken from
-    // its own envelope role. The selected recursive fields are the ones the
-    // prefix above already stands for.
+    // Segment 2 -- ALL the constructor arguments in SOURCE order.
+    //
+    // A nonrecursive field takes its operand from its own envelope role. A
+    // recursive field takes the compiler-only `SelectedRecursiveArgument`
+    // member: it is the same closure the IH prefix names, differing only in
+    // call route, so it needs no envelope operand and no ABI slot.
+    //
+    // ⛔ `D6a`: this loop used to `continue` on a recursive position. The IH
+    // then stood in for the argument as well as for the hypothesis, and every
+    // later binder shifted down one slot.
     for position in 0..argument_binders {
-        if recursive_positions.contains(&position) {
-            continue;
-        }
         let source_position = u32::try_from(position).map_err(|_| {
             backend_module(
                 "a continuation case binder position exceeds the planner's field width".to_string(),
             )
         })?;
+        if recursive_positions.contains(&position) {
+            // ⛔ The hard stop for an unprojected recursive position is
+            // segment 1's, and it has already fired: a position that is not the
+            // ruled `worker_position` never reaches here. So this member is
+            // always the *selected* recursive argument, and `D6a` deliberately
+            // does not generalize to a multi-worker population.
+            run.push(ContinuationCaseBinderSource::SelectedRecursiveArgument { source_position });
+            continue;
+        }
         let index = envelope
             .iter()
             .position(|role| {
@@ -1567,13 +1617,52 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 ));
             }
 
+            // `D6a` -- THE ROUTE, taken from the planner's own issuance.
+            //
+            // `retargeted_worker_body` is `Some` exactly when
+            // `continuation_context_for` issued a generated execution context
+            // for this `(specialization, worker body)` pair. That is the
+            // planner-issued raw-body-versus-generated-context fact, read once
+            // here at construction, where the role is known.
+            //
+            // ⛔ Not re-derived at the call site. Both bindings below name the
+            // same body origin, so no comparison available there can tell them
+            // apart -- see `StaticWorkerCallRoute`.
+            let induction_route = match retargeted_worker_body {
+                Some(_) => StaticWorkerCallRoute::GeneratedContext,
+                None => StaticWorkerCallRoute::RawWorker,
+            };
+
             // The EXISTING constructor, with the projected identity and arity.
             let worker = compiler.construct_static_worker_binding(
                 unit.worker_closure_origin,
                 unit.worker_body_origin,
                 unit.worker_declared_arity,
                 unit.worker_capture_count,
+                worker_captures.clone(),
+                induction_route,
+            )?;
+
+            // `D6a` -- the selected recursive constructor argument.
+            //
+            // ⭐ The SAME closure occurrence, body origin, declared arity and
+            // ordered capture operands as the induction hypothesis above, built
+            // through the same constructor and validated against the same raw
+            // template contract. The one difference is the route, and that is
+            // the whole representation: the argument is the closure the source
+            // scope binds, while the IH is that closure called through this
+            // specialization's generated context.
+            //
+            // ⛔ Nothing new crosses the ABI. This adds no slot, carrier, tag,
+            // descriptor or source occurrence -- it is a second compiler-only
+            // binding over operands this frame has already loaded.
+            let recursive_argument = compiler.construct_static_worker_binding(
+                unit.worker_closure_origin,
+                unit.worker_body_origin,
+                unit.worker_declared_arity,
+                unit.worker_capture_count,
                 worker_captures,
+                StaticWorkerCallRoute::RawWorker,
             )?;
 
             // Exact body recovery: the selected case of the computational
@@ -1599,8 +1688,9 @@ pub(super) fn define_continuation_bodies<M: Module>(
             )?;
             // The semantic case environment, through the sole binding
             // authority, in the order `continuation_case_binder_run` states:
-            // the IH prefix, the constructor arguments in source order, then
-            // this frame's continuation inputs.
+            // the IH prefix, then ALL the constructor arguments in source
+            // order -- the selected recursive one included, as `D6a`'s
+            // compiler-only member -- then this frame's continuation inputs.
             //
             // ⛔ This site chooses nothing. It maps a plan onto operands; the
             // order is the plan's, and the plan is a pure function of the
@@ -1617,6 +1707,23 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 let binding = match *source {
                     ContinuationCaseBinderSource::InductionHypothesis => {
                         LoweringEnvironmentBinding::StaticWorker(worker.clone())
+                    }
+                    ContinuationCaseBinderSource::SelectedRecursiveArgument {
+                        source_position,
+                    } => {
+                        // The plan only ever names the ruled position here;
+                        // segment 1 hard-stops on any other. Re-checking it is
+                        // what keeps that a fact this site verifies rather than
+                        // one it inherits.
+                        if source_position != unit.recursive_position {
+                            return Err(backend_module(format!(
+                                "the binder run names a selected recursive argument at source \
+                                 position {source_position}, but this specialization projects a \
+                                 worker for position {}",
+                                unit.recursive_position
+                            )));
+                        }
+                        LoweringEnvironmentBinding::StaticWorker(recursive_argument.clone())
                     }
                     ContinuationCaseBinderSource::Ordinary(index) => {
                         let operand = ordinary.get(index).ok_or_else(|| {
@@ -1651,8 +1758,17 @@ pub(super) fn define_continuation_bodies<M: Module>(
                 ordinary.len(),
                 envelope,
                 env.iter()
+                    // `D6a` -- the ROUTE is printed, not just the arm. Both
+                    // static-worker members name the same closure, body and
+                    // arity, so an arm-only rendering shows two identical
+                    // entries and a change collapsing the two routes would be
+                    // invisible in this log.
                     .map(|binding| match binding {
-                        LoweringEnvironmentBinding::StaticWorker(_) => "StaticWorker",
+                        LoweringEnvironmentBinding::StaticWorker(worker) => match worker.route {
+                            StaticWorkerCallRoute::RawWorker => "StaticWorker(RawWorker)",
+                            StaticWorkerCallRoute::GeneratedContext =>
+                                "StaticWorker(GeneratedContext)",
+                        },
                         LoweringEnvironmentBinding::Value(LoweringOperand::Carried(_)) =>
                             "Carried",
                         LoweringEnvironmentBinding::Value(LoweringOperand::Specialized(_)) =>

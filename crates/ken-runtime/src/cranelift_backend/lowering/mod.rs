@@ -2907,6 +2907,61 @@ struct StaticWorkerBinding {
     body_origin: StaticOriginId,
     declared_arity: u32,
     captures: Vec<LoweringOperand>,
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D6a`** — which callee this binding's call
+    /// goes to, carried rather than reconstructed. See
+    /// [`StaticWorkerCallRoute`].
+    ///
+    /// ⛔ **Deliberately NOT `#[allow(dead_code)]`.** `D6a` is the
+    /// representation; the route's consumption at the call edge is `D6b`, so
+    /// production reads nothing here yet and the compiler says so. That warning
+    /// is the obligation staying visible, exactly as the narrowed allowance on
+    /// `closure_origin` above intends — silencing it would turn an open
+    /// checkpoint into an invisible one.
+    route: StaticWorkerCallRoute,
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6a` — the closed compiler-only call route.**
+///
+/// Two bindings can name the **same** closure occurrence, body origin, declared
+/// arity and ordered captures and still be different callables, because they
+/// reach that body by different routes. That is the whole content of `D6a`: a
+/// specialization's induction hypothesis and its selected recursive constructor
+/// argument are the same closure, and the *only* thing that separates them is
+/// this field.
+///
+/// ⛔ **It is carried, never derived at the call site.** The pre-`D6a` code
+/// decided the suffix by comparing `generated_context_captures.worker_body_
+/// origin` against the binding's `body_origin`, and selected the callee by
+/// whichever entry the retarget had left in `worker_calls`. Both readings are
+/// *blind here by construction*: the two bindings share a body origin, so a
+/// body-origin comparison answers the same for both, and one map entry cannot
+/// name two routes. Body shape, declared arity, use site, environment length
+/// and "whichever target exists" are all equally blind for the same reason —
+/// which is why this is a field and not a predicate.
+///
+/// The route is fixed by the **role the binding was constructed for**, and that
+/// role is a planner fact: the planner either issued a generated execution
+/// context for this `(specialization, worker body)` pair or it did not.
+///
+/// ⛔ No `FuncRef` lives here. The route names *which declared-call table* a
+/// caller resolves its target from; the target itself is still minted into the
+/// calling function, so nothing crosses a function boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StaticWorkerCallRoute {
+    /// The exact **raw worker body**, at its own unretargeted contract.
+    ///
+    /// Its operand run is the raw run and nothing else: explicit arguments,
+    /// then stored captures. It appends **no** continuation-input suffix. Every
+    /// binding built for an ordinary lexical closure takes this route, as does
+    /// `D6a`'s selected recursive constructor argument.
+    RawWorker,
+    /// The **planner-issued generated execution context** that executes that
+    /// same body on behalf of one enclosing specialization.
+    ///
+    /// The context's ABI has a capture run for the enclosing specialization's
+    /// continuation inputs, so a call on this route appends that suffix. This
+    /// is the route an induction hypothesis takes.
+    GeneratedContext,
 }
 
 impl LoweringEnvironmentBinding {
