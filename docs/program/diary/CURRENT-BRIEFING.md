@@ -40,10 +40,23 @@
 
 ### The one thing to do next
 
-**Nothing — `D2b` is in flight.** Released at `evt_41ksf39gnqds3` (08:5xZ),
-leader dispatched, frame blob `d7c426e7`. Next expected event is the `D2b`
-report. The Architect ruled at `evt_44k69b55vhek2` that this belongs **inside
-this node**; ⛔ no new node. **`D3`, `D4`, candidate, QA, `D6` closure,
+**`D2b` is SCOPED BUT UNSTARTED, and the implementer was compacted mid-node to
+start it.** It accepted and scoped `D2b` at `evt_3nk9bbkr2bzpq`, then stopped
+deliberately at ctx 48% rather than strand a half-applied typed refactor;
+`runtime-leader` asked me to compact and re-release (`evt_4hca2c5cb12vm`).
+⛔ **Nothing is landed past `e6d4f085`** — the branch is clean and no `D2b`
+edit is in flight. The standing assignment is the leader's release
+`evt_2d39r6ctx7n5t`; the Architect ruled at `evt_44k69b55vhek2` that this
+belongs **inside this node**; ⛔ no new node.
+
+⛔ **The implementer's scoping survives compaction because it POSTED it**
+(`evt_3nk9bbkr2bzpq`): one closed enum replacing the bare `immediate_slot`,
+three arms, no wildcard at any consumer — plus the warning that **production
+declines every producer-local candidate at the `D2` gate before projection, so
+neither new arm is reachable from any fixture.** Both discriminators must
+construct the arms directly and be mutation-proved. ⭐ That is the difference
+between a stop and a loss: it wrote the design down where compaction could not
+reach it. **`D3`, `D4`, candidate, QA, `D6` closure,
 `#27`/case-emission, the call-result SCC and downstream `D7` all remain held.**
 WIP clock: derive it from the latest reset event in the thread, never from a
 stamped deadline.
