@@ -33,28 +33,89 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~13:3xZ · `D3b` re-cut is PARTIAL at `e70ae04c`
+## LIVE — 2026-08-05 ~14:0xZ · `D3b` HARD STOP at `456ec7e6`
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Nothing waits on me.** `runtime-leader` holds the resume; the next act is
-bounded by the Architect's identity ruling and is Runtime's to execute. Watch
-for either a candidate or the multiplicity hard stop named below.
+**Nothing waits on me. The Architect is the next mover** and took the stop at
+14:04Z, grounding the walk, the three red controls, and the `Let`/`If` value
+semantics before ruling. The mechanism half is theirs. **If it comes back as a
+scope question — refuse the population, or cut it out — that half is mine.**
 
-### `D3b` PARTIAL — preserved, deliberately non-candidate, and RED by design
+### The gating multiplicity question is ANSWERED: NO multiplicity
 
-Lineage `f5e4fa9f` (base) → **`1f6fc5cf`** (production, compiles) →
-**`e70ae04c`** (WIP). Both are contained by
-`wp/RT-DECL-CLOSURE-PORT-typed-units`; the implementer worktree is clean on
-`runtime-implementer/work` and the WP branch is free.
+The measurement the previous window flagged as decisive came back **negative**,
+so no per-causal-edge claims are needed and no hard stop is owed on it.
 
-**`e70ae04c` does not compile under `--profile test`** because the test
-migration is mid-flight. That is where the implementer chose to stop, not a
-regression. Do not route it to QA and do not read the red as a signal. Production
-(`cargo check -p ken-runtime`) compiles at both commits.
+- direct emission: `defining_owner == unit.emission_owner()` — **40/40**
+- capture: indexed frame = the enclosing spec's emission owner — **20/20**
+
+Structural, not just observed: `emission_owner` is a **field of
+`ContinuationSpecializationKey`**, so two emitting frames give two keys and two
+interned specializations; a context interned on `(enclosing,
+worker_body_origin)` determines the enclosing unit and hence its emission owner.
+The source frame is a **function of the context's own key**, and the 60
+observations are its positive control.
+
+**The implementer's own first census was an artifact and it flagged it as one** —
+keyed on `ContinuationSpecializationId` alone, which is per-compile, so it merged
+different fixtures and reported one specialization consumed from three frames.
+The collision-immune form asks the question **within one plan**. Do not carry the
+old specialization census forward as evidence; the implementer explicitly retired
+it.
+
+**The same measurement found and fixed a live defect:** the frame whose
+`defining_abi_operands` the capture consumer indexes was a **predeclared**
+function in every observation, never the enclosing specialization.
+
+### The NEW hard stop: duplicate full-coordinate lexical claims
+
+Exact `456ec7e6`, `722 passed / 10 failed` — the 7 prior reds unchanged, 3 new
+ones sharing one cause. **Exact-once `CurrentLexical` membership fails:** at a
+predeclared direct-emission seat, `EntryAbi { owner 0, abi position 1,
+Parameter }` occurs at lexical indices **0 and 2**.
+
+This is lawful `let y = x` — a non-`Effect` `Let` pushes the bound expression's
+own authority, so one root identity occupies two distinct bindings. An `If` join
+may also carry the same coordinate with a **potentially different SSA value**.
+No lowering fixture reaches duplicate membership; the three rows are
+planner-only.
+
+**Innermost selection makes all 3 pass with no other regression, and the
+implementer declined to take it** — it is textually first-match and unmeasured
+for value equivalence. That refusal is the frame working; do not read the
+passing variant as an available shortcut.
+
+Two-stage finalization remains **deferred**, not built.
+
+**Lineage** (all of `fad24816` and later compile under `--profile test`; the
+mid-migration red at `e70ae04c` is cleared):
+
+```
+456ec7e6  record the two-stage path's reachability
+d81359ae  the deliverable record
+8298a321  re-cut the rows the new law changed
+fad24816  the capture consumer's source frame, measured
+e70ae04c  (the WIP partial the turn resumed from)
+```
+
+**`41d2b1e5` is not an object on the branch.** It was quoted from memory in two
+posts and corrected twice; ignore it wherever it appears.
+
+### The earlier partial at `e70ae04c` — HISTORY, and its red is CLEARED
+
+*(Superseded: the turn resumed from it and reached `456ec7e6`. `fad24816` and
+later compile under `--profile test`. Kept because the description of what
+`1f6fc5cf` lands is still the accurate account of the representation.)*
+
+Lineage `f5e4fa9f` (base) → `1f6fc5cf` (production) → `e70ae04c` (WIP), all
+contained by `wp/RT-DECL-CLOSURE-PORT-typed-units`. `e70ae04c` did not compile
+under `--profile test` because the test migration was mid-flight — that was
+where the implementer chose to stop on a working-budget limit, not a
+regression, and it was never routed to QA.
 
 **The stop was working budget, not a defect.** The implementer stopped short of
 a restructure rather than strand a half-done one, and handed over an exact
@@ -97,17 +158,11 @@ frame recut:
    **Not built** — the partial names the enclosing specialization.
 3. **Caller-class ambiguity is fail-closed, not a widened slot.** Never reached.
 
-### The measurement that must come first
+### The measurement that had to come first — DONE, answered negative
 
-**If one target capture is consumed from more than one lawful source frame, a
-single target-level claim is insufficient** — planning must then issue claims
-per exact causal consumer/call edge, or hard-stop with the concrete edge. This
-is **unmeasured**: the test build was mid-migration, so the probe could not run.
-
-The 13 specialization-emitter census rows do **not** answer it. The Architect
-said explicitly they are evidence the validation path must exist, not that a
-shortcut is safe, and the implementer declined to carry the number forward as
-reassurance. Do not let it re-enter as one.
+*(Superseded by the LIVE block above: no multiplicity, 40/40 and 20/20 within
+plan, and the structural argument from `ContinuationSpecializationKey`. Kept
+only as the record of why it was sequenced ahead of the claim shape.)*
 
 **Three planner rows assert refusals the re-cut changed** — the crossed
 owner/context refusal (`"different producer owner"`) and the caller
