@@ -69,7 +69,13 @@ run get_recent_context, pick up evt_7h92n2tr7pbrm; re-orient per CLAUDE.md>"`
 then a **separate** `Enter`. A wake is not task routing and does not breach
 Steward-never-to-implementer.
 
-### The branch trap for this release, and it is live
+### The branch trap — RESOLVED 07:1xZ, kept because it recurs every release
+
+**Confirmed clear by an independent instrument:** the handoff gate's own
+post-compaction worktree read shows `runtime-implementer` at
+**`179af863 (wp/RT-DECL-CLOSURE-PORT-typed-units)`**, so it is building on the
+proved lineage, not bare `main`. No `preserved/` refs were created — nothing was
+ahead. The description below is the standing hazard, not an open item.
 
 **`179af863` is contained by exactly ONE ref —
 `wp/RT-DECL-CLOSURE-PORT-typed-units` — and NO worktree has it checked out.**
