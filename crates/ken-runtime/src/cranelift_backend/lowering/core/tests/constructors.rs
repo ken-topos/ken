@@ -6999,6 +6999,53 @@ fn d7_pair_record(first: &str, second: &str) -> RuntimeExpr {
     }
 }
 
+fn d7_named_pair_record(names: [&str; 2], constructors: [&str; 2]) -> RuntimeExpr {
+    RuntimeExpr::Record {
+        fields: names
+            .into_iter()
+            .zip(constructors)
+            .map(|(name, constructor)| {
+                (
+                    name.to_string(),
+                    RuntimeExpr::Construct {
+                        constructor: constructor.to_string(),
+                        args: Vec::new(),
+                    },
+                )
+            })
+            .collect(),
+    }
+}
+
+/// Two records with the same arity, the same field CONSTRUCTORS and therefore
+/// the same shape and lane, differing in exactly one thing: their ordered field
+/// NAMES.
+///
+/// ⭐⭐ **Differing only in the names is what makes the row about the schema.**
+/// The existing record rows share `first`/`second`, so two records at different
+/// origins intern the same identities and a substituted certificate is caught by
+/// the per-position child occurrence instead. Here the field identities differ
+/// and nothing else does, so the field-schema comparison is the only check that
+/// can separate them.
+fn d7_field_identity_arguments() -> RuntimeExpr {
+    d7_ownership_recursor(vec![
+        d7_named_pair_record(
+            ["alpha", "beta"],
+            [
+                "ctor:fixture::CallInput::Alpha",
+                "ctor:fixture::CallInput::Beta",
+            ],
+        ),
+        d7_named_pair_record(
+            ["gamma", "delta"],
+            [
+                "ctor:fixture::CallInput::Alpha",
+                "ctor:fixture::CallInput::Beta",
+            ],
+        ),
+    ])
+}
+
 /// A **recursor** whose case body calls the declared two-parameter unit with
 /// the two aggregates given.
 ///
@@ -7613,4 +7660,357 @@ fn a_call_use_coordinate_substitution_is_inert_for_a_self_authorizing_aggregate(
             "{label}: an inert substitution must emit exactly the baseline's allocations"
         );
     }
+}
+
+/// The one bare-rig device the direct-API `D7` rows share.
+///
+/// ⭐ A function with NO boundary-carrier refs: the first thing an emitted
+/// carrier step does is fail, so **where a graph stops is observable**. A row
+/// that stops at `BoundaryCarrier` got past the whole-graph preflight and
+/// reached the allocator; a row that stops with a preflight reason did not.
+/// ⛔ That pairing is what makes "refused before any allocation" a measurement
+/// rather than an assertion about a fixture that never allocates.
+fn d7_bare_preflight_rig<'plan>(
+    seed_env: &'plan NativeSeedEnvironment,
+    plan: StaticTransitionPlan<'plan>,
+    name: &str,
+) -> (impl Module, cranelift_codegen::Context, Lowering<'plan>) {
+    let mut module = new_jit_module().expect("JIT module constructs");
+    let mut signature = module.make_signature();
+    signature.returns.push(AbiParam::new(types::I64));
+    let func_id = module
+        .declare_function(name, Linkage::Local, &signature)
+        .expect("probe declares");
+    let mut context = module.make_context();
+    context.func =
+        Function::with_name_signature(UserFuncName::user(0, func_id.as_u32()), signature);
+    let compiler = bare_carrier_test_lowering(seed_env, plan);
+    (module, context, compiler)
+}
+
+/// **`D7` — a mismatch below EVERY recursive container is refused, and the
+/// containers are the two the walk used to stop at.**
+///
+/// MEASURED, on a bare rig, one row per container position. Each row is a pair
+/// differing in ONE field -- the nested aggregate's carried producer occurrence:
+///
+/// | container position | with `occurrence: None` | with the planned occurrence |
+/// |---|---|---|
+/// | `HostResult.error` | refused, naming the missing producer, 0 raw allocations | reaches the allocator |
+/// | `HostResult.ok` | refused, likewise | reaches the allocator |
+/// | `DynamicConstructor` alternative field | refused, likewise | reaches the allocator |
+///
+/// ⭐⭐ **These three positions were invisible to the previous walk.** It matched
+/// `Constructor` and `Record` and returned `Ok` on a `_` arm, so a host result's
+/// two arms and a dynamic alternative's fields -- which are two levels down,
+/// inside a `Vec` of alternative structs -- were admitted without being
+/// reconciled at all. ⛔ The refusal is not "this container is unsupported": the
+/// twin row proves the SAME container with a correct nested certificate walks
+/// straight through to the allocation.
+///
+/// ⚠ Promise class: **durable invariant** -- a relation between the two answers
+/// to one question at each position, never either message as a value. Restoring
+/// a wildcard arm turns all three refusing rows green, which is the regression
+/// this exists to catch.
+///
+/// CLAIMED: the preflight is total over `Lowered`, so no aggregate reaches the
+/// allocator through a container the walk declined to enter.
+#[test]
+fn a_mismatch_below_every_recursive_container_is_refused_before_any_allocation() {
+    let seed_env = NativeSeedEnvironment::empty();
+    let construct = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Bool(true))],
+    };
+    let (plan, construct_origin) = planned_root_occurrence(&construct);
+    let wrap_occurrence = plan
+        .source_aggregate_occurrence(construct_origin, PlannedAggregateShape::Constructor)
+        .expect("the planned `Construct` has an ownership record at its own origin");
+    let wrap_identity = plan
+        .constructor_symbol_identity(construct_origin)
+        .expect("the planned `Construct` has a constructor identity");
+    let (_module, mut context, mut compiler) =
+        d7_bare_preflight_rig(&seed_env, plan, "d7_container_probe");
+
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
+
+    // One SSA value per role, shared by every row: the rows must differ in the
+    // carried occurrence and in nothing else.
+    let word = builder.ins().iconst(types::I64, 1);
+    let leaf = || Lowered::Bool {
+        value: word,
+        known: Some(true),
+    };
+    let nested = |occurrence| Lowered::Constructor {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        synthesized_identity: None,
+        occurrence,
+        args: vec![leaf()],
+    };
+    let host_result = |error: Lowered, ok: Lowered| Lowered::HostResult {
+        success: word,
+        error: Box::new(error),
+        ok: Box::new(ok),
+        err_constructor: "ctor:fixture::C1::Err".to_string(),
+        ok_constructor: "ctor:fixture::C1::Ok".to_string(),
+    };
+    let dynamic = |field: Lowered| {
+        Lowered::DynamicConstructor(DynamicConstructorV1 {
+            discriminator: word,
+            alternatives: vec![DynamicConstructorAlternativeV1 {
+                tag: 0,
+                constructor: "ctor:fixture::C1::Wrap".to_string(),
+                identity: wrap_identity,
+                occurrence: Some(wrap_occurrence),
+                fields: vec![field],
+            }],
+        })
+    };
+
+    for (label, build) in [
+        (
+            "HostResult.error",
+            &(|occurrence| host_result(nested(occurrence), leaf()))
+                as &dyn Fn(Option<AggregateOccurrenceId>) -> Lowered,
+        ),
+        (
+            "HostResult.ok",
+            &|occurrence| host_result(leaf(), nested(occurrence)),
+        ),
+        ("DynamicConstructor field", &|occurrence| {
+            dynamic(nested(occurrence))
+        }),
+    ] {
+        let guard = GovernedAllocationMutationGuard::install(GovernedAllocationMutation::None);
+        let refused = compiler
+            .transfer_into_carrier(&mut builder, construct_origin, &build(None))
+            .expect_err("a nested aggregate carrying no producer occurrence cannot cross");
+        let reason = format!("{refused:?}");
+        assert!(
+            reason.contains("no planner-issued producer occurrence"),
+            "{label}: the refusal must be the PREFLIGHT's, not whatever the container \
+             emission would have said next: got {reason}"
+        );
+        assert_eq!(
+            guard.raw_allocations(),
+            0,
+            "{label}: the whole-graph walk must finish before the first raw allocation"
+        );
+        drop(guard);
+
+        let reached = compiler
+            .transfer_into_carrier(
+                &mut builder,
+                construct_origin,
+                &build(Some(wrap_occurrence)),
+            )
+            .expect_err("a fixture with no carrier refs cannot allocate");
+        let reached = format!("{reached:?}");
+        assert!(
+            !reached.contains("no planner-issued producer occurrence"),
+            "NON-VACUITY ({label}): the SAME container carrying a correct nested \
+             certificate must get PAST the preflight, or the row above says nothing \
+             about the container: got {reached}"
+        );
+    }
+}
+
+/// **`D7` — a child whose possible OWNERS escape the set the meet was taken
+/// over is refused, at the same outer shape, lane and arity.**
+///
+/// MEASURED, on a bare rig over one planned parent whose position 0 the planner
+/// planned with owners `[NoReferent]` -- a child it will materialize as a native
+/// scalar pair, which has no boundary node for anything to own:
+///
+/// | held child at position 0 | derived closed owner set | outcome |
+/// |---|---|---|
+/// | `Bool` (spill-free immediate) | `[NoReferent]` | reaches the allocator |
+/// | `Bytes` (a handle) | `[PersistentStore]` | refused, 0 raw allocations |
+///
+/// ⭐⭐ **The two rows share the parent template exactly** -- same producer
+/// occurrence, same constructor symbol, same arity, therefore the same planned
+/// shape, class and allocation lane. The only difference is what the child can
+/// be owned by, which is the fact the parent's lane was DERIVED from. A parent
+/// whose lane was concluded from a set that does not contain its actual child's
+/// owner is a conclusion from the wrong premises.
+///
+/// ⛔ Not a check that the child is "the right kind". It is a containment: the
+/// held set must be inside the planned one, and the direction is the content.
+///
+/// ⚠ Promise class: **durable invariant** -- a relation between two answers to
+/// one question, not either message.
+///
+/// CLAIMED: the meet's premises are checked against the operands actually held,
+/// not merely recorded.
+#[test]
+fn a_child_owner_set_outside_the_planned_meet_is_refused_before_any_allocation() {
+    let seed_env = NativeSeedEnvironment::empty();
+    // ⭐ The `Call` child is what makes position 0's planned owner set the
+    // singleton `[NoReferent]`: its join result is a native scalar pair, so the
+    // planner records that nothing can own it. Measured on this exact fixture.
+    let fixture = RuntimeExpr::Construct {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        args: vec![RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: Vec::new(),
+                body: Box::new(RuntimeExpr::Value(RuntimeValue::Bool(true))),
+            }),
+            args: Vec::new(),
+        }],
+    };
+    let (plan, construct_origin) = planned_root_occurrence(&fixture);
+    let wrap_occurrence = plan
+        .source_aggregate_occurrence(construct_origin, PlannedAggregateShape::Constructor)
+        .expect("the planned `Construct` has an ownership record at its own origin");
+    assert_eq!(
+        plan.aggregate_record_view(wrap_occurrence)
+            .expect("the record is readable")
+            .children()[0]
+            .owners,
+        vec![BoundaryReferentOwner::NoReferent],
+        "the row is only about owner containment if the planned set is a strict \
+         subset of what a handle child would derive"
+    );
+    let (_module, mut context, mut compiler) =
+        d7_bare_preflight_rig(&seed_env, plan, "d7_child_owner_probe");
+
+    let mut function_context = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut context.func, &mut function_context);
+    let entry = builder.create_block();
+    builder.switch_to_block(entry);
+    bind_bare_test_trap_lane(&mut compiler, &mut builder);
+
+    let word = builder.ins().iconst(types::I64, 1);
+    let template = |child: Lowered| Lowered::Constructor {
+        constructor: "ctor:fixture::C1::Wrap".to_string(),
+        synthesized_identity: None,
+        occurrence: Some(wrap_occurrence),
+        args: vec![child],
+    };
+
+    let guard = GovernedAllocationMutationGuard::install(GovernedAllocationMutation::None);
+    let refused = compiler
+        .transfer_into_carrier(
+            &mut builder,
+            construct_origin,
+            &template(Lowered::Bytes(vec![7, 8])),
+        )
+        .expect_err("a child that can be owned outside the planned set cannot cross");
+    let reason = format!("{refused:?}");
+    assert!(
+        reason.contains("can be owned by"),
+        "the refusal must be the OWNER containment, not the arity, class or \
+         identity checks that precede it: got {reason}"
+    );
+    assert_eq!(
+        guard.raw_allocations(),
+        0,
+        "the walk must refuse before the first raw allocation"
+    );
+    drop(guard);
+
+    let reached = compiler
+        .transfer_into_carrier(
+            &mut builder,
+            construct_origin,
+            &template(Lowered::Bool {
+                value: word,
+                known: Some(true),
+            }),
+        )
+        .expect_err("a fixture with no carrier refs cannot allocate");
+    let reached = format!("{reached:?}");
+    assert!(
+        !reached.contains("can be owned by"),
+        "NON-VACUITY: the SAME parent holding a child whose closed owner set IS \
+         inside the planned one must get past the owner check: got {reached}"
+    );
+}
+
+/// **`D7` — a record's ordered FIELD SCHEMA is load-bearing, and a sibling's is
+/// refused before a single allocation is emitted.**
+///
+/// MEASURED, on the same real two-argument declared-unit call reached through
+/// the source machine, with two records that differ in **exactly one thing** —
+/// their ordered field names. Same arity, same field constructors, therefore the
+/// same shape and the same ruled lane, recorded from the live plan as
+/// `same_shape: true, same_lane: true`:
+///
+/// | run | outcome |
+/// |---|---|
+/// | baseline | compiles, non-zero raw allocations |
+/// | B's certificate for A | 1 hit, refused naming the field identity, **0 raw allocations** |
+///
+/// ⭐⭐ **The refusal is the FIELD SCHEMA arm, not the child occurrence.** The
+/// preflight compares presence, shape, class, arity and then, per position, the
+/// field identity — before it reaches the nested occurrence. Asserting the
+/// message names the identity is what distinguishes this row from the ownership
+/// control it sits beside: with the same field names on both records, the
+/// substitution is caught by the child occurrence and this arm is never
+/// exercised.
+///
+/// ⛔ The identity compared is the TYPED `FieldIdentity` the producer was
+/// issued, on both sides. There is no `&str -> FieldIdentity` direction and none
+/// may be added — comparing the template's field strings against the plan would
+/// be the second derivation `D2` forbids, and it is what left field naming
+/// unreconciled while order and arity were covered.
+///
+/// ⚠ Promise class: **durable invariant** — a relation between a baseline and a
+/// negative differing in one certificate, never a message as a value.
+///
+/// CLAIMED: a record's field names are its producer's fact, they travel with the
+/// template, and a template carrying another producer's schema cannot be
+/// emitted.
+#[test]
+fn a_sibling_records_field_schema_is_refused_before_any_allocation() {
+    let program = d7_field_identity_arguments();
+    let (baseline, baseline_hits, baseline_allocations, _) =
+        d7_ownership_run(&program, GovernedAllocationMutation::None);
+    baseline.expect("the two-record field-identity fixture compiles unmutated");
+    assert_eq!(baseline_hits, 0, "the baseline installs no mutation");
+    assert!(
+        baseline_allocations > 0,
+        "the baseline must actually allocate, or 'the negative emitted zero' is a \
+         comparison between two zeroes"
+    );
+
+    let (result, hits, allocations, substitution) = d7_ownership_run(
+        &program,
+        GovernedAllocationMutation::SiblingAggregateProducer,
+    );
+    assert_eq!(
+        hits, 1,
+        "the certificate substitution must FIRE exactly once, or a refusal is not \
+         attributable to it"
+    );
+    let substitution = substitution.expect("a firing substitution records what it moved");
+    assert_ne!(
+        substitution.from,
+        Some(substitution.to),
+        "a substitution that substituted nothing is indistinguishable from a \
+         well-defended one"
+    );
+    assert!(
+        substitution.same_shape && substitution.same_lane,
+        "the two records must agree on shape and lane, or the refusal is \
+         attributable to something coarser than the schema: {substitution:?}"
+    );
+    let error = result.expect_err("a record carrying a sibling's field schema cannot be emitted");
+    assert_eq!(
+        allocations, 0,
+        "the whole-graph preflight must finish before the FIRST raw allocation, and \
+         the baseline emitted {baseline_allocations}: got {error:?}"
+    );
+    let reason = format!("{error:?}");
+    assert!(
+        reason.contains("carries identity"),
+        "the refusal must be the FIELD SCHEMA disagreement -- a shape, class, arity \
+         or nested-occurrence refusal would mean the row never exercised the field \
+         identities at all: {reason}"
+    );
 }
