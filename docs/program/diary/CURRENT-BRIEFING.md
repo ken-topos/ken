@@ -41,11 +41,24 @@ trust this line.
 
 ### The one thing to do next
 
-**Release `RT-CONTSRC-PRODUCER-LOCAL` to Runtime.** Handoff-gate compaction of
-runtime-leader/implementer/qa was launched at ~07:0xZ; all three were 0 ahead
-and 0 dirty, so the gate's `reset --hard` was safe. **After it returns: post the
-kick, then rouse each seat with `send-keys` — a freshly compacted Claude seat
-does not wake on a mention alone.**
+**RELEASED at 07:0xZ. Verify `runtime-implementer` actually transitioned to
+Working, and rouse it with `send-keys` if it did not.**
+
+- Kick (fresh root, its own thread): **`evt_7h92n2tr7pbrm`**.
+- `D7` rescope-in-place, posted in `thr_3rx07jfewhjhf`: `evt_14a9cee7fkv2s`.
+- Handoff gate ran on all three seats (all 0 ahead, 0 dirty, so the
+  `reset --hard` was safe). **Confirmed:** implementer ctx 0% with skills
+  restored, both Codex seats show `Context compacted`.
+
+**The wake asymmetry is the thing to watch.** `runtime-leader` and `runtime-qa`
+are **Codex** (`gpt-5.6-terra`) and woke on the mention via the tmux backend —
+the leader was Working within a minute. **`runtime-implementer` is Claude
+(Opus 5) and its mention push never reaches the session.** So the leader's
+dispatch to it will not wake it either. If it sits idle at an empty composer,
+rouse mechanically: `tmux send-keys -t moot-runtime-implementer -l "<one line:
+run get_recent_context, pick up evt_7h92n2tr7pbrm; re-orient per CLAUDE.md>"`
+then a **separate** `Enter`. A wake is not task routing and does not breach
+Steward-never-to-implementer.
 
 ### The branch trap for this release, and it is live
 
