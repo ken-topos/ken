@@ -40,10 +40,10 @@
 
 ### The one thing to do next
 
-**Release `D8a` to Runtime.** Thread **`thr_6m43v75yndhtj`**, on Architect
-ruling **`evt_3dcafs581921e`**. Base is preserved exact `9f21ff0e`; no
-candidate, no QA route. Frame section: *"GOVERNING — the `D7` cut is MIS-SIZED.
-The work is `D8a`-`D8g`."*
+**Nothing — the ring is working `D8b`.** Thread **`thr_6m43v75yndhtj`**, on
+Architect ruling **`evt_3dcafs581921e`**. `D8a` discharged at exact `e02ef413`;
+`D8b` released at `evt_3jp0rpq7jp13g`. No candidate, no QA route. Frame section:
+*"GOVERNING — the `D7` cut is MIS-SIZED. The work is `D8a`-`D8g`."*
 
 ⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
 published *"new member at ordinal 2, not 3"*. So is the whole
@@ -95,7 +95,30 @@ gap, not a missing fixture** — the released bounded witness repair could never
 have discharged it, because the only source shape that exercises the raw table
 is refused earlier. That is why its wrong-table mutation stays green.
 
-**Next: release `D8a` to Runtime.** The `D7a`-`D7e` cut is **SPENT** — Architect
+**Next: wait for `D8b`.** Released by the leader at `evt_3jp0rpq7jp13g` on exact
+`e02ef413`; implementer working it.
+
+⭐ **`D8a` DISCHARGED at exact `e02ef413`** (`742/2/1`, both failures the
+`d86be55d` baseline pair). **The fork resolved to the STRUCTURAL branch and was
+measured before it was chosen** — a test-only hook removed reason one (disjoint
+walks) exactly and nothing else, and still yielded no second owner, because the
+`D5a` availability law refuses first on both plans. Disarmed run is the positive
+control.
+
+⚠ **The owner buys NO discrimination on any current population** — correctness
+insurance and an earlier transplant catch, not a key that separates anything.
+**`D8g` must not attempt an owner-based-separation positive**; there is no
+population to demonstrate it on.
+
+**Steward disposition added to `D8b`:** delete the owner-collision refusal in
+`composed_worker_view` — measured unreachable and unexercised, and the ruling
+authorized encoding the invariant **instead** of a discriminator, not alongside
+a dead guard. ⛔ **Not the `D6b` unwitnessed-residual case:** `D6b`'s table was
+unreachable because the mechanism was **incomplete**; this is unreachable
+because the planner **proves the population impossible**. Delete the collision
+guard, **not** the field — the owner's selector role is separately live.
+
+**Why the `D8` series exists.** The `D7a`-`D7e` cut is **SPENT** — Architect
 ruling `evt_3dcafs581921e` returned **outcome (c), mis-sized**, on preserved
 exact `f3427dae` (`D7a`) and `9f21ff0e` (`D7a2`). Both are **non-candidate
 evidence**. The governing cut is `D8a`-`D8g`, and the `D8` series is allocated
