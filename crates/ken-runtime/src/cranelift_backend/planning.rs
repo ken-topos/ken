@@ -55,13 +55,21 @@ pub(super) use static_transition::{
     ContinuationSourceCoordinate,
     ContinuationSourceSlotAuthority,
     ContinuationFrameRequirement,
-    d3b_publish_without_finalization, d3b_refinalize, D3bFinalizationPerturbation,
     ContinuationSpecializationId,
     // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` — the emission consumer's fail-closed
     // check that it is indexing where the coordinate actually sits.
     verify_current_lexical_availability,
     verify_predeclared_entry_frame_membership,
     ContinuationUnitView,
+};
+
+// `D3b` stage-2 controls. ⛔ `#[cfg(test)]` on the RE-EXPORT as well as on the
+// items themselves: an ungated re-export of a `cfg(test)` item is an unresolved
+// import in the PRODUCTION build, which the test profile cannot see. Caught by
+// checking `-p ken-runtime` separately from `--profile test`.
+#[cfg(test)]
+pub(in crate::cranelift_backend) use static_transition::{
+    d3b_publish_without_finalization, d3b_refinalize, D3bFinalizationPerturbation,
 };
 #[cfg(test)]
 pub(super) use static_transition::with_last_io_error_role_omitted;
