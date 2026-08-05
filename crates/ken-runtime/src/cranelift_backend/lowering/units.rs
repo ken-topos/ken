@@ -2168,6 +2168,14 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
         crate::cranelift_backend::lowering::record_d8j_discharged(
             compiler.function_local.composed_discharges.keys().cloned(),
         );
+        // `D8k` -- the composed half of the partition, accumulated from the
+        // VERIFIED relation and never from the direct instruction map.
+        if let Some(ledger) = compiler.continuation_claims.as_mut() {
+            ledger.record_composed(
+                compiler.function_local.composed_discharges.keys().cloned(),
+                emission_owner,
+            )?;
+        }
         if let Some(ledger) = compiler.continuation_claims.as_mut() {
             ledger.record_emitted(
                 compiler.function_local.continuation_emissions.keys().cloned(),
@@ -2412,6 +2420,16 @@ pub(super) struct ContinuationClaimLedger {
     /// accumulated across all generated functions after each one's CLIF has been
     /// checked.
     emitted: BTreeSet<ContinuationCallIdentity>,
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8k`** -- every identity discharged by a
+    /// VERIFIED composed source-continuation consumption, accumulated across
+    /// every generated function after each one's CLIF has been checked.
+    ///
+    /// ⛔ Fed from `function_local.composed_discharges` and from nothing else.
+    /// The direct instruction map is not a source of composed claims: its gate
+    /// requires the recorded instruction to decode to `identity.target()`, and
+    /// a composed instruction targets the raw worker, so an identity appearing
+    /// in both would mean one of the two gates had been loosened.
+    composed: BTreeSet<ContinuationCallIdentity>,
 }
 
 impl ContinuationClaimLedger {
@@ -2452,6 +2470,7 @@ impl ContinuationClaimLedger {
             planned,
             declared: BTreeSet::new(),
             emitted: BTreeSet::new(),
+            composed: BTreeSet::new(),
         })
     }
 
@@ -2485,6 +2504,61 @@ impl ContinuationClaimLedger {
             if !self.emitted.insert(identity) {
                 return Err(backend_module(
                     "a causal token emitted a direct call from more than one generated function"
+                        .to_string(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// **`D8k`** -- record the causal tokens one generated function discharged
+    /// through a VERIFIED composed source-continuation consumption, and claim
+    /// them.
+    ///
+    /// ⛔ Called only after `verify_recorded_composed_discharges` has promoted
+    /// them, so an identity reaches this set only once its recorded raw-worker
+    /// call was found in the finished CLIF, its decoded callee matched the
+    /// `D8b`/`D8d` target, its operand run matched that target's declared run,
+    /// and its result was shown to return downstream into the unchanged
+    /// continuation.
+    ///
+    /// ⭐⭐ **The claim is made HERE and not at the seat, and that is what makes
+    /// the partition disjoint.** A composed consumption claims the same
+    /// `claims` slot a direct emission would, so an identity claimed both ways
+    /// is rejected as a double claim rather than silently satisfying both
+    /// halves of the union.
+    pub(super) fn record_composed(
+        &mut self,
+        discharged: impl IntoIterator<Item = ContinuationCallIdentity>,
+        defining: ContinuationEmissionOwner,
+    ) -> Result<(), CraneliftBackendError> {
+        for identity in discharged {
+            if identity.emission_owner() != defining {
+                return Err(backend_module(
+                    "a composed source continuation was discharged by a function that is not its \
+                     emission owner"
+                        .to_string(),
+                ));
+            }
+            let consumed = self.claims.get_mut(&identity).ok_or_else(|| {
+                backend_module(
+                    "a composed source continuation discharged a causal token this ledger never \
+                     planned"
+                        .to_string(),
+                )
+            })?;
+            if let Some(previous) = consumed {
+                return Err(backend_module(format!(
+                    "a causal token was claimed twice, first by {previous:?} and then by a \
+                     composed source continuation; one causal obligation is discharged by one \
+                     form, never by both"
+                )));
+            }
+            *consumed = Some(defining);
+            if !self.composed.insert(identity) {
+                return Err(backend_module(
+                    "a causal token was discharged by a composed source continuation in more \
+                     than one generated function"
                         .to_string(),
                 ));
             }
@@ -2605,10 +2679,13 @@ impl ContinuationClaimLedger {
     /// same size can differ, and a length comparison here would pass for a
     /// population that swapped one token for another.
     pub(super) fn close(self) -> Result<(), CraneliftBackendError> {
+        // `D8k` -- DECLARATION may remain over the full planned set. An unused
+        // declaration is a `FuncRef` nobody called, not an emitted call, so the
+        // declared population stays equal to planned even where the discharge
+        // took the composed form.
         for (name, set) in [
             ("resolved", self.resolved.keys().cloned().collect::<BTreeSet<_>>()),
             ("declared", self.declared.clone()),
-            ("emitted", self.emitted.clone()),
         ] {
             if set != self.planned {
                 let missing = self.planned.difference(&set).count();
@@ -2618,6 +2695,50 @@ impl ContinuationClaimLedger {
                      {missing} planned tokens absent, {extra} unplanned tokens present"
                 )));
             }
+        }
+        // ⭐⭐ `D8k` -- THE PARTITION. `planned = direct-emitted ⊎
+        // composed-consumed`, asserted as a disjoint union of two sets that
+        // were accumulated from two different kinds of evidence: decoded direct
+        // specialization emissions, and verified composed source-continuation
+        // consumptions.
+        //
+        // ⛔ Not weakened to a count. Two sets of the right total size can still
+        // be the wrong sets, and a program that emitted one token directly and
+        // consumed a different one compositionally would satisfy any arithmetic
+        // statement of this law.
+        //
+        // ⛔ Disjointness is asserted separately from coverage, because they
+        // fail for different reasons: an overlap means one obligation was
+        // answered twice, in two forms; a shortfall means one was never
+        // answered at all.
+        let both = self
+            .emitted
+            .intersection(&self.composed)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if !both.is_empty() {
+            return Err(backend_module(format!(
+                "{} causal tokens were discharged BOTH by a decoded direct emission and by a \
+                 verified composed consumption; the two forms partition the planned population \
+                 and an identity in both means one obligation was answered twice",
+                both.len()
+            )));
+        }
+        let discharged = self
+            .emitted
+            .union(&self.composed)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if discharged != self.planned {
+            let missing = self.planned.difference(&discharged).count();
+            let extra = discharged.difference(&self.planned).count();
+            return Err(backend_module(format!(
+                "the discharged continuation call population is not the planned one: {missing} \
+                 planned tokens were neither directly emitted nor compositionally consumed, and \
+                 {extra} discharged tokens were never planned. Direct: {}, composed: {}",
+                self.emitted.len(),
+                self.composed.len()
+            )));
         }
         let leftover = self
             .claims
@@ -3379,6 +3500,15 @@ fn define_unit_body<M: Module>(
     crate::cranelift_backend::lowering::record_d8j_discharged(
         compiler.function_local.composed_discharges.keys().cloned(),
     );
+    // `D8k` -- same accumulation on the ordinary pass. ⛔ The owner supplied is
+    // this unit's own emission owner, so `record_composed` can hold the
+    // discharge to the identity it claims rather than trusting the seat.
+    if let Some(ledger) = compiler.continuation_claims.as_mut() {
+        ledger.record_composed(
+            compiler.function_local.composed_discharges.keys().cloned(),
+            ContinuationEmissionOwner::Predeclared(unit.function),
+        )?;
+    }
     // `4b` closeout control: verify this function's emissions but never
     // accumulate them, so whole-pass set equality has a population to miss.
     #[cfg(test)]

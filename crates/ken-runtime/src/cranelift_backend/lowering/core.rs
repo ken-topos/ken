@@ -7215,10 +7215,46 @@ impl<'a> Lowering<'a> {
         let mut residual = result_edges
             .iter()
             .filter(|edge| {
+                // ⭐⭐ `RT-CONTSRC-PRODUCER-LOCAL` `D8k` — the residual is what
+                // NEITHER verified form has discharged.
+                //
+                // A causal call answered by a composed source continuation is
+                // not detached: the producer's constructor was eliminated in
+                // place and the obligation was met by the raw-worker call the
+                // source machine made. Before this, only a direct emission
+                // could clear an edge, which is why the declaration-owned
+                // composed witness refused here — the seat asked the unit to
+                // RETURN a producer constructor the composed path exists to
+                // consume.
+                //
+                // ⛔ **The claim, not only the verified relation, and that
+                // ordering is forced.** This seat runs while the function is
+                // still being built; `composed_discharges` is populated from
+                // `pending_composed_discharges` only once the CLIF is finished,
+                // which is strictly later. Reading the verified relation alone
+                // here would always see it empty and clear nothing.
+                //
+                // ⇒ What makes this sound is that an unverified claim cannot
+                // survive to an artifact: `verify_recorded_composed_discharges`
+                // runs before this function is published and refuses the whole
+                // compile if any claim fails. So no object exists in which a
+                // claim that was never verified suppressed a residual. That is
+                // a property of the ORDER of the two passes, and it is why
+                // neither may be moved without re-deriving it.
+                let claimed = self
+                    .function_local
+                    .pending_composed_discharges
+                    .iter()
+                    .any(|pending| pending.identity == edge.identity);
                 !self
                     .function_local
                     .continuation_emissions
                     .contains_key(&edge.identity)
+                    && !self
+                        .function_local
+                        .composed_discharges
+                        .contains_key(&edge.identity)
+                    && !claimed
             })
             .collect::<Vec<_>>();
         // `D5a` checkpoint 4 step 3 — the multi-member reaching mutation.

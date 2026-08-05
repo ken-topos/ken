@@ -10561,11 +10561,20 @@ fn d4_an_unrecorded_continuation_emission_reds_the_clif_sweep() {
 /// ⭐ This is the control that separates "each function checked its own
 /// emissions" from "every planned token was emitted somewhere". The per-
 /// function gate stays green here; only the closeout notices.
+///
+/// ⚠ **`D8k` moved which clause catches it, and the move is the point.** The
+/// closeout no longer asserts `emitted == planned`; it asserts the disjoint
+/// partition `planned = direct-emitted ⊎ composed-consumed`. A token that was
+/// never accumulated is now caught as one that is in NEITHER half, which is a
+/// strictly more informative reading of the same defect — the message names
+/// both populations, so a reader can tell "nothing was emitted" from "it was
+/// discharged the other way". ⛔ The control is not weakened: it still asserts
+/// a set relation and still names the clause it must reach.
 #[test]
 fn d4_failing_to_accumulate_emissions_reds_the_closeout_set_equality() {
     assert_emission_mutation_reds(
         ContinuationEmissionMutation::SuppressEmissionAccumulation,
-        "emitted continuation call population does not equal the planned one",
+        "were neither directly emitted nor compositionally consumed",
     );
 }
 
@@ -16453,7 +16462,7 @@ fn d8a_one_emission_owner_answers_one_composed_source_coordinate() {
 /// ⚠ **`D8e` retired this row's original claim, and the retirement is recorded
 /// here rather than in a handoff.** As landed, this said the two preconditions
 /// "do not coincide anywhere in this suite". They now do:
-/// `d8e_the_composed_binding_is_installed_consumed_and_meets_the_causal_projection`
+/// `d8e_the_composed_binding_is_installed_consumed_and_clears_its_own_causal_edge`
 /// is the witness that combines them, and it installs and consumes. What
 /// survives — and what this row is now scoped to — is the narrower, still-live
 /// fact about the two populations `D8d` was measured against: neither of them
@@ -16808,26 +16817,33 @@ fn d8e_witness_compile(
 /// transition, and the emitted call is read back from the emitter's own log
 /// rather than from the binding that requested it.
 ///
-/// ⛔ **What it is NOT evidence of, said plainly.** The program does not compile.
-/// It refuses at the `D5a` detached-result seat, and that refusal is NOT this
-/// node's to repair. Interning the specialization that supplies the `D8a` target
-/// necessarily projects a causal call onto the same emitting unit
-/// (`continuation_result_edges_owned_by` is keyed on the emission owner and
-/// admits every projected call), and that edge has exactly two discharges: a
-/// claim, or a unit result that IS the planned producer constructor. The
-/// composed deferred-constructor path can do neither -- it returns to the
-/// selected field before `claim_and_call_continuation`, which is the one claim
-/// seat in the crate, and it exists precisely to eliminate the constructor the
-/// other discharge requires. ⇒ The gap is a whole-node finding, escalated rather
-/// than worked around; a witness that compiled would have had to fabricate one
-/// of the two discharges.
+/// ⭐⭐ **The `D5a` detached-result seat is PASSED, and that is `D8h`-`D8k`'s
+/// repair landing.** As written at `89e36ec1` this row refused there, and said
+/// so: interning the specialization that supplies the `D8a` target necessarily
+/// projects a causal call onto the same emitting unit, and that edge had
+/// exactly two discharges -- a claim at `claim_and_call_continuation`, which
+/// the composed path returns before, or a unit result that IS the producer
+/// constructor, which the composed path exists to eliminate. The escalation was
+/// right and the answer was a third discharge: `D8k` makes the residual filter
+/// read "what NEITHER verified form has discharged", so a composed source
+/// continuation clears its own edge. This row's refusal moving is the evidence
+/// that landed.
 ///
-/// **Transition sentinel.** The refusal assertion goes red the moment the
-/// composed path acquires a lawful discharge for its own causal call. That is
-/// the event that retires it, and when it fires the three counter assertions
-/// above it are the positive route, already green.
+/// ⛔ **What it is still NOT evidence of, said plainly.** The program does not
+/// compile. It now stops LATER and elsewhere, building the specialization's
+/// case binder run, because the producer's ordinary envelope carries no
+/// nonrecursive field at the selected field's source position. That is a
+/// different frontier, in specialization emission rather than causal closure,
+/// and it is out of `D8k`'s scope -- reported, not accommodated.
+///
+/// **Transition sentinel, on the NEW boundary.** The row now pins that the
+/// detached seat is *not* reached and that the envelope construction is. It
+/// reds when either half moves -- if the detached seat returns, the `D8k`
+/// filter has regressed; if the envelope refusal goes away, a composed witness
+/// compiles end to end for the first time and the counter clauses above it
+/// become a full positive route.
 #[test]
-fn d8e_the_composed_binding_is_installed_consumed_and_meets_the_causal_projection() {
+fn d8e_the_composed_binding_is_installed_consumed_and_clears_its_own_causal_edge() {
     let (error, counters, markers) = d8e_witness_compile("d8e_witness", 3, true);
     let (sites, bindings, consumptions) = counters;
 
@@ -16872,16 +16888,23 @@ fn d8e_the_composed_binding_is_installed_consumed_and_meets_the_causal_projectio
     );
 
     let error = error.expect(
-        "the witness does not compile, and this row exists to say so. If it now compiles, the \
-         composed path has acquired a discharge for its own projected causal call -- retire this \
-         sentinel and promote the clauses above",
+        "the witness does not compile end to end, and this row exists to say where it stops. If \
+         it now compiles, a composed witness has reached emission for the first time -- retire \
+         this sentinel and promote the clauses above",
     );
     let reason = format!("{error:?}");
     assert!(
-        reason.contains("detached-result seat"),
-        "the refusal must be the D5a causal projection, which is the finding this row escalates. \
-         Anything else is a NEW refusal on the composed consumption path and must be reported, \
-         not accommodated: {reason}"
+        !reason.contains("detached-result seat"),
+        "D8k's repair must hold: a causal call answered by a verified composed source \
+         continuation is no longer a residual detached-result edge, so this witness must pass \
+         that seat. Refusing there again means the residual filter has regressed to reading only \
+         direct emissions: {reason}"
+    );
+    assert!(
+        reason.contains("ordinary envelope has no nonrecursive field"),
+        "and it must stop at the NEXT frontier, in specialization emission rather than causal \
+         closure. A different refusal here is a new finding on the composed path and must be \
+         reported rather than absorbed into this expectation: {reason}"
     );
     assert!(
         !reason.contains("runtime-local and live-domain only"),
@@ -17169,8 +17192,10 @@ fn d8i_the_discharge_facet_is_transported_stated_and_refuses_both_ways() {
          transport only, and a drift here means the facet altered the binding path"
     );
     assert!(
-        format!("{error:?}").contains("detached-result seat"),
-        "and it must still refuse at the same place: D8i must not move D8e's outcome"
+        !format!("{error:?}").contains("detached-result seat"),
+        "and D8k's residual repair must hold underneath D8i: a verified composed discharge \
+         clears its own causal edge, so this witness passes the detached-result seat. D8i \
+         changed transport only and must not move that outcome either way"
     );
     let records = d8i_discharges();
     let composed = records
@@ -17656,4 +17681,202 @@ fn d8j_root_witness_identities(
         .iter()
         .map(|target| target.call_identity().clone())
         .collect()
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8k` — the causal population is a disjoint
+/// partition, and the composed half claims through the same slot the direct
+/// half does.**
+///
+/// The whole-pass closeout no longer says `emitted == planned`. It says
+///
+/// ```text
+/// planned = resolved = declared = claimed
+/// planned = direct-emitted  ⊎  composed-consumed
+/// ```
+///
+/// where the two halves are accumulated from two different kinds of evidence:
+/// decoded direct-specialization emissions, and verified composed
+/// source-continuation consumptions. **Declaration may remain over the full
+/// planned set** -- an unused `FuncRef` is not an emitted call -- which is why
+/// `declared == planned` survives unchanged beside the partition.
+///
+/// ## Why this row works on the ledger rather than end to end
+///
+/// **MEASURED**: no composed witness reaches `close_continuation_claim_ledger`
+/// yet. Both stop earlier -- the declaration-owned one in specialization
+/// emission at the ordinary-envelope frontier, the root-owned one at the same
+/// place. So the closeout's composed half cannot be exercised by compiling a
+/// program, and a row that only compiled one would assert nothing about it.
+///
+/// **CLAIMED**: the ledger is the seat of the law, and it is exercised here
+/// with **real planner identities** taken from the `D8e` witness plan through
+/// the ordinary projection -- not hand-built, which they cannot be.
+///
+/// **THE GAP**: this proves the law, not that any program reaches it. When a
+/// composed witness compiles to closure, the end-to-end assertion becomes
+/// available and should be added beside this rather than replacing it.
+///
+/// ## Clauses
+///
+/// 1. **The exact partition closes.** Declare the planned set, discharge the
+///    one planned identity compositionally, and the closeout accepts -- with
+///    the direct half EMPTY, which is the case the pre-`D8k` law could not
+///    express at all.
+/// 2. **A duplicate claim refuses.** An identity claimed directly and then
+///    discharged compositionally is rejected where the second claim is made,
+///    not at the closeout -- one obligation, one form.
+/// 3. **An overlap refuses at the closeout.** Recording the same identity into
+///    both halves without a second claim reaches the disjointness clause, which
+///    is why disjointness is asserted separately from coverage.
+/// 4. **A shortfall refuses.** Discharging nothing leaves the planned token in
+///    neither half.
+/// 5. **A wrong owner refuses.** A composed discharge claimed by a function
+///    that is not the identity's emission owner is rejected before it can
+///    enter either population.
+///
+/// **Promise class: durable invariant.** Set relations over a planned
+/// population the fixture does not fix; the only literal is that the population
+/// is non-empty, which is asserted rather than assumed.
+#[test]
+fn d8k_the_causal_population_is_a_disjoint_partition_of_direct_and_composed() {
+    use crate::cranelift_backend::lowering::units::{declare_unit_bundle, ContinuationClaimLedger};
+
+    let entry = d8j_root_witness_entry();
+    let plan = plan_static_transition_graph_with_symbols(
+        &entry,
+        &BTreeMap::new(),
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .expect("the witness plans");
+    // ⛔ The identities come from the plan's own pairing, which is the only way
+    // to obtain one: `ContinuationCallIdentity` has no constructor outside
+    // planning, so this row cannot fabricate its population even by accident.
+    let identities = plan
+        .composed_call_targets()
+        .expect("targets")
+        .iter()
+        .map(|target| target.call_identity().clone())
+        .collect::<Vec<_>>();
+    assert!(
+        !identities.is_empty(),
+        "the witness must plan at least one causal identity, or every clause here is vacuous"
+    );
+    let owner = identities[0].emission_owner();
+    let open = || {
+        let mut module = new_object_module("d8k-partition").expect("module");
+        let bundle = declare_unit_bundle(&mut module, &plan).expect("the bundle declares");
+        let ledger = ContinuationClaimLedger::open(&plan, &bundle).expect("the ledger opens");
+        (ledger, bundle)
+    };
+
+    // Clause 1 — the exact partition, with the direct half empty.
+    let (mut ledger, _bundle) = open();
+    ledger
+        .record_declared(identities.iter().cloned())
+        .expect("declaration covers the planned set");
+    ledger
+        .record_composed(identities.iter().cloned(), owner)
+        .expect("a verified composed discharge claims its own identity");
+    ledger.close().expect(
+        "planned = declared = claimed and planned = direct ⊎ composed with an EMPTY direct half. \
+         A refusal here means the partition still requires a direct emission for every planned \
+         token, which is exactly the law D8k replaced",
+    );
+
+    // Clause 2 — one obligation, one form.
+    let (mut ledger, _bundle) = open();
+    ledger
+        .record_declared(identities.iter().cloned())
+        .expect("declaration covers the planned set");
+    ledger
+        .claim_exact(&identities[0], owner)
+        .expect("the direct claim is lawful on its own");
+    let refusal = format!(
+        "{:?}",
+        ledger
+            .record_composed(identities.iter().cloned(), owner)
+            .expect_err("a second claim on one identity must refuse")
+    );
+    assert!(
+        refusal.contains("claimed twice"),
+        "the duplicate must be caught where the second claim is MADE, so the two forms cannot \
+         both report success and leave the closeout to notice: {refusal}"
+    );
+
+    // Clause 3 — the disjointness clause at the closeout.
+    let (mut ledger, _bundle) = open();
+    ledger
+        .record_declared(identities.iter().cloned())
+        .expect("declaration covers the planned set");
+    ledger
+        .record_composed(identities.iter().cloned(), owner)
+        .expect("the composed discharge claims");
+    ledger
+        .record_emitted(identities.iter().cloned())
+        .expect("recording a direct emission does not itself claim");
+    let refusal = format!(
+        "{:?}",
+        ledger
+            .close()
+            .expect_err("an identity in both halves must refuse at the closeout")
+    );
+    assert!(
+        refusal.contains("discharged BOTH"),
+        "and it must reach the DISJOINTNESS clause, not the coverage one: the union is complete \
+         here, so a law stated only as a union would accept this: {refusal}"
+    );
+
+    // Clause 4 — a shortfall.
+    let (mut ledger, _bundle) = open();
+    ledger
+        .record_declared(identities.iter().cloned())
+        .expect("declaration covers the planned set");
+    let refusal = format!(
+        "{:?}",
+        ledger
+            .close()
+            .expect_err("a planned token in neither half must refuse")
+    );
+    assert!(
+        refusal.contains("neither directly emitted nor compositionally consumed"),
+        "and the message must name both halves, so a reader can tell an unemitted token from one \
+         discharged the other way: {refusal}"
+    );
+
+    // Clause 5 — wrong owner.
+    let (mut ledger, _bundle) = open();
+    ledger
+        .record_declared(identities.iter().cloned())
+        .expect("declaration covers the planned set");
+    // ⛔ A REAL emission owner, and it has to come from another plan: this
+    // witness's two identities sit at one producer `Construct` and so share one
+    // owner. Taken from the `D5a` witness, whose population genuinely carries
+    // both an owner class -- `Predeclared` and `Specialization` -- so the value
+    // substituted here is one the planner mints rather than one this row
+    // invented. Asserting it differs is what keeps the clause from perturbing
+    // toward the owner it already has.
+    let foreign = with_d5a_witness_plan(|plan| {
+        plan.composed_call_targets()
+            .expect("targets")
+            .iter()
+            .map(|target| target.call_identity().emission_owner())
+            .find(|candidate| *candidate != owner)
+    })
+    .expect(
+        "no plan in reach carries a second emission owner, so this clause would perturb toward \
+         the owner it already has and pass vacuously",
+    );
+    let refusal = format!(
+        "{:?}",
+        ledger
+            .record_composed([identities[0].clone()], foreign)
+            .expect_err("a composed discharge claimed by a non-owner must refuse")
+    );
+    assert!(
+        refusal.contains("is not its emission owner"),
+        "and it must refuse at the owner clause, before the identity can enter either \
+         population: {refusal}"
+    );
 }
