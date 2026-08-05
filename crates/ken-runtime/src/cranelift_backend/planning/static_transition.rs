@@ -5086,10 +5086,22 @@ enum ProducerLocalKind {
     /// The result of a host effect. The `Effect` occurrence owns the identity,
     /// and its own occurrence authority owns the referent lifetime.
     HostEffectResult,
-    /// One binder of one `Match`/`ComputationalMatch` case. The referent comes
+    /// One **constructor argument** binder of one `Match` /
+    /// `ComputationalMatch` case. Its representation and referent both come
     /// from the scrutinee, named here by the match occurrence whose child 0 it
     /// is.
-    MatchCaseBinder { match_origin: StaticOriginId },
+    ///
+    /// ⛔ **Not "any case binder".** A `ComputationalMatch` case environment is
+    /// `[recursive IH binders, constructor argument binders, outer
+    /// environment]`, and the two runs are **not homogeneous** —
+    /// `derive_occurrence_lifetime` gives every IH `ActivationOwned` while
+    /// argument binders take the scrutinee's, and the result-phase pass gives
+    /// IHs a declared-unit-result contract while argument binders preserve the
+    /// scrutinee's representation. `a5a6ce9b` looped over the combined count
+    /// and stamped one contract across both, which silently misclassified the
+    /// IH prefix; the Architect blocked it at `evt_9krmbv834z9p`. There is
+    /// deliberately no `RecursiveIhBinder` arm here — see the walk.
+    CaseArgumentBinder { match_origin: StaticOriginId },
 }
 
 /// `RT-CONTSRC-PRODUCER-LOCAL` `D2` — the planner contract for one
@@ -5136,15 +5148,36 @@ fn producer_local_source(
             abi::result_carrier(SemanticSourceKind::Expression(RuntimeExprShape::Effect))?,
             occurrence_authority(plan, binding.binding_origin)?.lifetime,
         ),
-        ProducerLocalKind::MatchCaseBinder { match_origin } => {
+        ProducerLocalKind::CaseArgumentBinder { match_origin } => {
             let scrutinee = occurrence_authority(plan, match_origin)?
                 .children
                 .iter()
                 .find(|child| child.position == 0)
                 .ok_or_else(|| {
-                    planner_error("a match case binder names a match with no scrutinee child")
+                    planner_error("a case argument binder names a match with no scrutinee child")
                 })?;
-            (AbiCarrier::ValueWord, scrutinee.lifetime)
+            // ⭐ The carrier is READ, not chosen. A constructor argument binder
+            // preserves the scrutinee's representation — that is the existing
+            // result-phase rule, stated at the `Match` and `ComputationalMatch`
+            // arms of `summarize_result_phase` — so the binder's carrier is the
+            // carrier the scrutinee's result travels in, and `abi::result_carrier`
+            // is the sole authority for that. ⛔ This replaces the blanket
+            // `ValueWord` of `a5a6ce9b`, which was a `D2` invention.
+            let seed = plan
+                .semantic_sources
+                .iter()
+                .find(|seed| seed.origin == scrutinee.origin)
+                .ok_or_else(|| {
+                    planner_error("a case argument binder's scrutinee has no semantic seed")
+                })?;
+            let carrier = abi::result_carrier(seed.source)?;
+            // ⛔ Admissibility, from the same authority that gates an entry
+            // slot: a continuation source environment admits `ValueWord` and
+            // `GroundValueCarrier` and refuses every convention carrier. A
+            // scrutinee whose result travels in one fails closed HERE rather
+            // than being silently narrowed to an ordinary value word.
+            slot_referent_affinity(carrier)?;
+            (carrier, scrutinee.lifetime)
         }
     };
     Ok(ContinuationSourceSlotAuthority {
@@ -5288,7 +5321,7 @@ fn walk_continuation_value_environment(
                 for binder in 0..case.binders {
                     nested.push(producer_local_value(
                         plan,
-                        ProducerLocalKind::MatchCaseBinder {
+                        ProducerLocalKind::CaseArgumentBinder {
                             match_origin: origin,
                         },
                         case_body,
@@ -5323,15 +5356,39 @@ fn walk_continuation_value_environment(
                     .ok_or_else(|| {
                         planner_capacity_error("continuation case binder count exhausted")
                     })?;
-                // `D2` — same binding kind as the ordinary `Match` above; a
-                // computational case's argument and recursive binders are one
-                // ordered binder run, so the ordinal spans both.
+                // `D2` corrected — this case environment is
+                // `[recursive IH binders, constructor argument binders, outer
+                // environment]`, and the two runs are **not homogeneous**.
+                // `derive_occurrence_lifetime` gives every IH `ActivationOwned`
+                // and every argument binder the scrutinee's lifetime; the
+                // result-phase pass gives IHs a declared-unit-result contract
+                // and argument binders the scrutinee's representation.
+                //
+                // ⛔ The IH prefix stays `Open`. **No contract is claimed for
+                // it**, because none can be read: nothing maps a `ResultPhase`
+                // to an `AbiCarrier`; the IH's phase depends on
+                // `functionized_units`, a whole-plan argument that is not a
+                // field of `StaticTransitionPlan` and so is not edge-local; and
+                // an IH is a *callable*, whose continuation-input vocabulary
+                // (`BoundaryUseAvail::Callable`,
+                // `BoundaryUseNeed::PreserveCallableIdentity`) exists only under
+                // `#[cfg(test)]`. Leaving it `Open` is the pre-`D2` behaviour
+                // and refuses to claim what it cannot derive; a default carrier
+                // here is exactly what `evt_9krmbv834z9p` forbids.
+                //
+                // ⭐ The ordinal still spans the whole run, so identity stays
+                // `(case body, binder ordinal)` with no new tag.
                 let case_body = child(1 + index)?;
+                let recursive_binders = case.recursive_positions.len();
                 let mut nested = Vec::with_capacity(binders + environment.len());
                 for binder in 0..binders {
+                    if binder < recursive_binders {
+                        nested.push(ContinuationValueSourceAuthority::Open);
+                        continue;
+                    }
                     nested.push(producer_local_value(
                         plan,
-                        ProducerLocalKind::MatchCaseBinder {
+                        ProducerLocalKind::CaseArgumentBinder {
                             match_origin: origin,
                         },
                         case_body,
@@ -19662,6 +19719,134 @@ mod tests {
             panic!("expected a producer-local coordinate, got {:?}", source.coordinate);
         };
         (source, binding, locator)
+    }
+
+    /// A `ComputationalMatch` whose single case has **one recursive position
+    /// and one ordinary argument binder**, with a persistent scrutinee, and
+    /// whose case body is itself a `ComputationalMatch`.
+    ///
+    /// Walking to that inner occurrence lands exactly on the outer case's own
+    /// environment, which is the run this discriminator is about:
+    /// `[IH, argument, outer...]`.
+    fn contsrc_d2_ih_and_argument_case_fixture() -> RuntimeExpr {
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Contspec::Node".to_string(),
+                args: vec![unit(), unit()],
+            }),
+            cases: vec![RuntimeComputationalMatchCase {
+                constructor: "ctor:fixture::Contspec::Node".to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: contspec_parameter_match(RuntimeExpr::Var(3)),
+            }],
+            default: trap("d2 ih and argument"),
+        }
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D2` corrected — a `ComputationalMatch`
+    /// case run is `[IH, argument]` and the two subruns are NOT contracted
+    /// alike.**
+    ///
+    /// This is the discriminator `a5a6ce9b` lacked. That checkpoint looped over
+    /// the combined binder count and stamped one contract across both subruns;
+    /// its positive row targeted an inner `ComputationalMatch` but inspected
+    /// that occurrence's *incoming* environment, so it observed an outer
+    /// ordinary-`Match` binder and a host-effect result — never an IH.
+    ///
+    /// MEASURED: the outer case's environment is ordered
+    /// `[Open, producer-local argument binder, ...]`. The IH prefix carries no
+    /// contract at all; the argument binder carries the scrutinee's carrier and
+    /// lifetime. CLAIMED: the two subruns are contracted from their own
+    /// authorities, and the IH's is not invented. THE GAP: the IH's real
+    /// contract is not derived here — it is refused. That is the hard stop
+    /// reported with this correction, not a claim that `Open` is its answer.
+    ///
+    /// ⭐ **This rejects both stampings, which is the point.** Stamping the
+    /// argument contract across the run makes position 0 `Closed`; stamping the
+    /// IH treatment across it makes position 1 `Open`. The row asserts each
+    /// position's domain exactly, so either stamp reds it — and the two
+    /// assertions are what a single `binders`-wide loop cannot satisfy.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_d2_a_computational_case_run_separates_its_ih_prefix_from_its_arguments() {
+        let expr = Box::leak(Box::new(contsrc_d2_ih_and_argument_case_fixture()));
+        let plan = plan_static_transition_graph(expr, &BTreeMap::new())
+            .expect("the IH/argument fixture plans");
+        let mut computational = plan
+            .occurrence_authorities
+            .iter()
+            .map(|authority| authority.origin)
+            .filter(|origin| {
+                plan.planned_occurrence_expr(*origin)
+                    .is_ok_and(|expr| matches!(expr, RuntimeExpr::ComputationalMatch { .. }))
+            })
+            .collect::<Vec<_>>();
+        computational.sort();
+        let [outer, inner, ..] = computational.as_slice() else {
+            panic!("the fixture must contain an outer and an inner ComputationalMatch");
+        };
+        let reached = contsrc_d2_reached_environment(&plan, *inner);
+        assert!(
+            reached.len() >= 2,
+            "the walk must land on the outer case's own binder run: {reached:?}"
+        );
+
+        // ⛔ Position 0 is the recursive IH. No contract is claimed for it.
+        // Stamping the argument contract across the run would make this
+        // `Closed`, which is precisely the defect this row exists to catch.
+        assert_eq!(
+            reached[0],
+            ContinuationValueSourceAuthority::Open,
+            "the recursive IH prefix must carry NO contract; a producer-local value here is \
+             the a5a6ce9b misclassification"
+        );
+
+        // Position 1 is the ordinary constructor argument binder, contracted
+        // from the scrutinee. Stamping the IH treatment across the run would
+        // make this `Open`.
+        let (argument, binding, locator) = contsrc_d2_local(&reached[1]);
+        assert_eq!(
+            binding.binding_ordinal, 1,
+            "the ordinal must span the whole run so identity stays (case body, ordinal) \
+             with no new tag"
+        );
+        assert_eq!(binding.binding_origin, locator.environment_origin);
+        assert_eq!(locator.environment_index, 1);
+
+        // The contract is READ from the scrutinee, not chosen. The scrutinee is
+        // a constructor of persistent children, so its lifetime is persistent
+        // and its affinity is the two-element set -- which an IH's
+        // activation-owned treatment could not produce.
+        let scrutinee_lifetime = occurrence_authority(&plan, *outer)
+            .expect("the outer match has an occurrence authority")
+            .children
+            .iter()
+            .find(|child| child.position == 0)
+            .expect("the outer match has a scrutinee child")
+            .lifetime;
+        // ⛔ Non-vacuity: the fixture's scrutinee must actually be PERSISTENT.
+        // An activation-owned scrutinee would give the argument binder the same
+        // affinity an IH's activation-owned treatment produces, and the
+        // comparison below would hold for the wrong reason.
+        assert_eq!(
+            scrutinee_lifetime,
+            PlannedReferentLifetime::Persistent,
+            "the discriminator needs a persistent scrutinee, or the affinity assertion cannot \
+             tell a scrutinee-derived contract from a stamped activation-owned one"
+        );
+        assert_eq!(
+            argument.referent_affinity,
+            lifetime_referent_affinity(scrutinee_lifetime),
+            "the argument binder's affinity must be the scrutinee's, not a stamped constant"
+        );
+        assert_eq!(
+            argument.ownership,
+            argument.carrier.ownership(),
+            "ownership must remain the carrier's projection"
+        );
+        assert_eq!(argument.storage_owner, argument.carrier.storage_owner());
     }
 
     /// **`RT-CONTSRC-PRODUCER-LOCAL` `D2` — both binding kinds are populated as

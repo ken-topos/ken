@@ -13,7 +13,8 @@ also the only site that can supply a locator.
 | kind | minted at | `binding_origin` | `binding_ordinal` | `locator.environment_origin` | `locator.environment_index` |
 |---|---|---|---|---|---|
 | host-effect result | the `Let` whose bound value is an `Effect` | the `Effect` occurrence | `0` | the `Let`'s **body** | `0` |
-| `Match` case binder | the `Match` / `ComputationalMatch` case descent | the **case body** occurrence | the binder's index | the same case body | the binder's index |
+| constructor **argument** binder | the `Match` / `ComputationalMatch` case descent | the **case body** occurrence | the binder's index | the same case body | the binder's index |
+| recursive **IH** binder | ⛔ not minted — stays `Open`, see the correction below | — | — | — | — |
 
 **The two origins differ for the effect result and coincide for the case
 binder, and that is the separation `D1` exists to express.** An `Effect`
@@ -40,21 +41,28 @@ differ per kind; ownership and storage owner are read off `AbiCarrier`'s
 existing methods — the same two the entry plane's `abi::slot` reads — so this
 record **cannot disagree with the entry plane** about what a carrier implies.
 
-| fact | host-effect result | `Match` case binder |
+| fact | host-effect result | constructor argument binder |
 |---|---|---|
-| carrier | `abi::result_carrier` on the `Effect` shape | ⚠ `ValueWord`, derived here |
+| carrier | `abi::result_carrier` on the `Effect` shape | `abi::result_carrier` on the **scrutinee's** shape |
 | ownership | `AbiCarrier::ownership` | `AbiCarrier::ownership` |
 | storage owner | `AbiCarrier::storage_owner` | `AbiCarrier::storage_owner` |
 | referent affinity | the `Effect` occurrence's own lifetime authority | the scrutinee child's lifetime authority |
 
-⚠ **The one fact no prior authority stated, flagged rather than buried.** A case
-binder is not an occurrence's *result*, so `result_carrier` — whose contract is
-"the carrier an occurrence's result travels in" — does not answer for it, and
-nothing else did either. `ValueWord` is this plane's carrier for an ordinary
-in-body Ken value: it is what `result_carrier` assigns every expression shape
-that is not `Trap` or `ImportedDeclarationRef`, and a binder is exactly that.
-**This is a `D2` derivation, not a pre-existing reading**, and it is the single
-item in this deliverable that wants the Architect's eye.
+⭐ **The argument binder's carrier is read, not chosen.** A constructor argument
+binder *preserves the scrutinee's representation* — that is the existing
+result-phase rule, stated at both the `Match` and `ComputationalMatch` arms of
+`summarize_result_phase` — so the binder's carrier is the carrier the
+scrutinee's result travels in, and `abi::result_carrier` is the sole authority
+for that. The carrier is then put through `slot_referent_affinity`, the same
+admissibility gate an entry slot passes: a continuation source environment
+admits `ValueWord` and `GroundValueCarrier` and refuses every convention
+carrier, so a scrutinee whose result travels in one **fails closed** rather than
+being silently narrowed.
+
+⚠ **The first version of this deliverable (`a5a6ce9b`) asserted a blanket
+`ValueWord` for "a case binder" instead.** That was a `D2` invention, and the
+Architect blocked it at `evt_9krmbv834z9p`. It is replaced by the reading
+above.
 
 ⭐ **The binder's referent lifetime is not conservatively floored, because it
 does not have to be.** `PlannedReferentLifetime::Persistent` is issued only when
@@ -67,6 +75,84 @@ The derivation is measured to be per-binding rather than stamped: on the control
 fixture the case binder's scrutinee is persistent and the effect result is
 activation-owned, so the two affinities **differ**. A single hardcoded affinity
 — the easiest wrong implementation — reds that assertion.
+
+## The correction: a case run is not homogeneous, and the IH half is a hard stop
+
+**The defect in `a5a6ce9b`.** A `ComputationalMatch` case environment is
+
+```
+[ recursive IH binders, constructor argument binders, outer environment ]
+```
+
+and the two runs are **not** contracted alike. `derive_occurrence_lifetime`
+gives every IH `ActivationOwned` and every argument binder the *scrutinee's*
+lifetime; `summarize_result_phase` gives IHs a declared-unit-result contract
+(`carrier()` or `SPECIALIZED`, on `functionized_units`) and argument binders the
+scrutinee's representation. `a5a6ce9b` looped over the combined count and
+stamped one contract across both, silently misclassifying the IH prefix.
+
+**The correction.** The loop now splits at `recursive_positions.len()`. The
+ordinal still spans the whole run, so the identity stays `(case body, binder
+ordinal)` with no new tag and no new enum arm. Arguments get the scrutinee-read
+contract above.
+
+**The IH prefix stays `Open` — no contract is claimed for it.** Three
+independent reasons, each measured in the current source rather than argued:
+
+1. **No `ResultPhase` → `AbiCarrier` map exists anywhere.** The two vocabularies
+   are disjoint by construction: `ResultPhase` records a *representation phase*
+   and `AbiCarrier` records an *ABI transport*. `slot_referent_affinity` — the
+   authority for which carriers a continuation source environment admits —
+   accepts `ValueWord` and `GroundValueCarrier` and refuses the rest, and
+   nothing proves an IH is either of those two.
+2. **The IH's phase is not edge-local.** It is `carrier()` or `SPECIALIZED`
+   depending on `functionized_units`, which is a whole-plan argument to
+   `plan_static_transition_graph_with_symbols` and is **not a field of
+   `StaticTransitionPlan`**. So `(case body, ordinal)` does not determine the IH
+   contract, and the walk cannot reach the fact that would.
+3. **An IH is a callable, and the continuation-input vocabulary for a callable
+   is `#[cfg(test)]`-only.** `BoundaryUseAvail::Callable` and
+   `BoundaryUseNeed::PreserveCallableIdentity` exist solely as test mutations;
+   every production projection is `Value` / `PreserveValue`. Representing an IH
+   as a continuation source would need those promoted to production, which is an
+   additional boundary-use authority.
+
+⛔ Leaving it `Open` is **not** choosing a default carrier — it is declining to
+represent, which is the pre-`D2` behaviour and preserves every edge's verdict.
+Picking any of `ValueWord`, `ResultWord`, or a new variant is what
+`evt_9krmbv834z9p` forbids.
+
+### The discriminator
+
+`contsrc_d2_a_computational_case_run_separates_its_ih_prefix_from_its_arguments`
+uses a case with **one recursive position, one ordinary argument binder and a
+persistent scrutinee**, and walks to an inner `ComputationalMatch` so it lands
+on that case's **own** binder run.
+
+⚠ The `a5a6ce9b` positive could not have caught this: it targeted an inner
+`ComputationalMatch` but inspected that occurrence's *incoming* environment, so
+it observed an outer ordinary-`Match` binder and a host-effect result and never
+an IH at all.
+
+It asserts position 0 is exactly `Open` and position 1 is exactly the
+producer-local argument binder with the scrutinee's affinity — so **either
+stamping reds it**, which is the property the Architect asked for:
+
+| mutation | result |
+|---|---|
+| stamp the argument contract across both subruns (the `a5a6ce9b` loop) | **red** — position 0 becomes `Closed` |
+| stamp the IH treatment across both subruns | **red** — position 1 becomes `Open` |
+
+Both were run. Only this row reds, which is what makes it a discriminator rather
+than a smoke test.
+
+⛔ The row also asserts the scrutinee's lifetime **is** `Persistent`. An
+activation-owned scrutinee would give the argument binder the same affinity an
+IH's activation-owned treatment produces, and the comparison would then hold for
+the wrong reason.
+
+The `a5a6ce9b` outer-`Match`/effect fixture is retained unchanged for the
+host-effect result, the locator/binding split, and the admission mutations.
 
 ## Represented, not admitted
 
