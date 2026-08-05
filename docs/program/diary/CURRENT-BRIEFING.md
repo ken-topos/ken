@@ -33,25 +33,27 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~08:4xZ · `D2` COMPLETE; `D4` is set equality; `D3` out
+## LIVE — 2026-08-05 ~09:0xZ · `D2` REOPENED as availability; `D3` held
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Nothing — `D3` is in flight.** Next expected event is the `D3` report.
-**`D4`, candidate, QA, `D6` closure, `#27`/case-emission, the call-result SCC
-and downstream `D7` all remain held.** WIP clock: derive it from the latest
-reset event in the thread, never from a stamped deadline.
+**Release `D2b` — the immediate-availability projection — then `D3`.** The
+Architect ruled at `evt_44k69b55vhek2` that this belongs **inside this node**;
+⛔ no new node. **`D3`, `D4`, candidate, QA, `D6` closure, `#27`/case-emission,
+the call-result SCC and downstream `D7` all remain held.** WIP clock: derive it
+from the latest reset event in the thread, never from a stamped deadline.
 
 ### Where the node stands
 
 | deliverable | state |
 |---|---|
 | `D0` `12d9612a` (zero delta), `D1` `77a24320` | accepted `evt_5zkydewv5kspb` |
-| `D2` | **COMPLETE at exact `e6d4f085`**, Architect gate `evt_38yd5sd1ht0kk` |
-| `D3` | released, in flight |
+| `D2` identity + value contract | accepted preservation at exact `e6d4f085` |
+| `D2b` immediate availability | **NEW and REOPENED** — `evt_44k69b55vhek2` |
+| `D3` | **HELD behind `D2b`** — released 08:41Z, hard-stopped 08:49Z |
 | `D4` | recut as SET EQUALITY, held |
 
 **`D2`'s route was blocked once and corrected twice, and both stops were
@@ -84,6 +86,36 @@ nothing claims a future authority cannot represent them.
 ⛔ **The program fingerprint is load-bearing.** `StaticOriginId`s are per-compile,
 so without it edges from different fixtures collide and the census silently
 undercounts: a first pass reported 58 identities of which six were collisions.
+
+### `D2b` — why `D3` hard-stopped, and it is MY frame this time
+
+`D3` reached the real emission seam and measured that **a producer-local value
+has no member in the run the seam indexes.** Resolving its arm would need one of
+three exits this node bans: widening the emitting function's input ABI run,
+giving the seam a second non-ABI environment, or reusing a convention slot.
+
+⛔ **The root cause is a `D1` clause I wrote.** It promised "an exact
+emission-time locator into the environment that actually contains it" and
+**never said which environment**. `D2` read it as the semantic environment and
+populated a scope-relative `(environment_origin, environment_index)`; the seam
+indexes a different space. **A load-bearing term left spanning two coordinate
+spaces** — a different defect class from this campaign's earlier four, which
+were false laws. Nobody could have discharged it as written. `D1`'s wording is
+now corrected in place.
+
+⛔ **Do not pin "`producer_env` is always the ABI operand run."** The Architect's
+precision correction: the 61 records prove the **currently admitted** population
+only, and there are **two** consumers — the retained-frame seat passes the
+current `LoweringEnvironmentBinding` run, the detached/generated-context seats
+read a function-local ABI operand run.
+
+⭐ **The implementer withheld six of nine consumer sites** rather than land a
+partial that would leave the seam no longer naming its own remaining work. That
+is now frame law: no partial `D3`. It also **withdrew its own parity remark**
+unprompted — it had reverted the probe while the parity run was in flight, so
+the empty result could not distinguish "no parity emission reaches this seam"
+from "the probe was not compiled in". An absence presented as corroboration,
+caught and retracted by its author before anyone read the stop through it.
 
 ### The lesson from my own fork, because it will recur
 
