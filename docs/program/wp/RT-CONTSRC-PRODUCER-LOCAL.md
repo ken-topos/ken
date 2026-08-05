@@ -864,7 +864,101 @@ all six failing `D0` rows.
   existing one. That is substrate expansion, the Architect's to authorize, and
   must not be discovered mid-repair.
 
-  ##### `D5a` is CUT into two checkpoints (Steward, 2026-08-05, `evt_62ee5f2dvmvp1`)
+  ##### GOVERNING — `D5a-1`/`D5a-2` are SPENT; the work is `D6a`/`D6b`/`D6c`
+
+  **Architect ruling `evt_760m5azkrdrzq`, 2026-08-05.** Everything in the
+  `D5a-1`/`D5a-2` subsection below is **refuted**. Those two labels are spent:
+  their text names a mechanism the measurement disproved, so do not implement
+  from them and do not reuse the labels. **Hold exact `e27d297a`.**
+
+  **The law in this frame was FALSE and is corrected.** The semantic case
+  environment is `[IHs, ALL constructor arguments in source order, outer
+  frame]`. For the governed case: `[IH, ScopeArgument, BufferAllocate success
+  payload]`. The functionized construction **replaces the selected recursive
+  argument with its IH** — that is the defect. Source comments carry the same
+  false law and are the implementer's to correct.
+
+  **Three things are refuted, and each would have gone green:**
+
+  | refuted | why |
+  |---|---|
+  | the Steward's *"new member at ordinal 2, not 3"* | it is `ScopeArgument` at ordinal **1**; `ContinuationInput(0)` moves to 2. At ordinal 2, `Var(2)` still resolves to a success payload while `Var(1)` is silently wrong |
+  | the continuation-input projection | `ContinuationInput(0)` **already is** the outer success binder with exact case-body provenance (origin 45's `Result::Ok` body **is** the `ComputationalMatch` at 50); `required_input_count` is already 1. A second input is the banned fabricated availability |
+  | a new `ContinuationOrdinaryEnvelopeRole` + ABI `Parameter(ValueWord)` | that envelope is the exact runtime Parameter-slot run. The selected recursive argument is a **closure capsule** with no lawful `ValueWord` representation, deliberately non-transferable. Widening `ordinary_parameters` reintroduces the closure-boundary violation under a new name |
+
+  **Authorized representation.** One explicit **compiler-only unit-environment
+  member** for the selected recursive constructor argument, derived from the
+  unit's already-exact `recursive_position` and `ContinuationWorkerProvenance`.
+  ⛔ It is **not** a new source occurrence, continuation input, ABI slot,
+  carrier, tag, or runtime descriptor. It is installed as a compiler-only
+  static-worker binding built from the same exact closure occurrence, body,
+  arity and ordered capture provenance the unit already carries; its captures
+  remain the existing transported worker-capture operands. **The closure capsule
+  does not cross the ABI.**
+
+  Closed binder plan: (1) one IH member for the selected recursive position;
+  (2) one constructor-argument member for **every** source position —
+  nonrecursive through the existing ordinary envelope, the selected recursive
+  one through the new typed member; (3) the existing continuation-input run
+  **unchanged**. Exact run for the governed row:
+
+  ```
+  InductionHypothesis
+  SelectedRecursiveArgument { source_position: recursive_position }
+  ContinuationInput(0)
+  ```
+
+  **The call-route distinction is load-bearing.** The two compiler-only
+  bindings share source closure/body provenance but name different call
+  semantics: the **IH** calls the exact generated continuation context and
+  appends that context's continuation-input suffix; the **selected recursive
+  argument** calls the exact raw worker and appends **no** suffix. The current
+  body-origin-only `worker_calls` lookup and `generated_context_captures` guard
+  **cannot distinguish them**. A closed compiler-only call-route discriminator
+  is authorized, keyed to the planner-issued raw-body versus generated-context
+  target; it may live on the static-worker binding and in the function-local
+  declared-call table. ⛔ It must **not** be inferred from body shape, arity,
+  use site, environment length, or which target is available, and no `FuncRef`
+  may cross a function boundary.
+
+  ⇒ This **narrows** the old statement that `StaticWorkerBinding` carries no
+  call identity: it still carries no runtime callable value, but it must carry
+  the compiler-only exact call route that separates these two lawful bindings.
+
+  ###### The cut: `D6a`, `D6b`, `D6c`
+
+  Sized for one turn each. This is a planner/lowering **representation
+  expansion**, so it is three checkpoints, not one — the same mis-sizing that
+  spent `D5a` twice.
+
+  **`D6a` — representation only.** The `SelectedRecursiveArgument` typed member
+  with its derivation from `recursive_position` + `ContinuationWorkerProvenance`,
+  **and** the closed call-route discriminator. Both are what the plan *says*;
+  ⛔ no lowering consumption in this turn.
+
+  **`D6b` — consumption and the positive.** Lowering consumes both members.
+  Governed positive: `Var(0)` is the IH, `Var(1)` is the exact `ScopeArgument`,
+  `Var(2)` is the existing `BufferAllocate` success payload, and execution
+  advances to the original `D4a` boundary. Plus the **discriminating control**:
+  the IH and the selected argument used as **different callees**, so aliasing
+  both to the generated context cannot pass. ⚠ Assert the **whole run**, never
+  `Var(2)` alone — a wrong ordinal passes a `Var(2)`-only positive.
+
+  **`D6c` — the refusal set, pre-emission.** Refuse on omission, duplicate,
+  wrong source position, wrong closure/body, wrong capture run, wrong order,
+  fabricated availability, or cross-routing the raw and IH targets. Plus:
+  exactly one selected-recursive-argument member for the unit's exact recursive
+  position and worker provenance; exact binder-run cardinality `IH count +
+  argument_binders + continuation_inputs`; no added ABI Parameter/Capture/Result
+  slot and unchanged continuation-input count; raw-route versus
+  generated-context-route exactness, including **suffix presence only on the IH
+  route**.
+
+  **Preserved, unchanged:** the existing hard stop for any additional recursive
+  position for which the unit projects no worker. ⛔ Do **not** generalize this
+  ruling into a multi-worker population.
+
+  ##### SPENT — `D5a` cut into `D5a-1`/`D5a-2` (Steward, `evt_62ee5f2dvmvp1`). REFUTED, see above.
 
   **The hard stop above is ANSWERED: no.** The representation already exists —
   `ContinuationCaseBinderSource::ContinuationInput` at `lowering/units.rs:1022`,
