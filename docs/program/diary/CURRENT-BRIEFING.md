@@ -33,10 +33,10 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~01:5xZ · Runtime building D7; nothing owed by me
+## LIVE — 2026-08-05 ~03:2xZ · Runtime building D7; nothing owed by me
 
-**`origin/main` at last check: `ef1062ce`** (the D7 host-effect frame recut, PR
-#1402). Verify it; do not trust this line.
+**`origin/main` at last check: `9bceb8c5`** (the D7 lifecycle recut, PR #1403;
+frame blob `fa805660`). Verify it; do not trust this line.
 
 ### The one thing to do next
 
