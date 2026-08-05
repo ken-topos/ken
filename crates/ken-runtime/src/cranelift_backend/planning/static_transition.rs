@@ -5815,6 +5815,41 @@ fn build_continuation_specialization_plan(
                         discovery.continuation_origin,
                     )?
                     else {
+                        // ⛔⛔ **`D7` checkpoint `1c` HARD STOP -- this `continue`
+                        // is the omission site, and it is NOT closed.**
+                        //
+                        // The candidate above is already a derived
+                        // recursive-position worker with a built provenance.
+                        // Dropping it here removes it from the `#26`
+                        // result-flow population, so its closure has nothing to
+                        // be claimed by and reaches the late generic `Closure`
+                        // arm -- which is exactly the fall-through the frame's
+                        // matrix-omission law forbids, and exactly the framed
+                        // witness (closure `381` / body `375`, `Vis` parent
+                        // `386`, constructor-field position `1`).
+                        //
+                        // ⛔ **Refusing here with existing authority is not
+                        // possible, and that is a measurement, not a
+                        // preference.** Scoping the refusal to a real planned
+                        // member -- the only planner-issued discriminator there
+                        // is, `AbiUnitDefinition::ClosureBody`'s defining
+                        // occurrence -- reds 23 green `ken-runtime` fixtures.
+                        // Every one of them is in the SAME state as the witness:
+                        // a real member, at a recursive position of an exact
+                        // continuation producer, declined for an open source
+                        // value environment, with zero interned
+                        // specializations. The one candidate that IS separable
+                        // -- `contspec_open_and_ambiguous_sources_refuse_only_
+                        // the_candidate`'s closure `13`, declined on one edge
+                        // and interned on another -- is separable by a test that
+                        // does not separate the other twenty-two.
+                        //
+                        // ⇒ The narrowing that would admit the green fixtures
+                        // and refuse `381` needs a predicate this plane does not
+                        // have. The frame calls a third production predicate a
+                        // hard stop; the concrete edge is returned instead of
+                        // widened. The member-population law below IS enforced,
+                        // and it is the converse direction of the same law.
                         continue;
                     };
                     let emission_owner = match discovery.enclosing_specialization {
@@ -6051,6 +6086,238 @@ fn validate_continuation_specialization_closure(
         return Err(planner_error(
             "continuation planned-edge closure does not reach every unit",
         ));
+    }
+    Ok(())
+}
+
+/// **`cfg(test)`-only corruption of the planned static-worker MEMBER
+/// population** — the two compile-valid ways a real member goes missing.
+///
+/// ⭐ Two settings and not one, because a member can be wrong by **not being
+/// there** and by **being there as something else**, and neither mutation
+/// produces the other's plan. `Reclassify` is the one a positive assertion is
+/// most likely to agree with by accident: the unit is still present, still
+/// declared, still has a function, and only its definition arm says it is not
+/// this worker's body.
+///
+/// ⛔ Applied to the descriptor population **after** it is derived and
+/// **before** the plan validates, so what is measured is a planner refusal on a
+/// real plan state -- not a checker fed a hand-built argument.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StaticWorkerMemberMutation {
+    Exact,
+    /// Drop the emittable unit that defines the planned member's body.
+    OmitMember,
+    /// Keep the unit, but define it as a scheduling entry instead.
+    ReclassifyMember,
+    /// Keep the unit and its arm, but attribute it to a different closure.
+    RedirectDefiningOccurrence,
+    /// Keep the member exactly where it is, and change the contract it declares.
+    MisdeclareMemberContract,
+}
+
+#[cfg(test)]
+thread_local! {
+    static STATIC_WORKER_MEMBER_MUTATION: std::cell::Cell<StaticWorkerMemberMutation> =
+        const { std::cell::Cell::new(StaticWorkerMemberMutation::Exact) };
+}
+
+/// Run `body` with the planned static-worker member population corrupted.
+///
+/// ⛔ No restore-on-unwind guard: a panic inside the scope is the fixture
+/// failing, the cell is thread-local, and Rust runs each test on its own
+/// thread, so a panicking row cannot leak the setting into a sibling.
+#[cfg(test)]
+fn with_static_worker_member_mutation<R>(
+    mutation: StaticWorkerMemberMutation,
+    body: impl FnOnce() -> R,
+) -> R {
+    STATIC_WORKER_MEMBER_MUTATION.with(|cell| cell.set(mutation));
+    let result = body();
+    STATIC_WORKER_MEMBER_MUTATION.with(|cell| cell.set(StaticWorkerMemberMutation::Exact));
+    result
+}
+
+/// Corrupt the emittable unit that defines the FIRST planned specialization's
+/// worker body, leaving every other unit -- including every `ClosureBody` that
+/// no specialization names -- exactly as the planner derived it.
+///
+/// ⭐ Scoped to the exact member on purpose. A mutation that swept every
+/// `ClosureBody` would red under this law and under nothing else, and would
+/// therefore be unable to show that ordinary closures are untouched by it.
+#[cfg(test)]
+fn apply_static_worker_member_mutation(plan: &mut StaticTransitionPlan<'_>) {
+    let mutation = STATIC_WORKER_MEMBER_MUTATION.with(std::cell::Cell::get);
+    if mutation == StaticWorkerMemberMutation::Exact {
+        return;
+    }
+    let Some(specialization) = plan.continuation_specializations.first() else {
+        return;
+    };
+    let closure_origin = specialization.key.worker.closure_origin;
+    let defines_member = |definition: &AbiUnitDefinition| {
+        matches!(
+            definition,
+            AbiUnitDefinition::ClosureBody { defining_origin, .. }
+                if *defining_origin == closure_origin
+        )
+    };
+    match mutation {
+        StaticWorkerMemberMutation::Exact => {}
+        StaticWorkerMemberMutation::OmitMember => {
+            plan.abi
+                .descriptors
+                .retain(|descriptor| !defines_member(&descriptor.definition));
+        }
+        StaticWorkerMemberMutation::ReclassifyMember => {
+            for descriptor in &mut plan.abi.descriptors {
+                if defines_member(&descriptor.definition) {
+                    descriptor.definition = AbiUnitDefinition::SchedulingEntry {
+                        ingress: AbiSchedulingIngress::Empty,
+                    };
+                }
+            }
+        }
+        StaticWorkerMemberMutation::RedirectDefiningOccurrence => {
+            for descriptor in &mut plan.abi.descriptors {
+                if defines_member(&descriptor.definition) {
+                    if let AbiUnitDefinition::ClosureBody {
+                        defining_origin, ..
+                    } = &mut descriptor.definition
+                    {
+                        *defining_origin = StaticOriginId(defining_origin.0.wrapping_add(1));
+                    }
+                }
+            }
+        }
+        StaticWorkerMemberMutation::MisdeclareMemberContract => {
+            for descriptor in &mut plan.abi.descriptors {
+                if defines_member(&descriptor.definition) {
+                    descriptor.header.parameters = descriptor.header.parameters.wrapping_add(1);
+                }
+            }
+        }
+    }
+}
+
+/// Whether an emittable unit names this closure occurrence as its defining
+/// occurrence -- the planner's own answer to *"is this a real static-worker
+/// member?"*.
+///
+/// ⛔ Keyed on the DEFINING OCCURRENCE, not on the worker's body origin.
+/// Measured: those are different coordinates. A specialization's
+/// `worker.body_origin` is the closure's child-0 occurrence, while an
+/// `AbiDescriptor::origin` is the unit's seed -- the target of the closure's
+/// `StaticBody` edge. They coincide only when a body's occurrence is also its
+/// scheduling entry, and the `px8j` fixture is a live counter-example (closure
+/// `29` names body `18`; its unit's origin is `28`). Joining on them produced a
+/// false planning refusal on a green fixture.
+fn closure_defines_a_planned_member(
+    plan: &StaticTransitionPlan<'_>,
+    closure_origin: StaticOriginId,
+) -> bool {
+    plan.abi.descriptors.iter().any(|descriptor| {
+        matches!(
+            descriptor.definition,
+            AbiUnitDefinition::ClosureBody { defining_origin, .. }
+                if defining_origin == closure_origin
+        )
+    })
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` checkpoint `1c` — THE MATRIX-OMISSION LAW, at
+/// the planning boundary.**
+///
+/// ⭐⭐ **A real planned static-worker member that is omitted or misclassified
+/// must red HERE.** The frame states the law directly: such a member *"must FAIL
+/// IN PLANNING, and may NOT fall through to the late generic `Closure`
+/// refusal."* Checkpoint 1's
+/// `validate_retained_callable_capture_contract` is a **pre-emission** gate --
+/// correct, and later than the law. It also treats `worker_templates`
+/// membership as necessary and insufficient, which is exactly right and exactly
+/// why it cannot be this check: **every** emittable body is in that map, so
+/// membership does not distinguish an exact member from an ordinary closure.
+///
+/// ⭐ **The discriminator is the specialization population, and it already
+/// exists.** Measured on the linked row: four `ClosureBody` units, and exactly
+/// one of them named by a `ContinuationSpecialization`'s worker. That one is the
+/// exact planner-proved member; the other three are ordinary closures which the
+/// frame says must *still* reach the generic arm. So the law's subject is
+/// precisely "named by a specialization", and its obligation is that the unit
+/// population contain that member, defined by that closure, under that contract.
+///
+/// ⛔ **Nothing is minted and nothing is widened.** Both sides are populations
+/// the planner already closed: `continuation_specializations`, whose worker
+/// provenance names `(closure_origin, body_origin, declared_arity, captures)`,
+/// and `abi.descriptors`, whose `ClosureBody` arm already records its
+/// `defining_origin`. This is a cross-population closure over two existing
+/// derivations -- the same shape as the substrate-preallocation closure beside
+/// it -- not a new identity, lane, disposition or ABI field.
+///
+/// ⛔ **The join is on the DEFINING CLOSURE OCCURRENCE, not on the worker's body
+/// origin, and that correction was measured rather than reasoned.** A
+/// specialization's `worker.body_origin` is the closure's child-`0` occurrence;
+/// an `AbiDescriptor::origin` is the unit's seed, the target of the closure's
+/// `StaticBody` edge. They coincide only when a body's occurrence is also its
+/// scheduling entry. Joining on them refused the green `px8j` fixture, whose
+/// closure `29` names body `18` while its unit's origin is `28`.
+///
+/// The two ways the member can be wrong, named separately:
+///
+/// | failure | what it means |
+/// |---|---|
+/// | no emittable unit defines this worker's closure | the member is **omitted or misclassified**: it is gone, it is not a closure body, or it belongs to another closure -- one fact to a join on the defining occurrence |
+/// | the unit's declared parameters/captures disagree with the worker | the member is present, correctly classified and correctly attributed, under a **different contract** than the specialization was interned against |
+///
+/// ⛔⛔ **This is the CONVERSE direction of the frame's law, and it does not
+/// close the framed gap.** It says every interned specialization has its member.
+/// The framed witness is the other direction -- a real member with *no*
+/// specialization at all -- and its omission site is the declined candidate in
+/// `build_continuation_specialization_plan`, which carries the hard stop. Read
+/// that comment before treating this as the whole of `1c`.
+fn validate_static_worker_member_population(
+    plan: &StaticTransitionPlan<'_>,
+) -> Result<(), CraneliftBackendError> {
+    for specialization in &plan.continuation_specializations {
+        let worker = &specialization.key.worker;
+        // Uniqueness is checked HERE rather than over the whole descriptor
+        // population, because the law's subject is this member. A global
+        // duplicate sweep would be a different, broader claim about the ABI
+        // plane, and asserting it from this function would make a failure
+        // report the wrong cause.
+        let mut members = plan.abi.descriptors.iter().filter(|descriptor| {
+            matches!(
+                descriptor.definition,
+                AbiUnitDefinition::ClosureBody { defining_origin, .. }
+                    if defining_origin == worker.closure_origin
+            )
+        });
+        let Some(member) = members.next() else {
+            return Err(planner_error(
+                "a planned continuation specialization names a static-worker closure that no \
+                 emittable unit defines, so the exact member is omitted from the planned \
+                 population and that closure could only reach the generic closure arm",
+            ));
+        };
+        if members.next().is_some() {
+            return Err(planner_error(
+                "two emittable units define one static-worker closure occurrence, so the planned \
+                 specialization could not name either member unambiguously",
+            ));
+        }
+        if member.header.parameters != worker.declared_arity {
+            return Err(planner_error(
+                "a planned static-worker member declares a different parameter count than the \
+                 specialization interned against it",
+            ));
+        }
+        if member.header.captures as usize != worker.captures.len() {
+            return Err(planner_error(
+                "a planned static-worker member declares a different capture count than the \
+                 specialization interned against it",
+            ));
+        }
     }
     Ok(())
 }
@@ -7024,6 +7291,8 @@ impl<'src> Planner<'src> {
         // representation, which does not exist until that line.
         self.plan.host_effect_seats = build_host_effect_seat_plan(&self.plan)?;
         validate_host_effect_seat_plan(&self.plan, &self.plan.host_effect_seats)?;
+        #[cfg(test)]
+        apply_static_worker_member_mutation(&mut self.plan);
         self.plan.validate()?;
         Ok(self.plan)
     }
@@ -9144,6 +9413,21 @@ impl<'src> StaticTransitionPlan<'src> {
     }
 
     fn validate(&self) -> Result<(), CraneliftBackendError> {
+        // ⭐⭐ **`D7` checkpoint `1c` runs FIRST, and the position is argued.**
+        //
+        // Measured: dropping the member's descriptor is ALSO caught downstream,
+        // by the ABI plane's "descriptor population is not exact for the
+        // function unit partition". That refusal is true, is in planning, and
+        // names neither the member nor the law -- it reports a population size
+        // where the cause is a specific worker the specialization population
+        // still points at.
+        //
+        // ⛔ Running first preempts that check **only in the case this law is
+        // about**: a descriptor no specialization names still reaches the
+        // partition check unchanged, because this law never looks at it. A
+        // narrow, correctly-attributed refusal ahead of a broad one is the
+        // whole reason for stating the law separately.
+        validate_static_worker_member_population(self)?;
         if self.entries.is_empty() {
             return Err(planner_error("closed graph has no entry"));
         }
@@ -18915,6 +19199,211 @@ mod tests {
             )
             .unwrap_err(),
             planner_error("continuation edge token disagrees with its exact target")
+        );
+    }
+
+    // -- `D7` checkpoint `1c`: the matrix-omission law, in PLANNING ----------
+    //
+    // ⭐⭐ The law is that a real planned static-worker member which is omitted
+    // or misclassified must fail HERE, and may not fall through to the late
+    // generic `Closure` arm. Its two halves are measured separately: an exact
+    // member's absence or reclassification must red in planning, and an
+    // ORDINARY closure -- one outside any planner-proved edge -- must be
+    // untouched by it.
+
+    /// One closure shape, used twice: once in the recursive-position seat where
+    /// the planner proves an exact edge, and once as an ordinary `Let` binder
+    /// where it proves nothing.
+    ///
+    /// ⭐⭐ **Same shape on purpose.** The frame's scoping sentence is about *the
+    /// same closure* outside an exact planner-proved edge, so a fixture whose
+    /// two closures differed in arity or capture count could satisfy the law by
+    /// telling them apart on shape rather than on membership -- and would say
+    /// nothing about the property.
+    fn d7_1c_member_and_ordinary_twin_fixture() -> RuntimeExpr {
+        let twin = || RuntimeExpr::LexicalClosure {
+            captures: vec![unit()],
+            params: vec!["twin".to_string()],
+            body: Box::new(RuntimeExpr::Construct {
+                constructor: "ctor:fixture::Contspec::Leaf".to_string(),
+                args: Vec::new(),
+            }),
+        };
+        RuntimeExpr::Let {
+            // The ordinary twin. Nothing proves an edge into it, so no
+            // specialization names it and the law must not demand one.
+            value: Box::new(twin()),
+            body: Box::new(RuntimeExpr::ComputationalMatch {
+                scrutinee: Box::new(RuntimeExpr::Construct {
+                    constructor: "ctor:fixture::Contspec::Node".to_string(),
+                    args: vec![twin()],
+                }),
+                cases: vec![
+                    crate::RuntimeComputationalMatchCase {
+                        constructor: "ctor:fixture::Contspec::Node".to_string(),
+                        argument_binders: 1,
+                        recursive_positions: vec![0],
+                        body: RuntimeExpr::Var(0),
+                    },
+                    crate::RuntimeComputationalMatchCase {
+                        constructor: "ctor:fixture::Contspec::Leaf".to_string(),
+                        argument_binders: 0,
+                        recursive_positions: Vec::new(),
+                        body: unit(),
+                    },
+                ],
+                default: RuntimeTrap {
+                    code: RuntimeTrapCode::PatternMatchFailure,
+                    message: "d7 1c twin fixture".to_string(),
+                },
+            }),
+        }
+    }
+
+    /// The members a plan's specialization population names, and the
+    /// `ClosureBody` units it does not.
+    fn d7_1c_member_and_ordinary_body_counts(plan: &StaticTransitionPlan<'_>) -> (usize, usize) {
+        let members = plan
+            .continuation_specializations
+            .iter()
+            .map(|specialization| specialization.key.worker.body_origin)
+            .collect::<BTreeSet<_>>();
+        let ordinary = plan
+            .abi
+            .descriptors
+            .iter()
+            .filter(|descriptor| {
+                matches!(descriptor.definition, AbiUnitDefinition::ClosureBody { .. })
+                    && !members.contains(&descriptor.origin)
+            })
+            .count();
+        (members.len(), ordinary)
+    }
+
+    /// **The positive control and the scoping half in one measurement.**
+    ///
+    /// ⭐ The scoping assertion is what stops this law from being "every closure
+    /// body needs a specialization". That reading would also make every mutation
+    /// row below red, so the rows alone cannot distinguish the two -- only a
+    /// plan that carries an ordinary `ClosureBody` and still closes can.
+    #[test]
+    fn d7_1c_the_member_population_closes_and_ordinary_closures_are_outside_it() {
+        let expr = d7_1c_member_and_ordinary_twin_fixture();
+        let plan = plan_static_transition_graph(&expr, &BTreeMap::new())
+            .expect("the twin fixture plans, with the member law in force");
+        let (members, ordinary) = d7_1c_member_and_ordinary_body_counts(&plan);
+        assert!(
+            members >= 1,
+            "the fixture must prove at least one exact planner edge, or every row below is vacuous"
+        );
+        assert!(
+            ordinary >= 1,
+            "the fixture must also carry a closure body OUTSIDE every proved edge, or the law is \
+             indistinguishable from `every closure body needs a specialization`"
+        );
+        validate_static_worker_member_population(&plan)
+            .expect("the derived member population is closed");
+    }
+
+    /// **Every compile-valid corruption of the exact member reds IN PLANNING.**
+    ///
+    /// ⭐ Four settings and not one, because a member can be wrong by not being
+    /// there, by being there as a different unit kind, by being attributed to a
+    /// different closure, and by declaring a different contract in the same
+    /// place. `Reclassify` and `Misdeclare` are the two a positive assertion is
+    /// most likely to agree with by accident: the unit is still present, still
+    /// declared and still has a function.
+    ///
+    /// ⛔ **The first three share one refusal, and that is the honest reading
+    /// rather than a collapsed check.** This law joins the two populations on
+    /// the defining closure occurrence, so "the unit is gone", "the unit is not
+    /// a closure body" and "the unit belongs to another closure" are one fact to
+    /// it: no emittable unit defines this worker's closure. The contract row is
+    /// what proves the law is not merely a presence test -- it fails with the
+    /// member present, correctly classified, and correctly attributed.
+    #[test]
+    fn d7_1c_an_omitted_or_misclassified_member_reds_in_planning() {
+        let expr = d7_1c_member_and_ordinary_twin_fixture();
+        for (mutation, expected) in [
+            (
+                StaticWorkerMemberMutation::OmitMember,
+                "no emittable unit defines",
+            ),
+            (
+                StaticWorkerMemberMutation::ReclassifyMember,
+                "no emittable unit defines",
+            ),
+            (
+                StaticWorkerMemberMutation::RedirectDefiningOccurrence,
+                "no emittable unit defines",
+            ),
+            (
+                StaticWorkerMemberMutation::MisdeclareMemberContract,
+                "different parameter count",
+            ),
+        ] {
+            let Err(error) = with_static_worker_member_mutation(mutation, || {
+                plan_static_transition_graph(&expr, &BTreeMap::new())
+            }) else {
+                panic!("{mutation:?}: a corrupted member population must not close")
+            };
+            let CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(reason)) = &error
+            else {
+                panic!("{mutation:?} must refuse in PLANNING, got {error:?}")
+            };
+            assert!(
+                reason.contains(expected),
+                "{mutation:?} must be attributed to the member law, got {reason:?}"
+            );
+        }
+    }
+
+    /// **The refusal reaches the whole lowering entry, and is never the generic
+    /// `Closure` diagnostic.**
+    ///
+    /// ⭐⭐ The planning-entry rows above prove the checker fires; this proves
+    /// the checker is ON THE PATH a program takes. Planning runs before any
+    /// Cranelift function is defined, so a `PlannerInvariant` here is a refusal
+    /// before definition or object emission by construction -- and no object is
+    /// returned to say otherwise.
+    ///
+    /// ⛔ The unmutated row is the positive control: the same fixture through
+    /// the same entry must not produce this refusal, which is what makes the
+    /// mutated rows evidence rather than a fixture that never compiled.
+    #[test]
+    fn d7_1c_the_planning_refusal_is_what_the_whole_lowering_entry_reports() {
+        let example = crate::RuntimeExample {
+            name: "d7-1c-member-law".to_string(),
+            checked_core_shape: "LexicalClosure".to_string(),
+            ir: d7_1c_member_and_ordinary_twin_fixture(),
+            observation: crate::RuntimeObservation::Returned(crate::RuntimeGroundValue::Bool(true)),
+        };
+        let compile = || {
+            crate::run_example_with_seed_observation(&example, &crate::NativeSeedEnvironment::empty())
+                .err()
+        };
+        let member_law = |error: &CraneliftBackendError| {
+            matches!(
+                error,
+                CraneliftBackendError::Backend(BackendFailure::PlannerInvariant(reason))
+                    if reason.contains("no emittable unit defines")
+            )
+        };
+        if let Some(error) = compile() {
+            assert!(
+                !member_law(&error),
+                "the unmutated fixture must not trip the member law: {error:?}"
+            );
+        }
+        let error = with_static_worker_member_mutation(
+            StaticWorkerMemberMutation::OmitMember,
+            compile,
+        )
+        .expect("an omitted member must refuse the whole entry, not produce a run report");
+        assert!(
+            member_law(&error),
+            "an omitted member must refuse in planning, never at the generic closure \
+             diagnostic: {error:?}"
         );
     }
 }
