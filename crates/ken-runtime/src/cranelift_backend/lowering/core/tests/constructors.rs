@@ -7839,7 +7839,20 @@ fn a_mismatch_below_every_recursive_container_is_refused_before_any_allocation()
 /// owner is a conclusion from the wrong premises.
 ///
 /// ⛔ Not a check that the child is "the right kind". It is a containment: the
-/// held set must be inside the planned one, and the direction is the content.
+/// held set must be inside the planned one, and the direction is the content. A
+/// held child may be LONGER-lived than its position planned for -- a persistent
+/// child where the meet allowed an activation-owned one dangles nothing --
+/// never shorter.
+///
+/// ⚠ **The refusal is the SECOND of two arms at this position, and the first
+/// has its own witness.** Before the containment, the planner's two fields about
+/// the position are made to agree: the invocation arena is a possible owner only
+/// if the position is activation-owned. Not an equivalence -- `owners` is the
+/// lifetime's affinity intersected with the child's representation, so THIS
+/// fixture's position 0 is legitimately `ActivationOwned` over `[NoReferent]`,
+/// and stating the law as `==` refuses it. Mutating the planner to admit the
+/// arena under a persistent lifetime reds the first arm; dropping the
+/// containment reds this row.
 ///
 /// ⚠ Promise class: **durable invariant** -- a relation between two answers to
 /// one question, not either message.

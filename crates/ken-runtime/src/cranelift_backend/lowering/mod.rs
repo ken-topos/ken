@@ -2923,53 +2923,69 @@ impl<'a> Lowering<'a> {
             // makes the parent's lane a conclusion from the wrong premises --
             // and when that something is the invocation arena, a persistent
             // parent ends up naming storage that dies first.
-            let held_owners = self.child_possible_referent_owners(child)?;
-            if let Some(escaped) = held_owners
-                .iter()
-                .find(|owner| !planned_child.owners.contains(owner))
-            {
-                return Err(unsupported(
-                    lowered_value_kind(child),
-                    format!(
-                        "child {} can be owned by {escaped:?}, which its own producer \
-                         occurrence's ownership record did not plan for that position \
-                         (planned {:?})",
-                        planned_child.position, planned_child.owners,
-                    ),
-                ));
-            }
-            // ⭐ The LIFETIME, read from the planner's OTHER field. The check
-            // above compares owner sets; this one compares against
-            // `planned_child.lifetime`, which the planner records beside them,
-            // so a record whose two fields ever disagree is caught here instead
-            // of the lowering trusting whichever it happened to read.
+            // ⭐ **The planner's TWO fields about this position must agree,
+            // before either is used.** `owners` is the set the meet was taken
+            // over and `lifetime` is the lifetime it was taken under, and the
+            // law relating them is one-directional: the invocation arena is a
+            // possible owner ONLY IF the position is activation-owned.
             //
-            // ⛔ **Directional, and the direction is the whole content.** A held
-            // child may be LONGER-lived than the position planned for -- a
-            // persistent child sitting where the meet allowed an activation-
-            // owned one dangles nothing, and refusing it would red every
-            // spillable immediate, whose closed set is
-            // `{NoReferent, PersistentStore}` at a position the planner
-            // legitimately planned as `ActivationOwned` (measured: two
-            // fixtures). ⛔ It may never be SHORTER: that is the parent naming
-            // storage that dies first, which is the edge this subclosure
-            // exists to close.
+            // ⛔ **Not an equivalence, and the asymmetry is a measured fact
+            // about the planner rather than a hedge.** `owners` is the
+            // lifetime's affinity INTERSECTED with the child's representation,
+            // so a child the emitter materializes as a native scalar pair is
+            // recorded `ActivationOwned` over `[NoReferent]` -- it may be
+            // short-lived and still have no boundary node for anything to own.
+            // Stating this as `==` refuses that lawful record, measured on the
+            // very fixture the owner control is built from.
             //
-            // ⚠ Read from the owner set rather than from the value's shape:
-            // `Constructor` and `Record` are persistable shapes, so a
-            // shape-derived lifetime would answer `Persistent` for exactly the
-            // aggregates whose own record says otherwise.
-            let held_lifetime = Self::possible_owners_lifetime(&held_owners);
-            if held_lifetime == PlannedReferentLifetime::ActivationOwned
+            // ⚠ Stated as a law rather than assumed, because everything below
+            // reads whichever field answers its question: a record whose owners
+            // admitted the arena under a persistent lifetime would let a
+            // containment pass under one field while the lane was concluded
+            // from the other.
+            if planned_child
+                .owners
+                .contains(&BoundaryReferentOwner::InvocationArena)
                 && planned_child.lifetime != PlannedReferentLifetime::ActivationOwned
             {
                 return Err(unsupported(
                     lowered_value_kind(child),
                     format!(
-                        "child {} is held with a {held_lifetime:?} referent lifetime but its \
-                         own producer occurrence's ownership record planned {:?} at that \
-                         position",
-                        planned_child.position, planned_child.lifetime,
+                        "the ownership record's own fields disagree at child {}: it plans a \
+                         {:?} referent lifetime and possible owners {:?}",
+                        planned_child.position, planned_child.lifetime, planned_child.owners,
+                    ),
+                ));
+            }
+            // ⛔ **Containment, and the DIRECTION is the whole content.** A held
+            // child may be LONGER-lived than the position planned for: a
+            // persistent child sitting where the meet allowed an
+            // activation-owned one dangles nothing. Requiring the two sets to be
+            // EQUAL reds every spillable immediate, whose closed set is
+            // `{NoReferent, PersistentStore}` at a position the planner
+            // legitimately plans `ActivationOwned` -- measured on two fixtures
+            // before the direction was fixed. It may never be SHORTER: that is
+            // the parent naming storage that dies first, which is the edge this
+            // subclosure exists to close.
+            //
+            // ⚠ The held set is read from the disposition and, for an aggregate,
+            // from its own ruled lane -- never from the value's shape.
+            // `Constructor` and `Record` are persistable SHAPES, which is
+            // precisely why the shape cannot answer this.
+            let held_owners = self.child_possible_referent_owners(child)?;
+            if let Some(escaped) = held_owners
+                .iter()
+                .find(|owner| !planned_child.owners.contains(owner))
+            {
+                let held_lifetime = Self::possible_owners_lifetime(&held_owners);
+                return Err(unsupported(
+                    lowered_value_kind(child),
+                    format!(
+                        "child {} is held with a {held_lifetime:?} referent lifetime and can \
+                         be owned by {escaped:?}, which its own producer occurrence's \
+                         ownership record did not plan for that position (planned {:?} over \
+                         {:?})",
+                        planned_child.position, planned_child.lifetime, planned_child.owners,
                     ),
                 ));
             }
