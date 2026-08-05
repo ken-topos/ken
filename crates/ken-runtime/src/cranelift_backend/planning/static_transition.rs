@@ -3662,6 +3662,249 @@ fn fixed_node_selected_owner_of(
     }
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the phase one host-effect seat's value is
+/// actually in.**
+///
+/// ⛔ Deliberately its own type rather than a reuse of [`BoundaryUsePhase`].
+/// That vocabulary is the CONTINUATION-input projection's and is keyed on ABI
+/// slots; this one is keyed on a semantic seat of a host operation. They answer
+/// different questions about different populations, and one enum spanning both
+/// is what lets an answer derived for one be read as authority for the other.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum EffectSeatPhase {
+    /// A compile-time `Lowered` template the emitter may read directly.
+    SpecializedTemplate,
+    /// A boundary-carrier word, observable only through emitted helpers.
+    CarriedWord,
+}
+
+/// What the emitter DOES at one seat.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum EffectSeatOperation {
+    /// Select one member of a closed constructor set (`Stream`, `CreatePolicy`,
+    /// `ResourceOpenMode`) and write its wire tag.
+    SelectClosedTag,
+    /// Project a byte span to a `(pointer, length)` pair.
+    ProjectBytesSpan,
+    /// Observe an opaque resource handle as a scalar.
+    ObserveResourceHandle,
+    /// Narrow an exact `Int` to a checked `u64`.
+    NarrowExactInt,
+}
+
+/// **What a seat must be able to OBSERVE — derived FIRST, before any
+/// representation is selected.**
+///
+/// ⭐⭐ **The direction is the whole point.** A `Need` read off a chosen
+/// disposition reverses the equation: it makes whatever the representation
+/// happens to offer into the definition of what the consumer wanted. Planning
+/// derives this from the seat's own semantics — what the wire request requires
+/// at that ordinal — and only then selects and validates an `Avail` that
+/// satisfies it.
+///
+/// ⛔ Equality-bearing, together with the operation and the semantic ordinal. A
+/// seat's identity is not its structural role: `BufferAllocate.capacity`,
+/// `FsChangeMode.mode` and `FsReadAt.length` are all `EffectArgument`s holding
+/// an `Int`, and they are three different seats.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum EffectSeatNeed {
+    /// The member identity of a closed constructor set.
+    ConstructorTag,
+    /// A byte span's address and length.
+    BytesPointerLength,
+    /// An opaque resource handle's scalar word.
+    ResourceScalar,
+    /// An exact `Int`'s magnitude as a checked `u64`.
+    ExactIntU64,
+}
+
+/// **The phases in which a seat's [`EffectSeatNeed`] can actually be
+/// satisfied.**
+///
+/// ⛔ Per-SEAT, never per-need, and that is not redundancy. `BufferFreeze`'s
+/// buffer and span-origin seats observe a resource handle in either phase
+/// because their route already emits the helper; `ResourceRelease`'s and
+/// `FsReadAt`'s observe the same `ResourceScalar` and have no such route. Same
+/// need, different availability — a per-need table would have to answer one of
+/// them wrongly.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct EffectSeatAvail {
+    pub(in crate::cranelift_backend) specialized: bool,
+    pub(in crate::cranelift_backend) carried: bool,
+}
+
+impl EffectSeatAvail {
+    const SPECIALIZED_ONLY: Self = Self {
+        specialized: true,
+        carried: false,
+    };
+    const EITHER_PHASE: Self = Self {
+        specialized: true,
+        carried: true,
+    };
+
+    /// Whether a seat consumed in `phase` can satisfy its need.
+    ///
+    /// ⛔ This IS the `Need ⊆ Avail` test. It is a membership question, and it
+    /// is asked in planning so that a seat which fails it is refused with its
+    /// own coordinates rather than reaching the emitter and failing as a
+    /// generic specialized-only surface.
+    fn admits(self, phase: EffectSeatPhase) -> bool {
+        match phase {
+            EffectSeatPhase::SpecializedTemplate => self.specialized,
+            EffectSeatPhase::CarriedWord => self.carried,
+        }
+    }
+}
+
+/// **One FULL semantic seat of one admitted host effect.**
+///
+/// ⭐ "Full" is the correction this record exists to make. A seat is not a
+/// structural position and not a nominal role: it is the position *plus* the
+/// operation it belongs to *plus* its post-capability-offset semantic ordinal.
+/// Two seats agreeing on the first and differing on either of the others are
+/// two records, because the wire request wants different things of them.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct PlannedEffectSeat {
+    pub(in crate::cranelift_backend) effect_origin: StaticOriginId,
+    /// The exact child occurrence that produces this seat's value.
+    pub(in crate::cranelift_backend) child_origin: StaticOriginId,
+    /// The child's STRUCTURAL position, capability included.
+    pub(in crate::cranelift_backend) position: u32,
+    pub(in crate::cranelift_backend) operation: ken_host::HostOpV1,
+    /// The semantic argument ordinal, AFTER the conditional capability offset.
+    ///
+    /// ⛔ Not the structural position. An operation carrying a capability shifts
+    /// every argument by one, so a seat keyed on the structural position alone
+    /// names a different semantic argument depending on a fact about the
+    /// operation's capability that the position does not carry.
+    pub(in crate::cranelift_backend) ordinal: u32,
+    pub(in crate::cranelift_backend) producer_owner: PredeclaredFunctionId,
+    pub(in crate::cranelift_backend) producer_phase: EffectSeatPhase,
+    pub(in crate::cranelift_backend) consumer_owner: PredeclaredFunctionId,
+    pub(in crate::cranelift_backend) consumer_phase: EffectSeatPhase,
+    pub(in crate::cranelift_backend) semantic_operation: EffectSeatOperation,
+    pub(in crate::cranelift_backend) need: EffectSeatNeed,
+    pub(in crate::cranelift_backend) avail: EffectSeatAvail,
+}
+
+/// The seat contract of one admitted operation at one semantic ordinal.
+///
+/// ⛔ **Total over the 13 admitted operations, with no `_` arm**, so a new
+/// admitted operation is a compile error here rather than an operation whose
+/// seats silently have no contract. `None` means the operation has no seat at
+/// that ordinal, which is an arity disagreement and is refused by the caller —
+/// never a seat that is exempt.
+///
+/// ⚠ The `Avail` column is where this release's one new capability appears, and
+/// nowhere else: `BufferAllocate.capacity` is the single seat whose exact `Int`
+/// this release can observe through the carrier ABI. Every other `ExactIntU64`
+/// seat stays specialized-only, which is why `Avail` is recorded per seat.
+fn host_effect_seat_contract(
+    operation: ken_host::HostOpV1,
+    ordinal: u32,
+) -> Option<(EffectSeatOperation, EffectSeatNeed, EffectSeatAvail)> {
+    use ken_host::HostOpV1 as Op;
+    use EffectSeatAvail as Avail;
+    use EffectSeatNeed as Need;
+    use EffectSeatOperation as Semantic;
+    let tag = (
+        Semantic::SelectClosedTag,
+        Need::ConstructorTag,
+        Avail::SPECIALIZED_ONLY,
+    );
+    let bytes = (
+        Semantic::ProjectBytesSpan,
+        Need::BytesPointerLength,
+        Avail::SPECIALIZED_ONLY,
+    );
+    let resource = (
+        Semantic::ObserveResourceHandle,
+        Need::ResourceScalar,
+        Avail::SPECIALIZED_ONLY,
+    );
+    let phase_bearing_resource = (
+        Semantic::ObserveResourceHandle,
+        Need::ResourceScalar,
+        Avail::EITHER_PHASE,
+    );
+    let exact_int = (
+        Semantic::NarrowExactInt,
+        Need::ExactIntU64,
+        Avail::SPECIALIZED_ONLY,
+    );
+    let carried_exact_int = (
+        Semantic::NarrowExactInt,
+        Need::ExactIntU64,
+        Avail::EITHER_PHASE,
+    );
+    match (operation, ordinal) {
+        (Op::ConsoleWrite, 0) | (Op::ConsoleFlush, 0) | (Op::ConsoleIsTerminal, 0) => Some(tag),
+        (Op::ConsoleWrite, 1) => Some(bytes),
+        (Op::FsReadFile, 0)
+        | (Op::FsWriteFile, 0)
+        | (Op::FsChangeMode, 0)
+        | (Op::FsOpen, 0)
+        | (Op::FsWriteFile, 2) => Some(bytes),
+        (Op::FsWriteFile, 1) | (Op::FsOpen, 1) => Some(tag),
+        (Op::FsChangeMode, 1) => Some(exact_int),
+        (Op::FsHandleMetadata, 0) | (Op::ResourceRelease, 0) => Some(resource),
+        // ⭐ The one seat this release teaches the carrier to observe.
+        (Op::BufferAllocate, 0) => Some(carried_exact_int),
+        (Op::BufferFreeze, 0) | (Op::BufferFreeze, 3) => Some(phase_bearing_resource),
+        (Op::BufferFreeze, 1) | (Op::BufferFreeze, 2) => Some(exact_int),
+        (Op::FsReadAt, 0) | (Op::FsReadAt, 2) | (Op::FsWriteAt, 0) | (Op::FsWriteAt, 2) => {
+            Some(resource)
+        }
+        (Op::FsWriteAt, 5) => Some(resource),
+        (Op::FsReadAt, 1)
+        | (Op::FsReadAt, 3)
+        | (Op::FsReadAt, 4)
+        | (Op::FsWriteAt, 1)
+        | (Op::FsWriteAt, 3)
+        | (Op::FsWriteAt, 4) => Some(exact_int),
+        // An ADMITTED operation at an ordinal it does not have. `None` here is
+        // an arity disagreement, refused by the caller with the seat's own
+        // coordinates -- never a seat that is exempt from having a contract.
+        (
+            Op::ConsoleWrite
+            | Op::ConsoleFlush
+            | Op::ConsoleIsTerminal
+            | Op::FsReadFile
+            | Op::FsWriteFile
+            | Op::FsChangeMode
+            | Op::FsOpen
+            | Op::FsHandleMetadata
+            | Op::FsReadAt
+            | Op::FsWriteAt
+            | Op::ResourceRelease
+            | Op::BufferAllocate
+            | Op::BufferFreeze,
+            _,
+        ) => None,
+        // ⛔ The represented-UNAVAILABLE lanes, named rather than wildcarded.
+        // They are refused before any seat is derived, so they have no seat
+        // contract at all -- and naming them is what makes promoting one to the
+        // admitted set a compile error here rather than an operation whose
+        // seats silently answer `None`.
+        (
+            Op::ConsoleRead
+            | Op::ClockWallNow
+            | Op::ClockMonotonicNow
+            | Op::ClockSleepUntil
+            | Op::FsAppendFile
+            | Op::FsMetadata
+            | Op::FsReadDirectory
+            | Op::FsCreateDirectory
+            | Op::FsRemoveFile
+            | Op::FsRemoveDirectory
+            | Op::FsRename
+            | Op::EntropyRandomBytes,
+            _,
+        ) => None,
+    }
+}
+
 /// Derive one ownership record for every aggregate producer occurrence.
 ///
 /// ⛔ **The population is every `Construct`/`Record` source occurrence, not the
