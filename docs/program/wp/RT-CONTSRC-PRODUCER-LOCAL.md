@@ -1249,6 +1249,41 @@ all six failing `D0` rows.
   possible**, so a control that never instantiates a second owner cannot settle
   the question either way.
 
+  ###### `D8a` STATUS — DISCHARGED at exact `e02ef413`, on the STRUCTURAL branch
+
+  `742 passed / 2 failed / 1 ignored` (`+1` row), both failures the `d86be55d`
+  baseline pair; production and test profiles clean. **The fork resolved to
+  "structurally impossible", and it was measured before it was chosen.**
+
+  **Reason one — the walks are disjoint.** `continuation_result_origins` does
+  not descend into `Closure`/`LexicalClosure`; every descent root is
+  `worker.body_origin`. Origins form a tree, so two descent roots are
+  nested-or-disjoint and a producer `Construct` is reached by exactly one
+  discovery. Its emission owner is fixed by where it sits.
+
+  **Reason two, and this is the one that makes it structural rather than an
+  artifact of one walk's shape:** a test-only hook pushed every descent a second
+  time with `enclosing_specialization: None` — **removing reason one exactly and
+  nothing else** — and still yielded no second owner. Planning refuses first, on
+  both plans, with *"a continuation coordinate is not present in the lexical
+  environment in force at the emission seat"*. That is the `D5a` availability
+  law standing behind the traversal. The disarmed run is the positive control.
+
+  **Side effect, and it is an improvement:** owner-qualifying **moves where a
+  cross-layer transplant is caught**. Under four fields a wrong body and a
+  transplanted construct origin both reached selector agreement — one defect
+  from two sides. Now a transplant pairs one layer's owner with another's
+  construct, a pair no unit carries, so the **selector** refuses it one step
+  earlier, before any worker is compared.
+
+  > **WATCH, and it binds every later checkpoint: the owner buys NO
+  > discrimination on any current population.** It is correctness insurance and
+  > an earlier transplant catch — **not a key that separates anything today.**
+  > **If a later checkpoint assumes the owner is doing selection work, that
+  > assumption is false as measured.** In particular, `D8g` must not attempt a
+  > positive that demonstrates owner-based separation; there is no population to
+  > demonstrate it on, and manufacturing one is the fabrication this node bans.
+
   **`D8b` — the composed-call target, planner side.** Mint the target as a
   planner fact under the `D8a` selector, carrying the **full
   `ComposedWorkerView` provenance**.
@@ -1290,6 +1325,32 @@ all six failing `D0` rows.
   the only reaching perturbation trips plane bounds first, proving the wrong
   guard. **If `D8b` retains any form of that check it must be exercised or
   deleted. It does not get a third carry.**
+
+  **Also delete in `D8b`: the owner-collision refusal in `composed_worker_view`
+  (Steward, on the `D8a` report).** The implementer measured it **unreachable
+  and unexercised — deleting it reds nothing** — and labelled it defence in
+  depth against a future change to the walk. `D8a` resolved the fork to the
+  structural branch, and the ruling authorized encoding the invariant
+  **instead** of a discriminator, not alongside a dead guard. The invariant is
+  the witnessed mechanism: its duplication-hook control is mutation-proved (hook
+  made a no-op reds the `D8a` row). **Keeping an unexercised second guard puts
+  untested code in the TCB to defend an invariant that already has a live
+  control** — `docs/PRINCIPLES.md`, small auditable TCB.
+
+  **This is NOT the `D6b` unwitnessed-residual case, and the difference is why
+  one is deleted and the other was forbidden.** `D6b`'s raw table was
+  unreachable **because the mechanism was incomplete** — the source shape that
+  would exercise it was refused earlier by the very gap under repair, so
+  accepting it would have turned an unreachable mechanism into delivered
+  semantics. The owner-collision refusal is unreachable **because the planner
+  proves the population impossible**, which is `D8a`'s finding rather than a
+  symptom of one. Do not cite `D6b`'s prohibition against this deletion, and do
+  not cite this deletion as precedent for accepting an unwitnessed mechanism.
+
+  **The owner's selector role is separately live and stays:** supplying an owner
+  no unit carries reaches the zero-answer refusal, and dropping the owner from
+  the selector reds two `D7a` rows. **Delete the collision guard, not the
+  field.**
 
   **`D8c` — the consumption seam.** The selected recursive argument's result is
   consumed **in the exact source-machine continuation**, and the closure-valued
