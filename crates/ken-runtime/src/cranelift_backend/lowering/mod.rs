@@ -3572,6 +3572,13 @@ pub(in crate::cranelift_backend) enum D8jMutation {
     WrongClaimingOwner,
     /// Attempt the composed discharge on an ordinary binding.
     DischargeFromOrdinaryBinding,
+    /// Record a result value defined BEFORE the call, so the value the
+    /// continuation is said to have received cannot have come from it.
+    ///
+    /// ⛔ A real value of the finished function, taken from the first
+    /// instruction that defines one -- not a fabricated `Value`, which would be
+    /// caught by a bounds check rather than by the downstream relation.
+    RecordResultDefinedBeforeTheCall,
 }
 
 #[cfg(test)]
@@ -5601,6 +5608,30 @@ impl<'a> Lowering<'a> {
                 )));
             }
             // 5 — the result returned into the unchanged continuation.
+            #[cfg(test)]
+            let record = if d8j_mutation() == D8jMutation::RecordResultDefinedBeforeTheCall {
+                let mut earliest = None;
+                'earliest: for block in func.layout.blocks() {
+                    for inst in func.layout.block_insts(block) {
+                        if inst == record.inst {
+                            break 'earliest;
+                        }
+                        if let [value, ..] = func.dfg.inst_results(inst) {
+                            earliest = Some(*value);
+                            break 'earliest;
+                        }
+                    }
+                }
+                match earliest {
+                    Some(value) => PendingComposedDischarge {
+                        result: Some(value),
+                        ..record
+                    },
+                    None => record,
+                }
+            } else {
+                record
+            };
             let result = record.result.ok_or_else(|| {
                 backend_module(
                     "a composed discharge's call result was not a carried word, so nothing \

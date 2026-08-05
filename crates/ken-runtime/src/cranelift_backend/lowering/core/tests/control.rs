@@ -17503,11 +17503,24 @@ fn d8j_root_witness_compile(
 /// | `WrongClaimingOwner` | a claim from a function that is not the emission owner | verification 2, at the seat |
 /// | `RedirectRecordedInstruction` | the record moved onto another real call | verification 4, on the finished CLIF |
 /// | `DischargeFromOrdinaryBinding` | an ordinary clone of the same binding | the authority accessor |
+/// | `RecordResultDefinedBeforeTheCall` | a value defined before the call | verification 5, on the finished CLIF |
 ///
 /// ⭐ The substitution is the same-symbol shortcut made concrete: the witness
 /// interns **two** specializations at one producer `Construct` -- one
 /// constructor symbol, two identities -- so a pairing that keyed on the symbol
 /// would have to choose, and this switch installs the choice it would make.
+///
+/// A sixth switch, `RecordResultDefinedBeforeTheCall`, discriminates
+/// verification 5 with a real earlier value of the same function.
+///
+/// **THE GAP, named rather than left to be assumed:** verification 4's
+/// **operand half** has no discriminator. Both of this witness's workers
+/// declare arity 1 with no captures, so substituting the other target does not
+/// move the declared run, and the binding-versus-target mismatch refuses one
+/// step earlier. That check is therefore known to execute and not known to
+/// discriminate. It would take a witness whose two recursive positions carry
+/// workers of different arity, which is fixture work this checkpoint does not
+/// own.
 ///
 /// **Promise class: durable invariant.** Relations over one program's relation
 /// and five refusals; the only literals are the arity of the population, which
@@ -17572,6 +17585,11 @@ fn d8j_the_composed_authority_is_discharged_once_after_the_call() {
             D8jMutation::DischargeFromOrdinaryBinding,
             "carries no composed causal authority",
             "an ordinary clone of the same binding has no authority to present",
+        ),
+        (
+            D8jMutation::RecordResultDefinedBeforeTheCall,
+            "is not defined at or after its",
+            "a value defined before the call cannot be what the call returned into the ' +              'continuation",
         ),
     ] {
         let (error, discharged, _, _) = d8j_root_witness_compile("d8j_defect", mutation);
