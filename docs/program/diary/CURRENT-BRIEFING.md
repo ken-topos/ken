@@ -40,11 +40,11 @@
 
 ### The one thing to do next
 
-**Release `D8d` to Runtime** on exact `e4b4c26c`. Thread
-**`thr_6m43v75yndhtj`**, on Architect ruling **`evt_nwgvvr4vaf7y`**. `D8a`
-discharged `e02ef413`, `D8b` discharged `e4b4c26c`, `D8c` retired. No candidate,
-no QA route. Frame sections: *"GOVERNING — the `D7` cut is MIS-SIZED"* and
-*"`D8c` IS RETIRED — folded into `D8e`"*.
+**Nothing — the ring is working `D8e`** on exact `c2e8314f`. Thread
+**`thr_6m43v75yndhtj`**. `D8a` discharged `e02ef413`, `D8b` `e4b4c26c`, `D8d`
+`c2e8314f`; `D8c` retired. No candidate, no QA route. Frame sections: *"GOVERNING
+— the `D7` cut is MIS-SIZED"*, *"`D8c` IS RETIRED"*, and *"STANDING — on this
+node 'correct and unreachable' is the DEFAULT"*.
 
 ⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
 published *"new member at ordinal 2, not 3"*. So is the whole
@@ -96,8 +96,27 @@ gap, not a missing fixture** — the released bounded witness repair could never
 have discharged it, because the only source shape that exercises the raw table
 is refused earlier. That is why its wrong-table mutation stays green.
 
-**Next: release `D8d` to Runtime** on exact `e4b4c26c`, and carry the queued
-owner-collision-guard deletion to its handoff.
+**Next: wait for `D8e`.** Released by the leader at `evt_4rs11vaganczg` on exact
+`c2e8314f`; implementer working it. `D8a`/`D8b`/`D8d` all discharged.
+
+⭐ **`D8d` DISCHARGED at exact `c2e8314f`** (`742/2/1`). The target-derived
+`StaticWorkerBinding` is installed at the selected recursive source-order
+position; **not** a `Value(Closure)`, so value-position use stays fail-closed at
+`value_at`. Owner-collision guard deleted; `emission_owner`'s selector role
+re-measured live afterwards.
+
+⚠⚠ **THE BINDING IS CORRECT AND MEASURABLY NEVER INSTALLED** — the two
+preconditions coincide nowhere in the suite. Pinned as a **sentinel**, measured
+with **two counters** because *"unreadable by design"* and *"never built"* are
+indistinguishable from outside. **That sentinel is `D8e`'s inheritance and its
+real work.**
+
+⛔ **Third occurrence on this node** — `D6b`'s raw table, `D7a2`'s retention, now
+`D8d`'s binding, all correct-and-unreached. **On this node the mechanism is the
+cheap half and the WITNESS is the deliverable.** ⛔ **If `D8e` cannot build its
+witness through the ordinary production planner/lowering path, that is a
+WHOLE-NODE finding** (the composed path cannot exercise this substrate at all) —
+hard-stop to me, do **not** hand-construct a plan to make the witness exist.
 
 ⛔ **`D8c` IS RETIRED — folded into `D8e`** (Architect `evt_nwgvvr4vaf7y`,
 **outcome (c) at the CHECKPOINT boundary, not the whole-node boundary; the node

@@ -1418,6 +1418,49 @@ all six failing `D0` rows.
   closure capsule **continues to fail closed**, exactly as in the functionized
   unit.
 
+  ###### `D8d` STATUS — DISCHARGED at exact `c2e8314f`
+
+  `742 passed / 2 failed / 1 ignored` (`+1` row), both failures the `d86be55d`
+  baseline pair; both profiles clean. One compiler-only `StaticWorkerBinding`
+  at the selected recursive source-order position, derived from the exact `D8b`
+  target under the `D8a` five-field selector. **Not a specialized
+  `Value(Closure)`** — the capsule has no value representation, so
+  value-position use stays fail-closed at `value_at`, which is the property
+  `D8e`'s consumer will be the sole lawful way around. Identity and shape from
+  the target, capture **operands** from the lowered closure at that position —
+  the `D6a` split, with the constructor re-checking the two. Route is
+  `RawWorker` by `D6a`'s law, **not selected**. The queued owner-collision guard
+  is deleted and the `emission_owner` selector role re-measured live afterwards.
+
+  > **The binding is correct and MEASURABLY NEVER INSTALLED** — the two
+  > preconditions do not coincide anywhere in the suite. The implementer pinned
+  > this as a **sentinel** rather than leaving it in a handoff, and used **two
+  > counters** because *"unreadable by design"* and *"never built"* are
+  > indistinguishable from outside. That sentinel is `D8e`'s inheritance.
+
+  ###### STANDING — on this node, "correct and unreachable" is the DEFAULT, and the WITNESS is the deliverable
+
+  **Third occurrence, and the pattern is now the thing to plan around rather
+  than rediscover:** `D6b`'s raw table, `D7a2`'s retention, and now `D8d`'s
+  binding all landed **correct and unreached**. Any checkpoint that builds a
+  mechanism ahead of its consumer produces this, so on this node:
+
+  - **The mechanism is the cheap half. The witness that reaches it is the
+    deliverable**, and a checkpoint that lands a mechanism with no witness has
+    delivered its easier half.
+  - **A green suite is not evidence about an unreached mechanism** — that is
+    exactly what made `D6b`'s wrong-table mutation stay green and cost a recut.
+  - **Two counters, not one**, whenever *"unreadable by design"* and *"never
+    built"* would look identical from outside.
+
+  **If `D8e` cannot build its witness through the ordinary production
+  planner/lowering path, that is a WHOLE-NODE finding, not a checkpoint
+  finding** — it would mean the composed path cannot exercise this substrate at
+  all. Hard-stop and route it to me, not around it. **Hand-constructing a plan
+  to make the witness exist is the fabrication this node bans**, and it would
+  convert an unreachable mechanism into delivered semantics, which is the exact
+  thing the `D6b` ruling forbade.
+
   **`D8e` — source-machine callee consumer, AND the consumption law closed over
   the composed path.** An exact `Var` callee resolving to that binding is
   consumed **before** the value-only `Var` path. Arguments are still evaluated
