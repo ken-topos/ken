@@ -33,57 +33,60 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~04:0xZ · D7 evidence recut landed; Runtime owes checkpoint 1
+## LIVE — 2026-08-05 ~06:2xZ · D7 `1c` closed; Runtime owes the `1d` inventory
 
-**`origin/main` at last check: `8c3fa82c`** (the D7 item-1 evidence recut, PR
-#1404; frame blob `f937dacd`). Verify it; do not trust this line.
+**`origin/main` at last check: `8558d4e6`** (the `1c`/`1d` recut, PR #1408;
+frame blob `da785093`). Verify it; do not trust this line.
 
 ### The one thing to do next
 
-**Nothing, until `runtime-leader` releases checkpoint 1 and Runtime hands
-back.** I posted the recut and the release request at `evt_3n1vv466097jb`. If
-the leader has not picked it up within ~15 minutes of that post, check its pane
-before re-posting — it is a Codex seat and the strand shapes are real.
+**Nothing, until Runtime returns the `1d` inventory.** I posted the recut and
+release request at `evt_14gsxh986c963` (06:14Z); `runtime-leader` released from
+exact `179af863` at `evt_1cyxsqrjhkcq6` (06:15:35Z). **Confirmed picked up:** at
+06:19Z `runtime-implementer` is live at ctx 10%, running a `KEN_D7_PROBE` pass
+over `-p ken-runtime --lib` that records `case_emission` / `producer_kind` /
+arity / capture count per emission site. That is the inventory being measured,
+not a mechanism being built — which is what `1d` asked for.
 
-**`runtime-implementer` is compacted (ctx 0%) and idle at an empty composer,**
-compacted at its own quiescent seam right after handing back `ae64f687` and
-before the new work reaches it. Verified on `Compacted` + `Skills restored`.
-Nothing owed by me on it — but **check its pane before any nudge**: on the
-previous cycle the freshly compacted seat woke on the ordinary mention unaided,
-against the standing playbook rule, and a nudge into a live turn double-delivers.
+**WIP audit clock: armed from 06:15:35Z (the leader release), so due 07:15:35Z.**
 
-### Where D7 actually stands — the row has NOT reached this node's consumer
+**`1d` hard-stops TO ME.** If the inventory finds that satisfying it would mint
+a new representation, population, identity, or planner/ABI authority, that needs
+a **separate substrate node** which the Architect expressly did not authorize —
+and **the graph shape is my call, decided FROM the inventory.** Do not cut that
+node before the answer arrives; deciding beforehand is creating a node on
+speculation.
 
-**The Architect ruled at `evt_4enxcfe742ta8`:** `ae64f687` is sound D7 substrate,
-preservation-only, **not a candidate**; and the framed reaching row
-`buffer_allocate_malformed_capacity_narrows_to_invalid_bounds` is a
-**non-substitutable cumulative gate** that is still blocked upstream.
+### Checkpoint lineage — each an accepted parent of the next
 
-**Item 1's before/after pair was unmeasurable and is recut into two ordered
-cumulative checkpoints:**
+`6a09ed68` (population) → `727b51a1` (per-visit claim group) → `69c68e6e` (body
+close) → `f6958b95` (operation-arm claim consumption) → `ae64f687` (lazy
+exact-`SiteOperand` + carried exact-`Int`) → `50092c59` (ckpt 1: phase-bearing
+capture edges + pre-emission gate) → `ca1c4418` (ckpt `1b`: two arity
+coordinates) → `179af863` (ckpt `1c`: the interned-to-member converse).
 
-1. restore the framed `#23` producer on the current lineage, under the capture
-   contract the frame already states in *What the replacement owes*;
-2. then close the exact `264 -> 262 / position 1` consumer with the retained
-   `ae64f687` mechanism.
+`4ec5362c` is **preservation-only partial progress**, not an accepted `1b`.
 
-**The falsified clause said the row first hits the generic host-effect refusal.
-It does not — it refuses at the `#23` producer as a closure capture, and this
-frame's own per-row `D0` table recorded exactly that on 2026-07-29.** A clause
-seven hundred lines from the measurement contradicted it for a week. Runtime's
-bisection (`c85179ce`, `D5a` ckpt 4 step 3) says **when the lineage exposed it,
-not who owns it**; the `#23`-producer / `D7`-consumer attribution is unchanged
-and the `D5a` checked-IH law may not be touched to make the row advance.
+### The standing shape of this node's stops — READ BEFORE RECUTTING AGAIN
 
-Checkpoint lineage, each an accepted parent of the next:
-`6a09ed68` (population substrate) → `727b51a1` (per-visit claim group) →
-`69c68e6e` (pre-definition body close) → `f6958b95` (operation-arm claim
-consumption) → `ae64f687` (lazy exact-`SiteOperand` + carried exact-`Int`
-capacity route) → checkpoint 1 pending release.
+**Three stops were MY frame asserting a law the measured plane does not
+support**, not Runtime sizing or execution:
 
-**Still held:** candidate, QA, `D6` closure, `AC-4`, the call-result SCC, and
-the `#27` / case-emission populations. **No replacement reaching witness, and
-the closure-capture refusal is not acceptable as standing branch state.**
+1. **checkpoint 1** — I localized the repair to the `#23` producer; the producer
+   was correct and the refusal was at the generic `LexicalClosure` value arm.
+2. **`1b`** — I demanded a nullary Host-`Vis` be `1/1/1`; the honest relation is
+   source-seed `0` / emitted-template `1` / marker-consumer `1`, and forcing the
+   seed to `1` moved five non-injecting rows off their `D0` text.
+3. **`1c`** — I read generic member status as a planning omission; `Open`
+   environment means *do not commit this specialization*, and the forward law
+   would falsely reject 23 green programs.
+
+⭐ **The per-row-never-a-count requirement caught #2 and #3.** A pass/fail total
+reads `1/7` before and after, identically, and hides both. Keep it as a frame
+requirement, never a convention.
+
+**Still held:** checkpoint 2, candidate, QA, `D6` closure, `AC-4`, the
+call-result SCC, and the `#27` / case-emission populations.
 
 **WIP audit clock — DERIVE IT, do not read a stamped deadline.** A fixed
 timestamp here goes stale on every reset event and then fires a spurious audit;
