@@ -94,19 +94,29 @@ gap, not a missing fixture** — the released bounded witness repair could never
 have discharged it, because the only source shape that exercises the raw table
 is refused earlier. That is why its wrong-table mutation stays green.
 
-**Next: release the corrected `D7a`, then `D7a2`.** Substrate is cut as in-node
-checkpoints. ⚠ **Labels are allocation order; the frame's EXECUTION ORDER table
-is authoritative.** Order: `D7a` (four-field composed worker view) → `D7a2`
-(raw-target population) → `D7b` (one environment authority) → `D7c`
-(source-machine callee consumer) → `D7d` (checked-marker occupancy) → `D7e`
-(non-vacuous closeout, both paths) → `D6b` closeout → `D6c`.
+**Next: wait for `D7a2`.** Released by the leader at `evt_6w8ca76mtz5gb`;
+implementer working it. Substrate is cut as in-node checkpoints. ⚠ **Labels are
+allocation order; the frame's EXECUTION ORDER table is authoritative.** Order:
+`D7a` → `D7a2` (raw-target population) → `D7b` (one environment authority) →
+`D7c` (source-machine callee consumer) → `D7d` (checked-marker occupancy) →
+`D7e` (non-vacuous closeout, both paths) → `D6b` closeout → `D6c`.
 
-⛔ **`D7a` NOT discharged** (Architect `evt_7x6knchb4rb1n`); `ab741989`
-preserved as partial evidence. **The selector is FOUR fields** — the triple
-names a source *position*, and two dynamic recursion layers instantiate the same
-one. Both current plans show two distinct workers per triple, separated exactly
-by `producer_construct_origin`. Different construct origins are **different
-questions, not conflicting answers**.
+⭐ **`D7a` corrected checkpoint delivered at exact `f3427dae`** (on `ab741989`):
+`739 passed / 2 failed / 1 ignored`, the two being the `d86be55d` baseline pair;
+production and test profiles both clean. **The four-field selector bought the
+thing that was missing** — under the three-field selector every group was
+ambiguous and the projection was **all refusals**; with the causal field the
+inner layer resolves on its own worker facts and the outer refuses on its
+superseded body. ⇒ **The positive branch is now exercised, not claimed.**
+
+⚠ **Watch: `f3427dae` has NOT been Architect-reviewed** — the leader sequenced
+`D7a2` straight after it. Defensible (the candidate is held, so nothing merges
+unreviewed), but every Architect review on this node so far has found something
+real, so `D7a2` may be building on an unreviewed base.
+
+**The selector is FOUR fields** — the triple names a source *position*, and two
+dynamic recursion layers instantiate the same one. Different construct origins
+are **different questions, not conflicting answers**.
 
 ⛔ **`D7a2` exists because of a CIRCULARITY:** `D7a` refuses the very raw target
 `D7b` must make callable, so `D7b` can never lawfully start. The planner mints
