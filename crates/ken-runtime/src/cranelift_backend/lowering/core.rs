@@ -6091,291 +6091,294 @@ impl<'a> Lowering<'a> {
     /// common — claim once under the defining owner, resolve this Function's
     /// own declared target, append the projected captures, emit one direct
     /// call, record the `Inst` — lives here exactly once.
-    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b`** — resolve one continuation input's
-    /// `(coordinate, availability)` pair to an index into the environment this
-    /// seam is about to read, or refuse.
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` (re-cut) — resolve the DIRECT
+    /// EMISSION claim**, the one consumer that reads `producer_env`.
     ///
-    /// ⛔ **Exhaustive over the product, with no wildcard and no default.** Six
-    /// pairings exist; three are lawful and three are crossed. A crossed pair is
-    /// not an unhandled case — it is the projection and this seam disagreeing
-    /// about what the value is, and the only safe answer is to stop. ⛔ No
-    /// conversion, offset, fallback or same-value inference crosses a domain
-    /// boundary here, in either direction.
-    fn resolve_continuation_immediate(
+    /// ⛔ **It takes only `views.direct_emission`.** There is no arm that falls
+    /// back to the capture view, and none that searches for "whichever claim
+    /// fits": the two consumers hold different environments, which is exactly
+    /// what `D3c` measured, so borrowing the other's index is the defect.
+    ///
+    /// ⛔ **Root provenance is not consulted.** Both root arms are lawful here;
+    /// what must hold is that the claim names *this* seat or *this* frame.
+    fn resolve_direct_emission_claim(
         &self,
         coordinate: ContinuationSourceCoordinate,
-        availability: ContinuationImmediateAvailability,
+        views: ContinuationAvailabilityViews,
         defining_owner: ContinuationEmissionOwner,
-        seat: ContinuationImmediateSeat,
-    ) -> Result<ContinuationImmediateResolution, CraneliftBackendError> {
-        match (coordinate, availability) {
-            (
-                ContinuationSourceCoordinate::EntryAbi {
-                    source_owner,
-                    source_abi_position,
-                    ..
-                },
-                ContinuationImmediateAvailability::EntryAbi { immediate_slot },
-            ) => Ok(ContinuationImmediateResolution {
-                immediate_slot,
-                root: ContinuationImmediateRoot::EntryAbi {
-                    source_owner,
-                    source_abi_position,
-                },
-            }),
-            (
-                ContinuationSourceCoordinate::ProducerLocal { .. },
-                ContinuationImmediateAvailability::CurrentLexical {
-                    emission_origin,
-                    lexical_environment_origin,
-                    post_shift_index,
-                },
-            ) => {
-                // ⛔ A specialization emitter refuses BEFORE any index is
-                // produced. A generated context lowers a raw body and does not
-                // stand in the producer's semantic environment at all, so a
-                // post-shift index there counts binders of a scope this function
-                // never entered.
+        seat: ContinuationDirectEmissionSeat,
+    ) -> Result<u32, CraneliftBackendError> {
+        let Some(claim) = views.direct_emission else {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "a continuation input carries no direct-emission availability claim, so \
+                     nothing says where this emission seat holds {coordinate:?}; \
+                     RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than reading the \
+                     context-capture claim, which is an index into a different environment"
+                ),
+            ));
+        };
+        match claim {
+            ContinuationEnvironmentClaim::CurrentLexical {
+                emission_owner,
+                producer_result_origin,
+                emission_origin,
+                lexical_environment_origin,
+                post_shift_index,
+            } => {
+                // ⛔ A current-lexical claim is authority over a PREDECLARED
+                // retained environment. A generated context lowers a raw body
+                // and does not stand in the producer's semantic environment, so
+                // the claim is refused BEFORE any operand run is indexed.
                 let ContinuationEmissionOwner::Predeclared(owner) = defining_owner else {
                     return Err(unsupported(
                         "ContinuationSpecialization",
-                        format!(
-                            "a continuation input is available as the current-lexical \
-                             producer-local {availability:?}, but the emitting context is the \
-                             generated {defining_owner:?}, which does not stand in the \
-                             producer's semantic environment; refusing before indexing is \
-                             deliberate, because that index counts binders of a scope this \
-                             function never entered"
-                        ),
+                        "a current-lexical availability claim was presented to a generated \
+                         emission context, which holds no retained lexical environment for the \
+                         producer; its post-shift index has nothing here to index and \
+                         RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than reading it as a \
+                         frame slot",
                     ));
                 };
-                let ContinuationImmediateSeat::Emission {
-                    producer_owner,
-                    producer_result_origin,
-                    emission_origin: seat_emission_origin,
-                } = seat
-                else {
+                if emission_owner != owner {
                     return Err(unsupported(
                         "ContinuationSpecialization",
                         format!(
-                            "a continuation input is available as the current-lexical \
-                             producer-local {availability:?} at a seam holding only an ABI \
-                             operand run and no semantic environment; a post-shift lexical index \
-                             has nothing to index here, and reading the ABI run with it would \
-                             name a different value"
-                        ),
-                    ));
-                };
-                // ⛔ The availability must be keyed to THIS emission. A
-                // projection built for another seat of the same owner is
-                // well-formed and names a different environment.
-                if emission_origin != seat_emission_origin {
-                    return Err(unsupported(
-                        "ContinuationSpecialization",
-                        format!(
-                            "a current-lexical availability is keyed to emission origin \
-                             {emission_origin:?} but is being consumed at \
-                             {seat_emission_origin:?}; the two seats hold different environments"
+                            "a current-lexical claim names emission owner {emission_owner:?}, \
+                             which is not the unit currently being defined ({owner:?}), so its \
+                             index counts binders in an environment this seat never stands in"
                         ),
                     ));
                 }
-                if producer_owner != owner {
+                if seat.emission_origin != emission_origin
+                    || seat.producer_result_origin != producer_result_origin
+                {
                     return Err(unsupported(
                         "ContinuationSpecialization",
-                        format!(
-                            "a current-lexical availability names producer owner \
-                             {producer_owner:?}, which is not the unit currently being defined \
-                             ({defining_owner:?}); a lexical index is only meaningful in its own \
-                             owner's environment"
-                        ),
+                        "a current-lexical claim is keyed to a different emission occurrence \
+                         than the one now emitting, so the binder depth it counted is not the \
+                         depth in force here",
                     ));
                 }
-                // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` CONSUMER MUTATIONS.
-                //
-                // ⭐ `D4a`'s mutations proved the INSTRUMENT — that the
-                // post-shift slot and the locator slot hold different operands.
-                // These prove the CONSUMER: that the production seam refuses
-                // when it selects the wrong one. The Architect's gate requires
-                // both, and passing the first does not discharge the second.
-                //
-                // ⛔ Applied HERE, ahead of the verification and not after it.
-                // A mutation applied to the resolved index downstream would slip
-                // past the very check that is supposed to catch it, and the row
-                // would then prove only that the index changed — which is the
-                // instrument's claim, not the consumer's.
-                #[cfg(test)]
-                let post_shift_index = match d3b_consumer_mutation() {
-                    D3bConsumerMutation::Exact => post_shift_index,
-                    D3bConsumerMutation::ConsumeLocatorIndex => {
-                        record_d3b_consumer_application();
-                        let ContinuationSourceCoordinate::ProducerLocal { locator, .. } =
-                            coordinate
-                        else {
-                            unreachable!("this arm matched a producer-local coordinate")
-                        };
-                        locator.environment_index
-                    }
-                    D3bConsumerMutation::ShiftProducerLocalSlot => {
-                        record_d3b_consumer_application();
-                        post_shift_index.wrapping_add(1)
-                    }
-                };
-                // ⭐ The check that makes a wrong index unrepresentable rather
-                // than merely unlikely: every incidental discriminator —
-                // carrier, ownership, storage owner, referent affinity, lowering
-                // shape — is EQUAL across the positions of one seat environment
-                // in the measured population, so nothing downstream would notice.
+                // ⭐ The claim's index is CHECKED against the planner's own walk
+                // of this seat, never re-derived here. See
+                // `verify_current_lexical_availability`.
                 verify_current_lexical_availability(
                     &self.static_transition_plan,
-                    producer_owner,
+                    emission_owner,
                     producer_result_origin,
                     emission_origin,
                     lexical_environment_origin,
                     coordinate,
                     post_shift_index,
+                )?;
+                Ok(post_shift_index)
+            }
+            ContinuationEnvironmentClaim::EntryFrame {
+                frame,
+                declared_slot,
+            } => {
+                // The direct-emission consumer reads an entry frame only when
+                // the emitting frame IS that frame -- a generated context
+                // emitting from its own operand run.
+                self.verify_entry_frame(coordinate, frame, declared_slot, defining_owner)?;
+                Ok(declared_slot)
+            }
+        }
+    }
+
+    /// **`D3b` (re-cut) — resolve the CONTEXT-CAPTURE claim**, the consumer that
+    /// reads `function_local.defining_abi_operands`.
+    ///
+    /// ⛔ A current-lexical claim is **refused outright** here: this consumer
+    /// holds an entry-frame operand run and no semantic environment at all, so a
+    /// post-shift index has nothing to index. That refusal is by **consumer
+    /// environment identity**, not by root domain.
+    fn resolve_context_capture_claim(
+        &self,
+        coordinate: ContinuationSourceCoordinate,
+        views: ContinuationAvailabilityViews,
+        defining_owner: ContinuationEmissionOwner,
+    ) -> Result<u32, CraneliftBackendError> {
+        let Some(claim) = views.context_capture else {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "a generated context capture carries no context-capture availability claim, \
+                     so nothing says where this frame holds {coordinate:?}; \
+                     RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than reading the \
+                     direct-emission claim, whose index counts binders in a lexical environment \
+                     this consumer does not hold"
+                ),
+            ));
+        };
+        match claim {
+            ContinuationEnvironmentClaim::CurrentLexical { .. } => Err(unsupported(
+                "ContinuationSpecialization",
+                "a current-lexical availability claim was presented to the entry-frame capture \
+                 consumer, which holds an ABI operand run and no semantic environment; a \
+                 post-shift lexical index is not a frame slot and \
+                 RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than indexing with it",
+            )),
+            ContinuationEnvironmentClaim::EntryFrame {
+                frame,
+                declared_slot,
+            } => {
+                self.verify_entry_frame(coordinate, frame, declared_slot, defining_owner)?;
+                Ok(declared_slot)
+            }
+        }
+    }
+
+    /// **`D3b` (re-cut) — an entry-frame claim is lawful only where the frame it
+    /// names is the frame this consumer actually holds, AND that frame really
+    /// declares a member for the full coordinate at the declared slot.**
+    ///
+    /// ⛔ Membership is the check, not a numeric agreement. The retired law
+    /// compared `immediate_slot` against `source_abi_position`, which is a
+    /// relation between a frame position and a ROOT position — the coupling
+    /// `D3c` falsified.
+    fn verify_entry_frame(
+        &self,
+        coordinate: ContinuationSourceCoordinate,
+        frame: ContinuationFrameIdentity,
+        declared_slot: u32,
+        defining_owner: ContinuationEmissionOwner,
+    ) -> Result<(), CraneliftBackendError> {
+        match (frame, defining_owner) {
+            (
+                ContinuationFrameIdentity::Predeclared(named),
+                ContinuationEmissionOwner::Predeclared(held),
+            ) => {
+                if named != held {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "an entry-frame claim names predeclared frame {named:?}, which is \
+                             not the frame being defined ({held:?}); its declared slot indexes \
+                             an operand run this consumer does not hold"
+                        ),
+                    ));
+                }
+                // ⛔ **Membership, at the exact predeclared descriptor.** A
+                // ProducerLocal member cannot be invented here: the entry source
+                // enumeration produces exactly the entry ABI run, so a mid-body
+                // value is simply absent and this refuses.
+                verify_predeclared_entry_frame_membership(
+                    &self.static_transition_plan,
+                    named,
+                    coordinate,
+                    declared_slot,
                 )
-                .map_err(|error| {
+            }
+            (
+                ContinuationFrameIdentity::GeneratedContext {
+                    enclosing,
+                    worker_body_origin,
+                },
+                ContinuationEmissionOwner::Specialization(held),
+            ) => {
+                if enclosing != held {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "an entry-frame claim names the generated context of \
+                             specialization {enclosing:?}, which is not the specialization \
+                             whose frame is being defined ({held:?})"
+                        ),
+                    ));
+                }
+                // ⭐ **The pairing revalidation.** The claim carries the pair
+                // contexts are interned on; this resolves it to the actual
+                // `ContinuationContextId` and checks that context declares the
+                // full coordinate at exactly this slot. The context id could not
+                // be carried in the claim -- contexts are minted after the
+                // projections that name them -- so the identity is closed here,
+                // where both facts exist.
+                let context = self
+                    .static_transition_plan
+                    .continuation_context_for(enclosing, worker_body_origin)?
+                    .ok_or_else(|| {
+                        unsupported(
+                            "ContinuationSpecialization",
+                            "an entry-frame claim names a generated context frame that the \
+                             planner never interned, so no declared capture run exists to \
+                             discharge it",
+                        )
+                    })?;
+                let captures = context.captures()?;
+                let mut found = None;
+                for (position, capture) in captures.iter().enumerate() {
+                    if capture.coordinate != coordinate {
+                        continue;
+                    }
+                    if found.is_some() {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            "a generated context declares two members for one continuation \
+                             coordinate, so the declared slot is ambiguous; \
+                             RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than taking the first",
+                        ));
+                    }
+                    found = Some(position);
+                }
+                let position = found.ok_or_else(|| {
                     unsupported(
                         "ContinuationSpecialization",
                         format!(
-                            "a current-lexical continuation input failed its emission-seat \
-                             consistency check: {error}"
+                            "a generated context declares no member for {coordinate:?}, so its \
+                             frame cannot make that value available; this fails closed rather \
+                             than falling back to a root position"
                         ),
                     )
                 })?;
-                Ok(ContinuationImmediateResolution {
-                    immediate_slot: post_shift_index,
-                    root: ContinuationImmediateRoot::ProducerLocal,
-                })
-            }
-            (
-                ContinuationSourceCoordinate::ProducerLocal { .. },
-                ContinuationImmediateAvailability::GeneratedContextCapture {
-                    context,
-                    owner,
-                    immediate_capture_slot,
-                },
-            ) => {
-                // ⛔ A predeclared emitter refuses: it holds its own entry run,
-                // not a generated context's capture run, and the two are
-                // different environments that happen to be indexed alike.
-                let ContinuationEmissionOwner::Specialization(defining_context) = defining_owner
-                else {
-                    return Err(unsupported(
-                        "ContinuationSpecialization",
-                        format!(
-                            "a continuation input is available as the generated-context capture \
-                             {availability:?}, but the emitting context is the predeclared \
-                             {defining_owner:?}, which holds no such capture run"
-                        ),
-                    ));
-                };
-                if context != defining_context {
-                    return Err(unsupported(
-                        "ContinuationSpecialization",
-                        format!(
-                            "a generated-context capture availability is keyed to context \
-                             {context:?} but is being consumed while defining \
-                             {defining_context:?}; a capture slot indexes one exact context's run"
-                        ),
-                    ));
-                }
-                let view = self
-                    .static_transition_plan
-                    .continuation_contexts()?
-                    .into_iter()
-                    .find(|candidate| candidate.enclosing_specialization() == context)
+                let expected = u32::try_from(position)
+                    .ok()
+                    .and_then(|position| context.parameters().checked_add(position))
                     .ok_or_else(|| {
                         unsupported(
                             "ContinuationSpecialization",
-                            format!(
-                                "a generated-context capture availability names context \
-                                 {context:?}, which has no projected view to check its capture \
-                                 run against"
-                            ),
+                            "generated context capture slot exhausted",
                         )
                     })?;
-                if view.raw_owner() != owner {
+                if expected != declared_slot {
                     return Err(unsupported(
                         "ContinuationSpecialization",
                         format!(
-                            "a generated-context capture availability names owner {owner:?}, \
-                             which is not the raw owner {:?} of the context it is keyed to",
-                            view.raw_owner()
+                            "an entry-frame claim declares slot {declared_slot} for \
+                             {coordinate:?}, but the generated context declares that member at \
+                             slot {expected}; the two disagree, so at least one of them names a \
+                             different value"
                         ),
                     ));
                 }
-                // Full ROOT-COORDINATE membership. ⛔ By whole coordinate, never
-                // by owner or position alone: a local binding must not be able
-                // to satisfy an entry position by carrying the same integer.
-                let captures = view.captures()?;
-                let matching = captures
-                    .iter()
-                    .filter(|capture| capture.coordinate == coordinate)
-                    .count();
-                if matching != 1 {
-                    return Err(unsupported(
-                        "ContinuationSpecialization",
-                        format!(
-                            "a generated-context capture availability names a coordinate its \
-                             context declares {matching} times among its captures; exactly one \
-                             occurrence is required, or the slot it names is not determined"
-                        ),
-                    ));
-                }
-                let position = captures
-                    .iter()
-                    .position(|capture| capture.coordinate == coordinate)
-                    .expect("membership was just counted");
-                let declared = view
-                    .parameters()
-                    .checked_add(u32::try_from(position).map_err(|_| {
-                        unsupported(
-                            "ContinuationSpecialization",
-                            "a generated-context capture position exhausted",
-                        )
-                    })?)
-                    .ok_or_else(|| {
-                        unsupported(
-                            "ContinuationSpecialization",
-                            "a generated-context capture slot position overflowed",
-                        )
-                    })?;
-                if declared != immediate_capture_slot {
-                    return Err(unsupported(
-                        "ContinuationSpecialization",
-                        format!(
-                            "a generated-context capture availability names immediate slot \
-                             {immediate_capture_slot} but this context declares that coordinate \
-                             at {declared}"
-                        ),
-                    ));
-                }
-                Ok(ContinuationImmediateResolution {
-                    immediate_slot: immediate_capture_slot,
-                    root: ContinuationImmediateRoot::ProducerLocal,
-                })
+                Ok(())
+            }
+            (ContinuationFrameIdentity::Predeclared(named), ContinuationEmissionOwner::Specialization(held)) => {
+                Err(unsupported(
+                    "ContinuationSpecialization",
+                    format!(
+                        "an entry-frame claim names predeclared frame {named:?} while the frame \
+                         being defined is the generated context of {held:?}; a predeclared \
+                         entry run is not reachable from a generated context and \
+                         RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than indexing its own"
+                    ),
+                ))
             }
             (
-                ContinuationSourceCoordinate::EntryAbi { .. },
-                ContinuationImmediateAvailability::CurrentLexical { .. }
-                | ContinuationImmediateAvailability::GeneratedContextCapture { .. },
-            )
-            | (
-                ContinuationSourceCoordinate::ProducerLocal { .. },
-                ContinuationImmediateAvailability::EntryAbi { .. },
+                ContinuationFrameIdentity::GeneratedContext { enclosing, .. },
+                ContinuationEmissionOwner::Predeclared(held),
             ) => Err(unsupported(
                 "ContinuationSpecialization",
                 format!(
-                    "a continuation input pairs the root coordinate {coordinate:?} with the \
-                     immediate availability {availability:?}, which belong to different domains; \
-                     RT-CONTSRC-PRODUCER-LOCAL D3b refuses a crossed pair rather than trusting \
-                     either half, because each is well-formed alone and only the pairing is wrong"
+                    "an entry-frame claim names the generated context of {enclosing:?} while the \
+                     frame being defined is predeclared {held:?}; a generated context's capture \
+                     run is not this function's entry run"
                 ),
             )),
         }
     }
-
     fn claim_and_call_resolved_continuation(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -6770,111 +6773,48 @@ impl<'a> Lowering<'a> {
             // the value IS. Matching the halves separately lets a crossed pair
             // through whenever both halves are individually well-formed, which
             // is exactly the shape that reads as safe.
-            let resolution = self.resolve_continuation_immediate(
+            let immediate_slot = self.resolve_direct_emission_claim(
                 input.coordinate,
                 input.availability,
                 defining_owner,
-                ContinuationImmediateSeat::Emission {
-                    producer_owner: unit.producer_owner(),
+                ContinuationDirectEmissionSeat {
                     producer_result_origin: unit.producer_result_origin(),
                     emission_origin: unit.producer_construct_origin(),
                 },
             )?;
-            let immediate_slot = resolution.immediate_slot;
-            // `D3b` — INJECTIVITY, **within the producer-local domain only**.
+            // `D3b` (re-cut) — INJECTIVITY, over the whole emission.
             //
-            // ⛔ **Deliberately not across domains, and that is a measurement
-            // rather than a preference.** An entry-ABI input's `immediate_slot`
-            // is a position in the entry ABI frame; a producer-local input's
-            // `post_shift_index` is a position in the lexical frame. Comparing
-            // the two integers is the cross-frame conflation this node exists to
-            // forbid, and a first draft that did it refused five lawful bracket
-            // fixtures where a parameter at ABI position 0 and a case binder at
-            // lexical position 0 legitimately carry the same number.
+            // ⭐ **The re-cut widens this law, and that is a consequence of the
+            // correction rather than an extra.** Under the retired representation
+            // the law had to be scoped to the producer-local domain, because an
+            // entry-ABI `immediate_slot` was a position in the ABI frame while a
+            // producer-local index was a position in the lexical frame, and
+            // comparing the two integers was itself the cross-frame conflation.
             //
-            // Within one domain the law is exact, and it is the consumption-side
-            // dual of the planner's refusal of a binding present at two
-            // positions of the seat environment: there, ambiguity is one value
-            // in two places; here it is two values claiming one place.
-            if matches!(resolution.root, ContinuationImmediateRoot::ProducerLocal) {
-                if let Some((seen, _)) = resolved_slots
-                    .iter()
-                    .find(|(_, slot)| *slot == immediate_slot)
-                {
-                    if *seen != input.coordinate {
-                        return Err(unsupported(
-                            "ContinuationSpecialization",
-                            format!(
-                                "two distinct producer-local continuation inputs of one emission \
-                                 resolve to the same immediate slot {immediate_slot}: {seen:?} \
-                                 and {:?}. One position cannot hold both values, so at least one \
-                                 would be emitted carrying the other's operand",
-                                input.coordinate
-                            ),
-                        ));
-                    }
+            // ⛔ Now every claim at one direct-emission seat names a position in
+            // **the same environment** — this seat's own. So two inputs
+            // resolving to one slot is unambiguously two values claiming one
+            // place, and at least one of them would be emitted carrying the
+            // other's operand. It is the consumption-side dual of the planner's
+            // refusal of a coordinate present at two positions of the seat.
+            if let Some((seen, _)) = resolved_slots
+                .iter()
+                .find(|(_, slot)| *slot == immediate_slot)
+            {
+                if *seen != input.coordinate {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "two distinct continuation inputs of one emission resolve to the \
+                             same immediate slot {immediate_slot}: {seen:?} and {:?}. One \
+                             position cannot hold both values, so at least one would be emitted \
+                             carrying the other's operand",
+                            input.coordinate
+                        ),
+                    ));
                 }
-                resolved_slots.push((input.coordinate, immediate_slot));
             }
-            // `D5a` -- ROOT provenance versus IMMEDIATE availability.
-            //
-            // ⛔ Exhaustive over the emission-owner classes with no catch-all:
-            // the two answer the question "does this environment hold the value,
-            // and at which index" differently, and a default arm here would be
-            // the reverse-map `evt_609am4v7cdt5b` forbids.
-            match (resolution.root, defining_owner) {
-                (
-                    ContinuationImmediateRoot::EntryAbi {
-                        source_owner,
-                        source_abi_position,
-                    },
-                    ContinuationEmissionOwner::Predeclared(owner),
-                ) => {
-                    // The emitting function IS the root provenance owner, so
-                    // root and immediate must coincide. Both halves are checked:
-                    // the owner because it always was, and the equality because
-                    // it is the consistency law that lets this arm read either
-                    // field and get the same answer.
-                    if source_owner != owner {
-                        return Err(unsupported(
-                            "ContinuationSpecialization",
-                            format!(
-                                "a continuation input names source owner {source_owner:?}, which \
-                                 is not the unit currently being defined ({defining:?})"
-                            ),
-                        ));
-                    }
-                    if immediate_slot != source_abi_position {
-                        return Err(unsupported(
-                            "ContinuationSpecialization",
-                            "a continuation input emitted from its own root owner has an \
-                             immediate slot that disagrees with its root ABI position; for a \
-                             predeclared emitter the two are the same environment, so a \
-                             disagreement means the projection was built against a different \
-                             owner than the one now emitting",
-                        ));
-                    }
-                }
-                (
-                    ContinuationImmediateRoot::EntryAbi { .. },
-                    ContinuationEmissionOwner::Specialization(_),
-                ) => {
-                    // The emitting function is a generated context. Root
-                    // provenance is deliberately NOT compared against it: the
-                    // whole reason this context exists is that the root owner's
-                    // parameters are not reachable from the raw body, and
-                    // `fn3[0]` is not an index into `fn2`'s environment. The
-                    // planner resolved the root value to this context's own
-                    // capture position when it built the projection; the bounds
-                    // check below is what makes that resolution answerable here.
-                }
-                // `D3b` — a producer-local root carries no ABI position in any
-                // emitting environment, so there is no root-versus-immediate
-                // equality to state. ⛔ Its identity was checked where it lives:
-                // against the emission seat's own lexical environment, or
-                // against the generated context's declared capture run.
-                (ContinuationImmediateRoot::ProducerLocal, _) => {}
-            }
+            resolved_slots.push((input.coordinate, immediate_slot));
             let binding = producer_env
                 .get(immediate_slot as usize)
                 .ok_or_else(|| {
@@ -8885,58 +8825,16 @@ impl<'a> Lowering<'a> {
             // nothing here to index and is refused rather than read as an ABI
             // position. The generated-context capture arm IS resolvable here,
             // because a capture slot is a position in exactly this run.
-            let resolution = self.resolve_continuation_immediate(
+            let immediate_slot = self.resolve_context_capture_claim(
                 capture.coordinate,
                 capture.availability,
                 defining_owner,
-                ContinuationImmediateSeat::AbiOperandRun,
             )?;
             // `RT-CONTSRC-PRODUCER-LOCAL` `D2b` — the availability domain, matched
             // exhaustively with no wildcard exactly as the coordinate domain is
             // above. `D3` teaches this seam the two producer-local arms; until
             // then it must not index `defining_abi_operands` — an ABI operand run
             // — with a lexical environment index.
-            let immediate_slot = resolution.immediate_slot;
-            // ROOT provenance versus IMMEDIATE availability, kept apart exactly
-            // as at the specialization emission seam. Exhaustive over the owner
-            // classes with no catch-all.
-            match (resolution.root, defining_owner) {
-                (
-                    ContinuationImmediateRoot::EntryAbi {
-                        source_owner,
-                        source_abi_position,
-                    },
-                    ContinuationEmissionOwner::Predeclared(owner),
-                ) => {
-                    if source_owner != owner {
-                        return Err(unsupported(
-                            "ContinuationSpecialization",
-                            format!(
-                                "a generated context capture names root source owner {:?}, which                                  is not the function emitting this carried invocation; its value                                  is not available here and reconstructing one would be the                                  reverse-map the ruling forbids",
-                                source_owner
-                            ),
-                        ));
-                    }
-                    if immediate_slot != source_abi_position {
-                        return Err(unsupported(
-                            "ContinuationSpecialization",
-                            "a generated context capture emitted from its own root owner has an                              immediate slot that disagrees with its root ABI position",
-                        ));
-                    }
-                }
-                (
-                    ContinuationImmediateRoot::EntryAbi { .. },
-                    ContinuationEmissionOwner::Specialization(_),
-                ) => {
-                    // A context calling another context reads the immediate
-                    // slot alone; root provenance is retained and deliberately
-                    // not compared against a function that never held it.
-                }
-                // `D3b` — a producer-local root has no ABI position to agree
-                // with; its identity was checked against the declared capture
-                // run inside the resolver.
-                (ContinuationImmediateRoot::ProducerLocal, _) => {}
-            }
             let operand = self
                 .function_local
                 .defining_abi_operands
@@ -13648,19 +13546,14 @@ enum ContinuationImmediateRoot {
     ProducerLocal,
 }
 
-/// What the consuming seam is holding, which decides whether a lexical index has
-/// anything to index at all.
+/// **`D3b` re-cut — the exact occurrence the direct-emission consumer stands at.**
+///
+/// ⛔ A `CurrentLexical` claim counts binders at ONE seat. Presenting it at a
+/// different occurrence would read an index derived at one depth as if it held
+/// at another, so the consumer carries its own seat and refuses a claim keyed
+/// elsewhere.
 #[derive(Clone, Copy, Debug)]
-enum ContinuationImmediateSeat {
-    /// The specialization emission seam: it holds the producer's own lowering
-    /// environment at the exact emission occurrence.
-    Emission {
-        producer_owner: PredeclaredFunctionId,
-        producer_result_origin: StaticOriginId,
-        emission_origin: StaticOriginId,
-    },
-    /// A seam holding only an ABI operand run. ⛔ Not a lesser case of the
-    /// above: it is a different environment, and the distinction is what stops a
-    /// post-shift lexical index being read as an ABI position.
-    AbiOperandRun,
+struct ContinuationDirectEmissionSeat {
+    producer_result_origin: StaticOriginId,
+    emission_origin: StaticOriginId,
 }

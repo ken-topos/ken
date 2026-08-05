@@ -51,11 +51,13 @@ pub(super) use static_transition::{
     // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — the closed coordinate sum reaches
     // lowering because the emission resolver must MATCH on it; there is no
     // accessor that answers "which ABI position" without the domain.
-    ContinuationImmediateAvailability, ContinuationSourceCoordinate,
+    ContinuationAvailabilityViews, ContinuationEnvironmentClaim, ContinuationFrameIdentity,
+    ContinuationSourceCoordinate,
     ContinuationSpecializationId,
     // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` — the emission consumer's fail-closed
     // check that it is indexing where the coordinate actually sits.
     verify_current_lexical_availability,
+    verify_predeclared_entry_frame_membership,
     ContinuationUnitView,
 };
 #[cfg(test)]

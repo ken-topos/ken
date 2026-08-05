@@ -80,7 +80,8 @@ pub(in crate::cranelift_backend) use super::planning::{
     DeclarationCallTargetClass,
     ContinuationContextId, ContinuationEmissionOwner,
     ContinuationInputView, ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge,
-    ContinuationImmediateAvailability, ContinuationSourceCoordinate,
+    ContinuationAvailabilityViews, ContinuationEnvironmentClaim, ContinuationFrameIdentity,
+    ContinuationSourceCoordinate,
     ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, FieldIdentity, JoinPlanToken,
     PlannedReferentLifetime,
@@ -89,7 +90,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,
     SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot, PlannedAggregateOwnership,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
-    verify_current_lexical_availability,
+    verify_current_lexical_availability, verify_predeclared_entry_frame_membership,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]

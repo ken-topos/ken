@@ -923,112 +923,152 @@ struct ContinuationInputProjection {
     /// `evt_609am4v7cdt5b` forbids; the two are kept apart here so no consumer
     /// has to know which it holds.
     ///
-    /// **`D2b`** — this was a bare `u32`, which silently asserted that every
-    /// immediate availability is an ABI operand position. It is now a closed
-    /// sum over the environments a value can actually be reachable in; the
-    /// entry-ABI arm carries the identical number this field always held.
-    availability: ContinuationImmediateAvailability,
+    /// **`D3b` re-cut** — the two consumer-specific claims. See
+    /// [`ContinuationAvailabilityViews`]; ⛔ there is no single "immediate
+    /// slot" here, because the two consumers do not hold the same environment.
+    availability: ContinuationAvailabilityViews,
 }
 
-/// How one emission context resolves a continuation input's root provenance to
-/// the slot where that value is immediately available to it.
+/// **`D3b` re-cut — which frame will emit this continuation call.**
 ///
-/// ⛔ Deliberately an enum over the two emission-owner classes rather than an
-/// `Option<..>` with a defaulting arm: a generated context that cannot find a
-/// root value among its own captures must **reject**, and a default would
-/// silently emit a call reading whatever sat at the root position.
-enum ContinuationImmediateResolution<'plan> {
-    /// The emitting function is itself the root provenance owner. Immediate and
-    /// root are the same position; this is the entire pre-`D5a` population.
-    RootIsImmediate,
-    /// The emitting function is the generated execution context of an enclosing
-    /// specialization. The value is reachable only as one of that context's own
+/// ⛔ Deliberately an enum over the two emitting-frame classes rather than an
+/// `Option` with a defaulting arm: a generated context that declares no member
+/// for a value must **reject**, and a default would silently emit a call reading
+/// whatever sat at the root position.
+///
+/// ⭐ This replaces `ContinuationImmediateResolution`, whose `RootIsImmediate`
+/// arm carried the retired premise in its name: that when the emitter is the
+/// root owner, root position *is* immediate position. `D3c` measured otherwise.
+enum ContinuationEmitterFrame<'plan> {
+    /// The emitting frame is the predeclared producer owner itself, and its
+    /// direct-emission consumer stands in that owner's retained lexical
+    /// environment.
+    Predeclared(PredeclaredFunctionId),
+    /// The emitting frame is the generated execution context of an enclosing
+    /// specialization. Values are reachable only as that context's declared
     /// captures, which are exactly the enclosing specialization's continuation
-    /// inputs, laid out after the context's parameter run.
+    /// inputs laid out after its parameter run.
     GeneratedContext {
-        /// `D2b` — the exact generated context this resolution speaks for. Arm
-        /// 2 is keyed to it, so a projection built against one context can
-        /// never be read as availability inside another.
-        context: ContinuationSpecializationId,
-        /// `D2b` — the predeclared function whose body hosts that context.
-        owner: PredeclaredFunctionId,
+        enclosing: ContinuationSpecializationId,
+        worker_body_origin: StaticOriginId,
         context_parameters: u32,
         enclosing_inputs: &'plan [ContinuationInputProjection],
     },
 }
 
-/// **`RT-CONTSRC-PRODUCER-LOCAL` `D2b`** — where the emitting seat can reach
-/// this value *right now*, as a closed sum kept separate from root provenance.
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` (re-cut)** — WHERE ONE NAMED CONSUMER
+/// holds this value, as a closed sum over **environments**.
 ///
 /// `D1` gave every continuation input a root coordinate
 /// ([`ContinuationSourceCoordinate`]): *which value is this, and in whose
-/// terms*. That answers identity and it is never rewritten. It does **not**
-/// answer availability — *where does the code about to emit the call find the
-/// value* — and `D1` left the two spanning one term, which is the framing
-/// defect `evt_44k69b55vhek2` reopened `D2` for.
+/// terms*. That answers identity and is never rewritten. This answers a
+/// different question — *where does the consumer about to read it find it* —
+/// and ⛔ **neither determines the other.**
 ///
-/// The three arms are three genuinely different environments, not three
-/// spellings of an index:
+/// ⛔⛔ **The retired law, named so it is not reconstructed.** `D3b` first
+/// landed a product over `(root coordinate, availability)` with three lawful
+/// pairings and three crossed, resting on the premise that root provenance
+/// constrains availability. `D3c` measured that premise false: at a predeclared
+/// seat under one intervening binder an entry root's ABI position 0 is not its
+/// immediate position, which is 1. So `EntryAbi` + `CurrentLexical` is not a
+/// crossed pair — **it is the lawful answer at nonzero lexical depth.**
+/// `RootIsImmediate`, the pairing table and the equality
+/// `immediate_slot == source_abi_position` are all retired.
 ///
-/// - [`Self::EntryAbi`] is the entire pre-`D2b` population, unchanged. The
-///   value arrives through an ABI operand run — the root owner's own entry run
-///   when the emitter *is* the root owner, or a generated context's capture run
-///   laid out after its parameters. Both were already `immediate_slot`.
-/// - [`Self::CurrentLexical`] is a producer-local value sitting in the
-///   *semantic* environment at one exact emission seat. It has no ABI position
-///   anywhere and must never acquire one by defaulting.
-/// - [`Self::GeneratedContextCapture`] is a producer-local value that a
-///   generated context carries as a declared capture, which is lawful only once
-///   the caller's own current-lexical availability proves the value existed at
-///   the call seat.
+/// The two arms are two genuinely different environments:
+///
+/// - [`Self::CurrentLexical`] — the *semantic* environment in force at one
+///   exact predeclared emission occurrence, with intervening binders counted.
+///   **Either root arm may take it.**
+/// - [`Self::EntryFrame`] — a declared slot in one exactly identified frame's
+///   operand run. **Either root arm may take it**, but only where that frame
+///   really does declare a member for the full coordinate.
 ///
 /// ⛔ There is no accessor that answers "which index" without first answering
-/// "which environment". Reading a lexical index as an ABI slot would conflate
-/// exactly the two coordinate spaces the closed sum exists to separate.
+/// "which environment, and whose". Reading a lexical index as a frame slot is
+/// the conflation this sum exists to make unrepresentable.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(in crate::cranelift_backend) enum ContinuationImmediateAvailability {
-    /// Entry ABI availability — the pre-`D2b` case, carried forward verbatim.
-    EntryAbi {
-        /// The position in the emitting context's own ABI operand run.
-        immediate_slot: u32,
-    },
-    /// `D2b` arm 1 — current lexical availability, keyed to the exact causal
-    /// producer/emission occurrence.
-    ///
-    /// Lowering may consume this **only** at `emission_origin` while holding
-    /// the semantic environment rooted at `lexical_environment_origin`. The
-    /// index is post-shift: it counts the binders actually pushed between the
-    /// binding's scope and the emission seat, obtained by the forward semantic
-    /// environment walk rather than by assuming introduction index equals
-    /// emission index.
+pub(in crate::cranelift_backend) enum ContinuationEnvironmentClaim {
+    /// The value sits in the retained lexical environment at one exact
+    /// predeclared emission seat. The index is **post-shift**: it counts the
+    /// binders actually pushed between the value's scope and the seat, obtained
+    /// by the forward semantic environment walk.
     CurrentLexical {
+        emission_owner: PredeclaredFunctionId,
+        producer_result_origin: StaticOriginId,
         emission_origin: StaticOriginId,
         lexical_environment_origin: StaticOriginId,
         post_shift_index: u32,
     },
-    /// `D2b` arm 2 — generated-context capture availability, keyed to the exact
-    /// generated owner/context and carrying that context's declared immediate
-    /// capture slot.
-    GeneratedContextCapture {
-        context: ContinuationSpecializationId,
-        owner: PredeclaredFunctionId,
-        immediate_capture_slot: u32,
+    /// The value arrives as a declared slot of one exactly identified frame's
+    /// operand run.
+    ///
+    /// ⭐ **This subsumes the old `GeneratedContextCapture`.** A generated
+    /// context's capture run and a predeclared function's entry run are the same
+    /// *kind* of environment — a declared operand run — differing only in which
+    /// frame declares it. Two names for one environment class is what let the
+    /// old law read a frame identity off a root domain.
+    EntryFrame {
+        frame: ContinuationFrameIdentity,
+        declared_slot: u32,
     },
 }
 
-impl ContinuationImmediateAvailability {
-    /// The entry-ABI operand position, for a test that has already established
-    /// the arm. ⛔ Test-only and panicking on purpose: production consumers must
-    /// go through the fail-closed path above, never assert their way past the
-    /// domain question.
-    #[cfg(test)]
-    pub(in crate::cranelift_backend) fn expect_entry_abi_slot(self) -> u32 {
-        match self {
-            Self::EntryAbi { immediate_slot } => immediate_slot,
-            other => panic!("expected an entry-ABI immediate availability, found {other:?}"),
-        }
-    }
+/// **Which frame's operand run an [`ContinuationEnvironmentClaim::EntryFrame`]
+/// speaks for**, as an exact identity.
+///
+/// ⛔ A frame identity is never inferred from a root coordinate. It names the
+/// one environment whose declared members can discharge the claim, and a
+/// consumer holding a different frame must refuse rather than index its own.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum ContinuationFrameIdentity {
+    /// A predeclared function's own entry ABI run.
+    Predeclared(PredeclaredFunctionId),
+    /// A generated execution context's frame: its parameter run followed by its
+    /// declared capture run.
+    ///
+    /// ⛔ **Identified by the pair the planner actually interns contexts on,**
+    /// `(enclosing_specialization, worker_body_origin)`, and NOT by
+    /// [`ContinuationContextId`]. That is a timing fact, not a preference:
+    /// specializations are interned first, each key carrying these very
+    /// projections, and contexts are minted afterwards from
+    /// `enclosing_unit.key.continuation_inputs`. A claim built during projection
+    /// therefore cannot carry a context id that does not exist yet, and
+    /// stamping one in afterwards would mean mutating an immutable projection.
+    ///
+    /// ⭐ The consumer closes the gap by **revalidating this pair against the
+    /// `ContinuationContextId` it actually holds**, which is the identity check
+    /// the ruling asks for, performed where both facts exist.
+    GeneratedContext {
+        enclosing: ContinuationSpecializationId,
+        worker_body_origin: StaticOriginId,
+    },
+}
 
+/// **The two consumer-specific availability views of one continuation input.**
+///
+/// ⛔⛔ **One unqualified index cannot be authority for both consumers, and this
+/// is measured rather than argued.** The direct continuation-call emission reads
+/// `producer_env` — the exact lexical environment standing at the producer's
+/// emission seat. The generated-context capture append reads
+/// `function_local.defining_abi_operands` — an entry-frame operand run. `D3c`
+/// showed those two disagree at nonzero binder depth, so a single `availability`
+/// field repaired for one consumer silently mis-serves the other.
+///
+/// ⭐ The split is not artificial: the two consumers already read **two physical
+/// copies** of these records — the specialization's `continuation_inputs`, and
+/// the context's `captures`, which is a clone of them.
+///
+/// ⛔ A closed record keyed by consumer kind, deliberately **not** an unkeyed
+/// vector and **not** a "first matching availability" search. A consumer takes
+/// its own field or refuses; there is no arm that lets it fall back to the
+/// other's.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct ContinuationAvailabilityViews {
+    /// For the direct continuation-call emission consumer.
+    pub(in crate::cranelift_backend) direct_emission: Option<ContinuationEnvironmentClaim>,
+    /// For the generated-context capture-append consumer.
+    pub(in crate::cranelift_backend) context_capture: Option<ContinuationEnvironmentClaim>,
 }
 
 /// One exact source-slot value in the environment carried by a producer edge
@@ -1515,13 +1555,12 @@ pub(in crate::cranelift_backend) struct ContinuationInputView {
     pub(in crate::cranelift_backend) boundary_avail: BoundaryUseAvail,
     pub(in crate::cranelift_backend) referent_affinity: Vec<BoundaryReferentOwner>,
     pub(in crate::cranelift_backend) ordinary_abi_position: u32,
-    /// **`D5a`/`D2b`** — where the emitting context finds this value. See
-    /// [`ContinuationInputProjection::availability`]; ⛔ this is not
-    /// `source_abi_position` unless the emitter is the root owner, and the
-    /// emission seam checks that equality rather than assuming it. The
-    /// emission seam must **match** on it: a producer-local value is not
-    /// reachable through any ABI operand run at all.
-    pub(in crate::cranelift_backend) availability: ContinuationImmediateAvailability,
+    /// **`D3b` re-cut** — the two consumer-specific claims. See
+    /// [`ContinuationAvailabilityViews`]. ⛔ Each consumer must take its OWN
+    /// field and validate the frame or seat it names against the environment it
+    /// actually holds; there is no field here that answers "which index"
+    /// without first answering "which environment, and whose".
+    pub(in crate::cranelift_backend) availability: ContinuationAvailabilityViews,
 }
 
 /// `D1` — a read-only view of one already-validated continuation call token,
@@ -6113,13 +6152,14 @@ fn continuation_emission_seat_environment(
 /// and `D3a`'s validator own that half.
 pub(in crate::cranelift_backend) fn verify_current_lexical_availability(
     plan: &StaticTransitionPlan<'_>,
-    producer_owner: PredeclaredFunctionId,
+    emission_owner: PredeclaredFunctionId,
     producer_result_origin: StaticOriginId,
     emission_origin: StaticOriginId,
     lexical_environment_origin: StaticOriginId,
     coordinate: ContinuationSourceCoordinate,
     post_shift_index: u32,
 ) -> Result<(), CraneliftBackendError> {
+    let producer_owner = emission_owner;
     let environment = ContinuationProducerEnvironment {
         producer_owner,
         producer_result_origin,
@@ -6136,10 +6176,18 @@ pub(in crate::cranelift_backend) fn verify_current_lexical_availability(
     // ⛔ Reuses the projection's OWN locator, so "where the coordinate is" has
     // exactly one definition in this plane. A second search written here would
     // be a second authority that could drift from the first.
-    let derived =
-        current_lexical_availability(coordinate, source_root, emission_origin, &seat)?;
+    let derived = current_lexical_availability(
+        coordinate,
+        emission_owner,
+        producer_result_origin,
+        source_root,
+        emission_origin,
+        &seat,
+    )?;
     if derived
-        != (ContinuationImmediateAvailability::CurrentLexical {
+        != (ContinuationEnvironmentClaim::CurrentLexical {
+            emission_owner,
+            producer_result_origin,
             emission_origin,
             lexical_environment_origin,
             post_shift_index,
@@ -6152,19 +6200,82 @@ pub(in crate::cranelift_backend) fn verify_current_lexical_availability(
     Ok(())
 }
 
-/// **`D2b` arm 1** — locate one producer-local coordinate in the emission seat's
-/// environment, and refuse if it is not exactly there.
+/// **`D3b` re-cut — VERIFY that one predeclared frame really declares a member
+/// for a full coordinate, at exactly the declared slot.**
 ///
-/// ⛔ **Fail-closed path 2 of 5 — wrong post-shift index.** The index is
-/// *searched for by identity*, never assumed equal to the introduction index or
-/// to the projection ordinal. A coordinate absent from the seat environment, or
-/// present at two positions, produces an error rather than a plausible number.
+/// ⭐ **Membership, not numeric agreement.** The retired law asked whether
+/// `immediate_slot == source_abi_position` — a comparison between a frame
+/// position and a ROOT position, which is the coupling `D3c` falsified. This
+/// asks the only question that is actually about the frame: *does this
+/// descriptor's own entry run declare this coordinate here?*
+///
+/// ⛔ **A `ProducerLocal` member cannot be invented.** The entry source
+/// enumeration produces exactly the entry ABI input run, so a mid-body value is
+/// simply absent from it and this refuses. That is the ruled law: a
+/// producer-local member remains unavailable at a predeclared entry frame unless
+/// a separately authorized substrate later declares one.
+pub(in crate::cranelift_backend) fn verify_predeclared_entry_frame_membership(
+    plan: &StaticTransitionPlan<'_>,
+    frame: PredeclaredFunctionId,
+    coordinate: ContinuationSourceCoordinate,
+    declared_slot: u32,
+) -> Result<(), CraneliftBackendError> {
+    let members = continuation_owner_entry_sources(plan, frame)?;
+    let mut found = None;
+    for (position, member) in members.iter().enumerate() {
+        if member.coordinate != coordinate {
+            continue;
+        }
+        if found.is_some() {
+            return Err(planner_error(
+                "a predeclared entry frame declares two members for one continuation \
+                 coordinate, so its declared slot is ambiguous; RT-CONTSRC-PRODUCER-LOCAL D3b \
+                 refuses rather than taking the first",
+            ));
+        }
+        found = Some(position);
+    }
+    let position = found.ok_or_else(|| {
+        planner_error(
+            "a predeclared entry frame declares no member for this continuation coordinate, so \
+             its entry run cannot make that value available; RT-CONTSRC-PRODUCER-LOCAL D3b fails \
+             closed rather than reading whichever operand sits at a plausible position",
+        )
+    })?;
+    let position = u32::try_from(position)
+        .map_err(|_| planner_capacity_error("predeclared entry frame slot exhausted"))?;
+    if position != declared_slot {
+        return Err(planner_error(
+            "an entry-frame claim's declared slot is not the position at which that predeclared \
+             frame declares the coordinate, so the slot names a different member",
+        ));
+    }
+    Ok(())
+}
+
+/// **`D3b` re-cut, the `CurrentLexical` arm** — locate one coordinate in the
+/// emission seat's environment, and refuse if it is not exactly there.
+///
+/// ⛔ **Fail-closed — wrong post-shift index.** The index is *searched for by
+/// full-coordinate identity*, never assumed equal to the introduction index, the
+/// projection ordinal, or a root ABI position. A coordinate absent from the seat
+/// environment, or present at two positions, produces an error rather than a
+/// plausible number.
+///
+/// ⭐ **Either root arm reaches here, and that is the `D3c` correction.** The
+/// seat environment is seeded by `continuation_owner_entry_sources`, whose
+/// members carry `EntryAbi` coordinates, and then walked forward with binders
+/// prepended. So an entry value's post-shift position is found by the same
+/// search that finds a producer-local one — which is exactly why the old
+/// "an entry root takes its ABI position" shortcut was wrong.
 fn current_lexical_availability(
     coordinate: ContinuationSourceCoordinate,
+    emission_owner: PredeclaredFunctionId,
+    producer_result_origin: StaticOriginId,
     lexical_environment_origin: StaticOriginId,
     emission_origin: StaticOriginId,
     seat_environment: &[ContinuationValueSourceAuthority],
-) -> Result<ContinuationImmediateAvailability, CraneliftBackendError> {
+) -> Result<ContinuationEnvironmentClaim, CraneliftBackendError> {
     let mut found: Option<u32> = None;
     for (index, value) in seat_environment.iter().enumerate() {
         let ContinuationValueSourceAuthority::Closed(sources) = value else {
@@ -6178,39 +6289,43 @@ fn current_lexical_availability(
         })?;
         if found.is_some() {
             return Err(planner_error(
-                "a producer-local binding is present at two positions of the emission seat's \
+                "a continuation coordinate is present at two positions of the emission seat's \
                  lexical environment, so its post-shift index is ambiguous; an exact structural \
-                 binding identity must occur at most once and this refuses rather than taking \
-                 the first",
+                 identity must occur at most once and this refuses rather than taking the first",
             ));
         }
         found = Some(index);
     }
     let post_shift_index = found.ok_or_else(|| {
         planner_error(
-            "a producer-local binding is not present in the lexical environment in force at the \
+            "a continuation coordinate is not present in the lexical environment in force at the \
              emission seat, so the value is not immediately available there; this fails closed \
              rather than reverse-searching for a position that happens to hold a similar value",
         )
     })?;
-    Ok(ContinuationImmediateAvailability::CurrentLexical {
+    Ok(ContinuationEnvironmentClaim::CurrentLexical {
+        emission_owner,
+        producer_result_origin,
         emission_origin,
         lexical_environment_origin,
         post_shift_index,
     })
 }
 
+/// **`D3b` re-cut — build the two consumer-specific availability views.**
+///
+/// ⛔ The `emitter` argument names the frame that will *emit* this call, and it
+/// is the only thing consulted. Nothing here reads a root coordinate to decide
+/// which environment a value lives in — that coupling is precisely what `D3c`
+/// falsified.
 fn exact_continuation_projection(
     plan: &StaticTransitionPlan<'_>,
     environment: &ContinuationProducerEnvironment,
     ordinary_parameters: u32,
-    immediate: &ContinuationImmediateResolution<'_>,
+    emitter: &ContinuationEmitterFrame<'_>,
 ) -> Result<Vec<ContinuationInputProjection>, CraneliftBackendError> {
-    // `D2b` — the emission seat's lexical environment is derived at most once
-    // per edge, and only when a producer-local coordinate actually needs it.
-    // ⭐ Deliberately lazy: an all-entry-ABI edge (the entire population
-    // admitted today) must not start paying for a walk it never reads, and
-    // must not be newly rejectable by a walk failure that cannot affect it.
+    // The emission seat's lexical environment is derived at most once per edge,
+    // and only where the direct-emission consumer will actually read it.
     let mut seat_environment: Option<(StaticOriginId, Vec<ContinuationValueSourceAuthority>)> =
         None;
     environment
@@ -6221,127 +6336,101 @@ fn exact_continuation_projection(
             let ordinal = u32::try_from(ordinal).map_err(|_| {
                 planner_capacity_error("continuation projection ordinal exhausted")
             })?;
-            let availability = match immediate {
-                ContinuationImmediateResolution::RootIsImmediate => {
-                    // ⛔ Exhaustive over the coordinate domain with no wildcard.
-                    // The emitting function IS the root owner, so an entry-ABI
-                    // value's immediate slot is its entry position — while a
-                    // producer-local value has no entry position at all and
-                    // takes the lexical arm instead of borrowing one.
-                    match input.coordinate {
-                        ContinuationSourceCoordinate::EntryAbi {
-                            source_abi_position,
-                            ..
-                        } => ContinuationImmediateAvailability::EntryAbi {
-                            immediate_slot: source_abi_position,
-                        },
-                        ContinuationSourceCoordinate::ProducerLocal { .. } => {
-                            let (lexical_environment_origin, seat) = match &seat_environment {
-                                Some(seat) => seat,
-                                None => seat_environment.insert(
-                                    continuation_emission_seat_environment(plan, environment)?,
-                                ),
-                            };
-                            current_lexical_availability(
-                                input.coordinate,
-                                *lexical_environment_origin,
-                                environment.producer_construct_origin,
-                                seat,
-                            )?
-                        }
+            let availability = match emitter {
+                // ⭐⭐ **The `D3c` correction, and the whole point of the re-cut.**
+                // A predeclared emitter's direct-emission consumer reads the
+                // retained lexical environment at the seat. So EVERY input --
+                // entry-rooted or producer-local alike -- takes a
+                // `CurrentLexical` claim whose index comes from the forward
+                // walk. ⛔ An entry root does NOT take its ABI position here;
+                // that shortcut was measured wrong at nonzero binder depth.
+                ContinuationEmitterFrame::Predeclared(emission_owner) => {
+                    let (lexical_environment_origin, seat) = match &seat_environment {
+                        Some(seat) => seat,
+                        None => seat_environment.insert(
+                            continuation_emission_seat_environment(plan, environment)?,
+                        ),
+                    };
+                    let claim = current_lexical_availability(
+                        input.coordinate,
+                        *emission_owner,
+                        environment.producer_result_origin,
+                        *lexical_environment_origin,
+                        environment.producer_construct_origin,
+                        seat,
+                    )?;
+                    ContinuationAvailabilityViews {
+                        direct_emission: Some(claim),
+                        // ⛔ No context-capture view: this projection belongs to a
+                        // specialization emitted from a predeclared frame, and
+                        // the capture-append consumer must build its own claim
+                        // against the frame it holds rather than reuse this one.
+                        context_capture: None,
                     }
                 }
-                ContinuationImmediateResolution::GeneratedContext {
-                    context,
-                    owner,
+                // The emitting frame is a generated execution context. Its
+                // captures ARE the enclosing specialization's continuation
+                // inputs, in ordinal order, laid out after its parameter run.
+                //
+                // ⛔ Membership is by the **whole coordinate**, exactly once.
+                // Matching on a position, or on an owner/position pair, would
+                // let a local binding and an entry position collide by carrying
+                // the same integer.
+                ContinuationEmitterFrame::GeneratedContext {
+                    enclosing,
+                    worker_body_origin,
                     context_parameters,
                     enclosing_inputs,
                 } => {
-                    // The generated context's captures ARE the enclosing
-                    // specialization's continuation inputs, in ordinal order,
-                    // laid out immediately after its parameter run. Matching on
-                    // full root provenance -- owner AND position -- is what
-                    // makes this a lookup rather than a coincidence of index.
-                    //
-                    // `D1` `D3` consumer 2 of 3 — the comparison is now over the
-                    // **whole** coordinate rather than an owner/position pair.
-                    // ⛔ That is strictly stronger and domain-aware: a local
-                    // binding can never match an entry position by carrying the
-                    // same integer, because the two are not the same type.
-                    //
-                    // ⛔ **Fail-closed path 3 of 5 — missing full-coordinate
-                    // capture membership.**
                     let position = enclosing_inputs
                         .iter()
                         .position(|enclosing| enclosing.coordinate == input.coordinate)
                         .ok_or_else(|| {
                             planner_error(
-                                "a continuation input's root provenance is not among the \
-                                 enclosing specialization's continuation inputs, so the generated \
-                                 emission context cannot make that value available; this fails \
-                                 closed rather than falling back to the root position, which \
-                                 would read whatever the raw body happened to hold there",
+                                "a continuation input's coordinate is not among the enclosing \
+                                 specialization's continuation inputs, so the generated emission \
+                                 context declares no member for it; this fails closed rather than \
+                                 falling back to a root position, which would read whatever the \
+                                 raw body happened to hold there",
                             )
                         })?;
-                    let captured = &enclosing_inputs[position];
-                    // ⛔ **Fail-closed path 4 of 5 — wrong generated
-                    // owner/context.** The resolution names the context this
-                    // availability is keyed to; the captures it was handed must
-                    // belong to that same unit. Crossing a context id with
-                    // another unit's capture projection would key an
-                    // availability to a context that never holds the value.
-                    if captured.producer_owner != *owner {
+                    if enclosing_inputs
+                        .iter()
+                        .filter(|enclosing| enclosing.coordinate == input.coordinate)
+                        .count()
+                        != 1
+                    {
                         return Err(planner_error(
-                            "a generated emission context's capture projection names a different \
-                             producer owner than the context it is keyed to, so the immediate \
-                             capture slot would index an environment that does not exist; \
-                             RT-CONTSRC-PRODUCER-LOCAL D2b refuses a crossed owner/context pair",
+                            "a generated emission context declares two members for one \
+                             continuation coordinate, so its declared slot is ambiguous; \
+                             RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than taking the first",
                         ));
                     }
                     let position = u32::try_from(position).map_err(|_| {
                         planner_capacity_error("continuation immediate slot exhausted")
                     })?;
-                    // ⛔ **Fail-closed path 5 of 5 — wrong immediate slot.** The
-                    // capture run begins after the context's parameters; an
-                    // overflow here is a refusal, never a wrap.
-                    let immediate_capture_slot =
+                    let declared_slot =
                         context_parameters.checked_add(position).ok_or_else(|| {
                             planner_capacity_error(
                                 "continuation immediate slot position exhausted",
                             )
                         })?;
-                    match input.coordinate {
-                        ContinuationSourceCoordinate::EntryAbi { .. } => {
-                            ContinuationImmediateAvailability::EntryAbi {
-                                immediate_slot: immediate_capture_slot,
-                            }
-                        }
-                        ContinuationSourceCoordinate::ProducerLocal { .. } => {
-                            // A producer-local value may be carried as a
-                            // declared capture only once the CALLER's own
-                            // current-lexical availability proves it already
-                            // existed at that call seat. ⛔ Without that, this
-                            // would be a fabricated capture: a claim that a
-                            // mid-body value was reachable somewhere no walk
-                            // ever placed it.
-                            if !matches!(
-                                captured.availability,
-                                ContinuationImmediateAvailability::CurrentLexical { .. }
-                            ) {
-                                return Err(planner_error(
-                                    "a generated emission context captures a producer-local \
-                                     binding whose enclosing input does not carry a current-\
-                                     lexical availability, so nothing proves the value existed \
-                                     at the call seat that built this context; this fails closed \
-                                     rather than fabricating the capture",
-                                ));
-                            }
-                            ContinuationImmediateAvailability::GeneratedContextCapture {
-                                context: *context,
-                                owner: *owner,
-                                immediate_capture_slot,
-                            }
-                        }
+                    let claim = ContinuationEnvironmentClaim::EntryFrame {
+                        frame: ContinuationFrameIdentity::GeneratedContext {
+                            enclosing: *enclosing,
+                            worker_body_origin: *worker_body_origin,
+                        },
+                        declared_slot,
+                    };
+                    // ⭐ The SAME claim serves both consumers here, and that is
+                    // sound for one reason only: a generated context's direct
+                    // emission and its capture append read the same frame -- its
+                    // own operand run. ⛔ It is written twice rather than shared
+                    // through one field, so a later divergence between the two
+                    // consumers is a local edit and not a silent reinterpretation.
+                    ContinuationAvailabilityViews {
+                        direct_emission: Some(claim),
+                        context_capture: Some(claim),
                     }
                 }
             };
@@ -6786,22 +6875,31 @@ fn build_continuation_specialization_plan(
                                 })?;
                             Some((
                                 enclosing,
-                                enclosing_unit.key.producer_owner,
+                                // ⭐ The body origin half of the pair contexts
+                                // are interned on, taken from the enclosing
+                                // unit's own key so the frame identity is the
+                                // interning key rather than a restatement of it.
+                                enclosing_unit.key.worker.body_origin,
                                 generated_context_parameters(&enclosing_unit.key.worker)?,
                                 enclosing_unit.key.continuation_inputs.clone(),
                             ))
                         }
                     };
-                    let immediate = match &enclosing_context {
-                        None => ContinuationImmediateResolution::RootIsImmediate,
-                        Some((context, owner, context_parameters, enclosing_inputs)) => {
-                            ContinuationImmediateResolution::GeneratedContext {
-                                context: *context,
-                                owner: *owner,
-                                context_parameters: *context_parameters,
-                                enclosing_inputs,
-                            }
-                        }
+                    let emitter = match &enclosing_context {
+                        None => ContinuationEmitterFrame::Predeclared(
+                            producer_environment.producer_owner,
+                        ),
+                        Some((
+                            enclosing,
+                            worker_body_origin,
+                            context_parameters,
+                            enclosing_inputs,
+                        )) => ContinuationEmitterFrame::GeneratedContext {
+                            enclosing: *enclosing,
+                            worker_body_origin: *worker_body_origin,
+                            context_parameters: *context_parameters,
+                            enclosing_inputs,
+                        },
                     };
                     let key = ContinuationSpecializationKey {
                         producer_owner: producer_environment.producer_owner,
@@ -6822,7 +6920,7 @@ fn build_continuation_specialization_plan(
                             plan,
                             &producer_environment,
                             ordinary_parameters,
-                            &immediate,
+                            &emitter,
                         )?,
                     };
                     let (target, inserted) =
