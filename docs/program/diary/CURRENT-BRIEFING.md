@@ -33,19 +33,57 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~15:1xZ · `D3b` APPROVED; `D4b` released — the LAST deliverable
+## LIVE — 2026-08-05 ~16:1xZ · `D4b` DISCHARGED; unit-convert `D1` released
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for `D4b`, then the node candidate.** Nothing waits on me. `D4b` was
-released at 15:07Z and `runtime-implementer` is working it.
+**Wait for `RT-UNIT-CLOSURE-CONVERT` `D1`'s inventory, which hard-stops to
+me.** `D1` is the node's sizing instrument and it is a **mandatory hard stop
+before `D2`** — when it returns, **the cut is mine.** Nothing else waits on me.
 
-⛔ **No merge is owed by me yet.** The Architect was explicit: `012a2c88` is
-**`D3b` checkpoint approval only — not node-candidate and not publisher
-approval.** Do not read "approved" as merge-ready.
+⛔ **No merge is owed by me yet.** `RT-CONTSRC-PRODUCER-LOCAL` `D4b` is
+**discharged** at exact `b3ba2820` (Architect `evt_gqph7jhjeybx`), and that is
+its **last in-node checkpoint** — but the **node candidate stays held**, on
+three counts the Architect named: the five `Var: no runtime binding` reds are
+the `RT-UNIT-CLOSURE-CONVERT` gate; exact per-instance `V` accounting is still
+a candidate `AC` that the coarser diagnostic census does **not** silently
+replace; and CI/no-regression plus candidate review have not run.
+
+### The sequencing ruling I made at ~16:1xZ, so it is not re-litigated
+
+The Architect discharged `D4b` and referred the release boundary to me,
+reporting that two published artifacts contradict. **They do not — the
+contradiction was inside ONE file, six lines apart**, and it was mine.
+
+`docs/program/issues/RT-UNIT-CLOSURE-CONVERT.md` said in one section that the
+gate is *"prose, not a `depends_on` edge, because an edge both ways is a
+cycle... both `active`, one branch"* — and then in the next section that the
+node *"enters the frontier when `RT-CONTSRC-PRODUCER-LOCAL` merges, with no
+Steward pass in between."*
+
+⛔ **Read literally the second sentence is a DEADLOCK**: producer-local's
+candidate cannot close until unit-convert lands, so waiting for its merge waits
+forever. Both **frames** were consistent and correct all along; only the issue
+node's status prose was false. It was my standing one-release-ahead boilerplate
+applied to the one pair it does not govern.
+
+⭐ **The corpus settled this itself.** The same file names the governing
+precedent two paragraphs up — `RT-CONTSRC-PRODUCER-LOCAL` against
+`RT-DECL-CLOSURE-PORT`, **both `active`, one branch** — and that pattern is
+live right now: producer-local is `status: active` with an unmerged
+`depends_on`. I did not need a new rule, only to stop contradicting the one
+already there.
+
+**Ruling: the same-branch atomic-set sequence stands.** The two nodes land in
+one candidate and **both flip `merged` in one commit**. The `depends_on` edge
+is **retained** — it states checkpoint order, which is true, not merge order,
+which is not — and `status: active` is the lever that keeps the node off the
+releasable frontier (`gen-progress.sh` computes that frontier as `ready` AND
+every `depends_on` merged, so a stale `ready` advertises in-flight work as
+available to release).
 
 ### `D3b` is checkpoint-APPROVED at exact `012a2c88`
 
@@ -285,10 +323,12 @@ deleted.**
 
 ### Framing debt: still clear
 
-`docs/program/wp/RT-UNIT-CLOSURE-CONVERT.md` exists and its node is `ready`
-(framed and shovel-ready — *not* startable, its dependency is unmerged). It
-enters the frontier when `RT-CONTSRC-PRODUCER-LOCAL` merges, with no Steward
-pass in between.
+`docs/program/wp/RT-UNIT-CLOSURE-CONVERT.md` exists and its node is now
+`active` — `D1` released 2026-08-05 from exact `b3ba2820`. ⛔ **The sentence
+that used to sit here — "it enters the frontier when `RT-CONTSRC-PRODUCER-LOCAL`
+merges, with no Steward pass in between" — was FALSE and is retired.** See the
+sequencing ruling in the LIVE block: the two nodes are one atomic set on one
+branch, so that merge never precedes this node.
 
 ### `D3c` RETURNED: the position MOVES. `D3b`'s premise is FALSE.
 

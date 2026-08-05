@@ -1,7 +1,7 @@
 ---
 id: RT-UNIT-CLOSURE-CONVERT
 title: "Activate function-unit closure conversion for predeclared units — a retained nested body's free de Bruijn references become declared typed capture slots, reconstructed at unit entry from exact caller operands"
-status: ready
+status: active
 owner: runtime
 size: TBD
 gate: none
@@ -116,13 +116,32 @@ a `depends_on` edge**, because an edge both ways is a cycle the generator
 cannot resolve. Same pattern as `RT-CONTSRC-PRODUCER-LOCAL` itself against
 `RT-DECL-CLOSURE-PORT`: both `active`, one branch, sequenced by the frame.
 
-## Status: `ready`, and what that does and does not mean
+## Status: `active` — this node does NOT wait for a merge
 
-The frame exists, so the framing debt is discharged and this node is
-shovel-ready. `ready` here means framed, not startable: **its dependency
-`RT-CONTSRC-PRODUCER-LOCAL` is unmerged**, with `D3c`, a re-cut `D3b`, `D4b`
-and its candidate still ahead. It enters the frontier when that node merges,
-with no Steward pass in between — which is the point.
+**Released `D1` only, 2026-08-05, from exact `b3ba2820` on
+`wp/RT-DECL-CLOSURE-PORT-typed-units`** (Steward sequencing ruling; Architect
+disposition `evt_gqph7jhjeybx` discharging `RT-CONTSRC-PRODUCER-LOCAL` `D4b`
+and referring the release boundary here).
+
+⛔ **This section previously said the node "enters the frontier when
+`RT-CONTSRC-PRODUCER-LOCAL` merges, with no Steward pass in between." That was
+false, and read literally it was a deadlock** — that node's candidate cannot
+close until this one lands (the section above, and its own frame), so waiting
+for its merge means waiting forever. The sentence was the standing
+one-release-ahead phrasing applied to a pair it does not govern.
+
+**The two nodes are one atomic set on one branch, not a sequence.** They land
+in one candidate, and at that merge **both flip `merged` in one commit**. The
+`depends_on` edge is retained because this node genuinely builds **on**
+`RT-CONTSRC-PRODUCER-LOCAL`'s landed checkpoints — it states checkpoint order,
+which is true, and **not** merge order, which is not. `status: active` is what
+keeps this node off the releasable frontier; `gen-progress.sh` computes that
+frontier as `ready` **and** every `depends_on` entry merged, so a stale `ready`
+here would advertise in-flight work as available to release.
+
+This is the same shape as `RT-CONTSRC-PRODUCER-LOCAL` against
+`RT-DECL-CLOSURE-PORT`, live in this corpus today: `active`, with an unmerged
+`depends_on`, building on the shared branch.
 
 ## What must not be lost
 
