@@ -1098,6 +1098,21 @@ all six failing `D0` rows.
   checkpoints because the interface has five pieces with real dependencies, and
   because bundling is what spent `D5a` twice and `D6b` once.
 
+  ###### EXECUTION ORDER — read this table, never the letters
+
+  ⚠ **Labels are allocation order. This table is execution order.** It is the
+  only ordering statement in this frame that is authoritative.
+
+  | # | checkpoint | owner layer |
+  |---|---|---|
+  | 1 | `D7a` — composed worker view, **four-field** selector | planner projection |
+  | 2 | `D7a2` — raw-target requirement / population closure | planner population |
+  | 3 | `D7b` — one environment authority | lowering environment |
+  | 4 | `D7c` — source-machine callee consumer | lowering consumer |
+  | 5 | `D7d` — checked-marker occupancy | integration |
+  | 6 | `D7e` — non-vacuous closeout, both paths | proof |
+  | 7 | `D6b` closeout, then `D6c` refusal set | — |
+
   **`D7a` — planner-issued composed worker view.** From the exact
   computational-frame origin, selected alternative and recursive source position
   **already in scope**, planning exposes the same full worker provenance the
@@ -1106,6 +1121,85 @@ all six failing `D0` rows.
   from closure shape, body shape, whichever target exists, or a source re-walk.
   Refuse before emission on zero answers, conflicting full identities, wrong
   position/body/capture provenance, or an unexecutable raw target.
+
+  > ⛔ **NOT DISCHARGED — the selector is FOUR fields, not three** (Architect
+  > `evt_7x6knchb4rb1n`, on preserved partial progress exact `ab741989`).
+  > `(continuation_origin, producer_alternative, recursive_position)` **is not an
+  > identity** — it names a source-level frame *position*, and **two dynamic
+  > recursion layers may instantiate the same one.** Both current plans prove it:
+  > each triple has **two distinct worker answers**, separated exactly by the
+  > producer `Construct` origin.
+  >
+  > ```rust
+  > pub(in crate::cranelift_backend) fn composed_worker_view(
+  >     &self,
+  >     producer_construct_origin: StaticOriginId,
+  >     continuation_origin: StaticOriginId,
+  >     producer_alternative: u32,
+  >     recursive_position: u32,
+  > ) -> Result<ComposedWorkerView, CraneliftBackendError>
+  > ```
+  >
+  > This is the **same causal coordinate `continuation_call_binding_for` already
+  > uses** — no tag, sequence, owner heuristic, or second identity. The composed
+  > path supplies the first field directly as `deferred.construct_origin`.
+  >
+  > ⭐ **Different workers under different `producer_construct_origin` are NOT
+  > conflicting answers — they are different questions the old selector
+  > collapsed.** *"Conflicting full identities"* stays a refusal only when two
+  > different workers answer the **same four-field** selector. ⛔ Do not choose
+  > first/lowest; do not add emission owner, specialization id, or call sequence.
+  >
+  > The correction replaces **every** three-field source-contract statement and
+  > control, and must prove: the measured three-field groups **collide**; every
+  > corresponding four-field group resolves **exactly once**; dropping or
+  > transplanting the construct-origin field **refuses, independently** of the
+  > other three selector-field controls; and body-child and ordered-capture
+  > provenance checks remain **independently live**.
+
+  **`D7a2` — the raw-target requirement, and it is why `D7b` cannot start
+  without it.** ⛔ **Do NOT delete or weaken the unexecutable-target refusal.**
+  Against the current post-`D5a` executable population it is **telling the
+  truth**: the outer raw body has a descriptor but no declared-and-defined
+  `Function`.
+
+  ⛔ **But that population predates the contract `D7b` adds, and the result is a
+  CIRCULARITY: `D7a` refuses the very target `D7b` is required to make callable,
+  so `D7b` can never lawfully start.** `D7b` does not merely expose an inert
+  value — it installs a compiler-only `SelectedRecursiveArgument` whose route is
+  **unconditionally `RawWorker`**, and a callable binding must resolve to a
+  declared-and-defined target **even if a particular source body never invokes
+  it**. That is a new planner-known **raw-target requirement**.
+
+  The planner closes the population **before** environment installation:
+  (1) mint **one unconstructible** raw-target requirement under the same exact
+  four-field selector and full worker provenance; (2) treat it as a **surviving
+  raw route** for `template_only_worker_bodies` / `executable_units`, retaining
+  that raw body in the one declared-and-defined `Function` population;
+  (3) re-run `composed_worker_view`'s executability check against that **final**
+  population; (4) only then let `D7b` install the binding.
+
+  ⛔ This is an **executable-target requirement, not an emitted-call event.** Do
+  not invent an `EmittableCallEdge` before `D7c` emits a call, do not
+  force-declare in lowering, do not retain every template globally, and do not
+  infer demand from a reached lowerer or a source re-walk.
+
+  **Non-vacuous controls, all five:** exact-set equality between four-field
+  composed-worker requirements and the planner records retaining their raw
+  targets; omission, wrong body and cross-construct transplant **refuse before
+  lowering**; declaration and definition populations retain the **same exact**
+  required body with **no undefined phantom**; a body with **no** such
+  requirement **stays template-only** (proving this is not a global suppression
+  rollback); and after reconciliation the current outer layer answers positively
+  **while a deliberate requirement-omission mutation reaches the preserved
+  unexecutable-target refusal**.
+
+  **Why `D7a2` is its own checkpoint and not a `D7a` substep** (Steward sizing
+  call, which the ruling leaves to me): the four-field correction is projection
+  and stays in `D7a`, but the requirement **changes the executable-unit
+  population**, which the released *"`D7a` projection only"* boundary excludes.
+  Folding it in would repeat the bundling that spent `D5a` twice, `D6b` once,
+  and `D7a` now.
 
   **`D7b` — one environment authority, not two.** When the composed /
   source-machine case environment installs the constructor-argument segment, the

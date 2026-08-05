@@ -94,12 +94,25 @@ gap, not a missing fixture** — the released bounded witness repair could never
 have discharged it, because the only source shape that exercises the raw table
 is refused earlier. That is why its wrong-table mutation stays green.
 
-**Next: release `D7a`.** I cut the substrate as **in-node checkpoints
-`D7a`–`D7e`**, not a predecessor node — same branch, same candidate, so a node
-buys no merge boundary. ⚠ **`D7`'s number is allocation order, not execution
-order: it runs BEFORE `D6b` closes.** `D7a` planner-issued composed worker view,
-`D7b` one environment authority, `D7c` source-machine callee consumer, `D7d`
-checked-marker occupancy, `D7e` non-vacuous closeout through both paths.
+**Next: release the corrected `D7a`, then `D7a2`.** Substrate is cut as in-node
+checkpoints. ⚠ **Labels are allocation order; the frame's EXECUTION ORDER table
+is authoritative.** Order: `D7a` (four-field composed worker view) → `D7a2`
+(raw-target population) → `D7b` (one environment authority) → `D7c`
+(source-machine callee consumer) → `D7d` (checked-marker occupancy) → `D7e`
+(non-vacuous closeout, both paths) → `D6b` closeout → `D6c`.
+
+⛔ **`D7a` NOT discharged** (Architect `evt_7x6knchb4rb1n`); `ab741989`
+preserved as partial evidence. **The selector is FOUR fields** — the triple
+names a source *position*, and two dynamic recursion layers instantiate the same
+one. Both current plans show two distinct workers per triple, separated exactly
+by `producer_construct_origin`. Different construct origins are **different
+questions, not conflicting answers**.
+
+⛔ **`D7a2` exists because of a CIRCULARITY:** `D7a` refuses the very raw target
+`D7b` must make callable, so `D7b` can never lawfully start. The planner mints
+one unconstructible raw-target requirement and re-runs executability against the
+**final** population first. ⛔ Do **not** weaken the unexecutable-target refusal
+— against today's population it is telling the truth.
 
 ⛔ Banned: accepting the raw table as a permanently unwitnessed residual, and
 any carrier callable/helper route.
