@@ -5564,9 +5564,13 @@ impl<'a> Lowering<'a> {
                 // it hands them to the shared ordering directly; the arity
                 // check lives there for every consumer rather than once here.
                 if self.body_emission_authority == BodyEmissionAuthority::FunctionizedUnits {
-                    // ⭐ Crossing into a declared generated unit: each
-                    // argument crosses at its OWN paired occurrence, here,
-                    // rather than at the callee's origin later.
+                    // ⭐ Crossing into a declared generated unit here, rather
+                    // than inside `call_declared_unit_target` later. ⛔ All
+                    // inputs cross at ONE common transfer coordinate — there is
+                    // no per-argument pairing on this route — and the
+                    // coordinate is inert: an aggregate carries its own
+                    // producer authority and is preflighted against it, and a
+                    // non-aggregate queries no aggregate ownership at all.
                     let args = self.carry_source_call_inputs(builder, body, args)?;
                     let called = self.call_declaration_closure_unit(
                         builder, reference, &symbol, &params, captures, args,

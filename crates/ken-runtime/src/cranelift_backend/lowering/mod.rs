@@ -4035,16 +4035,20 @@ impl<'a> Lowering<'a> {
                         LoweringOperand::Carried(word) => word.word,
                         LoweringOperand::Specialized(value) => {
                             // ⚠ **`target.origin` is the CALLEE's scheduling
-                            // entry.** This is the fallback for callers whose
-                            // input authority is not yet ruled; a caller that
-                            // has each input's caller-side occurrence carries
-                            // it across before reaching here, so nothing that
-                            // arrives specialized at this point has one.
+                            // entry**, and what still arrives specialized here
+                            // is what no earlier crossing took.
                             //
-                            // ⛔ **Two repairs have landed and one site
-                            // remains.** `lower_expr`'s direct-closure-callee
-                            // arm and the source machine's call path both now
-                            // carry each input at its own occurrence.
+                            // ⛔ **The two earlier crossings are NOT the same
+                            // mechanism, and conflating them is what this
+                            // comment used to do.** `lower_expr`'s
+                            // direct-closure-callee arm carries each input at
+                            // its exact caller-side occurrence. The source
+                            // machine's call path carries its inputs at ONE
+                            // common transfer coordinate with no per-argument
+                            // pairing — inert, because an aggregate carries and
+                            // is preflighted against its own producer
+                            // authority, and a non-aggregate queries no
+                            // aggregate ownership.
                             //
                             // MEASURED after both, `--nocapture
                             // --test-threads=1` over the whole suite: 137
@@ -4058,13 +4062,13 @@ impl<'a> Lowering<'a> {
                             // all**, so the capture-authority witness does not
                             // exist.
                             //
-                            // ⛔ The one remaining aggregate population is **97
-                            // `Constructor` `Parameter`s, every one of them
-                            // from `call_static_worker`** (traced by
-                            // backtrace, not inferred). That site computes each
-                            // argument's exact caller-side origin with
-                            // `child_occurrence` and then discards it — the
-                            // identical shape, and a separate release.
+                            // ⛔ The one remaining aggregate population is
+                            // **`Constructor` `Parameter`s from
+                            // `call_static_worker`** (traced by backtrace, not
+                            // inferred). They reach this fallback and
+                            // **self-authorize**: each carries its own producer
+                            // occurrence, so the coordinate below is not the
+                            // authority its ownership record is resolved at.
                             //
                             // ⚠ No guard here refusing aggregates: measured, it
                             // would refuse those 97 inputs, which compile today.
