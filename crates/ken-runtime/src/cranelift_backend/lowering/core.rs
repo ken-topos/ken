@@ -7340,26 +7340,94 @@ impl<'a> Lowering<'a> {
         // tell them apart.
         #[cfg(test)]
         let raw_operands = inputs.len();
-        if let Some(extra) = self.function_local.generated_context_captures.as_ref() {
-            if extra.worker_body_origin == worker.body_origin {
+        // ⭐ **`RT-CONTSRC-PRODUCER-LOCAL` `D6b` — THE ROUTE IS CONSUMED HERE,
+        // and it decides BOTH halves of the call: the operand run and the
+        // callee.** The two must be decided by one fact, because they are one
+        // contract -- a generated context's ABI has a capture run the raw body
+        // does not, so appending the suffix to a raw target, or omitting it from
+        // a context target, is an arity disagreement against a frame that may be
+        // large enough to absorb it silently.
+        //
+        // ⛔ The pre-`D6b` reading -- "append iff
+        // `generated_context_captures.worker_body_origin == worker.body_origin`"
+        // -- is *blind by construction* now that `D6a` binds two workers over
+        // one body origin. It answers the same for the induction hypothesis and
+        // for the selected recursive argument, which are exactly the two the
+        // suffix must separate. The body-origin equality is retained below, but
+        // demoted to a consistency check on the route's own choice.
+        match worker.route {
+            StaticWorkerCallRoute::GeneratedContext => {
+                // The enclosing specialization's continuation inputs, carried
+                // across this worker execution. Absent is a hard stop: a
+                // context-routed call with no suffix to append means the
+                // binding named a context this frame never stashed operands
+                // for, and calling it would underflow the context's ABI.
+                let extra = self
+                    .function_local
+                    .generated_context_captures
+                    .as_ref()
+                    .ok_or_else(|| {
+                        unsupported(
+                            "Call",
+                            format!(
+                                "a static worker binding for body origin {:?} is routed to a \
+                                 generated context, but this frame stashed no continuation-input \
+                                 suffix for any body",
+                                worker.body_origin
+                            ),
+                        )
+                    })?;
+                if extra.worker_body_origin != worker.body_origin {
+                    return Err(unsupported(
+                        "Call",
+                        format!(
+                            "a context-routed static worker binding names body origin {:?}, but \
+                             the stashed continuation-input suffix belongs to body {:?}",
+                            worker.body_origin, extra.worker_body_origin
+                        ),
+                    ));
+                }
                 inputs.extend(extra.operands.iter().cloned());
+            }
+            StaticWorkerCallRoute::RawWorker => {
+                // ⛔ Appends NOTHING, unconditionally -- not even when this
+                // frame does hold a suffix for this very body origin, which is
+                // precisely the `D6a` case where the induction hypothesis
+                // beside this binding is context-routed over the same body.
+                // "No suffix" and "a suffix of length zero" stay different
+                // facts, and this arm is the first.
             }
         }
 
         // Resolve the exact target FIRST. The mutation below perturbs only what
         // the consumer is handed, never what the binding named.
-        let exact = self
-            .function_local
-            .worker_calls
+        //
+        // `D6b` -- from the route's OWN table. In a retargeted specialization
+        // `worker_calls[body]` is the generated context and the raw callee
+        // survives only in `raw_worker_calls`; taking whichever entry exists is
+        // the inference `D6a` made impossible.
+        let (table, table_name) = match worker.route {
+            StaticWorkerCallRoute::GeneratedContext => {
+                (&self.function_local.worker_calls, "worker_calls")
+            }
+            StaticWorkerCallRoute::RawWorker => {
+                (&self.function_local.raw_worker_calls, "raw_worker_calls")
+            }
+        };
+        let exact = table
             .get(&worker.body_origin)
             .cloned()
             .ok_or_else(|| {
                 unsupported(
                     "Call",
                     format!(
-                        "no worker call target for body origin {:?} was declared into this \
-                         function",
-                        worker.body_origin
+                        "no {table_name} target for body origin {:?} was declared into this \
+                         function, so the {:?} route has no callee. ⛔ This never falls back to \
+                         the other route's table: a raw call answered by a generated context \
+                         would underflow that context's capture run, and a context call answered \
+                         by the raw body would drop the continuation inputs the context exists \
+                         to carry",
+                        worker.body_origin, worker.route
                     ),
                 )
             })?;
@@ -7377,12 +7445,16 @@ impl<'a> Lowering<'a> {
         //
         // No candidate is a loud failure, never a fall back to exact: a silent
         // fallback would make this control vacuously green.
+        // `D6b` -- the redirect searches the SAME table the exact resolution
+        // used. Searching `worker_calls` while the exact answer came from
+        // `raw_worker_calls` would make the mutation a route swap rather than
+        // the same-shape redirect `AC-5` names, and the resulting red would be
+        // attributable to the wrong mechanism.
         #[cfg(test)]
         let target = if STATIC_WORKER_MUTATION.with(std::cell::Cell::get)
             == StaticWorkerMutation::RedirectResolvedWorkerTarget
         {
-            self.function_local
-                .worker_calls
+            table
                 .iter()
                 .find(|(origin, call)| {
                     **origin != worker.body_origin
@@ -7431,6 +7503,7 @@ impl<'a> Lowering<'a> {
             body_origin: worker.body_origin,
             raw_operands,
             supplied_operands: inputs.len(),
+            route: worker.route,
         });
         Ok(emitted.0)
     }

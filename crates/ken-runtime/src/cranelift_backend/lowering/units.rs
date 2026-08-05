@@ -1391,6 +1391,10 @@ pub(super) fn define_continuation_bodies<M: Module>(
         // Declared here, into THIS function: no `FuncRef` crosses a function.
         let declared_workers = worker_targets.declare_in_func(module, &mut func);
         function_local.unit_calls = declared_workers.clone();
+        // `D6b` -- the RAW route's table, captured before the retarget below
+        // rewrites `worker_calls`. This is the only point at which the raw
+        // callee for a retargeted body is still in hand.
+        function_local.raw_worker_calls = declared_workers.clone();
         function_local.worker_templates = worker_targets.templates().clone();
         function_local.context_calls = declare_context_calls_in_func(
             module,
@@ -1991,6 +1995,11 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
         function_local.unit_calls = declared_calls.static_bodies;
         function_local.declaration_calls = declared_calls.declarations;
         function_local.worker_calls = worker_targets.declare_in_func(module, &mut func);
+        // `D6b` -- no retarget happens in a generated context body, so the two
+        // tables agree here. Populated anyway rather than left empty: the raw
+        // route must resolve from ITS OWN table in every function, or the
+        // resolution silently depends on which function it runs in.
+        function_local.raw_worker_calls = function_local.worker_calls.clone();
         function_local.worker_templates = worker_targets.templates().clone();
         function_local.context_calls = declare_context_calls_in_func(
             module,
@@ -3027,6 +3036,9 @@ fn define_unit_body<M: Module>(
     d5_mutate_declared_calls(&mut function_local.declaration_calls);
     // `D4`: this function's own worker refs, minted here and never copied.
     function_local.worker_calls = worker_targets.declare_in_func(module, &mut func);
+    // `D6b` -- an ordinary unit body performs no retarget, so the two tables
+    // agree. Populated anyway, for the same reason as the context body above.
+    function_local.raw_worker_calls = function_local.worker_calls.clone();
     // `D5a` checkpoint 1: the raw template contracts, beside the call targets
     // and deliberately not derived from them.
     function_local.worker_templates = worker_targets.templates().clone();

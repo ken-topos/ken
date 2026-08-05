@@ -111,6 +111,7 @@ fn run_checked_bounded_nat_fixture(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            raw_worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),

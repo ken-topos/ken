@@ -102,6 +102,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            raw_worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
@@ -262,6 +263,7 @@ fn run_px8j_malformed_recursor_consumer(
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            raw_worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
@@ -2171,6 +2173,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            raw_worker_calls: BTreeMap::new(),
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
             declaration_calls: BTreeMap::new(),
@@ -8095,6 +8098,115 @@ fn d6a_a_specialization_binds_two_leading_static_workers_for_the_ih_and_its_recu
     );
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6b` — the governed positive: the plan and
+/// the ASSEMBLED environment agree entry for entry.**
+///
+/// The whole run for the governed depth-3 case is
+/// `[IH, ScopeArgument, BufferAllocate success payload]` — `Var(0)` the
+/// induction hypothesis, `Var(1)` the selected recursive constructor argument,
+/// `Var(2)` this frame's single continuation input, which the planner projects
+/// from the outer `BufferAllocate` `Result::Ok` success binder.
+///
+/// ⭐ **Two oracles, and the row is the agreement between them.** The plan side
+/// calls [`continuation_case_binder_run`] on the case's own coordinates; the
+/// assembled side reads what `define_continuation_bodies` actually installed.
+/// The pre-existing binder-run rows pin only the first, and are green even if
+/// production stops calling the plan function; the `D6a` environment row pins
+/// only the second, and is green under any plan that happens to produce two
+/// leading workers. Neither alone says the assembled environment IS the plan.
+/// This row asserts the correspondence **positionally**: `IH` and
+/// `SelectedRecursiveArgument` must land on static workers, `ContinuationInput`
+/// on a carried operand.
+///
+/// ⛔ **STATED GAP, measured — `Var(1)` is proven as a BINDING, not as a call.**
+/// No witness in this suite calls a `SelectedRecursiveArgument`. MEASURED on
+/// this fixture: every specialization's emitted static-worker call has callee
+/// `Var(0)`, the induction hypothesis; `Var(1)` is bound and never invoked. So
+/// this row pins that the argument occupies its exact position with a
+/// static-worker binding, which is what `D6a` represents and what a consumer
+/// would resolve — it does **not** and cannot pin what calling it emits.
+///
+/// **Promise class: durable invariant.** The assertion is a correspondence
+/// between two derivations of the same law. A fixture that grows fields or
+/// inputs keeps it green; only a divergence between the plan and the assembly,
+/// or a change to the law itself, reds it.
+#[test]
+fn d6b_the_governed_case_environment_is_the_binder_run_it_was_planned_from() {
+    // The governed depth-3 case's own coordinates, as the trace reports them:
+    // one constructor argument, which is the recursive one; an empty ordinary
+    // envelope, since the only field is the recursive one the envelope
+    // excludes by contract; and this frame's single continuation input.
+    let run = continuation_case_binder_run(1, &[0], 0, &[], 1)
+        .expect("the governed depth-3 case's own coordinates are a lawful binder run");
+    assert_eq!(
+        run,
+        vec![
+            ContinuationCaseBinderSource::InductionHypothesis,
+            ContinuationCaseBinderSource::SelectedRecursiveArgument { source_position: 0 },
+            ContinuationCaseBinderSource::ContinuationInput(0),
+        ],
+        "the whole run is [IH, ScopeArgument, outer success payload]. The pre-`D6a` run \
+         omitted the middle member, which put the continuation input at `Var(1)` and left \
+         `Var(2)` unbound -- the exact reported failure"
+    );
+
+    let expr = crate::cranelift_backend::planning::governed_nested_resource_bracket(3);
+    reset_d5a_trace();
+    recursive_port_process_compiles(&expr)
+        .unwrap_or_else(|error| panic!("the governed depth-3 fixture must compile: {error}"));
+    let trace = take_d5a_trace();
+
+    let mut checked = 0usize;
+    for body in trace.iter().filter(|entry| entry.contains("SPEC-BODY")) {
+        // Only the specializations whose coordinates are the ones the run above
+        // was derived from. A body with a different shape is a different law
+        // instance and asserting this vector against it would be a coincidence.
+        if !body.contains("binders=1 ordinary=0 envelope=[]") {
+            continue;
+        }
+        let (_, rendered) = body
+            .split_once("env=[")
+            .unwrap_or_else(|| panic!("every SPEC-BODY entry renders its environment: {body}"));
+        let entries = rendered
+            .strip_suffix(']')
+            .unwrap_or_else(|| panic!("the rendered environment is bracketed: {body}"))
+            .split(", ")
+            .collect::<Vec<_>>();
+        assert!(
+            entries.len() >= run.len(),
+            "the assembled environment is at least as long as the planned run; a shorter one \
+             means a member the plan names was never installed: {body}"
+        );
+        for (position, source) in run.iter().enumerate() {
+            let entry = entries[position];
+            let expected_worker = matches!(
+                source,
+                ContinuationCaseBinderSource::InductionHypothesis
+                    | ContinuationCaseBinderSource::SelectedRecursiveArgument { .. }
+            );
+            assert_eq!(
+                entry.starts_with("StaticWorker"),
+                expected_worker,
+                "at run position {position} the plan says {source:?}, so the assembled \
+                 environment must hold {} there. A disagreement means the assembly is not the \
+                 plan -- which no binder-run row and no environment-shape row can see on its \
+                 own: {body}",
+                if expected_worker {
+                    "a static worker"
+                } else {
+                    "a value operand"
+                }
+            );
+            checked += 1;
+        }
+    }
+    assert!(
+        checked > 0,
+        "no specialization carried the coordinates this run was derived from, so every clause \
+         above ran vacuously: {trace:?}"
+    );
+}
+
 fn rt_scale_b_peak_rss_kib() -> Result<usize, String> {
     let status = std::fs::read_to_string("/proc/self/status")
         .map_err(|error| format!("could not read /proc/self/status: {error}"))?;
@@ -13583,7 +13695,8 @@ fn d5a_the_retargeted_worker_call_carries_the_raw_run_plus_the_context_capture_s
                 body_origin,
                 raw_operands,
                 supplied_operands,
-            } => Some((*body_origin, *raw_operands, *supplied_operands)),
+                route,
+            } => Some((*body_origin, *raw_operands, *supplied_operands, *route)),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -13596,21 +13709,40 @@ fn d5a_the_retargeted_worker_call_carries_the_raw_run_plus_the_context_capture_s
         let contexts = plan.continuation_contexts().expect("contexts");
         let mut suffixed = 0usize;
         let mut plain = 0usize;
-        for (body, raw, supplied) in &calls {
-            let context = contexts
-                .iter()
-                .find(|context| context.worker_body_origin() == *body);
-            match context {
-                Some(context) => {
+        // ⛔ **`RT-CONTSRC-PRODUCER-LOCAL` `D6b` — classified by the event's own
+        // ROUTE, not by whether a context exists for its body.** The pre-`D6b`
+        // version keyed on `contexts.find(body)`, which `D6a` made ambiguous:
+        // one body origin now carries two bindings, so that lookup answers the
+        // same for the induction hypothesis and for the selected recursive
+        // argument while their operand runs must differ. It would demand a
+        // suffix on the raw call and red on the correct program.
+        //
+        // ⭐ The plan is still the independent oracle for the suffix's LENGTH —
+        // the context's own declared capture count — so this reads the route
+        // from the emission and the arity from the planner, and neither side
+        // can satisfy the row alone.
+        for (body, raw, supplied, route) in &calls {
+            match route {
+                StaticWorkerCallRoute::GeneratedContext => {
+                    let context = contexts
+                        .iter()
+                        .find(|context| context.worker_body_origin() == *body)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "a call routed to a generated context must have one planned for \
+                                 its body {body:?}; the route is not a free choice at the call \
+                                 edge"
+                            )
+                        });
                     let captures = context.header().captures as usize;
                     assert_eq!(
                         supplied - raw,
                         captures,
-                        "the call to retargeted body {body:?} must carry the raw run followed by \
-                         EXACTLY the enclosing frame's continuation inputs — the capture run its \
-                         generated context declares. A shorter suffix drops inputs; a longer one \
-                         is an arity error against a frame that might be large enough to absorb \
-                         it silently"
+                        "the context-routed call to body {body:?} must carry the raw run followed \
+                         by EXACTLY the enclosing frame's continuation inputs — the capture run \
+                         its generated context declares. A shorter suffix drops inputs; a longer \
+                         one is an arity error against a frame that might be large enough to \
+                         absorb it silently"
                     );
                     assert!(
                         captures > 0,
@@ -13619,12 +13751,15 @@ fn d5a_the_retargeted_worker_call_carries_the_raw_run_plus_the_context_capture_s
                     );
                     suffixed += 1;
                 }
-                None => {
+                StaticWorkerCallRoute::RawWorker => {
                     assert_eq!(
                         supplied, raw,
-                        "body {body:?} has no generated context, so its call is the raw operand \
-                         run and nothing else. A suffix here would be appended to a frame with \
-                         no capture run to hold it"
+                        "a raw-routed call to body {body:?} is the raw operand run and nothing \
+                         else. ⛔ This holds even when a generated context DOES exist for that \
+                         body — which is exactly the `D6a` case, where the selected recursive \
+                         argument and the induction hypothesis share a body origin and only the \
+                         route separates them. A suffix here would be appended to a raw frame \
+                         with no capture run to hold it"
                     );
                     plain += 1;
                 }

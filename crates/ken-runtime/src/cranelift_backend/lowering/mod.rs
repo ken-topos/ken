@@ -851,6 +851,7 @@ impl ArtifactHelpers<'_> {
             native_int_tags: BTreeMap::new(),
             unit_calls: BTreeMap::new(),
             worker_calls: BTreeMap::new(),
+            raw_worker_calls: BTreeMap::new(),
             worker_templates: BTreeMap::new(),
             context_calls: BTreeMap::new(),
             defining_abi_operands: Vec::new(),
@@ -976,6 +977,30 @@ struct FunctionLocalRefs {
     /// exact body origin. Minted per generated function; a `FuncRef` here
     /// belongs to that function and is never copied to another.
     worker_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D6b`** -- this function's own call targets
+    /// for the **raw worker bodies**, keyed by exact body origin, as declared
+    /// *before* any retarget.
+    ///
+    /// ⛔ A fifth map rather than a flag on `worker_calls`, because the two
+    /// answer different questions for the **same** key. In a retargeted
+    /// specialization `worker_calls[body]` has been overwritten with the
+    /// generated context that executes `body`, so the raw callee is no longer
+    /// reachable from that map at all -- and a
+    /// [`StaticWorkerCallRoute::RawWorker`] binding for that same body still
+    /// needs it. Keeping one map and choosing by route is impossible when one
+    /// entry has been replaced; keeping both is the whole mechanism.
+    ///
+    /// ⛔ Same per-function discipline as every table here: minted by
+    /// `WorkerTargets::declare_in_func` into *this* `Function`, never copied
+    /// between functions, so no `FuncRef` crosses a boundary.
+    ///
+    /// ⚠ **A body absent here is a body with no emitted `Function`.** This map
+    /// is declared from the *executable* population, so a body that a total
+    /// retarget made template-only is legitimately missing. `call_static_worker`
+    /// fails closed on the miss rather than falling back to `worker_calls` --
+    /// a fallback would silently route a raw call through a generated context
+    /// whose ABI expects a capture suffix this caller does not supply.
+    raw_worker_calls: BTreeMap<StaticOriginId, units::DeclaredUnitCall>,
     /// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 1** -- the RAW descriptor
     /// contract for every worker body, executable or template-only.
     ///
@@ -1832,6 +1857,17 @@ pub(in crate::cranelift_backend) enum D5aMarkerEvent {
         body_origin: StaticOriginId,
         raw_operands: usize,
         supplied_operands: usize,
+        /// **`RT-CONTSRC-PRODUCER-LOCAL` `D6b`** — the route this call was
+        /// emitted on.
+        ///
+        /// ⭐ Recorded beside the operand counts because together they are the
+        /// **call semantics**, and `D6b`'s claim is about the pair. `D6a` binds
+        /// two workers over one `body_origin`, so the three pre-`D6b` fields
+        /// cannot say which binding an event belongs to — two events for one
+        /// body are indistinguishable without this. With it, "the raw route
+        /// appends nothing and the context route appends the suffix" is one
+        /// readable relation per event rather than an inference across events.
+        route: StaticWorkerCallRoute,
     },
 }
 
