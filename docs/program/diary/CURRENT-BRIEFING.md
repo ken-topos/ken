@@ -33,54 +33,80 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## ▶▶ LIVE — 2026-07-27 ~18:0xZ · 4 merges; 3 FRAMES WRITTEN, NOT KICKED
+## LIVE — 2026-08-05 ~01:5xZ · Runtime building D7; nothing owed by me
 
-**`origin/main` at last check: `b55d292c`, with PR #1117 (`V4-RESIDUAL`) in its
-publisher window.** ⛔ Verify it; do not trust this line.
+**`origin/main` at last check: `ef1062ce`** (the D7 host-effect frame recut, PR
+#1402). Verify it; do not trust this line.
 
-### ⭐⭐ THE ONE THING TO DO NEXT
+### The one thing to do next
 
-Three WP frames are **written, committed to `steward/work`, and NOT released.**
-Publishing them and kicking their rings is the whole of the next action — it is
-`§00` delivery and nothing outranks it.
+**Nothing, until Runtime hands back.** `runtime-implementer` is mid-turn on the
+`RT-DECL-CLOSURE-PORT` D7 effect-seat population/ledger slice, resumed from
+exact `3d8f9b21` on the governed `70887529` lineage, released by
+`runtime-leader` at `evt_1krkxb1zv0kwx` (01:36). Confirmed engaged by pane at
+01:51 — one continuous turn, 15m elapsed, ctx 19%. The leader is idle-and-
+correct, waiting on that named checkpoint.
 
-| ring | frame | state |
-|---|---|---|
-| **Ergo** | `SURF-IDENT-TR39-R1` | written, unkicked |
-| **Language** | `SURF-SPACE-CELLS-P1` | written, unkicked |
-| **Runtime** | `RT-FNSPLIT-C1` (frame pre-existed) | dependency cleared, unkicked |
+**WIP audit clock: armed at 01:36, fires 02:36.** The release is the reset
+event. A routine progress post does not reset it.
 
-Sequence: V4 lands → verify by blob → publish my doc bundle (`steward/work`
-commits `781ffee1`, `a2bbde28`, `6aa5c230`, `a5dbdc6b`; ⛔ cut a fresh
-`wp/steward-<slug>` from `origin/main` and cherry-pick — never publish from
-`steward/work`) → **then the Handoff Gate for each ring: compact EVERY member,
-verify each drop, THEN post the kickoff.**
+**Governing base, do not let it drift:** continue only from the `70887529`
+lineage. Rebase, merge, or cherry-pick of `fb8fd881`, `430798bf`, `548682c3`,
+`42ccd8ec` is banned — they are competing historical implementations, and
+importing them reintroduces the role/disposition-derived schema the host-effect
+ruling ruled false (Architect `evt_` in `thr_3rx0`, 01:06).
 
-⚠ **Ergo and Language both touch `crates/ken-elaborator/src/lexer.rs`** (Ergo:
-the identifier rule; Language: `becomes`/`mut` tokens). Different functions, but
-I told Language in `SURF-SPACE-CELLS-P1 §5` that I would **sequence rather than
-let them collide.** Honor that.
+### Frontier: one release ahead is SATISFIED
 
-### ✅ Landed this window — four merges, each blob-verified
+Every node whose `depends_on` names `RT-DECL-CLOSURE-PORT` is `ready` and has a
+frame file in `docs/program/wp/`:
 
-| PR | `main` | what |
-|---|---|---|
-| #1114 | `78f1f74b` | `MAP-TRANSPORT-CODEC-R1` determination — no codec is required today |
-| #1115 | `aea07d62` | `EFF-SPACE-ENSURES-PRESTATE` — `old` fails closed (Shape B) |
-| #1116 | `b55d292c` | `RT-VALUE-TOTALITY-P3` — `Value` `Debug` is depth-total |
-| #1117 | in flight | `V4-RESIDUAL` — binder-child paths rejected |
+| successor | other unmet deps |
+|---|---|
+| `RT-SEED-CALL-PORT` | none — this is the immediate next release |
+| `PX8-ERRID-ALLOC` | `RT-NATIVE-FNSPLIT` |
+| `NATIVE-HANDLE-CARRIER` | `RT-NATIVE-FNSPLIT`, `RT-JOIN-DISPOSITION` |
+| `RT-CONTSPEC-LEDGER` | `RT-CONTSPEC-ACTIVATE` |
+| `RT-DESCENT-RETIRE` | `RT-SEED-CALL-PORT`, `RT-PRODUCER-MATCH-PORT`, `RT-RECURSOR-TRANSPORT` |
 
-### ▶ Lane state
+`RT-SEED-CALL-PORT`'s fixed-input blobs are pinned at `origin/main = 14c3c5f7`
+(2026-07-29) and are stale by construction — D7 rewrites `core.rs` in front of
+it. **The frame says so itself and instructs re-pin at pickup.** That is
+shovel-ready, not framing debt; do not re-pin the numbers and call it a
+re-measurement.
+
+### Lane state
 
 | ring | state |
 |---|---|
-| **Kernel** | ✅ **building** — `KERNEL-NESTED-IND` D3b+D4. D3a already merged |
-| **Verify** | `V4-RESIDUAL` in the publisher; ring free after |
-| **Runtime** | free; `RT-FNSPLIT-C1` releasable, awaiting my kickoff |
-| **Language · Ergo** | free; frames written, awaiting my kickoff |
-| **Foundation** | ⛔ **whole ring idle and legitimately blocked** — see task `#144` |
-| **Doc** | idle, correct — `DOC-ATTEST-LIVING` is operator-held |
-| **Spec enclave** | `STR-NFC-CONSTRUCTION` awaiting Architect resolution |
+| **Runtime** | building — `RT-DECL-CLOSURE-PORT` D7 effect-seat slice 2 |
+| **Kernel · Verify · Language · Ergo · Foundation · Spec** | idle, awaiting Steward kickoff — the fleet's single-threaded posture, not a stall |
+| **Doc** | stood down after `DOC-PROGRAM-WAVE-RECONCILE` merged |
+| **Architect** | serving the Runtime ring; last act was the identity acceptance of `70887529` |
+
+**Tracker `active` flags are stale on three nodes** — `KERNEL-NESTED-IND`,
+`SPEC-MISSION-GROUNDING`, `SURF-SPACE-CELLS` all read `active` while their rings
+report no authorized WP. Reconcile at the next tracker pass; an `active` node
+whose ring is idle reads as in-flight work to anyone but me.
+
+### Unlanded finished work — research, 4 days old
+
+`wp/research-kernel-extension-assessment` @ `0c450267` (2026-08-01) carries
+`research/kernel-extension-assessment.md`, 746 lines, absent from `main`. No
+`git_request` for it reached me. **Its path is neither `library/` nor a Steward
+route, so the fail-closed predicate sends it to the Architect** — who is
+currently the Runtime ring's reviewer. Do not spend that seat on it mid-slice;
+bundle the routing question with the next Architect contact, or ask research
+whether anything is owed.
+
+### My own transport — fixed by the 01:48 restart
+
+The seat now runs the original flagged process
+(`--dangerously-load-development-channels server:convo-channel`), not the
+unflagged `bg-pty-host --fork-session --resume` fork that silently dropped every
+mention. Channel subscription confirmed on `spc_4q7g0se87rgje`. **The
+generalization I posted at 01:35 — that `runtime-implementer` shared the
+defect — was wrong and is retracted at `evt_` 01:45; route to it normally.**
 
 ### ⛔ OWED TO THE OPERATOR — four items, none self-resolvable
 
