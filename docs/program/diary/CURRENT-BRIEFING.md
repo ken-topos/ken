@@ -80,9 +80,29 @@ discriminating control must use the **mixed landed-object witness**
 typed worker binding refuses in value position and five rows redden. **Keep the
 whole-run control; the silent-pass rationale was wrong.**
 
-**`D6b`** owes consumption, the governed positive, the mixed discriminating
-control, **and** the raw-target declared-call-table representation `D6a` leaves
-inert. **`D6c`** is the refusal set. Both held.
+⛔ **`D6b` IS MIS-SIZED and FROZEN** (Architect `evt_6azsr4xrch1he`). Exact
+`d86be55d` is preserved as **accepted partial progress** — the route consumer
+and both function-local tables are sound. `D6c`, QA, candidate, `D6` closure and
+downstream are frozen with it.
+
+**Another false claim of mine, corrected:** the two lowering paths do **not**
+build the same segments at the recursive field. Composed/source-machine
+(`core.rs:2929`, `:3467`, `:4649`) enters **every** constructor field as
+`Value`; the functionized specialization **alone** substitutes the
+`StaticWorker` (`units.rs:1696-1764`). ⇒ **A production representation/consumer
+gap, not a missing fixture** — the released bounded witness repair could never
+have discharged it, because the only source shape that exercises the raw table
+is refused earlier. That is why its wrong-table mutation stays green.
+
+**Next: release `D7a`.** I cut the substrate as **in-node checkpoints
+`D7a`–`D7e`**, not a predecessor node — same branch, same candidate, so a node
+buys no merge boundary. ⚠ **`D7`'s number is allocation order, not execution
+order: it runs BEFORE `D6b` closes.** `D7a` planner-issued composed worker view,
+`D7b` one environment authority, `D7c` source-machine callee consumer, `D7d`
+checked-marker occupancy, `D7e` non-vacuous closeout through both paths.
+
+⛔ Banned: accepting the raw table as a permanently unwitnessed residual, and
+any carrier callable/helper route.
 
 ### ⛔⛔ I PUBLISHED A FALSE CONCLUSION AND IT IS WITHDRAWN
 

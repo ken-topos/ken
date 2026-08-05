@@ -969,6 +969,35 @@ all six failing `D0` rows.
   five rows redden (measured). The whole-run control is still required; it is
   not required by the silent-pass story this frame used to tell.
 
+  ⛔ **`D6b` also owes a NON-VACUOUS raw-call emission witness** (Architect
+  `evt_21ytnjgdw147`, on partial progress `d86be55d`). The route consumer and
+  the two function-local target tables are accepted and preserved — but **the
+  landed-object row proves the mixed binding pair is in the environment without
+  ever calling the selected recursive argument.** The corpus therefore never
+  consumes `raw_worker_calls` in the retargeted case, and the mutation *"resolve
+  `RawWorker` through `worker_calls`"* **survives**. ⚠ **A green suite cannot
+  discharge a callee-selection law whose wrong table is observationally inert.**
+
+  The witness is a test fixture built from **existing source constructs on the
+  ordinary planner/lowering path**, where the selected recursive argument is
+  actually **called**. Ordinary source syntax in a fixture is authorized; ⛔ a
+  new production occurrence kind, authority, fabricated identity, population
+  mechanism, or hand-constructed plan is not. It must prove: same exact
+  closure/body provenance yields a `GeneratedContext` IH and a `RawWorker`
+  selected argument; the argument is invoked at the planner-derived binder
+  position with its real raw arity and captures; the emitted raw event carries
+  **no** generated-context suffix and resolves through `raw_worker_calls`;
+  substituting `worker_calls` for that lookup **reddens** it; and the existing
+  `GeneratedContext` append-nothing mutation **stays red**.
+
+  ⛔ **Fail closed on the population edge:** if the ordinary fixture reaches a
+  template-only raw body and `raw_worker_calls` cannot be populated without
+  declaring an undefined function, **stop and report that exact edge.** Do not
+  force-declare a body to make the test green.
+
+  This belongs to `D6b`, **not** `D6c` — `D6c` owns the refusal closure *after*
+  this positive is established.
+
   ⚠ **`D6b` also owes the raw-target declared-call-table representation**,
   which `D6a` leaves honestly inert: the existing body-origin lookup is
   overwritten by the generated context and the raw body is removed from the
@@ -986,7 +1015,22 @@ all six failing `D0` rows.
   that resolved a generated context** — ⛔ not on every IH, per the corrected
   conditional law above.
 
-  ###### `D6a` STATUS — mechanism ACCEPTED at exact `625b7860`, held for fidelity
+  ###### `D6a` STATUS — DISCHARGED at exact `70d4e8d9`
+
+  **Architect fidelity verdict `evt_t1g8hrrtw4vn`**, parent `625b7860`, tree
+  `5d868b6a`. The comment-only child touched exactly the three authorized files;
+  after removing comment lines from the zero-context diff, the only changed Rust
+  tokens are **two assertion-message literals** — conditions, predicates,
+  expected vectors, route enum and construction, binder plan, provenance checks
+  and control reachability all unchanged. A repository-wide phrase-family sweep
+  found **no surviving** unconditional-IH, equal-route-means-reuse, or
+  silent-tail-append statement. `736 / 2 / 1`, both profiles clean.
+
+  ⇒ `D6b` is the next sequenced checkpoint, released at `evt_4hn520k8c5z5y`.
+
+  The acceptance record below is retained as the mechanism's provenance.
+
+  ###### `D6a` mechanism acceptance — exact `625b7860` (superseded by the discharge above)
 
   Architect review `evt_3hx267n11sm9k`, parent `e27d297a`, tree `80471947`.
   Measured `730 passed / 7 failed / 1 ignored` to **`736 / 2 / 1`** — five rows
@@ -1013,6 +1057,86 @@ all six failing `D0` rows.
   **Preserved, unchanged:** the existing hard stop for any additional recursive
   position for which the unit projects no worker. ⛔ Do **not** generalize this
   ruling into a multi-worker population.
+
+  ##### ⛔ `D6b` IS MIS-SIZED. `D7` is the substrate, and it RUNS BEFORE `D6b` CLOSES.
+
+  **Architect ruling `evt_6azsr4xrch1he`, 2026-08-05**, accepting the composed-path
+  hard stop on preserved exact `d86be55d`. ⚠ **`D7`'s number is allocation order,
+  not execution order** — it precedes `D6b` closeout. `D6b`, `D6c`, QA, candidate,
+  `D6` closure and downstream are **frozen** meanwhile; `d86be55d` is preserved as
+  **accepted partial progress**, not a residual.
+
+  **The false claim was this frame's, and it is corrected: the two lowering paths
+  do NOT build the same segments at the recursive field.**
+
+  | path | what it installs at the selected recursive field |
+  |---|---|
+  | composed / source-machine (`core.rs:2929`, `:3467`, `:4649`) | `extend_specialized(..., args)` — **every** constructor field enters as `LoweringEnvironmentBinding::Value` |
+  | functionized specialization (`units.rs:1696-1764`) | **alone** replaces the selected recursive field with the planner-derived `StaticWorker` |
+
+  Direct descent has an exact-`Var` static-worker callee consumer
+  (`core.rs:10375-10404`); the source machine's `Var` is **value-only** and its
+  call state requires a specialized callable template.
+
+  ⇒ ⛔ **This is a production representation/consumer gap, NOT a missing fixture.**
+  The bounded witness repair released for `D6b` could not have discharged it —
+  the only source shape that would exercise the raw table is **refused earlier**,
+  which is exactly why its wrong-table mutation stays green. ⛔ **Do not accept
+  the raw table as a permanently unwitnessed residual**; calling `D6b` complete
+  would turn an unreachable mechanism into delivered semantics. ⛔ **And do not
+  add a carrier callable/helper route** — worker body, arity, captures and route
+  are already compiler/planner facts, so encoding callable identity or a template
+  descriptor in the carrier would widen the ABI/runtime boundary, duplicate the
+  static authority, and violate the compiler-only closure-capsule ruling.
+
+  ###### The cut: `D7a`–`D7e`, ordered
+
+  **In-node checkpoints, not a predecessor node** (Steward sizing call, which the
+  ruling leaves to me). It lands on the same branch in the same candidate, so a
+  node adds a tracker object and a critical-path entry while buying **no** merge
+  boundary — the same reasoning that closed [[RT-UNIT-CLOSURE-CONVERT]]. Five
+  checkpoints because the interface has five pieces with real dependencies, and
+  because bundling is what spent `D5a` twice and `D6b` once.
+
+  **`D7a` — planner-issued composed worker view.** From the exact
+  computational-frame origin, selected alternative and recursive source position
+  **already in scope**, planning exposes the same full worker provenance the
+  continuation unit uses: closure occurrence, raw body, declared arity, ordered
+  capture provenance, route eligibility. ⛔ Lowering may **not** rediscover it
+  from closure shape, body shape, whichever target exists, or a source re-walk.
+  Refuse before emission on zero answers, conflicting full identities, wrong
+  position/body/capture provenance, or an unexecutable raw target.
+
+  **`D7b` — one environment authority, not two.** When the composed /
+  source-machine case environment installs the constructor-argument segment, the
+  selected recursive position installs that exact compiler-only
+  `StaticWorkerBinding` at its **source-order binder position**. Nonrecursive
+  arguments stay `Value`; the IH prefix and outer frame are unchanged. ⛔ No
+  parallel side map, no carrier facet. Value-position use of the closure capsule
+  **continues to fail closed**, exactly as in the functionized unit.
+
+  **`D7c` — source-machine callee consumer.** An exact `Var` callee resolving to
+  that binding is consumed **before** the value-only `Var` path. Arguments are
+  still evaluated under the existing source-machine control and phase, then handed
+  to the **same** route-selected static-worker emitter direct descent uses. ⛔ No
+  duplicated target/operand assembly; no shortcut through `lower_expr` that
+  bypasses source control.
+
+  **`D7d` — checked-marker coexistence.** The witness places an ordinary
+  selected-argument call **before** the checked IH call inside one checked
+  wrapper. ⇒ ⛔ *"A marker is pending"* therefore **cannot** mean *"the next
+  static-worker call consumes it."* The selected-argument call **leaves the marker
+  pending**; only the exact planner-issued checked call occurrence may consume it.
+  Use the existing checked **occurrence authority** (or a faithful projection),
+  ⛔ never route, arity, binder-index coincidence, or first-call order. Omission,
+  duplicate, transplant and wrong occurrence must all refuse.
+
+  **`D7e` — non-vacuous closeout.** Re-run the ordinary A/B source witness through
+  **both** composed and functionized paths. It must reach a same-body
+  `GeneratedContext` IH and `RawWorker` selected-argument emission, make the
+  wrong-table mutation **red**, keep the context-suffix mutation **red**, and prove
+  the raw target is **both declared and defined**. ⛔ `D6c`'s refusal set follows
+  only after this positive closes.
 
   ##### SPENT — `D5a` cut into `D5a-1`/`D5a-2` (Steward, `evt_62ee5f2dvmvp1`). REFUTED, see above.
 
