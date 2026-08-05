@@ -15049,6 +15049,21 @@ fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder()
         );
     };
 
+    // ⭐ Positive control on the ORACLE, and it leads deliberately: an entry walk
+    // that recorded nothing would make every comparison below -- the agreement
+    // half included -- pass or fail for a reason that has nothing to do with a
+    // moved position. ⛔ It is asserted over EVERY observed row, not just the
+    // shifted one, so a starved oracle is attributed here rather than surfacing
+    // as a confusing failure of whichever check happens to run first.
+    for seat in &observed {
+        assert_ne!(
+            seat.entry_operand, "none",
+            "the entry ABI walk recorded no operand at position {}, so this row measures a \
+             missing oracle rather than a moved position: {seat:#?}",
+            seat.source_abi_position
+        );
+    }
+
     // ⭐⭐ **The discriminating control, and the reason this measurement is about
     // the BINDER rather than about a misaligned oracle.**
     //
@@ -15078,15 +15093,6 @@ fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder()
              shifted row proves nothing: {seat:#?}"
         );
     }
-
-    // Positive control on the oracle itself. An entry walk that recorded
-    // nothing would make every comparison below pass for the wrong reason.
-    assert_ne!(
-        seat.entry_operand, "none",
-        "the entry ABI walk recorded no operand at position {}, so this row measures a missing \
-         oracle rather than a moved position: {seat:#?}",
-        seat.source_abi_position
-    );
 
     // ⛔ The flip must not be a BOUNDS mismatch. The root position is a lawful
     // index into the emission environment; production reads it without error.
