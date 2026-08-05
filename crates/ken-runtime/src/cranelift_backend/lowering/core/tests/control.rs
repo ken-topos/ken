@@ -12120,7 +12120,7 @@ fn d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_work
                             (
                                 input.coordinate.expect_entry_abi().0,
                                 input.coordinate.expect_entry_abi().1,
-                                input.immediate_slot,
+                                input.availability.expect_entry_abi_slot(),
                             )
                         })
                         .collect::<Vec<_>>(),
@@ -12795,7 +12795,7 @@ fn d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_
                              emitter than the one that will run"
                         );
                         assert_eq!(
-                            input.immediate_slot,
+                            input.availability.expect_entry_abi_slot(),
                             input.coordinate.expect_entry_abi().1,
                             "for a predeclared emitter the root ABI position and the immediate \
                              slot index the same environment, so they must agree; this is the \
@@ -12807,7 +12807,7 @@ fn d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_
                     if inputs
                         .iter()
                         .any(|input| {
-                            input.immediate_slot != input.coordinate.expect_entry_abi().1
+                            input.availability.expect_entry_abi_slot() != input.coordinate.expect_entry_abi().1
                         })
                     {
                         specialization_with_a_real_difference += 1;

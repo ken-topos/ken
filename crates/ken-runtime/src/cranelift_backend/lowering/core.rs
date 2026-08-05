@@ -6302,7 +6302,9 @@ impl<'a> Lowering<'a> {
                 match d5a_route_mutation() {
                     D5aRouteMutation::ReadRootPositionAsImmediateSlot => {
                         record_d5a_route_application();
-                        input.immediate_slot = source_abi_position;
+                        input.availability = ContinuationImmediateAvailability::EntryAbi {
+                            immediate_slot: source_abi_position,
+                        };
                     }
                     // ⛔ Scoped to the SPECIALIZATION arm. Applied to a
                     // predeclared emitter it is caught by that arm's equality
@@ -6312,19 +6314,60 @@ impl<'a> Lowering<'a> {
                     D5aRouteMutation::PerturbImmediateSlotOutOfRange => {
                         if matches!(defining_owner, ContinuationEmissionOwner::Specialization(_)) {
                             record_d5a_route_application();
-                            input.immediate_slot =
-                                u32::try_from(producer_env.len()).unwrap_or(u32::MAX);
+                            input.availability = ContinuationImmediateAvailability::EntryAbi {
+                                immediate_slot: u32::try_from(producer_env.len())
+                                    .unwrap_or(u32::MAX),
+                            };
                         }
                     }
                     D5aRouteMutation::PerturbPredeclaredImmediateSlot => {
                         if matches!(defining_owner, ContinuationEmissionOwner::Predeclared(_)) {
-                            record_d5a_route_application();
-                            input.immediate_slot = input.immediate_slot.wrapping_add(1);
+                            if let ContinuationImmediateAvailability::EntryAbi {
+                                immediate_slot,
+                            } = input.availability
+                            {
+                                record_d5a_route_application();
+                                input.availability =
+                                    ContinuationImmediateAvailability::EntryAbi {
+                                        immediate_slot: immediate_slot.wrapping_add(1),
+                                    };
+                            }
                         }
                     }
                     _ => {}
                 }
                 input
+            };
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D2b` — the emission seam matches the
+            // AVAILABILITY domain, exactly as it already matches the coordinate
+            // domain above. ⛔ No wildcard: `D2b` projects the two producer-local
+            // availabilities and `D3` teaches this seam to consume them. Until
+            // then a lexical index must not be handed to `producer_env`, which
+            // is an ABI operand run — the two are different environments, and
+            // indexing one with the other's index names a different value.
+            //
+            // ⭐ Unreachable today by construction, since the coordinate match
+            // above has already refused every producer-local coordinate and the
+            // projection only builds these arms for that domain. It is written
+            // anyway because "unreachable" is a claim about the current
+            // projection, and this seam must not be the place that discovers it
+            // was wrong.
+            let immediate_slot = match input.availability {
+                ContinuationImmediateAvailability::EntryAbi { immediate_slot } => immediate_slot,
+                ContinuationImmediateAvailability::CurrentLexical { .. }
+                | ContinuationImmediateAvailability::GeneratedContextCapture { .. } => {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a continuation input is immediately available only as the \
+                             producer-local {:?}; RT-CONTSRC-PRODUCER-LOCAL D2b projects that \
+                             availability and D3 teaches this seam to consume it. Refusing is \
+                             deliberate: the alternative is indexing this context's ABI operand \
+                             run with a lexical environment index",
+                            input.availability
+                        ),
+                    ));
+                }
             };
             // `D5a` -- ROOT provenance versus IMMEDIATE availability.
             //
@@ -6348,7 +6391,7 @@ impl<'a> Lowering<'a> {
                             ),
                         ));
                     }
-                    if input.immediate_slot != source_abi_position {
+                    if immediate_slot != source_abi_position {
                         return Err(unsupported(
                             "ContinuationSpecialization",
                             "a continuation input emitted from its own root owner has an \
@@ -6371,7 +6414,7 @@ impl<'a> Lowering<'a> {
                 }
             }
             let binding = producer_env
-                .get(input.immediate_slot as usize)
+                .get(immediate_slot as usize)
                 .ok_or_else(|| {
                     unsupported(
                         "ContinuationSpecialization",
@@ -6379,7 +6422,7 @@ impl<'a> Lowering<'a> {
                             "a continuation input names immediate slot {} outside the emitting \
                              context's environment of {} bindings; note this is the IMMEDIATE \
                              slot, not the root ABI position {} beside it",
-                            input.immediate_slot,
+                            immediate_slot,
                             producer_env.len(),
                             source_abi_position,
                         ),
@@ -8387,6 +8430,26 @@ impl<'a> Lowering<'a> {
                     ));
                 }
             };
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D2b` — the availability domain, matched
+            // exhaustively with no wildcard exactly as the coordinate domain is
+            // above. `D3` teaches this seam the two producer-local arms; until
+            // then it must not index `defining_abi_operands` — an ABI operand run
+            // — with a lexical environment index.
+            let immediate_slot = match capture.availability {
+                ContinuationImmediateAvailability::EntryAbi { immediate_slot } => immediate_slot,
+                ContinuationImmediateAvailability::CurrentLexical { .. }
+                | ContinuationImmediateAvailability::GeneratedContextCapture { .. } => {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a generated context capture is immediately available only as the \
+                             producer-local {:?}; RT-CONTSRC-PRODUCER-LOCAL D2b projects that \
+                             availability and D3 teaches this seam to consume it",
+                            capture.availability
+                        ),
+                    ));
+                }
+            };
             // ROOT provenance versus IMMEDIATE availability, kept apart exactly
             // as at the specialization emission seam. Exhaustive over the owner
             // classes with no catch-all.
@@ -8401,7 +8464,7 @@ impl<'a> Lowering<'a> {
                             ),
                         ));
                     }
-                    if capture.immediate_slot != source_abi_position {
+                    if immediate_slot != source_abi_position {
                         return Err(unsupported(
                             "ContinuationSpecialization",
                             "a generated context capture emitted from its own root owner has an                              immediate slot that disagrees with its root ABI position",
@@ -8417,13 +8480,13 @@ impl<'a> Lowering<'a> {
             let operand = self
                 .function_local
                 .defining_abi_operands
-                .get(capture.immediate_slot as usize)
+                .get(immediate_slot as usize)
                 .ok_or_else(|| {
                     unsupported(
                         "ContinuationSpecialization",
                         format!(
                             "a generated context capture names immediate slot {} outside the                              emitting function's {} ABI operands; note this is the IMMEDIATE                              slot, not the root ABI position {} beside it",
-                            capture.immediate_slot,
+                            immediate_slot,
                             self.function_local.defining_abi_operands.len(),
                             source_abi_position,
                         ),
