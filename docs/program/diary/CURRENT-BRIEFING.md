@@ -35,16 +35,58 @@
 
 ## LIVE — 2026-08-05 ~07:0xZ · `1e` FALSIFIED; `RT-CONTSRC-PRODUCER-LOCAL` cut
 
-**`origin/main`: `a8e37a3d`** (PR #1412). New node `RT-CONTSRC-PRODUCER-LOCAL`
-is `ready` with a frame; `D7` checkpoint `1f` withdraws `1e`. Verify; do not
-trust this line.
+**`origin/main`: `d4f27582`** (PR #1413). `RT-CONTSRC-PRODUCER-LOCAL` is
+`active` with a frame; `D7` checkpoint `1f` withdraws `1e`. Verify; do not trust
+this line.
 
 ### The one thing to do next
 
-**Nothing — released and CONFIRMED LIVE at 07:08Z.** `runtime-leader` dispatched
-(`evt_7tcvf241ws3j9` in the new thread, `evt_4xhv3q7cq6avp` in `D7`'s), and
-`runtime-implementer` is working. **WIP audit clock armed from the 07:05:59Z
-kickoff, so due ~08:06Z.** The kick minted thread **`thr_6m43v75yndhtj`**.
+**Nothing — `D2` is in flight.** `RT-CONTSRC-PRODUCER-LOCAL` is live in thread
+**`thr_6m43v75yndhtj`**; `origin/main = d4f27582`.
+
+- `D0` (`12d9612a`, zero code delta) and `D1` (`77a24320`) delivered on
+  `wp/RT-DECL-CLOSURE-PORT-typed-units`, base exact `179af863`. **No hard
+  stop.** **Architect APPROVED `D0`/`D1`** at `evt_5zkydewv5kspb` (07:34:42Z).
+- **Leader released `D2` only** at `evt_4ak330de1fg9s` (07:35:05Z); implementer
+  confirmed working. **`D4` remains unreleased.**
+- I corrected three frame defects the ring flagged (PR #1413, blob `18c88ea5`).
+  **Nothing owed by me.**
+- **WIP audit clock: armed from the 07:35Z `D2` release, so due ~08:35Z.**
+
+**Next expected event:** `D2` report. If it hard-stops, the concrete edge routes
+to me — this node's frame is mine and four of this campaign's stops have been my
+framing, not Runtime's execution.
+
+> ### The mistake I made at 07:36Z, because the shape recurs
+>
+> My frame-correction post `evt_270c4gk9trrmv` carried the line "`D2`-`D4`
+> remain unreleased pending the Architect's gate". **It was already false when
+> it landed** — the gate and `D2`'s release had posted 80 and 57 seconds
+> earlier, and I had composed against the state I last measured. The Architect
+> caught it in under a minute (`evt_1g2ssacct76tq`); corrected at
+> `evt_7rbseqb0xnsaq`.
+>
+> ⇒ **A post whose subject is NOT release state must not assert release state.**
+> A status claim carried as background inherits the message's authority and
+> escapes its scrutiny. Re-read the channel immediately before posting anything
+> that names what is released.
+
+### The three frame corrections, so they are not re-litigated
+
+From `evt_1srfqjmkp5eh8`, all published:
+
+1. **`D3`'s consumer count was 3 in prose, 10 measured.** Frame now sizes `D3`
+   from the in-tree seam function `entry_abi_pending_producer_local`, not from
+   frame prose. **A frame-side count of a code-side population goes stale the
+   moment the code moves.**
+2. **`AC-1`'s six red rows are TWO populations** — the `AC-1` row refuses at
+   `Match: scrutinee is not a constructor value`, the other five at
+   `ComputationalMatch: ...`. Greening the five does not discharge `AC-1`, or
+   the reverse. Invisible in `1 passed / 6 failed`.
+3. **`AC-5` is pinned to `D4`.** It guards broad admission changing the interned
+   population; before `D4` admits anything that condition is unreachable, so an
+   earlier "controls green" report is true and meaningless while reading as
+   cleared risk.
 
 ⚠ **A live-verb grep nearly reported this ring idle.** The implementer's footer
 read `✻ Actualizing… (1m 9s)` — a verb absent from the tick's pattern list, so
@@ -258,10 +300,29 @@ re-measurement.
 | **Doc** | stood down after `DOC-PROGRAM-WAVE-RECONCILE` merged |
 | **Architect** | serving the Runtime ring; last act was the identity acceptance of `70887529` |
 
-**Tracker `active` flags are stale on three nodes** — `KERNEL-NESTED-IND`,
-`SPEC-MISSION-GROUNDING`, `SURF-SPACE-CELLS` all read `active` while their rings
-report no authorized WP. Reconcile at the next tracker pass; an `active` node
-whose ring is idle reads as in-flight work to anyone but me.
+**Tracker statuses reconciled 2026-08-05 ~07:45Z** — four were wrong against the
+generator's own legend, where `active` means **a team is building**:
+
+| node | was | now | why |
+|---|---|---|---|
+| `RT-CONTSRC-PRODUCER-LOCAL` | `ready` | `active` | it IS in flight |
+| `KERNEL-NESTED-IND` | `active` | `ready` | deps met, framed inline, no seat |
+| `SPEC-MISSION-GROUNDING` | `active` | `ready` | three ACs open, no seat |
+| `SURF-SPACE-CELLS` | `active` | `draft` | P1 landed, P2 residual unframed |
+
+**Both of the two nodes that argued for `active` in their own prose used it to
+mean "not merged".** `SURF-SPACE-CELLS` said it stays `active` "so a reader
+cannot mistake a merged phase for a merged node"; `SPEC-MISSION-GROUNDING` said
+the AC reconciliation "is the reason it is `active` rather than `merged`." The
+anti-merged signal those blocks wanted is carried by the blocks themselves. Both
+operative sentences are rewritten, not appended to.
+
+⇒ The releasable-frontier list now shows `KERNEL-NESTED-IND` and
+`SPEC-MISSION-GROUNDING`. **That is accurate and is not a kick order** — the
+single-threaded hold is a release decision, not a dependency, and the tracker is
+generated so it cannot carry the hold. `SPEC-MISSION-GROUNDING` in particular is
+**not** releasable by me: `AC-M3` names a pass `COORDINATION §10⁻a` forbids the
+Steward to request.
 
 ### Unlanded finished work — research, 4 days old
 

@@ -1,7 +1,7 @@
 ---
 id: SPEC-MISSION-GROUNDING
 title: "Ground the spec as a whole against the mission — audit every retained constraint for which mission property fails without it, and relax the ones where nothing does"
-status: active
+status: ready
 owner: spec
 size: L
 gate: none
@@ -36,8 +36,17 @@ origin: Operator question 2026-07-26 — "the question to ground the spec agains
 >
 > ⇒ **This node is now the umbrella**: it owns the *method and its standard of
 > evidence*; the tracks own the edits. ⛔ It does not close when `A1` lands —
-> see the AC reconciliation immediately below, which is the reason it is
-> `active` rather than `merged`.
+> see the AC reconciliation immediately below, which is the reason it is not
+> `merged`.
+>
+> ⛔ **Status is `ready`, not `active`.** `active` means **a team is building**,
+> and no Spec seat is assigned; three ACs are open and every dependency is met,
+> which is exactly `ready` (deps met, unassigned). It read `active` until
+> 2026-08-05 as a stand-in for "not merged" — a signal this block already
+> carries. ⚠ Releasing it is still not wholly mine: `AC-M3` names an adversary
+> refutation pass that `COORDINATION §10⁻a` forbids the Steward from
+> requesting. That is on the operator-owed list, not a reason to mis-state the
+> status.
 
 ## ⚠ AC RECONCILIATION — what the first pass DID AND DID NOT discharge
 
