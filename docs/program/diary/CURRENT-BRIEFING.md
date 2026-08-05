@@ -33,22 +33,60 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~01:5xZ · Runtime building D7; nothing owed by me
+## LIVE — 2026-08-05 ~03:2xZ · Runtime building D7; nothing owed by me
 
-**`origin/main` at last check: `ef1062ce`** (the D7 host-effect frame recut, PR
-#1402). Verify it; do not trust this line.
+**`origin/main` at last check: `9bceb8c5`** (the D7 lifecycle recut, PR #1403;
+frame blob `fa805660`). Verify it; do not trust this line.
 
 ### The one thing to do next
 
 **Nothing, until Runtime hands back.** `runtime-implementer` is mid-turn on the
-`RT-DECL-CLOSURE-PORT` D7 effect-seat population/ledger slice, resumed from
-exact `3d8f9b21` on the governed `70887529` lineage, released by
-`runtime-leader` at `evt_1krkxb1zv0kwx` (01:36). Confirmed engaged by pane at
-01:51 — one continuous turn, 15m elapsed, ctx 19%. The leader is idle-and-
-correct, waiting on that named checkpoint.
+**lazy site-operand correction and the carried capacity route**, resumed from
+exact `f6958b95`, released by `runtime-leader` at 03:01
+(`evt_6jrzzfqg1t2xy`) after the Architect's outcome-(b) disposition at 02:58
+(`evt_see9dbnftqaz`: the positional projection is lawful, the eager full-list
+realization is not). Confirmed engaged by pane at 03:06 — live turn, ctx 14%.
+The leader is idle-and-correct.
 
-**WIP audit clock: armed at 01:36, fires 02:36.** The release is the reset
-event. A routine progress post does not reset it.
+**THE DISPATCH IS NO LONGER HELD — as of the Architect's 02:47 review
+(`evt_7vxssfyfdh0m1`).** Read every earlier post's "bulk conversion and the
+exact-`Int` helper remain held" as superseded. Still held: candidate, QA, `D6`
+closure, the call-result SCC, and the `#27` / case-emission populations.
+
+Checkpoint lineage since my recut, each an accepted parent of the next:
+`6a09ed68` (population substrate) → `727b51a1` (per-visit claim group) →
+`69c68e6e` (pre-definition body close) → `f6958b95` (operation-arm claim
+consumption; bulk pre-operation conversion removed) → in flight.
+
+**I compacted `runtime-implementer` at `f6958b95` (03:00), on the leader's
+request.** Used a direct `/compact`, **not `handoff-gate-compact.sh`** — that
+script's `git reset --hard origin/main` is right for a before-new-work gate and
+wrong mid-WP. Nothing is owed by me on it.
+
+> **Measured, and it contradicts the playbook: the freshly compacted seat DID
+> wake on the leader's ordinary mention**, unaided, within minutes. The standing
+> rule is that a just-compacted seat sits idle at an empty composer and needs a
+> pane rouse; I had promised the leader that nudge and it turned out unnecessary.
+> **Check the pane before sending one — a nudge into a live turn
+> double-delivers.** One observation, not yet a retraction of the rule.
+
+**WIP audit clock — DERIVE IT, do not read a stamped deadline.** A fixed
+timestamp here goes stale on every reset event and then fires a spurious audit;
+it needed rewriting twice in the first hour. At tick time, take the **latest**
+of these in the WP thread and add 60 minutes:
+
+- a kickoff or re-kickoff (leader release),
+- an Architect audit, ruling, or review verdict,
+- a candidate or checkpoint handoff,
+- a genuine hard stop, or completion.
+
+**A routine progress post is not a reset event.** Counting those makes the
+trigger fire never while looking armed.
+
+On this ring the resets have been arriving every 5 to 15 minutes, so **the
+60-minute trigger has not come close to firing and probably will not while the
+cadence holds.** That is the healthy case, not a broken detector — but it is
+also why a stamped deadline was pure noise here.
 
 **Governing base, do not let it drift:** continue only from the `70887529`
 lineage. Rebase, merge, or cherry-pick of `fb8fd881`, `430798bf`, `548682c3`,
