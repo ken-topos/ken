@@ -33,85 +33,97 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~07:0xZ · `1e` FALSIFIED; `RT-CONTSRC-PRODUCER-LOCAL` cut
+## LIVE — 2026-08-05 ~08:4xZ · `D2` COMPLETE; `D4` is set equality; `D3` out
 
-**`origin/main`: `d4f27582`** (PR #1413). `RT-CONTSRC-PRODUCER-LOCAL` is
-`active` with a frame; `D7` checkpoint `1f` withdraws `1e`. Verify; do not trust
-this line.
+**Verify `origin/main` before trusting anything below.**
+`RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Nothing — the IH-requirement census is in flight, and its answer is MY next
-decision.** `RT-CONTSRC-PRODUCER-LOCAL` is live in `thr_6m43v75yndhtj`.
+**Nothing — `D3` is in flight.** Next expected event is the `D3` report.
+**`D4`, candidate, QA, `D6` closure, `#27`/case-emission, the call-result SCC
+and downstream `D7` all remain held.** WIP clock: derive it from the latest
+reset event in the thread, never from a stamped deadline.
 
-- `D0` (`12d9612a`), `D1` (`77a24320`) accepted. `D2` blocked at `a5a6ce9b`
-  (`evt_9krmbv834z9p`), corrected at exact **`5377d2ab`**, and the correction is
-  **accepted as sound partial progress** — but **not as complete `D2`**
-  (`evt_4h2v01dc7g8s4`, 08:17:20Z).
-- **My disposition: `evt_7q2mztg9n7dva`.** Leader released the census only at
-  `evt_361zdh159edv0` (08:19Z); implementer working it. **`D3`, `D4`,
-  candidate, QA, `D6` closure, `#27`/case-emission, the call-result SCC and
-  downstream `D7` all remain held.**
-- **WIP clock re-armed on the 08:19Z release — derive it, never read a stamped
-  deadline.**
+### Where the node stands
 
-### The fork I have NOT decided, and the one measurement that decides it
-
-The Architect found an **expressibility boundary**: `D1`'s producer-local arm is
-enclosed by `ContinuationSourceSlotAuthority`, which is unconditionally a
-**value-slot** contract, and a recursive IH is not a value — lowering already
-holds it as a compiler-only `LoweringEnvironmentBinding::StaticWorker` with no
-word, tag, descriptor or carrier. Three measured grounds: no `ResultPhase` to
-`AbiCarrier` map exists; the IH's phase depends on whole-plan
-`functionized_units`, so `(case body, ordinal)` does not determine it; and the
-production continuation-input vocabulary has **no callable domain at all**
-(`BoundaryUseAvail::Callable` is `#[cfg(test)]`-only). Leaving the prefix `Open`
-is declining to represent, not defaulting — and it is the only sound behaviour.
-
-The Architect asked me to **recut this node to add a closed callable-contract
-substrate, or sequence a precursor node.** ⛔ **I refused to choose yet**, and
-the reason must survive: the fork turns on whether the edges `D4` must admit
-**actually contain IH binders**, and nobody has measured that. If the answer is
-zero, the boundary is real and off `D4`'s path, and a substrate node would
-lengthen the critical path to represent a value no edge needs.
-
-**This node has already been stopped once by exactly that error, and it was
-mine** — `1e` read a first-`Open` census as a requirement census and ruled a
-minimal scope over an empty population. Section 6 of the frame came out of it
-and binds me first: decide the graph shape FROM the inventory, never before it.
-
-**What each answer means, so no one has to guess:**
-
-| census result | disposition |
+| deliverable | state |
 |---|---|
-| **zero** IH-bearing edges | boundary recorded as a named residual, `D2` completes at `5377d2ab`, `D3`/`D4` proceed against the single value contract, **no new node** |
-| **nonzero** | the closed callable-contract substrate gets its **own node**, cut from the Architect's ruling; `D3` waits, because every consumer must exhaustively distinguish the two contracts and `D3`-against-one-contract would be built twice |
+| `D0` `12d9612a` (zero delta), `D1` `77a24320` | accepted `evt_5zkydewv5kspb` |
+| `D2` | **COMPLETE at exact `e6d4f085`**, Architect gate `evt_38yd5sd1ht0kk` |
+| `D3` | released, in flight |
+| `D4` | recut as SET EQUALITY, held |
 
-⛔ The census must be a **vector over the full required environment**. A
-first-`Open` census cannot answer it and reporting one reproduces `1e` exactly.
+**`D2`'s route was blocked once and corrected twice, and both stops were
+sound.** `a5a6ce9b` stamped one blanket `ValueWord` contract across a
+`ComputationalMatch` binder run that is **not homogeneous** — it is ordered
+`[recursive IH binders, constructor argument binders, outer environment]`.
+`5377d2ab` fixed the argument half by **reading** the carrier from the
+scrutinee's shape instead of choosing one, and hard-stopped on the IH half
+rather than defaulting. `e6d4f085` added the census and the fidelity
+correction.
 
-### What I owe regardless of the answer
+### `D4` is now SET EQUALITY, not closure
 
-**`AC-3` never says the case-binder population splits into an IH sub-run and an
-argument sub-run**, while requiring the newly-interning edges to be accounted for
-individually — an aggregate over a heterogeneous run is what `AC-3` exists to
-forbid. Amend when the contract is settled. ⛔ Not mid-correction, where a frame
-edit duplicates a live instruction and drags its guardrails section along.
+Unit: **one call to `exact_continuation_source_environment`**, identified by
+program fingerprint + consumer owner + continuation origin + producer construct
+origin + recursive position + closure origin.
 
-**The two stale comments are folded into the census unit, not left to "any
-successor".** `producer_local_source`'s table and the `D2` positive's prose still
-state the blanket `ValueWord` the gate rejected. A comment asserting a rejected
-contract is not a stale note — it is what a later reader builds from.
+| set | contents |
+|---|---|
+| `C` | all **83** `(identity, full required vector)` instances |
+| `V` | the **80** fully closed under the current value-slot authority |
+| `R = C \ V` | exactly **3**: `OPEN[ih-binder]`, `OPEN[let-value:Construct]`, `AMBIG2[let-value:If]` |
 
-**Neither stop here is my framing.** The heterogeneous-run defect was caught at
-the gate and the IH boundary was found by building; that is the only way it
-could have been found. Four earlier stops on this campaign *were* my frames
-asserting laws the measured plane does not support. Do not count these with
-them, and do not read this node as mis-sized.
+`D4` discharges when `interned = V` and `declined = R`. ⭐ **All 17 parity
+instances are in `V`** — the population behind the six failing `D0` rows, and
+the critical-path fact. ⛔ Call the three **outside-this-contract-domain
+residuals**, never "unrepresentable" — the Architect corrected my wording, and
+nothing claims a future authority cannot represent them.
+
+⛔ **The program fingerprint is load-bearing.** `StaticOriginId`s are per-compile,
+so without it edges from different fixtures collide and the census silently
+undercounts: a first pass reported 58 identities of which six were collisions.
+
+### The lesson from my own fork, because it will recur
+
+I put a **binary** fork to the ring: zero IH-bearing edges ⇒ no node; nonzero ⇒
+substrate first and `D3` waits. The census returned **1 of 83**, and the leader
+applied my rule correctly — but the decisive fact had no cell in it: **the IH
+edge is one of three non-closed positions from three causes, and a callable
+contract closes exactly one.** So "every environment closed" was unreachable by
+any node in the graph, with or without the substrate. That is a deadlock, not a
+gate — the same thing checkpoint `1f` retired.
+
+⇒ **State a fork by what would DECIDE it, not by the shape of the number you
+expect back.** The census was still the right call; the defect was in how I
+pre-committed to reading it.
+
+### `RT-CONTSRC-CALLABLE-CONTRACT` — filed, `draft` on purpose
+
+A real capability gap: production continuation inputs have **no callable domain
+at all** (`BoundaryUseAvail::Callable` is `#[cfg(test)]`-only), and a recursive
+IH is a compiler-only `StaticWorker` with no word, tag, descriptor or carrier.
+Grounded in the Architect's ruling plus three source measurements.
+
+⛔ **Held `draft` deliberately — it is NOT framing debt.** It closes 1 of 83
+instances and 0 of 6 failing rows, and the one-release-ahead policy is already
+satisfied by the six framed successors of `RT-DECL-CLOSURE-PORT`. Promoting it
+would put an off-critical-path node in front of a reader looking for the next
+kickoff.
+
+### Two things about this node that must not be misread later
+
+**None of `D2`'s stops was a sizing defect.** The heterogeneous-run defect was
+caught at the gate; the IH boundary was found by building, which is the only way
+it could have been found. Four *earlier* stops on this campaign were my frames
+asserting laws the measured plane does not support — do not count these with
+them.
 
 ⭐ **The implementer retired its own invented `ValueWord` blanket before the gate
-ruled on it**, and reported the IH half as three measured grounds rather than
-picking a default. That is what these frames are written to produce.
+ruled on it**, reported the IH half as three measured grounds rather than picking
+a default, and declined to choose the graph. That is what these frames are
+written to produce.
 
 > ### The mistake I made at 07:36Z, because the shape recurs
 >
