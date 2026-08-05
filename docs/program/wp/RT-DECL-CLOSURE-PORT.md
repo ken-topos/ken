@@ -2526,27 +2526,90 @@ family — that is a measurement nobody has taken.
         > checks to make the row advance — the defect is the producer naming an
         > incomplete application, not the check catching it.
 
-        **What the correction owes.** Make the Host-`Vis` call seed and template
-        name the **full erased Runtime application, including the injected result
-        operand**, and bind seed, marker body, and consumer to that one arity.
+        > **RECUT 2026-08-05 (Architect `evt_68e5svw1eeenp`) — this checkpoint's
+        > first statement of what it owes was FALSE, and the implementation was
+        > right to contradict it.** It said "make the seed and template name the
+        > full erased application" and demanded a **nullary Host-`Vis` be
+        > `1 / 1 / 1` at seed, marker body, and consumer. That **collapses two
+        > distinct lawful coordinates into one number.**
+        >
+        > **The honest measured relation is `source-seed 0 / emitted-template 1 /
+        > marker-consumer 1`.** Forcing the source seed to `1` is wrong for
+        > non-injecting nullary forces, and the first attempt proved it: a
+        > producer-global count moved the five non-injecting `fs_*` rows **off
+        > their framed `D0` refusal text**. ⛔ Do not contort the code to satisfy
+        > the old premise. **The per-row table is what caught this** — a pass/fail
+        > total reads `1/7` before and after, identically, and hides it entirely.
 
-        **Required controls:**
+        **What the correction owes — two coordinates, named separately.**
 
-        - a **nullary** Host-`Vis` continuation is `1 / 1 / 1` — seed, marker
-          body, and consumer all naming the same single arity;
-        - an **n-argument** Host-`Vis` continuation is `n + 1` throughout;
-        - an **ordinary non-Host** application remains `n`, so the correction is
-          scoped to the injecting route and does not shift every application;
-        - **omitting or double-counting the injected result refuses before
-          emission** — both directions, since a correction that can only be
-          wrong one way is half-measured;
-        - all existing `D5a` marker controls and the exact `50092c59` capture
-          controls remain green.
+        - **Source occurrence arity** — the checked seed-binding count. It binds
+          the checked/source application occurrence and **stays as it is.**
+        - **Complete emitted arity** — the immutable template / marker / consumer
+          count, naming the complete erased Runtime application.
+        - **Host-`Vis` relates the two by exactly one planner-known injected
+          host-result operand. Every non-injecting route relates them by zero.**
+
+        **The delta may not be an unconstrained count.** Derive it from a closed
+        route / injected-operand kind, or an equivalent **exhaustively matched**
+        representation; use **checked** addition and conversion; and **retain the
+        exact source-binding check** unchanged. An open integer that happens to be
+        `1` on the measured path is the same defect in the other direction.
+
+        **Required controls — they must drive the REAL routes.** The prior four
+        did not: they hand-constructed the slot, source seed, frame, and raw
+        injected operands, never traversed the Host-`Vis` producer, and asserted
+        only that a number was less or greater than a separately computed
+        `source + 1`. **Neither mutation was ever fed through marker entry or
+        static-worker consumption, so neither was shown to refuse — and both
+        would stay green if that pre-emission rejection disappeared.** A
+        `debug_assert_eq!` over the same arithmetic is not an independent
+        release-build oracle.
+
+        - a **real nullary** Host-`Vis` application produces full template arity
+          **1**; a **real n-argument** one produces **n + 1**;
+        - a **real ordinary non-Host** route remains **n** — the scoping half,
+          without which every other row is equally consistent with a global shift;
+        - `cfg(test)`-only **omit** and **double-count** mutations **at the
+          Host-`Vis` route** each **reach the existing Runtime marker gate and
+          refuse before function definition or emission**. Both directions: a
+          correction that can only be wrong one way is half-measured.
+        - all existing `D5a`, checkpoint-1, and per-row `D0` controls remain
+          **cumulative**.
 
         **Scope.** Existing `D7` / [[RT-RECURSOR-TRANSPORT]] atomic scope. No new
         node, carrier lane, disposition, representation, or third participant.
-        Runtime holds exact `50092c59`; **no candidate, no QA route, and no
-        checkpoint-2 work until this lands.**
+        Exact `4ec5362c` is **preservation-only partial progress** — its component
+        boundary is correct and should be retained; it is not an accepted `1b`.
+        **No candidate, no QA route, and no checkpoint-2 work until a corrected
+        `1b` is accepted.**
+
+     **1c. Enforce the matrix-omission law in PLANNING.** Authorized by the
+        operator 2026-08-05; sequencing confirmed by the Architect at
+        `evt_68e5svw1eeenp`.
+
+        **The gap, measured.** At the checkpoint-1 stop, body origin `375` was in
+        `function_local.worker_templates` and its closure still reached the **late
+        generic `Closure` arm**. That is a **real planned static-worker member
+        falling through** where this frame's own matrix-omission law says it must
+        **fail in planning** and may not fall through there.
+
+        **Checkpoint 1 did not close it.**
+        `validate_retained_callable_capture_contract` is a **pre-emission** gate.
+        It correctly treats `worker_templates` membership as necessary and
+        insufficient, but it fires at emission; the law says planning. Neither the
+        checkpoint-1 acceptance nor `1b` claims otherwise.
+
+        **Sequencing — after `1b`, before checkpoint 2.** It may begin only once a
+        corrected `1b` is accepted. The reason is measurement, not preference:
+        enforcing in planning **moves where the linked row first refuses**, and
+        `1b`'s entire evidence is a per-row before/after on that row. Landing `1c`
+        first would shift the row underneath the measurement while it is being
+        taken. The law makes a silent fall-through refuse **earlier**; it does not
+        advance the row, so it has no claim to jump the queue.
+
+        **Scope.** Existing `D7` / [[RT-RECURSOR-TRANSPORT]] atomic scope. It
+        closes a law this frame already states — it does not author a new one.
 
      2. **Then close the exact `264 -> 262 / position 1` consumer** with the
         retained `ae64f687` mechanism: the exact planned seat is claimed, the
@@ -2556,7 +2619,7 @@ family — that is a measurement nobody has taken.
 
      All existing mixed-phase, owner/order/provenance, zero-allocation capsule,
      `D5a` marker, phase/taxonomy and `AC-4` controls remain **cumulative**
-     across all three checkpoints.
+     across all four checkpoints.
 
      **The row may NOT be replaced by a synthetic or direct carried-capacity
      witness.** Such a witness proves the consumer locally and cannot prove that
