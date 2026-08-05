@@ -2118,12 +2118,49 @@ family — that is a measurement nobody has taken.
 
   ⇒ Every `#23` / `#26` mixed-phase, zero-allocation nested-capsule, population,
   and per-row first-refusal obligation above **remains owed on top of these**.
-  Exact `fb8fd881` is **preservation-only, not a candidate**, and is the exact
-  continuation base.
+  Exact `fb8fd881` is **preservation-only, not a candidate**, and is **superseded
+  history** — see the governing-base correction immediately below.
+
+  #### GOVERNING BASE — corrected 2026-08-05, Architect `evt_73b1t4nkewftw`
+
+  **The governing base for every remaining `D7` move is exact
+  `708875292fdf1d81f13320d61baeb5a84a7e7bbf`**, which descends from `origin/main`
+  `e6b4a13b`. **Do not rebase, merge, or cherry-pick `fb8fd881`, `430798bf`,
+  `548682c3`, or `42ccd8ec` into it.**
+
+  Those tips and `70887529` share merge-base `f7cea8fd` and are **competing
+  historical implementations, not independent halves awaiting assembly.** The
+  older line lacks the accepted source-aggregate preflight, the typed `Record`
+  schema, and the aggregate E/R relation. `70887529` lacks the older
+  role/disposition contract machinery — and importing it would **reintroduce the
+  role-/disposition-derived schema this frame's own host-effect ruling declares
+  false**, which is why the assembly is prohibited rather than merely costly.
+
+  **Every sentence below calling one of those four SHAs "the exact continuation
+  base" was stale and is corrected in place.** They remain citable as **evidence
+  of what was ruled when, and of the original refusal** — never as a place to
+  resume from. This restates, at the point of work, what
+  **THE BASE IS NOW DURABLE AT `origin`** already says further down: a preserved
+  ref is a recovery point, not a resume instruction.
+
+  **The measurement that forced this correction** — runtime-implementer,
+  2026-08-05, `evt_2t4h5v0p7kwph`, stopping before any edit rather than picking an
+  interpretation. `fb8fd881` is **not an ancestor of `70887529`**. Of ten symbols
+  probed, the six the older line carries — `specialized_source_env_at`,
+  `boundary_contract`, `BoundaryUseIdentity`, `SemanticEliminator`,
+  `SpecializedOnlyLeaf`, `EffectArgument` — appear in **zero** files on the
+  governing base; the four the governing base carries —
+  `specialized_operands_at`, `source_aggregate_preflight`, `LoweredRecordField`,
+  `AggregateAllocationLedger` — appear in **zero** files on `430798bf`.
+
+  ⇒ **A frame that names a base and separately names what must be preserved has
+  told a truth only if the base carries it.** Those two sentences were written
+  three lineage-tips apart and were never reconciled; the block above is that
+  reconciliation, and it is the reason this recut exists.
 
   #### ⛔⛔ THE `264 → 262` EFFECT-ARGUMENT SEAT — Architect `evt_4ev85skm3pdx9`
 
-  Grounded on exact preservation-only `430798bf` (tree `4653af25`, parent exact
+  **Evidenced — not based — on exact `430798bf`** (tree `4653af25`, parent exact
   `fb8fd881`), which advances origin 271 and then first-refuses at:
 
   ```text
@@ -2134,9 +2171,19 @@ family — that is a measurement nobody has taken.
   BoundaryCarrier: an effect argument is a specialized-only surface …
   ```
 
-  ⛔ **This is an ALREADY-PLANNED `D7` `SemanticEliminator` — not a new producing
-  predicate, node, lane, or disposition. Atomic scope remains `D7` +
-  [[RT-RECURSOR-TRANSPORT]].** `#23` remains the producer: it delivers a **carried
+  **That is the ORIGINAL REFUSAL as printed by machinery that does not exist on
+  the governing base**, and it is quoted here only to fix **which semantic seat**
+  is at issue: effect origin 264, child origin 262, structural position 1. On
+  exact `70887529` the same seat refuses **generically** — a host-effect operand
+  is a specialized-only surface — carrying **no identity at all**. ⇒ Read every
+  `BoundaryUseIdentity` / `SemanticEliminator` / `SpecializedOnlyLeaf` /
+  `EffectArgument` spelling in this section as **the historical vocabulary of the
+  evidence**, never as a symbol to produce, remove, or assert against.
+
+  ⛔ **This is an ALREADY-PLANNED `D7` semantic-eliminator seat — not a new
+  producing predicate, node, lane, disposition, atomic participant, or lineage
+  assembly. Atomic scope remains `D7` + [[RT-RECURSOR-TRANSPORT]].** `#23`
+  remains the producer: it delivers a **carried
   exact `Int`** to the capacity seat of the statically selected `BufferAllocate`
   effect. `D7` owns the consumer — a host-effect argument that semantically narrows
   that exact `Int` for the wire request. `RuntimeExpr::Effect` and `EffectArgument`
@@ -2149,11 +2196,17 @@ family — that is a measurement nobody has taken.
 
   1. **Effect lowering consumes the wrong authority.** `lower_process_host_effect`
      lowers each argument as a `LoweringOperand`, but for every
-     non-`BufferFreeze` operation it calls `specialized_source_env_at` over the
-     **entire vector** *before* entering the operation/seat-specific match. ⇒ A
-     token labelled `SemanticEliminator` is consumed as authorization for a
+     non-`BufferFreeze` operation it bulk-converts the **entire vector** *before*
+     entering the operation/seat-specific match. ⇒ A token standing for a
+     semantic-carrier observation is consumed as authorization for a
      **specialized-only read**, and the carried word is refused before the effect
      can perform its ruled emitted-helper observation.
+
+     **On the governing base this call is spelled `specialized_operands_at`**
+     (measured 2026-08-05; the historical spelling `specialized_source_env_at` has
+     zero occurrences there). **The mechanism is the same and this half of the
+     defect is fully present** — which is what makes sections B and C buildable on
+     `70887529` without any lineage assembly.
   2. **⛔ The contract schema is under-keyed and FALSE.**
      `boundary_contract(disposition)` maps `SemanticEliminator | SpecializedOnlyLeaf`
      to **one shared arm** — `consumer_phase = SpecializedValue`,
@@ -2180,19 +2233,48 @@ family — that is a measurement nobody has taken.
   the seat-specific semantic operation and `Need` · the selected disposition and
   guaranteed `Avail`.
 
-  ⛔ **`EffectArgument` remains INVENTORY DATA — it is not sufficient authority.**
-  ⛔ **Remove the shared `SemanticEliminator | SpecializedOnlyLeaf` contract arm.**
-  Names may vary, but the schema **must** distinguish semantic carrier observation
-  from specialized-template inspection. ⭐ Two equal `EffectArgument` roles with
-  different seats — `BufferAllocate.capacity : exact Int → checked u64` versus
+  **BUILD A FRESH EFFECT-SEAT AUTHORITY. Do not reconstruct the historical
+  vocabulary.** Corrected 2026-08-05, Architect `evt_73b1t4nkewftw`. **This clause
+  read "Remove the shared `SemanticEliminator | SpecializedOnlyLeaf` contract
+  arm."** That arm does not exist on the governing base, so the instruction has
+  **no referent**, and its mutation control would be **vacuous**: restoring an arm
+  that was never there proves nothing. Do not produce `BoundaryUseIdentity`,
+  `OperandEdgeDisposition`, `SemanticEliminator`, `SpecializedOnlyLeaf`, or
+  `EffectArgument` on `70887529`.
+
+  **The requirement the removal was standing in for is kept in full**, and is now
+  stated positively. One **planner-issued record**, keyed by the full semantic
+  seat:
+
+  - effect origin, exact child origin, and structural position;
+  - admitted host operation and semantic ordinal, **after** the conditional
+    capability offset;
+  - producer and consumer owner/phase; and
+  - the seat-specific semantic operation and `Need`, followed by the selected
+    representation's `Avail`.
+
+  **`Need` is derived FIRST from the exact operation/seat; `Avail` is THEN checked
+  to satisfy it** — never the reverse, which is the inversion this whole section
+  exists to correct. **Operation, ordinal, and `Need` are part of the authority
+  and part of its equality.** A generic "argument", a role, a disposition, an
+  origin label, or a diagnostic string **is not authority**.
+
+  **Keep this type SEPARATE from the continuation-specific `BoundaryUseNeed` /
+  `Avail` projection already present on `70887529`.** Widening that unrelated
+  continuation record to carry effect seats **conflates two consumers again** —
+  the identical defect one layer out, and the reason a shared arm was wrong in
+  the first place.
+
+  Two argument seats with the **same structural kind** but different seats —
+  `BufferAllocate.capacity : exact Int → checked u64` versus
   `ConsoleWrite.bytes : Bytes → pointer/length` or
-  `ResourceRelease.resource : opaque token → scalar` — **must carry different
-  `Need`s even when they share the `SemanticEliminator` disposition.**
+  `ResourceRelease.resource : opaque token → scalar` — **must remain distinct
+  records carrying different `Need`s.**
 
   ##### B. Consume ONE exact seat token inside the operation-specific arm
 
   ⛔ Do **not** bulk-convert the argument vector through
-  `specialized_source_env_at`. Each semantic seat phase-dispatches
+  `specialized_operands_at`. Each semantic seat phase-dispatches
   **exhaustively, with no wildcard**: `Specialized(value)` uses the existing typed
   specialized reader; `Carried(word)` calls the carrier helper(s) that satisfy
   **that seat's recorded `Need`**; and a seat for which planning cannot prove
@@ -2232,8 +2314,18 @@ family — that is a measurement nobody has taken.
 
   1. **Exact reaching row.** The row
      `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds`
-     advances through origin 271 **and** exact edge `264 → 262 / position 1`,
-     returns `InvalidBounds`, and records **zero** shared-host dispatch events.
+     advances through origin 271 **and** the exact semantic seat
+     `264 → 262 / position 1`, returns `InvalidBounds`, and records **zero**
+     shared-host dispatch events.
+
+     **Corrected 2026-08-05 (`evt_73b1t4nkewftw`): the row must carry the NEW
+     planner-issued seat identity for that effect/child/position. The
+     `BoundaryUseIdentity` spelling and the old diagnostic string are NOT
+     required and must not be reconstructed.** State the control as a
+     before/after pair on the governing base: **before** the repair the seat
+     reaches the **generic host-effect specialized-only refusal**; **after** the
+     repair the exact planned seat is **claimed**, and the row returns
+     `InvalidBounds` with zero dispatch.
   2. **Exact-`Int` phase pair.** Specialized and carried inputs produce
      **identical** narrowing outcomes for `-1`, `0`, `1`, `u64::MAX`,
      `u64::MAX + 1`, and a negative wide magnitude — covering **both** carried
@@ -2243,31 +2335,51 @@ family — that is a measurement nobody has taken.
      magnitude, wrong owner, and non-OK/non-range helper status **fail closed and
      are never converted into `InvalidBounds`**. No invalid-range case dispatches;
      a valid case dispatches **exactly once**.
-  4. **⭐ Key-sufficiency pair.** Two exact `EffectArgument` seats with the **same
-     nominal role** but different semantic needs receive **distinct** recorded
-     `Need`s and seat contracts. ⛔ Mutating the key/contract back to role-only or
-     disposition-only **must reject before function definition**.
-  5. **⭐ Disposition discriminator.** A carried operand at an exact
-     `SemanticEliminator` seat passes through its emitted helper, while the same
-     phase at a **real** `SpecializedOnlyLeaf` still **fails**. ⛔ Restoring the
-     shared `boundary_contract` arm must **red this pair**.
+  4. **Key sufficiency.** Two argument seats with the **same structural kind**
+     but a different **operation, ordinal, or `Need`** remain **distinct
+     records**. A mutation that **erases operation, erases ordinal, erases
+     `Need`, or collapses all argument seats to one contract must reject before
+     function definition.** (Corrected 2026-08-05: this read "two exact
+     `EffectArgument` seats with the same nominal role" and keyed the mutation on
+     role-only/disposition-only — vocabulary with no referent on the governing
+     base. The property is unchanged; only the key is restated in terms that
+     exist.)
+  5. **Semantic-eliminator versus specialized-only discriminator — stated in the
+     REAL current mechanisms, not retired enum labels.** A carried
+     `BufferAllocate.capacity` operand **passes** through its exact emitted
+     helper, while a carried operand at an **actually reached
+     `specialized_operands_at` template-reading leaf** still **refuses**. A
+     mutation routing the effect seat **back through the generic bulk specialized
+     conversion must red the passing half.**
+
+     **This is the non-vacuous equivalent of the impossible "restore the shared
+     `boundary_contract` arm" mutation this item used to demand.** That arm does
+     not exist on the governing base, so its restoration would have been a
+     **no-op, and a no-op mutation is indistinguishable from a well-defended
+     one** — it goes green either way and proves nothing.
   6. **Static population closure.** Enumerate every capability/argument seat for
      **all 13** admitted host operations, **independently of which runtime branch
      the parity row reaches**. Omit, duplicate, transplant, change operation,
      change ordinal/conditional base, change `Need`, or leave one token unused:
      each **rejects at the planned-set / emitted-ledger gate before function
      definition**.
-  7. **Lowering closure.** Removing the carried capacity arm **recreates the exact
-     `264 → 262` refusal**; restoring the bulk non-`BufferFreeze`
-     `specialized_source_env_at` gate **reds** the effect-seat controls. Existing
-     specialized effect rows and `BufferFreeze` phase-bearing seats remain green.
+  7. **Lowering closure.** Removing the carried capacity arm **recreates the
+     refusal at the exact `264 → 262 / position 1` seat** — on the governing base
+     that is the **generic host-effect specialized-only refusal**, not the
+     historical identity-bearing diagnostic (corrected 2026-08-05). Restoring the
+     bulk non-`BufferFreeze` `specialized_operands_at` gate **reds** the
+     effect-seat controls. Existing specialized effect rows and `BufferFreeze`
+     phase-bearing seats remain green.
   8. **No regression in the prior closure.** Every origin-271 source-machine
      `Match` control, every `#23` / `#26` mixed-phase and zero-allocation capsule
      control, the complete per-row first-refusal map, and the literal CI-green
      `AC-4` obligation **all remain owed**.
 
-  ⇒ Exact `430798bf` is **preservation-only, not a candidate**, and is the exact
-  continuation base. ⛔ No QA verdict transfers; fresh SHA, fresh QA, and a
+  ⇒ Exact `430798bf` is **preservation-only, not a candidate**, and is
+  **superseded history — evidence for the semantic seat and the original refusal
+  only.** Corrected 2026-08-05: this sentence read "and is the exact continuation
+  base"; **the governing base is exact `70887529`** (GOVERNING BASE, above).
+  ⛔ No QA verdict transfers; fresh SHA, fresh QA, and a
   **fresh** Architect Decision are mandatory.
 
   #### ⛔⛔ THE `FsAppendFile` CASE-EMISSION REACHABILITY AUTHORITY
@@ -2417,8 +2529,11 @@ family — that is a measurement nobody has taken.
      controls, the complete CI first-refusal map, and the **literal all-12 CI
      gate** all remain owed.
 
-  ⇒ Exact `548682c3` is **preservation-only, not a candidate**, and is the exact
-  continuation base. ⛔ No verdict transfers; fresh SHA, fresh QA, and a **fresh**
+  ⇒ Exact `548682c3` is **preservation-only, not a candidate**, and is
+  **superseded history, cited as evidence only.** Corrected 2026-08-05: this
+  sentence read "and is the exact continuation base"; **the governing base is
+  exact `70887529`** (GOVERNING BASE, above).
+  ⛔ No verdict transfers; fresh SHA, fresh QA, and a **fresh**
   Architect Decision are mandatory.
 
   #### ⛔⛔ THE `MkProgramCaps` INVOCATION-AGGREGATE REPRESENTATION
@@ -2602,8 +2717,13 @@ family — that is a measurement nobody has taken.
      first-refusal map, the **`D8` retained-target obligation**, and the **literal
      all-twelve CI gate** remain owed.
 
-  ⇒ Exact `42ccd8ec` is **preservation-only, not a candidate**, and is the exact
-  continuation base. ⛔ No QA verdict **or prior Decision** transfers; fresh SHA,
+  ⇒ Exact `42ccd8ec` is **preservation-only, not a candidate**, and is
+  **superseded history, cited as evidence only.** Corrected 2026-08-05: this
+  sentence read "and is the exact continuation base", which also contradicted the
+  paragraph directly below calling its preserved ref a recovery point rather than
+  a resume instruction. **The governing base is exact `70887529`** (GOVERNING
+  BASE, above).
+  ⛔ No QA verdict **or prior Decision** transfers; fresh SHA,
   fresh QA, and a **fresh** Architect Decision are mandatory.
 
   ##### ⭐ THE BASE IS NOW DURABLE AT `origin` — and it was NOT until 2026-07-30
