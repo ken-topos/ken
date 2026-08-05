@@ -1,7 +1,7 @@
 ---
 id: RT-CONTSRC-CALLABLE-CONTRACT
 title: "Closed callable-contract arm for continuation sources — a recursive IH is a compiler-only static worker with no value carrier, and the enclosing slot authority is unconditionally a value contract, so its environment sits outside the domain RT-CONTSRC-PRODUCER-LOCAL owns"
-status: draft
+status: ready
 owner: runtime
 size: M
 gate: none
@@ -62,7 +62,7 @@ closures the `1e` hard stop was about.
 ⇒ This node closes **1 of 83 edges and 0 of 6 failing rows.** It is real work
 on a real capability gap, and it is not on the critical path.
 
-⛔ **It is also not the thing that would let `D4` close every environment.**
+**It is also not the thing that would let `D4` close every environment.**
 `D4`'s declined set `R` is exactly three instances, from three causes:
 
 | supplying construct | verdict | closed by this node? |
@@ -71,7 +71,7 @@ on a real capability gap, and it is not on the critical path.
 | `let-value:Construct` | `OPEN` | no — a different contract domain |
 | `let-value:If` | `AMBIG2` | no — joins two distinct exact sources |
 
-⛔ **These are "outside-this-contract-domain residuals", NOT "unrepresentable"**
+**These are "outside-this-contract-domain residuals", NOT "unrepresentable"**
 (Architect, `evt_38yd5sd1ht0kk`). Nothing here claims a future authority cannot
 represent `Construct` or a joined `If`; they are simply not authorized by
 [[RT-CONTSRC-PRODUCER-LOCAL]] and not by this node either.
@@ -80,17 +80,27 @@ represent `Construct` or a joined `If`; they are simply not authorized by
 any node currently in the graph, with or without this one. `D4` is therefore
 stated as **set equality** — `interned = V`, `declined = R` — not as closure.
 
-## Status: deliberately `draft`, and that is not framing debt
+## Status: `ready`, and the priority is written into the frame
 
-This node is a successor of an in-flight node, so the standing
-one-release-ahead policy would normally have it `ready` with a shovel-ready
-frame. ⛔ **It is held at `draft` on purpose**: it closes 1 of 83 instances and
-0 of 6 failing `D0` rows, and the frontier the policy protects is already
-satisfied — all six successors of [[RT-DECL-CLOSURE-PORT]] are `ready` with
-frames. Promoting this one would put an off-critical-path node in front of a
-reader looking for the next kickoff. The content above is the frame; what it
-lacks is fixed inputs measured at a base, which must be re-derived whenever it
-is actually scheduled.
+**Frame:** `docs/program/wp/RT-CONTSRC-CALLABLE-CONTRACT.md`.
+
+This node was held at `draft` on the argument that it closes 1 of 83 instances
+and 0 of 6 failing `D0` rows, so promoting it would put an off-critical-path
+node in front of a reader looking for the next kickoff. **That cost is real and
+the remedy was wrong.** Withholding `status` to express priority makes the node
+invisible to `gen-progress.sh`, which reads status, not intent — a framed node
+kept at `draft` is indistinguishable from unstarted work. Priority now lives in
+section 0 of the frame, where it is stated rather than encoded.
+
+The same argument also claimed *"the content above is the frame."* It is not.
+A node is not a frame: what it lacked was fixed inputs measured at a base, ACs
+with named controls, and banned scope — which is the whole of what a ring
+discharges. The frame now carries those, and makes naming the base its own
+`D0`, because this node's base does not exist yet.
+
+**`ready` here means framed and shovel-ready, not startable.** Its dependency
+[[RT-CONTSRC-PRODUCER-LOCAL]] is unmerged, with `D3c`, a possible `D3b` re-cut,
+`D4b` and its candidate ahead. It enters the frontier when that node merges.
 
 ## What it must deliver
 
@@ -106,22 +116,22 @@ as a **closed sum**:
 Constraints, all from the Architect's ruling:
 
 - The callable arm comes from the **existing planned static-worker/member
-  authority** — ⛔ never from `ResultPhase`, from source syntax, or from a new
+  authority** — never from `ResultPhase`, from source syntax, or from a new
   lookup in lowering.
 - **Every** downstream source / projection / view consumer must **exhaustively
-  distinguish** the two contracts. ⛔ No default arm.
+  distinguish** the two contracts. No default arm.
 - A callable source creates **no ordinary ABI slot**. Its lawful consumer is
   callee-only, and every value-producing use must **fail closed**.
 - The **production** need/availability vocabulary must be able to state that
-  fact. ⛔ A `#[cfg(test)]` callable arm cannot be its authority — that is
+  fact. A `#[cfg(test)]` callable arm cannot be its authority — that is
   measurement 3 above, and reusing it would make the test suite the source of a
   production contract.
-- ⛔ Whole-plan result representation stays a **separate later decision** about
+- Whole-plan result representation stays a **separate later decision** about
   what calling the worker returns. It must not be folded into coordinate
   identity or used to manufacture an input carrier.
 
 ## The witness this node must close
 
-The single IH edge above. ⛔ Its environment closing is the deliverable; a
+The single IH edge above. Its environment closing is the deliverable; a
 report that the arm exists without that edge's vector going all-closed does not
 discharge it.

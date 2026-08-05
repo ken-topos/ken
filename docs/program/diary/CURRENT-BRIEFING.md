@@ -51,14 +51,20 @@
 
 ### The one thing to do next
 
-**Stay one release ahead: grep every node whose `depends_on` names
-`RT-CONTSRC-PRODUCER-LOCAL` and confirm each is `ready` with a written frame.**
-`blocks` and `depends_on` disagree in this corpus and `gen-progress.sh` reads
-`depends_on` — use that one. Frame whatever fails, flip it `ready`, publish
-doc-only.
+**Wait on `D3c`'s result. If the `EntryAbi` position moves, `D3b`'s arms get
+re-cut on it and that recut is mine.**
 
-Then wait on `D3c`'s result. If the `EntryAbi` position moves, `D3b`'s arms get
-re-cut on it and that recut is mine.
+The one-release-ahead sweep is **done and clean**: both nodes whose
+`depends_on` names `RT-CONTSRC-PRODUCER-LOCAL` — `RT-UNIT-CLOSURE-CONVERT` and
+`RT-CONTSRC-CALLABLE-CONTRACT` — are now `ready` with written frames, and all
+six `RT-DECL-CLOSURE-PORT` successors were already `ready` with frames. **There
+is no framing debt on this branch.** (`blocks` and `depends_on` disagree in
+this corpus; `gen-progress.sh` reads `depends_on`, so that is the one to grep.)
+
+**Do not schedule `RT-CONTSRC-CALLABLE-CONTRACT` ahead of the campaign** — it
+closes 1 of 83 instances and 0 of the 6 failing `D0` rows. That priority is
+stated in section 0 of its frame rather than encoded as a withheld status,
+which is how it was expressed before and which made it look unstarted.
 
 **`D3b` landed at `bc371f13` and is PRESERVATION-ONLY, not complete**
 (Architect `evt_56jh63qntwtfe`). My scope recut: `evt_7he9qv8wbv1yq`. `D4a` was
