@@ -61,14 +61,30 @@ emits a well-formed operand of the right contract carrying the wrong value.
 Zero-depth rows agree position-for-position in the same window, so the
 divergence is attributable to the binder.
 
+### The fidelity recut is LANDED. `D3b` is releasable.
+
+The Architect ruled (crossed-post confirmation): **the pairing table does not
+survive.** Availability becomes **consumer-specific planner-issued claims** over
+`CurrentLexical` and `EntryFrame`, with `GeneratedContextCapture` **subsumed**
+into the generated-context `EntryFrame` case. Retired by name: `RootIsImmediate`,
+the three-lawful/three-crossed table, `immediate_slot == source_abi_position`,
+`ContinuationImmediateResolution::root`.
+
+**A fourth pairing does not fix it** — one unqualified index cannot be authority
+for two consumers holding different environments (direct emission reads
+`producer_env`; context-capture append reads `defining_abi_operands`).
+
+Recut published at `evt_6wk0fznne72z1`, `origin/main` `b9bd4602`. **Three sites
+beyond the checkpoint carried the same premise and were swept**: `D1`'s "Entry
+ABI availability remains its existing case, untouched"; Finding 2's rejection
+rule, whose basis was emitter-class-for-root-domain; and `AC-2`, which named
+three consumers when the count is ten.
+
 ### The one thing to do next
 
-**Re-cut `D3b`'s checkpoint text the moment the Architect answers the mechanism
-question at `evt_3n4k9xx4mvq8b`.** The axis: `D3b`'s product table assumed root
-provenance constrains immediate availability. If the two are orthogonal, then
-`EntryAbi`/`EntryAbi` is not a pairing readable off the coordinate at all —
-entry-frame availability becomes a **proved membership fact**, not a lawful
-pairing. That answer sizes the re-cut; do not guess it.
+**Wait for `runtime-leader` to release `D3b` from `f5e4fa9f`, then watch for the
+candidate.** Nothing waits on me. If a fresh corrected SHA comes back, the node
+QA and `D4b` sequence resumes.
 
 **Three scope calls already made (`evt_3n4k9xx4mvq8b`), do not re-litigate:**
 
