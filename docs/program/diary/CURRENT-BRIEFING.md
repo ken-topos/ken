@@ -40,9 +40,74 @@
 
 ### The one thing to do next
 
-**Wait for `RT-UNIT-CLOSURE-CONVERT` `D1`'s inventory, which hard-stops to
-me.** `D1` is the node's sizing instrument and it is a **mandatory hard stop
-before `D2`** — when it returns, **the cut is mine.** Nothing else waits on me.
+**Wait for `RT-UNIT-CLOSURE-CONVERT` `D1b`, which hard-stops to me.** Released
+16:36Z at `evt_6tef507frnhkf` in thread **`thr_668pxy8mez8hb`** (kick anchor
+`evt_1zj6yp3p35v9f`). **The cut is still mine and I have NOT made it.** Nothing
+else waits on me.
+
+### `D1` returned a HARD STOP at `bc754c03`, and I did NOT size from it
+
+Doc-only child of `b3ba2820`; source tree unchanged, all probes reverted.
+Record at `docs/program/wp/RT-UNIT-CLOSURE-CONVERT-D1.md` (on the branch, not
+`main`). **Accepted.**
+
+- **`CaptureSlot { ordinal: u32 }` CONFIRMED.** Identity exists **only** in
+  `captures: Vec<RuntimeExpr>` (`ir.rs:443`), which is consumed for its
+  **length** (`semantic_ir.rs:444`) and discarded at the semantic-plane
+  boundary. Nothing downstream — `CaptureLayout`, `AbiSlot`, `AbiFrameHeader` —
+  has a field that could name a captured value.
+- **All five `RT-FNSPLIT-B2R` elements are PRESENT, none a stub**, and live for
+  the other **127** closures (90 `LexicalClosure` with one capture, 30 with two,
+  7 `Closure` with one). ⭐ **The honest reading is not "the mechanism is
+  missing" but "all five are driven off one input that is empty for this
+  population."**
+- **The five failing units are lexical closure bodies declaring `captures: 0`
+  whose bodies reference a free variable.** ⛔ **ABSENT, not inert** — no
+  declared-but-unbound slot exists. Binding it would **fabricate a capture**,
+  one of the four banned repairs.
+
+⛔ **I REFUSED TO SIZE, and this is the reasoning to keep.** Read alone the
+record sizes this as a large node — a new free-variable analysis **plus** a new
+identity-bearing representation. **But the record itself says it has not
+established why those closures arrive with an empty capture list while 127
+others do not**, and those two statements are in tension: *something* populates
+`captures` for the 127. **That producer, and the basis on which it decides
+membership, is what sizes this node — and it is unmeasured.** Sizing on the
+first reading would be creating work on speculation.
+
+**`D1b` is FOLDED, not a new node** (relax, fold, then cut). It asks what
+writes `LexicalClosure { captures }` / `Closure { captures }` and on what basis,
+then why that list is empty for `defining_origin` 88 and 14. **Three readings
+are live and it must distinguish them:** a producer with a gap for this
+population (repair is upstream, may be small); a producer copying an
+already-known set whose input lacks it (the question moves one plane further
+out); or nothing computing captures anywhere (only then is a new analysis the
+honest answer).
+
+⚠ **Do not assume the `Var` index is right and the capture list wrong.** The
+record's own numbers put the converse in play: `index=2 env_len=2` and
+`index=3 env_len=3` against a header of `{parameters: 1, captures: 0}` — **the
+lowering environment is already longer than the declared slot run**, so
+something other than declared captures contributes to it. If that reading holds,
+this population never needed a capture at all.
+
+⛔ **Banned in `D1b`:** any production edit, repair, or representation change —
+**specifically, do not add an identity field to `CaptureSlot`.** If `D1b`
+confirms a new representation or analysis pass is genuinely required, **that is
+an Architect question and I route it**; it grows substrate and is not mine to
+cut unilaterally.
+
+⚠ **OPERATOR-FACING, and it is the campaign-sizing question they already
+hold:** if the third reading is the true one, this node is **large and sits
+ahead of all seven `RecursiveDescent` retirement nodes**, since they funnel
+through `RT-DECL-CLOSURE-PORT`. That is a critical-path fact, not a Runtime
+execution problem. Do not decide it here.
+
+⭐ **Second silent stale anchor this campaign:** the `B2R` table's
+`CaptureSlot` at `semantic_ir.rs:438` now lands **six lines from the
+`capture_slots` derivation at `:444`** — a reader following the stale table
+would plausibly believe they were in the right place. All seven `B2R` anchors
+moved again; the re-derived table is in the `D1` record.
 
 ⛔ **No merge is owed by me yet.** `RT-CONTSRC-PRODUCER-LOCAL` `D4b` is
 **discharged** at exact `b3ba2820` (Architect `evt_gqph7jhjeybx`), and that is
