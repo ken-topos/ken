@@ -33,17 +33,70 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~14:0xZ · `D3b` HARD STOP at `456ec7e6`
+## LIVE — 2026-08-05 ~14:2xZ · alias recut LANDED; `D3b` resumable from `456ec7e6`
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Nothing waits on me. The Architect is the next mover** and took the stop at
-14:04Z, grounding the walk, the three red controls, and the `Let`/`If` value
-semantics before ruling. The mechanism half is theirs. **If it comes back as a
-scope question — refuse the population, or cut it out — that half is mine.**
+**Wait for `runtime-leader` to release `D3b` from `456ec7e6`, then watch for the
+candidate.** Nothing waits on me. Recut landed at `evt_vktkmgwftjcn`;
+`origin/main` **`0385cf90`**, frame blob
+**`14b9bc7f0ee145a4998f8da65f4139a84fdd680b`**, verified out of the object store.
+
+### The ruled law: nearest-exact-singleton-alias
+
+The exact-once **lexical position** precondition was FALSE and is retired. It
+conflated *does this position certainly hold `S`* with *is it the only position
+that holds `S`*; `D3b` needs only the first. `join` deduplicates
+`Closed([S])` records, so two positions each holding exactly `Closed([S])` are
+**proved aliases of one semantic source** — the measured `let y = x` at indices
+0 and 2. Select the **minimum de Bruijn index among eligible positions**, where
+eligible means the held authority is exactly `Closed([S])` against the complete
+`S` (coordinate, carrier, ownership, storage owner, affinity).
+
+An `If` yielding `S` or `T` joins to `Closed([S, T])` and is not eligible; if
+both branches yield `S` the join stays `Closed([S])`, which is the proof. **No
+SSA-equality instrument is needed** and adding one would duplicate a fact the
+planner authority already states.
+
+**Four operative sites were replaced, not two** — the ruling named `D3b`'s
+exact-once walk and the "two positions refuses" clause; the sweep also found
+`D2b`'s duplicate-membership fail-closed arm and **both** definitions of the
+`CurrentLexical` claim as carrying a "post-shift index", which is what an
+implementer builds the claim from.
+
+⭐ **The judgment call, flagged so it can be overturned in one edit:** I **kept**
+`exactly once` for a frame's **ordered capture projection** and for predeclared
+frame membership, on the grounds that the alias argument comes from `join` over
+the *semantic environment* and does not transfer to a capture projection with a
+declared slot. If wrong, it errs toward a false refusal. The frame says "do not
+collapse the two cases" so a later `exactly once` sweep does not read these as
+missed.
+
+⭐ **Two additions beyond the literal ruling**, both load-bearing: the six alias
+controls **with the note that control 3 is not a variant of control 1** (3
+selects the outer position, 1 the inner — a suite with only 1 and 2 passes under
+a positional shortcut too), and a **carve-out in the first-match ban**, which
+would otherwise have forbidden the law just ruled. The discriminator is
+**eligibility, not ordering**.
+
+### Standing results from that turn — do NOT re-measure
+
+- **Caller-frame multiplicity is NEGATIVE.** Direct owner = emission owner
+  40/40; capture indexed frame = enclosing spec's emission owner 20/20 — and
+  structurally, since `emission_owner` is a field of
+  `ContinuationSpecializationKey`.
+- **The capture consumer's source-frame defect is fixed.**
+- ⛔ The earlier specialization census suggesting multiplicity was a
+  **per-compile-id artifact**; its own author retired it. Not available as
+  evidence.
+- **Two-stage `EntryFrame` stays in `D3b`**, not moved to `D4b`. The 0/60
+  generated-owner consumptions explains the evidence boundary and does not
+  authorize a half-stamped accepted plan.
+- ⛔ **`41d2b1e5` is not an object on the branch** — quoted from memory in two
+  posts, corrected twice.
 
 ### The gating multiplicity question is ANSWERED: NO multiplicity
 
