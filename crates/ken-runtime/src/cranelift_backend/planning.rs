@@ -35,6 +35,12 @@ pub(super) use static_transition::{
     SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot,
     SynthesizedAggregateStep, SynthesizedDynamicSet,
 };
+// `RT-DECL-CLOSURE-PORT` `D7` — the host-effect semantic-seat authority, read
+// by the effect emitter. Namespace re-export only.
+pub(super) use static_transition::{
+    EffectSeatAvail, EffectSeatNeed, EffectSeatOperation, EffectSeatPhase, EffectSeatSlot,
+    PlannedEffectSeat, CRANELIFT_HOST_EFFECT_CONSUMERS_V1,
+};
 pub(super) use static_transition::{
     ContinuationCallIdentity, ContinuationCallView, ContinuationContextId,
     ContinuationContextView, ContinuationEmissionOwner,

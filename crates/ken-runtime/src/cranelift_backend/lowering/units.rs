@@ -2494,6 +2494,9 @@ pub(super) fn open_continuation_claim_ledger(
     // for the same reason: one artifact has exactly one relation, and every
     // body's events commit into it.
     compiler.aggregate_allocations = Some(AggregateAllocationLedger::default());
+    // `D7` — the host-effect seat ledger opens on the same boundary: one
+    // artifact has one consumed-seat evidence, and every body claims into it.
+    compiler.host_effect_seats = Some(EffectSeatLedger::default());
     Ok(())
 }
 
@@ -2533,6 +2536,29 @@ pub(super) fn close_aggregate_allocation_ledger(
             backend_module("the aggregate allocation ledger went missing".to_string())
         })?
         .close(planned)
+}
+
+/// **`D7` — close the host-effect seat authority once, over the whole
+/// compilation.**
+///
+/// ⛔ Whole-artifact rather than per-body, because a seat inside a worker body
+/// is consumed in its predeclared unit and again in each specialization that
+/// contains it; no single body's claims equal the population. ⭐ But unlike the
+/// aggregate relation this IS an equality: the seat population is derived from
+/// the `Effect` occurrences the source contains, not from a synthesized tree
+/// most of whose nodes no program touches.
+pub(super) fn close_host_effect_seat_ledger(
+    compiler: &mut Lowering<'_>,
+) -> Result<EffectSeatClosure, CraneliftBackendError> {
+    let planned = compiler
+        .static_transition_plan
+        .host_effect_seat_records()
+        .to_vec();
+    compiler
+        .host_effect_seats
+        .take()
+        .ok_or_else(|| backend_module("the host effect seat ledger went missing".to_string()))?
+        .close(&planned)
 }
 
 /// **`D5a` checkpoint 4 step 1 — declare every generated context into ONE

@@ -774,6 +774,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
         defining_emission_owner: None,
         defining_function_id: None,
         aggregate_allocations: None,
+        host_effect_seats: None,
         seed_env,
         declarations,
         static_transition_plan,
@@ -872,6 +873,7 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 // 1 to 132 records when measured.
                 let _aggregate_relation =
                     super::units::close_aggregate_allocation_ledger(&mut compiler)?;
+                let _effect_seats = super::units::close_host_effect_seat_ledger(&mut compiler)?;
             }
             // `RT-CONTSPEC-ACTIVATE` `D2` — define each declared continuation
             // target from its own projected contract, after the ordinary
@@ -930,6 +932,8 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
                 // 1 to 132 records when measured.
                 let _aggregate_relation =
                     super::units::close_aggregate_allocation_ledger(&mut compiler)?;
+            // `D7` — planned seats against consumed seats, exactly.
+            let _effect_seats = super::units::close_host_effect_seat_ledger(&mut compiler)?;
             root_result
         }
         BodyEmissionAuthority::RecursiveDescent => {
@@ -9907,6 +9911,22 @@ impl<'a> Lowering<'a> {
                 self.lower_expr(builder, argument, env)
             })
             .collect::<Result<Vec<_>, _>>()?;
+        // ⭐ `D7` — claim the planned record for every argument seat, in the
+        // phase the operand is ACTUALLY in, before any of it is read. The claim
+        // is made here rather than inside the operation arms because the arms
+        // are what the next release restructures; the population, the phase
+        // agreement and the exact planned-versus-consumed closure are settled
+        // first, on the emitter as it stands.
+        for (ordinal, operand) in lowered.iter().enumerate() {
+            let ordinal = u32::try_from(ordinal).map_err(|_| {
+                unsupported("Effect", "host effect argument ordinal exceeds the seat space")
+            })?;
+            self.claim_host_effect_seat(
+                static_origin,
+                EffectSeatSlot::Argument(ordinal),
+                operand.effect_seat_phase(),
+            )?;
+        }
         // BufferFreeze has two ruled phase-bearing resource seats. Every other
         // host operation remains specialized-only and crosses the typed phase
         // boundary only after the checked operation is known.
@@ -10000,7 +10020,16 @@ impl<'a> Lowering<'a> {
                 // Present ⇒ the capability value is child 0 of this occurrence.
                 let capability_value =
                     self.child_occurrence(static_origin, 0, &capability.value)?;
-                let token = match self.lower_expr(builder, capability_value, env)? {
+                let capability_operand = self.lower_expr(builder, capability_value, env)?;
+                // The capability is a consumed seat with its own need, not
+                // argument ordinal 0 -- it authorizes the operation rather than
+                // naming an object, and it is observable in either phase.
+                self.claim_host_effect_seat(
+                    static_origin,
+                    EffectSeatSlot::Capability,
+                    capability_operand.effect_seat_phase(),
+                )?;
+                let token = match capability_operand {
                     LoweringOperand::Specialized(Lowered::CapabilityToken { value }) => value,
                     LoweringOperand::Carried(word) => self.emit_carrier_scalar(builder, word)?,
                     _ => {

@@ -73,6 +73,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         defining_emission_owner: None,
         defining_function_id: None,
         aggregate_allocations: None,
+        host_effect_seats: None,
         process_object: true,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -232,6 +233,7 @@ fn run_px8j_malformed_recursor_consumer(
         defining_emission_owner: None,
         defining_function_id: None,
         aggregate_allocations: None,
+        host_effect_seats: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has
@@ -2140,6 +2142,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         defining_emission_owner: None,
         defining_function_id: None,
         aggregate_allocations: None,
+        host_effect_seats: None,
         process_object: false,
         process_symbols: crate::NativeProcessSymbols::legacy_prelude(),
         // ⛔ `None` — a bare `Lowering` fixture emits into no module, so it has

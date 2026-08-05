@@ -82,6 +82,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, FieldIdentity, JoinPlanToken,
     PlannedReferentLifetime,
+    EffectSeatPhase, EffectSeatSlot, PlannedEffectSeat,
     AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,
     SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot, PlannedAggregateOwnership,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
@@ -259,21 +260,11 @@ fn scale_b_record_unit_body(function: &Function) {
     scale_b_record_function(function, ScaleBEmitter::FunctionizedUnitBody);
 }
 
-const CRANELIFT_HOST_EFFECT_CONSUMERS_V1: [ken_host::HostOpV1; 13] = [
-    ken_host::HostOpV1::ConsoleWrite,
-    ken_host::HostOpV1::ConsoleFlush,
-    ken_host::HostOpV1::ConsoleIsTerminal,
-    ken_host::HostOpV1::FsReadFile,
-    ken_host::HostOpV1::FsWriteFile,
-    ken_host::HostOpV1::FsChangeMode,
-    ken_host::HostOpV1::FsOpen,
-    ken_host::HostOpV1::FsHandleMetadata,
-    ken_host::HostOpV1::FsReadAt,
-    ken_host::HostOpV1::FsWriteAt,
-    ken_host::HostOpV1::ResourceRelease,
-    ken_host::HostOpV1::BufferAllocate,
-    ken_host::HostOpV1::BufferFreeze,
-];
+// ⭐ The admitted set now has ONE definition, in planning, because the seat
+// population is derived from it there. This is a namespace re-export so both
+// the emitter's admission check and the planner's population read the same
+// list; a local copy could disagree with it silently.
+use crate::cranelift_backend::planning::CRANELIFT_HOST_EFFECT_CONSUMERS_V1;
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BoundedNatLoweringMutation {
@@ -1878,6 +1869,10 @@ struct Lowering<'a> {
     /// `None` outside that pass, which is the only place an aggregate
     /// allocation can be attributed to a declared function.
     aggregate_allocations: Option<AggregateAllocationLedger>,
+    /// `D7` — the consumed side of the host-effect seat authority. `None`
+    /// outside the emission pass, where a bare rig defines no function and there
+    /// is no population to close against.
+    host_effect_seats: Option<EffectSeatLedger>,
     /// **`RT-DECL-CLOSURE-PORT` `D5`** — the checked-call closeout ledger.
     /// `None` outside the functionized unit-bundle pass, which is the only
     /// place a checked call can reach a declaration-owned unit.
@@ -2461,6 +2456,19 @@ impl LoweringOperand {
     /// `edge` names the call site in the diagnostic. ⚠ It is a **label, not a
     /// mechanism** — it makes a misplaced boundary legible in a failure, and
     /// nothing more.
+    /// **The phase this operand is ACTUALLY in.**
+    ///
+    /// ⛔ An observation, not a decision. It is the one fact the planner's
+    /// derived `consumer_phase` is checked against, so it must read the operand
+    /// in hand and nothing else — a version of this that consulted the plan
+    /// would make the agreement true by construction.
+    fn effect_seat_phase(&self) -> EffectSeatPhase {
+        match self {
+            LoweringOperand::Specialized(_) => EffectSeatPhase::SpecializedTemplate,
+            LoweringOperand::Carried(_) => EffectSeatPhase::CarriedWord,
+        }
+    }
+
     fn specialized_at(self, edge: &'static str) -> Result<Lowered, CraneliftBackendError> {
         match self {
             LoweringOperand::Specialized(lowered) => Ok(lowered),
@@ -5092,6 +5100,49 @@ impl<'a> Lowering<'a> {
         // by construction and the law unstateable.
         ledger.record_event(function, result)?;
         ledger.relate(function, result, occurrence)
+    }
+
+    /// **`D7` — claim the ONE planned record for a seat the emitter is about to
+    /// consume, and check the phase the planner claimed against the phase the
+    /// emitter actually found.**
+    ///
+    /// ⭐ **This is where `Need ⊆ Avail` is asked.** The need and the
+    /// availability are the planner's, derived from the operation and the slot
+    /// with no reference to any representation; the phase is the emitter's,
+    /// read off the operand in hand. A seat that fails the membership is
+    /// refused as that exact seat of that exact operation — not as a generic
+    /// specialized-only surface, which is the whole point of the record.
+    fn claim_host_effect_seat(
+        &mut self,
+        effect_origin: StaticOriginId,
+        slot: EffectSeatSlot,
+        observed: EffectSeatPhase,
+    ) -> Result<PlannedEffectSeat, CraneliftBackendError> {
+        let record = self
+            .static_transition_plan
+            .host_effect_seat(effect_origin, slot)?;
+        if !record.avail.admits(observed) {
+            return Err(unsupported(
+                "Effect",
+                format!(
+                    "seat {slot:?} of {:?} needs {:?}, which it cannot observe in {observed:?}",
+                    record.operation, record.need
+                ),
+            ));
+        }
+        let function = self.defining_function_id;
+        let Some(ledger) = self.host_effect_seats.as_mut() else {
+            return Ok(record);
+        };
+        let function = function.ok_or_else(|| {
+            backend_module(
+                "a host effect seat was consumed inside the emission pass with no declared \
+                 function open, so its claim has no body to be scoped by"
+                    .to_string(),
+            )
+        })?;
+        ledger.claim(function, record)?;
+        Ok(record)
     }
 
     /// **`D7` — THE choke point. Every carrier allocation in the backend is
@@ -7938,6 +7989,151 @@ pub(in crate::cranelift_backend) struct AggregateRelationClosure {
     /// Planned records no event related. **Lawful** — `P` authorizes, it does
     /// not oblige. Retained as a measurement, never as a failure condition.
     pub(in crate::cranelift_backend) unused: usize,
+}
+
+/// **`RT-DECL-CLOSURE-PORT` `D7` — what the emitter ACTUALLY consumed at each
+/// host-effect seat.**
+///
+/// ⭐ **This is the independent second side of the seat authority.** The planner
+/// derives a population of seats and claims a consumer phase for each; this
+/// records the seats the emitter reached and the phase it actually found them
+/// in. A single structure holding both would make the agreement true by
+/// construction — the planner's claim would BE the record of what happened —
+/// and every one of the six failures the close below names would be unstateable.
+#[derive(Clone, Debug, Default)]
+pub(in crate::cranelift_backend) struct EffectSeatLedger {
+    /// `C` — one entry per (body, seat) the emitter claimed.
+    ///
+    /// ⛔ Keyed by `FuncId` as well as the seat: one static seat inside a worker
+    /// body is consumed in its predeclared unit and again in every generated
+    /// specialization that contains it, and the completeness law below is a
+    /// statement about a body rather than about the compilation.
+    ///
+    /// ⚠ The value carries a COUNT because a repeat claim at one key is lawful
+    /// and was measured to be: recursive-descent emission lowers one static
+    /// occurrence more than once inside a single body. Rejecting the repeat
+    /// refused a real program. What cannot happen is a repeat claim carrying a
+    /// DIFFERENT record — that is one seat's authority answering for another.
+    claimed: BTreeMap<(FuncId, StaticOriginId, EffectSeatSlot), (PlannedEffectSeat, usize)>,
+}
+
+/// What the whole-pass seat closeout measured.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct EffectSeatClosure {
+    /// Distinct seats consumed.
+    pub(in crate::cranelift_backend) seats: usize,
+    /// Claims across all bodies; exceeds `seats` when a seat is emitted under
+    /// more than one owner.
+    pub(in crate::cranelift_backend) claims: usize,
+    pub(in crate::cranelift_backend) population: usize,
+    /// Planned seats no body reached. **Lawful** — a declaration body this
+    /// compilation never emitted takes its occurrence's seats with it.
+    /// Retained as a measurement, never as a failure condition.
+    pub(in crate::cranelift_backend) unreached: usize,
+}
+
+impl EffectSeatLedger {
+    /// Record that a body consumed one exact seat.
+    ///
+    /// ⛔ A repeat claim carrying a DIFFERENT record rejects: the key is the
+    /// seat, so two records under it means one seat's contract was answered by
+    /// another seat's authority.
+    fn claim(
+        &mut self,
+        function: FuncId,
+        record: PlannedEffectSeat,
+    ) -> Result<(), CraneliftBackendError> {
+        let key = (function, record.effect_origin, record.slot);
+        match self.claimed.get_mut(&key) {
+            Some((previous, claims)) => {
+                if *previous != record {
+                    return Err(backend_module(format!(
+                        "host effect seat ledger: function {function} claims {:?} {:?} as \
+                         {record:?} after claiming it as {previous:?}, so one seat carries two \
+                         contracts",
+                        record.effect_origin, record.slot
+                    )));
+                }
+                *claims += 1;
+            }
+            None => {
+                self.claimed.insert(key, (record, 1));
+            }
+        }
+        Ok(())
+    }
+
+    /// **Close planned against consumed.**
+    ///
+    /// Two laws, and the split between them is measured rather than chosen.
+    ///
+    /// ⛔ **`consumed ⊆ planned`** — a body consumed a seat the planner never
+    /// derived. Stated over the whole compilation from the accumulated claims,
+    /// so it survives a mutated population that the per-claim lookup would have
+    /// resolved against.
+    ///
+    /// ⛔ **Per-body occurrence completeness** — if a body consumed ANY seat of
+    /// an effect occurrence it consumed EVERY seat of it. This is the law that
+    /// catches a dropped consumption, and it is per-body because that is the
+    /// window in which "the emitter reached this effect" is a fact.
+    ///
+    /// ⚠ **What is deliberately NOT a law: a planned occurrence no body
+    /// consumed at all.** Whole-population equality was written first and
+    /// measured: it refused a lawful program whose effect occurrence sits in a
+    /// declaration body this compilation never emitted. `P` authorizes seats;
+    /// it does not oblige a body to exist. The count is reported so the gap is
+    /// visible rather than silent — but a seat of an occurrence that WAS
+    /// reached cannot hide in it, because the completeness law above is keyed on
+    /// the occurrence, not on the population.
+    fn close(
+        &mut self,
+        planned: &[PlannedEffectSeat],
+    ) -> Result<EffectSeatClosure, CraneliftBackendError> {
+        let population = planned
+            .iter()
+            .map(|record| (record.effect_origin, record.slot))
+            .collect::<BTreeSet<_>>();
+        let consumed = self
+            .claimed
+            .keys()
+            .map(|(_, effect_origin, slot)| (*effect_origin, *slot))
+            .collect::<BTreeSet<_>>();
+        if let Some(extra) = consumed.difference(&population).next() {
+            return Err(backend_module(format!(
+                "host effect seat ledger: {extra:?} was consumed but is not in the planned \
+                 population"
+            )));
+        }
+        // Every (body, occurrence) the emitter reached owes every planned slot
+        // of that occurrence.
+        let mut reached = BTreeSet::new();
+        for (function, effect_origin, _) in self.claimed.keys() {
+            reached.insert((*function, *effect_origin));
+        }
+        for (function, effect_origin) in &reached {
+            for record in planned
+                .iter()
+                .filter(|record| record.effect_origin == *effect_origin)
+            {
+                if !self
+                    .claimed
+                    .contains_key(&(*function, *effect_origin, record.slot))
+                {
+                    return Err(backend_module(format!(
+                        "host effect seat ledger: function {function} consumed {effect_origin:?} \
+                         but not its planned {:?} seat, so the occurrence was read incompletely",
+                        record.slot
+                    )));
+                }
+            }
+        }
+        Ok(EffectSeatClosure {
+            seats: consumed.len(),
+            claims: self.claimed.values().map(|(_, claims)| claims).sum(),
+            population: population.len(),
+            unreached: population.difference(&consumed).count(),
+        })
+    }
 }
 
 /// One argument to a compiler-synthesized constructor, in the FORM the tree

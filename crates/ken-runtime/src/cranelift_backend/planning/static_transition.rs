@@ -1474,6 +1474,10 @@ pub(in crate::cranelift_backend) struct StaticTransitionPlan<'src> {
     /// HAS a lowering accessor — the allocation lane is unreadable at the
     /// producer without it.
     aggregate_ownership: Vec<PlannedAggregateOwnership>,
+    /// `RT-DECL-CLOSURE-PORT` `D7`. One record per capability/argument seat of
+    /// every admitted host effect occurrence. Read by lowering, which claims
+    /// exactly one of these per seat it consumes.
+    host_effect_seats: Vec<PlannedEffectSeat>,
 }
 
 #[cfg(test)]
@@ -3688,8 +3692,26 @@ pub(in crate::cranelift_backend) enum EffectSeatOperation {
     ProjectBytesSpan,
     /// Observe an opaque resource handle as a scalar.
     ObserveResourceHandle,
+    /// Observe the opaque invocation capability token as a scalar.
+    ObserveCapabilityToken,
     /// Narrow an exact `Int` to a checked `u64`.
     NarrowExactInt,
+}
+
+/// **Which slot of one effect occurrence a seat is.**
+///
+/// ⛔ The conditional capability is NOT argument ordinal 0, and collapsing the
+/// two is the exact confusion the post-capability offset exists to prevent.
+/// `FsOpen`'s capability and `FsOpen`'s first semantic argument are both real
+/// consumed seats with different needs; keyed on the structural position alone
+/// they would be positions 0 and 1, and keyed on a bare ordinal they would
+/// collide at 0. This carries the distinction in the key itself.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum EffectSeatSlot {
+    /// The capability at structural position 0, when the occurrence has one.
+    Capability,
+    /// The semantic argument at this ordinal, AFTER the capability offset.
+    Argument(u32),
 }
 
 /// **What a seat must be able to OBSERVE — derived FIRST, before any
@@ -3714,6 +3736,14 @@ pub(in crate::cranelift_backend) enum EffectSeatNeed {
     BytesPointerLength,
     /// An opaque resource handle's scalar word.
     ResourceScalar,
+    /// The invocation capability token's scalar word.
+    ///
+    /// ⛔ Deliberately not [`Self::ResourceScalar`]. Both are opaque scalars and
+    /// the emitter reads both through `emit_carrier_scalar`, but a capability
+    /// token authorizes an operation while a resource handle names an object.
+    /// One need spanning both would let a seat proved for one be read as proof
+    /// for the other.
+    CapabilityTokenScalar,
     /// An exact `Int`'s magnitude as a checked `u64`.
     ExactIntU64,
 }
@@ -3745,11 +3775,11 @@ impl EffectSeatAvail {
 
     /// Whether a seat consumed in `phase` can satisfy its need.
     ///
-    /// ⛔ This IS the `Need ⊆ Avail` test. It is a membership question, and it
-    /// is asked in planning so that a seat which fails it is refused with its
-    /// own coordinates rather than reaching the emitter and failing as a
-    /// generic specialized-only surface.
-    fn admits(self, phase: EffectSeatPhase) -> bool {
+    /// ⛔ This IS the `Need ⊆ Avail` test. It is a membership question, and the
+    /// seat it is asked about carries its own coordinates — so a seat that
+    /// fails it is refused as that exact seat of that exact operation, never as
+    /// a generic specialized-only surface.
+    pub(in crate::cranelift_backend) fn admits(self, phase: EffectSeatPhase) -> bool {
         match phase {
             EffectSeatPhase::SpecializedTemplate => self.specialized,
             EffectSeatPhase::CarriedWord => self.carried,
@@ -3772,21 +3802,60 @@ pub(in crate::cranelift_backend) struct PlannedEffectSeat {
     /// The child's STRUCTURAL position, capability included.
     pub(in crate::cranelift_backend) position: u32,
     pub(in crate::cranelift_backend) operation: ken_host::HostOpV1,
-    /// The semantic argument ordinal, AFTER the conditional capability offset.
+    /// The slot: the capability, or a semantic argument ordinal AFTER the
+    /// conditional capability offset.
     ///
     /// ⛔ Not the structural position. An operation carrying a capability shifts
     /// every argument by one, so a seat keyed on the structural position alone
     /// names a different semantic argument depending on a fact about the
     /// operation's capability that the position does not carry.
-    pub(in crate::cranelift_backend) ordinal: u32,
+    pub(in crate::cranelift_backend) slot: EffectSeatSlot,
+    /// The owner of the occurrence that PRODUCES this seat's value.
     pub(in crate::cranelift_backend) producer_owner: PredeclaredFunctionId,
-    pub(in crate::cranelift_backend) producer_phase: EffectSeatPhase,
+    /// The owner of the body that DISPATCHES the effect.
+    ///
+    /// ⚠ **No phase accompanies either owner, and that is a measured
+    /// correction rather than an omission.** A derived `consumer_phase` was
+    /// built first, from the child's planned join-result representation widened
+    /// to `CarriedWord` across an owner boundary, and checked against the phase
+    /// the emitter actually held. It was WRONG on real programs: `BufferFreeze`
+    /// argument 0 and `FsReadFile`'s capability both arrive carried while their
+    /// child occurrence has no `CarrierWord` join result and no owner crossing,
+    /// because the value reaches the body through a declared ABI slot — a fact
+    /// about the enclosing unit's parameters, not about the child. Rather than
+    /// keep a prediction that is false, the phase is OBSERVED at the claim and
+    /// `Need ⊆ Avail` is asked there, of the operand actually in hand. The
+    /// membership question is unchanged; only the thing it is asked about is
+    /// now a measurement instead of a guess.
     pub(in crate::cranelift_backend) consumer_owner: PredeclaredFunctionId,
-    pub(in crate::cranelift_backend) consumer_phase: EffectSeatPhase,
     pub(in crate::cranelift_backend) semantic_operation: EffectSeatOperation,
     pub(in crate::cranelift_backend) need: EffectSeatNeed,
     pub(in crate::cranelift_backend) avail: EffectSeatAvail,
 }
+
+/// **The host operations this backend represents as consumers.**
+///
+/// ⛔ It lives in PLANNING because the seat population is derived here and the
+/// emitter's admission check reads the same list. A second copy on the lowering
+/// side would be a second authority: the two could disagree about whether an
+/// operation is admitted, and the disagreement would show up as a seat with no
+/// planned record rather than as a contradiction anyone stated.
+pub(in crate::cranelift_backend) const CRANELIFT_HOST_EFFECT_CONSUMERS_V1:
+    [ken_host::HostOpV1; 13] = [
+    ken_host::HostOpV1::ConsoleWrite,
+    ken_host::HostOpV1::ConsoleFlush,
+    ken_host::HostOpV1::ConsoleIsTerminal,
+    ken_host::HostOpV1::FsReadFile,
+    ken_host::HostOpV1::FsWriteFile,
+    ken_host::HostOpV1::FsChangeMode,
+    ken_host::HostOpV1::FsOpen,
+    ken_host::HostOpV1::FsHandleMetadata,
+    ken_host::HostOpV1::FsReadAt,
+    ken_host::HostOpV1::FsWriteAt,
+    ken_host::HostOpV1::ResourceRelease,
+    ken_host::HostOpV1::BufferAllocate,
+    ken_host::HostOpV1::BufferFreeze,
+];
 
 /// The seat contract of one admitted operation at one semantic ordinal.
 ///
@@ -3802,12 +3871,53 @@ pub(in crate::cranelift_backend) struct PlannedEffectSeat {
 /// seat stays specialized-only, which is why `Avail` is recorded per seat.
 fn host_effect_seat_contract(
     operation: ken_host::HostOpV1,
-    ordinal: u32,
+    slot: EffectSeatSlot,
 ) -> Option<(EffectSeatOperation, EffectSeatNeed, EffectSeatAvail)> {
     use ken_host::HostOpV1 as Op;
     use EffectSeatAvail as Avail;
     use EffectSeatNeed as Need;
     use EffectSeatOperation as Semantic;
+    // ⭐ The CAPABILITY half, kept ahead of the argument table because its
+    // population is the exact complement: the four FS-path operations require
+    // one, and every other admitted operation refuses one outright. A `None`
+    // here is therefore not an arity gap but a capability the operation does
+    // not admit, and the caller refuses it with the seat's own coordinates.
+    let ordinal = match slot {
+        EffectSeatSlot::Capability => {
+            return match operation {
+                Op::FsReadFile | Op::FsWriteFile | Op::FsChangeMode | Op::FsOpen => Some((
+                    Semantic::ObserveCapabilityToken,
+                    Need::CapabilityTokenScalar,
+                    // Both phases: the emitter reads a specialized
+                    // `CapabilityToken` template directly and a carried word
+                    // through `emit_carrier_scalar`.
+                    Avail::EITHER_PHASE,
+                )),
+                Op::ConsoleWrite
+                | Op::ConsoleFlush
+                | Op::ConsoleIsTerminal
+                | Op::FsHandleMetadata
+                | Op::FsReadAt
+                | Op::FsWriteAt
+                | Op::ResourceRelease
+                | Op::BufferAllocate
+                | Op::BufferFreeze
+                | Op::ConsoleRead
+                | Op::ClockWallNow
+                | Op::ClockMonotonicNow
+                | Op::ClockSleepUntil
+                | Op::FsAppendFile
+                | Op::FsMetadata
+                | Op::FsReadDirectory
+                | Op::FsCreateDirectory
+                | Op::FsRemoveFile
+                | Op::FsRemoveDirectory
+                | Op::FsRename
+                | Op::EntropyRandomBytes => None,
+            };
+        }
+        EffectSeatSlot::Argument(ordinal) => ordinal,
+    };
     let tag = (
         Semantic::SelectClosedTag,
         Need::ConstructorTag,
@@ -3903,6 +4013,124 @@ fn host_effect_seat_contract(
             _,
         ) => None,
     }
+}
+
+/// **Derive one record for every capability/argument seat of every admitted
+/// host effect occurrence.**
+///
+/// ⛔ **The population is every `Effect` source occurrence, not the ones some
+/// reached trace visited**, and within one occurrence it is every slot the
+/// operation actually has — not the slots the arm this compilation took
+/// happened to read.
+///
+/// ⭐ The order of the derivation is the correction this record exists to make.
+/// `Need` comes from [`host_effect_seat_contract`], which is keyed on the
+/// operation and the slot and knows nothing about how the value will be
+/// represented. Only then is the seat's `Avail` checked to admit the phase the
+/// consumer will see it in. Reading the need off the representation instead is
+/// what makes whatever the emitter happens to offer into the definition of what
+/// the wire request wanted.
+fn build_host_effect_seat_plan(
+    plan: &StaticTransitionPlan<'_>,
+) -> Result<Vec<PlannedEffectSeat>, CraneliftBackendError> {
+    let mut records = Vec::new();
+    for occurrence in plan.source_occurrences.iter().flatten() {
+        let RuntimeExpr::Effect {
+            operation,
+            capability,
+            args,
+            ..
+        } = occurrence.expr
+        else {
+            continue;
+        };
+        // A represented-unavailable lane has no seats at all: it is refused
+        // whole, before any slot of it is derived.
+        if !CRANELIFT_HOST_EFFECT_CONSUMERS_V1.contains(operation) {
+            continue;
+        }
+        let effect_origin = occurrence.static_origin;
+        let authority = occurrence_authority(plan, effect_origin)?;
+        let consumer_owner = authority.owner;
+        let argument_base = u32::from(capability.is_some());
+        let slots = capability
+            .iter()
+            .map(|_| EffectSeatSlot::Capability)
+            .chain((0..args.len()).map(|ordinal| {
+                EffectSeatSlot::Argument(
+                    u32::try_from(ordinal).expect("an argument list shorter than u32::MAX"),
+                )
+            }));
+        for slot in slots {
+            let position = match slot {
+                EffectSeatSlot::Capability => 0,
+                EffectSeatSlot::Argument(ordinal) => argument_base
+                    .checked_add(ordinal)
+                    .ok_or_else(|| planner_capacity_error("effect seat position overflows"))?,
+            };
+            let child = authority
+                .children
+                .get(position as usize)
+                .ok_or_else(|| planner_error("a host effect seat has no child occurrence"))?;
+            // ⛔ `Need` FIRST, from the seat's own semantics.
+            let Some((semantic_operation, need, avail)) =
+                host_effect_seat_contract(*operation, slot)
+            else {
+                return Err(planner_error(format!(
+                    "host operation {:?} has no seat contract at {slot:?}, so the occurrence's \
+                     shape and the operation's wire request disagree",
+                    operation
+                )));
+            };
+            records.push(PlannedEffectSeat {
+                effect_origin,
+                child_origin: child.origin,
+                position,
+                operation: *operation,
+                slot,
+                producer_owner: child.owner,
+                consumer_owner,
+                semantic_operation,
+                need,
+                avail,
+            });
+        }
+    }
+    records.sort();
+    Ok(records)
+}
+
+/// Every record names a DISTINCT seat.
+///
+/// The non-aliasing law of the seat domain, in production rather than in a
+/// test, for the same reason the aggregate producers have one: if two records
+/// shared `(effect_origin, slot)`, one seat's contract could authorize
+/// another's consumption.
+fn validate_host_effect_seats_are_unique(
+    records: &[PlannedEffectSeat],
+) -> Result<(), CraneliftBackendError> {
+    let mut seen = BTreeSet::new();
+    for record in records {
+        if !seen.insert((record.effect_origin, record.slot)) {
+            return Err(planner_error(
+                "two host effect seat records name the same occurrence slot, so a seat identity \
+                 is not unique",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_host_effect_seat_plan(
+    plan: &StaticTransitionPlan<'_>,
+    records: &[PlannedEffectSeat],
+) -> Result<(), CraneliftBackendError> {
+    if records != build_host_effect_seat_plan(plan)? {
+        return Err(planner_error(
+            "the host effect seat population is not the exact closed seat-contract derivation",
+        ));
+    }
+    validate_host_effect_seats_are_unique(records)
 }
 
 /// Derive one ownership record for every aggregate producer occurrence.
@@ -5788,6 +6016,7 @@ impl<'src> Planner<'src> {
                 join_results: Vec::new(),
                 case_emissions: Vec::new(),
                 aggregate_ownership: Vec::new(),
+                host_effect_seats: Vec::new(),
                 occurrence_authorities: Vec::new(),
                 continuation_specializations: Vec::new(),
                 continuation_specialization_calls: Vec::new(),
@@ -6699,6 +6928,11 @@ impl<'src> Planner<'src> {
         // call-shaped child look arena-owned.
         self.plan.aggregate_ownership = build_aggregate_ownership_plan(&self.plan)?;
         validate_aggregate_ownership_plan(&self.plan, &self.plan.aggregate_ownership)?;
+        // ⛔ After `join_results` for the same reason the ownership plan is: a
+        // seat's consumer phase is a fact about the child's planned result
+        // representation, which does not exist until that line.
+        self.plan.host_effect_seats = build_host_effect_seat_plan(&self.plan)?;
+        validate_host_effect_seat_plan(&self.plan, &self.plan.host_effect_seats)?;
         self.plan.validate()?;
         Ok(self.plan)
     }
@@ -7600,6 +7834,34 @@ impl<'src> StaticTransitionPlan<'src> {
         &self,
     ) -> &[PlannedAggregateOwnership] {
         &self.aggregate_ownership
+    }
+
+    /// The closed planned seat population, for the whole-pass seat closeout.
+    pub(in crate::cranelift_backend) fn host_effect_seat_records(&self) -> &[PlannedEffectSeat] {
+        &self.host_effect_seats
+    }
+
+    /// **Claim the ONE planned record for an exact seat.**
+    ///
+    /// ⛔ Keyed on the occurrence and the slot, never on the operation alone: a
+    /// lookup by operation would answer for whichever occurrence of that
+    /// operation came first, so one effect's proof would authorize another's
+    /// consumption. A seat with no record is a loud refusal, not a fallback —
+    /// it means the emitter reached a seat planning never derived.
+    pub(in crate::cranelift_backend) fn host_effect_seat(
+        &self,
+        effect_origin: StaticOriginId,
+        slot: EffectSeatSlot,
+    ) -> Result<PlannedEffectSeat, CraneliftBackendError> {
+        self.host_effect_seats
+            .iter()
+            .find(|record| record.effect_origin == effect_origin && record.slot == slot)
+            .copied()
+            .ok_or_else(|| {
+                planner_error(format!(
+                    "host effect occurrence {effect_origin:?} has no planned seat at {slot:?}"
+                ))
+            })
     }
 
     /// **The planner's closed, ordered alternative population at one path.**
@@ -8990,6 +9252,7 @@ impl<'src> StaticTransitionPlan<'src> {
         validate_case_emission_plan(self, &self.case_emissions)?;
         validate_occurrence_authority_plan(self, &self.occurrence_authorities)?;
         validate_aggregate_ownership_plan(self, &self.aggregate_ownership)?;
+        validate_host_effect_seat_plan(self, &self.host_effect_seats)?;
         validate_substrate_preallocation_closure(
             self,
             &self.case_emissions,
