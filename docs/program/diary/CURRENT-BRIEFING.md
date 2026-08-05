@@ -41,14 +41,20 @@
 ### The one thing to do next
 
 **Nothing, until Runtime hands back.** `runtime-implementer` is mid-turn on the
-`RT-DECL-CLOSURE-PORT` D7 effect-seat population/ledger slice, resumed from
-exact `3d8f9b21` on the governed `70887529` lineage, released by
-`runtime-leader` at `evt_1krkxb1zv0kwx` (01:36). Confirmed engaged by pane at
-01:51 — one continuous turn, 15m elapsed, ctx 19%. The leader is idle-and-
-correct, waiting on that named checkpoint.
+`RT-DECL-CLOSURE-PORT` D7 **per-visit claim-group replacement**, resumed from
+exact `6a09ed68` on the governed `70887529` lineage, released by
+`runtime-leader` at ~02:19 after my recut landed (`evt_3qfng437agm18`).
+Confirmed engaged by pane at 02:21 — live turn, editing `lowering/core.rs` at
+the visit-open site, ctx 25%. The leader is idle-and-correct, waiting on that
+named checkpoint. Bulk conversion and the carried exact-`Int` route are
+explicitly deferred until this checkpoint is reviewed.
 
-**WIP audit clock: armed at 01:36, fires 02:36.** The release is the reset
-event. A routine progress post does not reset it.
+**WIP audit clock: re-armed at 02:19, fires 03:19.** The leader's release is
+the reset event. A routine progress post does not reset it.
+
+Superseded, for reading older posts only: the 01:36 release from `3d8f9b21`
+and its 02:36 deadline. That slice produced `6a09ed68`, which the Architect
+accepted as WIP substrate while ruling its ledger lifecycle too coarse.
 
 **Governing base, do not let it drift:** continue only from the `70887529`
 lineage. Rebase, merge, or cherry-pick of `fb8fd881`, `430798bf`, `548682c3`,
