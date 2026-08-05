@@ -40,10 +40,15 @@
 
 ### The one thing to do next
 
-**Release `D8h` to Runtime on preserved exact `89e36ec1`** — planner pairing:
-pair each `ComposedCallTarget` with the exact opaque `ContinuationCallIdentity`
-selected by the same five fields as the `D8a` selector. Thread
-**`thr_6m43v75yndhtj`**.
+**Wait for `D8h`.** Released to Runtime at `evt_48c17peaekf4y` (~22:5xZ) on
+preserved exact `89e36ec1`; `runtime-leader` relayed it at `evt_1g0ye6axhcqcp`
+within 30 seconds and the implementer is working. Thread
+**`thr_6m43v75yndhtj`**. **The 60-minute WIP clock re-armed at that release.**
+
+`D8h` is planner pairing only: pair each `ComposedCallTarget` with the exact
+opaque `ContinuationCallIdentity` selected by the same five fields as the `D8a`
+selector. On its checkpoint, release `D8i` (transport on the binding as a
+separate closed facet), then `D8j`, then `D8k`.
 
 **Architect ruling `evt_37fa3rdegb3yc` settled the fork as outcome (c) —
 BOTH mechanisms I offered were refused.** (a) would execute the continuation
