@@ -41,21 +41,42 @@ this line.
 
 ### The one thing to do next
 
-**Nothing — `D2` is in flight.** `RT-CONTSRC-PRODUCER-LOCAL` is live in thread
-**`thr_6m43v75yndhtj`**; `origin/main = d4f27582`.
+**Nothing — the `D2` correction is in flight.** `RT-CONTSRC-PRODUCER-LOCAL` is
+live in thread **`thr_6m43v75yndhtj`**; `origin/main = f5ffdcd3`.
 
-- `D0` (`12d9612a`, zero code delta) and `D1` (`77a24320`) delivered on
-  `wp/RT-DECL-CLOSURE-PORT-typed-units`, base exact `179af863`. **No hard
-  stop.** **Architect APPROVED `D0`/`D1`** at `evt_5zkydewv5kspb` (07:34:42Z).
-- **Leader released `D2` only** at `evt_4ak330de1fg9s` (07:35:05Z); implementer
-  confirmed working. **`D4` remains unreleased.**
-- I corrected three frame defects the ring flagged (PR #1413, blob `18c88ea5`).
-  **Nothing owed by me.**
-- **WIP audit clock: armed from the 07:35Z `D2` release, so due ~08:35Z.**
+- `D0` (`12d9612a`, zero delta), `D1` (`77a24320`) **accepted**
+  (`evt_5zkydewv5kspb`), `D2` delivered at exact `a5a6ce9b` with no hard stop.
+- **`D2` is BLOCKED by the Architect** at `evt_9krmbv834z9p` (08:00:58Z);
+  `a5a6ce9b` preserved as bounded progress. Leader dispatched the bounded
+  correction at `evt_3grwb2yc4esd0` (08:01:24Z); implementer working it.
+- **`D3` and `D4` remain unreleased**, with candidate, QA, `D6` closure,
+  `#27`/case-emission and the call-result SCC still held.
+- **Nothing owed by me.** **WIP clock re-armed on the 08:00:58Z ruling — derive
+  it; do not read a stamped deadline.**
 
-**Next expected event:** `D2` report. If it hard-stops, the concrete edge routes
-to me — this node's frame is mine and four of this campaign's stops have been my
-framing, not Runtime's execution.
+**The block, because it changes a frame-level fact.** A `ComputationalMatch`
+case environment is ordered `[recursive IH binders, constructor argument
+binders, outer environment]`, and **those two runs are not homogeneous** —
+existing law gives IH binders `ActivationOwned` with a phase-derived contract
+while argument binders preserve the scrutinee representation. `D2` looped the
+combined count and stamped one `ValueWord` + scrutinee-lifetime contract across
+both. Identity `(case body, binder ordinal)` survives; the ordinal's *role* is
+what must be read off the case header.
+
+⇒ **`AC-3` is affected and I owe an edit once `D2` is accepted.** It requires
+the ~34 newly-interning edges to be "accounted for individually", and the frame
+never says that the case-binder population splits into an IH sub-run and an
+argument sub-run. An aggregate over a heterogeneous run is exactly what `AC-3`
+exists to forbid. ⛔ **Do not amend the frame while the correction is in
+flight** — the leader's dispatch already carries the instruction verbatim, and a
+mid-flight frame edit would duplicate a live instruction and drag its guardrails
+section along. Amend when the contract is settled, not while it is being
+derived.
+
+**This stop is NOT my framing.** It is an execution defect caught at the gate,
+which is the gate working. Four earlier stops on this campaign were my frames
+asserting laws the measured plane does not support; this one is a different
+class and should not be counted with them.
 
 > ### The mistake I made at 07:36Z, because the shape recurs
 >
