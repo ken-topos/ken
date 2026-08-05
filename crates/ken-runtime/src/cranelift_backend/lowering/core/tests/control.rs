@@ -17504,6 +17504,7 @@ fn d8j_root_witness_compile(
 /// | `RedirectRecordedInstruction` | the record moved onto another real call | verification 4, on the finished CLIF |
 /// | `DischargeFromOrdinaryBinding` | an ordinary clone of the same binding | the authority accessor |
 /// | `RecordResultDefinedBeforeTheCall` | a value defined before the call | verification 5, on the finished CLIF |
+/// | `SupplyOperandCountDisagreesWithTarget` | the reported run, after the real one was emitted | verification 4b, on the finished CLIF |
 ///
 /// ⭐ The substitution is the same-symbol shortcut made concrete: the witness
 /// interns **two** specializations at one producer `Construct` -- one
@@ -17513,14 +17514,22 @@ fn d8j_root_witness_compile(
 /// A sixth switch, `RecordResultDefinedBeforeTheCall`, discriminates
 /// verification 5 with a real earlier value of the same function.
 ///
-/// **THE GAP, named rather than left to be assumed:** verification 4's
-/// **operand half** has no discriminator. Both of this witness's workers
-/// declare arity 1 with no captures, so substituting the other target does not
-/// move the declared run, and the binding-versus-target mismatch refuses one
-/// step earlier. That check is therefore known to execute and not known to
-/// discriminate. It would take a witness whose two recursive positions carry
-/// workers of different arity, which is fixture work this checkpoint does not
-/// own.
+/// **Verification 4b is discriminated too, and by the one lawful form.**
+/// `SupplyOperandCountDisagreesWithTarget` moves the emitter's REPORTED operand
+/// run after the real vector has been assembled and emitted. The identity, the
+/// paired target, the owner, the recorded instruction, the decoded callee, the
+/// downstream result and the source control all stay exact, so 4b is the first
+/// refusal and the relation is empty for that reason and no other.
+///
+/// ⛔ **A whole-target substitution is not a control for it** — verification 1
+/// or 4a would refuse first and mask it. That is why the perturbation is of the
+/// evidence rather than of the target.
+///
+/// ⚠ The delta itself is arbitrary, and that is a property of this witness
+/// rather than a choice: both its workers declare arity 1 with no captures, so
+/// no adjacent real quantity differs from the true run. What carries the
+/// control is the isolation — one field moves, every other verifier input stays
+/// exact — not the value.
 ///
 /// **Promise class: durable invariant.** Relations over one program's relation
 /// and five refusals; the only literals are the arity of the population, which
@@ -17589,7 +17598,16 @@ fn d8j_the_composed_authority_is_discharged_once_after_the_call() {
         (
             D8jMutation::RecordResultDefinedBeforeTheCall,
             "is not defined at or after its",
-            "a value defined before the call cannot be what the call returned into the ' +              'continuation",
+            "a value defined before the call cannot be what the call returned into the \
+             continuation",
+        ),
+        (
+            D8jMutation::SupplyOperandCountDisagreesWithTarget,
+            "operands but its D8b/D8d target declares",
+            "only the EVIDENCE about the operand run moves: the vector that was written, the \
+             identity, the paired target, the owner, the recorded instruction, the decoded \
+             callee, the downstream result and the source control are all still exact, so 4b \
+             is the FIRST refusal and nothing earlier can be masking it",
         ),
     ] {
         let (error, discharged, _, _) = d8j_root_witness_compile("d8j_defect", mutation);

@@ -7679,13 +7679,29 @@ impl<'a> Lowering<'a> {
         // `D8j` — the instruction is HANDED BACK, not recorded. Which consumer
         // may answer for a causal obligation with it is the caller's question,
         // and both this emitter's callers reach here.
-        Ok((
-            emitted.0,
+        // ⭐ The operand run is reported from the vector that was just written,
+        // read adjacent to the call that consumed it. ⛔ Not recomputed from the
+        // binding's declared arity and captures: that is the quantity
+        // verification 4b compares this against, and deriving both from one
+        // source would make the comparison an identity.
+        let emission = StaticWorkerEmission {
+            inst: emitted.1,
+            supplied_operands: inputs.len(),
+        };
+        // `D8j` verification 4b's discriminator, applied AFTER the real vector
+        // was assembled and emitted. ⛔ It moves the EVIDENCE about the run, not
+        // the run: the call that was written is unchanged, and every other input
+        // to the verifier stays exact.
+        #[cfg(test)]
+        let emission = if d8j_mutation() == D8jMutation::SupplyOperandCountDisagreesWithTarget {
             StaticWorkerEmission {
-                inst: emitted.1,
-                supplied_operands: inputs.len(),
-            },
-        ))
+                supplied_operands: emission.supplied_operands.saturating_add(1),
+                ..emission
+            }
+        } else {
+            emission
+        };
+        Ok((emitted.0, emission))
     }
 
     /// **`D2` -- the binder-lowering helper.** Lowers a `Let`'s bound value

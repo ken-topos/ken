@@ -3572,6 +3572,27 @@ pub(in crate::cranelift_backend) enum D8jMutation {
     WrongClaimingOwner,
     /// Attempt the composed discharge on an ordinary binding.
     DischargeFromOrdinaryBinding,
+    /// **Verification 4b's discriminator.** Move the emitter's reported operand
+    /// run away from the run its `D8b`/`D8d` target declares, and move nothing
+    /// else.
+    ///
+    /// ⛔ Applied to `StaticWorkerEmission.supplied_operands` AFTER the call has
+    /// assembled and emitted its operand vector, so the vector that was written
+    /// is the real one and only the evidence about it disagrees. Identity,
+    /// paired target, owner, recorded instruction, decoded callee, downstream
+    /// result and source control all stay correct, which is what makes 4b the
+    /// FIRST refusal rather than a consequence of an earlier one.
+    ///
+    /// ⛔ A whole-target substitution is NOT a control for 4b: verification 1 or
+    /// 4a would refuse first and mask it. That is why the perturbation is of the
+    /// evidence and not of the target.
+    ///
+    /// ⚠ **The delta is arbitrary, and that is a property of this witness, not
+    /// a choice.** Both of its workers declare arity 1 with no captures, so no
+    /// adjacent real quantity differs from the true run to perturb toward. What
+    /// carries the control is the isolation -- one field moves and every other
+    /// verifier input stays exact -- not the value.
+    SupplyOperandCountDisagreesWithTarget,
     /// Record a result value defined BEFORE the call, so the value the
     /// continuation is said to have received cannot have come from it.
     ///
