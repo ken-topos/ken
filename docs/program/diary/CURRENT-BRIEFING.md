@@ -41,8 +41,14 @@ frame blob `da785093`). Verify it; do not trust this line.
 ### The one thing to do next
 
 **Nothing, until Runtime returns the `1d` inventory.** I posted the recut and
-release request at `evt_14gsxh986c963`; the leader releases from exact
-`179af863`. **`runtime-implementer` is compacted (ctx 0%), empty composer.**
+release request at `evt_14gsxh986c963` (06:14Z); `runtime-leader` released from
+exact `179af863` at `evt_1cyxsqrjhkcq6` (06:15:35Z). **Confirmed picked up:** at
+06:19Z `runtime-implementer` is live at ctx 10%, running a `KEN_D7_PROBE` pass
+over `-p ken-runtime --lib` that records `case_emission` / `producer_kind` /
+arity / capture count per emission site. That is the inventory being measured,
+not a mechanism being built — which is what `1d` asked for.
+
+**WIP audit clock: armed from 06:15:35Z (the leader release), so due 07:15:35Z.**
 
 **`1d` hard-stops TO ME.** If the inventory finds that satisfying it would mint
 a new representation, population, identity, or planner/ABI authority, that needs
