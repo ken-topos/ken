@@ -41,8 +41,17 @@ trust this line.
 
 ### The one thing to do next
 
-**RELEASED at 07:0xZ. Verify `runtime-implementer` actually transitioned to
-Working, and rouse it with `send-keys` if it did not.**
+**Nothing — released and CONFIRMED LIVE at 07:08Z.** `runtime-leader` dispatched
+(`evt_7tcvf241ws3j9` in the new thread, `evt_4xhv3q7cq6avp` in `D7`'s), and
+`runtime-implementer` is working. **WIP audit clock armed from the 07:05:59Z
+kickoff, so due ~08:06Z.** The kick minted thread **`thr_6m43v75yndhtj`**.
+
+⚠ **A live-verb grep nearly reported this ring idle.** The implementer's footer
+read `✻ Actualizing… (1m 9s)` — a verb absent from the tick's pattern list, so
+the sweep printed a blank status. **The busy-check is wrong in both directions
+and the verb list is open-ended: a missing verb reads exactly like idle.**
+Resolve any blank or `(no-footer)` status by reading the pane, never by
+extending the pattern and trusting it.
 
 - Kick (fresh root, its own thread): **`evt_7h92n2tr7pbrm`**.
 - `D7` rescope-in-place, posted in `thr_3rx07jfewhjhf`: `evt_14a9cee7fkv2s`.
