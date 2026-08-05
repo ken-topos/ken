@@ -2588,28 +2588,97 @@ family — that is a measurement nobody has taken.
         operator 2026-08-05; sequencing confirmed by the Architect at
         `evt_68e5svw1eeenp`.
 
-        **The gap, measured.** At the checkpoint-1 stop, body origin `375` was in
-        `function_local.worker_templates` and its closure still reached the **late
-        generic `Closure` arm**. That is a **real planned static-worker member
-        falling through** where this frame's own matrix-omission law says it must
-        **fail in planning** and may not fall through there.
+        > **RECUT 2026-08-05 (Architect `evt_41v9zkjaf52n6`, Research advisory
+        > `evt_72mj37q3pecv4`) — this checkpoint's FORWARD reading was false on
+        > the current authority plane, and is retired.** It said body `375`'s
+        > presence in `worker_templates` while reaching the late generic `Closure`
+        > arm is **a planned member falling through**. It is not.
+        >
+        > **Three populations, measured, and the frame collapsed them:**
+        >
+        > - **B** — generic `ClosureBody` members;
+        > - **C** — edge-local specialization candidates with recursive position
+        >   and worker provenance;
+        > - **I** — candidates **interned** only after an exact **closed** producer
+        >   environment is proved.
+        >
+        > Closure `381` and **22 measured green peers** are in `B ∩ C`, but their
+        > required environment is `Open`, so none is in `I`.
+        > `exact_continuation_source_environment` makes that decision **before**
+        > interning. **`Open` is positive fail-closed evidence meaning "do not
+        > commit this specialization" — not "a planned member was omitted" and not
+        > "reject the enclosing program."**
+        >
+        > ⛔ **So this checkpoint may enforce `I -> exactly one matching B`. It may
+        > NOT enforce `B ∩ C -> I or reject`** — that turns inability to prove an
+        > environment into source-program invalidity, and would falsely reject 23
+        > measured green programs including the landed
+        > `contspec_open_and_ambiguous_sources_refuse_only_the_candidate` law.
+        >
+        > ⛔ **Closure-level membership is not an edge-local obligation.** Measured
+        > closure `13` is declined on one edge and interned on another, so a
+        > closure-level refusal collapses edge-local opportunity into member-global
+        > obligation — a cardinality error independent of the 22 peers.
 
-        **Checkpoint 1 did not close it.**
-        `validate_retained_callable_capture_contract` is a **pre-emission** gate.
-        It correctly treats `worker_templates` membership as necessary and
-        insufficient, but it fires at emission; the law says planning. Neither the
-        checkpoint-1 acceptance nor `1b` claims otherwise.
+        **What `1c` is, and it is CLOSED.** Exact
+        `179af86350ba7191935fcc9ff902bb166c954339` (on `ca1c4418`) lands the exact
+        lawful converse and discharges this checkpoint:
 
-        **Sequencing — after `1b`, before checkpoint 2.** It may begin only once a
-        corrected `1b` is accepted. The reason is measurement, not preference:
-        enforcing in planning **moves where the linked row first refuses**, and
-        `1b`'s entire evidence is a per-row before/after on that row. Landing `1c`
-        first would shift the row underneath the measurement while it is being
-        taken. The law makes a silent fall-through refuse **earlier**; it does not
-        advance the row, so it has no claim to jump the queue.
+        ```
+        interned specialization
+            -> exactly one ClosureBody member
+               at the defining closure occurrence
+               with the exact declared parameter/capture contract
+        ```
 
-        **Scope.** Existing `D7` / [[RT-RECURSOR-TRANSPORT]] atomic scope. It
-        closes a law this frame already states — it does not author a new one.
+        Preserve that mechanism and its omission, reclassification, redirection,
+        and wrong-contract controls — they are non-vacuous **on an actually
+        interned specialization**.
+
+        **Sequencing.** After `1b`, before checkpoint 2, for the reason recorded
+        when it was authorized: enforcing in planning moves where the linked row
+        first refuses, and `1b`'s evidence is a per-row before/after on that row.
+
+     **1d. The route/availability authority INVENTORY for the linked edge.**
+        Added 2026-08-05, Architect `evt_41v9zkjaf52n6`. **This is a bounded
+        investigation whose first and possibly only deliverable is an answer, not
+        a mechanism.**
+
+        **The open question, stated exactly.** Closure `381`'s late refusal is
+        real: it lacks a viable eventual route. But that is **an unmet
+        route/availability obligation whose mandatory status is not represented at
+        this planning boundary** — not a planned-member omission. `1c`'s converse
+        cannot reach it, because `I = ∅` for `381`.
+
+        **First task: inventory, do not build.** Identify whether an **existing
+        upstream** semantic authority proves this exact edge **mandatory** and
+        supplies an exact, **edge-local** environment derivation.
+
+        - **It must distinguish `381` from the 22 same-state green peers BEFORE
+          interning.** No such discriminator exists in the measured plane; if the
+          inventory does not find one that already exists, it has not found one.
+        - **Projection of that authority is permitted only if it already exists
+          and is edge-local.** ⛔ Not derived, not generalized, not reconstructed.
+
+        > ⛔⛔ **HARD STOP, and it is the point of this checkpoint. If satisfying
+        > it would mint a NEW representation, population, identity, or planner/ABI
+        > authority — STOP and return the concrete edge to the Steward.** That
+        > outcome requires a **separate substrate node**, which this ruling
+        > expressly does **not** authorize. **The graph shape is the Steward's
+        > call, decided FROM the inventory** — deciding it before the inventory
+        > exists would be creating a node on speculation, which this frame's own
+        > constraint test forbids.
+
+        **Bans carried from the ruling.** ⛔ Do not reject all `Open` real
+        members · ⛔ do not retire the candidate-only law · ⛔ do not
+        special-case closure `381` · ⛔ do not use corpus identity as a
+        predicate · ⛔ do not
+        weaken the generic `Closure` refusal · ⛔ do not declare the linked witness
+        closed from the converse. **No environment repair is authorized from the
+        present facts.**
+
+        **Scope.** Existing `D7` / [[RT-RECURSOR-TRANSPORT]] atomic scope **for
+        the inventory only**. It adds no third production predicate.
 
      2. **Then close the exact `264 -> 262 / position 1` consumer** with the
         retained `ae64f687` mechanism: the exact planned seat is claimed, the
@@ -2619,7 +2688,7 @@ family — that is a measurement nobody has taken.
 
      All existing mixed-phase, owner/order/provenance, zero-allocation capsule,
      `D5a` marker, phase/taxonomy and `AC-4` controls remain **cumulative**
-     across all four checkpoints.
+     across all five checkpoints.
 
      **The row may NOT be replaced by a synthetic or direct carried-capacity
      witness.** Such a witness proves the consumer locally and cannot prove that
