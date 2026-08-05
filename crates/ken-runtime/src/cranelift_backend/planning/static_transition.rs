@@ -664,8 +664,14 @@ impl<'plan> ContinuationContextView<'plan> {
             .iter()
             .zip(self.inputs)
             .map(|(projection, authority)| {
+                // `D1` — the ABI-plane input authority records an ENTRY source
+                // owner, so agreement is checked in that domain. ⛔ A
+                // producer-local coordinate refuses here rather than being
+                // compared against a field that cannot hold it.
+                let (source_owner, _, _) =
+                    projection.coordinate.entry_abi_pending_producer_local()?;
                 if projection.ordinal != authority.ordinal
-                    || projection.source_owner != authority.source_owner
+                    || source_owner != authority.source_owner
                 {
                     return Err(planner_error(
                         "a generated context capture disagrees with its validated ABI input \
@@ -692,11 +698,172 @@ impl<'plan> ContinuationContextView<'plan> {
 }
 
 /// The source ABI provenance class of one continuation input.
+///
+/// ⛔ This labels provenance **inside one coordinate space** — a position in the
+/// source owner's entry ABI input run. It is not the place to name a value that
+/// has no such position; see [`ContinuationSourceCoordinate`].
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-enum ContinuationInputSource {
+pub(in crate::cranelift_backend) enum ContinuationInputSource {
     Parameter,
     LexicalCapture { source_origin: StaticOriginId },
     SeedCapture { defining_origin: StaticOriginId },
+}
+
+/// `RT-CONTSRC-PRODUCER-LOCAL` `D1` — the exact structural identity of a value
+/// the producer **creates mid-body**.
+///
+/// ⛔ Deliberately carries no ABI position and is not convertible to one. The
+/// value does not exist at its owner's function entry, so `parameters +
+/// captures` has no position for it, and inventing one is the first of the five
+/// exits the Architect closed at `evt_75k8cydbj5127`.
+///
+/// The identity is the occurrence that introduces the binding **plus which
+/// binding of that occurrence it is**: an occurrence such as a `Match` case
+/// introduces several at once, and an origin alone would name the set rather
+/// than the value.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct ProducerLocalBinding {
+    /// The unit whose body contains the binding.
+    pub(in crate::cranelift_backend) binding_owner: PredeclaredFunctionId,
+    /// The occurrence that introduces it.
+    pub(in crate::cranelift_backend) binding_origin: StaticOriginId,
+    /// Which binding that occurrence introduces. Zero when it introduces one.
+    pub(in crate::cranelift_backend) binding_ordinal: u32,
+}
+
+/// `RT-CONTSRC-PRODUCER-LOCAL` `D1` — where a producer-local value is found at
+/// the moment the continuation call is emitted.
+///
+/// ⛔ Deliberately its own type rather than a second `u32` sitting beside an
+/// entry ABI position. An environment index and an ABI position are different
+/// coordinate spaces; the whole reason [`ContinuationSourceCoordinate`] is a
+/// closed sum is that no consumer can read one as the other by forgetting to
+/// ask which it holds.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) struct ProducerLocalLocator {
+    /// The occurrence whose value environment contains the binding at the point
+    /// the call is emitted.
+    pub(in crate::cranelift_backend) environment_origin: StaticOriginId,
+    /// The binding's index in that environment.
+    pub(in crate::cranelift_backend) environment_index: u32,
+}
+
+/// `RT-CONTSRC-PRODUCER-LOCAL` `D1` — which coordinate **domain** names one
+/// continuation input's value in its producer.
+///
+/// ⛔ A closed sum over two coordinate *spaces*, and ⛔ **not** a fourth
+/// [`ContinuationInputSource`] arm. The Architect rejected that shape
+/// explicitly (`evt_75k8cydbj5127`): appending a case to an enum whose
+/// enclosing record still requires an entry-ABI coordinate produces a truthful
+/// provenance label with an untruthful `source_abi_position` beside it.
+///
+/// ⛔ **No default or wildcard arm anywhere this is matched.** A third domain
+/// must fail to compile at every consumer until each one assigns it — that is
+/// `AC-2`, and it is the property that makes this a type rather than a
+/// convention.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum ContinuationSourceCoordinate {
+    /// A value that exists at the source owner's function entry: one position
+    /// in its `parameters + captures` ABI input run, carrying the contract that
+    /// `continuation_owner_entry_sources` reads off that exact `AbiSlot`.
+    ///
+    /// ⭐ Unchanged from before `D1` in both content and meaning. The three
+    /// components were previously inline fields of the records below; moving
+    /// them into an arm is what makes the other domain expressible without
+    /// making this one ambiguous.
+    EntryAbi {
+        source_owner: PredeclaredFunctionId,
+        source_abi_position: u32,
+        source: ContinuationInputSource,
+    },
+    /// A value created after entry by the producer body. Named by its exact
+    /// structural binding identity and located, at emission time, in the
+    /// environment that actually contains it. Its carrier / ownership /
+    /// storage-owner / affinity are planner-derived and live on the enclosing
+    /// record, exactly as the entry arm's slot-derived ones do.
+    ///
+    /// ⚠ `dead_code` is allowed **only** because `D1` is the representation and
+    /// `D2` is what populates it — the arm is constructed today by the controls
+    /// that prove each consumer refuses it, and the warning would otherwise
+    /// read as "unused, delete me". ⛔ `D2` removes this attribute; it is not a
+    /// standing exemption.
+    #[allow(dead_code)]
+    ProducerLocal {
+        binding: ProducerLocalBinding,
+        locator: ProducerLocalLocator,
+    },
+}
+
+impl ContinuationSourceCoordinate {
+    /// The entry-ABI coordinate this names, or the refusal owed to `D3`.
+    ///
+    /// ⛔ **Not an exemption.** Every caller is a consumer that does not yet
+    /// assign the producer-local domain, and each one fails closed here rather
+    /// than reading a position the local arm does not have. `grep` this name to
+    /// enumerate exactly what `D3` still owes; when the list is empty the
+    /// method goes with it.
+    fn entry_abi_pending_producer_local(
+        self,
+    ) -> Result<(PredeclaredFunctionId, u32, ContinuationInputSource), CraneliftBackendError> {
+        match self {
+            Self::EntryAbi {
+                source_owner,
+                source_abi_position,
+                source,
+            } => Ok((source_owner, source_abi_position, source)),
+            Self::ProducerLocal { .. } => Err(planner_error(
+                "a continuation input names a producer-local binding, which this consumer does \
+                 not yet assign; RT-CONTSRC-PRODUCER-LOCAL D1 represents the coordinate and D3 \
+                 assigns it, and refusing here is deliberate — the alternative is reading an \
+                 entry ABI position this value does not have",
+            )),
+        }
+    }
+
+    /// A producer-local coordinate for a control that must **reach** one.
+    ///
+    /// ⛔ Test-only, and it exists because `D1` represents this domain while
+    /// nothing constructs it yet: without a way to present one, every refusal
+    /// written for it is unmeasured code, which reads exactly like absent code.
+    /// The identifiers are sentinels — the controls assert on the refusal, not
+    /// on what the binding names.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn producer_local_probe() -> Self {
+        Self::ProducerLocal {
+            binding: ProducerLocalBinding {
+                binding_owner: PredeclaredFunctionId(u32::MAX),
+                binding_origin: StaticOriginId(u32::MAX),
+                binding_ordinal: 0,
+            },
+            locator: ProducerLocalLocator {
+                environment_origin: StaticOriginId(u32::MAX),
+                environment_index: 0,
+            },
+        }
+    }
+
+    /// The entry-ABI components, for a test that is asserting *about* them.
+    ///
+    /// ⛔ Test-only, and it panics rather than defaulting: a test that meant to
+    /// read an entry position and got a producer-local coordinate has measured
+    /// a different value than it names, which is the failure mode this whole
+    /// separation exists to prevent.
+    #[cfg(test)]
+    pub(in crate::cranelift_backend) fn expect_entry_abi(
+        self,
+    ) -> (PredeclaredFunctionId, u32, ContinuationInputSource) {
+        match self {
+            Self::EntryAbi {
+                source_owner,
+                source_abi_position,
+                source,
+            } => (source_owner, source_abi_position, source),
+            Self::ProducerLocal { binding, locator } => panic!(
+                "this assertion names an entry ABI coordinate but reached the producer-local \
+                 binding {binding:?} at {locator:?}"
+            ),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -736,9 +903,11 @@ enum BoundaryUseAvail {
 struct ContinuationInputProjection {
     producer_owner: PredeclaredFunctionId,
     consumer_owner: PredeclaredFunctionId,
-    source_owner: PredeclaredFunctionId,
-    source_abi_position: u32,
-    source: ContinuationInputSource,
+    /// `D1` — the closed coordinate domain naming this value in its producer.
+    /// ⛔ Replaces the inline `source_owner`/`source_abi_position`/`source`
+    /// triple; those are the `EntryAbi` arm's components and are unchanged
+    /// there.
+    coordinate: ContinuationSourceCoordinate,
     ordinal: u32,
     carrier: AbiCarrier,
     ownership: AbiOwnership,
@@ -800,9 +969,12 @@ enum ContinuationImmediateResolution<'plan> {
 /// still name invocation-owned storage.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ContinuationSourceSlotAuthority {
-    source_owner: PredeclaredFunctionId,
-    source_abi_position: u32,
-    source: ContinuationInputSource,
+    /// `D1` — the closed coordinate domain. The contract fields below are
+    /// slot-derived for the `EntryAbi` arm and planner-derived for the
+    /// `ProducerLocal` one; that difference is in how they are *obtained*, not
+    /// in what they mean, so they stay beside the coordinate rather than
+    /// inside it.
+    coordinate: ContinuationSourceCoordinate,
     carrier: AbiCarrier,
     ownership: AbiOwnership,
     storage_owner: AbiStorageOwner,
@@ -1143,8 +1315,14 @@ impl<'plan> ContinuationUnitView<'plan> {
             .iter()
             .zip(self.inputs)
             .map(|(projection, authority)| {
+                // `D1` — the ABI-plane input authority records an ENTRY source
+                // owner, so agreement is checked in that domain. ⛔ A
+                // producer-local coordinate refuses here rather than being
+                // compared against a field that cannot hold it.
+                let (source_owner, _, _) =
+                    projection.coordinate.entry_abi_pending_producer_local()?;
                 if projection.ordinal != authority.ordinal
-                    || projection.source_owner != authority.source_owner
+                    || source_owner != authority.source_owner
                 {
                     return Err(planner_error(
                         "a continuation input projection disagrees with its validated ABI input \
@@ -1236,9 +1414,7 @@ pub(in crate::cranelift_backend) enum ContinuationOrdinaryEnvelopeRole {
 fn continuation_input_view(projection: &ContinuationInputProjection) -> ContinuationInputView {
     ContinuationInputView {
         ordinal: projection.ordinal,
-        source_owner: projection.source_owner,
-        source_abi_position: projection.source_abi_position,
-        source: projection.source,
+        coordinate: projection.coordinate,
         carrier: projection.carrier,
         ownership: projection.ownership,
         storage_owner: projection.storage_owner,
@@ -1259,9 +1435,10 @@ fn continuation_input_view(projection: &ContinuationInputProjection) -> Continua
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) struct ContinuationInputView {
     pub(in crate::cranelift_backend) ordinal: u32,
-    pub(in crate::cranelift_backend) source_owner: PredeclaredFunctionId,
-    pub(in crate::cranelift_backend) source_abi_position: u32,
-    pub(in crate::cranelift_backend) source: ContinuationInputSource,
+    /// `D1` — the closed coordinate domain naming this value in its producer.
+    /// ⛔ The emission seam must **match** on it; there is no field here that
+    /// answers "which ABI position" without first answering "which domain".
+    pub(in crate::cranelift_backend) coordinate: ContinuationSourceCoordinate,
     pub(in crate::cranelift_backend) carrier: AbiCarrier,
     pub(in crate::cranelift_backend) ownership: AbiOwnership,
     pub(in crate::cranelift_backend) storage_owner: AbiStorageOwner,
@@ -4850,21 +5027,37 @@ fn continuation_owner_entry_sources(
             }
         };
         sources.push(ContinuationSourceSlotAuthority {
-            source_owner: owner,
-            source_abi_position,
-            source,
+            // ⭐ This function enumerates the ENTRY ABI input run and nothing
+            // else, so it produces exactly the `EntryAbi` arm. That is not an
+            // omission: a value with no entry position is by construction not
+            // in the population this function walks.
+            coordinate: ContinuationSourceCoordinate::EntryAbi {
+                source_owner: owner,
+                source_abi_position,
+                source,
+            },
             carrier: slot.carrier,
             ownership: slot.ownership,
             storage_owner: slot.storage_owner,
             referent_affinity,
         });
     }
-    sources.sort_by_key(|source| source.source_abi_position);
+    let entry_position = |source: &ContinuationSourceSlotAuthority| match source.coordinate {
+        ContinuationSourceCoordinate::EntryAbi {
+            source_abi_position, ..
+        } => source_abi_position,
+        // ⛔ Unreachable by construction — every push above is `EntryAbi` — and
+        // deliberately mapped to a position no exact run can hold, so a future
+        // arm smuggled into this walk fails the exactness check below instead
+        // of sorting silently into it.
+        ContinuationSourceCoordinate::ProducerLocal { .. } => u32::MAX,
+    };
+    sources.sort_by_key(entry_position);
     if sources.len() != input_count as usize
         || sources
             .iter()
             .enumerate()
-            .any(|(position, source)| source.source_abi_position as usize != position)
+            .any(|(position, source)| entry_position(source) as usize != position)
     {
         return Err(planner_error(
             "continuation owner entry environment is not exact for its ABI slots",
@@ -5049,14 +5242,42 @@ fn validate_continuation_source_slot(
     plan: &StaticTransitionPlan<'_>,
     source: &ContinuationSourceSlotAuthority,
 ) -> Result<(), CraneliftBackendError> {
-    let expected = continuation_owner_entry_sources(plan, source.source_owner)?
-        .into_iter()
-        .find(|candidate| candidate.source_abi_position == source.source_abi_position)
-        .ok_or_else(|| planner_error("continuation value names no exact source ABI slot"))?;
-    if expected != *source || source.referent_affinity.is_empty() {
-        return Err(planner_error(
-            "continuation value disagrees with its exact source ABI provenance",
-        ));
+    // `D1` `D3` consumer 1 of 3 — the slot's only exact validator.
+    //
+    // ⛔ Exhaustive over the coordinate domains with no wildcard. The
+    // producer-local arm is **refused**, never exempted: the node bans
+    // exempting a new arm from this validator, and a refusal is the opposite of
+    // an exemption — it fails closed until `D3` gives this consumer the
+    // producer-local derivation to re-run.
+    match source.coordinate {
+        ContinuationSourceCoordinate::EntryAbi {
+            source_owner,
+            source_abi_position,
+            ..
+        } => {
+            let expected = continuation_owner_entry_sources(plan, source_owner)?
+                .into_iter()
+                .find(|candidate| {
+                    matches!(
+                        candidate.coordinate,
+                        ContinuationSourceCoordinate::EntryAbi {
+                            source_abi_position: candidate_position,
+                            ..
+                        } if candidate_position == source_abi_position
+                    )
+                })
+                .ok_or_else(|| {
+                    planner_error("continuation value names no exact source ABI slot")
+                })?;
+            if expected != *source || source.referent_affinity.is_empty() {
+                return Err(planner_error(
+                    "continuation value disagrees with its exact source ABI provenance",
+                ));
+            }
+        }
+        ContinuationSourceCoordinate::ProducerLocal { .. } => {
+            source.coordinate.entry_abi_pending_producer_local()?;
+        }
     }
     Ok(())
 }
@@ -5446,7 +5667,15 @@ fn exact_continuation_projection(
                 planner_capacity_error("continuation projection ordinal exhausted")
             })?;
             let immediate_slot = match immediate {
-                ContinuationImmediateResolution::RootIsImmediate => input.source_abi_position,
+                ContinuationImmediateResolution::RootIsImmediate => {
+                    // `D1` `D3` consumer 3 of 3, planner half — the emitting
+                    // function IS the root owner, so the immediate slot is the
+                    // entry ABI position. ⛔ A producer-local value has none,
+                    // and this refuses rather than substituting the ordinal.
+                    let (_, source_abi_position, _) =
+                        input.coordinate.entry_abi_pending_producer_local()?;
+                    source_abi_position
+                }
                 ContinuationImmediateResolution::GeneratedContext {
                     context_parameters,
                     enclosing_inputs,
@@ -5456,12 +5685,15 @@ fn exact_continuation_projection(
                     // laid out immediately after its parameter run. Matching on
                     // full root provenance -- owner AND position -- is what
                     // makes this a lookup rather than a coincidence of index.
+                    //
+                    // `D1` `D3` consumer 2 of 3 — the comparison is now over the
+                    // **whole** coordinate rather than an owner/position pair.
+                    // ⛔ That is strictly stronger and domain-aware: a local
+                    // binding can never match an entry position by carrying the
+                    // same integer, because the two are not the same type.
                     let position = enclosing_inputs
                         .iter()
-                        .position(|enclosing| {
-                            enclosing.source_owner == input.source_owner
-                                && enclosing.source_abi_position == input.source_abi_position
-                        })
+                        .position(|enclosing| enclosing.coordinate == input.coordinate)
                         .ok_or_else(|| {
                             planner_error(
                                 "a continuation input's root provenance is not among the \
@@ -5483,9 +5715,7 @@ fn exact_continuation_projection(
                 immediate_slot,
                 producer_owner: environment.producer_owner,
                 consumer_owner: environment.consumer_owner,
-                source_owner: input.source_owner,
-                source_abi_position: input.source_abi_position,
-                source: input.source,
+                coordinate: input.coordinate,
                 ordinal,
                 carrier: input.carrier,
                 ownership: input.ownership,
@@ -5557,6 +5787,44 @@ fn exact_continuation_ordinary_parameters(
         .map_err(|_| planner_capacity_error("continuation ordinary arity exhausted"))
 }
 
+/// Copy exactly one component of an `EntryAbi` coordinate from `source` into
+/// `target`, for the `AC-2` omission matrix.
+///
+/// ⛔ Panics on a producer-local coordinate. The matrix proves a field is
+/// load-bearing by neutralizing it and observing the two keys become equal; a
+/// silent no-op would leave them unequal and be read as proof.
+#[cfg(test)]
+fn copy_entry_coordinate_component(
+    target: &mut ContinuationSourceCoordinate,
+    source: &ContinuationSourceCoordinate,
+    component: ContinuationProjectionOmission,
+) {
+    let (
+        ContinuationSourceCoordinate::EntryAbi {
+            source_owner: from_owner,
+            source_abi_position: from_position,
+            source: from_source,
+        },
+        ContinuationSourceCoordinate::EntryAbi {
+            source_owner: to_owner,
+            source_abi_position: to_position,
+            source: to_source,
+        },
+    ) = (source, target)
+    else {
+        panic!(
+            "the AC-2 omission matrix reached a producer-local coordinate; it would have \
+             neutralized nothing and reported the field load-bearing anyway"
+        );
+    };
+    match component {
+        ContinuationProjectionOmission::SourceOwner => *to_owner = *from_owner,
+        ContinuationProjectionOmission::SourceAbiPosition => *to_position = *from_position,
+        ContinuationProjectionOmission::Source => *to_source = *from_source,
+        other => panic!("{other:?} is not a coordinate component"),
+    }
+}
+
 #[cfg(test)]
 fn continuation_keys_equal_under_mutation(
     left: &ContinuationSpecializationKey,
@@ -5586,13 +5854,21 @@ fn continuation_keys_equal_under_mutation(
                     ContinuationProjectionOmission::ConsumerOwner => {
                         target.consumer_owner = source.consumer_owner
                     }
-                    ContinuationProjectionOmission::SourceOwner => {
-                        target.source_owner = source.source_owner
+                    // `D1` — the three source components now live inside the
+                    // `EntryAbi` arm, so the copy-back reaches into it. ⛔ A
+                    // producer-local coordinate PANICS rather than silently
+                    // copying nothing: a no-op here would leave the two keys
+                    // unequal and the control would report "distinguished"
+                    // while having applied no mutation at all.
+                    ContinuationProjectionOmission::SourceOwner
+                    | ContinuationProjectionOmission::SourceAbiPosition
+                    | ContinuationProjectionOmission::Source => {
+                        copy_entry_coordinate_component(
+                            &mut target.coordinate,
+                            &source.coordinate,
+                            field,
+                        )
                     }
-                    ContinuationProjectionOmission::SourceAbiPosition => {
-                        target.source_abi_position = source.source_abi_position
-                    }
-                    ContinuationProjectionOmission::Source => target.source = source.source,
                     ContinuationProjectionOmission::Ordinal => target.ordinal = source.ordinal,
                     ContinuationProjectionOmission::Carrier => target.carrier = source.carrier,
                     ContinuationProjectionOmission::Ownership => {
@@ -18470,12 +18746,15 @@ mod tests {
                 unit.key
                     .continuation_inputs
                     .iter()
-                    .map(|input| (input.source_owner, input.source_abi_position))
+                    .map(|input| {
+                        let (owner, position, _) = input.coordinate.expect_entry_abi();
+                        (owner, position)
+                    })
                     .collect::<Vec<_>>(),
                 vec![(unit.key.consumer_owner, 0), (unit.key.consumer_owner, 1)]
             );
             assert!(matches!(
-                unit.key.continuation_inputs[1].source,
+                unit.key.continuation_inputs[1].coordinate.expect_entry_abi().2,
                 ContinuationInputSource::LexicalCapture { .. }
             ));
             assert_eq!(
@@ -18719,9 +18998,11 @@ mod tests {
         );
         assert_eq!(unit.key.continuation_inputs.len(), 2);
         let input = &unit.key.continuation_inputs[0];
-        assert_eq!(input.source_owner, unit.key.consumer_owner);
-        assert_eq!(input.source_abi_position, 1);
-        assert_eq!(input.source, ContinuationInputSource::Parameter);
+        let (source_owner, source_abi_position, source) =
+            input.coordinate.expect_entry_abi();
+        assert_eq!(source_owner, unit.key.consumer_owner);
+        assert_eq!(source_abi_position, 1);
+        assert_eq!(source, ContinuationInputSource::Parameter);
         assert_eq!(
             input.referent_affinity,
             vec![
@@ -18785,7 +19066,7 @@ mod tests {
                 .key
                 .continuation_inputs
                 .iter()
-                .map(|input| input.source_abi_position)
+                .map(|input| input.coordinate.expect_entry_abi().1)
                 .collect::<Vec<_>>(),
             vec![1, 0, 1],
         );
@@ -18808,7 +19089,7 @@ mod tests {
                 .key
                 .continuation_inputs
                 .iter()
-                .map(|input| input.source_abi_position)
+                .map(|input| input.coordinate.expect_entry_abi().1)
                 .collect::<Vec<_>>(),
             vec![1, 0],
             "the production mutation must discard the required tail",
@@ -18832,7 +19113,7 @@ mod tests {
                 .key
                 .continuation_inputs
                 .iter()
-                .map(|input| input.source_abi_position)
+                .map(|input| input.coordinate.expect_entry_abi().1)
                 .collect::<Vec<_>>(),
             vec![0, 1],
             "the production mutation must restate descriptor ordinals",
@@ -18960,6 +19241,128 @@ mod tests {
         );
     }
 
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D1` — the two planner-side consumers of
+    /// the coordinate refuse the producer-local domain instead of reading an
+    /// entry ABI position it does not have.**
+    ///
+    /// `D1` represents the domain; `D3` teaches the consumers to assign it.
+    /// Between the two, the honest behaviour is a refusal, and a refusal nobody
+    /// exercises is indistinguishable from a missing one — so this presents a
+    /// producer-local coordinate directly.
+    ///
+    /// MEASURED: `validate_continuation_source_slot` and
+    /// `exact_continuation_projection` each return `Err` on a producer-local
+    /// coordinate, and each returns `Ok` on the same record carrying its
+    /// original entry coordinate. CLAIMED: neither consumer has a path that
+    /// silently reads an entry position out of the local domain. THE GAP: this
+    /// says nothing about whether `D3`'s eventual derivations are *correct* —
+    /// only that the pre-`D3` state fails closed rather than open.
+    ///
+    /// ⭐ The positive control is the load-bearing half. `Err` is satisfied by a
+    /// record that was malformed for some unrelated reason, so each row proves
+    /// the same record validates when its coordinate is the entry one.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_producer_local_coordinate_is_refused_by_both_planner_consumers() {
+        let plan = contspec_plan();
+        let unit = &plan.continuation_specializations[0];
+        let entry_sources = continuation_owner_entry_sources(&plan, unit.key.consumer_owner)
+            .expect("the consumer owner has an exact entry environment");
+        let exact = entry_sources
+            .first()
+            .expect("the fixture consumer has at least one entry input")
+            .clone();
+
+        // Positive control: the untouched record validates.
+        validate_continuation_source_slot(&plan, &exact)
+            .expect("the exact entry-ABI authority must validate, or this row proves nothing");
+
+        let mut local = exact.clone();
+        local.coordinate = ContinuationSourceCoordinate::producer_local_probe();
+        let refusal = validate_continuation_source_slot(&plan, &local)
+            .expect_err("the exact slot validator must refuse a producer-local coordinate");
+        assert!(
+            format!("{refusal:?}").contains("producer-local binding"),
+            "the validator must refuse with its OWN message rather than incidentally: {refusal:?}"
+        );
+
+        // The projection's `RootIsImmediate` arm: the immediate slot IS the
+        // entry position there, so a local coordinate has no answer.
+        let entry_environment = ContinuationProducerEnvironment {
+            producer_owner: unit.key.producer_owner,
+            producer_result_origin: unit.key.producer_result_origin,
+            producer_construct_origin: unit.key.producer_construct_origin,
+            consumer_owner: unit.key.consumer_owner,
+            inputs: vec![exact],
+        };
+        exact_continuation_projection(
+            &entry_environment,
+            unit.key.ordinary_parameters,
+            &ContinuationImmediateResolution::RootIsImmediate,
+        )
+        .expect("the entry-coordinate projection must succeed, or this row proves nothing");
+
+        let local_environment = ContinuationProducerEnvironment {
+            inputs: vec![local],
+            ..entry_environment
+        };
+        let refusal = exact_continuation_projection(
+            &local_environment,
+            unit.key.ordinary_parameters,
+            &ContinuationImmediateResolution::RootIsImmediate,
+        )
+        .expect_err("the projection must refuse a producer-local coordinate at RootIsImmediate");
+        assert!(
+            format!("{refusal:?}").contains("producer-local binding"),
+            "the projection must refuse with its OWN message: {refusal:?}"
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D1` `AC-2` — the coordinate is a CLOSED
+    /// sum, and an entry position is not representable as a local binding.**
+    ///
+    /// The property `AC-2` actually needs is compile-time: a third domain must
+    /// not compile until every consumer assigns it. That is carried by there
+    /// being no wildcard arm at any of the matches, which no runtime assertion
+    /// can observe. What *is* observable, and is the reason the sum exists, is
+    /// that the two domains never compare equal — so an entry coordinate can
+    /// never be mistaken for a local binding by a consumer comparing
+    /// coordinates.
+    ///
+    /// ⛔ This is deliberately NOT an assertion about the source text of the
+    /// matches. It tests the behaviour the type buys.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_the_two_coordinate_domains_never_compare_equal() {
+        let plan = contspec_plan();
+        let entry_sources = continuation_owner_entry_sources(
+            &plan,
+            plan.continuation_specializations[0].key.consumer_owner,
+        )
+        .expect("the consumer owner has an exact entry environment");
+        let local = ContinuationSourceCoordinate::producer_local_probe();
+        assert!(
+            !entry_sources.is_empty(),
+            "the fixture must supply at least one entry coordinate to compare against"
+        );
+        for source in &entry_sources {
+            assert!(
+                matches!(
+                    source.coordinate,
+                    ContinuationSourceCoordinate::EntryAbi { .. }
+                ),
+                "the entry walk must produce only entry coordinates"
+            );
+            assert_ne!(
+                source.coordinate, local,
+                "an entry coordinate compared equal to a producer-local one, so the \
+                 generated-context capture lookup could resolve one as the other"
+            );
+        }
+    }
+
     fn mutate_projection_field(
         projection: &mut ContinuationInputProjection,
         field: ContinuationProjectionOmission,
@@ -18971,15 +19374,34 @@ mod tests {
             ContinuationProjectionOmission::ConsumerOwner => {
                 projection.consumer_owner = PredeclaredFunctionId(u32::MAX)
             }
-            ContinuationProjectionOmission::SourceOwner => {
-                projection.source_owner = PredeclaredFunctionId(u32::MAX)
-            }
-            ContinuationProjectionOmission::SourceAbiPosition => {
-                projection.source_abi_position = u32::MAX
-            }
-            ContinuationProjectionOmission::Source => {
-                projection.source = ContinuationInputSource::SeedCapture {
-                    defining_origin: StaticOriginId(u32::MAX),
+            // `D1` — same three components, now inside the `EntryAbi` arm.
+            // ⛔ The sentinel is written INTO the arm, never by replacing the
+            // arm: swapping the whole coordinate for a producer-local one would
+            // make every row of the matrix pass on the domain tag alone.
+            ContinuationProjectionOmission::SourceOwner
+            | ContinuationProjectionOmission::SourceAbiPosition
+            | ContinuationProjectionOmission::Source => {
+                let ContinuationSourceCoordinate::EntryAbi {
+                    source_owner,
+                    source_abi_position,
+                    source,
+                } = &mut projection.coordinate
+                else {
+                    panic!("the AC-2 omission matrix reached a producer-local coordinate");
+                };
+                match field {
+                    ContinuationProjectionOmission::SourceOwner => {
+                        *source_owner = PredeclaredFunctionId(u32::MAX)
+                    }
+                    ContinuationProjectionOmission::SourceAbiPosition => {
+                        *source_abi_position = u32::MAX
+                    }
+                    ContinuationProjectionOmission::Source => {
+                        *source = ContinuationInputSource::SeedCapture {
+                            defining_origin: StaticOriginId(u32::MAX),
+                        }
+                    }
+                    other => panic!("{other:?} is not a coordinate component"),
                 }
             }
             ContinuationProjectionOmission::Ordinal => projection.ordinal = u32::MAX,

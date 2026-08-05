@@ -12118,8 +12118,8 @@ fn d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_work
                         // would have to infer it from the emission not failing.
                         .map(|input| {
                             (
-                                input.source_owner,
-                                input.source_abi_position,
+                                input.coordinate.expect_entry_abi().0,
+                                input.coordinate.expect_entry_abi().1,
                                 input.immediate_slot,
                             )
                         })
@@ -12149,7 +12149,10 @@ fn d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_work
                         .captures()
                         .expect("context captures")
                         .iter()
-                        .map(|input| (input.source_owner, input.source_abi_position))
+                        .map(|input| {
+                            let (owner, position, _) = input.coordinate.expect_entry_abi();
+                            (owner, position)
+                        })
                         .collect::<Vec<_>>(),
                 )
             })
@@ -12786,13 +12789,14 @@ fn d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_
                     predeclared += 1;
                     for input in &inputs {
                         assert_eq!(
-                            input.source_owner, owner,
+                            input.coordinate.expect_entry_abi().0, owner,
                             "a predeclared emitter IS its inputs' root provenance owner, so a \
                              projection naming another owner was built against a different \
                              emitter than the one that will run"
                         );
                         assert_eq!(
-                            input.immediate_slot, input.source_abi_position,
+                            input.immediate_slot,
+                            input.coordinate.expect_entry_abi().1,
                             "for a predeclared emitter the root ABI position and the immediate \
                              slot index the same environment, so they must agree; this is the \
                              consistency law that lets that arm read either field"
@@ -12802,7 +12806,9 @@ fn d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_
                 ContinuationEmissionOwner::Specialization(_) => {
                     if inputs
                         .iter()
-                        .any(|input| input.immediate_slot != input.source_abi_position)
+                        .any(|input| {
+                            input.immediate_slot != input.coordinate.expect_entry_abi().1
+                        })
                     {
                         specialization_with_a_real_difference += 1;
                     }
@@ -13370,6 +13376,54 @@ fn d5a_the_capture_projection_reads_the_immediate_slot_and_bounds_it() {
              guard: {refusal}"
         );
     }
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D1` — the emission resolver refuses a
+/// producer-local coordinate rather than indexing with whatever it can reach.**
+///
+/// This seam's job is to turn a coordinate into an index into the emitting
+/// environment. `D1` adds a coordinate domain it has not been taught to locate,
+/// and `D3` will teach it. Between the two, the only honest answer is a
+/// refusal — and the refusal is on a branch no plan the planner will build can
+/// reach yet, so without presenting one deliberately it is unmeasured code.
+///
+/// ⚠ **MEASURED**: the object emission refuses, with the message this arm
+/// raises, and the perturbation is confirmed to have fired. **CLAIMED**: the
+/// resolver dispatches on the coordinate *domain* before it reads any position.
+/// **THE GAP**: this proves the arm is reachable and fails closed. It says
+/// nothing about `D3`'s eventual locating logic, which does not exist.
+///
+/// **Promise class: transition sentinel** — it is retired by `D3`, which
+/// replaces this refusal with a real resolution. Named for the boundary rather
+/// than for a count, and this sentence is the event that retires it.
+#[test]
+fn contsrc_the_emission_resolver_refuses_a_producer_local_coordinate() {
+    let refusal = with_d5a_route_mutation(
+        D5aRouteMutation::PresentProducerLocalCoordinate,
+        || {
+            let refusal =
+                crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                    "contsrc_producer_local",
+                    false,
+                )
+                .map(|_| ())
+                .map_err(|error| format!("{error:?}"))
+                .expect_err(
+                    "the emission resolver must refuse a producer-local coordinate; a compile \
+                     means the domain match is inert on the route that reaches it",
+                );
+            assert!(
+                d5a_route_applications() > 0,
+                "the perturbation must have fired, or this row measured the unmutated route"
+            );
+            refusal
+        },
+    );
+    assert!(
+        refusal.contains("producer-local binding"),
+        "the refusal must be the one this arm raises, not an incidental failure \
+         downstream: {refusal}"
+    );
 }
 
 /// **`D5a` checkpoint 4 step 1 — the carried invocation's retained source

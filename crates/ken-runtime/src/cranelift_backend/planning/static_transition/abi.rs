@@ -858,9 +858,13 @@ fn append_continuation_descriptor(
             len: u32::try_from(projection.referent_affinity.len())
                 .map_err(|_| planner_capacity_error("continuation ABI affinity range exhausted"))?,
         };
+        // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — this plane records an ENTRY source
+        // owner. ⛔ A producer-local coordinate has no such owner to record and
+        // refuses here; `D3` decides what this plane carries for that domain.
+        let (source_owner, _, _) = projection.coordinate.entry_abi_pending_producer_local()?;
         abi.continuation_inputs.push(AbiContinuationInputAuthority {
             ordinal,
-            source_owner: projection.source_owner,
+            source_owner,
             referent_affinity,
         });
         abi.continuation_slots.push(AbiSlot {
@@ -1044,11 +1048,14 @@ fn append_continuation_context_descriptor(
                 planner_capacity_error("generated context ABI affinity range exhausted")
             })?,
         };
+        // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — same entry-domain refusal as the
+        // specialization plane above.
+        let (source_owner, _, _) = projection.coordinate.entry_abi_pending_producer_local()?;
         abi.context_inputs.push(AbiContinuationInputAuthority {
             ordinal,
             // ⚠ ROOT provenance, retained unchanged. The context makes the value
             // *available*; it does not become its origin.
-            source_owner: projection.source_owner,
+            source_owner,
             referent_affinity,
         });
         abi.context_slots.push(AbiSlot {
@@ -1988,8 +1995,11 @@ impl AbiPlane {
                 let ordinal = u32::try_from(position).map_err(|_| {
                     planner_capacity_error("continuation ABI input ordinal exhausted")
                 })?;
-                if authority.ordinal != ordinal || authority.source_owner != projection.source_owner
-                {
+                // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — entry-domain agreement, as
+                // at the push site. ⛔ Refuses on a producer-local coordinate.
+                let (source_owner, _, _) =
+                    projection.coordinate.entry_abi_pending_producer_local()?;
+                if authority.ordinal != ordinal || authority.source_owner != source_owner {
                     return Err(planner_error(
                         "continuation ABI input source owner disagrees with the planner projection",
                     ));

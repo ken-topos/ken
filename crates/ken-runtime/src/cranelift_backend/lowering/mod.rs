@@ -80,7 +80,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     DeclarationCallTargetClass,
     ContinuationContextId, ContinuationEmissionOwner,
     ContinuationInputView, ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge,
-    ContinuationSpecializationId,
+    ContinuationSourceCoordinate, ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, FieldIdentity, JoinPlanToken,
     PlannedReferentLifetime,
     host_effect_seat_contract_of, EffectSeatNeed, EffectSeatOperation, EffectSeatPhase,
@@ -1566,6 +1566,14 @@ pub(in crate::cranelift_backend) enum D5aRouteMutation {
     /// its inputs' root provenance, move the immediate slot off the root ABI
     /// position it must equal.
     PerturbPredeclaredImmediateSlot,
+    /// `RT-CONTSRC-PRODUCER-LOCAL` `D1` — present a **producer-local**
+    /// coordinate at both emission seams.
+    ///
+    /// ⚠ Perturbs the seam's INPUT, deliberately: `D1` represents the
+    /// producer-local domain but nothing constructs one yet, so no plan the
+    /// planner will build reaches these arms. Without this the two refusals are
+    /// unmeasured code, which is indistinguishable from absent code.
+    PresentProducerLocalCoordinate,
     // ── the generated-context capture suffix ──────────────────────────────
     // ── the carried-invocation binding's retained source coordinates ───────
     /// Perturb the recursive position the carried invocation presents, so the

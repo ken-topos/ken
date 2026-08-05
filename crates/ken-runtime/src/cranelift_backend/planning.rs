@@ -47,7 +47,11 @@ pub(super) use static_transition::{
     ContinuationCallIdentity, ContinuationCallView, ContinuationContextId,
     ContinuationContextView, ContinuationEmissionOwner,
     ContinuationInputView,
-    ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge, ContinuationSpecializationId,
+    ContinuationOrdinaryEnvelopeRole, ContinuationResultEdge,
+    // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — the closed coordinate sum reaches
+    // lowering because the emission resolver must MATCH on it; there is no
+    // accessor that answers "which ABI position" without the domain.
+    ContinuationSourceCoordinate, ContinuationSpecializationId,
     ContinuationUnitView,
 };
 #[cfg(test)]

@@ -6252,10 +6252,47 @@ impl<'a> Lowering<'a> {
             producer_env.len(),
             unit.continuation_inputs()?
                 .iter()
-                .map(|input| (input.source_owner, input.source_abi_position))
+                .map(|input| input.coordinate)
                 .collect::<Vec<_>>()
         ));
         for input in unit.continuation_inputs()? {
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — present a producer-local
+            // coordinate to this seam, so its refusal is measured rather than
+            // merely written. ⛔ Applied BEFORE the domain match, because the
+            // question is what the match does with a domain it cannot locate.
+            #[cfg(test)]
+            let input = {
+                let mut input = input;
+                if d5a_route_mutation() == D5aRouteMutation::PresentProducerLocalCoordinate {
+                    record_d5a_route_application();
+                    input.coordinate = ContinuationSourceCoordinate::producer_local_probe();
+                }
+                input
+            };
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D1` `D3` consumer 3 of 3 — the
+            // emission resolver. ⛔ Exhaustive over the coordinate domains with
+            // no default and no fallthrough: this seam indexes an environment,
+            // and a domain it has not been taught to locate must refuse rather
+            // than index with whatever integer it can reach.
+            let (source_owner, source_abi_position) = match input.coordinate {
+                ContinuationSourceCoordinate::EntryAbi {
+                    source_owner,
+                    source_abi_position,
+                    ..
+                } => (source_owner, source_abi_position),
+                ContinuationSourceCoordinate::ProducerLocal { binding, locator } => {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a continuation input names the producer-local binding \
+                             {binding:?} at {locator:?}; RT-CONTSRC-PRODUCER-LOCAL D1 \
+                             represents that coordinate and D3 teaches this seam to locate \
+                             it. Refusing is deliberate: the alternative is reading an entry \
+                             ABI position this value does not have"
+                        ),
+                    ));
+                }
+            };
             // `D5a` checkpoint 4 step 3 -- the capture projection's three
             // reaching mutations. ⛔ Each perturbs one COORDINATE the projection
             // supplies; the two guards below are untouched.
@@ -6265,7 +6302,7 @@ impl<'a> Lowering<'a> {
                 match d5a_route_mutation() {
                     D5aRouteMutation::ReadRootPositionAsImmediateSlot => {
                         record_d5a_route_application();
-                        input.immediate_slot = input.source_abi_position;
+                        input.immediate_slot = source_abi_position;
                     }
                     // ⛔ Scoped to the SPECIALIZATION arm. Applied to a
                     // predeclared emitter it is caught by that arm's equality
@@ -6302,17 +6339,16 @@ impl<'a> Lowering<'a> {
                     // the owner because it always was, and the equality because
                     // it is the consistency law that lets this arm read either
                     // field and get the same answer.
-                    if input.source_owner != owner {
+                    if source_owner != owner {
                         return Err(unsupported(
                             "ContinuationSpecialization",
                             format!(
-                                "a continuation input names source owner {:?}, which is not the \
-                                 unit currently being defined ({defining:?})",
-                                input.source_owner
+                                "a continuation input names source owner {source_owner:?}, which \
+                                 is not the unit currently being defined ({defining:?})"
                             ),
                         ));
                     }
-                    if input.immediate_slot != input.source_abi_position {
+                    if input.immediate_slot != source_abi_position {
                         return Err(unsupported(
                             "ContinuationSpecialization",
                             "a continuation input emitted from its own root owner has an \
@@ -6345,7 +6381,7 @@ impl<'a> Lowering<'a> {
                              slot, not the root ABI position {} beside it",
                             input.immediate_slot,
                             producer_env.len(),
-                            input.source_abi_position,
+                            source_abi_position,
                         ),
                     )
                 })?;
@@ -8317,21 +8353,55 @@ impl<'a> Lowering<'a> {
         })?;
         let mut inputs = inputs.to_vec();
         for capture in view.captures()? {
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — present a producer-local
+            // coordinate to this seam, so its refusal is measured rather than
+            // merely written. ⛔ Applied BEFORE the domain match, because the
+            // question is what the match does with a domain it cannot locate.
+            #[cfg(test)]
+            let capture = {
+                let mut capture = capture;
+                if d5a_route_mutation() == D5aRouteMutation::PresentProducerLocalCoordinate {
+                    record_d5a_route_application();
+                    capture.coordinate = ContinuationSourceCoordinate::producer_local_probe();
+                }
+                capture
+            };
+            // `RT-CONTSRC-PRODUCER-LOCAL` `D1` `D3` consumer 3 of 3, context
+            // half. ⛔ Exhaustive over the coordinate domains with no default,
+            // for the same reason as the specialization seam: this reads an ABI
+            // operand run, which a producer-local value is not in.
+            let (source_owner, source_abi_position) = match capture.coordinate {
+                ContinuationSourceCoordinate::EntryAbi {
+                    source_owner,
+                    source_abi_position,
+                    ..
+                } => (source_owner, source_abi_position),
+                ContinuationSourceCoordinate::ProducerLocal { binding, locator } => {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "a generated context capture names the producer-local binding \
+                             {binding:?} at {locator:?}; RT-CONTSRC-PRODUCER-LOCAL D1 \
+                             represents that coordinate and D3 teaches this seam to locate it"
+                        ),
+                    ));
+                }
+            };
             // ROOT provenance versus IMMEDIATE availability, kept apart exactly
             // as at the specialization emission seam. Exhaustive over the owner
             // classes with no catch-all.
             match defining_owner {
                 ContinuationEmissionOwner::Predeclared(owner) => {
-                    if capture.source_owner != owner {
+                    if source_owner != owner {
                         return Err(unsupported(
                             "ContinuationSpecialization",
                             format!(
                                 "a generated context capture names root source owner {:?}, which                                  is not the function emitting this carried invocation; its value                                  is not available here and reconstructing one would be the                                  reverse-map the ruling forbids",
-                                capture.source_owner
+                                source_owner
                             ),
                         ));
                     }
-                    if capture.immediate_slot != capture.source_abi_position {
+                    if capture.immediate_slot != source_abi_position {
                         return Err(unsupported(
                             "ContinuationSpecialization",
                             "a generated context capture emitted from its own root owner has an                              immediate slot that disagrees with its root ABI position",
@@ -8355,7 +8425,7 @@ impl<'a> Lowering<'a> {
                             "a generated context capture names immediate slot {} outside the                              emitting function's {} ABI operands; note this is the IMMEDIATE                              slot, not the root ABI position {} beside it",
                             capture.immediate_slot,
                             self.function_local.defining_abi_operands.len(),
-                            capture.source_abi_position,
+                            source_abi_position,
                         ),
                     )
                 })?
