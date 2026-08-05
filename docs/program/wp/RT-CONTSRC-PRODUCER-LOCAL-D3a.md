@@ -4,19 +4,43 @@ Deliverable record. Code `ec008478`, control `868fc0aa`, on
 `wp/RT-DECL-CLOSURE-PORT-typed-units` over accepted D2b `7316e13a`
 (record child `2bd724cd`).
 
-Released by `evt_5wvankf3zpg0g` after the Steward recut D3 into D3a and D3b
-(`evt_11esqaep9awbs`) and the Architect ruled the ABI representation
-(`evt_6p6vf0aqnjn3g`, confirming gate at `evt_6p6vf0aqnjn3g`).
+Released by `evt_5wvankf3zpg0g`. The ABI representation — the closed tagged
+provenance sum this deliverable implements — was ruled by the Architect at
+`evt_3xyy1fq66tyvp`. The separate Architect confirming gate at
+`evt_6p6vf0aqnjn3g` answers whether seam 1 lawfully refuses `CurrentLexical`
+at a specialization emitter; it binds D3b only and D3a does not depend on it.
 
 ## Why there is a D3a at all
 
 D3's original cut bundled two consumer groups with different measurability
 into one all-or-nothing deliverable. The act-1 correspondence probe
 (`evt_gp162jb84s8b`) measured that no reaching emission sits at nonzero binder
-depth, so the lowering half consumes a population only D4 creates. The Steward
-named that a sizing defect in the cut and redrew the boundary. D3a is
-everything presently measurable, landed whole; D3b is the two lowering arms
-plus the seam deletion, sequenced with or after D4.
+depth, so the lowering half consumes a population only admission creates. The
+Steward named that a sizing defect in its own cut and redrew the boundary
+(`evt_11esqaep9awbs`).
+
+### The binding order is FOUR checkpoints
+
+⛔ The Steward's two-checkpoint recut — D3a/D3b with D3b "with or after D4" —
+is **superseded** by Architect `evt_7vc8zh0rvqyps`, acknowledged by the Steward
+at `evt_78xj476p05zvj`. The two-checkpoint phrasing was directionally right and
+under-specified in the one place that decides the work: D4 as a single unit
+cannot both *create* the nonzero-depth population and *prove* the final
+partition, so it never named what would produce D3b's evidence.
+
+1. **D3a** — non-lowering closure. This record. Both lowering consumers
+   explicitly refuse; the seam and the pending population stay visible.
+2. **D4a** — bounded admission and measurement. Admits the census-bound `V`
+   population under the existing authority while D3a's refusals stay in place,
+   so real reaching producer-local emissions exist and nonzero-depth
+   `CurrentLexical` correspondence can be measured. ⭐ It **may be deliberately
+   red**: a red there is the instrument working, not a regression.
+3. **D3b** — lowering closure, only after that evidence exists. The seam is
+   deleted only when its closed population is empty.
+4. **D4b** — admission closeout: `interned = V`, `declined = R`.
+
+⛔ D3a precedes D4a and not the reverse: admission cannot safely run before the
+lowering consumers are explicitly fail-closed.
 
 ## What landed
 
@@ -131,8 +155,8 @@ door with real owners and scopes.
   seams still refuse; D3b owns them.
 - Nothing about the depth-greater-than-zero correspondence between the
   lowering environment and the semantic seat environment. That remains
-  **unmeasured**, per `evt_gp162jb84s8b`, and D4 creates the emissions that
-  would measure it.
+  **unmeasured**, per `evt_gp162jb84s8b`. D4a is the checkpoint that creates
+  the emissions which would measure it.
 - Every D3a arm is reached by direct construction, not by any fixture compile:
   production still declines every producer-local candidate at the D2 gate.
   The controls are built that way deliberately, with positive controls and
@@ -148,5 +172,5 @@ conformance are CI's.
 
 ## Held
 
-D3b, D4, candidate, QA of the node, D6 closure, AC-4, `#27`/case-emission, the
-call-result SCC and downstream D7.
+D4a, D3b, D4b, candidate, QA of the node, D6 closure, AC-4,
+`#27`/case-emission, the call-result SCC and downstream D7.
