@@ -2128,6 +2128,20 @@ family — that is a measurement nobody has taken.
   `e6b4a13b`. **Do not rebase, merge, or cherry-pick `fb8fd881`, `430798bf`,
   `548682c3`, or `42ccd8ec` into it.**
 
+  > **RESUME POINT, 2026-08-05 — exact `6a09ed6840bc334af25015ec57b69ec884e8705c`**
+  > (Architect `evt_6vr00htkk6cpf`), a descendant of `70887529` on this lineage.
+  > **Preserve it; it is accepted WIP substrate, not a candidate.** Accepted in
+  > it: the full 13-operation population, the capability-as-own-seat correction,
+  > exact seat/owner coordinates, per-seat `Need`/`Avail`, the key-axis controls,
+  > and the independent contract recomputation.
+  >
+  > **What it is not:** the accepted population/ledger closure. Two clauses of
+  > this section were false and are recut below — planned producer/consumer
+  > **phase** fields, and the global `planned = consumed` / unused-token
+  > rejection. Runtime resumes from `6a09ed68` and **replaces only the coarse
+  > ledger/claim lifecycle** before proceeding to operation-specific consumption.
+  > The lowering and exact-`Int` slice remain held.
+
   Those tips and `70887529` share merge-base `f7cea8fd` and are **competing
   historical implementations, not independent halves awaiting assembly.** The
   older line lacks the accepted source-aggregate preflight, the typed `Record`
@@ -2249,9 +2263,39 @@ family — that is a measurement nobody has taken.
   - effect origin, exact child origin, and structural position;
   - admitted host operation and semantic ordinal, **after** the conditional
     capability offset;
-  - producer and consumer owner/phase; and
-  - the seat-specific semantic operation and `Need`, followed by the selected
-    representation's `Avail`.
+  - exact producer and consumer **owners**; and
+  - the seat-specific semantic operation and consumer-derived `Need`, followed by
+    the set of operand **phases in which that `Need` is lawfully dischargeable** —
+    the per-seat `Avail`.
+
+  > ##### PHASE IS EVIDENCE, NOT PLANNER AUTHORITY
+  >
+  > Recut 2026-08-05, Architect `evt_6vr00htkk6cpf`.
+  >
+  > **This bullet read "producer and consumer owner/phase", and the planned-phase
+  > half of it is withdrawn for this effect-seat population.** The declared-ABI
+  > witnesses falsify child-join representation as that authority, and the
+  > measured substitution the implementer made is the correct one.
+  >
+  > **Do not invent another statically predicted producer/consumer phase.** Owners
+  > stay planned. Admissible phases stay planned, as `Avail`. The actual
+  > `SpecializedTemplate`-versus-`CarriedWord` phase is **emission evidence** —
+  > observed from the exact operand at the exact consumption seat and checked
+  > against that planned `Avail`. It must not be reverse-derived from a child or
+  > an ABI result.
+  >
+  > **Lifetime is not a replacement phase oracle.** These seats immediately
+  > observe a value rather than retain it; owner/lifetime validity stays with the
+  > typed carrier/helper and aggregate authorities that actually govern the
+  > representation.
+  >
+  > **One correction is owed where the claim moves into the operation-specific
+  > arm: retain the observed phase in the independent claim evidence, and bind the
+  > returned claim to the same operand/arm that performs the read.** Exact
+  > `6a09ed68` checks the phase and then collapses it out of the ledger. **A check
+  > whose evidence is discarded, followed by a later independent read, is not the
+  > closed relation this gate needs** — the two reads can disagree and nothing
+  > sees it.
 
   **`Need` is derived FIRST from the exact operation/seat; `Avail` is THEN checked
   to satisfy it** — never the reverse, which is the inversion this whole section
@@ -2360,9 +2404,78 @@ family — that is a measurement nobody has taken.
   6. **Static population closure.** Enumerate every capability/argument seat for
      **all 13** admitted host operations, **independently of which runtime branch
      the parity row reaches**. Omit, duplicate, transplant, change operation,
-     change ordinal/conditional base, change `Need`, or leave one token unused:
-     each **rejects at the planned-set / emitted-ledger gate before function
-     definition**.
+     change ordinal/conditional base, or change `Need`: each **rejects at the
+     planned-set / emitted-ledger gate before function definition**.
+
+     > **Recut 2026-08-05, Architect `evt_6vr00htkk6cpf`: "or leave one token
+     > unused" is WITHDRAWN, and so is global `planned = consumed`.** The
+     > implementer's measurement is decisive — an un-emitted declaration lawfully
+     > leaves planned seats unused. **`P` here is a closed AUTHORIZATION
+     > population, not an execution obligation.**
+     >
+     > Global closure is **`image(claims) ⊆ P`**. An unused member of `P` is
+     > **lawful and reported**, never a rejection. This is the same law the
+     > aggregate lifecycle already carries in this frame — `dom(R) = E` with
+     > `image(R) ⊆ P`, no surjectivity onto `P` — and the two must not drift
+     > apart again.
+     >
+     > **SCOPE — read this before carrying the withdrawal anywhere else.** Both
+     > withdrawals govern **the effect-seat population only**. Two other
+     > populations in this frame still state a **bijection** with unused-token
+     > rejection, and they are **untouched and still correct**: the
+     > continuation/boundary-use `#27` population (`655 → 650`, the "bijection
+     > mutations" control row) and the case-emission reachability authority's
+     > planned-use/emitted-use bijection. Their `P` is an execution obligation;
+     > this section's `P` is an authorization. **Do not propagate this
+     > withdrawal into them, and do not read their bijection back into the
+     > effect seats** — the populations differ in what `P` means, not in rigour.
+
+  6a. **Per-visit claim-group lifecycle — the global relation is necessary but
+      NOT sufficient.** Exact `6a09ed68` keys its ledger
+      `(FuncId, effect_origin, slot)`, which **merges every repeated lowering of
+      one static occurrence in that body**. The implementation measured such
+      repeats. **Visit A can claim one subset and visit B the complementary
+      subset, and their union passes per-body occurrence completeness while
+      neither visit was complete** — and the key discards which phase each visit
+      observed. Putting claims inside operation-specific arms makes that
+      distinction load-bearing.
+
+      Use a **local claim group per concrete compiler-side lowering visit of one
+      effect occurrence**, on the existing local event/relation discipline:
+
+      1. Open one **ledger-minted, lowering-unconstructible** claim-group identity
+         **before any seat of that effect occurrence is observed**.
+      2. Bind the group to the open function body, the exact effect origin, the
+         operation, and its planner-issued seat population.
+      3. Claim every planned seat **exactly once within that group**. Each claim
+         records the exact planned record **plus the observed phase**, proves
+         `observed_phase ∈ Avail`, and is consumed by that seat's exact
+         operation-specific read.
+      4. **Close the group before host request dispatch or any successful exit.**
+         Its claimed slot set must equal the planned slot set for that occurrence.
+         **No group may remain open at body or global close.**
+      5. **Repeating a complete group for the same static occurrence is lawful.**
+      6. Whole-pass close requires every opened group committed and every recorded
+         claim related to `P`. It does **not** require every member of `P` to have
+         a group.
+
+      **Rejects:** duplicate use of one seat inside a group, a conflicting record
+      at one key, a missing seat in any one group, an extra seat, a wrong
+      operation/owner/ordinal/`Need`, an `observed_phase` outside `Avail`, and a
+      discarded or still-open group.
+
+  6b. **Lifecycle controls — the masking case is the one that decides this.**
+
+      - **Complementary omissions across two repeated visits must reject BOTH
+        incomplete groups**, even though their union equals the planned seat set.
+        This is the discriminator the `(FuncId, effect_origin, slot)` union
+        cannot express; without it the whole per-visit law is unmeasured.
+      - An **un-emitted occurrence** passes as reported-unreached.
+      - **Two identical complete visits** pass.
+      - A **duplicate within one visit** rejects.
+      - A **discarded or open group** rejects.
+      - An **observed-phase mutation rejects at the exact seat** — this is what
+        makes the retained phase evidence load-bearing rather than recorded.
   7. **Lowering closure.** Removing the carried capacity arm **recreates the
      refusal at the exact `264 → 262 / position 1` seat** — on the governing base
      that is the **generic host-effect specialized-only refusal**, not the
