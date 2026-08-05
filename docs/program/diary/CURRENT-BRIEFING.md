@@ -33,42 +33,57 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~03:2xZ · Runtime building D7; nothing owed by me
+## LIVE — 2026-08-05 ~04:0xZ · D7 evidence recut landed; Runtime owes checkpoint 1
 
-**`origin/main` at last check: `9bceb8c5`** (the D7 lifecycle recut, PR #1403;
-frame blob `fa805660`). Verify it; do not trust this line.
+**`origin/main` at last check: `8c3fa82c`** (the D7 item-1 evidence recut, PR
+#1404; frame blob `f937dacd`). Verify it; do not trust this line.
 
 ### The one thing to do next
 
-**Nothing, until Runtime hands back.** `runtime-implementer` is mid-turn on the
-**lazy site-operand correction and the carried capacity route**, resumed from
-exact `f6958b95`, released by `runtime-leader` at 03:01
-(`evt_6jrzzfqg1t2xy`) after the Architect's outcome-(b) disposition at 02:58
-(`evt_see9dbnftqaz`: the positional projection is lawful, the eager full-list
-realization is not). Confirmed engaged by pane at 03:06 — live turn, ctx 14%.
-The leader is idle-and-correct.
+**Nothing, until `runtime-leader` releases checkpoint 1 and Runtime hands
+back.** I posted the recut and the release request at `evt_3n1vv466097jb`. If
+the leader has not picked it up within ~15 minutes of that post, check its pane
+before re-posting — it is a Codex seat and the strand shapes are real.
 
-**THE DISPATCH IS NO LONGER HELD — as of the Architect's 02:47 review
-(`evt_7vxssfyfdh0m1`).** Read every earlier post's "bulk conversion and the
-exact-`Int` helper remain held" as superseded. Still held: candidate, QA, `D6`
-closure, the call-result SCC, and the `#27` / case-emission populations.
+**`runtime-implementer` is compacted (ctx 0%) and idle at an empty composer,**
+compacted at its own quiescent seam right after handing back `ae64f687` and
+before the new work reaches it. Verified on `Compacted` + `Skills restored`.
+Nothing owed by me on it — but **check its pane before any nudge**: on the
+previous cycle the freshly compacted seat woke on the ordinary mention unaided,
+against the standing playbook rule, and a nudge into a live turn double-delivers.
 
-Checkpoint lineage since my recut, each an accepted parent of the next:
+### Where D7 actually stands — the row has NOT reached this node's consumer
+
+**The Architect ruled at `evt_4enxcfe742ta8`:** `ae64f687` is sound D7 substrate,
+preservation-only, **not a candidate**; and the framed reaching row
+`buffer_allocate_malformed_capacity_narrows_to_invalid_bounds` is a
+**non-substitutable cumulative gate** that is still blocked upstream.
+
+**Item 1's before/after pair was unmeasurable and is recut into two ordered
+cumulative checkpoints:**
+
+1. restore the framed `#23` producer on the current lineage, under the capture
+   contract the frame already states in *What the replacement owes*;
+2. then close the exact `264 -> 262 / position 1` consumer with the retained
+   `ae64f687` mechanism.
+
+**The falsified clause said the row first hits the generic host-effect refusal.
+It does not — it refuses at the `#23` producer as a closure capture, and this
+frame's own per-row `D0` table recorded exactly that on 2026-07-29.** A clause
+seven hundred lines from the measurement contradicted it for a week. Runtime's
+bisection (`c85179ce`, `D5a` ckpt 4 step 3) says **when the lineage exposed it,
+not who owns it**; the `#23`-producer / `D7`-consumer attribution is unchanged
+and the `D5a` checked-IH law may not be touched to make the row advance.
+
+Checkpoint lineage, each an accepted parent of the next:
 `6a09ed68` (population substrate) → `727b51a1` (per-visit claim group) →
 `69c68e6e` (pre-definition body close) → `f6958b95` (operation-arm claim
-consumption; bulk pre-operation conversion removed) → in flight.
+consumption) → `ae64f687` (lazy exact-`SiteOperand` + carried exact-`Int`
+capacity route) → checkpoint 1 pending release.
 
-**I compacted `runtime-implementer` at `f6958b95` (03:00), on the leader's
-request.** Used a direct `/compact`, **not `handoff-gate-compact.sh`** — that
-script's `git reset --hard origin/main` is right for a before-new-work gate and
-wrong mid-WP. Nothing is owed by me on it.
-
-> **Measured, and it contradicts the playbook: the freshly compacted seat DID
-> wake on the leader's ordinary mention**, unaided, within minutes. The standing
-> rule is that a just-compacted seat sits idle at an empty composer and needs a
-> pane rouse; I had promised the leader that nudge and it turned out unnecessary.
-> **Check the pane before sending one — a nudge into a live turn
-> double-delivers.** One observation, not yet a retraction of the rule.
+**Still held:** candidate, QA, `D6` closure, `AC-4`, the call-result SCC, and
+the `#27` / case-emission populations. **No replacement reaching witness, and
+the closure-capture refusal is not acceptable as standing branch state.**
 
 **WIP audit clock — DERIVE IT, do not read a stamped deadline.** A fixed
 timestamp here goes stale on every reset event and then fires a spurious audit;
