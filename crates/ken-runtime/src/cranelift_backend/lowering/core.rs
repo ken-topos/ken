@@ -6326,31 +6326,36 @@ impl<'a> Lowering<'a> {
             }
             (
                 ContinuationFrameIdentity::GeneratedContext {
-                    enclosing,
+                    context: claimed_context,
+                    specialization,
                     worker_body_origin,
                 },
                 ContinuationEmissionOwner::Specialization(held),
             ) => {
-                if enclosing != held {
+                if specialization != held {
                     return Err(unsupported(
                         "ContinuationSpecialization",
                         format!(
                             "an entry-frame claim names the generated context of \
-                             specialization {enclosing:?}, which is not the specialization \
+                             specialization {specialization:?}, which is not the specialization \
                              whose frame is being defined ({held:?})"
                         ),
                     ));
                 }
-                // ⭐ **The pairing revalidation.** The claim carries the pair
-                // contexts are interned on; this resolves it to the actual
-                // `ContinuationContextId` and checks that context declares the
-                // full coordinate at exactly this slot. The context id could not
-                // be carried in the claim -- contexts are minted after the
-                // projections that name them -- so the identity is closed here,
-                // where both facts exist.
+                // ⭐⭐ **The three-sided revalidation the ruling asks for.** The
+                // claim is finalized, so it carries both the resolved
+                // `ContinuationContextId` and the key it was resolved from. This
+                // re-resolves that key against the plan in hand and checks the
+                // answer AGREES with the recorded id.
+                //
+                // ⛔ Not redundant with finalization. Finalization proves the key
+                // resolved uniquely *in the plan it ran over*; this proves the
+                // consumer is holding that same plan. The two could only disagree
+                // if a claim were carried across plans -- which is precisely the
+                // failure that must not be able to hide behind a plausible id.
                 let context = self
                     .static_transition_plan
-                    .continuation_context_for(enclosing, worker_body_origin)?
+                    .continuation_context_for(specialization, worker_body_origin)?
                     .ok_or_else(|| {
                         unsupported(
                             "ContinuationSpecialization",
@@ -6359,6 +6364,18 @@ impl<'a> Lowering<'a> {
                              discharge it",
                         )
                     })?;
+                if context.id() != claimed_context {
+                    return Err(unsupported(
+                        "ContinuationSpecialization",
+                        format!(
+                            "an entry-frame claim carries generated context {claimed_context:?}, \
+                             but its own (specialization, worker body) key resolves to {:?} in \
+                             the plan being lowered; the recorded identity and the key it was \
+                             resolved from disagree",
+                            context.id()
+                        ),
+                    ));
+                }
                 let captures = context.captures()?;
                 let mut found = None;
                 for (position, capture) in captures.iter().enumerate() {
@@ -6419,12 +6436,12 @@ impl<'a> Lowering<'a> {
                 ))
             }
             (
-                ContinuationFrameIdentity::GeneratedContext { enclosing, .. },
+                ContinuationFrameIdentity::GeneratedContext { specialization, .. },
                 ContinuationEmissionOwner::Predeclared(held),
             ) => Err(unsupported(
                 "ContinuationSpecialization",
                 format!(
-                    "an entry-frame claim names the generated context of {enclosing:?} while the \
+                    "an entry-frame claim names the generated context of {specialization:?} while the \
                      frame being defined is predeclared {held:?}; a generated context's capture \
                      run is not this function's entry run"
                 ),

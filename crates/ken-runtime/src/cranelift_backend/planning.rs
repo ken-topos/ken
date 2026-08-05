@@ -54,6 +54,8 @@ pub(super) use static_transition::{
     ContinuationAvailabilityViews, ContinuationEnvironmentClaim, ContinuationFrameIdentity,
     ContinuationSourceCoordinate,
     ContinuationSourceSlotAuthority,
+    ContinuationFrameRequirement,
+    d3b_publish_without_finalization, d3b_refinalize, D3bFinalizationPerturbation,
     ContinuationSpecializationId,
     // `RT-CONTSRC-PRODUCER-LOCAL` `D3b` — the emission consumer's fail-closed
     // check that it is indexing where the coordinate actually sits.

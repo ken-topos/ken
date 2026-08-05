@@ -92,6 +92,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     SynthesizedAggregateNode, SynthesizedAggregatePath, SynthesizedAggregateRoot, PlannedAggregateOwnership,
     JoinResultRepresentation, PredeclaredFunctionId, StaticOriginId, StaticTransitionPlan,
     verify_current_lexical_availability, verify_predeclared_entry_frame_membership,
+    ContinuationFrameRequirement,
     SynthesizedConstructorRole, SynthesizedFixedConstructorRole,
 };
 #[cfg(test)]

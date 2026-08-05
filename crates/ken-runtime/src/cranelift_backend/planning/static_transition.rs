@@ -567,6 +567,11 @@ pub(in crate::cranelift_backend) struct ContinuationContextId(u32);
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) struct PlannedContinuationContext {
     id: ContinuationContextId,
+    /// **Stage 2** — the finalized availability of each capture, in capture
+    /// order. Empty until [`finalize_continuation_availability_plan`] runs; the
+    /// only reader is [`ContinuationContextView::captures`], which refuses when
+    /// an entry is missing rather than publishing a draft.
+    finalized_availability: Vec<ContinuationAvailabilityViews>,
     /// The specialization whose selected worker body this context executes, and
     /// whose continuation inputs it keeps live across that execution.
     enclosing_specialization: ContinuationSpecializationId,
@@ -625,6 +630,9 @@ impl PlannedContinuationContext {
 /// ABI descriptor, slots and input authority.
 pub(in crate::cranelift_backend) struct ContinuationContextView<'plan> {
     planned: &'plan PlannedContinuationContext,
+    /// Stage-2 availability, one per capture. ⛔ The view cannot reach the
+    /// drafts on `planned` -- `captures()` publishes from here or refuses.
+    finalized: &'plan [ContinuationAvailabilityViews],
     header: AbiFrameHeader,
     slots: &'plan [AbiSlot],
     inputs: &'plan [abi::AbiContinuationInputAuthority],
@@ -674,7 +682,8 @@ impl<'plan> ContinuationContextView<'plan> {
             .captures
             .iter()
             .zip(self.inputs)
-            .map(|(projection, authority)| {
+            .enumerate()
+            .map(|(position, (projection, authority))| {
                 // `D3a` — the ABI-plane input authority records a DOMAIN-TAGGED
                 // provenance owner, so agreement is checked as the complete
                 // tagged value. ⛔ Both domains are now recordable here, and
@@ -689,7 +698,7 @@ impl<'plan> ContinuationContextView<'plan> {
                          authority",
                     ));
                 }
-                Ok(continuation_input_view(projection))
+                continuation_input_view(projection, self.finalized.get(position))
             })
             .collect()
     }
@@ -923,10 +932,15 @@ struct ContinuationInputProjection {
     /// `evt_609am4v7cdt5b` forbids; the two are kept apart here so no consumer
     /// has to know which it holds.
     ///
-    /// **`D3b` re-cut** — the two consumer-specific claims. See
-    /// [`ContinuationAvailabilityViews`]; ⛔ there is no single "immediate
-    /// slot" here, because the two consumers do not hold the same environment.
-    availability: ContinuationAvailabilityViews,
+    /// **`D3b` re-cut** — the two consumer-specific claims, as STAGE 1 drafts.
+    ///
+    /// ⛔ There is no single "immediate slot" here, because the two consumers do
+    /// not hold the same environment. ⛔ And these are **drafts**: a generated
+    /// frame is still a structural requirement, because the context ids that
+    /// would resolve it are minted after this record is interned. Nothing reads
+    /// this field directly — [`continuation_input_view`] publishes only the
+    /// finalized form.
+    availability: ContinuationAvailabilityDraft,
 }
 
 impl ContinuationAvailabilityViews {
@@ -1005,7 +1019,7 @@ enum ContinuationEmitterFrame<'plan> {
 /// "which environment, and whose". Reading a lexical index as a frame slot is
 /// the conflation this sum exists to make unrepresentable.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(in crate::cranelift_backend) enum ContinuationEnvironmentClaim {
+pub(in crate::cranelift_backend) enum ContinuationEnvironmentClaimOver<Frame> {
     /// The value sits in the retained lexical environment at one exact
     /// predeclared emission seat.
     ///
@@ -1036,13 +1050,53 @@ pub(in crate::cranelift_backend) enum ContinuationEnvironmentClaim {
     /// frame declares it. Two names for one environment class is what let the
     /// old law read a frame identity off a root domain.
     EntryFrame {
-        frame: ContinuationFrameIdentity,
+        frame: Frame,
         declared_slot: u32,
     },
 }
 
-/// **Which frame's operand run an [`ContinuationEnvironmentClaim::EntryFrame`]
-/// speaks for**, as an exact identity.
+/// **Stage 2** — a claim whose frame is an exact, resolved identity. This is the
+/// only form any consumer ever sees.
+pub(in crate::cranelift_backend) type ContinuationEnvironmentClaim =
+    ContinuationEnvironmentClaimOver<ContinuationFrameIdentity>;
+
+/// **Stage 1** — a claim whose frame is still a structural requirement.
+/// ⛔ Never published: [`continuation_input_view`] has no way to expose one.
+pub(in crate::cranelift_backend) type ContinuationEnvironmentDraft =
+    ContinuationEnvironmentClaimOver<ContinuationFrameRequirement>;
+
+/// **STAGE 1 — the STRUCTURAL frame requirement a projection can state while the
+/// fixed point is still running.**
+///
+/// ⛔⛔ **A distinct type from [`ContinuationFrameIdentity`], and that is the
+/// mechanism rather than a style choice.** Specializations are interned first,
+/// each key carrying these very projections, and `ContinuationContextId`s are
+/// minted only afterwards from `enclosing_unit.key.continuation_inputs`. So a
+/// claim built during projection *cannot* carry a context id: it does not exist
+/// yet. Making the two stages one type would leave a field that is sometimes
+/// filled and sometimes not — a half-stamped claim — and every consumer would
+/// have to be trusted to check which it holds. Here the requirement simply
+/// **cannot be presented to a consumer**: nothing converts one into an identity
+/// except [`finalize_continuation_availability`], which resolves it.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum ContinuationFrameRequirement {
+    /// A predeclared function's own entry ABI run. ⭐ Already exact at stage 1 —
+    /// a predeclared function id is not minted by context interning, so this arm
+    /// carries no less evidence than its finalized twin.
+    Predeclared(PredeclaredFunctionId),
+    /// A generated execution context's frame, named by the pair contexts are
+    /// **provisionally interned on**. ⛔ This is a key, not an identity: it says
+    /// which context *should* exist, and finalization is what proves exactly one
+    /// does.
+    GeneratedContext {
+        enclosing: ContinuationSpecializationId,
+        worker_body_origin: StaticOriginId,
+    },
+}
+
+/// **STAGE 2 — which frame's operand run an
+/// [`ContinuationEnvironmentClaim::EntryFrame`] speaks for**, as an exact
+/// identity, published only after every generated context has been minted.
 ///
 /// ⛔ A frame identity is never inferred from a root coordinate. It names the
 /// one environment whose declared members can discharge the claim, and a
@@ -1054,22 +1108,248 @@ pub(in crate::cranelift_backend) enum ContinuationFrameIdentity {
     /// A generated execution context's frame: its parameter run followed by its
     /// declared capture run.
     ///
-    /// ⛔ **Identified by the pair the planner actually interns contexts on,**
-    /// `(enclosing_specialization, worker_body_origin)`, and NOT by
-    /// [`ContinuationContextId`]. That is a timing fact, not a preference:
-    /// specializations are interned first, each key carrying these very
-    /// projections, and contexts are minted afterwards from
-    /// `enclosing_unit.key.continuation_inputs`. A claim built during projection
-    /// therefore cannot carry a context id that does not exist yet, and
-    /// stamping one in afterwards would mean mutating an immutable projection.
-    ///
-    /// ⭐ The consumer closes the gap by **revalidating this pair against the
-    /// `ContinuationContextId` it actually holds**, which is the identity check
-    /// the ruling asks for, performed where both facts exist.
+    /// ⭐ **All three sides are recorded, and the consumer revalidates all
+    /// three.** `context` is the resolved identity; `specialization` and
+    /// `worker_body_origin` are the key it resolved *from*. Keeping the key
+    /// beside the id is what lets a consumer check that the id it holds is the
+    /// one this key names, rather than taking the id on trust — the two could
+    /// only disagree if finalization resolved against a different plan, which is
+    /// exactly the failure worth being unable to hide.
     GeneratedContext {
-        enclosing: ContinuationSpecializationId,
+        context: ContinuationContextId,
+        specialization: ContinuationSpecializationId,
         worker_body_origin: StaticOriginId,
     },
+}
+
+/// **STAGE 2 — resolve one structural frame requirement to an exact identity.**
+///
+/// ⛔ Exactly one match, or refuse. Zero means the plan names a frame that was
+/// never interned; more than one means the provisional key is not a key at all.
+/// Both are refused **here, at finalization**, rather than at whatever seam
+/// happens to reach the claim first — which is the difference between a plan
+/// that cannot be built and a plan that is accepted and fails later.
+fn finalize_continuation_frame(
+    contexts: &[PlannedContinuationContext],
+    requirement: ContinuationFrameRequirement,
+) -> Result<ContinuationFrameIdentity, CraneliftBackendError> {
+    match requirement {
+        // ⭐ Already exact: a predeclared function id is not minted by context
+        // interning, so there is nothing to resolve and nothing that could fail.
+        ContinuationFrameRequirement::Predeclared(owner) => {
+            Ok(ContinuationFrameIdentity::Predeclared(owner))
+        }
+        ContinuationFrameRequirement::GeneratedContext {
+            enclosing,
+            worker_body_origin,
+        } => {
+            let mut found = None;
+            for context in contexts {
+                if context.enclosing_specialization != enclosing
+                    || context.worker_body_origin != worker_body_origin
+                {
+                    continue;
+                }
+                if found.is_some() {
+                    return Err(planner_error(
+                        "two generated execution contexts share one (enclosing specialization, \
+                         worker body) pair, so the frame a continuation input names is ambiguous; \
+                         RT-CONTSRC-PRODUCER-LOCAL D3b refuses at finalization rather than \
+                         publishing a claim that resolves differently depending on which \
+                         consumer looks it up",
+                    ));
+                }
+                found = Some(context.id);
+            }
+            let context = found.ok_or_else(|| {
+                planner_error(
+                    "a continuation input names a generated execution context frame that was \
+                     never interned, so no declared operand run exists to discharge it; \
+                     RT-CONTSRC-PRODUCER-LOCAL D3b refuses at finalization rather than \
+                     publishing an unresolvable claim",
+                )
+            })?;
+            Ok(ContinuationFrameIdentity::GeneratedContext {
+                context,
+                specialization: enclosing,
+                worker_body_origin,
+            })
+        }
+    }
+}
+
+/// Finalize one draft claim. `CurrentLexical` carries no frame and passes
+/// through unchanged — it was already exact at stage 1.
+fn finalize_continuation_claim(
+    contexts: &[PlannedContinuationContext],
+    draft: ContinuationEnvironmentDraft,
+) -> Result<ContinuationEnvironmentClaim, CraneliftBackendError> {
+    Ok(match draft {
+        ContinuationEnvironmentDraft::CurrentLexical {
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            nearest_alias_index,
+        } => ContinuationEnvironmentClaim::CurrentLexical {
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            nearest_alias_index,
+        },
+        ContinuationEnvironmentDraft::EntryFrame {
+            frame,
+            declared_slot,
+        } => ContinuationEnvironmentClaim::EntryFrame {
+            frame: finalize_continuation_frame(contexts, frame)?,
+            declared_slot,
+        },
+    })
+}
+
+/// Finalize both consumer views of one input.
+fn finalize_continuation_availability(
+    contexts: &[PlannedContinuationContext],
+    draft: ContinuationAvailabilityDraft,
+) -> Result<ContinuationAvailabilityViews, CraneliftBackendError> {
+    Ok(ContinuationAvailabilityViews {
+        direct_emission: draft
+            .direct_emission
+            .map(|claim| finalize_continuation_claim(contexts, claim))
+            .transpose()?,
+        context_capture: draft
+            .context_capture
+            .map(|claim| finalize_continuation_claim(contexts, claim))
+            .transpose()?,
+    })
+}
+
+/// **STAGE 2, the pass** — run once, after every generated context has been
+/// minted, over every specialization input and every context capture.
+///
+/// ⛔⛔ **Whole-plan, and that is the obligation rather than a convenience.**
+/// Finalizing lazily — resolving each claim the first time some consumer asks
+/// for it — would leave a plan carrying an unresolvable frame *accepted*, and
+/// refused only if and when something happened to reach it. The measured
+/// `0/60` generated-owner consumptions is exactly the condition under which
+/// that gap would stay invisible. Every claim is resolved here, whether or not
+/// anything will ever read it.
+fn finalize_continuation_availability_plan(
+    plan: &mut StaticTransitionPlan<'_>,
+) -> Result<(), CraneliftBackendError> {
+    let contexts = &plan.continuation_contexts;
+    let mut specialization_views = Vec::with_capacity(plan.continuation_specializations.len());
+    for unit in &plan.continuation_specializations {
+        specialization_views.push(
+            unit.key
+                .continuation_inputs
+                .iter()
+                .map(|input| finalize_continuation_availability(contexts, input.availability))
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+    }
+    let mut context_views = Vec::with_capacity(contexts.len());
+    for context in contexts {
+        context_views.push(
+            context
+                .captures
+                .iter()
+                .map(|capture| finalize_continuation_availability(contexts, capture.availability))
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+    }
+    for (unit, views) in plan
+        .continuation_specializations
+        .iter_mut()
+        .zip(specialization_views)
+    {
+        unit.finalized_availability = views;
+    }
+    for (context, views) in plan.continuation_contexts.iter_mut().zip(context_views) {
+        context.finalized_availability = views;
+    }
+    Ok(())
+}
+
+/// **`D3b` stage-2 controls** — how the context population is perturbed before
+/// finalization is re-run. Test-only.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D3bFinalizationPerturbation {
+    Exact,
+    /// No context was interned at all: every generated requirement resolves to
+    /// ZERO.
+    DropContexts,
+    /// Every context appears twice under its own key: every generated
+    /// requirement resolves to MORE THAN ONE.
+    DuplicateContexts,
+}
+
+/// Re-run stage-2 finalization over a perturbed context population and report
+/// `(generated requirements resolved, claims finalized)`.
+///
+/// ⛔ The first number is the **non-vacuity** counter. The measured `0/60`
+/// consumption boundary means a control could pass here while resolving no
+/// generated frame at all, and a zero/multiple perturbation over an empty
+/// requirement set succeeds trivially.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d3b_refinalize(
+    plan: &StaticTransitionPlan<'_>,
+    perturbation: D3bFinalizationPerturbation,
+) -> Result<(usize, usize), CraneliftBackendError> {
+    let contexts = match perturbation {
+        D3bFinalizationPerturbation::Exact => plan.continuation_contexts.clone(),
+        D3bFinalizationPerturbation::DropContexts => Vec::new(),
+        D3bFinalizationPerturbation::DuplicateContexts => {
+            let mut doubled = plan.continuation_contexts.clone();
+            doubled.extend(plan.continuation_contexts.iter().cloned());
+            doubled
+        }
+    };
+    let mut generated = 0;
+    let mut total = 0;
+    let mut count = |draft: ContinuationAvailabilityDraft| {
+        for claim in [draft.direct_emission, draft.context_capture].into_iter().flatten() {
+            total += 1;
+            if matches!(
+                claim,
+                ContinuationEnvironmentDraft::EntryFrame {
+                    frame: ContinuationFrameRequirement::GeneratedContext { .. },
+                    ..
+                }
+            ) {
+                generated += 1;
+            }
+        }
+    };
+    for unit in &plan.continuation_specializations {
+        for input in &unit.key.continuation_inputs {
+            count(input.availability);
+            finalize_continuation_availability(&contexts, input.availability)?;
+        }
+    }
+    for context in &plan.continuation_contexts {
+        for capture in &context.captures {
+            count(capture.availability);
+            finalize_continuation_availability(&contexts, capture.availability)?;
+        }
+    }
+    Ok((generated, total))
+}
+
+/// Attempt to publish a view with no finalized entry — the publication gate.
+/// Test-only.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d3b_publish_without_finalization(
+    plan: &StaticTransitionPlan<'_>,
+) -> Result<(), CraneliftBackendError> {
+    let projection = plan
+        .continuation_specializations
+        .first()
+        .and_then(|unit| unit.key.continuation_inputs.first())
+        .ok_or_else(|| planner_error("the fixture plans no continuation input"))?;
+    continuation_input_view(projection, None).map(|_| ())
 }
 
 /// **The two consumer-specific availability views of one continuation input.**
@@ -1091,12 +1371,22 @@ pub(in crate::cranelift_backend) enum ContinuationFrameIdentity {
 /// its own field or refuses; there is no arm that lets it fall back to the
 /// other's.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub(in crate::cranelift_backend) struct ContinuationAvailabilityViews {
+pub(in crate::cranelift_backend) struct ContinuationAvailabilityOver<Frame> {
     /// For the direct continuation-call emission consumer.
-    pub(in crate::cranelift_backend) direct_emission: Option<ContinuationEnvironmentClaim>,
+    pub(in crate::cranelift_backend) direct_emission:
+        Option<ContinuationEnvironmentClaimOver<Frame>>,
     /// For the generated-context capture-append consumer.
-    pub(in crate::cranelift_backend) context_capture: Option<ContinuationEnvironmentClaim>,
+    pub(in crate::cranelift_backend) context_capture:
+        Option<ContinuationEnvironmentClaimOver<Frame>>,
 }
+
+/// **Stage 2** — the published, immutable views. Both consumers read this form.
+pub(in crate::cranelift_backend) type ContinuationAvailabilityViews =
+    ContinuationAvailabilityOver<ContinuationFrameIdentity>;
+
+/// **Stage 1** — what a projection carries while the fixed point runs.
+pub(in crate::cranelift_backend) type ContinuationAvailabilityDraft =
+    ContinuationAvailabilityOver<ContinuationFrameRequirement>;
 
 /// One exact source-slot value in the environment carried by a producer edge
 /// into a computational continuation.
@@ -1317,6 +1607,9 @@ impl ContinuationCallIdentity {
 pub(in crate::cranelift_backend) struct ContinuationUnitView<'plan> {
     id: ContinuationSpecializationId,
     key: &'plan ContinuationSpecializationKey,
+    /// Stage-2 availability, one per continuation input. ⛔ See
+    /// [`ContinuationContextView::finalized`].
+    finalized: &'plan [ContinuationAvailabilityViews],
     header: AbiFrameHeader,
     slots: &'plan [AbiSlot],
     inputs: &'plan [abi::AbiContinuationInputAuthority],
@@ -1451,7 +1744,8 @@ impl<'plan> ContinuationUnitView<'plan> {
             .continuation_inputs
             .iter()
             .zip(self.inputs)
-            .map(|(projection, authority)| {
+            .enumerate()
+            .map(|(position, (projection, authority))| {
                 // `D3a` — domain-tagged provenance agreement, as at the
                 // generated-context capture consumer above.
                 if projection.ordinal != authority.ordinal
@@ -1463,7 +1757,7 @@ impl<'plan> ContinuationUnitView<'plan> {
                          authority",
                     ));
                 }
-                Ok(continuation_input_view(projection))
+                continuation_input_view(projection, self.finalized.get(position))
             })
             .collect()
     }
@@ -1545,8 +1839,24 @@ pub(in crate::cranelift_backend) enum ContinuationOrdinaryEnvelopeRole {
 /// callers: the two populations hold the *same* projection records (a context's
 /// captures literally are its enclosing specialization's continuation inputs),
 /// so a second hand-written copy would be the place the two drift apart.
-fn continuation_input_view(projection: &ContinuationInputProjection) -> ContinuationInputView {
-    ContinuationInputView {
+fn continuation_input_view(
+    projection: &ContinuationInputProjection,
+    finalized: Option<&ContinuationAvailabilityViews>,
+) -> Result<ContinuationInputView, CraneliftBackendError> {
+    // ⛔⛔ **THE PUBLICATION GATE.** This is the single conversion both
+    // populations pass through, so it is the one place that can guarantee no
+    // consumer ever holds a draft. A missing entry means stage 2 did not run for
+    // this record, and the honest answer is a refusal -- never the draft, which
+    // would be a half-stamped claim, and never a default frame, which would be
+    // an invented one.
+    let availability = *finalized.ok_or_else(|| {
+        planner_error(
+            "a continuation input has no finalized availability, so its generated frame \
+             requirement was never resolved to an exact context identity; \
+             RT-CONTSRC-PRODUCER-LOCAL D3b refuses to publish an unfinalized claim",
+        )
+    })?;
+    Ok(ContinuationInputView {
         ordinal: projection.ordinal,
         coordinate: projection.coordinate,
         carrier: projection.carrier,
@@ -1558,8 +1868,8 @@ fn continuation_input_view(projection: &ContinuationInputProjection) -> Continua
         boundary_avail: projection.boundary_avail,
         referent_affinity: projection.referent_affinity.clone(),
         ordinary_abi_position: projection.ordinary_abi_position,
-        availability: projection.availability,
-    }
+        availability,
+    })
 }
 
 /// A read-only view of one already-validated continuation input.
@@ -1679,6 +1989,12 @@ fn dense_slice<T>(arena: &[T], range: semantic_ir::DenseRange) -> Option<&[T]> {
 struct PlannedContinuationSpecialization {
     id: ContinuationSpecializationId,
     key: ContinuationSpecializationKey,
+    /// **Stage 2** — the finalized availability of each continuation input, in
+    /// ordinal order. ⛔ Deliberately a SIBLING of `key`, never inside it:
+    /// `key` is the interning identity, and stamping a resolved context id into
+    /// it after interning would rewrite the identity every dedup decision was
+    /// already made against.
+    finalized_availability: Vec<ContinuationAvailabilityViews>,
 }
 
 /// Exact causal identity for one direct producer edge into an interned target.
@@ -6233,7 +6549,7 @@ pub(in crate::cranelift_backend) fn verify_current_lexical_availability(
         &seat,
     )?;
     if derived
-        != (ContinuationEnvironmentClaim::CurrentLexical {
+        != (ContinuationEnvironmentDraft::CurrentLexical {
             emission_owner,
             producer_result_origin,
             emission_origin,
@@ -6458,8 +6774,8 @@ fn current_lexical_availability(
     lexical_environment_origin: StaticOriginId,
     emission_origin: StaticOriginId,
     seat_environment: &[ContinuationValueSourceAuthority],
-) -> Result<ContinuationEnvironmentClaim, CraneliftBackendError> {
-    Ok(ContinuationEnvironmentClaim::CurrentLexical {
+) -> Result<ContinuationEnvironmentDraft, CraneliftBackendError> {
+    Ok(ContinuationEnvironmentDraft::CurrentLexical {
         emission_owner,
         producer_result_origin,
         emission_origin,
@@ -6537,11 +6853,11 @@ fn exact_continuation_projection(
                         *emission_owner,
                         input.coordinate,
                     )?
-                    .map(|declared_slot| ContinuationEnvironmentClaim::EntryFrame {
-                        frame: ContinuationFrameIdentity::Predeclared(*emission_owner),
+                    .map(|declared_slot| ContinuationEnvironmentDraft::EntryFrame {
+                        frame: ContinuationFrameRequirement::Predeclared(*emission_owner),
                         declared_slot,
                     });
-                    ContinuationAvailabilityViews {
+                    ContinuationAvailabilityDraft {
                         direct_emission: Some(claim),
                         context_capture: capture,
                     }
@@ -6593,8 +6909,8 @@ fn exact_continuation_projection(
                                 "continuation immediate slot position exhausted",
                             )
                         })?;
-                    let claim = ContinuationEnvironmentClaim::EntryFrame {
-                        frame: ContinuationFrameIdentity::GeneratedContext {
+                    let claim = ContinuationEnvironmentDraft::EntryFrame {
+                        frame: ContinuationFrameRequirement::GeneratedContext {
                             enclosing: *enclosing,
                             worker_body_origin: *worker_body_origin,
                         },
@@ -6606,7 +6922,7 @@ fn exact_continuation_projection(
                     // own operand run. ⛔ It is written twice rather than shared
                     // through one field, so a later divergence between the two
                     // consumers is a local edit and not a silent reinterpretation.
-                    ContinuationAvailabilityViews {
+                    ContinuationAvailabilityDraft {
                         direct_emission: Some(claim),
                         context_capture: Some(claim),
                     }
@@ -6839,7 +7155,11 @@ fn intern_specialization(
     // The immutable key is installed before the caller performs any recursive
     // discovery. This ordering is the fixed point's decreasing measure.
     interned.insert(key.clone(), id);
-    units.push(PlannedContinuationSpecialization { id, key });
+    units.push(PlannedContinuationSpecialization {
+        id,
+        key,
+        finalized_availability: Vec::new(),
+    });
     Ok((id, true))
 }
 
@@ -7221,6 +7541,7 @@ fn intern_generated_contexts(
         );
         contexts.push(PlannedContinuationContext {
             id,
+            finalized_availability: Vec::new(),
             enclosing_specialization: enclosing,
             worker_body_origin,
             raw_owner: call.token.producer_owner,
@@ -7518,9 +7839,31 @@ fn validate_continuation_specialization_plan(
 ) -> Result<(), CraneliftBackendError> {
     let (expected_units, expected_calls, expected_contexts) =
         build_continuation_specialization_plan(plan)?;
-    if plan.continuation_specializations != expected_units
+    // ⛔⛔ **The comparison is against the DERIVATION, and `D3b`'s stage-2
+    // finalization is not part of it.**
+    //
+    // This validator's whole strength is exact equality against a fresh
+    // re-derivation, and that must not be weakened. But `finalized_availability`
+    // is stamped *after* the derivation closes, from the interned contexts —
+    // a re-derivation cannot reproduce it and is not supposed to. Comparing it
+    // would make this fire on the stamping rather than on any disagreement about
+    // what was derived, which is exactly what it did when finalization first
+    // landed: 83 tests red, none of them about the plan being wrong.
+    //
+    // ⭐ Cleared on a clone rather than skipped field-by-field, so a field added
+    // to either record later is compared by default. Only what is explicitly
+    // named here is exempt.
+    let mut landed_units = plan.continuation_specializations.clone();
+    for unit in &mut landed_units {
+        unit.finalized_availability.clear();
+    }
+    let mut landed_contexts = plan.continuation_contexts.clone();
+    for context in &mut landed_contexts {
+        context.finalized_availability.clear();
+    }
+    if landed_units != expected_units
         || plan.continuation_specialization_calls != expected_calls
-        || plan.continuation_contexts != expected_contexts
+        || landed_contexts != expected_contexts
     {
         return Err(planner_error(
             "continuation specialization plan is not the exact closed derivation",
@@ -8463,6 +8806,20 @@ impl<'src> Planner<'src> {
         // continuation-callee partition, and admitting a caller-side context
         // there would make one identity domain readable as the other.
         install_continuation_context_abi(&mut self.plan.abi, &self.plan.continuation_contexts)?;
+        // `D3b` STAGE 2 — every context id now exists, so every structural frame
+        // requirement can be resolved to exactly one identity.
+        //
+        // ⛔ **Placed AFTER validation deliberately.** The validator re-derives
+        // the whole continuation plan and compares it for exact equality; a
+        // finalized sibling field stamped before that runs is state the
+        // re-derivation cannot produce, so the comparison would fail on the
+        // stamping rather than on any real disagreement. Finalization is a
+        // post-derivation publication step, not part of the derivation.
+        //
+        // ⭐ Still before anything can publish a view: `continuation_units` and
+        // `continuation_contexts` both require the ABI installed above, so the
+        // earliest possible view is built after this line.
+        finalize_continuation_availability_plan(&mut self.plan)?;
         self.plan.join_results = build_join_result_plan(&self.plan, functionized_units)?;
         // `D7` — the aggregate occurrence population is built HERE, last, and
         // deliberately not beside the occurrence authorities it also reads.
@@ -10295,6 +10652,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 Ok(ContinuationUnitView {
                     id: planned.id,
                     key: &planned.key,
+                    finalized: &planned.finalized_availability,
                     header: descriptor.header,
                     slots,
                     inputs,
@@ -10353,6 +10711,7 @@ impl<'src> StaticTransitionPlan<'src> {
                 }
                 Ok(ContinuationContextView {
                     planned,
+                    finalized: &planned.finalized_availability,
                     header: descriptor.header,
                     slots,
                     inputs,
@@ -20869,8 +21228,8 @@ mod tests {
         .expect("a producer-local coordinate present at the seat must project");
         assert_eq!(
             projected[0].availability,
-            ContinuationAvailabilityViews {
-                direct_emission: Some(ContinuationEnvironmentClaim::CurrentLexical {
+            ContinuationAvailabilityDraft {
+                direct_emission: Some(ContinuationEnvironmentDraft::CurrentLexical {
                     emission_owner: environment.producer_owner,
                     producer_result_origin: result_origin,
                     emission_origin: construct_origin,
@@ -21124,7 +21483,7 @@ mod tests {
              would make nearest-alias and the retired exact-once law indistinguishable"
         );
 
-        let Some(ContinuationEnvironmentClaim::CurrentLexical {
+        let Some(ContinuationEnvironmentDraft::CurrentLexical {
             emission_owner,
             producer_result_origin,
             emission_origin,
@@ -21228,8 +21587,8 @@ mod tests {
         // interned. A capture cannot be fabricated because there is nothing to
         // find unless the caller really declares the value.
         let caller_proof = ContinuationInputProjection {
-            availability: ContinuationAvailabilityViews {
-                direct_emission: Some(ContinuationEnvironmentClaim::CurrentLexical {
+            availability: ContinuationAvailabilityDraft {
+                direct_emission: Some(ContinuationEnvironmentDraft::CurrentLexical {
                     emission_owner: owner,
                     producer_result_origin: result_origin,
                     emission_origin: construct_origin,
@@ -21255,9 +21614,9 @@ mod tests {
         // A decoy ahead of it, so the capture POSITION is not zero and cannot
         // be confused with the introduction index.
         let decoy = ContinuationInputProjection {
-            availability: ContinuationAvailabilityViews {
-                direct_emission: Some(ContinuationEnvironmentClaim::EntryFrame {
-                    frame: ContinuationFrameIdentity::Predeclared(owner),
+            availability: ContinuationAvailabilityDraft {
+                direct_emission: Some(ContinuationEnvironmentDraft::EntryFrame {
+                    frame: ContinuationFrameRequirement::Predeclared(owner),
                     declared_slot: 0,
                 }),
                 context_capture: None,
@@ -21311,8 +21670,8 @@ mod tests {
             &resolution(context, &enclosing_inputs, body_origin, CONTEXT_PARAMETERS),
         )
         .expect("a captured producer-local value with a caller proof must project");
-        let declared = ContinuationEnvironmentClaim::EntryFrame {
-            frame: ContinuationFrameIdentity::GeneratedContext {
+        let declared = ContinuationEnvironmentDraft::EntryFrame {
+            frame: ContinuationFrameRequirement::GeneratedContext {
                 enclosing: context,
                 worker_body_origin: body_origin,
             },
@@ -21326,7 +21685,7 @@ mod tests {
             // environment rather than by convention. ⛔ Asserting the whole record
             // is what makes that agreement measured; asserting one view would
             // leave the other unexamined.
-            ContinuationAvailabilityViews {
+            ContinuationAvailabilityDraft {
                 direct_emission: Some(declared),
                 context_capture: Some(declared),
             },
@@ -21370,16 +21729,16 @@ mod tests {
             .availability;
         assert_eq!(
             crossed,
-            ContinuationAvailabilityViews {
-                direct_emission: Some(ContinuationEnvironmentClaim::EntryFrame {
-                    frame: ContinuationFrameIdentity::GeneratedContext {
+            ContinuationAvailabilityDraft {
+                direct_emission: Some(ContinuationEnvironmentDraft::EntryFrame {
+                    frame: ContinuationFrameRequirement::GeneratedContext {
                         enclosing: context,
                         worker_body_origin: other_body_origin,
                     },
                     declared_slot: CONTEXT_PARAMETERS + 1,
                 }),
-                context_capture: Some(ContinuationEnvironmentClaim::EntryFrame {
-                    frame: ContinuationFrameIdentity::GeneratedContext {
+                context_capture: Some(ContinuationEnvironmentDraft::EntryFrame {
+                    frame: ContinuationFrameRequirement::GeneratedContext {
                         enclosing: context,
                         worker_body_origin: other_body_origin,
                     },

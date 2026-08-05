@@ -12851,6 +12851,75 @@ fn d5a_a_specialization_owned_edge_separates_root_provenance_from_its_immediate_
 /// `d5a_a_transplanted_generated_context_binding_refuses_at_the_retarget`, which
 /// hands one identity another's context and is refused.
 ///
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` STAGE 2 — every structural frame
+/// requirement resolves to exactly one context, and zero or multiple refuses.**
+///
+/// ⭐⭐ **This is the obligation the Architect kept in `D3b` rather than moving
+/// to `D4b`, and it is proved by direct planner controls because behavioural
+/// activation does not exist yet.** Measured at the time of writing: `0` of `60`
+/// consumer observations held a generated emission owner. So no compiled program
+/// reaches a generated `EntryFrame` claim, and a control that waited for one
+/// would never run.
+///
+/// ⛔ **That is exactly why the non-vacuity counter is asserted first.** A
+/// zero-or-multiple perturbation over an EMPTY requirement set succeeds
+/// trivially — nothing to resolve, nothing to refuse — and every row below would
+/// pass while measuring an empty loop. The counter is what distinguishes "the
+/// refusals fire" from "there was nothing to fire on".
+///
+/// ⚠ **MEASURED**: the witness carries generated frame requirements; they
+/// resolve under the real context population and refuse under both perturbations;
+/// and the publication gate refuses an unfinalized claim. **CLAIMED**: no
+/// half-stamped claim can reach a consumer, because the only conversion that
+/// builds a view requires a finalized entry. **THE GAP**: no *lowered* program
+/// consumes a generated frame identity today, so the three-sided consumer
+/// revalidation is exercised by construction rather than by execution; `D4b`
+/// supplies that.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d3b_every_generated_frame_requirement_resolves_to_exactly_one_context() {
+    use crate::cranelift_backend::planning::{
+        d3b_publish_without_finalization, d3b_refinalize, D3bFinalizationPerturbation,
+    };
+    with_d5a_witness_plan(|plan| {
+        let (generated, total) = d3b_refinalize(plan, D3bFinalizationPerturbation::Exact)
+            .expect("the real context population must resolve every requirement");
+        assert!(
+            total > 0,
+            "the witness must carry availability claims at all, or every row here is vacuous"
+        );
+        // ⛔ THE non-vacuity assertion. See the note above.
+        assert!(
+            generated > 0,
+            "the witness must carry at least one GENERATED frame requirement ({generated} of              {total} claims); with none, both perturbations below succeed over an empty set and              prove nothing"
+        );
+
+        let refusal = d3b_refinalize(plan, D3bFinalizationPerturbation::DropContexts)
+            .expect_err("a requirement naming no interned context must refuse at finalization");
+        assert!(
+            format!("{refusal:?}").contains("never interned"),
+            "the refusal must be the zero-resolution one: {refusal:?}"
+        );
+
+        let refusal = d3b_refinalize(plan, D3bFinalizationPerturbation::DuplicateContexts)
+            .expect_err("a requirement resolving to two contexts must refuse at finalization");
+        assert!(
+            format!("{refusal:?}").contains("share one (enclosing specialization, worker body)"),
+            "the refusal must be the multiple-resolution one, not the zero one: {refusal:?}"
+        );
+
+        // ⛔ The publication gate: a view cannot be built without a finalized
+        // entry, so a draft has no path to any consumer.
+        let refusal = d3b_publish_without_finalization(plan)
+            .expect_err("publishing an unfinalized claim must refuse");
+        assert!(
+            format!("{refusal:?}").contains("no finalized availability"),
+            "the refusal must be the publication gate: {refusal:?}"
+        );
+    });
+}
+
 /// **Promise class: durable invariant.**
 #[test]
 fn d5a_a_generated_context_resolves_only_under_the_identity_that_encloses_it() {
