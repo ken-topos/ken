@@ -16042,3 +16042,323 @@ fn d7a_the_three_field_selector_collides_where_the_four_field_selector_resolves(
         .expect("the nested continuation fixture plans");
     check(&nested);
 }
+
+
+/// Arm the `D7a2` retention and defect for one closure, then restore both.
+///
+/// ⛔ The restore is unconditional. A perturbation left armed leaks into every
+/// later row on this thread, and the failure mode is silent: the next row's
+/// population is wrong and its assertions still pass.
+fn with_d7a2_reconciliation<T>(
+    retain: bool,
+    defect: crate::cranelift_backend::planning::ComposedRawTargetDefect,
+    f: impl FnOnce(&StaticTransitionPlan<'_>) -> T,
+) -> T {
+    use crate::cranelift_backend::planning::{
+        set_composed_raw_target_defect, set_composed_raw_target_retention, ComposedRawTargetDefect,
+    };
+    set_composed_raw_target_retention(retain);
+    set_composed_raw_target_defect(defect);
+    let outcome = with_d5a_witness_plan(f);
+    set_composed_raw_target_retention(false);
+    set_composed_raw_target_defect(ComposedRawTargetDefect::Exact);
+    outcome
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a2` — the reconciliation laws, against the
+/// population they were written for.**
+///
+/// Five clauses, each measured with the retention armed so that none of them
+/// quantifies over an empty set:
+///
+/// 1. **Exact-set equality.** The required-body set equals the retained
+///    raw-target set, and the gate reports the full requirement population.
+/// 2. **Three minting defects refuse before lowering**, each with its own
+///    message: a requirement whose carried body is not its worker's; one minted
+///    under a sibling's construct origin; and — as the consistent case — an
+///    omission, which leaves the population coherent and instead loses the
+///    target.
+/// 3. **Declaration and definition agree.** Every required body has both an
+///    emittable descriptor and an executable unit, so "retained" can never come
+///    to mean declared-but-undefined or its converse.
+/// 4. **A body no requirement names stays superseded.** Omitting one
+///    requirement returns exactly that body to the template-only set, which is
+///    what makes the retention a per-body route rather than a global template
+///    retention.
+/// 5. **The outer layer answers positively after reconciliation**, and with its
+///    requirement omitted reaches the *preserved* unexecutable-target refusal —
+///    the same message `D7a` shipped, unchanged.
+///
+/// **MEASURED**: all five, on the real witness. The defect controls in clause 2
+/// are unreachable through any plan the planner builds, which is why they are
+/// posed through the minting hook rather than left as unexercised guards.
+///
+/// **THE GAP**, two of them, both measured rather than suspected:
+///
+/// - Clause 5's positive half holds *with the retention armed*, and the
+///   retention is not wired into production — see
+///   [`d7a2_the_retained_raw_target_cannot_be_defined_because_its_result_carries_a_raw_closure`]
+///   for the refusal that blocks it. Read clause 5 as "the reconciliation would
+///   answer this way", not as "production answers this way today".
+/// - Clause 3 asserts the declaration/definition property from *this* side and
+///   it holds over a non-empty required set. The **gate's own** check for it is
+///   a different statement and is **unexercised**: deleting that check leaves
+///   this row green. Every required body on these plans has an emittable
+///   descriptor by construction, so no perturbation short of fabricating an
+///   origin reaches it — and a fabricated origin would be caught by the plane
+///   bounds instead, proving the wrong guard. Read the gate's third check as
+///   untested.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d7a2_the_reconciliation_retains_exactly_the_required_raw_targets() {
+    use crate::cranelift_backend::planning::ComposedRawTargetDefect;
+    use std::collections::BTreeSet;
+
+    // ⛔ Measured FIRST, with the retention unarmed: the bodies the retention
+    // is what retains. Clause 4 must omit one of these — a body that survives
+    // on its own route would return to nothing when its requirement is dropped,
+    // and the clause would pass while measuring the wrong body.
+    let superseded_without_retention =
+        with_d7a2_reconciliation(false, ComposedRawTargetDefect::Exact, |plan| {
+            plan.template_only_worker_bodies()
+                .expect("the superseded set")
+        });
+    assert!(
+        !superseded_without_retention.is_empty(),
+        "some worker body must be superseded before reconciliation, or the retention retains          nothing and every clause below measures a population it never changed"
+    );
+
+    // ── clauses 1 and 3, plus clause 5's positive half ──────────────────
+    let outer = with_d7a2_reconciliation(true, ComposedRawTargetDefect::Exact, |plan| {
+        let requirements = plan
+            .composed_raw_target_requirements()
+            .expect("the requirements mint");
+        assert!(
+            !requirements.is_empty(),
+            "the witness must mint at least one raw-target requirement, or every clause here is \
+             vacuous"
+        );
+        let reconciled = plan
+            .verify_raw_target_reconciliation()
+            .expect("the reconciliation gate must pass once the retention is armed");
+        assert_eq!(
+            reconciled,
+            requirements.len(),
+            "the gate must report the whole requirement population it checked, so a caller can \
+             tell a real reconciliation from an empty one"
+        );
+
+        let required = requirements
+            .iter()
+            .map(|requirement| requirement.required_body_origin())
+            .collect::<BTreeSet<_>>();
+        let template_only = plan
+            .template_only_worker_bodies()
+            .expect("the superseded set");
+        assert!(
+            required.is_disjoint(&template_only),
+            "every required body must have LEFT the superseded set; one still in it is a demand \
+             the population does not honour"
+        );
+
+        let emittable = plan
+            .emittable_units()
+            .expect("emittable units")
+            .iter()
+            .map(|unit| unit.origin())
+            .collect::<BTreeSet<_>>();
+        let executable = plan
+            .executable_units()
+            .expect("executable units")
+            .iter()
+            .map(|unit| unit.origin())
+            .collect::<BTreeSet<_>>();
+        for body in &required {
+            assert!(
+                emittable.contains(body) && executable.contains(body),
+                "required body {body:?} must be in BOTH populations. In only the first it is \
+                 declared and never defined; in only the second it is defined and never \
+                 declared, and each is the undefined phantom from one side"
+            );
+        }
+
+        // Clause 5's positive half: the layer whose body was superseded before
+        // reconciliation now answers, with its own worker.
+        let answered = requirements
+            .iter()
+            .map(|requirement| {
+                let (construct, frame, alternative, position) = requirement.selector();
+                let view = plan
+                    .composed_worker_view(construct, frame, alternative, position)
+                    .unwrap_or_else(|error| {
+                        panic!("every reconciled selector must answer: {error:?}")
+                    });
+                assert_eq!(
+                    view.body_origin(),
+                    requirement.required_body_origin(),
+                    "the answer must be the worker the requirement was minted for"
+                );
+                (requirement.selector(), requirement.required_body_origin())
+            })
+            .collect::<Vec<_>>();
+        answered
+    });
+
+    // ── clause 4 and clause 5's refusal half ────────────────────────────
+    //
+    // ⛔ The omitted body is chosen from the population the previous block
+    // measured, not hardcoded. A literal origin here would silently stop naming
+    // a required body the moment the fixture shifted, and the clause would pass
+    // by omitting nothing.
+    let (omitted_selector, omitted_body) = *outer
+        .iter()
+        .find(|(_, body)| superseded_without_retention.contains(body))
+        .expect(
+            "some requirement must name a body that was superseded before reconciliation, or the              retention changed nothing and clauses 4 and 5 have no subject",
+        );
+
+    with_d7a2_reconciliation(
+        true,
+        ComposedRawTargetDefect::OmitRequirementFor(omitted_body),
+        |plan| {
+            let requirements = plan
+                .composed_raw_target_requirements()
+                .expect("the requirements mint");
+            assert!(
+                requirements
+                    .iter()
+                    .all(|requirement| requirement.required_body_origin() != omitted_body),
+                "the omission must actually have fired, or every assertion below measures the \
+                 unperturbed population"
+            );
+
+            // Clause 4: the body no requirement names is superseded again.
+            assert!(
+                plan.template_only_worker_bodies()
+                    .expect("the superseded set")
+                    .contains(&omitted_body),
+                "body {omitted_body:?} has no requirement, so it must return to the superseded \
+                 set. If it stayed retained the retention would be global — the very thing this \
+                 clause exists to forbid"
+            );
+
+            // Clause 5: and the preserved refusal is what a consumer meets.
+            let refusal = plan
+                .composed_worker_view(
+                    omitted_selector.0,
+                    omitted_selector.1,
+                    omitted_selector.2,
+                    omitted_selector.3,
+                )
+                .expect_err("a selector whose raw target was not retained must refuse");
+            assert!(
+                format!("{refusal:?}").contains("template-only"),
+                "the refusal must be the PRESERVED unexecutable-target one, unchanged from D7a. \
+                 A new message here would mean the reconciliation replaced the guard instead of \
+                 supplying the population it reads: {refusal:?}"
+            );
+        },
+    );
+
+    // ── clause 2: the two inconsistent minting defects ──────────────────
+    //
+    // ⛔ Both reach the SAME law, and that is the finding rather than a
+    // weakness: a wrong body and a transplanted construct origin are one defect
+    // seen from two sides — a demand attributed to a selector that does not
+    // resolve to it. Both name real origins, so neither is visible to a check
+    // that only asks whether the body exists.
+    for defect in [
+        ComposedRawTargetDefect::WrongBody,
+        ComposedRawTargetDefect::TransplantConstruct,
+    ] {
+        with_d7a2_reconciliation(true, defect, |plan| {
+            let refusal = plan
+                .verify_raw_target_reconciliation()
+                .expect_err("an inconsistently minted requirement must refuse at the gate");
+            assert!(
+                format!("{refusal:?}").contains("minted for one layer"),
+                "{defect:?} must reach the selector-agreement refusal, not one it also happens \
+                 to trip further along: {refusal:?}"
+            );
+        });
+    }
+
+    // ── clause 2, third arm: the set-equality law, where it really fires ──
+    //
+    // ⭐ Production. With the retention unarmed the requirements are all
+    // consistent and the demand is simply not honoured, so the gate must refuse
+    // on the population law rather than on a provenance one. This is both the
+    // only non-vacuous exercise of that check and the exact statement of why
+    // D7b cannot proceed today.
+    with_d7a2_reconciliation(false, ComposedRawTargetDefect::Exact, |plan| {
+        let refusal = plan.verify_raw_target_reconciliation().expect_err(
+            "with the retention unwired the gate must refuse: a selector demands a callable raw \
+             body the executable population does not contain",
+        );
+        assert!(
+            format!("{refusal:?}").contains("undefined phantom"),
+            "the refusal must be the exact-set-equality one: {refusal:?}"
+        );
+    });
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a2` — why the retention is measured and not
+/// wired.**
+///
+/// The reconciliation is correct on the planner's own terms: with the retention
+/// armed the gate passes, both layers answer, and no phantom appears. It is
+/// refused one plane later, and this row is what makes that a pinned fact rather
+/// than a claim in a handoff.
+///
+/// ⇒ Defining the retained raw body means transferring its result across the
+/// unit boundary. That result is a **constructor carrying a raw closure child**,
+/// and a closure has no durable lane — the *permanent raw closure refusal* that
+/// [`StaticTransitionPlan::template_only_worker_bodies`] already names as what
+/// governs branch one. The generated context exists precisely so that this
+/// body's result never takes that route; retaining the raw body re-opens the
+/// route the retarget was built to replace.
+///
+/// ⭐ The attribution is not read off the message alone. The same compile is run
+/// **twice**, differing only in whether the retention is armed, and the exact
+/// run must succeed. A row that only asserted the armed run refuses would be
+/// equally consistent with a witness that never compiled.
+///
+/// **Promise class: transition sentinel.** It is named for the boundary, and it
+/// is retired by whichever event resolves it: a durable lane for the raw closure
+/// route, or a ruling that the required raw target is reached some other way.
+/// Either turns it red on purpose, which is the review it exists to force.
+#[test]
+fn d7a2_the_retained_raw_target_cannot_be_defined_because_its_result_carries_a_raw_closure() {
+    use crate::cranelift_backend::planning::{
+        set_composed_raw_target_defect, set_composed_raw_target_retention, ComposedRawTargetDefect,
+    };
+
+    let compile = |retain: bool| {
+        set_composed_raw_target_retention(retain);
+        set_composed_raw_target_defect(ComposedRawTargetDefect::Exact);
+        let outcome = crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "d7a2_retained_raw_target",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"));
+        set_composed_raw_target_retention(false);
+        outcome
+    };
+
+    // ⛔ The positive control. Without it the refusal below is equally
+    // consistent with a witness that does not compile at all.
+    compile(false).expect(
+        "the witness must compile with the retention UNARMED, which is production behaviour",
+    );
+
+    let refusal = compile(true)
+        .expect_err("retaining the required raw body must reach the raw closure route's refusal");
+    assert!(
+        refusal.contains("a closure cannot cross the boundary"),
+        "the refusal must be the permanent raw closure one at the boundary transfer, not an \
+         incidental failure further along. Anything else means the retained body was blocked \
+         somewhere other than the route this row is about: {refusal}"
+    );
+}

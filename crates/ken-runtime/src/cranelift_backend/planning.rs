@@ -66,6 +66,16 @@ pub(super) use static_transition::{
     // re-export only: no wrapper, no derivation, no second authority.
     ComposedWorkerRouteEligibility, ComposedWorkerView, ContinuationWorkerCaptureProvenance,
     ContinuationWorkerCaptureSource,
+    // `D7a2` — the raw-target requirement and its reconciliation gate.
+    ComposedRawTargetRequirement,
+};
+// `RT-CONTSRC-PRODUCER-LOCAL` `D7a2` reconciliation controls. ⛔ `#[cfg(test)]`
+// on the RE-EXPORT as well as on the items: an ungated re-export of a
+// `cfg(test)` item is an unresolved import in the PRODUCTION build, which the
+// test profile cannot see.
+#[cfg(test)]
+pub(super) use static_transition::{
+    set_composed_raw_target_defect, set_composed_raw_target_retention, ComposedRawTargetDefect,
 };
 
 // `D3b` stage-2 controls. ⛔ `#[cfg(test)]` on the RE-EXPORT as well as on the
