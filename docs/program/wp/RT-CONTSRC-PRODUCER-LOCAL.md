@@ -777,11 +777,34 @@ all six failing `D0` rows.
   never be **shorter** than the body's ambient lexical demand. Do not "tighten"
   a capture run to its used set on the strength of this deliverable.
 
-  The two sites are the literal `LexicalClosure { captures: Vec::new(), … }`
-  constructions in `crates/ken-runtime/src/cranelift_backend/test_objects.rs`
-  (`:176`, `:220`). Their bodies each reach **one** ambient outermost binding the
-  closure does not declare. They exercise a state the contract forbids and are
-  **not** evidence of a substrate gap.
+  ⛔⛔ **THE ANCHOR IS `planning/static_transition.rs:12038`, NOT
+  `test_objects.rs`. Corrected 2026-08-05 after a hard stop; the wrong anchor
+  rode through THREE artifacts before anyone probed it.**
+
+  The site is the `LexicalClosure { captures: Vec::new(), params: ["buffer"],
+  body: closure_body }` construction inside **`governed_nested_resource_bracket`**
+  (`planning/static_transition.rs:11949`, construction at `:12038`). That fixture
+  carries a **real de Bruijn scope tracker** (`bind`/`var`, `:11962`–`:11979`)
+  which emits `RuntimeExpr::Var` by role lookup, and it is the fixture behind
+  **exactly the five failing `Var` rows**.
+
+  ⛔ **`test_objects.rs:176` and `:220` are CORRECT and must not be touched.**
+  Their bodies are **genuinely closed — zero `Var` nodes** (`:176` is a `Let`
+  over an `Effect` and a `Construct`; `:220` wraps `:176`). Their ambient
+  lexical demand is nil, so `captures: Vec::new()` is right there, and adding
+  captures would **fabricate** them — violating the very totality ruling this
+  deliverable rests on, which constrains captures to *ambient demand* and is
+  silent where demand is zero.
+
+  ⭐ **How the wrong anchor survived, because the shape recurs:** `D1c` found
+  empty-capture literals in `test_objects.rs` and asserted they were the failing
+  units' source **without checking that they produce origins 88/14** — naming a
+  producer from a grep rather than a probe. The Architect's ruling and my `D5`
+  release then each inherited it as measured. **A `file:line` quoted in a code
+  fence reads as measured and is only a claim.** Cf.
+  [[agreement-is-not-corroboration-when-a-premise-was-inherited]]. `D1c`'s
+  *mechanism* conclusion is unaffected: the population is still a hand-written
+  fixture literal, not elaborator output.
 
   **Three requirements, all of them, and the second is the one that matters:**
 
@@ -794,6 +817,29 @@ all six failing `D0` rows.
      prevent**, and a passing suite cannot distinguish the two.
   3. Retain a **negative** showing an undeclared ambient lexical reference does
      **not** acquire a caller tail or a fabricated capture.
+
+  ### The recursion question — the capture list is DERIVED, not chosen
+
+  `governed_nested_resource_bracket` recurses on `depth - 1`, so one construction
+  site produces a closure at every depth, and the ring asked whether the fix is
+  one capture list or a depth-dependent one.
+
+  ⛔ **It is neither, as a decision.** The Architect's ruling makes the capture
+  run **exactly the body's ambient lexical demand at that construction**, so
+  uniform-versus-depth-dependent is an **outcome to be measured, not an intent to
+  be picked.** Derive it from the fixture's own `bind`/`var` scope tracker —
+  which already models the scope and is the fixture's own statement of what its
+  body reaches — and let the answer fall out. ⛔ Do **not** settle it by trying a
+  uniform list and seeing whether the suite goes green; that selects the shape
+  that passes rather than the shape the contract requires.
+
+  ⛔ **HARD-STOP CASE, and it is the live one:** if the tracker's own model says
+  the body should **not** reach outside the closure, then the `Var` is the defect
+  and the capture list is innocent — **the opposite repair.** The ruling settled
+  that `captures` must be total for ambient demand; ⛔ **it did NOT rule that
+  these bodies' `Var` indices are correct**, and that question has been open
+  since `D1b` measured the shortfall as exactly one outermost position. Stop and
+  return it to me rather than choosing.
 
   ⛔ **Banned, unchanged and restated because the measurement makes one of them
   look plausible:** no `CaptureSlot` identity field, no backend-synthesized
