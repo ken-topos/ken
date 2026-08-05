@@ -818,7 +818,69 @@ all six failing `D0` rows.
   3. Retain a **negative** showing an undeclared ambient lexical reference does
      **not** acquire a caller tail or a fabricated capture.
 
-  ### ⛔⛔ RECUT 2026-08-05 — THE CAPTURE LITERAL IS INNOCENT. `D5`'s edit is the fixture's SCOPE TRACKING.
+  ### ⛔⛔⛔ THE GOVERNING TEXT IS HERE — everything below this block is SUPERSEDED
+
+  **Architect ruling `evt_5gvgzp6bzj64t`, 2026-08-05.** `D5` is **real
+  unit-environment transport work**, not a fixture edit. Both the
+  "malformed fixture" conclusion and the fixture scope-track edit are
+  **WITHDRAWN**. ⛔ Do not touch the fixture.
+
+  **The premise that defeated two earlier recuts:** "nothing at the match level
+  binds `AllocatedBuffer`" counted only the inner `ComputationalMatch`'s binders
+  and **omitted the enclosing ordinary `Match`** over `BufferAllocate`, whose
+  `Result::Ok` case has `binders: 1` and **is** the governed buffer. The
+  nearest-first environment is
+  `[InductionHypothesis, ScopeArgument, AllocatedBuffer, ...outer]`, so
+  **`Var(2)` is well founded** — local under three binders. Confirmed by the
+  production walk `required_surrounding_environment_prefix`, by both lowering
+  constructions, and by the fixture's own committed structural assertion.
+
+  ⇒ ⛔ **The five reds are a REAL DEFECT — a functionized-unit environment
+  transport failure.** The emitted unit keeps the inner IH and constructor
+  argument and **loses the outer ordinary-`Match` success binder** in scope at
+  the source case body. ⛔ **Do not restore the "malformed fixture / no Ken
+  defect" reading; I published it and it is false.**
+
+  ⭐ **Unchanged and still standing:** the `LexicalClosure.captures` **totality**
+  law; the `Scope`-constructor closure is **innocent** with a correct empty
+  capture run; the `StaticWorker` is **non-causal**. ⭐ **The per-depth
+  compounding worry is DEAD** — each recursive level builds its own outer
+  `BufferAllocate` match and success binder, so a fresh `BinderScope::default()`
+  accurately describes that level. It is **not** permission to discard the
+  enclosing ordinary-case binder during unit formation.
+
+  #### `D5a` — planner side: transport the binding
+
+  1. Derive the outer ordinary-case binding from the enclosing `Match`
+     **success-binder provenance**.
+  2. Represent it as an **explicit typed unit-environment member** — ⛔ never an
+     implicit caller tail.
+  3. Retain the closed order **`IHs ++ arguments ++ outer frame`**.
+  4. **Fail closed before emission** on omission, redirection, wrong provenance,
+     wrong order, or fabricated availability.
+
+  ⛔ **`D5a` HARD-STOPS to the Steward if representing that member requires a
+  new planner or ABI authority** rather than an added typed member on an
+  existing one. That is substrate expansion, the Architect's to authorize, and
+  must not be discovered mid-repair.
+
+  #### `D5b` — lowering side: consume it, and prove it
+
+  5. Lowering consumes **that exact planned member**.
+  6. **Positive:** `Var(2)` is the actual `BufferAllocate` success payload,
+     **and the original `D4a` boundary is still reached.**
+  7. **Negative:** drop or redirect **only** that planned outer-frame member and
+     observe the **pre-emission** refusal.
+
+  ⛔ **Banned:** no capture edit, no source `Var` rewrite, no padding, no
+  shifting, no synthesized capture, no caller-tail recovery.
+
+  ⭐ **This vindicates [[RT-UNIT-CLOSURE-CONVERT]]'s GAP STATEMENT** — the unit
+  environment does not carry what its body needs — while its **mechanism**
+  (capture slots) stays wrong. That node stays `closed` and capture conversion
+  remains banned as the repair.
+
+  ### ⛔ SUPERSEDED 2026-08-05 — the capture literal is innocent (kept: that part is still true)
 
   **The "correct the capture literal" edit is WITHDRAWN.** Measured at
   `:12038`: `closure_scope` is built from an **empty** `BinderScope::default()`

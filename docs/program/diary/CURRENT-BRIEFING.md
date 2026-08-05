@@ -40,30 +40,67 @@
 
 ### The one thing to do next
 
-**Wait for the Architect's FIXTURE-SEMANTICS ruling**, routed at
-`evt_1e3bz0c973egh` in `RT-CONTSRC-PRODUCER-LOCAL`'s thread
-**`thr_6m43v75yndhtj`**:
+**`D5a` is released and Runtime is working it.** Recut posted at
+`evt_4c4wx22dhedfb` in `RT-CONTSRC-PRODUCER-LOCAL`'s thread
+**`thr_6m43v75yndhtj`**, on Architect ruling `evt_5gvgzp6bzj64t`. **`D5a`
+hard-stops to me** if the member needs a **new** planner/ABI authority rather
+than an added typed member on an existing one — that is substrate expansion and
+the Architect's to authorize.
 
-> **In `governed_nested_resource_bracket`, should the governed buffer be in
-> scope at the `ComputationalMatch` level?** Bind `AllocatedBuffer` around the
-> match, or correct `allocation_scope` so the case body does not reference it.
+### ⛔⛔ I PUBLISHED A FALSE CONCLUSION AND IT IS WITHDRAWN
 
-Both change what the fixture **means**, which is why it is not mine. ⛔ **Do not
-repair before that ruling**, and do not let the ring pick.
+**This file said "the five reds are the runtime correctly rejecting a malformed
+fixture — no Ken defect." THAT IS FALSE.** Its premise — that nothing at the
+match level binds `AllocatedBuffer` — counted only the inner
+`ComputationalMatch`'s binders and **omitted the enclosing ordinary `Match`**
+over `BufferAllocate`, whose `Result::Ok` case has `binders: 1` and **is** the
+governed buffer.
 
-### ⭐⭐ THE CAMPAIGN CONCLUSION — the five reds are NOT a Ken defect
+The nearest-first environment is
+`[InductionHypothesis, ScopeArgument, AllocatedBuffer, ...outer]`, so **`Var(2)`
+is well founded** — local under three binders. Confirmed independently by the
+production walk `required_surrounding_environment_prefix`, by both lowering
+constructions, and by the fixture's own committed structural assertion.
 
-**The runtime is correctly rejecting a malformed fixture.** `Var: no runtime
-binding` is the right answer to an IR referencing a binder nobody bound.
-`governed_nested_resource_bracket`'s `allocation_scope` presumes an ambient
-`AllocatedBuffer` **at the match level that nothing there binds** — the buffer
-is bound *inside* the closure. ⛔ **No substrate gap, no Ken defect, nothing on
-the critical path but a test-fixture repair.**
+⇒ ⛔ **The five reds are a REAL DEFECT: a functionized-unit environment
+transport failure.** The emitted unit keeps the inner IH and constructor
+argument and **loses the outer ordinary-`Match` success binder**. ⛔ **Do not
+touch the fixture.**
 
-**How far this moved:** from "a large closure-conversion substrate node gating
-all seven `RecursiveDescent` nodes" to "one fixture presumes a binder it never
-binds." Three inventory passes plus **three hard stops**, every stop the ring
-correctly refusing to fabricate something.
+⭐ **The shape to learn from:** three successive dispositions — mine, the
+Architect's, and the ring's — each inherited an unprobed premise from the one
+before. The anchor was never measured; then the binder count was taken from the
+inner match alone. **Each artifact read as grounded because its predecessor
+did.**
+
+### `D5` — recut as REAL transport work, split `D5a`/`D5b`
+
+**No new node** (same branch, one candidate — the reasoning that closed
+[[RT-UNIT-CLOSURE-CONVERT]]). ⚠ **But `D5` is no longer small.**
+
+**`D5a` planner:** derive the outer ordinary-case binding from the enclosing
+`Match` **success-binder provenance**; represent it as an **explicit typed
+unit-environment member**, never an implicit caller tail; retain the closed
+order **`IHs ++ arguments ++ outer frame`**; **fail closed before emission** on
+omission, redirection, wrong provenance, wrong order, or fabricated
+availability.
+
+**`D5b` lowering:** consume **that exact planned member**; **positive** that
+`Var(2)` is the real `BufferAllocate` success payload **and the `D4a` boundary
+is still reached**; **negative** that dropping or redirecting **only** that
+member hits the **pre-emission** refusal.
+
+⛔ **Banned:** no capture edit, no source `Var` rewrite, no padding, no
+shifting, no synthesized capture, no caller-tail recovery.
+
+⭐ **Still standing:** the `LexicalClosure.captures` **totality** law; the
+`Scope`-constructor closure is **innocent** (correct empty capture run); the
+`StaticWorker` is **non-causal**. ⭐ **The per-depth compounding worry is
+DEAD** — each level builds its own outer match and success binder.
+
+⭐ **[[RT-UNIT-CLOSURE-CONVERT]]'s GAP STATEMENT was right all along** — the
+unit environment does not carry what its body needs. Only its **mechanism**
+(capture slots) was wrong. It stays `closed`; capture conversion stays banned.
 
 ### `D5` — recut TWICE; both earlier edits are WITHDRAWN
 
