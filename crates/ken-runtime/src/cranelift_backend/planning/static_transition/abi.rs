@@ -25,7 +25,8 @@ use super::semantic_ir::{
 };
 use super::{
     planner_capacity_error, planner_error, unsupported, BoundaryReferentOwner,
-    ContinuationContextId, ContinuationSpecializationId, CraneliftBackendError, EdgeKind,
+    ContinuationContextId, ContinuationSourceCoordinate, ContinuationSpecializationId,
+    CraneliftBackendError, EdgeKind,
     PlannedContinuationContext, PlannedContinuationSpecialization, SemanticPlane,
     SemanticSourceKind, SemanticSourceSeed, StaticEdge, StaticEdgeId, StaticNode, StaticNodeId,
     StaticOriginId, TransitionKind,
@@ -504,8 +505,59 @@ pub(super) struct AbiContinuationDescriptor {
 #[repr(C)]
 pub(super) struct AbiContinuationInputAuthority {
     pub(super) ordinal: u32,
-    pub(super) source_owner: PredeclaredFunctionId,
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3a`** — the provenance owner *with its
+    /// coordinate domain retained*. See [`AbiContinuationInputProvenance`];
+    /// this replaces a bare `source_owner`, which could not tell the two
+    /// domains apart.
+    pub(super) provenance: AbiContinuationInputProvenance,
     pub(super) referent_affinity: DenseRange,
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3a` — this plane's provenance-owner axis,
+/// with the coordinate domain PRESERVED.**
+///
+/// ⛔ **Not a bare `PredeclaredFunctionId`.** Both coordinate domains name an
+/// owner, so projecting them onto one raw id makes `EntryAbi { source_owner: X }`
+/// and `ProducerLocal { binding_owner: X }` the *same value* at this consumer —
+/// and an ABI authority would then accept a substitution of either for the
+/// other whenever ordinal, owner and affinity happen to agree. That contradicts
+/// `D1`'s accepted closed-domain boundary, and the domain being retained by the
+/// validator and by the exhaustive coordinate matches elsewhere does not repair
+/// this plane's own projection.
+///
+/// ⛔ **Exactly one field per arm, and it is the owner.** Not an owner beside an
+/// independent boolean or tag: that shape can encode a combination no
+/// coordinate can produce, so the invalid state would be representable here and
+/// nowhere else.
+///
+/// ⭐ This plane owns *only* the provenance-owner axis. Structural binding
+/// identity and immediate availability stay in their accepted planner
+/// representations; nothing duplicates the full source coordinate here, and no
+/// arm invents an ABI position for a producer-local value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(C, u32)]
+pub(super) enum AbiContinuationInputProvenance {
+    EntryAbi { source_owner: PredeclaredFunctionId },
+    ProducerLocal { binding_owner: PredeclaredFunctionId },
+}
+
+impl AbiContinuationInputProvenance {
+    /// The provenance one source coordinate names.
+    ///
+    /// ⛔ Exhaustive over the coordinate domain with no wildcard, default or
+    /// fallback: a domain added later must be assigned an arm here before it
+    /// compiles, which is the whole point of routing every consumer through one
+    /// constructor rather than each reading an owner field it likes.
+    pub(super) fn of(coordinate: ContinuationSourceCoordinate) -> Self {
+        match coordinate {
+            ContinuationSourceCoordinate::EntryAbi { source_owner, .. } => {
+                Self::EntryAbi { source_owner }
+            }
+            ContinuationSourceCoordinate::ProducerLocal { binding, .. } => Self::ProducerLocal {
+                binding_owner: binding.binding_owner,
+            },
+        }
+    }
 }
 
 /// **`RT-DECL-CLOSURE-PORT` `D5a` — one generated producer execution context's
@@ -858,13 +910,12 @@ fn append_continuation_descriptor(
             len: u32::try_from(projection.referent_affinity.len())
                 .map_err(|_| planner_capacity_error("continuation ABI affinity range exhausted"))?,
         };
-        // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — this plane records an ENTRY source
-        // owner. ⛔ A producer-local coordinate has no such owner to record and
-        // refuses here; `D3` decides what this plane carries for that domain.
-        let (source_owner, _, _) = projection.coordinate.entry_abi_pending_producer_local()?;
+        // `RT-CONTSRC-PRODUCER-LOCAL` `D3a` — this plane records the provenance
+        // owner WITH its coordinate domain, so both domains are recordable and
+        // neither is expressible as the other.
         abi.continuation_inputs.push(AbiContinuationInputAuthority {
             ordinal,
-            source_owner,
+            provenance: AbiContinuationInputProvenance::of(projection.coordinate),
             referent_affinity,
         });
         abi.continuation_slots.push(AbiSlot {
@@ -1048,14 +1099,14 @@ fn append_continuation_context_descriptor(
                 planner_capacity_error("generated context ABI affinity range exhausted")
             })?,
         };
-        // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — same entry-domain refusal as the
-        // specialization plane above.
-        let (source_owner, _, _) = projection.coordinate.entry_abi_pending_producer_local()?;
+        // `RT-CONTSRC-PRODUCER-LOCAL` `D3a` — same domain-preserving provenance
+        // as the specialization plane above.
         abi.context_inputs.push(AbiContinuationInputAuthority {
             ordinal,
             // ⚠ ROOT provenance, retained unchanged. The context makes the value
-            // *available*; it does not become its origin.
-            source_owner,
+            // *available*; it does not become its origin. That is why this is
+            // the coordinate's own provenance and never this context's id.
+            provenance: AbiContinuationInputProvenance::of(projection.coordinate),
             referent_affinity,
         });
         abi.context_slots.push(AbiSlot {
@@ -1997,13 +2048,18 @@ impl AbiPlane {
                 let ordinal = u32::try_from(position).map_err(|_| {
                     planner_capacity_error("continuation ABI input ordinal exhausted")
                 })?;
-                // `RT-CONTSRC-PRODUCER-LOCAL` `D1` — entry-domain agreement, as
-                // at the push site. ⛔ Refuses on a producer-local coordinate.
-                let (source_owner, _, _) =
-                    projection.coordinate.entry_abi_pending_producer_local()?;
-                if authority.ordinal != ordinal || authority.source_owner != source_owner {
+                // `RT-CONTSRC-PRODUCER-LOCAL` `D3a` — re-derive the provenance
+                // from the planner projection and compare the COMPLETE tagged
+                // value. ⛔ Not the owner alone: comparing owners would accept
+                // an entry-ABI authority standing in for a producer-local one
+                // in the same owner, which is exactly the substitution the tag
+                // exists to refuse.
+                if authority.ordinal != ordinal
+                    || authority.provenance
+                        != AbiContinuationInputProvenance::of(projection.coordinate)
+                {
                     return Err(planner_error(
-                        "continuation ABI input source owner disagrees with the planner projection",
+                        "continuation ABI input provenance disagrees with the planner projection",
                     ));
                 }
                 if authority.referent_affinity.start as usize != next_affinity {

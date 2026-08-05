@@ -668,14 +668,14 @@ impl<'plan> ContinuationContextView<'plan> {
             .iter()
             .zip(self.inputs)
             .map(|(projection, authority)| {
-                // `D1` — the ABI-plane input authority records an ENTRY source
-                // owner, so agreement is checked in that domain. ⛔ A
-                // producer-local coordinate refuses here rather than being
-                // compared against a field that cannot hold it.
-                let (source_owner, _, _) =
-                    projection.coordinate.entry_abi_pending_producer_local()?;
+                // `D3a` — the ABI-plane input authority records a DOMAIN-TAGGED
+                // provenance owner, so agreement is checked as the complete
+                // tagged value. ⛔ Both domains are now recordable here, and
+                // neither can satisfy the other's comparison by carrying the
+                // same owner id.
                 if projection.ordinal != authority.ordinal
-                    || source_owner != authority.source_owner
+                    || abi::AbiContinuationInputProvenance::of(projection.coordinate)
+                        != authority.provenance
                 {
                     return Err(planner_error(
                         "a generated context capture disagrees with its validated ABI input \
@@ -799,13 +799,36 @@ pub(in crate::cranelift_backend) enum ContinuationSourceCoordinate {
 }
 
 impl ContinuationSourceCoordinate {
-    /// The entry-ABI coordinate this names, or the refusal owed to `D3`.
+    /// The entry-ABI coordinate this names, or the refusal owed to `D3b`.
     ///
-    /// ⛔ **Not an exemption.** Every caller is a consumer that does not yet
-    /// assign the producer-local domain, and each one fails closed here rather
-    /// than reading a position the local arm does not have. `grep` this name to
-    /// enumerate exactly what `D3` still owes; when the list is empty the
-    /// method goes with it.
+    /// ⛔ **Not an exemption.** A caller is a consumer that does not yet assign
+    /// the producer-local domain, and it fails closed here rather than reading
+    /// a position the local arm does not have.
+    ///
+    /// ⚠ **`D3a` — the live enumeration is now the TWO LOWERING EMISSION ARMS,
+    /// and they are not callers of this method.** Every planner-side consumer
+    /// has been given a real producer-local derivation, so this method has no
+    /// caller left; `dead_code` is allowed for exactly that reason and is
+    /// **time-bounded, not standing**. What remains owed is:
+    ///
+    /// - `lowering::core`, the retained-frame emission seam — must consume
+    ///   `ContinuationImmediateAvailability::CurrentLexical` at its exact
+    ///   emission origin, environment and post-shift index.
+    /// - `lowering::core`, the declared-context emission seam — must consume
+    ///   `ContinuationImmediateAvailability::GeneratedContextCapture` for its
+    ///   exact context, owner and declared slot.
+    ///
+    /// Both still refuse today, in lowering's own vocabulary rather than
+    /// through this method: their refusal names *lowering's* environments, and
+    /// routing it through a planner-side helper would replace a message about
+    /// the operand run being indexed with one about a coordinate domain.
+    ///
+    /// ⛔ **Kept rather than deleted because deleting it would be the lie.**
+    /// `D3b` consumes both arms, at which point nothing is owed and this method
+    /// goes with the debt it names. It is retained here so the debt has a
+    /// single named place, and its own refusal contract stays measured by
+    /// `contsrc_d3a_entry_abi_seam_still_refuses_the_producer_local_domain`.
+    #[allow(dead_code)]
     fn entry_abi_pending_producer_local(
         self,
     ) -> Result<(PredeclaredFunctionId, u32, ContinuationInputSource), CraneliftBackendError> {
@@ -1427,14 +1450,11 @@ impl<'plan> ContinuationUnitView<'plan> {
             .iter()
             .zip(self.inputs)
             .map(|(projection, authority)| {
-                // `D1` — the ABI-plane input authority records an ENTRY source
-                // owner, so agreement is checked in that domain. ⛔ A
-                // producer-local coordinate refuses here rather than being
-                // compared against a field that cannot hold it.
-                let (source_owner, _, _) =
-                    projection.coordinate.entry_abi_pending_producer_local()?;
+                // `D3a` — domain-tagged provenance agreement, as at the
+                // generated-context capture consumer above.
                 if projection.ordinal != authority.ordinal
-                    || source_owner != authority.source_owner
+                    || abi::AbiContinuationInputProvenance::of(projection.coordinate)
+                        != authority.provenance
                 {
                     return Err(planner_error(
                         "a continuation input projection disagrees with its validated ABI input \
@@ -5587,13 +5607,13 @@ fn validate_continuation_source_slot(
     plan: &StaticTransitionPlan<'_>,
     source: &ContinuationSourceSlotAuthority,
 ) -> Result<(), CraneliftBackendError> {
-    // `D1` `D3` consumer 1 of 3 — the slot's only exact validator.
+    // `D1` `D3a` consumer 1 of 3 — the slot's only exact validator.
     //
-    // ⛔ Exhaustive over the coordinate domains with no wildcard. The
-    // producer-local arm is **refused**, never exempted: the node bans
-    // exempting a new arm from this validator, and a refusal is the opposite of
-    // an exemption — it fails closed until `D3` gives this consumer the
-    // producer-local derivation to re-run.
+    // ⛔ Exhaustive over the coordinate domains with no wildcard, and **neither
+    // arm is exempted**: each RE-DERIVES its own authority and compares the
+    // whole record. The entry arm re-reads the owner's entry slot run; the
+    // producer-local arm re-runs the very walk that mints these values. A
+    // domain added later gets its own derivation here or does not compile.
     match source.coordinate {
         ContinuationSourceCoordinate::EntryAbi {
             source_owner,
@@ -5620,8 +5640,64 @@ fn validate_continuation_source_slot(
                 ));
             }
         }
-        ContinuationSourceCoordinate::ProducerLocal { .. } => {
-            source.coordinate.entry_abi_pending_producer_local()?;
+        ContinuationSourceCoordinate::ProducerLocal { binding, locator } => {
+            // `D3a` — the producer-local re-derivation, the exact analogue of
+            // the entry arm above.
+            //
+            // ⭐ The independent authority is the **walk itself**: re-run it
+            // from this binding owner's own source root to the scope the
+            // locator names, and the value it places at the locator's index
+            // must be this one. That re-derives carrier, ownership, storage
+            // owner and affinity from `producer_local_source`, rather than
+            // trusting the fields the projection arrived carrying.
+            //
+            // ⛔ Rooted at `binding.binding_owner`, not at the consumer or the
+            // emitting owner: a binding's scope belongs to the function whose
+            // body created it, and walking from anywhere else would reach a
+            // different environment and index it with this locator's number.
+            let owner_root = continuation_owner_source_root(plan, binding.binding_owner)?;
+            let entry = continuation_owner_entry_sources(plan, binding.binding_owner)?
+                .into_iter()
+                .map(ContinuationValueSourceAuthority::source)
+                .collect::<Vec<_>>();
+            let (_, reached) = walk_continuation_value_environment(
+                plan,
+                owner_root,
+                locator.environment_origin,
+                &entry,
+            )?;
+            let reached = reached.ok_or_else(|| {
+                planner_error(
+                    "a producer-local continuation value names a scope outside its own binding \
+                     owner's source subtree, so the forward walk never reaches it and no \
+                     environment holds the value it claims",
+                )
+            })?;
+            let index = usize::try_from(locator.environment_index).map_err(|_| {
+                planner_capacity_error("continuation producer-local environment index exhausted")
+            })?;
+            let held = reached.get(index).ok_or_else(|| {
+                planner_error(
+                    "a producer-local continuation value names an environment index past the end \
+                     of the environment in force at its own locator scope",
+                )
+            })?;
+            let ContinuationValueSourceAuthority::Closed(sources) = held else {
+                return Err(planner_error(
+                    "a producer-local continuation value's locator names an open environment \
+                     position, which carries no exact source authority to agree with; this \
+                     fails closed rather than accepting a position whose contents are unknown",
+                ));
+            };
+            // ⛔ Whole-record containment, not a coordinate match. The position
+            // may legitimately hold several joined sources, so membership is
+            // the right relation — but the member must agree in every field,
+            // which is what makes this a re-derivation rather than a lookup.
+            if !sources.contains(source) || source.referent_affinity.is_empty() {
+                return Err(planner_error(
+                    "continuation value disagrees with its exact producer-local source provenance",
+                ));
+            }
         }
     }
     Ok(())
@@ -19438,14 +19514,46 @@ mod tests {
         let plan = contspec_plan();
 
         let mut wrong_owner = plan.abi.clone();
-        wrong_owner.continuation_inputs[0].source_owner = PredeclaredFunctionId(u32::MAX);
+        wrong_owner.continuation_inputs[0].provenance =
+            abi::AbiContinuationInputProvenance::EntryAbi {
+                source_owner: PredeclaredFunctionId(u32::MAX),
+            };
         assert_eq!(
             wrong_owner
                 .validate_continuation_specializations(&plan.continuation_specializations)
                 .unwrap_err(),
-            planner_error(
-                "continuation ABI input source owner disagrees with the planner projection"
-            )
+            planner_error("continuation ABI input provenance disagrees with the planner projection")
+        );
+
+        // `RT-CONTSRC-PRODUCER-LOCAL` `D3a` — the corruption the bare
+        // `source_owner` field could not express, let alone refuse.
+        //
+        // ⭐ The owner is carried across UNCHANGED and only the domain moves,
+        // so ordinal, owner and affinity all still agree. Before `D3a` this
+        // record held one `PredeclaredFunctionId` and both domains projected
+        // onto it, so this substitution was **not representable** — an ABI
+        // authority for an entry-ABI value and one for a producer-local
+        // binding in the same owner were the same value. The tag is what makes
+        // the swap both expressible and refusable.
+        let mut crossed_domain = plan.abi.clone();
+        let carried_owner = match crossed_domain.continuation_inputs[0].provenance {
+            abi::AbiContinuationInputProvenance::EntryAbi { source_owner } => source_owner,
+            abi::AbiContinuationInputProvenance::ProducerLocal { binding_owner } => binding_owner,
+        };
+        crossed_domain.continuation_inputs[0].provenance =
+            abi::AbiContinuationInputProvenance::ProducerLocal {
+                binding_owner: carried_owner,
+            };
+        assert_ne!(
+            crossed_domain.continuation_inputs[0].provenance,
+            plan.abi.continuation_inputs[0].provenance,
+            "the domain swap must change the recorded provenance, or this row measures nothing"
+        );
+        assert_eq!(
+            crossed_domain
+                .validate_continuation_specializations(&plan.continuation_specializations)
+                .unwrap_err(),
+            planner_error("continuation ABI input provenance disagrees with the planner projection")
         );
 
         let mut wrong_lifetime = plan.abi.clone();
@@ -19823,15 +19931,32 @@ mod tests {
     /// present nowhere, so it is still refused — but now because no walk places
     /// it, which is the property `D2b` actually owes.
     ///
+    /// ⚠ **`D3a` moved the FIRST half the same way, for the same reason.**
+    /// `validate_continuation_source_slot` no longer refuses on the domain
+    /// either — it re-derives producer-local coordinates by re-running the
+    /// forward walk. A **fabricated** coordinate is still refused, but now
+    /// because the re-derivation cannot reach it: this row's probe names
+    /// `PredeclaredFunctionId(u32::MAX)` as its binding owner, and no such
+    /// owner has a source root to walk from.
+    ///
+    /// ⛔ That refusal is real but *shallow* — it rejects the owner before any
+    /// environment is consulted. The deeper property, that a coordinate with a
+    /// genuine owner and a genuine scope is refused when the walk does not
+    /// place it **there**, is deliberately not claimed here: it needs a
+    /// coordinate this probe cannot express, and
+    /// `contsrc_d3a_validator_rederives_a_producer_local_source` measures it
+    /// with real owners, real scopes and a positive control.
+    ///
     /// MEASURED: `validate_continuation_source_slot` returns `Err` on a
-    /// producer-local coordinate; `exact_continuation_projection` returns `Err`
-    /// on a producer-local coordinate that the forward semantic walk does not
-    /// find at the emission seat; each returns `Ok` on the same record carrying
-    /// its original entry coordinate. CLAIMED: neither consumer has a path that
-    /// silently reads an entry position out of the local domain. THE GAP: this
-    /// says nothing about whether `D2b`'s derivation assigns the *right* index
-    /// when the coordinate IS present — that is what the two `D2b`
-    /// discriminators below measure, and it is deliberately not claimed here.
+    /// producer-local coordinate whose binding owner does not exist;
+    /// `exact_continuation_projection` returns `Err` on a producer-local
+    /// coordinate that the forward semantic walk does not find at the emission
+    /// seat; each returns `Ok` on the same record carrying its original entry
+    /// coordinate. CLAIMED: neither consumer has a path that silently reads an
+    /// entry position out of the local domain. THE GAP: this says nothing about
+    /// whether either derivation assigns the *right* answer when the coordinate
+    /// IS present — the `D2b` discriminators below and the `D3a` row above own
+    /// that, and it is deliberately not claimed here.
     ///
     /// ⭐ The positive control is the load-bearing half. `Err` is satisfied by a
     /// record that was malformed for some unrelated reason, so each row proves
@@ -19857,9 +19982,11 @@ mod tests {
         local.coordinate = ContinuationSourceCoordinate::producer_local_probe();
         let refusal = validate_continuation_source_slot(&plan, &local)
             .expect_err("the exact slot validator must refuse a producer-local coordinate");
-        assert!(
-            format!("{refusal:?}").contains("producer-local binding"),
-            "the validator must refuse with its OWN message rather than incidentally: {refusal:?}"
+        assert_eq!(
+            refusal,
+            planner_error("continuation owner does not have one exact source-occurrence root"),
+            "the validator must refuse with a message from its OWN re-derivation rather than \
+             incidentally"
         );
 
         // The projection's `RootIsImmediate` arm. An entry coordinate takes the
@@ -20763,6 +20890,192 @@ mod tests {
             interned_inputs > 0,
             "no specialization interned any input at all, so the admission law held vacuously"
         );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3a` — the validator RE-DERIVES a
+    /// producer-local source instead of refusing its domain.**
+    ///
+    /// ⭐ The positive control is the deliverable: before `D3a` this call was
+    /// an `Err` for every producer-local coordinate, so `Ok(())` here is the
+    /// consumer actually being assigned rather than merely stopping.
+    ///
+    /// ⛔ The three discriminators exist because a lookup that merely *finds*
+    /// the coordinate would pass the positive control. Each perturbs one thing
+    /// the re-derivation must check and asserts the refusal by its own message.
+    ///
+    /// MEASURED: a walk-derived producer-local source validates; relocating it
+    /// to an index the same environment genuinely holds a **different** value
+    /// at is refused; changing the structural binding identity while keeping
+    /// the locator is refused; and corrupting a contract field the coordinate
+    /// does not name — the referent affinity — is refused. CLAIMED: the arm
+    /// re-runs the derivation and compares the whole record, rather than
+    /// confirming the coordinate appears somewhere. THE GAP: production still
+    /// declines every producer-local candidate at the `D2` gate, so this arm is
+    /// reached here by direct construction and not by any fixture compile.
+    ///
+    /// **Promise class: durable invariant.**
+    #[test]
+    fn contsrc_d3a_validator_rederives_a_producer_local_source() {
+        let expr = Box::leak(Box::new(contsrc_d2_both_binding_kinds_fixture()));
+        let plan =
+            plan_static_transition_graph(expr, &BTreeMap::new()).expect("the D2 fixture plans");
+        let target = contsrc_d2_first_origin(&plan, |expr| {
+            matches!(expr, RuntimeExpr::ComputationalMatch { .. })
+        });
+        let reached = contsrc_d2_reached_environment(&plan, target);
+        let (effect_source, _, effect_locator) = contsrc_d2_local(&reached[1]);
+
+        // The positive control, and the whole point of the deliverable.
+        validate_continuation_source_slot(&plan, effect_source)
+            .expect("D3a re-derives a producer-local source rather than refusing its domain");
+
+        // Discriminator 1 — the locator must name the position that actually
+        // holds THIS value.
+        //
+        // ⭐ The decoy is the fixture's OTHER producer-local binding's own
+        // locator, so it is a real occupied position in a real scope that holds
+        // a genuinely different value. That is what makes "walk somewhere and
+        // accept whatever sits at the index" a FAILING answer here rather than
+        // an indistinguishable one — an out-of-range index would only have
+        // measured the bounds guard.
+        let (binder_source, _, binder_locator) = contsrc_d2_local(&reached[0]);
+        assert_ne!(
+            (binder_locator.environment_origin, binder_locator.environment_index),
+            (effect_locator.environment_origin, effect_locator.environment_index),
+            "the two fixture bindings must occupy different positions, or the decoy is the seat"
+        );
+        let mut relocated = effect_source.clone();
+        if let ContinuationSourceCoordinate::ProducerLocal { locator, .. } =
+            &mut relocated.coordinate
+        {
+            *locator = binder_locator;
+        }
+        // The oracle: that position is occupied, and by something else.
+        let decoy_scope = contsrc_d2_reached_environment(&plan, binder_locator.environment_origin);
+        assert!(
+            matches!(
+                decoy_scope.get(binder_locator.environment_index as usize),
+                Some(ContinuationValueSourceAuthority::Closed(sources))
+                    if sources.contains(binder_source) && !sources.contains(&relocated)
+            ),
+            "the decoy position must hold the OTHER binding and not the relocated one, or this \
+             discriminator cannot fail for the intended reason"
+        );
+        assert_eq!(
+            validate_continuation_source_slot(&plan, &relocated).unwrap_err(),
+            planner_error(
+                "continuation value disagrees with its exact producer-local source provenance"
+            )
+        );
+
+        // Discriminator 2 — the structural binding identity is re-derived, not
+        // carried. Keeping the locator exact and moving only the ordinal makes
+        // the coordinate name a binding the walk never places there.
+        let mut crossed_binding = effect_source.clone();
+        if let ContinuationSourceCoordinate::ProducerLocal { binding, .. } =
+            &mut crossed_binding.coordinate
+        {
+            binding.binding_ordinal = binding.binding_ordinal.wrapping_add(1);
+        }
+        assert_eq!(
+            validate_continuation_source_slot(&plan, &crossed_binding).unwrap_err(),
+            planner_error(
+                "continuation value disagrees with its exact producer-local source provenance"
+            )
+        );
+
+        // Discriminator 3 — the CONTRACT, not just the coordinate. Affinity is
+        // re-derived by `producer_local_source` from the binding's lifetime, so
+        // a projection arriving with a different one disagrees even though its
+        // coordinate is exact.
+        //
+        // ⛔ The corrupted affinity is deliberately kept NON-EMPTY. Clearing it
+        // was the first draft, and it passed against a coordinate-only
+        // comparison: the sibling `is_empty()` clause refused it, so the row
+        // named the whole-record comparison while measuring the emptiness
+        // guard. Measured, not reasoned — the mutation to a coordinate-only
+        // match survived until this became a different non-empty value.
+        let mut wrong_affinity = effect_source.clone();
+        assert!(
+            !wrong_affinity.referent_affinity.is_empty(),
+            "the fixture source must carry an affinity to corrupt, or this row is vacuous"
+        );
+        wrong_affinity
+            .referent_affinity
+            .push(wrong_affinity.referent_affinity[0]);
+        assert!(
+            !wrong_affinity.referent_affinity.is_empty()
+                && wrong_affinity.referent_affinity != effect_source.referent_affinity,
+            "the corrupted affinity must be non-empty AND different, or discriminator 3 measures \
+             the emptiness guard instead of the whole-record comparison"
+        );
+        assert_eq!(
+            validate_continuation_source_slot(&plan, &wrong_affinity).unwrap_err(),
+            planner_error(
+                "continuation value disagrees with its exact producer-local source provenance"
+            )
+        );
+
+        // Discriminator 4 — the locator's index is BOUNDED by the environment
+        // that scope actually has, and running off it refuses by its own
+        // message rather than folding into the disagreement above.
+        //
+        // ⚠ This is the one refusal the coordinate comparison cannot subsume.
+        // The locator lives *inside* the coordinate, so a wrong index is
+        // normally caught as a coordinate disagreement — an index past the end
+        // has no position to compare against at all, and reaches a different
+        // guard.
+        let mut past_end = effect_source.clone();
+        if let ContinuationSourceCoordinate::ProducerLocal { locator, .. } =
+            &mut past_end.coordinate
+        {
+            locator.environment_index = u32::MAX;
+        }
+        assert_eq!(
+            validate_continuation_source_slot(&plan, &past_end).unwrap_err(),
+            planner_error(
+                "a producer-local continuation value names an environment index past the end of \
+                 the environment in force at its own locator scope"
+            )
+        );
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D3a` — the seam is retained, and its own
+    /// refusal contract stays measured while it has no caller.**
+    ///
+    /// ⚠ `D3a` assigns every planner-side consumer, so this method's live
+    /// enumeration is now the two lowering emission arms and nothing calls it.
+    /// An uncalled refusal is indistinguishable from a deleted one, so its
+    /// contract is asserted directly until `D3b` retires it with the debt.
+    ///
+    /// MEASURED: the method still returns the entry triple for an entry-ABI
+    /// coordinate and still refuses a producer-local one. CLAIMED: retaining
+    /// the seam retains a working refusal, not just a comment. THE GAP: this
+    /// says nothing about the two lowering seams, which refuse in their own
+    /// vocabulary and are `D3b`'s.
+    ///
+    /// **Promise class: transition sentinel** — `D3b` deletes the method and
+    /// this row with it.
+    #[test]
+    fn contsrc_d3a_entry_abi_seam_still_refuses_the_producer_local_domain() {
+        let entry = ContinuationSourceCoordinate::EntryAbi {
+            source_owner: PredeclaredFunctionId(7),
+            source_abi_position: 3,
+            source: ContinuationInputSource::Parameter,
+        };
+        assert_eq!(
+            entry.entry_abi_pending_producer_local().expect(
+                "the entry domain is exactly what this seam still answers for"
+            ),
+            (
+                PredeclaredFunctionId(7),
+                3,
+                ContinuationInputSource::Parameter
+            )
+        );
+        assert!(ContinuationSourceCoordinate::producer_local_probe()
+            .entry_abi_pending_producer_local()
+            .is_err());
     }
 
     fn mutate_projection_field(
