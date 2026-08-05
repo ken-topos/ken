@@ -244,22 +244,55 @@ all six failing `D0` rows.
   one all-or-nothing deliverable. That is a sizing defect in my cut, not a
   Runtime execution problem, and the recut is the fix.
 
-  - **`D3a` — the consumers measurable NOW. A WHOLE deliverable.** The validator
-    re-derivation, the tagged ABI provenance sum and its ABI-plane consumers,
-    and the generated-context full-coordinate lookup. Both lowering emission
-    seams **keep refusing** the local arms. Tested by exactly `D2b`'s
-    discipline: construct the arms directly and mutation-prove each property,
-    since production still declines every candidate.
-    ⛔ **`entry_abi_pending_producer_local` is RETAINED, and that is
-    COMPLIANCE, not an exception** — the release conditioned its deletion on
-    *"only when its live enumeration is empty"* (`evt_6zr8a4h90c7rp`). After
-    `D3a` it enumerates exactly the two lowering arms, so it still names its own
-    remaining work.
+  ### ⛔ THE BINDING ORDER IS FOUR CHECKPOINTS — Architect `evt_7vc8zh0rvqyps`
 
-  - **`D3b` — the two lowering emission arms, plus the seam deletion. A WHOLE
-    deliverable.** ⛔ **Sequenced against a population that actually reaches the
-    seam at nonzero depth**, i.e. with or after `D4`. Its release additionally
-    waits on the Architect's disposition of the probe's Finding 2 (below).
+  ⛔ **This supersedes the Steward's own two-checkpoint recut** (`D3a`/`D3b`
+  with `D3b` "with or after `D4`"), which was **directionally right and
+  under-specified in the one place that decides the work.** `D4` as a single
+  unit cannot both *create* the nonzero-depth population and *prove* the final
+  partition, so "with or after `D4`" never named what would produce `D3b`'s
+  evidence. `D4a` is that missing mechanism. ⭐ Same defect class as the `D1`
+  clause: a load-bearing sequencing term left ambiguous across two things.
+
+  ⛔ **Atomic scope and mechanism are UNCHANGED. No new node, selector,
+  coordinate, ABI field, or fallback is authorized.**
+
+  1. **`D3a` — non-lowering closure.** Land the tagged ABI provenance
+     authority, the validator changes, the ABI/view checks, and the
+     full-coordinate generated-context lookup. Keep **both** lowering consumers
+     explicitly refusing `CurrentLexical` **and** `GeneratedContextCapture`;
+     keep the seam and the pending population **visible**.
+     ⛔ **`entry_abi_pending_producer_local` is RETAINED, and that is
+     COMPLIANCE, not an exception** — the release conditioned its deletion on
+     *"only when its live enumeration is empty"* (`evt_6zr8a4h90c7rp`). After
+     `D3a` it enumerates exactly the two lowering arms, so it still names its
+     own remaining work.
+
+  2. **`D4a` — bounded admission and MEASUREMENT.** Admit the census-bound `V`
+     population using the **existing** authority, while retaining `D3a`'s
+     refusals. ⭐ **This checkpoint MAY BE DELIBERATELY RED.** Its purpose is to
+     produce the real reaching producer-local emissions and measure
+     nonzero-depth `CurrentLexical` correspondence. `R` remains declined.
+     ⛔ A red here is the instrument working, not a regression to chase.
+
+  3. **`D3b` — lowering closure.** Implement the two lowering arms **only after
+     that evidence exists**:
+     - `CurrentLexical` requires the matching predeclared emitter plus exact
+       emission origin, lexical-environment origin, and post-shift index.
+     - `GeneratedContextCapture` requires the matching specialization context,
+       owner, and declared immediate-capture slot.
+     - Cross-domain pairings, missing identity, wrong owner, wrong index/slot,
+       and ambiguity **reject**.
+
+     Delete the seam only when its closed population is empty.
+
+  4. **`D4b` — admission closeout.** Prove the framed final partition and
+     controls: `interned = V`, `declined = R`, with no extra route modality and
+     no special case.
+
+  ⛔ **Option 2 as offered is INVALID, not merely worse:** `D4` cannot safely
+  admit the population before the lowering consumers are explicitly fail-closed.
+  That is why `D3a` precedes `D4a` rather than the reverse.
 
   ⛔ **OPTION 3 IS REJECTED, and not for cost.** "Accept direct-construction
   testing of the lowering arm with the unmeasured plane correspondence
@@ -269,16 +302,37 @@ all six failing `D0` rows.
   emission seam is precisely the failure class `D2b`'s guards were built to
   prevent. ⛔ Do not re-propose it as a schedule recovery.
 
-  ⚠ **Finding 2 is the Architect's, and it gates `D3b` only.** All 27 of 27
-  specialization-emitter records are non-corresponding — 26 out-of-range, 1
-  pointing at a different owner's parameter (`env_len=3` against `seat_len=1`) —
-  a perfect separation by emitter class with zero exceptions. The implementer
-  reads this as correct-by-design (the generated context's operand run is a
-  genuinely different environment, which the seam's own comment already states,
-  and is what `GeneratedContextCapture` exists to serve) but ⭐ **declined to
+  ### Finding 2 — ANSWERED. Architect confirming gate `evt_6p6vf0aqnjn3g`
+
+  All 27 of 27 specialization-emitter records are non-corresponding — 26
+  out-of-range, 1 pointing at a different owner's parameter (`env_len=3`
+  against `seat_len=1`) — a perfect separation by emitter class with zero
+  exceptions. ⭐ The implementer read it as correct-by-design but **declined to
   classify a mismatch as the benign one on its own authority**, because the
-  ruling said any mismatch is a hard stop. That refusal is correct. ⛔ `D3a` does
-  not depend on the answer — under `D3a` both seams refuse everything local.
+  ruling said any mismatch is a hard stop. That refusal was correct and it is
+  what produced the ruling below.
+
+  **The mismatch is lawful and expected.** `CurrentLexical` is an authority over
+  the **retained lexical environment at an exact predeclared emission
+  occurrence**. A specialization emitter owns a **generated-context operand
+  run**; the same numeric index has no authority to name a value in the retained
+  lexical environment.
+
+  ⇒ **Seam 1 must REJECT `CurrentLexical` whenever the active emitter is a
+  specialization, before indexing any operand run.** The lawful local arm there
+  is `GeneratedContextCapture`, matching the exact generated context,
+  specialization owner, full root-coordinate membership, and declared
+  immediate-capture slot. **Conversely a predeclared emitter must reject
+  `GeneratedContextCapture`.** ⛔ No conversion, offset, fallback, or
+  "same value" inference crosses the domains.
+
+  ⛔ **The Architect corrected its own earlier "any mismatch is a hard stop" as
+  OVERBROAD.** The hard-stop comparison applies to a `CurrentLexical` authority
+  **at its matching predeclared-emitter domain**; applying that comparison to a
+  specialization emitter is **itself a category error**. ⇒ Do not carry the
+  older phrasing forward from any earlier post in the thread.
+
+  ⛔ This binds `D3b` only. `D3a` does not wait on it.
 
 - **`D4` — broad admission, stated as SET EQUALITY over the census's explicit
   unit.** ⛔ **Recut 2026-08-05 by Architect gate `evt_38yd5sd1ht0kk` on the
