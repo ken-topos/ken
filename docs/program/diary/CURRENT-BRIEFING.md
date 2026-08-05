@@ -33,22 +33,73 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~11:0xZ · `D4a` bind RULED; awaiting one Architect gate
+## LIVE — 2026-08-05 ~11:2xZ · `D4a` rd 2 gated + run; lane cleared, shift not yet
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for the Architect's confirming gate on my ruling `evt_28xx7t69z7j76`.**
-`D3a` is **QA-APPROVED at exact `14b111ae`**. `D4a` admitted `V` at `52422da5`,
-then its bounded extension **hard-stopped structurally** (`evt_7xwdw87mgf1q3`),
-QA-verified (`evt_5nd65hwfh941k`). I ruled the disposition rather than deferring
-it. ⛔ **Nothing is owed by me until the Architect answers** — and
-`runtime-leader` was told explicitly to **release on the Architect, not on my
-post.**
+**Wait for `runtime-leader`'s re-release, then ROUSE the implementer.** I
+compacted it to **ctx 0%** at the leader's request (`evt_6r040yzhv9tjq`), and
+⛔ **a just-compacted Claude seat does not pick up a mention posted after its
+compaction** — the leader was told to say so here and I do the mechanical wake.
+⛔ **Nothing else is owed by me.**
 
-### THE `D4a` BIND — RULED. Do not re-derive it.
+⚠ **The seat was STRANDED, not merely idle.** Its composer held unsubmitted real
+text — *"confirm the scrutinee hypothesis and build the shifted fixture"* —
+with the seat finished (`Baked for 5m 51s`) sitting behind it. ⛔ **And
+`handoff-gate-compact.sh` leads with a bare `Enter`, which would have SUBMITTED
+that strand instead of compacting.** Hand-drove one pane with a clear-first.
+`C-u` did not clear and the render stayed stale; `C-a`/`C-k` plus a probe string
+proved the buffer was empty before staging `/compact`. ⭐ **The displayed line is
+not the buffer.**
+
+### `D4a` ROUND 2 — gated YES, run once, and where it actually stands
+
+**The Architect gated my ruling YES** (`evt_65xkzqppdqdaj`), agreeing the fixture
+supplies only the population. ⭐ **It added the half most easily lost: the `D4a`
+mutation proves the INSTRUMENT; the `D3b` mutation proves the CONSUMER.** Once
+the real `D3b` consumer exists, substituting the locator index for
+`post_shift_index` must make the same fixture fail at the consumption boundary.
+`D4a` passing does not discharge that. It also pinned condition 5 to my frame
+correction: the fixture may add to `V`, **never to `R`**; re-census `C`/`V` at
+the new base; any new `R` member or decline cause is a hard stop.
+
+**Released (`evt_6cfjzp9yzvw8g`), run, nothing landed** — tree restored to
+`52422da5`, `724/7` unchanged, branch free.
+
+⭐ **THE ORIGINAL BLOCKER IS CLEARED.** Three lanes measured through the real
+production path: `ConsoleRead` refused (the old hard stop), `ConsoleIsTerminal`
+**visited but plans no seat at all** (it returns `Bool` before seat synthesis),
+and **`ConsoleWrite` lowers, reaches the emission seam, and produces a
+`CurrentLexical` record**. So a lawful lowerable shifted-population fixture is
+reachable and the lane question is answered.
+
+⛔ **But the reached record still has NO SHIFT** — `post_shift_index = 0`,
+`locator_index = 0`, `env_len = 4`. Nesting a further `Match` case body around
+the `ComputationalMatch` grew `env_len` to 5 and **both indices stayed 0**.
+
+⭐ **The implementer's hypothesis, offered as hypothesis and not as established:**
+the producer construct sits in its `ComputationalMatch`'s **scrutinee**, and a
+scrutinee is evaluated *outside* that match's own binders — so binders that match
+introduces are correctly not in force at the seat. To shift, the effect result
+must be introduced **above a binder whose BODY (not whose scrutinee) contains the
+producer construct.** Confirming it is the next bounded act; the leader will
+re-release exactly that on the standing `D4a` scope.
+
+⚠ **Two traps a successor must not re-pay.** `ConsoleIsTerminal` looks like a
+free win from the consumer list and is not. And ⛔ **`env_len` growing is NOT
+evidence of a shift** — both attempts grew it while the index stayed 0, which is
+act 1's "green on the wrong axis" shape one level down.
+
+⭐ **The oracle design is already settled and survives the stop:** the operand at
+each slot carries a distinct Cranelift SSA `Value`, observable purely
+lowering-side — no planner re-walk, no index arithmetic, no fixture-authored
+expected index. The seam probe that reads both slots is written and proven to
+fire. **What is missing is only a fixture shape that shifts.**
+
+### THE `D4a` BIND — RULED, and round 1's stop. History; do not re-derive.
 
 **The bind was:** the Architect required (`evt_tkzyc61rmd3`) a four-part proof at
 one exact predeclared emission — a reaching `CurrentLexical` with
@@ -159,7 +210,7 @@ deadline.
 | `D2` identity + value contract | accepted preservation at exact `e6d4f085` |
 | `D2b` immediate availability | **QA-APPROVED** exact `7316e13a` — `evt_3w4s25ta13hc4` |
 | `D3a` | **QA-APPROVED** exact `14b111ae` — `evt_62g4pganvk6f6` |
-| `D4a` | `V` admitted at `52422da5`; extension rd 1 **HARD STOP** `evt_7xwdw87mgf1q3`, QA-verified; **rd 2 RULED** `evt_28xx7t69z7j76` — awaiting Architect gate |
+| `D4a` | `V` admitted `52422da5`; rd 1 **HARD STOP** `evt_7xwdw87mgf1q3` (QA-verified); rd 2 ruled `evt_28xx7t69z7j76`, **gated YES** `evt_65xkzqppdqdaj`, re-released `evt_s2nbzddsag9k` — **BUILDING** |
 | `D3b` / `D4b` | held, in that order |
 
 ⛔ **There is no undivided `D4` any more.** The SET EQUALITY definition below
@@ -304,6 +355,12 @@ the sweep printed a blank status. **The busy-check is wrong in both directions
 and the verb list is open-ended: a missing verb reads exactly like idle.**
 Resolve any blank or `(no-footer)` status by reading the pane, never by
 extending the pattern and trusting it.
+
+⭐ **Confirmed open-ended, twice more: `Baked for 5m 51s` and `Grooving…` both
+printed `(no-footer)`.** ⛔ Do not chase the list. ⭐ **The cheap independent
+instrument is `ctx`, which the tick already captures: a ctx that ROSE between
+two reads is work, whatever verb is rendering.** It resolved `Grooving` without
+a second pane read.
 
 - Kick (fresh root, its own thread): **`evt_7h92n2tr7pbrm`**.
 - `D7` rescope-in-place, posted in `thr_3rx07jfewhjhf`: `evt_14a9cee7fkv2s`.
