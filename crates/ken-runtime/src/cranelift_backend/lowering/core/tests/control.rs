@@ -13378,24 +13378,28 @@ fn d5a_the_capture_projection_reads_the_immediate_slot_and_bounds_it() {
     }
 }
 
-/// **`RT-CONTSRC-PRODUCER-LOCAL` `D1` — the emission resolver refuses a
-/// producer-local coordinate rather than indexing with whatever it can reach.**
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D3b` — a producer-local coordinate carrying an
+/// entry-ABI availability is a CROSSED PAIR, and the resolver refuses it.**
 ///
-/// This seam's job is to turn a coordinate into an index into the emitting
-/// environment. `D1` adds a coordinate domain it has not been taught to locate,
-/// and `D3` will teach it. Between the two, the only honest answer is a
-/// refusal — and the refusal is on a branch no plan the planner will build can
-/// reach yet, so without presenting one deliberately it is unmeasured code.
+/// ⭐ **`D3b` is the event this row's `D1` sentinel named, and the row is
+/// inverted rather than deleted.** As a sentinel it asserted the seam refused
+/// *every* producer-local coordinate; `D3b` teaches the seam to resolve two of
+/// the three producer-local pairings, so that assertion is retired. What
+/// survives is stronger and permanent: the perturbation injects a producer-local
+/// coordinate while leaving the entry-ABI availability in place, and that pair
+/// belongs to two different domains. Deleting the row would leave a gap exactly
+/// where a law used to be.
 ///
-/// ⚠ **MEASURED**: the object emission refuses, with the message this arm
-/// raises, and the perturbation is confirmed to have fired. **CLAIMED**: the
-/// resolver dispatches on the coordinate *domain* before it reads any position.
-/// **THE GAP**: this proves the arm is reachable and fails closed. It says
-/// nothing about `D3`'s eventual locating logic, which does not exist.
+/// ⚠ **MEASURED**: the object emission refuses with the crossed-pair message,
+/// and the perturbation is confirmed to have fired. **CLAIMED**: the resolver
+/// dispatches on the *pairing*, not on either half alone — each half here is
+/// individually well-formed and only their combination is wrong. **THE GAP**:
+/// this says nothing about which index the two lawful producer-local pairings
+/// resolve to; that is the emission-seat consistency check's row.
 ///
-/// **Promise class: transition sentinel** — it is retired by `D3`, which
-/// replaces this refusal with a real resolution. Named for the boundary rather
-/// than for a count, and this sentence is the event that retires it.
+/// **Promise class: durable invariant.** A crossed domain pair must never
+/// resolve, under any later extension that keeps the two coordinate spaces
+/// distinct.
 #[test]
 fn contsrc_the_emission_resolver_refuses_a_producer_local_coordinate() {
     let refusal = with_d5a_route_mutation(
@@ -13409,8 +13413,9 @@ fn contsrc_the_emission_resolver_refuses_a_producer_local_coordinate() {
                 .map(|_| ())
                 .map_err(|error| format!("{error:?}"))
                 .expect_err(
-                    "the emission resolver must refuse a producer-local coordinate; a compile \
-                     means the domain match is inert on the route that reaches it",
+                    "the emission resolver must refuse a producer-local coordinate paired with \
+                     an entry-ABI availability; a compile means the pairing match is inert on \
+                     the route that reaches it",
                 );
             assert!(
                 d5a_route_applications() > 0,
@@ -13420,8 +13425,8 @@ fn contsrc_the_emission_resolver_refuses_a_producer_local_coordinate() {
         },
     );
     assert!(
-        refusal.contains("producer-local binding"),
-        "the refusal must be the one this arm raises, not an incidental failure \
+        refusal.contains("belong to different domains"),
+        "the refusal must be the crossed-pair one this arm raises, not an incidental failure \
          downstream: {refusal}"
     );
 }
