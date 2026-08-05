@@ -1181,16 +1181,55 @@ all six failing `D0` rows.
 
   ###### EXECUTION ORDER — label order, for the first time on this node
 
-  | # | checkpoint | owner layer |
-  |---|---|---|
-  | 1 | `D8a` — owner-qualified composed selector | planner projection |
-  | 2 | `D8b` — composed-call target, planner representation | planner |
-  | 3 | `D8c` — the consumption seam | lowering / emission |
-  | 4 | `D8d` — one environment authority | lowering environment |
-  | 5 | `D8e` — source-machine callee consumer | lowering consumer |
-  | 6 | `D8f` — checked-marker occupancy | integration |
-  | 7 | `D8g` — non-vacuous closeout, both paths | proof |
-  | 8 | `D6b` closeout, then `D6c` refusal set | — |
+  | # | checkpoint | owner layer | status |
+  |---|---|---|---|
+  | 1 | `D8a` — owner-qualified composed selector | planner projection | DISCHARGED `e02ef413` |
+  | 2 | `D8b` — composed-call target, planner representation | planner | DISCHARGED `e4b4c26c` |
+  | 3 | `D8d` — install the one target-derived environment binding | lowering environment | live |
+  | 4 | `D8e` — consume it at the source-machine callee seat, **and** close the no-unit-boundary property over that composed path | lowering consumer + proof | held |
+  | 5 | `D8f` — checked-marker occupancy | integration | held |
+  | 6 | `D8g` — non-vacuous closeout, both paths | proof | held |
+  | 7 | `D6b` closeout, then `D6c` refusal set | — | held |
+
+  ###### `D8c` IS RETIRED — folded into `D8e`. Architect `evt_nwgvvr4vaf7y`.
+
+  **Outcome (c) at the CHECKPOINT boundary, not the whole-node boundary. The
+  node remains well-sized** — `D8c` was simply ordered before the mechanisms
+  that make its law meaningful. Preserve exact `e4b4c26c`; **build neither form
+  the implementer returned.**
+
+  **My error, stated plainly: `D8c`'s consumption statement is an INTEGRATION
+  PROPERTY, not a predecessor mechanism.** I read the mechanism family's three
+  properties as three checkpoints, when the third is a property **of the
+  composition of the other two**. Only `D8d` + `D8e` together can establish it:
+  `D8d` owns binding, `D8e` owns consumption, and the promised fact — exact
+  arguments and captures consumed in the source-machine continuation with no
+  closure-valued unit result — is what their composition demonstrates.
+
+  **Both returned forms are unlawful, and each fails against a different item of
+  this frame's own ban list:**
+
+  | form | why it is not lawful |
+  |---|---|
+  | resolve the `D8b` target in `source_call_state` from a threaded `D8a` selector | a **second target-selection authority** in the consumer. It bypasses the binding authority `D8d` requires and duplicates the `D8e` contract; the carried word cannot validate the selector, so the late lookup is **not self-authenticating** |
+  | install a target-derived `Lowered::Closure` as `Value` | a **second callable representation** beside `StaticWorkerBinding`. It lets the template enter **value positions** and bypasses the route-selected emitter `D8e` requires |
+
+  **The corrected version of form 2 is exactly `D8d`** — install a
+  target-derived `StaticWorkerBinding`, not a specialized closure value. **That
+  binding is intentionally unreadable until `D8e` supplies its sole callee
+  consumer**, which is precisely why it could never have discharged a `D8c`
+  standing on its own.
+
+  **Banned in the recut:** a temporary `Value(Closure)` bridge, and any
+  consumer-side target lookup that `D8d`/`D8e` later replace. A scaffold that
+  the next checkpoint deletes is not a checkpoint.
+
+  **The label `D8c` is not reused.** The gap is deliberate — label order still
+  ascends, and reusing a spent label for different content is worse than a gap.
+
+  **Still orthogonal and still required:** the queued deletion of `D8b`'s
+  unreachable owner-collision guard. It moves to the `D8d` handoff. It does not
+  make anything executable and was never load-bearing for `D8c`.
 
   **Still in-node checkpoints, not a predecessor node** (Steward sizing call).
   The reasoning is unchanged and the new finding does not touch it: this lands
@@ -1352,28 +1391,22 @@ all six failing `D0` rows.
   the selector reds two `D7a` rows. **Delete the collision guard, not the
   field.**
 
-  **`D8c` — the consumption seam.** The selected recursive argument's result is
-  consumed **in the exact source-machine continuation**, and the closure-valued
-  result **never crosses a unit boundary**. Raw argument and capture semantics
-  are preserved exactly.
+  ###### `D8b` STATUS — DISCHARGED at exact `e4b4c26c`
 
-  **This is the checkpoint the whole recut exists for, and the one with no
-  landed precedent.** `9f21ff0e`'s trace names the seat it must avoid:
+  `ComposedCallTarget` minted; the withdrawn raw-body retention machinery
+  removed. **One well-founded target form, no fork returned.**
 
-  ```text
-  UNIT-BODY entry function=PredeclaredFunctionId(2) origin=StaticOriginId(36)
-    UNIT-RESULT transfer origin=StaticOriginId(36) value=Constructor
-    BOUNDARY-REFUSAL first closure child variant=Closure
-  ```
+  **The one candidate fork dissolved, and it stays dissolved under the `D8c`
+  retirement:** whether the target names the raw body or the route-resolved
+  callee. It is not a fork because **the view already carries route
+  eligibility**, so the target is a **representation, not a route decision**.
+  That reasoning originally cited *"`D8c` owns consumption"*; consumption is now
+  `D8e`, and the conclusion is unchanged — **do not re-open it** on the ground
+  that the checkpoint it named was retired.
 
-  **Positive:** that refusal is **not reached**, and the target is consumed with
-  the selected argument's exact raw operands.
-
-  **Hard stop, expected rather than exceptional:** if deriving the form from the
-  three mechanism-family properties admits **more than one materially different
-  form**, stop and return the alternatives to me. Do not pick one, and do not
-  build both. **A single well-founded derivation is not a hard stop** — build
-  it.
+  **`D8c` — RETIRED, folded into `D8e`.** See the retirement block above. Its
+  law is stated as `D8e`'s acceptance, where the mechanisms that make it
+  meaningful exist.
 
   **`D8d` — one environment authority, not two.** When the composed and
   source-machine case environment installs the constructor-argument segment, the
@@ -1385,12 +1418,36 @@ all six failing `D0` rows.
   closure capsule **continues to fail closed**, exactly as in the functionized
   unit.
 
-  **`D8e` — source-machine callee consumer.** An exact `Var` callee resolving to
-  that binding is consumed **before** the value-only `Var` path. Arguments are
-  still evaluated under the existing source-machine control and phase, then
-  handed to the **same** route-selected static-worker emitter direct descent
-  uses. No duplicated target or operand assembly; no shortcut through
-  `lower_expr` that bypasses source control.
+  **`D8e` — source-machine callee consumer, AND the consumption law closed over
+  the composed path.** An exact `Var` callee resolving to that binding is
+  consumed **before** the value-only `Var` path. Arguments are still evaluated
+  under the existing source-machine control and phase, then handed to the
+  **same** route-selected static-worker emitter direct descent uses. No
+  duplicated target or operand assembly; no shortcut through `lower_expr` that
+  bypasses source control.
+
+  **The folded `D8c` law is `D8e`'s acceptance, not a separate checkpoint.** The
+  selected recursive argument's result is consumed **in the exact source-machine
+  continuation**, the closure-valued result **never crosses a unit boundary**,
+  and raw argument and capture semantics are preserved exactly. `9f21ff0e`'s
+  trace names the seat it must avoid:
+
+  ```text
+  UNIT-BODY entry function=PredeclaredFunctionId(2) origin=StaticOriginId(36)
+    UNIT-RESULT transfer origin=StaticOriginId(36) value=Constructor
+    BOUNDARY-REFUSAL first closure child variant=Closure
+  ```
+
+  **Positive:** that refusal is **not reached**, and the target is consumed with
+  the selected argument's exact raw operands.
+
+  **Why this is one checkpoint and not two** (Steward, the ruling leaves the
+  fold to me): the law is what `D8e`'s own positive has to demonstrate anyway —
+  a callee consumer cannot be shown to work without showing the closure result
+  did not cross the boundary. Split off, it would have been a checkpoint that
+  asserts what its predecessor already proved. **If it turns out to carry real
+  independent work, that is a genuine hard stop and a re-cut** — say so rather
+  than absorbing it silently.
 
   **`D8f` — checked-marker occupancy.** The witness places an ordinary
   selected-argument call **before** the checked IH call inside one checked
