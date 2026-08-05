@@ -221,9 +221,22 @@ all six failing `D0` rows.
   ruling on the `D3b` hard stop at exact `456ec7e6`, 2026-08-05). Two lexical
   positions each holding exactly `Closed([S])` are **proved aliases of one
   semantic source**, and the law selects the nearest. ⛔ Duplicate membership
-  **still refuses in a frame's ordered capture projection** — a different
-  structure, carrying a declared slot. `D3b` carries the full statement;
-  **do not collapse the two cases.**
+  **still refuses in a frame's ordered capture projection**. `D3b` carries the
+  full statement; **do not collapse the two cases.**
+
+  **Why the asymmetry is principled, not an oversight** (Architect confirmation,
+  2026-08-05, on the landed recut — recorded here because a later `exactly once`
+  sweep will find the retained clauses and be tempted to unify them):
+
+  | | licences duplicates? | why |
+  |---|---|---|
+  | lexical environment | **yes** | `Closed([S])` from the forward semantic walk **proves** two bindings denote one source, and de Bruijn order supplies a canonical nearest binding |
+  | frame ordered projection | **no** | it declares ordered **ABI slots** — it carries no semantic-walk alias proof and has no "nearest lexical binder" ordering |
+
+  ⇒ Two frame members carrying one full coordinate make the **declared source
+  slot non-unique**, so they must refuse. ⛔ **Selecting one of them would
+  reintroduce the unkeyed first-member rule at the ABI boundary** — the exact
+  thing the ban exists to prevent, arriving under the alias law's name.
 
   **Two discriminators, and the first exists to defeat a specific vacuity:**
   - one with **at least one intervening binder**, so "introduction index equals
