@@ -15653,12 +15653,14 @@ fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder()
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a` — the composed worker view is the
-/// selecting unit's own worker, or one of the four named refusals.**
+/// selecting unit's own worker, or one of the named refusals.**
 ///
 /// The subject is the *specification* of
 /// [`StaticTransitionPlan::composed_worker_view`], asserted exhaustively over
 /// the planned population rather than against a literal census: group the units
-/// by the released three-field selector, and for each group the projection must
+/// by the **four-field causal selector** — producer `Construct` occurrence,
+/// computational-frame origin, selected alternative, ruled recursive position —
+/// and for each group the projection must
 ///
 /// 1. refuse with the conflict message if the members disagree about the
 ///    worker — an ambiguous selector has no worker for any later question to be
@@ -15669,35 +15671,53 @@ fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder()
 ///    emitted `Function`;
 /// 3. otherwise answer, field for field, with that group's own key facts.
 ///
-/// The second half proves the selector actually reads all three fields:
-/// perturbing any one of them, to a value the plan does have but not at that
-/// coordinate, must reach the *zero-answer* refusal rather than a plausible
-/// neighbour.
+/// ## The four selector controls, each independent of the other three
+///
+/// Every field is perturbed **with the other three held exact**, so a refusal is
+/// attributable to that field alone and no control is propped up by its
+/// neighbours. The perturbed value is one the plan really has — an origin it
+/// carries, the next alternative, the next position — so a selector that ignored
+/// a field would answer rather than refuse.
+///
+/// ⭐ The producer `Construct` origin gets a **second, stronger** control that
+/// the other three cannot have here: on both plans two layers share the other
+/// three fields, so transplanting one layer's construct origin onto the other's
+/// triple must return **that layer's** worker. Refusing is not the property —
+/// *selecting* is. Different workers under distinct construct origins are
+/// distinct questions, not a conflict, and this is what measures that.
 ///
 /// **MEASURED**, each by a mutation on the compiling plans rather than by
-/// assertion: clause 1 fires non-vacuously; each of the three selector fields
-/// is load-bearing (dropping any one is caught, and dropping the position is
-/// caught by the sibling-position re-check rather than by the selector); and
-/// all three provenance re-checks are reachable and reported here — comparing
-/// the body against the closure instead of its body child, and shifting a
-/// capture ordinal, each red this row with their own message.
+/// assertion: clauses 2 and 3 both fire non-vacuously; each of the four selector
+/// fields is load-bearing with the others exact; and the body-child and
+/// ordered-capture re-checks stay independently live — comparing the body
+/// against its closure instead of its body child, and shifting a capture
+/// ordinal, each red this row with their own message.
 ///
-/// **CLAIMED**: clauses 2 and 3 — that a resolving group is checked for
-/// executability and then answered with the planner's own facts.
+/// **CLAIMED**: clause 1 — that two specializations answering one four-field
+/// selector with different workers refuse rather than one being chosen.
 ///
-/// **THE GAP**: every group on both plans is ambiguous, so clause 1 is the only
-/// outcome either can reach and clauses 2 and 3 are **unexercised** — read them
-/// as untested, not as tested. The ordering makes that unavoidable here: clause
-/// 2 was reachable under the earlier per-candidate order and clause 1 was not,
-/// and no plan in this crate reaches both.
-/// [`d7a_the_released_three_field_selector_cannot_name_one_worker_while_one_source_match_is_specialized_at_two_layers`]
-/// measures why.
+/// **THE GAP**: with the causal field in the key, every group on both plans is a
+/// singleton, so clause 1 is **unexercised** — read it as untested. That is the
+/// inverse of the three-field selector's gap, where clause 1 was the only
+/// reachable outcome, and it is the direction that matters: the unexercised
+/// branch is now the *refusal*, not the answer.
 ///
 /// **Promise class: durable invariant.**
 #[test]
 fn d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_refusal() {
     use crate::cranelift_backend::planning::ComposedWorkerRouteEligibility;
     use std::collections::{BTreeMap, BTreeSet};
+
+    type Selector = (StaticOriginId, StaticOriginId, u32, u32);
+
+    fn selector_of(unit: &ContinuationUnitView<'_>) -> Selector {
+        (
+            unit.producer_construct_origin(),
+            unit.continuation_origin(),
+            unit.producer_alternative(),
+            unit.recursive_position(),
+        )
+    }
 
     fn check(plan: &StaticTransitionPlan<'_>) {
         let units = plan.continuation_units().expect("continuation units");
@@ -15706,26 +15726,21 @@ fn d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_ref
             .expect("the superseded set");
         assert!(
             !units.is_empty(),
-            "the witness must plan at least one continuation specialization, or every clause \
+            "the plan must intern at least one continuation specialization, or every clause \
              below quantifies over nothing"
         );
 
-        let mut groups: BTreeMap<(StaticOriginId, u32, u32), Vec<usize>> = BTreeMap::new();
+        let mut groups: BTreeMap<Selector, Vec<usize>> = BTreeMap::new();
         for (index, unit) in units.iter().enumerate() {
-            groups
-                .entry((
-                    unit.continuation_origin(),
-                    unit.producer_alternative(),
-                    unit.recursive_position(),
-                ))
-                .or_default()
-                .push(index);
+            groups.entry(selector_of(unit)).or_default().push(index);
         }
 
-        let mut reached_conflict = 0usize;
+        let mut reached_template_only = 0usize;
+        let mut reached_answer = 0usize;
 
-        for ((origin, alternative, position), members) in &groups {
-            let answered = plan.composed_worker_view(*origin, *alternative, *position);
+        for (selector, members) in &groups {
+            let answered =
+                plan.composed_worker_view(selector.0, selector.1, selector.2, selector.3);
 
             let identities = members
                 .iter()
@@ -15749,7 +15764,6 @@ fn d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_ref
                      question to be about, and reporting it would bury the ambiguity: \
                      {refusal:?}"
                 );
-                reached_conflict += 1;
                 continue;
             }
 
@@ -15763,6 +15777,7 @@ fn d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_ref
                     format!("{refusal:?}").contains("template-only"),
                     "the refusal must be the unexecutable-raw-target one: {refusal:?}"
                 );
+                reached_template_only += 1;
                 continue;
             }
 
@@ -15801,57 +15816,117 @@ fn d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_ref
                  this exact (specialization, worker body), never a re-derivation from whichever \
                  target exists"
             );
+            reached_answer += 1;
         }
 
-        // ⛔ Each of the three selector fields must be load-bearing. The
-        // perturbed value is one the plan really has — a worker body origin, the
-        // next alternative, the next position — so a selector that ignored a
-        // field would answer here rather than refusing.
+        // ⛔ One control per selector field, each with the other three EXACT, so
+        // no control leans on another.
+        //
+        // ⚠ The substituted origin is COMPUTED, not picked. Reaching for a
+        // convenient neighbour — the worker body — silently selected the *other*
+        // layer, because in a nested specialization the inner layer's producer
+        // `Construct` IS the outer layer's worker body. That control answered
+        // instead of refusing, and it was right to: it had named a real
+        // four-field key. So the substitute must be an origin the plan carries
+        // and that no unit claims in either origin position.
+        let claimed = units
+            .iter()
+            .flat_map(|unit| [unit.producer_construct_origin(), unit.continuation_origin()])
+            .collect::<BTreeSet<_>>();
+        let foreign = units
+            .iter()
+            .flat_map(|unit| [unit.worker_closure_origin(), unit.worker_body_origin()])
+            .find(|origin| !claimed.contains(origin))
+            .expect(
+                "the plan must carry some origin no specialization claims as a construct or                  frame origin, or these two controls cannot be posed at all",
+            );
         for unit in &units {
+            let exact = selector_of(unit);
             for (label, perturbed) in [
                 (
-                    "frame origin",
-                    (
-                        unit.worker_body_origin(),
-                        unit.producer_alternative(),
-                        unit.recursive_position(),
-                    ),
+                    "producer Construct occurrence",
+                    (foreign, exact.1, exact.2, exact.3),
                 ),
-                (
-                    "selected alternative",
-                    (
-                        unit.continuation_origin(),
-                        unit.producer_alternative() + 1,
-                        unit.recursive_position(),
-                    ),
-                ),
-                (
-                    "recursive position",
-                    (
-                        unit.continuation_origin(),
-                        unit.producer_alternative(),
-                        unit.recursive_position() + 1,
-                    ),
-                ),
+                ("frame origin", (exact.0, foreign, exact.2, exact.3)),
+                ("selected alternative", (exact.0, exact.1, exact.2 + 1, exact.3)),
+                ("recursive position", (exact.0, exact.1, exact.2, exact.3 + 1)),
             ] {
                 let refusal = plan
-                    .composed_worker_view(perturbed.0, perturbed.1, perturbed.2)
+                    .composed_worker_view(perturbed.0, perturbed.1, perturbed.2, perturbed.3)
                     .expect_err(
                         "a selector no specialization claims must refuse, so that a consumer \
                          cannot be handed a neighbour's worker",
                     );
                 assert!(
                     format!("{refusal:?}").contains("no continuation specialization claims"),
-                    "perturbing the {label} must reach the ZERO-answer refusal, which is what \
-                     shows that field participates in the selection: {refusal:?}"
+                    "perturbing the {label} — with the other three fields exact — must reach the \
+                     ZERO-answer refusal, which is what shows THAT field participates in the \
+                     selection on its own: {refusal:?}"
                 );
             }
         }
 
+        // ⭐ The transplant. For two layers sharing the other three fields, the
+        // construct origin must SELECT, not merely be compared: each layer's own
+        // origin under the shared triple must produce that layer's own worker.
+        let mut transplanted = 0usize;
+        for left in &units {
+            for right in &units {
+                if left.id() == right.id()
+                    || left.continuation_origin() != right.continuation_origin()
+                    || left.producer_alternative() != right.producer_alternative()
+                    || left.recursive_position() != right.recursive_position()
+                {
+                    continue;
+                }
+                assert_ne!(
+                    left.producer_construct_origin(),
+                    right.producer_construct_origin(),
+                    "two distinct specializations sharing all three source-text fields must \
+                     differ in the causal one, or the four-field selector is no more \
+                     discriminating than the three-field one it replaced"
+                );
+                let transplant = plan.composed_worker_view(
+                    right.producer_construct_origin(),
+                    left.continuation_origin(),
+                    left.producer_alternative(),
+                    left.recursive_position(),
+                );
+                let expected_body = right.worker_body_origin();
+                match transplant {
+                    Ok(view) => assert_eq!(
+                        view.body_origin(),
+                        expected_body,
+                        "transplanting the construct origin must answer with the worker of the \
+                         layer that origin names, not the layer whose other three fields were \
+                         supplied"
+                    ),
+                    Err(refusal) => assert!(
+                        template_only.contains(&expected_body)
+                            && format!("{refusal:?}").contains("template-only"),
+                        "the only lawful refusal for a transplant that names a real layer is \
+                         that layer's own superseded body: {refusal:?}"
+                    ),
+                }
+                transplanted += 1;
+            }
+        }
         assert!(
-            reached_conflict > 0,
-            "the conflict refusal must be reached on the real witness, or the ordering clause \
-             above is asserted over a population that never exhibits it"
+            transplanted > 0,
+            "the plan must carry two layers sharing the three source-text fields, or the \
+             transplant control measures nothing and the causal field is untested here"
+        );
+
+        assert!(
+            reached_template_only > 0,
+            "the unexecutable-raw-target refusal must be reached, or clause 2 is asserted over a \
+             population that never exhibits it"
+        );
+        assert!(
+            reached_answer > 0,
+            "the POSITIVE answer must be reached. Without this the projection would be all \
+             refusals — the exact shape that made the three-field selector unfit, and a \
+             projection nothing can ever successfully ask is not a projection"
         );
     }
 
@@ -15867,61 +15942,61 @@ fn d7a_the_composed_worker_view_is_the_selecting_units_own_worker_or_a_named_ref
     check(&nested);
 }
 
-/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a` — the released three-field selector does
-/// not name one worker, and this measures exactly why.**
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a` — the three source-text fields collide
+/// exactly where the causal field resolves.**
 ///
-/// The selector is the computational-frame origin, the selected alternative and
-/// the ruled recursive source position. All three are properties of the
-/// **source text**. When one source computational match is specialized at more
-/// than one recursion layer, every layer shares all three and the layers are
-/// distinguished only by their producer `Construct` occurrence — so the triple
-/// has as many answers as there are layers, with a different static worker each.
+/// The computational-frame origin, the selected alternative and the ruled
+/// recursive position are all properties of the **source text**. When one source
+/// computational match is specialized at more than one recursion layer, every
+/// layer shares all three, and the layers are distinguished only by their
+/// producer `Construct` occurrence.
 ///
 /// ⭐ That is not a fixture accident. Both plans in this crate that intern
 /// continuation specializations are nested, because nesting is what
-/// `RT-CONTSRC-PRODUCER-LOCAL` is about; a program specialized at one layer
-/// would resolve, and there is no such program in the suite to measure.
+/// `RT-CONTSRC-PRODUCER-LOCAL` is about.
 ///
-/// ⭐ The discriminating field is `producer_construct_origin`, which is
-/// **already the first field of the landed four-field selector**
-/// [`StaticTransitionPlan::continuation_call_binding_for`], and is in scope on
-/// the composed path as `deferred.construct_origin`. This row asserts it really
-/// does separate the layers, so the recommendation rests on a measurement.
+/// This row is the standing proof that the causal field earns its place: the
+/// three-text-field grouping must have a colliding group whose members name
+/// **different** workers, while every four-field group is a **singleton** and no
+/// four-field selector anywhere reaches the conflict refusal. Drop the field and
+/// the first half stays true while the second half fails, which is exactly the
+/// defect it was added to fix.
 ///
-/// **Promise class: transition sentinel.** It is named for the boundary, not
-/// for a count, and it is retired by whichever event resolves that boundary:
-/// the selector gaining the producer `Construct` origin, or a single-layer
-/// specialization witness entering the suite. Either turns it red on purpose,
-/// which is the review it exists to force.
+/// **Promise class: durable invariant.** The subject is the relation between the
+/// two groupings over whatever population the plans carry, not a census of
+/// either.
 #[test]
-fn d7a_the_released_three_field_selector_cannot_name_one_worker_while_one_source_match_is_specialized_at_two_layers(
-) {
+fn d7a_the_three_field_selector_collides_where_the_four_field_selector_resolves() {
     use std::collections::{BTreeMap, BTreeSet};
 
     fn check(plan: &StaticTransitionPlan<'_>) {
         let units = plan.continuation_units().expect("continuation units");
-        let mut groups: BTreeMap<(StaticOriginId, u32, u32), Vec<usize>> = BTreeMap::new();
+
+        let mut by_text: BTreeMap<(StaticOriginId, u32, u32), Vec<usize>> = BTreeMap::new();
+        let mut by_cause: BTreeMap<(StaticOriginId, StaticOriginId, u32, u32), Vec<usize>> =
+            BTreeMap::new();
         for (index, unit) in units.iter().enumerate() {
-            groups
-                .entry((
-                    unit.continuation_origin(),
-                    unit.producer_alternative(),
-                    unit.recursive_position(),
-                ))
+            let text = (
+                unit.continuation_origin(),
+                unit.producer_alternative(),
+                unit.recursive_position(),
+            );
+            by_text.entry(text).or_default().push(index);
+            by_cause
+                .entry((unit.producer_construct_origin(), text.0, text.1, text.2))
                 .or_default()
                 .push(index);
         }
 
-        let shared = groups
+        let collided = by_text
             .values()
             .find(|members| members.len() > 1)
             .expect(
-                "the witness must specialize one source match at more than one layer; with every \
-                 group a singleton the released selector would be sufficient and this row would \
-                 be measuring nothing",
+                "the plan must specialize one source match at more than one layer; with every \
+                 source-text group a singleton the causal field would be redundant and this row \
+                 would be measuring nothing",
             );
-
-        let workers = shared
+        let workers = collided
             .iter()
             .map(|index| {
                 (
@@ -15932,23 +16007,33 @@ fn d7a_the_released_three_field_selector_cannot_name_one_worker_while_one_source
             .collect::<BTreeSet<_>>();
         assert_eq!(
             workers.len(),
-            shared.len(),
-            "the layers sharing one selector must name DIFFERENT static workers. If they named \
-             the same one the triple would be ambiguous only in name, the projection would \
-             resolve, and the selector would need no fourth field"
+            collided.len(),
+            "the colliding layers must name DIFFERENT static workers. If they named the same one \
+             the collision would be in name only, the three-field selector would resolve, and the \
+             causal field would be carrying no weight"
         );
 
-        let constructs = shared
-            .iter()
-            .map(|index| units[*index].producer_construct_origin())
-            .collect::<BTreeSet<_>>();
-        assert_eq!(
-            constructs.len(),
-            shared.len(),
-            "the producer Construct occurrence must separate the layers the released selector \
-             conflates. This is the measurement the four-field recommendation rests on: without \
-             it, adding that field would refuse just as the three-field one does"
-        );
+        for (selector, members) in &by_cause {
+            assert_eq!(
+                members.len(),
+                1,
+                "every four-field group must be a singleton; {selector:?} has {} members, which \
+                 would mean the causal coordinate does not separate what the source text conflates",
+                members.len()
+            );
+            // ⛔ And no four-field selector may reach the CONFLICT refusal —
+            // singleton groups and a conflicting answer would mean the selector
+            // in production reads fewer fields than this grouping does.
+            if let Err(refusal) =
+                plan.composed_worker_view(selector.0, selector.1, selector.2, selector.3)
+            {
+                assert!(
+                    !format!("{refusal:?}").contains("different full worker identities"),
+                    "a four-field selector must never reach the conflict refusal when its group \
+                     is a singleton: {refusal:?}"
+                );
+            }
+        }
     }
 
     with_d5a_witness_plan(check);

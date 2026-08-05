@@ -1925,14 +1925,15 @@ pub(in crate::cranelift_backend) enum ComposedWorkerRouteEligibility {
 ///
 /// ## Why this exists
 ///
-/// The composed eliminator path holds the *frame* coordinates — the
-/// computational-frame origin, the selected alternative, and the ruled
-/// recursive source position — and does **not** hold the continuation unit that
-/// carries the worker those coordinates select. Every fact below already sits
-/// in an interned [`ContinuationSpecializationKey`]; without this projection the
-/// only route from those coordinates to these facts is to walk the closure
-/// occurrence and read its shape, which is the second authority
-/// `RT-WORKER-BIND` exists to prevent.
+/// The composed eliminator path holds the *causal* coordinates — the producer
+/// `Construct` occurrence it is building, the computational-frame origin, the
+/// selected alternative, and the ruled recursive source position — and does
+/// **not** hold the continuation unit that carries the worker those coordinates
+/// select. Every fact below already sits in an interned
+/// [`ContinuationSpecializationKey`]; without this projection the only route
+/// from those coordinates to these facts is to walk the closure occurrence and
+/// read its shape, which is the second authority `RT-WORKER-BIND` exists to
+/// prevent.
 ///
 /// ⛔ **Exposure, not discovery.** Nothing here is computed from a lowered
 /// value, an emitted shape, a body arity, an environment length, or from which
@@ -11101,12 +11102,40 @@ impl<'src> StaticTransitionPlan<'src> {
     /// **`RT-CONTSRC-PRODUCER-LOCAL` `D7a` — the planner-issued composed worker
     /// view.**
     ///
-    /// Keyed by the three facts a composed eliminator frame actually holds: the
+    /// Keyed by the four facts a composed eliminator frame actually holds: the
+    /// **producer `Construct` occurrence** it is building, the
     /// **computational-frame origin** it is lowering, the **selected
     /// alternative**, and one member of that case's **ruled recursive
     /// positions**. It answers with the full worker provenance the continuation
     /// unit uses — closure occurrence, raw body, declared arity, ordered capture
     /// provenance, and route eligibility.
+    ///
+    /// ⭐ **This is the same causal coordinate tuple
+    /// [`Self::continuation_call_binding_for`] already selects on, and that is
+    /// the point.** The producer `Construct` origin is not a tag, a sequence, an
+    /// owner heuristic, a specialization id, or a second identity bolted on to
+    /// break a tie; it is the field that says *which occurrence is being
+    /// built*, and the composed path supplies it directly as
+    /// `deferred.construct_origin`.
+    ///
+    /// ⛔ **It is load-bearing, not belt-and-braces.** The other three fields are
+    /// all properties of the **source text**: one source computational match
+    /// specialized at two recursion layers shares its origin, its selected
+    /// alternative and its ruled recursive position across both layers, and the
+    /// producer `Construct` occurrence is the only thing that separates them.
+    /// Without this field the selector collides on every plan in this crate that
+    /// interns continuation specializations, which
+    /// [`d7a_the_three_field_selector_collides_where_the_four_field_selector_resolves`]
+    /// measures directly.
+    ///
+    /// ⇒ **Different workers under distinct construct origins are distinct
+    /// questions, not a conflict.** Two layers naming two workers is the
+    /// ordinary, lawful shape of nested specialization. Conflict is reserved for
+    /// two specializations answering *one* four-field selector with different
+    /// workers.
+    ///
+    /// [`d7a_the_three_field_selector_collides_where_the_four_field_selector_resolves`]:
+    ///     crate::cranelift_backend::lowering::core::tests::control
     ///
     /// ⛔ **This method is the whole point of `D7a`, so read what it forbids.**
     /// A consumer that has this cannot need to walk the closure occurrence, read
@@ -11128,7 +11157,7 @@ impl<'src> StaticTransitionPlan<'src> {
     ///
     /// | refusal | what it means |
     /// |---|---|
-    /// | zero answers | no specialization claims this frame, alternative and position |
+    /// | zero answers | no specialization claims this construct occurrence, frame, alternative and position |
     /// | conflicting full identities | two do, and they disagree about the worker |
     /// | wrong position / body / capture provenance | a key's own worker record fails its independent re-check |
     /// | unexecutable raw target | the raw body is superseded, so a raw-route call has no `Function` to reach |
@@ -11138,16 +11167,16 @@ impl<'src> StaticTransitionPlan<'src> {
     /// means this view would hand a consumer a target that has a descriptor and
     /// no emitted `Function`. Refusing here is the same fail-closed direction
     /// [`Self::executable_units`] takes, applied at the projection rather than
-    /// at the emission.
+    /// at the emission. ⛔ That refusal and the executable-unit population it
+    /// reads are `D7a2`'s subject and are deliberately untouched here.
     ///
     /// ⛔ **Agreement between several answers is lawful; equality is by full
-    /// identity.** Two specializations may share a frame, alternative and
-    /// position — they differ in producer construct origin or emission owner,
-    /// which this selector deliberately does not carry — and if they name the
-    /// *same* worker, the same eligibility included, there is one answer and it
-    /// is theirs. Only disagreement refuses. Picking the first, the lowest, or
-    /// any other sequence would make the caller the authority for a fact the
-    /// planner owns.
+    /// identity.** Two specializations may still share all four fields — they
+    /// would differ only in emission owner, which this selector deliberately
+    /// does not carry — and if they name the *same* worker, the same eligibility
+    /// included, there is one answer and it is theirs. Only disagreement
+    /// refuses. Picking the first, the lowest, or any other sequence would make
+    /// the caller the authority for a fact the planner owns.
     // `D7b` (one environment authority) and `D7c` (the callee consumer) are the
     // production consumers, and both are held. Until one lands the only callers
     // are this node's own tests, so the attribute below is load-bearing rather
@@ -11155,13 +11184,15 @@ impl<'src> StaticTransitionPlan<'src> {
     #[cfg_attr(not(test), allow(dead_code))]
     pub(in crate::cranelift_backend) fn composed_worker_view(
         &self,
+        producer_construct_origin: StaticOriginId,
         continuation_origin: StaticOriginId,
         producer_alternative: u32,
         recursive_position: u32,
     ) -> Result<ComposedWorkerView, CraneliftBackendError> {
         let mut answer: Option<ComposedWorkerView> = None;
         for unit in &self.continuation_units()? {
-            if unit.continuation_origin() != continuation_origin
+            if unit.producer_construct_origin() != producer_construct_origin
+                || unit.continuation_origin() != continuation_origin
                 || unit.producer_alternative() != producer_alternative
                 || unit.recursive_position() != recursive_position
             {
@@ -11174,19 +11205,20 @@ impl<'src> StaticTransitionPlan<'src> {
                 Some(_) => {
                     return Err(planner_error(
                         "two continuation specializations answer one composed worker selector \
-                         with different full worker identities; one composed frame position has \
-                         one static worker, and choosing between them would make the caller the \
-                         authority for a fact planning owns",
+                         with different full worker identities; one producer Construct \
+                         occurrence at one frame position has one static worker, and choosing \
+                         between them would make the caller the authority for a fact planning \
+                         owns",
                     ));
                 }
             }
         }
         let answer = answer.ok_or_else(|| {
             planner_error(
-                "no continuation specialization claims this computational frame, selected \
-                 alternative and ruled recursive position, so there is no planner-issued worker \
-                 provenance to project and nothing may be reconstructed from the closure \
-                 occurrence's shape instead",
+                "no continuation specialization claims this producer Construct occurrence, \
+                 computational frame, selected alternative and ruled recursive position, so \
+                 there is no planner-issued worker provenance to project and nothing may be \
+                 reconstructed from the closure occurrence's shape instead",
             )
         })?;
 
