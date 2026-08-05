@@ -657,14 +657,18 @@ all six failing `D0` rows.
      its going red is the correction announcing itself.** That replacement is
      item 4 of `D3b`'s bounded re-cut. Do not read its red as a regression.
 
-  ⛔ **THE CANDIDATE IS ALSO GATED ON [[RT-UNIT-CLOSURE-CONVERT]], AND THAT IS
-  PROSE HERE RATHER THAN A `depends_on` EDGE** (an edge both ways is a cycle).
-  At `bc371f13` seven rows are red: the two standing `D0` reds, plus the five
-  `D4a` coordinate reds which **moved rather than cleared** — they now pass the
-  emission seam and fail at `Var: no runtime binding`, a predeclared unit body
-  whose lowering environment is shorter than its own de Bruijn depth. That is a
-  substrate boundary, ⛔ **not** a bounded repair here, and Runtime makes **no
-  unit-frame edit** meanwhile.
+  ⛔⛔ **SUPERSEDED 2026-08-05 — [[RT-UNIT-CLOSURE-CONVERT]] IS `closed` AND
+  THIS GATE IS NOW `D5` BELOW.** The paragraph that stood here called the five
+  `Var: no runtime binding` reds "a substrate boundary, not a bounded repair
+  here." ⛔ **That is FALSE and is retired by measurement**, not merely
+  re-scoped: `D1`/`D1b`/`D1c` on that node measured the runtime closure-
+  conversion substrate **complete**, production's capture basis **total by
+  construction**, and the five failing units **never on the production path at
+  all** — they are literals in `test_objects.rs`. The Architect then ruled the
+  contract (`evt_5g7kaec1xzaf6`): `LexicalClosure.captures` must be **total**
+  for its body's ambient lexical demand, so those fixtures are **malformed**.
+  ⇒ It is a bounded repair here after all, and it is `D5`. Do not restore the
+  old reading, and do not read the five reds as evidence of a substrate gap.
 
   ⛔ **Option 2 as offered is INVALID, not merely worse:** `D4` cannot safely
   admit the population before the lowering consumers are explicitly fail-closed.
@@ -754,6 +758,55 @@ all six failing `D0` rows.
   `OPEN[let-value:Construct]`, `AMBIG2[let-value:If]`. A new fixture that adds a
   member to `R` is a real finding about the contract domain: stop and report it.
   One that adds only to `V` leaves the partition intact.
+
+- **`D5` — correct the two MALFORMED `LexicalClosure` fixtures. ADDED
+  2026-08-05; this is the node's LAST deliverable and it clears the candidate
+  gate.** Folded in from `closed` [[RT-UNIT-CLOSURE-CONVERT]], whose substrate
+  premise three measurement passes retired.
+
+  **The governing contract, Architect ruling `evt_5g7kaec1xzaf6`:** a
+  `RuntimeExpr::LexicalClosure` is well formed only if its explicit ordered
+  `captures` run covers **every** ambient lexical de Bruijn reference its `body`
+  can reach, after accounting for (1) declared parameters, (2) binders
+  introduced inside the body, and (3) separately declared compiler-private or
+  generated unit bindings under their own contracts. ⛔ **There is no lawful
+  fourth source — an undeclared enclosing/caller environment tail.**
+
+  ⭐ **It is a TOTALITY ruling, not a MINIMALITY one.** A conservative capture
+  run **may be larger** than the body's actually-used free-variable set; it may
+  never be **shorter** than the body's ambient lexical demand. Do not "tighten"
+  a capture run to its used set on the strength of this deliverable.
+
+  The two sites are the literal `LexicalClosure { captures: Vec::new(), … }`
+  constructions in `crates/ken-runtime/src/cranelift_backend/test_objects.rs`
+  (`:176`, `:220`). Their bodies each reach **one** ambient outermost binding the
+  closure does not declare. They exercise a state the contract forbids and are
+  **not** evidence of a substrate gap.
+
+  **Three requirements, all of them, and the second is the one that matters:**
+
+  1. Either **explicitly capture** the intended enclosing value at closure
+     construction, or make the body **genuinely closed** if that is the
+     fixture's semantic intent.
+  2. ⛔ **Retain a discriminator proving the corrected fixture still reaches its
+     intended `D4a` boundary** — not merely that it went green. **Going green by
+     avoiding the boundary is the failure mode this deliverable exists to
+     prevent**, and a passing suite cannot distinguish the two.
+  3. Retain a **negative** showing an undeclared ambient lexical reference does
+     **not** acquire a caller tail or a fabricated capture.
+
+  ⛔ **Banned, unchanged and restated because the measurement makes one of them
+  look plausible:** no `CaptureSlot` identity field, no backend-synthesized
+  capture, no padding or shifting of the unit environment, no caller-tail copy.
+  `D1b` measured a `StaticWorker` at de Bruijn 0 in exactly the failing units,
+  which makes shifting `Var`s look like the obvious fix — it is not; both
+  failures are `index == env_len` and removing the worker makes the shortfall
+  **worse**.
+
+  ⚠ **Noted and deliberately NOT filed as a node:** an end-to-end `ken-cli`
+  corpus audit of capture producers. The Architect was explicit that it is **not
+  required to decide this contract**, since no observed producer can make an
+  undeclared ambient tail lawful. Do not derive a node from this line.
 
   ⛔ **The program fingerprint is load-bearing, not decoration.**
   `StaticOriginId`s are allocated per compile, so without it edges from
