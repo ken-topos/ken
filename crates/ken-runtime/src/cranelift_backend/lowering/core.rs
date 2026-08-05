@@ -6558,16 +6558,20 @@ impl<'a> Lowering<'a> {
         {
             use crate::cranelift_backend::lowering::{
                 d4a_describe_binding, d4a_record_seam, d4a_slot_selection,
-                ContinuationImmediateAvailability, ContinuationSourceCoordinate, D4aSeamObservation,
+                ContinuationEnvironmentClaim, ContinuationSourceCoordinate, D4aSeamObservation,
                 D4aSlotSelection,
             };
             let ContinuationSourceCoordinate::ProducerLocal { binding, locator } = input.coordinate
             else {
                 continue;
             };
-            let ContinuationImmediateAvailability::CurrentLexical {
+            // `D3b` re-cut — the observatory reads the DIRECT-EMISSION view,
+            // which is the one this seat consumes. ⛔ Not "whichever view has a
+            // current-lexical claim": taking the context-capture view here would
+            // measure an operand run this seat does not hold.
+            let Some(ContinuationEnvironmentClaim::CurrentLexical {
                 post_shift_index, ..
-            } = input.availability
+            }) = input.availability.direct_emission
             else {
                 continue;
             };
@@ -6708,37 +6712,48 @@ impl<'a> Lowering<'a> {
             let input = {
                 let mut input = input;
                 match d5a_route_mutation() {
+                    // ⭐ **The re-cut sharpens this row rather than porting it.**
+                    // Under the retired law "read the root position as the
+                    // immediate slot" was a type-level substitution; `D3c`
+                    // measured it as the live defect, so it is now expressed as
+                    // what it actually is — the claim's index replaced by
+                    // `source_abi_position` with the claim's ENVIRONMENT left
+                    // intact. That is the substitution `D3c` flipped, and it is
+                    // now caught by the planner walk rather than by an equality.
                     D5aRouteMutation::ReadRootPositionAsImmediateSlot => {
                         record_d5a_route_application();
-                        input.availability = ContinuationImmediateAvailability::EntryAbi {
-                            immediate_slot: source_abi_position,
-                        };
+                        input.availability.direct_emission = input
+                            .availability
+                            .direct_emission
+                            .map(|claim| d3b_replace_claim_index(claim, source_abi_position));
                     }
-                    // ⛔ Scoped to the SPECIALIZATION arm. Applied to a
-                    // predeclared emitter it is caught by that arm's equality
-                    // law first, and the row would name the bounds guard while
-                    // measuring the consistency one -- which is exactly what
-                    // the first draft did.
+                    // ⛔ Scoped to the SPECIALIZATION arm, whose direct-emission
+                    // claim is an entry-frame one. Applied to a predeclared
+                    // emitter the current-lexical revalidation refuses first, and
+                    // the row would name the bounds guard while measuring the
+                    // membership one.
                     D5aRouteMutation::PerturbImmediateSlotOutOfRange => {
                         if matches!(defining_owner, ContinuationEmissionOwner::Specialization(_)) {
                             record_d5a_route_application();
-                            input.availability = ContinuationImmediateAvailability::EntryAbi {
-                                immediate_slot: u32::try_from(producer_env.len())
-                                    .unwrap_or(u32::MAX),
-                            };
+                            let out_of_range =
+                                u32::try_from(producer_env.len()).unwrap_or(u32::MAX);
+                            input.availability.direct_emission = input
+                                .availability
+                                .direct_emission
+                                .map(|claim| d3b_replace_claim_index(claim, out_of_range));
                         }
                     }
+                    // ⛔ Scoped to the PREDECLARED arm, whose direct-emission
+                    // claim is current-lexical. `+1` moves the post-shift index
+                    // off the binder depth the planner walked, which the
+                    // revalidation must catch.
                     D5aRouteMutation::PerturbPredeclaredImmediateSlot => {
                         if matches!(defining_owner, ContinuationEmissionOwner::Predeclared(_)) {
-                            if let ContinuationImmediateAvailability::EntryAbi {
-                                immediate_slot,
-                            } = input.availability
-                            {
+                            if let Some(claim) = input.availability.direct_emission {
                                 record_d5a_route_application();
-                                input.availability =
-                                    ContinuationImmediateAvailability::EntryAbi {
-                                        immediate_slot: immediate_slot.wrapping_add(1),
-                                    };
+                                let moved = d3b_claim_index(claim).wrapping_add(1);
+                                input.availability.direct_emission =
+                                    Some(d3b_replace_claim_index(claim, moved));
                             }
                         }
                     }
@@ -13556,4 +13571,52 @@ enum ContinuationImmediateRoot {
 struct ContinuationDirectEmissionSeat {
     producer_result_origin: StaticOriginId,
     emission_origin: StaticOriginId,
+}
+
+/// The index a claim carries, whichever environment it names. **Mutation
+/// support only.**
+///
+/// ⛔ Deliberately NOT available to production. Reading "the index" without
+/// first answering "which environment" is the conflation the claim sum exists
+/// to prevent; a mutation is allowed to ask it precisely because its job is to
+/// corrupt the index while leaving the environment intact, so that what the
+/// consumer catches is the index and not a shape mismatch.
+#[cfg(test)]
+fn d3b_claim_index(claim: ContinuationEnvironmentClaim) -> u32 {
+    match claim {
+        ContinuationEnvironmentClaim::CurrentLexical {
+            post_shift_index, ..
+        } => post_shift_index,
+        ContinuationEnvironmentClaim::EntryFrame { declared_slot, .. } => declared_slot,
+    }
+}
+
+/// Replace a claim's index, preserving its environment and every identity field.
+/// **Mutation support only** — see [`d3b_claim_index`].
+#[cfg(test)]
+fn d3b_replace_claim_index(
+    claim: ContinuationEnvironmentClaim,
+    index: u32,
+) -> ContinuationEnvironmentClaim {
+    match claim {
+        ContinuationEnvironmentClaim::CurrentLexical {
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            post_shift_index: _,
+        } => ContinuationEnvironmentClaim::CurrentLexical {
+            emission_owner,
+            producer_result_origin,
+            emission_origin,
+            lexical_environment_origin,
+            post_shift_index: index,
+        },
+        ContinuationEnvironmentClaim::EntryFrame { frame, .. } => {
+            ContinuationEnvironmentClaim::EntryFrame {
+                frame,
+                declared_slot: index,
+            }
+        }
+    }
 }

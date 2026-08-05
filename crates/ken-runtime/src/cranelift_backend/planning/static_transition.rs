@@ -6270,6 +6270,56 @@ pub(in crate::cranelift_backend) fn verify_predeclared_entry_frame_membership(
     Ok(())
 }
 
+/// **`D3b` re-cut — the position at which one predeclared frame's ENTRY RUN
+/// declares a coordinate**, or `None` when it declares no member for it.
+///
+/// ⭐⭐ **This is the measured shape of the capture consumer's source frame, and
+/// the measurement is what put it here.** The generated-context capture append
+/// indexes `function_local.defining_abi_operands` — the operand run of the frame
+/// *currently being defined*. Over the corpus that frame was, in every
+/// observation, the **emission owner of the enclosing specialization**, and in
+/// every observation it was a predeclared function rather than that
+/// specialization's own generated context. So the capture consumer's claim is an
+/// entry-frame claim against a PREDECLARED frame, and its declared slot is the
+/// coordinate's position in that frame's entry ABI run.
+///
+/// ⛔ `None` is the honest answer, not a failure to look. A `ProducerLocal`
+/// coordinate is a mid-body value with no position in any entry run, so no
+/// capture claim can be built for it and the consumer refuses rather than
+/// indexing an operand run the value was never in. `D4b` owns making such a value
+/// capturable; until then the boundary fails closed.
+///
+/// ⛔ Membership is by the **whole coordinate, exactly once**. Two members for
+/// one coordinate is an ambiguous slot, refused rather than resolved by taking
+/// the first.
+fn predeclared_entry_frame_slot(
+    plan: &StaticTransitionPlan<'_>,
+    frame: PredeclaredFunctionId,
+    coordinate: ContinuationSourceCoordinate,
+) -> Result<Option<u32>, CraneliftBackendError> {
+    let members = continuation_owner_entry_sources(plan, frame)?;
+    let mut found = None;
+    for (position, member) in members.iter().enumerate() {
+        if member.coordinate != coordinate {
+            continue;
+        }
+        if found.is_some() {
+            return Err(planner_error(
+                "a predeclared entry frame declares two members for one continuation coordinate, \
+                 so the capture slot it would supply is ambiguous; \
+                 RT-CONTSRC-PRODUCER-LOCAL D3b refuses rather than taking the first",
+            ));
+        }
+        found = Some(position);
+    }
+    found
+        .map(|position| {
+            u32::try_from(position)
+                .map_err(|_| planner_capacity_error("predeclared entry frame slot exhausted"))
+        })
+        .transpose()
+}
+
 /// **`D3b` re-cut, the `CurrentLexical` arm** — locate one coordinate in the
 /// emission seat's environment, and refuse if it is not exactly there.
 ///
@@ -6376,13 +6426,35 @@ fn exact_continuation_projection(
                         environment.producer_construct_origin,
                         seat,
                     )?;
+                    // ⭐⭐ **The capture view, built against a DIFFERENT
+                    // environment of the same frame — this is the re-cut's whole
+                    // claim, made concrete.**
+                    //
+                    // The direct-emission consumer above reads this predeclared
+                    // frame's retained LEXICAL environment, so it takes a
+                    // post-shift index. The capture-append consumer reads the
+                    // same frame's ENTRY ABI RUN, so it takes that run's
+                    // position. `D3c` measured those two numbers diverging at
+                    // nonzero binder depth — which is exactly why one field could
+                    // not serve both, and why each is derived from its own
+                    // environment here rather than one being computed from the
+                    // other.
+                    //
+                    // ⛔ `None` when the frame declares no member: fails closed.
+                    // Nothing invents a position, and no fallback reads the
+                    // direct-emission index as a frame slot.
+                    let capture = predeclared_entry_frame_slot(
+                        plan,
+                        *emission_owner,
+                        input.coordinate,
+                    )?
+                    .map(|declared_slot| ContinuationEnvironmentClaim::EntryFrame {
+                        frame: ContinuationFrameIdentity::Predeclared(*emission_owner),
+                        declared_slot,
+                    });
                     ContinuationAvailabilityViews {
                         direct_emission: Some(claim),
-                        // ⛔ No context-capture view: this projection belongs to a
-                        // specialization emitted from a predeclared frame, and
-                        // the capture-append consumer must build its own claim
-                        // against the frame it holds rather than reuse this one.
-                        context_capture: None,
+                        context_capture: capture,
                     }
                 }
                 // The emitting frame is a generated execution context. Its
@@ -20680,13 +20752,24 @@ mod tests {
         .expect("a producer-local coordinate present at the seat must project");
         assert_eq!(
             projected[0].availability,
-            ContinuationImmediateAvailability::CurrentLexical {
-                emission_origin: construct_origin,
-                lexical_environment_origin: source_root,
-                post_shift_index: seat_index,
+            ContinuationAvailabilityViews {
+                direct_emission: Some(ContinuationEnvironmentClaim::CurrentLexical {
+                    emission_owner: environment.producer_owner,
+                    producer_result_origin: result_origin,
+                    emission_origin: construct_origin,
+                    lexical_environment_origin: source_root,
+                    post_shift_index: seat_index,
+                }),
+                // ⛔ The re-cut's load-bearing half of this row. A predeclared
+                // emitter projects NO context-capture claim, so the capture
+                // consumer cannot reach this value at all. Asserting the whole
+                // record rather than the direct view is what makes that a
+                // measured absence instead of an unexamined field.
+                context_capture: None,
             },
-            "the availability must be keyed to the exact emission occurrence and lexical \
-             environment, and carry the post-shift index"
+            "the direct-emission claim must be keyed to the exact emission occurrence, owner and \
+             lexical environment and carry the post-shift index, and a predeclared emitter must \
+             project no capture claim at all"
         );
         assert_ne!(
             seat_index, introduction_index,
@@ -20785,13 +20868,27 @@ mod tests {
             contsrc_d2b_shifted_emission_seat(&plan, owner, coordinate, introduction_index);
         let source_root = continuation_owner_source_root(&plan, owner).expect("one source root");
 
-        // The CALLER's proof: at its own seat the value is current-lexically
-        // available. ⛔ Without this record the capture would be fabricated.
+        // The CALLER's own projection of this value. ⭐ **The re-cut relocates
+        // this row's caller-proof authority rather than dropping it.** Under the
+        // retired law the projection inspected this record's availability and
+        // refused anything but a current-lexical one. That check is gone, because
+        // a nested generated context's member lawfully carries an entry-frame
+        // claim, so the old refusal was not a law. What replaces it is stronger
+        // and structural: **exact-once membership by whole coordinate in the
+        // enclosing specialization's own continuation inputs** — and those inputs
+        // were themselves projected and validated when that specialization was
+        // interned. A capture cannot be fabricated because there is nothing to
+        // find unless the caller really declares the value.
         let caller_proof = ContinuationInputProjection {
-            availability: ContinuationImmediateAvailability::CurrentLexical {
-                emission_origin: construct_origin,
-                lexical_environment_origin: source_root,
-                post_shift_index: seat_index,
+            availability: ContinuationAvailabilityViews {
+                direct_emission: Some(ContinuationEnvironmentClaim::CurrentLexical {
+                    emission_owner: owner,
+                    producer_result_origin: result_origin,
+                    emission_origin: construct_origin,
+                    lexical_environment_origin: source_root,
+                    post_shift_index: seat_index,
+                }),
+                context_capture: None,
             },
             producer_owner: owner,
             consumer_owner: owner,
@@ -20828,6 +20925,16 @@ mod tests {
         let enclosing_inputs = vec![decoy, caller_proof.clone()];
         const CONTEXT_PARAMETERS: u32 = 2;
         let context = ContinuationSpecializationId(0);
+        // ⛔ Two DISTINCT worker bodies. The frame identity is a pair, and a row
+        // that only ever supplies one body origin cannot tell a recorded identity
+        // from a defaulted one.
+        let body_origin = target;
+        let other_body_origin = plan
+            .occurrence_authorities
+            .iter()
+            .map(|authority| authority.origin)
+            .find(|origin| *origin != body_origin)
+            .expect("the fixture has a second static origin");
         let environment = ContinuationProducerEnvironment {
             producer_owner: owner,
             producer_result_origin: result_origin,
@@ -20856,12 +20963,24 @@ mod tests {
             &resolution(context, &enclosing_inputs, body_origin, CONTEXT_PARAMETERS),
         )
         .expect("a captured producer-local value with a caller proof must project");
+        let declared = ContinuationEnvironmentClaim::EntryFrame {
+            frame: ContinuationFrameIdentity::GeneratedContext {
+                enclosing: context,
+                worker_body_origin: body_origin,
+            },
+            declared_slot: CONTEXT_PARAMETERS + 1,
+        };
         assert_eq!(
             projected[0].availability,
-            ContinuationImmediateAvailability::GeneratedContextCapture {
-                context,
-                owner,
-                immediate_capture_slot: CONTEXT_PARAMETERS + 1,
+            // ⭐ BOTH views carry the same claim here, and only here. A generated
+            // context's direct emission and its capture append read one frame --
+            // its own operand run -- so the two consumers agree by identity of
+            // environment rather than by convention. ⛔ Asserting the whole record
+            // is what makes that agreement measured; asserting one view would
+            // leave the other unexamined.
+            ContinuationAvailabilityViews {
+                direct_emission: Some(declared),
+                context_capture: Some(declared),
             },
         );
         // The three numbers are pairwise distinct, which is what makes the
@@ -20882,33 +21001,61 @@ mod tests {
             "the refusal must be the membership one: {refusal:?}"
         );
 
-        // ⛔ Fail-closed 4 of 5 — wrong generated owner/context. The captures
-        // handed in must belong to the unit the availability is keyed to.
-        let other_owner = plan
-            .occurrence_authorities
-            .iter()
-            .map(|authority| authority.owner)
-            .find(|candidate| *candidate != owner)
-            .expect("the fixture has more than one predeclared owner");
-        let refusal = exact_continuation_projection(
+        // ⛔ 4 of 5 — the FRAME IDENTITY is recorded, not defaulted.
+        //
+        // ⭐ **This is the re-cut of the retired "crossed owner/context" refusal,
+        // and the relocation is the point.** That refusal fired in the planner,
+        // which was the wrong plane for it: the planner is handed the emitting
+        // frame and has no second frame to cross it against. What it can be held
+        // to is FAITHFULNESS — that the claim names the frame it was actually
+        // given. The refusal itself now lives at the consumer, in
+        // `verify_entry_frame`, which is the only place both the claimed frame
+        // and the held frame exist. A row asserting a defaulted identity would
+        // make that consumer check unreachable in principle.
+        let crossed = exact_continuation_projection(
             &plan,
             &environment,
             0,
             &resolution(context, &enclosing_inputs, other_body_origin, CONTEXT_PARAMETERS),
         )
-        .expect_err("a crossed owner/context pair must refuse");
-        assert!(
-            format!("{refusal:?}").contains("different producer owner"),
-            "the refusal must be the crossed owner/context one: {refusal:?}"
+        .expect("a different worker body is still a well-formed emitting frame")[0]
+            .availability;
+        assert_eq!(
+            crossed,
+            ContinuationAvailabilityViews {
+                direct_emission: Some(ContinuationEnvironmentClaim::EntryFrame {
+                    frame: ContinuationFrameIdentity::GeneratedContext {
+                        enclosing: context,
+                        worker_body_origin: other_body_origin,
+                    },
+                    declared_slot: CONTEXT_PARAMETERS + 1,
+                }),
+                context_capture: Some(ContinuationEnvironmentClaim::EntryFrame {
+                    frame: ContinuationFrameIdentity::GeneratedContext {
+                        enclosing: context,
+                        worker_body_origin: other_body_origin,
+                    },
+                    declared_slot: CONTEXT_PARAMETERS + 1,
+                }),
+            },
+            "the claim must name the worker body it was handed; a frame identity that ignores it \
+             would make two different frames indistinguishable to the consumer that has to refuse \
+             one of them"
+        );
+        assert_ne!(
+            crossed, projected[0].availability,
+            "two distinct emitting frames must not project the same claim, or the identity \
+             carries no information"
         );
 
-        // ⛔ Fail-closed 5 of 5 — wrong immediate slot. The capture run starts
-        // after the parameters, and that addition refuses rather than wraps.
+        // ⛔ 5 of 5 — the slot arithmetic refuses rather than wraps. The capture
+        // run starts after the parameter run, and `u32::MAX` parameters leaves no
+        // representable slot for a capture at position 1.
         let refusal = exact_continuation_projection(
             &plan,
             &environment,
             0,
-            &resolution(context, &enclosing_inputs, owner, u32::MAX),
+            &resolution(context, &enclosing_inputs, body_origin, u32::MAX),
         )
         .expect_err("an immediate slot past the representable range must refuse");
         assert!(
@@ -20916,30 +21063,28 @@ mod tests {
             "the refusal must be the slot-arithmetic one: {refusal:?}"
         );
 
-        // ⛔ The caller's proof is load-bearing: without a current-lexical
-        // availability nothing shows the value existed at the call seat, and a
-        // capture claiming otherwise is fabricated.
-        let unproved = ContinuationInputProjection {
-            availability: ContinuationImmediateAvailability::EntryAbi {
-                immediate_slot: CONTEXT_PARAMETERS + 1,
-            },
-            ..caller_proof
-        };
+        // ⛔ 6 — membership is EXACTLY ONCE. A duplicated member makes the
+        // declared slot ambiguous, and taking the first would silently pick one
+        // of two positions holding the same coordinate.
         let refusal = exact_continuation_projection(
             &plan,
             &environment,
             0,
             &resolution(
                 context,
-                &[enclosing_inputs[0].clone(), unproved],
-                owner,
+                &[
+                    enclosing_inputs[0].clone(),
+                    caller_proof.clone(),
+                    caller_proof,
+                ],
+                body_origin,
                 CONTEXT_PARAMETERS,
             ),
         )
-        .expect_err("a capture without the caller's current-lexical proof must refuse");
+        .expect_err("a duplicated capture member must refuse rather than take the first");
         assert!(
-            format!("{refusal:?}").contains("does not carry a current-"),
-            "the refusal must name the missing caller proof: {refusal:?}"
+            format!("{refusal:?}").contains("two members for one"),
+            "the refusal must be the ambiguity one: {refusal:?}"
         );
     }
 
