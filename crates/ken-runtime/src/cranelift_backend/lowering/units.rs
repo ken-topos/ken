@@ -2543,10 +2543,17 @@ pub(super) fn close_aggregate_allocation_ledger(
 ///
 /// ⛔ Whole-artifact rather than per-body, because a seat inside a worker body
 /// is consumed in its predeclared unit and again in each specialization that
-/// contains it; no single body's claims equal the population. ⭐ But unlike the
-/// aggregate relation this IS an equality: the seat population is derived from
-/// the `Effect` occurrences the source contains, not from a synthesized tree
-/// most of whose nodes no program touches.
+/// contains it; no single body's claims equal the population.
+///
+/// ⭐ **`image(claims) ⊆ P`, exactly as the aggregate relation states it — NOT
+/// an equality.** This comment previously claimed the opposite, on the reasoning
+/// that a seat population derived from the source's own `Effect` occurrences
+/// must be fully reached. That was measured false: an occurrence sitting in a
+/// declaration body a compilation never emits takes its seats with it, and
+/// requiring equality refused such a program. `P` authorizes; it does not
+/// oblige, and an unreached member is lawful and reported. A half-read
+/// occurrence cannot hide in that gap, because completeness is a group-local
+/// equality that has already run at each visit's close.
 pub(super) fn close_host_effect_seat_ledger(
     compiler: &mut Lowering<'_>,
 ) -> Result<EffectSeatClosure, CraneliftBackendError> {

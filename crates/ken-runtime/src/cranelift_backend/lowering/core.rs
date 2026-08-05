@@ -9948,38 +9948,52 @@ impl<'a> Lowering<'a> {
         };
         #[cfg(not(test))]
         let omitted: Option<EffectSeatSlot> = None;
-        let mut claim = |lowering: &mut Self, slot, operand: &LoweringOperand| {
+        let mut claimed = BTreeMap::new();
+        let mut claim = |lowering: &mut Self,
+                         claimed: &mut BTreeMap<EffectSeatSlot, PlannedEffectSeat>,
+                         slot,
+                         operand: &LoweringOperand| {
             if omitted == Some(slot) {
                 return Ok(());
             }
-            lowering
-                .claim_host_effect_seat(group, static_origin, slot, operand)
-                .map(|_| ())
+            let record = lowering.claim_host_effect_seat(group, static_origin, slot, operand)?;
+            claimed.insert(slot, record);
+            Ok(())
         };
         if let Some(operand) = &capability_operand {
-            claim(self, EffectSeatSlot::Capability, operand)?;
+            claim(self, &mut claimed, EffectSeatSlot::Capability, operand)?;
         }
         for (ordinal, operand) in lowered.iter().enumerate() {
             let ordinal = u32::try_from(ordinal).map_err(|_| {
                 unsupported("Effect", "host effect argument ordinal exceeds the seat space")
             })?;
-            claim(self, EffectSeatSlot::Argument(ordinal), operand)?;
+            claim(self, &mut claimed, EffectSeatSlot::Argument(ordinal), operand)?;
         }
         #[cfg(test)]
         if effect_seat_visit_mutation() == EffectSeatVisitMutation::DuplicateWithinVisit {
             if let Some(operand) = lowered.first() {
-                claim(self, EffectSeatSlot::Argument(0), operand)?;
+                claim(self, &mut claimed, EffectSeatSlot::Argument(0), operand)?;
             }
         }
         self.close_host_effect_seat_group(group)?;
-        // BufferFreeze has two ruled phase-bearing resource seats. Every other
-        // host operation remains specialized-only and crosses the typed phase
-        // boundary only after the checked operation is known.
-        let specialized_lowered = if operation == ken_host::HostOpV1::BufferFreeze {
-            None
-        } else {
-            Some(specialized_operands_at(&lowered, "a host-effect operand")?)
+        // ⭐ **The bulk pre-operation conversion is gone.** It crossed every
+        // operand to a specialized template BEFORE the operation was known, so a
+        // seat that could not be read that way failed as "a host-effect operand"
+        // -- naming neither the operation nor the seat, and answering for seats
+        // the arm never reads. Each arm now reads its own claimed seats.
+        let seats = ClaimedEffectSeats {
+            claimed: &claimed,
+            capability: capability_operand.as_ref(),
+            arguments: &lowered,
         };
+        // The four ordinals any arm below reads, named once. ⛔ These are
+        // SEMANTIC ordinals: the capability offset is already applied, so
+        // `SEAT_0` is the first semantic argument whether or not the operation
+        // carries a capability.
+        const SEAT_0: EffectSeatSlot = EffectSeatSlot::Argument(0);
+        const SEAT_1: EffectSeatSlot = EffectSeatSlot::Argument(1);
+        const SEAT_2: EffectSeatSlot = EffectSeatSlot::Argument(2);
+        const SEAT_3: EffectSeatSlot = EffectSeatSlot::Argument(3);
         let pointer_type = builder.func.dfg.value_type(
             self.function_local
                 .host_dispatch_context
@@ -10023,18 +10037,13 @@ impl<'a> Lowering<'a> {
             ken_host::HostOpV1::ConsoleWrite
             | ken_host::HostOpV1::ConsoleFlush
             | ken_host::HostOpV1::ConsoleIsTerminal => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
                         "ambient Console carried a capability",
                     ));
                 }
-                let stream = lowered
-                    .first()
-                    .and_then(console_stream_tag)
+                let stream = console_stream_tag(seats.specialized(SEAT_0)?)
                     .ok_or_else(|| {
                         unsupported("Effect", "Console operation has a malformed Stream operand")
                     })?;
@@ -10045,9 +10054,7 @@ impl<'a> Lowering<'a> {
                 if operation == ken_host::HostOpV1::ConsoleWrite {
                     let (data, len) = self.wire_bytes(
                         builder,
-                        lowered.get(1).ok_or_else(|| {
-                            unsupported("Effect", "Console.Write is missing Bytes")
-                        })?,
+                        seats.specialized(SEAT_1)?,
                     )?;
                     builder.ins().stack_store(data, request, request_offset(1));
                     builder.ins().stack_store(len, request, request_offset(2));
@@ -10057,43 +10064,49 @@ impl<'a> Lowering<'a> {
             | ken_host::HostOpV1::FsWriteFile
             | ken_host::HostOpV1::FsChangeMode
             | ken_host::HostOpV1::FsOpen => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 // Lowered and claimed above, with every other operand, so the
                 // claim group's window contains no operand lowering.
-                let capability_operand = capability_operand
-                    .ok_or_else(|| unsupported("Effect", "FS operation has no live capability"))?;
+                let (capability_record, capability_operand) =
+                    seats.operand(EffectSeatSlot::Capability)?;
+                // ⛔ Exhaustive over both phases with no wildcard. The capability
+                // is an either-phase seat: a specialized `CapabilityToken`
+                // template is read directly, a carried word through the emitted
+                // scalar read. A specialized template that is neither is the
+                // third case, and it names the seat rather than falling into a
+                // catch-all.
                 let token = match capability_operand {
-                    LoweringOperand::Specialized(Lowered::CapabilityToken { value }) => value,
-                    LoweringOperand::Carried(word) => self.emit_carrier_scalar(builder, word)?,
-                    _ => {
+                    LoweringOperand::Specialized(Lowered::CapabilityToken { value }) => *value,
+                    LoweringOperand::Carried(word) => self.emit_carrier_scalar(builder, *word)?,
+                    LoweringOperand::Specialized(other) => {
                         return Err(unsupported(
                             "Effect",
-                            "FS capability operand is not the opaque invocation token",
+                            format!(
+                                "seat {:?} of {:?} needs {:?}, but the specialized template at \
+                                 it is a {} rather than the opaque invocation token",
+                                capability_record.slot,
+                                capability_record.operation,
+                                capability_record.need,
+                                lowered_value_kind(other)
+                            ),
                         ));
                     }
                 };
                 builder.ins().stack_store(token, request, request_offset(0));
                 let (path, path_len) = self.wire_bytes(
                     builder,
-                    lowered
-                        .first()
-                        .ok_or_else(|| unsupported("Effect", "FS operation is missing its path"))?,
+                    seats.specialized(SEAT_0)?,
                 )?;
                 builder.ins().stack_store(path, request, request_offset(1));
                 builder
                     .ins()
                     .stack_store(path_len, request, request_offset(2));
                 if operation == ken_host::HostOpV1::FsWriteFile {
-                    let policy = lowered.get(1).and_then(create_policy_tag).ok_or_else(|| {
+                    let policy = create_policy_tag(seats.specialized(SEAT_1)?).ok_or_else(|| {
                         unsupported("Effect", "FS.WriteFile has a malformed CreatePolicy")
                     })?;
                     let (bytes, bytes_len) = self.wire_bytes(
                         builder,
-                        lowered.get(2).ok_or_else(|| {
-                            unsupported("Effect", "FS.WriteFile is missing contents")
-                        })?,
+                        seats.specialized(SEAT_2)?,
                     )?;
                     let policy = builder.ins().iconst(types::I64, policy);
                     builder
@@ -10104,9 +10117,7 @@ impl<'a> Lowering<'a> {
                         .ins()
                         .stack_store(bytes_len, request, request_offset(5));
                 } else if operation == ken_host::HostOpV1::FsChangeMode {
-                    let mode = lowered.get(1).ok_or_else(|| {
-                        unsupported("Effect", "FS.ChangeMode is missing its mode")
-                    })?;
+                    let mode = seats.specialized(SEAT_1)?;
                     let (mode, valid_int) = self.narrow_native_int_u64(builder, mode)?;
                     let in_range = builder.ins().icmp_imm(
                         cranelift_codegen::ir::condcodes::IntCC::UnsignedLessThanOrEqual,
@@ -10119,31 +10130,22 @@ impl<'a> Lowering<'a> {
                     let mode = builder.ins().select(in_range, narrowed, invalid);
                     builder.ins().stack_store(mode, request, request_offset(3));
                 } else if operation == ken_host::HostOpV1::FsOpen {
-                    let mode =
-                        lowered
-                            .get(1)
-                            .and_then(resource_open_mode_tag)
-                            .ok_or_else(|| {
-                                unsupported("Effect", "FS.Open has a malformed ResourceOpenMode")
-                            })?;
+                    let mode = resource_open_mode_tag(seats.specialized(SEAT_1)?)
+                        .ok_or_else(|| {
+                            unsupported("Effect", "FS.Open has a malformed ResourceOpenMode")
+                        })?;
                     let mode = builder.ins().iconst(types::I64, mode);
                     builder.ins().stack_store(mode, request, request_offset(3));
                 }
             }
             ken_host::HostOpV1::FsHandleMetadata | ken_host::HostOpV1::ResourceRelease => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
                         "resource operation carried a capability",
                     ));
                 }
-                let Lowered::ResourceToken { value: token } = lowered.first().ok_or_else(|| {
-                    unsupported("Effect", "resource operation is missing its token")
-                })?
-                else {
+                let Lowered::ResourceToken { value: token } = seats.specialized(SEAT_0)? else {
                     return Err(unsupported(
                         "Effect",
                         "resource operand is not an opaque resource token",
@@ -10154,18 +10156,13 @@ impl<'a> Lowering<'a> {
                     .stack_store(*token, request, request_offset(0));
             }
             ken_host::HostOpV1::BufferAllocate => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
                         "buffer allocation carried a capability",
                     ));
                 }
-                let capacity = lowered.first().ok_or_else(|| {
-                    unsupported("Effect", "BufferAllocate is missing its capacity")
-                })?;
+                let capacity = seats.specialized(SEAT_0)?;
                 let (capacity, valid) = self.narrow_native_int_u64(builder, capacity)?;
                 let invalid = builder.ins().icmp_imm(
                     cranelift_codegen::ir::condcodes::IntCC::Equal,
@@ -10183,25 +10180,11 @@ impl<'a> Lowering<'a> {
                 }
                 let token = self.lower_buffer_freeze_resource_seat(
                     builder,
-                    lowered.first().ok_or_else(|| {
-                        unsupported("Effect", "BufferFreeze is missing its buffer")
-                    })?,
+                    seats.operand(SEAT_0)?.1,
                     "buffer",
                 )?;
-                let start = lowered
-                    .get(1)
-                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its start"))?;
-                let length = lowered
-                    .get(2)
-                    .ok_or_else(|| unsupported("Effect", "BufferFreeze is missing its length"))?;
-                let (LoweringOperand::Specialized(start), LoweringOperand::Specialized(length)) =
-                    (start, length)
-                else {
-                    return Err(unsupported(
-                        "Effect",
-                        "BufferFreeze start and length must remain specialized Int operands",
-                    ));
-                };
+                let start = seats.specialized(SEAT_1)?;
+                let length = seats.specialized(SEAT_2)?;
                 let (start, start_valid) = self.narrow_native_int_u64(builder, start)?;
                 let (length, length_valid) = self.narrow_native_int_u64(builder, length)?;
                 let valid = builder.ins().band(start_valid, length_valid);
@@ -10214,9 +10197,7 @@ impl<'a> Lowering<'a> {
                 // PX8-SPAN-PROV: trailing `span_origin` acquisition token.
                 let span_origin = self.lower_buffer_freeze_resource_seat(
                     builder,
-                    lowered.get(3).ok_or_else(|| {
-                        unsupported("Effect", "BufferFreeze is missing its span origin")
-                    })?,
+                    seats.operand(SEAT_3)?.1,
                     "span origin",
                 )?;
                 for (index, value) in [token, start, length, span_origin].into_iter().enumerate() {
@@ -10226,9 +10207,6 @@ impl<'a> Lowering<'a> {
                 }
             }
             ken_host::HostOpV1::FsReadAt | ken_host::HostOpV1::FsWriteAt => {
-                let lowered = specialized_lowered
-                    .as_deref()
-                    .expect("non-BufferFreeze operands crossed the specialized boundary");
                 if capability.is_some() {
                     return Err(unsupported(
                         "Effect",
@@ -10236,7 +10214,9 @@ impl<'a> Lowering<'a> {
                     ));
                 }
                 let resource = |index: usize, name: &str| {
-                    let Some(Lowered::ResourceToken { value }) = lowered.get(index) else {
+                    let Some(Lowered::ResourceToken { value }) =
+                        seats.specialized(EffectSeatSlot::Argument(index as u32)).ok()
+                    else {
                         return Err(unsupported(
                             "Effect",
                             format!("positioned {name} operand is not a resource"),
@@ -10245,7 +10225,9 @@ impl<'a> Lowering<'a> {
                     Ok(*value)
                 };
                 let integer = |index: usize, name: &str| {
-                    let Some(value @ Lowered::Int { .. }) = lowered.get(index) else {
+                    let Some(value @ Lowered::Int { .. }) =
+                        seats.specialized(EffectSeatSlot::Argument(index as u32)).ok()
+                    else {
                         return Err(unsupported(
                             "Effect",
                             format!("positioned {name} operand is not Int"),
@@ -10514,8 +10496,23 @@ impl<'a> Lowering<'a> {
             // The seat's own lowered operands. A site-bound synthesized child
             // is PROJECTED from this list rather than handed in, so the emitter
             // states which operand it means and cannot substitute a look-alike.
-            let seat_operands: &[Lowered] =
-                specialized_lowered.as_deref().unwrap_or(&[]);
+            // ⚠ A POSITIONAL projection, and deliberately not the conversion
+            // that was removed above. It is taken after the operation is known,
+            // each element is read through its own claimed seat, and a refusal
+            // names that seat -- the site-bound synthesized-aggregate consumer
+            // below needs an ordered list and cannot ask per seat.
+            let seat_operands: Vec<Lowered> = if operation == ken_host::HostOpV1::BufferFreeze {
+                Vec::new()
+            } else {
+                (0..lowered.len() as u32)
+                    .map(|ordinal| {
+                        seats
+                            .specialized(EffectSeatSlot::Argument(ordinal))
+                            .cloned()
+                    })
+                    .collect::<Result<Vec<_>, _>>()?
+            };
+            let seat_operands: &[Lowered] = &seat_operands;
             let error_root =
                 SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultError);
             let ok_root = SynthesizedAggregatePath::root(SynthesizedAggregateRoot::HostResultOk);
@@ -10554,12 +10551,7 @@ impl<'a> Lowering<'a> {
                     | ken_host::HostOpV1::FsChangeMode
                     | ken_host::HostOpV1::FsOpen
             ) {
-                let path = specialized_lowered
-                    .as_ref()
-                    .expect("file-result synthesis follows a specialized-only operation")
-                    .first()
-                    .cloned()
-                    .expect("validated FS operation has a path");
+                let path = seats.specialized(SEAT_0)?.clone();
                 let _ = &path;
                 let (operation_role, operation_symbol) = match operation {
                     ken_host::HostOpV1::FsReadFile | ken_host::HostOpV1::FsOpen => (
@@ -10936,13 +10928,7 @@ impl<'a> Lowering<'a> {
                 let reply_start_int = self.lower_unsigned_u64_int(builder, reply_start)?;
                 // PX8-SPAN-PROV: bind the minted span to this `readAt`'s buffer
                 // operand acquisition (lowered arg 2, the request seat).
-                let Lowered::ResourceToken { value: span_origin } = specialized_lowered
-                    .as_ref()
-                    .expect("FsReadAt result synthesis follows a specialized-only operation")
-                    .get(2)
-                    .ok_or_else(|| {
-                        unsupported("Effect", "FsReadAt is missing its buffer operand")
-                    })?
+                let Lowered::ResourceToken { value: span_origin } = seats.specialized(SEAT_2)?
                 else {
                     return Err(unsupported(
                         "Effect",

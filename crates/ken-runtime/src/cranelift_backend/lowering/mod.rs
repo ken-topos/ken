@@ -8492,6 +8492,79 @@ impl EffectSeatLedger {
     }
 }
 
+/// **`RT-DECL-CLOSURE-PORT` `D7` — the seats of ONE visit, bound to the operands
+/// they were claimed from.**
+///
+/// ⭐ **This is what replaces the bulk pre-operation conversion.** That
+/// conversion crossed every operand to a specialized template before the
+/// operation was known, so a seat that could not be read specialized failed as
+/// "a host-effect operand" — a generic surface naming neither the operation nor
+/// the seat. Here each arm names the exact slot it is reading, and a refusal
+/// carries that seat's operation and need.
+///
+/// ⛔ The record comes from the claim, not from a fresh lookup. Re-resolving it
+/// here would let the arm read a seat the visit never claimed, which is exactly
+/// the binding the claim group exists to establish.
+struct ClaimedEffectSeats<'a> {
+    claimed: &'a BTreeMap<EffectSeatSlot, PlannedEffectSeat>,
+    capability: Option<&'a LoweringOperand>,
+    arguments: &'a [LoweringOperand],
+}
+
+impl<'a> ClaimedEffectSeats<'a> {
+    /// The claimed record and the operand it was claimed from.
+    fn operand(
+        &self,
+        slot: EffectSeatSlot,
+    ) -> Result<(PlannedEffectSeat, &'a LoweringOperand), CraneliftBackendError> {
+        let record = *self.claimed.get(&slot).ok_or_else(|| {
+            unsupported(
+                "Effect",
+                format!("{slot:?} was not claimed in this visit, so nothing authorizes reading it"),
+            )
+        })?;
+        let operand = match slot {
+            EffectSeatSlot::Capability => self.capability.ok_or_else(|| {
+                unsupported(
+                    "Effect",
+                    "the capability seat was claimed but no capability operand was lowered",
+                )
+            })?,
+            EffectSeatSlot::Argument(ordinal) => {
+                self.arguments.get(ordinal as usize).ok_or_else(|| {
+                    unsupported(
+                        "Effect",
+                        format!("{slot:?} was claimed but no operand was lowered at it"),
+                    )
+                })?
+            }
+        };
+        Ok((record, operand))
+    }
+
+    /// Read one seat's compile-time template.
+    ///
+    /// ⛔ **Exhaustive over the two phases, and the refusal names the SEAT.**
+    /// The carried arm is not dead code that could be a wildcard: it is the arm
+    /// that would fire if a seat's `Avail` were ever widened without a carried
+    /// route being written for it, and it must say which seat and which need
+    /// rather than "a host-effect operand".
+    fn specialized(&self, slot: EffectSeatSlot) -> Result<&'a Lowered, CraneliftBackendError> {
+        let (record, operand) = self.operand(slot)?;
+        match operand {
+            LoweringOperand::Specialized(lowered) => Ok(lowered),
+            LoweringOperand::Carried(_) => Err(unsupported(
+                "Effect",
+                format!(
+                    "seat {:?} of {:?} needs {:?}, which this release can observe only in a \
+                     specialized template, but this visit holds a carried word",
+                    record.slot, record.operation, record.need
+                ),
+            )),
+        }
+    }
+}
+
 /// One argument to a compiler-synthesized constructor, in the FORM the tree
 /// declares it.
 ///
