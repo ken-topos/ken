@@ -1377,9 +1377,10 @@ all six failing `D0` rows.
   | 6 | `D8i` — transport the discharge authority on the binding | lowering environment | held |
   | 7 | `D8j` — verified source-machine discharge + function-local relation | lowering consumer + proof | held |
   | 8 | `D8k` — partitioned global closeout | proof | held |
-  | 9 | `D8e` DISCHARGES — its positive program now closes the ledger | — | held |
-  | 10 | `D8f` — checked-marker occupancy | integration | held |
-  | 11 | `D8g` — non-vacuous closeout, both paths | proof | held |
+  | 9 | `D8e` DISCHARGES — causal obligation dischargeable and discharged | — | **DISCHARGED, Steward ruling below** |
+  | 10 | `D8l` — the ordinary-envelope frontier; `D8l1` is a MEASUREMENT | specialization emission | **NEXT** |
+  | 11 | `D8f` — checked-marker occupancy | integration | held, needs a composed witness at emission |
+  | 12 | `D8g` — non-vacuous closeout, both paths | proof | held, needs a composed witness at emission |
   | 12 | `D6b` closeout, then `D6c` refusal set | — | held |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
@@ -1857,6 +1858,83 @@ all six failing `D0` rows.
   **refuses in production by design** at `9f21ff0e`. Anything that starts
   calling it before the route is settled will read that refusal as a
   **regression** rather than as the checkpoint's own finding.
+
+  ###### STEWARD RULING — `D8e` CLOSES. The envelope frontier is `D8l`.
+
+  **`D8h`-`D8k` are complete and the causal-projection repair is proved.** The
+  `D8e` witness passes the former `D5a` detached-result seat: a causal call
+  answered by a composed source continuation **is not detached**, because the
+  producer's constructor was eliminated in place and the obligation was met by
+  the raw-worker call the source machine made. `continuation_result_edges_owned_by`
+  is unchanged; the filter is what moved.
+
+  **`D8e` closes on its own law, which is proved.** Consume the selected
+  recursive argument in the exact source-machine continuation with exact raw
+  arguments and captures, closure-valued result never crossing a unit boundary
+  — all of it demonstrated at `89e36ec1` and preserved through `D8k`: one
+  binding installed, one consumption before the value path, an emitted
+  `RawWorker` call carrying the exact raw run, read from the emitter's own log.
+
+  ⛔ **It does NOT close on "a compiling composed program," and the difference
+  is not a technicality.** The witness now stops later and elsewhere — in
+  **specialization emission**, building the specialization's case binder run,
+  because the ordinary envelope carries no nonrecursive field at the selected
+  field's source position. **No `D8e` release ever put specialization emission
+  in scope.** Closing `D8e` on end-to-end compilation would retroactively widen
+  its law to cover a mechanism it never owned, which is the mis-ordering that
+  retired `D8c`.
+
+  ⭐ **`D8e` closing is NOT the node closing.** The standing section above —
+  *"correct and unreachable" is the DEFAULT* — still binds the **candidate**:
+  this node must not ship a composed mechanism no program can reach. `D8e`'s
+  own layer is genuinely exercised end to end, which is what distinguishes it
+  from `D6b`, where the mechanism was never reached at all. The node's closure
+  obligation moves to `D8l`.
+
+  ###### `D8l` — the ordinary-envelope frontier. FIRST deliverable is a MEASUREMENT.
+
+  **`D8l` precedes `D8f` and `D8g`** (same label-order caveat as `D8h`-`D8k`).
+  `D8g` requires *"a selected-argument emission through the composed-call
+  target"* and `D8f`'s marker occupancy is emission-adjacent, so **both are
+  blocked until a composed witness reaches emission.** This is not an optional
+  tidy-up.
+
+  ⛔ **`D8l1` is: is the refusal STRUCTURAL to the composed shape, or a fixture
+  accident? Do not size the repair before that answer exists.** Flagged by the
+  implementer and it is the right flag: **both** witnesses hit the identical
+  refusal from `continuation_case_binder_run`, and both place a `Match` at the
+  selected field's source position — **which is exactly what
+  `requires_heterogeneous_deforestation` demands.** If the shape that triggers
+  the composed path is the same shape the envelope cannot carry, this is a
+  mechanism question for the Architect and potentially a second whole-node
+  finding, not a fixture fix.
+
+  **Sizing the repair before that measurement is the error this node has
+  already paid for twice** — `RT-UNIT-CLOSURE-CONVERT` was framed on a premise
+  measurement retired, and `D7` was cut before its own premise was checked.
+
+  ###### `D8k`'s ledger row is proved ON THE LAW, not on reach — and that is owed
+
+  Recorded because the implementer stated it plainly rather than letting it
+  pass: **no composed witness reaches `close_continuation_claim_ledger`** —
+  both stop at the envelope frontier. The row exercises the ledger with real
+  planner identities through the ordinary projection, so it **proves the law**;
+  it does **not** prove any program reaches it.
+
+  ⇒ **Whoever closes `D8l` owes the end-to-end assertion, ADDED BESIDE this row
+  rather than replacing it.** A law-level proof and a reach-level proof fail for
+  different reasons, and collapsing them loses the one that still holds.
+
+  **Two things `D8k` established that must not be re-litigated.** The residual
+  filter's soundness rests on **pass ORDER**: the seat runs while the function
+  is still being built, so it reads the claim as well as the verified relation
+  (which is populated only once the CLIF is finished). That is safe **only**
+  because verification runs before publication and fails the whole compile on
+  any failed claim — so no artifact can exist in which an unverified claim
+  suppressed a residual. ⛔ **Neither pass may move without re-deriving this.**
+  And `record_composed` claims through the **same slot** a direct emission
+  claims, so the partition is disjoint **at the point of claim**, not only at
+  closeout.
 
   ###### SPENT — the `D7a`-`D7e` cut. Superseded by `D8a`-`D8g` above.
 

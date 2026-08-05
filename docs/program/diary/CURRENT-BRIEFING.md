@@ -33,22 +33,39 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-05 ~22:4xZ · causal projection RULED (c); work extends to `D8h`-`D8k`
+## LIVE — 2026-08-06 ~00:0xZ · `D8h`-`D8k` DONE, `D8e` discharged; `D8l` is next
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for `D8h`.** Released to Runtime at `evt_48c17peaekf4y` (~22:5xZ) on
-preserved exact `89e36ec1`; `runtime-leader` relayed it at `evt_1g0ye6axhcqcp`
-within 30 seconds and the implementer is working. Thread
-**`thr_6m43v75yndhtj`**. **The 60-minute WIP clock re-armed at that release.**
+**Release `D8l1` to Runtime on exact `aaef1772`** — a MEASUREMENT, not a fix:
+is the ordinary-envelope refusal **structural to the composed shape or a
+fixture accident?** Thread **`thr_6m43v75yndhtj`**. Do not size the repair
+before that answer exists.
 
-`D8h` is planner pairing only: pair each `ComposedCallTarget` with the exact
-opaque `ContinuationCallIdentity` selected by the same five fields as the `D8a`
-selector. On its checkpoint, release `D8i` (transport on the binding as a
-separate closed facet), then `D8j`, then `D8k`.
+**`D8h`-`D8k` are complete and the causal-projection repair is PROVED.** The
+`D8e` witness passes the former `D5a` detached-result seat. `D8h` `a435d180`,
+`D8i` `abfd67ff`, `D8j` `8d0d6fca`, `D8k` `372097de`+`aaef1772`. **`D8e` is
+DISCHARGED** on my ruling — its own law is proved and specialization emission
+was never in its scope.
+
+⛔ **`D8e` closing is NOT the node closing.** The witness still does not compile
+end to end: it stops in **specialization emission**, building the
+specialization's case binder run, because the ordinary envelope carries no
+nonrecursive field at the selected field's source position. **Both** witnesses
+hit it, and both place a `Match` there — which is exactly what
+`requires_heterogeneous_deforestation` demands. If the shape that triggers the
+composed path is the shape the envelope cannot carry, that is an Architect
+mechanism question and possibly a second whole-node finding.
+
+**`D8l` precedes `D8f`/`D8g`**, which both need a composed witness that reaches
+emission. Label order still does not track execution order here.
+
+**Owed by whoever closes `D8l`:** the end-to-end ledger assertion, **added
+beside** `D8k`'s row rather than replacing it — `D8k` proves the law, not that
+any program reaches it.
 
 **Architect ruling `evt_37fa3rdegb3yc` settled the fork as outcome (c) —
 BOTH mechanisms I offered were refused.** (a) would execute the continuation
