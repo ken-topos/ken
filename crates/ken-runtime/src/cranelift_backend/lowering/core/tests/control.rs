@@ -21832,10 +21832,10 @@ fn d8p_binding_is_zero_one_or_declined_per_application_occurrence() {
          occupancy question on this program: {events:?}"
     );
     assert_eq!(
-        consumed, 1,
-        "and exactly ONE of them may bind. More than one is the marker being consumed by a call \
-         the planner never issued a template for; zero is the exact occurrence failing to find \
-         its own marker: {events:?}"
+        consumed, 2,
+        "and exactly one binding per defining body: this witness's checked source body is lowered \
+         by two, so two consumptions is once each. Fewer means a body never found its own marker; \
+         more means a call the planner issued no template for consumed one: {events:?}"
     );
     assert!(
         matches!(events.first(), Some(D5aMarkerEvent::WorkerCallEmitted { .. })),
@@ -21843,15 +21843,13 @@ fn d8p_binding_is_zero_one_or_declined_per_application_occurrence() {
          That ordering is the property: the ordinary call reaches the seat first, declines, and \
          leaves the marker for the occurrence that owns it: {events:?}"
     );
-    let refusal = format!("{declined:?}");
     assert!(
-        refusal.contains("one causal identity was discharged twice in a single function"),
-        "MEASURED, and stated so the binding evidence above is not read as more than it is: this \
-         program still refuses downstream, because the ordinary call re-uses a binding that \
-         carries a composed causal authority and the affine law refuses the second discharge. \
-         That is D8f's remaining question, not D8p's, and D8f stays held. If this refusal ever \
-         changes, the occupancy witness has moved and this expectation should be restated rather \
-         than deleted: {refusal}"
+        declined.is_none(),
+        "and the program COMPILES. Until D8f it refused here with 'one causal identity was \
+         discharged twice in a single function', because the declined call still answered for the \
+         checked application's composed identity. D8f's three-case disposition stopped it \
+         answering; d8f_the_declined_call_does_not_answer_for_the_checked_identity holds that as \
+         a difference: {declined:?}"
     );
 }
 
@@ -21918,5 +21916,193 @@ fn d8p_preserves_the_refusals_the_projection_could_have_weakened() {
     assert!(
         !pending.contains("None"),
         "and it must be a refusal, not a compile: {pending}"
+    );
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8f` — the declined call is emitted and does
+/// not answer for the checked application's causal identity.**
+///
+/// ## The three cases, and why a Boolean was the defect
+///
+/// The source-machine call edge had one bit: consumed, or not. That spelled two
+/// different facts the same way. *"No checked application is pending"* and
+/// *"one is pending, at another occurrence"* both left the call unchanged, and
+/// both let it claim its composed causal identity -- so on the two-call witness
+/// the ordinary selected-argument call answered for the identity the planner
+/// issued for the checked application, and the checked application then answered
+/// for it again. The affine law refused, correctly: *"one causal identity was
+/// discharged twice in a single function"*.
+///
+/// The boundary now matches a closed
+/// [`CheckedApplicationDisposition`](crate::cranelift_backend::lowering::CheckedApplicationDisposition)
+/// exhaustively. Nothing else moved: no identity gained an occurrence, none was
+/// minted, the binding is still composed, and the Function-local affine ledger
+/// is untouched. The declined call simply does not answer.
+///
+/// ## Clause 1 — the live occurrence decision, per body
+///
+/// The two calls are the same worker at the same arity in the same frame, so
+/// route, arity, binder index, call order and target shape are all blind. Per
+/// defining body, exactly one occurrence is `ConsumedHere` and exactly one is
+/// `PendingAtAnotherOccurrence`, and the consumed one is the occurrence the seam
+/// independently recorded as its binding. Those two logs are written at two
+/// different sites -- the seam and the integration boundary -- so their agreement
+/// is a relation, not a restatement.
+///
+/// ## Clause 2 — exactly one claim
+///
+/// The composed causal identities actually discharged are read from closeout,
+/// which is a third site and knows nothing about dispositions. One claim per
+/// defining body, and the program compiles.
+///
+/// ## Clause 3 — the difference
+///
+/// Letting the declined call claim -- the pre-`D8f` behaviour, with the call
+/// itself unchanged -- must bring the duplicate-discharge refusal back. Without
+/// this, "it compiles now" and "the affine law stopped noticing" are
+/// indistinguishable.
+///
+/// ## Clause 4 — the `D8j` population is not collapsed
+///
+/// A lawful composed call with no marker anywhere still claims. An over-broad
+/// repair that only claimed on `ConsumedHere` would silence the larger
+/// population, and this clause is what reds if one is written.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d8f_the_declined_call_does_not_answer_for_the_checked_identity() {
+    use crate::cranelift_backend::lowering::core::set_d8f_declined_call_claims;
+    use crate::cranelift_backend::lowering::{
+        d8f_dispositions, d8j_discharged, d8p_application_bindings, reset_d8n_observations,
+        CheckedApplicationDisposition,
+    };
+
+    // Clause 1 — the live occurrence decision, per defining body.
+    reset_d8n_observations();
+    let outcome = d8f_compile(true);
+    assert!(
+        outcome.is_none(),
+        "the two-call occupancy witness must compile. A 'discharged twice' refusal means the \
+         declined call is answering again; any other refusal is a new finding on this route and \
+         must be reported rather than absorbed: {outcome:?}"
+    );
+    let mut by_body: BTreeMap<FuncId, BTreeMap<StaticOriginId, CheckedApplicationDisposition>> =
+        BTreeMap::new();
+    for (function, origin, disposition) in d8f_dispositions() {
+        let function = function.expect("every disposition names its defining Function");
+        let previous = by_body.entry(function).or_default().insert(origin, disposition);
+        assert!(
+            previous.is_none(),
+            "one call edge per (defining body, occurrence): a second disposition under one key \
+             would mean the same call reached the boundary twice"
+        );
+    }
+    assert!(
+        by_body.len() >= 2,
+        "this witness's checked source body is lowered by more than one defining body, and the \
+         disposition is a per-body fact: {by_body:?}"
+    );
+    // The independent side: which occurrence the SEAM recorded as its binding.
+    // Written at the seam, not at the boundary these dispositions come from.
+    let bound = d8p_application_bindings()
+        .into_iter()
+        .map(|binding| {
+            (
+                binding.function.expect("bindings name their Function"),
+                binding.application_origin,
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    for (function, dispositions) in &by_body {
+        let consumed = dispositions
+            .iter()
+            .filter(|(_, disposition)| {
+                **disposition == CheckedApplicationDisposition::ConsumedHere
+            })
+            .map(|(origin, _)| *origin)
+            .collect::<Vec<_>>();
+        let declined = dispositions
+            .iter()
+            .filter(|(_, disposition)| {
+                **disposition == CheckedApplicationDisposition::PendingAtAnotherOccurrence
+            })
+            .map(|(origin, _)| *origin)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            consumed.len(),
+            1,
+            "exactly one occurrence in {function:?} is the checked application: {dispositions:?}"
+        );
+        assert_eq!(
+            declined.len(),
+            1,
+            "and exactly one declines. Zero would mean the ordinary call never reached the seat \
+             with the marker pending, and the occupancy question is not posed at all: \
+             {dispositions:?}"
+        );
+        assert_ne!(
+            consumed[0], declined[0],
+            "and they are different occurrences, which is the only thing that tells the two calls \
+             apart: same worker, same arity, same frame"
+        );
+        assert_eq!(
+            bound.get(function).copied(),
+            Some(consumed[0]),
+            "the occurrence the boundary treated as ConsumedHere must be the one the SEAM \
+             recorded binding at. Those two logs are written at different sites, so a \
+             disagreement here means the boundary is acting on a decision the seam did not make"
+        );
+    }
+
+    // Clause 2 — exactly one claim per defining body, read from closeout.
+    let claims = d8j_discharged();
+    assert!(
+        !claims.is_empty(),
+        "the checked application must still discharge its composed causal identity. Zero is what \
+         an over-broad repair produces -- one that stopped the declined call answering by \
+         stopping every call answering: {claims:?}"
+    );
+    let distinct = claims.iter().cloned().collect::<BTreeSet<_>>();
+    assert_eq!(
+        distinct.len(),
+        claims.len(),
+        "and no identity may be discharged twice. MEASURED: this witness's two defining bodies \
+         share ONE planner-issued causal identity, so 'once per body' would be the wrong \
+         expectation here -- the affine fact is that the identity is answered for exactly once, \
+         which is what the declined call answering would break: {claims:?}"
+    );
+
+    // Clause 3 — the difference. Let the declined call answer again.
+    set_d8f_declined_call_claims(true);
+    let doubled = d8f_compile(true);
+    set_d8f_declined_call_claims(false);
+    let doubled = format!("{doubled:?}");
+    assert!(
+        doubled.contains("one causal identity was discharged twice in a single function"),
+        "letting the DECLINED call claim must bring the refusal back. The call itself is unchanged \
+         either way -- only the claim moves -- so this is D8f's whole change stated as a \
+         difference. Without it, 'it compiles now' and 'the affine law stopped noticing' are the \
+         same observation: {doubled}"
+    );
+
+    // Clause 4 — the D8j population is not collapsed.
+    reset_d8n_observations();
+    let plain = d8n_compile();
+    assert!(plain.is_none(), "the unmarked composed witness compiles: {plain:?}");
+    assert!(
+        !d8j_discharged().is_empty(),
+        "a lawful composed call with no marker anywhere must still claim its causal identity. \
+         This is the LARGER population, and a repair that only claimed on ConsumedHere would \
+         silence it: {:?}",
+        d8j_discharged()
+    );
+    assert!(
+        d8f_dispositions()
+            .iter()
+            .all(|(_, _, disposition)| *disposition
+                == CheckedApplicationDisposition::NoPendingApplication),
+        "and every disposition on that program is NoPendingApplication, so clause 4 is about the \
+         first case and not about a program that quietly has a marker somewhere: {:?}",
+        d8f_dispositions()
     );
 }

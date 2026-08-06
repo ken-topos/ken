@@ -97,6 +97,27 @@ fn d8m_foreign_consumed_shape() -> bool {
     D8M_FOREIGN_CONSUMED_SHAPE.with(std::cell::Cell::get)
 }
 
+/// **`D8f`** — let the DECLINED call answer for the checked application's
+/// composed causal identity, which is what it did before this checkpoint.
+///
+/// The call itself is unchanged either way; only the claim moves. That is what
+/// makes the duplicate-discharge refusal a difference this checkpoint removed
+/// rather than one it routed around.
+#[cfg(test)]
+thread_local! {
+    static D8F_DECLINED_CALL_CLAIMS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8f_declined_call_claims(armed: bool) {
+    D8F_DECLINED_CALL_CLAIMS.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn d8f_declined_call_claims() -> bool {
+    D8F_DECLINED_CALL_CLAIMS.with(std::cell::Cell::get)
+}
+
 /// **`D8n`** — restore the compile-wide consumed-frame lifetime.
 #[cfg(test)]
 thread_local! {
@@ -4206,11 +4227,12 @@ impl<'a> Lowering<'a> {
                                 // hand so an ordinary selected-argument call
                                 // reaches the seat first and leaves the marker
                                 // for the occurrence that owns it.
-                                let bound = self.consume_checked_ih_marker_at_static_worker_call(
-                                    binder_index,
-                                    0,
-                                    static_origin,
-                                )?;
+                                let disposition = self
+                                    .consume_checked_ih_marker_at_static_worker_call(
+                                        binder_index,
+                                        0,
+                                        static_origin,
+                                    )?;
                                 let before = self.live_source_continuations;
                                 let (called, emission) = self.call_static_worker_with_inputs(
                                     builder,
@@ -4222,7 +4244,13 @@ impl<'a> Lowering<'a> {
                                 // written only now that the call instruction
                                 // exists and carrying the run it actually took.
                                 #[cfg(test)]
-                                if bound {
+                                crate::cranelift_backend::lowering::record_d8f_disposition(
+                                    self.defining_function_id,
+                                    static_origin,
+                                    disposition,
+                                );
+                                #[cfg(test)]
+                                if disposition == CheckedApplicationDisposition::ConsumedHere {
                                     crate::cranelift_backend::lowering::record_d8p_emitted_target(
                                         crate::cranelift_backend::lowering::D8pEmittedTarget {
                                             function: self.defining_function_id,
@@ -4238,7 +4266,38 @@ impl<'a> Lowering<'a> {
                                 // in hand under the SAME `control` this arm was
                                 // entered with. Only now may a composed
                                 // obligation be claimed.
-                                self.claim_composed_discharge(&worker, emission, &called, before)?;
+                                // **`D8f` — THE CLAIM DISPOSITION, three cases,
+                                // matched exhaustively.**
+                                match disposition {
+                                    // The `D8j` population: an ordinary composed
+                                    // call, untouched by this seam, claims its
+                                    // causal identity exactly as before.
+                                    CheckedApplicationDisposition::NoPendingApplication
+                                    // The checked application itself, claiming
+                                    // the planner-issued identity once.
+                                    | CheckedApplicationDisposition::ConsumedHere => {
+                                        self.claim_composed_discharge(
+                                            &worker, emission, &called, before,
+                                        )?;
+                                    }
+                                    // ⛔ The declined call. It is emitted
+                                    // unchanged and it claims NOTHING: the
+                                    // identity belongs to the checked
+                                    // application the planner issued it for, and
+                                    // an ordinary selected-argument call
+                                    // answering for it is a second discharge of
+                                    // one obligation. The binding is not
+                                    // reclassified and no identity is minted --
+                                    // this call simply does not answer.
+                                    CheckedApplicationDisposition::PendingAtAnotherOccurrence => {
+                                        #[cfg(test)]
+                                        if d8f_declined_call_claims() {
+                                            self.claim_composed_discharge(
+                                                &worker, emission, &called, before,
+                                            )?;
+                                        }
+                                    }
+                                }
                                 SourceMachineState::Value {
                                     value: RoutedAnswer::direct(called),
                                     control,
@@ -5300,7 +5359,7 @@ impl<'a> Lowering<'a> {
                                         // lowered, so any ordinary call among
                                         // them has already reached this seat and
                                         // already declined the marker.
-                                        let bound = self
+                                        let disposition = self
                                             .consume_checked_ih_marker_at_static_worker_call(
                                                 binder_index,
                                                 lowered.len(),
@@ -5316,7 +5375,15 @@ impl<'a> Lowering<'a> {
                                             )?;
                                         // `D8p` — the target side, post-instruction.
                                         #[cfg(test)]
-                                        if bound {
+                                        crate::cranelift_backend::lowering::record_d8f_disposition(
+                                            self.defining_function_id,
+                                            static_origin,
+                                            disposition,
+                                        );
+                                        #[cfg(test)]
+                                        if disposition
+                                            == CheckedApplicationDisposition::ConsumedHere
+                                        {
                                             crate::cranelift_backend::lowering::record_d8p_emitted_target(
                                                 crate::cranelift_backend::lowering::D8pEmittedTarget {
                                                     function: self.defining_function_id,
@@ -5333,9 +5400,25 @@ impl<'a> Lowering<'a> {
                                         // under the machine's own control, and
                                         // the raw call is now written. This is
                                         // the seat, and it is after all three.
-                                        self.claim_composed_discharge(
-                                            &worker, emission, &called, before,
-                                        )?;
+                                        //
+                                        // `D8f` — and the same three dispositions
+                                        // decide whether it answers.
+                                        match disposition {
+                                            CheckedApplicationDisposition::NoPendingApplication
+                                            | CheckedApplicationDisposition::ConsumedHere => {
+                                                self.claim_composed_discharge(
+                                                    &worker, emission, &called, before,
+                                                )?;
+                                            }
+                                            CheckedApplicationDisposition::PendingAtAnotherOccurrence => {
+                                                #[cfg(test)]
+                                                if d8f_declined_call_claims() {
+                                                    self.claim_composed_discharge(
+                                                        &worker, emission, &called, before,
+                                                    )?;
+                                                }
+                                            }
+                                        }
                                         SourceMachineState::Value {
                                             value: RoutedAnswer::direct(called),
                                             control,

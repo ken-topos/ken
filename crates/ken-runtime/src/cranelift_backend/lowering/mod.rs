@@ -3735,6 +3735,11 @@ thread_local! {
     /// relation rather than one site agreeing with itself.
     static D8P_EMITTED_TARGETS: std::cell::RefCell<Vec<D8pEmittedTarget>> =
         const { std::cell::RefCell::new(Vec::new()) };
+    /// `D8f` — the disposition each static-worker call edge was given, written
+    /// at the boundary that acts on it.
+    static D8F_DISPOSITIONS: std::cell::RefCell<
+        Vec<(Option<FuncId>, StaticOriginId, CheckedApplicationDisposition)>,
+    > = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// `D8p` — what the plan bound at one checked application.
@@ -3835,6 +3840,25 @@ pub(in crate::cranelift_backend) fn d8p_application_bindings() -> Vec<D8pApplica
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn d8p_emitted_targets() -> Vec<D8pEmittedTarget> {
     D8P_EMITTED_TARGETS.with(|log| log.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8f_disposition(
+    function: Option<FuncId>,
+    application_origin: StaticOriginId,
+    disposition: CheckedApplicationDisposition,
+) {
+    D8F_DISPOSITIONS.with(|log| {
+        log.borrow_mut()
+            .push((function, application_origin, disposition))
+    });
+}
+
+#[cfg(test)]
+#[allow(clippy::type_complexity)]
+pub(in crate::cranelift_backend) fn d8f_dispositions(
+) -> Vec<(Option<FuncId>, StaticOriginId, CheckedApplicationDisposition)> {
+    D8F_DISPOSITIONS.with(|log| log.borrow().clone())
 }
 
 #[cfg(test)]
@@ -3995,6 +4019,7 @@ pub(in crate::cranelift_backend) fn reset_d8n_observations() {
     D8M_BRIDGE_ARMS.with(|log| log.borrow_mut().clear());
     D8P_APPLICATION_BINDINGS.with(|log| log.borrow_mut().clear());
     D8P_EMITTED_TARGETS.with(|log| log.borrow_mut().clear());
+    D8F_DISPOSITIONS.with(|log| log.borrow_mut().clear());
 }
 
 #[cfg(test)]
@@ -12521,6 +12546,36 @@ enum SourceCallee {
         binder_index: u64,
     },
 }
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8f` — what a static-worker call edge found at
+/// the checked-application seam.**
+///
+/// ⛔ **Closed, and deliberately three cases rather than a Boolean.** "No
+/// checked application is pending" and "one is pending, at another occurrence"
+/// are different facts with different consequences for the composed causal
+/// claim, and a `bool` spelled them the same. The exhaustive match at the
+/// integration boundary is what makes a fourth case a compile error instead of
+/// a silent fall-through into one of these.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum CheckedApplicationDisposition {
+    /// No checked application is pending at this edge. The call is an ordinary
+    /// one and the seam did not touch it.
+    ///
+    /// ⭐ A composed binding claims its causal identity here exactly as it did
+    /// before `D8f` -- this is the `D8j` population, and it is the larger one.
+    NoPendingApplication,
+    /// A checked application IS pending, and this call is **not** it.
+    ///
+    /// The marker stays pending for the occurrence that owns it, the call is
+    /// emitted unchanged -- and its composed causal identity is **not** claimed.
+    /// That last part is the whole of this variant: the identity belongs to the
+    /// checked application the planner issued it for, and letting an ordinary
+    /// selected-argument call answer for it is a second discharge of one
+    /// obligation.
+    PendingAtAnotherOccurrence,
+    /// This call **is** the pending checked application, and the marker has been
+    /// consumed for it. It claims that same planner-issued identity, once.
+    ConsumedHere,
+}
 enum SourceContinuationTerminal<'a> {
     ReturnValue,
     /// The unique affine handoff from source evaluation back to the producer.
@@ -13421,25 +13476,33 @@ impl<'a> Lowering<'a> {
     /// one -- so a lowering that conflated them (as this checkpoint's
     /// predecessor did) disagrees with the plan here and refuses.
     ///
-    /// ⛔ Returns `Ok(false)` when no marker is pending: an ordinary static
-    /// worker call is untouched by this seam.
+    /// ⛔ Returns a closed [`CheckedApplicationDisposition`]. `D8f`'s three
+    /// cases are not interchangeable: "nothing pending" and "pending, but not
+    /// here" both leave the call unchanged and differ in whether its composed
+    /// causal identity may be claimed.
     fn consume_checked_ih_marker_at_static_worker_call(
         &mut self,
         binder_index: u64,
         supplied_arguments: usize,
         // `D8f` — the occurrence of the call being lowered.
         static_origin: StaticOriginId,
-    ) -> Result<bool, CraneliftBackendError> {
+    ) -> Result<CheckedApplicationDisposition, CraneliftBackendError> {
         #[cfg(test)]
         if D5A_MARKER_MUTATION.with(std::cell::Cell::get) == D5aMarkerMutation::SuppressConsumption
         {
             // ⛔ The call below is still emitted, lawfully and unchanged; only
             // the consumption is withheld. That is the whole point — closeout
             // must notice a real application that no consumption accounts for.
-            return Ok(false);
+            //
+            // ⚠ Reported as PENDING-AT-ANOTHER-OCCURRENCE, not as
+            // nothing-pending: a marker genuinely is pending here, and the
+            // mutation withholds this call's claim on it. Reporting the wrong
+            // case would let the mutation quietly change the causal claim too,
+            // and then the row it feeds would be measuring two changes at once.
+            return Ok(CheckedApplicationDisposition::PendingAtAnotherOccurrence);
         }
         let Some(pending) = self.pending_computational_ih_call else {
-            return Ok(false);
+            return Ok(CheckedApplicationDisposition::NoPendingApplication);
         };
         // ⭐⭐ `D8f` — OCCUPANCY. A pending marker does not mean "the next
         // static-worker call consumes it".
@@ -13450,7 +13513,7 @@ impl<'a> Lowering<'a> {
         // reaches this seat with a marker pending and must leave it pending:
         // it is not the occurrence the plan issued the marker for.
         //
-        // ⛔ `Ok(false)`, not a refusal, and the difference is the checkpoint.
+        // ⛔ A disposition, not a refusal, and the difference is the checkpoint.
         // An ordinary call is *untouched* by this seam -- exactly as it is when
         // no marker is pending at all -- so the marker survives for the
         // occurrence that owns it. Refusing here would make a lawful program
@@ -13527,7 +13590,7 @@ impl<'a> Lowering<'a> {
         // recorded because each names a law that a future witness would have to
         // satisfy rather than route around.
         if static_origin != pending.application_origin {
-            return Ok(false);
+            return Ok(CheckedApplicationDisposition::PendingAtAnotherOccurrence);
         }
         let call_template_id = pending.call_template_id;
         let plan = self.oriented_subcontinuation_plan.as_ref().ok_or_else(|| {
@@ -13602,7 +13665,7 @@ impl<'a> Lowering<'a> {
             binder_index,
             arity: call.arity,
         });
-        Ok(true)
+        Ok(CheckedApplicationDisposition::ConsumedHere)
     }
 
     fn mint_checked_computational_ih_instance(
