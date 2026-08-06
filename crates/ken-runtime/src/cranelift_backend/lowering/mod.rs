@@ -1033,7 +1033,7 @@ struct FunctionLocalRefs {
     /// from the one slot walk -- so index `i` here is ABI position `i` of the
     /// function being defined.
     ///
-    /// ⚠ **`RT-SRCBODY-BIND-ORDER` `D1`: this is no longer the body's
+    /// **`RT-SRCBODY-BIND-ORDER` `D1`: this is no longer the body's
     /// environment order.** The same walk still produces both, but a source
     /// body's semantic environment is `reverse(Parameter run) ++ Capture run`,
     /// because `lower_expr` resolves `Var(i)` as a de Bruijn index. THIS vector
@@ -1053,7 +1053,7 @@ struct FunctionLocalRefs {
     /// **`RT-SRCBODY-BIND-ORDER` `D3c`** -- the slot KIND at each ABI position
     /// of [`Self::defining_abi_operands`], recorded in the same walk.
     ///
-    /// ⛔ Independent source-descriptor authority for the `D3c` observatory,
+    /// Independent source-descriptor authority for the `D3c` observatory,
     /// and that independence is the point. Deriving where an ABI position lands
     /// in the semantic environment needs two descriptor facts -- whether the
     /// position is a `Parameter` and how long the `Parameter` run is -- and
@@ -1651,7 +1651,7 @@ pub(in crate::cranelift_backend) fn d4a_describe_binding(
 /// copy was only sound at zero binder depth, and every population before `D4a`
 /// was at zero binder depth.
 ///
-/// ⚠ **`RootIsImmediate` is RETIRED, on parent and candidate alike.** Production
+/// **`RootIsImmediate` is RETIRED, on parent and candidate alike.** Production
 /// resolves the claim through `resolve_direct_emission_claim` on
 /// `ContinuationEnvironmentClaim::CurrentLexical`. `source_abi_position`
 /// survives only in this `cfg(test)` observatory and its mutation, so this
@@ -1664,7 +1664,7 @@ pub(in crate::cranelift_backend) fn d4a_describe_binding(
 /// entry ABI operands, in ABI-position order, at unit entry: `D5a` built
 /// `defining_abi_operands` from the same single slot walk that seeds the entry
 /// environment, so "index `i` is ABI position `i`" holds there by construction.
-/// ⚠ `RT-SRCBODY-BIND-ORDER` `D1`: that walk now yields TWO orders, and this
+/// `RT-SRCBODY-BIND-ORDER` `D1`: that walk now yields TWO orders, and this
 /// record keeps the descriptor one. The environment a source body is lowered
 /// against is `reverse(Parameter run) ++ Capture run`, so a comparison between
 /// the two must go through the derived mapping recorded beside each seat, not
@@ -1727,7 +1727,7 @@ pub(in crate::cranelift_backend) struct D3cSeatObservation {
     /// `source_abi_position`, and the length of the descriptor's `Parameter`
     /// run. Read from `defining_abi_slot_kinds`, never from the environment.
     ///
-    /// ⛔ These two are what let the control derive the exact semantic position
+    /// These two are what let the control derive the exact semantic position
     /// an ABI position maps to. Without them the only available check is
     /// membership, which every unique-operand permutation satisfies and which
     /// therefore cannot tell the intended conversion from arbitrary

@@ -8448,7 +8448,7 @@ impl<'a> Lowering<'a> {
                 .map(|binding| d4a_describe_binding(Some(binding)))
                 .collect::<Vec<_>>();
             let abi_operands = self.function_local.defining_abi_operands.len();
-            // ⛔ The independent source-descriptor authority. Both facts come
+            // The independent source-descriptor authority. Both facts come
             // from the slot walk's recorded KINDS, so the derived position
             // below is computed from the descriptor and never found by looking
             // for the operand in the environment.

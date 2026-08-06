@@ -15538,9 +15538,9 @@ fn d3c_shape(operand: &str) -> &str {
 /// intervening binder.**
 ///
 /// This is the Architect's bounded measurement (`evt_56jh63qntwtfe`, Steward
-/// recut `evt_7he9qv8wbv1yq`), and ⛔ **it authorizes no production edit.**
+/// recut `evt_7he9qv8wbv1yq`), and **it authorizes no production edit.**
 ///
-/// ⚠ **The sentence that stood here is stale and its staleness mattered.** It
+/// **The sentence that stood here is stale and its staleness mattered.** It
 /// read: *"the projection's `RootIsImmediate` arm still copies
 /// `source_abi_position` into `immediate_slot`, and the emission seam still
 /// reads `producer_env` there."* That was true when this control was written
@@ -15580,7 +15580,7 @@ fn d3c_shape(operand: &str) -> &str {
 /// two agree, this control is the thing that must be re-cut deliberately, and
 /// its failure would be the correction announcing itself.
 ///
-/// ⚠ **That re-cut has happened once, and not in the direction the paragraph
+/// **That re-cut has happened once, and not in the direction the paragraph
 /// above anticipated.** `RT-SRCBODY-BIND-ORDER` `D1` did not make the two
 /// answers agree; it made them differ by a KNOWN permutation, converting a
 /// source body's ABI parameter run into the de Bruijn order `lower_expr`
@@ -15595,7 +15595,7 @@ fn d3c_shape(operand: &str) -> &str {
 /// comment at the assertion for the mapping and why it is derived rather than
 /// searched.
 ///
-/// ⚠ **A correction to a claim made in this doc by `RT-SRCBODY-BIND-ORDER`.**
+/// **A correction to a claim made in this doc by `RT-SRCBODY-BIND-ORDER`.**
 /// It said `D1` "widened the defect this control measures", on the premise that
 /// the `RootIsImmediate` copy was still live and had been accidentally correct
 /// at zero binder depth. That premise is false — see the retirement noted at
@@ -15651,14 +15651,14 @@ fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder()
     for seat in &flush {
         // `RT-SRCBODY-BIND-ORDER` `D3c` re-cut, Architect-directed.
         //
-        // ⛔ This half previously asserted POSITIONAL identity --
+        // This half previously asserted POSITIONAL identity --
         // `emission_environment[source_abi_position] == entry_operand` -- and
         // that is the premise `D1` retires: the emission environment is indexed
         // by de Bruijn position and the entry ABI run by descriptor position,
         // and for a source body the two are reverses of each other. The old
         // equality was true only while nothing converted between them.
         //
-        // ⛔ An intermediate cut asserted MEMBERSHIP-once instead, and that is
+        // An intermediate cut asserted MEMBERSHIP-once instead, and that is
         // insufficient: every permutation of a run of unique operands satisfies
         // it, so it cannot tell the intended conversion from arbitrary
         // misalignment. What replaces both is the EXACT derived position.
@@ -25064,14 +25064,14 @@ fn d3_observed_bind_orders() -> Vec<SrcbodyBindOrderObservation> {
 /// so the root keeps descriptor order while the declaration bodies beside it do
 /// not.
 ///
-/// ⛔ **This reads the recorded ORDINAL SEQUENCE, never the predicate.** An
+/// **This reads the recorded ORDINAL SEQUENCE, never the predicate.** An
 /// earlier cut of this control asserted `source_body_binding_order` directly
 /// and was measured GREEN against a build whose classification was correct and
 /// whose environments ignored it — a mutation that reddened controls 1 and 2
 /// left it passing. A control on the classifier answers whether the classifier
 /// agrees with itself; only the sequence answers what the body was handed.
 ///
-/// ⛔ The second assertion is the discriminating half. "The root is ascending"
+/// The second assertion is the discriminating half. "The root is ascending"
 /// is trivially green under a build that reverses nothing anywhere — which is
 /// precisely the retired behaviour. Requiring both answers OUT OF ONE COMPILE
 /// is what makes the negative a decision rather than a constant.
@@ -25137,7 +25137,7 @@ fn d3_the_process_root_keeps_descriptor_order_while_source_bodies_do_not() {
 /// **`D3` control 4 — the generated-context seat obeys the SAME binding law as
 /// the unit seat.**
 ///
-/// `D2`'s claim is an equivalence between two hosts for one body. ⛔ It cannot
+/// `D2`'s claim is an equivalence between two hosts for one body. It cannot
 /// be measured as a join across the two hosts, and the reason is structural: a
 /// raw worker every selecting specialization has retargeted is
 /// **template-only** and is absent from the emitted-`Function` population, so
@@ -25159,7 +25159,7 @@ fn d3_the_process_root_keeps_descriptor_order_while_source_bodies_do_not() {
 /// generated context; and at least one environment of length two or more is
 /// recorded reversed.
 ///
-/// ⛔ **THE GAP, and it is the part of `D3` this node did not deliver.** Every
+/// **THE GAP, and it is the part of `D3` this node did not deliver.** Every
 /// generated-context environment in this crate's only such populations has
 /// exactly ONE parameter, and a one-element sequence satisfies the law under
 /// either conversion. So over the generated-context rows this control has **no
@@ -25226,7 +25226,7 @@ fn d3_both_binding_seats_obey_one_conversion_law() {
 /// **`D3` control 4, amended — TRANSITION SENTINEL: no generated-context worker
 /// is multi-parameter yet.**
 ///
-/// ⛔ **This test is designed to go RED, and that red is its purpose.** It is
+/// **This test is designed to go RED, and that red is its purpose.** It is
 /// not a note and it is not a regression guard. It exists so that the
 /// unmeasured half of `D2` cannot be introduced silently.
 ///
@@ -25253,7 +25253,7 @@ fn d3_both_binding_seats_obey_one_conversion_law() {
 /// deliverable at that point is the cross-host equivalence control, not a
 /// bumped bound here.
 ///
-/// ⛔ Do NOT satisfy this by relaxing the bound. A `<= 2` would restate the
+/// Do NOT satisfy this by relaxing the bound. A `<= 2` would restate the
 /// current population as the contract and destroy the only thing the test does.
 ///
 /// MEASURED: compiling the `D5a` generated-context witness, every environment
