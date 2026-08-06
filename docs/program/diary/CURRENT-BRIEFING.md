@@ -206,6 +206,41 @@ branch and then re-reads that branch's tip.
 - **No repair authorized.** Knowing *which* wrong operand arrives does not yet
   say *why*, and that gap is where the repair scope lives. Recut is the
   Steward's.
+- **`D8` COMPLETE, no branch change. THE WRONG OPERAND IS NAMED:**
+  `ProgramCaps::MkProgramCaps`, identity **52**, minted at `StaticOriginId(3)`,
+  one field, arriving at `process_discriminator` **parameter-0, slot ordinal
+  0** where the borrowed process root belongs. Confirms the Architect's
+  stronger hypothesis — wrong operand delivered, not an unauthorized
+  reconstruction.
+- **The `Failure` candidate is REFUTED BY IDENTITY**, not waved off:
+  `StaticOriginId(109)`, identity `3697966841899`, low byte 43 vs observed 52.
+  The refutation is what leaves exactly one candidate standing.
+- Frame layout: 0 Parameter, 1 Parameter, 2 Result, 3 Control, 4 Trap, 5 Store.
+  Call-seat scheduling entries are origins 6 and 109. **The caller
+  argument-occurrence ID is still uncaptured.**
+- **`D9` RELEASED (`evt_5hnq7741yz410`) and it is THE LAST MEASUREMENT.** Two
+  items: (1) **why origin 3 is selected for parameter 0** — name the step that
+  builds the argument list, and capture the argument-occurrence ID linking the
+  scheduling entries to the delivered operand; (2) **settle the
+  identity-magnitude anomaly.** `MkProcessInput` is `3470333575222`, `Failure`
+  is `3697966841899`, `MkProgramCaps` is **52** — not the same order of
+  magnitude. **Is 52 a lawfully interned identity or an unset/defaulted field?**
+  If minting is inconsistent, "the wrong operand arrived" may be the wrong
+  diagnosis and "the identity was never set" the right one. **One field is
+  consistent with a real `MkProgramCaps`, and that consistency is exactly what
+  would hide a defaulted value.**
+- **ON `D9`'s RETURN: frame the repair, or hand the mechanism to the Architect.
+  NOT another measurement.** We are at `D9` with one commit landed, which is
+  the recuts-produce-labels-rather-than-merges shape the playbook warns about.
+  Each measurement did genuinely narrow — trap, class, bucket, named operand —
+  but the next artifact must be a repair or a ruling.
+- **KEEP IN VIEW, do not act on:** `process_discriminator` is called as a
+  **functionized declaration closure**, and the branch being merged is
+  `RT-DECL-CLOSURE-PORT` — *port declaration closures to the functionized lane*.
+  **If `D9` locates the selection defect inside that call path, the defect lives
+  in the work being landed** and goes to the Architect, not into a
+  Steward-scoped repair. **This does NOT reopen the publish** — the operator
+  ruled, the row is skipped, and this node owns it.
 - **`D6` landed** (stale carried-scrutinee reachability comment), on
   `wp/RT-ENTRY-TRAP-254-d6`. Targeted: 778 passed / 2 named pre-existing / 1
   ignored.
