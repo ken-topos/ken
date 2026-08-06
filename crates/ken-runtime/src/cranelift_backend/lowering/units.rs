@@ -1142,8 +1142,29 @@ pub(super) fn continuation_case_binder_run(
         )));
     }
 
-    let mut run =
-        Vec::with_capacity(argument_binders + recursive_positions.len() + continuation_inputs);
+    // **`D6c` — THE CHECKED TOTAL, computed ONCE and reused.**
+    //
+    // ⛔ Chained `checked_add` with a typed refusal on overflow: no panic and no
+    // wrapping. A wrapped total would understate the run's length and let the
+    // sealed-run cardinality check below pass on a run it should refuse, which
+    // is the one failure mode this postcondition exists to prevent.
+    //
+    // ⭐ The SAME value serves the allocation's capacity and the final
+    // cardinality. Computing it twice would let the two drift, and the check
+    // would then be comparing the run against a total the builder never used.
+    let sealed_total = recursive_positions
+        .len()
+        .checked_add(argument_binders)
+        .and_then(|partial| partial.checked_add(continuation_inputs))
+        .ok_or_else(|| {
+            backend_module(format!(
+                "this case's binder run would hold {} induction hypotheses + {argument_binders} \
+                 constructor arguments + {continuation_inputs} continuation inputs, which \
+                 overflows this platform's index width",
+                recursive_positions.len()
+            ))
+        })?;
+    let mut run = Vec::with_capacity(sealed_total);
 
     // Segment 1 -- the IH prefix, recursive positions reversed.
     //
@@ -1320,7 +1341,6 @@ pub(super) fn continuation_case_binder_run(
     // lawful -- each member is checked against the ROLE its own index names, so
     // the envelope may be laid out however the planner chose.
     let hypotheses = recursive_positions.len();
-    let sealed_total = hypotheses + argument_binders + continuation_inputs;
     if run.len() != sealed_total {
         return Err(backend_module(format!(
             "the sealed binder run holds {} members, but this case seals {hypotheses} induction \
@@ -1335,16 +1355,23 @@ pub(super) fn continuation_case_binder_run(
     // prefix and a hypothesis outside it are different defects and both are
     // caught, the second by the segment walks below.
     for (position, source) in run.iter().enumerate().take(hypotheses) {
-        if !matches!(
-            source,
-            ContinuationCaseBinderSource::InductionHypothesis
-        ) {
-            return Err(backend_module(format!(
-                "the sealed binder run holds {source:?} at position {position}, inside the \
-                 {hypotheses}-member induction-hypothesis prefix. The IH prefix leads the run and \
-                 the constructor arguments follow it; a member of another kind here is the two \
-                 segments permuted"
-            )));
+        // ⛔ EVERY variant enumerated, no `matches!` and no `other` arm. This is
+        // a load-bearing position: a future member kind must be a compile error
+        // here, forcing a decision about whether it may lead the run, rather
+        // than falling into a catch-all that happens to reject it today for a
+        // reason nobody chose.
+        match source {
+            ContinuationCaseBinderSource::InductionHypothesis => {}
+            ContinuationCaseBinderSource::SelectedRecursiveArgument { .. }
+            | ContinuationCaseBinderSource::Ordinary(_)
+            | ContinuationCaseBinderSource::ContinuationInput(_) => {
+                return Err(backend_module(format!(
+                    "the sealed binder run holds {source:?} at position {position}, inside the \
+                     {hypotheses}-member induction-hypothesis prefix. The IH prefix leads the run \
+                     and the constructor arguments follow it; a member of another kind here is \
+                     the two segments permuted"
+                )));
+            }
         }
     }
 
@@ -1428,11 +1455,23 @@ pub(super) fn continuation_case_binder_run(
     // Segment 3 -- the continuation-input tail, by exact ordinal.
     for ordinal in 0..continuation_inputs {
         let index = hypotheses + argument_binders + ordinal;
+        // ⛔ EVERY variant enumerated, for the same reason as the IH prefix. The
+        // ordinal mismatch is split out from the wrong-kind case so the two are
+        // distinguishable in the diagnostic rather than merged into one arm.
         match &run[index] {
-            ContinuationCaseBinderSource::ContinuationInput(named) if *named == ordinal => {}
-            other => {
+            ContinuationCaseBinderSource::ContinuationInput(named) => {
+                if *named != ordinal {
+                    return Err(backend_module(format!(
+                        "the sealed binder run holds continuation input {named} at run position \
+                         {index}, where this frame's continuation input {ordinal} belongs"
+                    )));
+                }
+            }
+            source @ (ContinuationCaseBinderSource::InductionHypothesis
+            | ContinuationCaseBinderSource::SelectedRecursiveArgument { .. }
+            | ContinuationCaseBinderSource::Ordinary(_)) => {
                 return Err(backend_module(format!(
-                    "the sealed binder run holds {other:?} at run position {index}, where this \
+                    "the sealed binder run holds {source:?} at run position {index}, where this \
                      frame's continuation input {ordinal} belongs"
                 )));
             }

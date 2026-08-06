@@ -23941,7 +23941,8 @@ fn d6b_every_raw_emission_sits_where_the_tables_agree_and_every_context_emission
 
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D6c` — the pre-emission SELECTION refusal set:
-/// five moved inputs, five guards that own them.**
+/// five perturbations at the selection seam, each refused by the guard that owns
+/// it.**
 ///
 /// ⛔ **NOT `D8f`'s refusal set.** `D8f` is about which call consumes a pending
 /// checked-IH marker. This is about **selecting the raw/IH target and its
@@ -23960,6 +23961,12 @@ fn d6b_every_raw_emission_sits_where_the_tables_agree_and_every_context_emission
 /// guard is stronger, not weaker.
 ///
 /// ## The five, and the guard that owns each
+///
+/// ⚠ **Four of the five are retained with their original owner. One migrated.**
+/// `WrongSourcePosition` is now refused by `D6c`'s sealed-run postcondition,
+/// which reaches it first and is the better owner — the perturbation makes the
+/// RUN name a wrong source position. Its downstream check still exists and still
+/// fails closed; it is simply no longer first. The other four are unchanged.
 ///
 /// | moved input | owning guard |
 /// |---|---|
@@ -23980,14 +23987,23 @@ fn d6b_every_raw_emission_sits_where_the_tables_agree_and_every_context_emission
 /// (in the sibling row) is a **segment permutation**, not an input at all. The
 /// remaining three do move exactly one argument.
 ///
-/// ## Two mutations that DECLINE rather than lie
+/// ## Two mutations that DECLINE rather than lie — and they decline for DIFFERENT reasons
 ///
-/// `WrongCaptureRun` and `CrossRouteTargets` have nothing to move on a unit with
-/// no captures, or on a route-degenerate unit where both members lawfully carry
-/// the raw route. There they leave the seam identical and **do not count an
-/// application**. ⛔ That is deliberate: a counter that ticked for a perturbation
-/// it did not perform would let this row read a green as a defence when the
-/// mutation never happened.
+/// ⛔ The two conditions are distinct and must not be stated as one:
+///
+/// - **`WrongCaptureRun`** declines when there is **no capture operand to drop
+///   and none to borrow** — a unit with an empty worker-capture segment and no
+///   ordinary operand available. The perturbation would leave the vector
+///   unchanged, so it is not performed.
+/// - **`CrossRouteTargets`** declines when **no generated context was resolved**.
+///   On a route-degenerate unit both members lawfully carry the raw route, so
+///   there is no crossing to make; the condition is about the retarget's outcome
+///   and has nothing to do with captures.
+///
+/// In both cases the arm leaves the seam identical and **counts no application**.
+/// A counter that ticked for a perturbation it did not perform would let this row
+/// read a green as a defence when the mutation never happened — which is exactly
+/// what the first version of these two arms did.
 ///
 /// ## The other three refusals live in the sibling row
 ///
@@ -24145,21 +24161,29 @@ fn d6c_each_moved_selection_input_is_refused_by_the_guard_that_owns_it_before_em
 ///
 /// ## Why the guard exists — measured, not assumed
 ///
-/// Before it, all three were **accepted**. `D6c`'s census
+/// Before it, all three were **accepted BY THEIR PRODUCER**: the run was returned
+/// malformed in every case. ⛔ That is not the same as "unrefused" — what each
+/// one then met differs, and the differences are the point. `D6c`'s census
 /// (`evt_na5pwjmxwxvn`, six cells, every one with a positive application count
 /// and a genuinely changed member run):
 ///
 /// | perturbation | mixed witness | governed witness |
 /// |---|---|---|
-/// | omission | **compiled**, 2 emissions | `Var: no runtime binding for index 2` |
-/// | duplicate | **compiled**, 2 emissions | `a Var in value position` |
-/// | permutation | `Call: "callee is not a closure"` | **compiled** |
+/// | omission | **compiled** | `Var: no runtime binding for index 2` |
+/// | duplicate | **compiled** | `a Var in value position` |
+/// | permutation | reached the producer, then refused **downstream** at `Call: "callee is not a closure"` | **compiled** — equal-value identity |
 ///
-/// ⛔ **Omission is the pre-`D6a` defect**, and on the mixed witness it compiled
-/// clean: that case body reads only `Var(0)`, so every later binder shifted with
-/// nothing positioned to notice. Where the old behaviour refused at all, the
-/// catcher was a **downstream consumer of a shifted binder** — fixture-dependent,
-/// and crediting a guard that does not own run shape.
+/// **Only omission and duplicate were genuinely unguarded**, and the mixed
+/// witness is where that is established: there the run was returned malformed
+/// *and* nothing downstream caught it. ⛔ Omission is the pre-`D6a` defect
+/// exactly, and it compiled because that case body reads only `Var(0)`, so every
+/// later binder shifted with nothing positioned to notice.
+///
+/// ⛔ **The permutation was never unguarded.** On the mixed witness it reached
+/// the producer and was then refused downstream — a real refusal, but by a
+/// callee-shape check that does not own run shape. On the governed witness its
+/// clean compile is **equal-value identity**, not an absent guard. Both readings
+/// were corrected before this row landed.
 ///
 /// ## The proof attribution, stated exactly
 ///
@@ -24258,6 +24282,7 @@ fn d6c_the_sealed_binder_run_refuses_a_miscounted_or_permuted_run_at_its_produce
         //
         // ⚠ For the permutation this is the EQUAL-VALUE LIMIT: the refusal below
         // proves typed-ROLE order, never that the two members differ in value.
+        reset_d8g_emissions();
         let expr = crate::cranelift_backend::planning::governed_nested_resource_bracket(3);
         let (governed, governed_applications) =
             with_d6c_selection_mutation(*mutation, || recursive_port_process_compiles(&expr));
@@ -24265,14 +24290,35 @@ fn d6c_the_sealed_binder_run_refuses_a_miscounted_or_permuted_run_at_its_produce
             governed_applications > 0,
             "{mutation:?} never reshaped the run on the governed witness"
         );
-        let governed = governed
-            .err()
-            .unwrap_or_else(|| panic!("{mutation:?} COMPILED on the governed witness"));
+        // ⛔ Typed and exhaustive, exactly as on the mixed witness. Matching on
+        // the formatted value would accept any failure whose text happened to
+        // mention the run, including one raised somewhere that does not own it.
+        let governed_reason = match &governed {
+            Err(CraneliftBackendError::Backend(BackendFailure::Module(reason))) => reason.clone(),
+            Err(CraneliftBackendError::Backend(other)) => panic!(
+                "{mutation:?} on the governed witness must be refused by the sealed run's own \
+                 postcondition, a typed Module failure; got another backend failure: {other:?}"
+            ),
+            Err(CraneliftBackendError::Unsupported(unsupported)) => panic!(
+                "{mutation:?} on the governed witness was refused by a LOWERING guard rather than \
+                 by the sealed run's postcondition, which is the downstream misattribution this \
+                 guard exists to end: {unsupported:?}"
+            ),
+            Ok(()) => panic!(
+                "{mutation:?} COMPILED on the governed witness, so the malformed run was accepted \
+                 by its producer"
+            ),
+        };
         assert!(
-            format!("{governed}").contains("the sealed binder run"),
-            "{mutation:?} on the governed witness must also be refused by the sealed run's \
-             postcondition rather than by a downstream consumer of a shifted binder; got \
-             {governed}"
+            governed_reason.contains(discriminating),
+            "{mutation:?} on the governed witness: the refusal must name the same shape fact it \
+             names on the mixed one; got {governed_reason}"
+        );
+        assert!(
+            d8g_emissions().is_empty(),
+            "{mutation:?} refused on the governed witness, but a static-worker call was emitted \
+             first: {:?}",
+            d8g_emissions()
         );
     }
 
