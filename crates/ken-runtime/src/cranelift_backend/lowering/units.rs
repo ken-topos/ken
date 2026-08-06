@@ -22,6 +22,7 @@
 //! filter here to get wrong.
 
 use super::*;
+use super::core::CheckedFrameFunctionScope;
 
 use cranelift_module::FuncId;
 
@@ -1533,6 +1534,10 @@ pub(super) fn define_continuation_bodies<M: Module>(
             ));
         }
         function_local.worker_calls = worker_calls;
+        // `D8n` — this generated Function's own checked-frame consumption
+        // transaction, spanning the specialization body exactly. ⛔ Opened before the builder and
+        // closed after it, so every branch scope inside nests within it.
+        let frame_scope = CheckedFrameFunctionScope::open(compiler)?;
         let mut func_ctx = FunctionBuilderContext::new();
         {
             let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
@@ -1853,6 +1858,7 @@ pub(super) fn define_continuation_bodies<M: Module>(
             builder.seal_all_blocks();
             builder.finalize();
         }
+        frame_scope.close(compiler)?;
         // Verify, then define THIS function -- a fresh context here would
         // define an empty body and silently discard everything emitted above.
         verify_cranelift_function(&func, module.isa())?;
@@ -2041,6 +2047,10 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
             .static_transition_plan
             .continuation_result_edges_owned_by(emission_owner)?;
 
+        // `D8n` — this generated Function's own checked-frame consumption
+        // transaction, spanning the generated-context body exactly. ⛔ Opened before the builder and
+        // closed after it, so every branch scope inside nests within it.
+        let frame_scope = CheckedFrameFunctionScope::open(compiler)?;
         let mut func_ctx = FunctionBuilderContext::new();
         {
             let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
@@ -2156,6 +2166,7 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
             builder.seal_all_blocks();
             builder.finalize();
         }
+        frame_scope.close(compiler)?;
         // The same emission-seam gate every other generated function passes: the
         // callee of each recorded causal emission is decoded back out of THIS
         // finished CLIF and compared with the planner-issued target.
@@ -3189,6 +3200,10 @@ fn define_unit_body<M: Module>(
         &compiler.static_transition_plan,
         bundle,
     )?;
+    // `D8n` — this generated Function's own checked-frame consumption
+    // transaction, spanning the ordinary unit body exactly. ⛔ Opened before the builder and
+    // closed after it, so every branch scope inside nests within it.
+    let frame_scope = CheckedFrameFunctionScope::open(compiler)?;
     let mut func_ctx = FunctionBuilderContext::new();
     let root_outcome;
     {
@@ -3482,6 +3497,7 @@ fn define_unit_body<M: Module>(
         builder.seal_all_blocks();
         builder.finalize();
     }
+    frame_scope.close(compiler)?;
     #[cfg(test)]
     d5a_trace(format!(
         "UNIT-BODY done function={:?} origin={:?} root={:?}",

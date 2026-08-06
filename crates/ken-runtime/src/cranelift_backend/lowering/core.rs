@@ -31,12 +31,112 @@ fn recursive_position_unit_calls() -> usize {
 
 type ConsumedSubcontinuationFrame = (u64, u64);
 
+/// **`D8n`** — restore the compile-wide consumed-frame lifetime.
+#[cfg(test)]
+thread_local! {
+    static D8N_COMPILE_WIDE_LIFECYCLE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8n_compile_wide_lifecycle(armed: bool) {
+    D8N_COMPILE_WIDE_LIFECYCLE.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn d8n_compile_wide_lifecycle() -> bool {
+    D8N_COMPILE_WIDE_LIFECYCLE.with(std::cell::Cell::get)
+}
+
 /// Transactions checked-frame consumption across mutually exclusive lowering
 /// successors. A successor begins at the common predecessor baseline, while
 /// the union remains authoritative after their join.
 struct CheckedFrameBranchScope {
     baseline: BTreeSet<ConsumedSubcontinuationFrame>,
     union: BTreeSet<ConsumedSubcontinuationFrame>,
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8n` — the per-`Function` checked-frame
+/// transaction.**
+///
+/// ⭐⭐ **Consumption is a fact about ONE emitted function, not about a
+/// compile.** `consumed_subcontinuation_frames` was a single compile-wide set,
+/// so a source body lowered into two generated `Function`s -- an ordinary
+/// declaration body and the specialization body derived from the same text --
+/// consumed the same `(invocation_id, frame_id)` twice and refused. That is not
+/// a double consumption: it is one consumption in each of two functions, which
+/// is exactly what a split body means.
+///
+/// ⛔ **The identity key is untouched.** No emission-owner, `FuncId` or
+/// `PredeclaredFunctionId` salt: salting the key would make one source frame
+/// two identities and quietly permit a real double consumption inside a single
+/// function. What was wrong was the ledger's LIFETIME, not what it counts.
+///
+/// ⛔ **Distinct from [`CheckedFrameBranchScope`], and they nest.** Branch
+/// successors are mutually exclusive paths through ONE function that rejoin, so
+/// their consumption unions at the join. Separate emitted functions never
+/// rejoin, so theirs must not: each starts empty and the enclosing set is
+/// restored afterwards. Using the branch scope here would union two functions'
+/// consumption into one set and reintroduce the collision one level up.
+///
+/// ⛔ **No active marker may cross the boundary in either direction.** A
+/// function body that begins with a marker pending would consume a frame its
+/// caller entered; one that ends with a marker pending has entered a frame
+/// nobody consumed, and the enclosing restore would then hide it.
+pub(super) struct CheckedFrameFunctionScope {
+    enclosing_consumed: BTreeSet<ConsumedSubcontinuationFrame>,
+}
+
+impl CheckedFrameFunctionScope {
+    /// Begin one generated `Function`'s consumption transaction.
+    pub(super) fn open(compiler: &mut Lowering<'_>) -> Result<Self, CraneliftBackendError> {
+        if compiler.active_subcontinuation_frame.is_some() {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "a checked subcontinuation marker was still active when a generated function                  body began, so that body would consume a frame its caller entered",
+            ));
+        }
+        // ⛔ `D8n` — the OLD lifecycle, restored under test: the set is shared
+        // compile-wide instead of starting empty per function. It is the exact
+        // pre-`D8n` behaviour, not an invented corruption, so the refusal it
+        // brings back is the one this checkpoint repaired.
+        #[cfg(test)]
+        if d8n_compile_wide_lifecycle() {
+            return Ok(Self {
+                enclosing_consumed: compiler.consumed_subcontinuation_frames.clone(),
+            });
+        }
+        Ok(Self {
+            enclosing_consumed: std::mem::take(&mut compiler.consumed_subcontinuation_frames),
+        })
+    }
+
+    /// End it, restoring the enclosing function's own consumption.
+    pub(super) fn close(self, compiler: &mut Lowering<'_>) -> Result<(), CraneliftBackendError> {
+        let dangling = compiler.active_subcontinuation_frame.take();
+        // ⛔ Under the compile-wide switch the body's consumption is LEFT in
+        // place instead of being rolled back, which is the other half of the
+        // pre-`D8n` behaviour. Restoring here while sharing at `open` would
+        // still hand the second function an empty set and reproduce nothing --
+        // the mutation has to be faithful at both ends or it measures neither.
+        #[cfg(test)]
+        if d8n_compile_wide_lifecycle() {
+            if dangling.is_some() {
+                return Err(unsupported(
+                    "OrientedSubcontinuationPlanV1",
+                    "a generated function body ended with a checked subcontinuation marker still                      active, so it entered a frame nothing consumed",
+                ));
+            }
+            return Ok(());
+        }
+        compiler.consumed_subcontinuation_frames = self.enclosing_consumed;
+        if dangling.is_some() {
+            return Err(unsupported(
+                "OrientedSubcontinuationPlanV1",
+                "a generated function body ended with a checked subcontinuation marker still                  active, so it entered a frame nothing consumed",
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl CheckedFrameBranchScope {

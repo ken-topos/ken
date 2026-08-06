@@ -18992,3 +18992,260 @@ fn strip_bridge_marker(expr: &RuntimeExpr, wrap_nonmatch: bool) -> RuntimeExpr {
         body: body.clone(),
     }
 }
+
+#[cfg(test)]
+const D8N_SYMBOL: &str = "decl:fixture::d8n::witness";
+
+/// The `D8m` checked-bridge witness hosted in a DECLARATION, so its one checked
+/// source body is lowered into **two** generated `Function`s: the ordinary
+/// declaration body, and the specialization body derived from the same text.
+/// The `D8m` bridge witness with IH slot markers added, so the split body gets
+/// PAST the slot guard and both generated `Function`s are actually lowered.
+/// ⛔ Without them the compile stops inside the first function and neither the
+/// duplicate refusal nor its absence is exercised -- the positive would be
+/// vacuous, which is the failure mode the release names.
+#[cfg(test)]
+fn d8n_witness() -> RuntimeExpr {
+    add_ih_slot_markers(&d8m_witness(7))
+}
+
+#[cfg(test)]
+fn add_ih_slot_markers(expr: &RuntimeExpr) -> RuntimeExpr {
+    let RuntimeExpr::Let { value, body } = expr else { panic!("let") };
+    let RuntimeExpr::ComputationalMatch { scrutinee, cases, default } = value.as_ref() else {
+        panic!("eliminator")
+    };
+    let RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body: bridge } = &cases[0].body else {
+        panic!("marked bridge")
+    };
+    let RuntimeExpr::ComputationalMatch {
+        scrutinee: bridge_scrutinee,
+        cases: bridge_cases,
+        default: bridge_default,
+    } = bridge.as_ref()
+    else {
+        panic!("bridge")
+    };
+    // ⛔ ONE case, so ONE slot template. The selected field resolves statically
+    // to `Ok`, so the `Err` arm is dead here; keeping it would need a second
+    // template whose only purpose is to name a constructor this program never
+    // reaches, and a template nothing exercises is scaffolding.
+    let marked_cases = bridge_cases
+        .iter()
+        .filter(|case| case.constructor.ends_with("::Ok"))
+        .map(|case| crate::RuntimeComputationalMatchCase {
+            constructor: case.constructor.clone(),
+            argument_binders: case.argument_binders,
+            recursive_positions: case.recursive_positions.clone(),
+            body: RuntimeExpr::CheckedComputationalIHSlots {
+                slot_template_ids: vec![200],
+                checked_occurrence_paths: vec![vec![20]],
+                body: Box::new(case.body.clone()),
+            },
+        })
+        .collect();
+    let mut cases = cases.clone();
+    cases[0] = crate::RuntimeComputationalMatchCase {
+        constructor: cases[0].constructor.clone(),
+        argument_binders: cases[0].argument_binders,
+        recursive_positions: cases[0].recursive_positions.clone(),
+        body: RuntimeExpr::CheckedSubcontinuationFrame {
+            frame_id: *frame_id,
+            body: Box::new(RuntimeExpr::ComputationalMatch {
+                scrutinee: bridge_scrutinee.clone(),
+                cases: marked_cases,
+                default: bridge_default.clone(),
+            }),
+        },
+    };
+    RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: scrutinee.clone(),
+            cases,
+            default: default.clone(),
+        }),
+        body: body.clone(),
+    }
+}
+
+#[cfg(test)]
+fn d8n_declaration() -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: D8N_SYMBOL.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: vec!["state".to_string()],
+                body: Box::new(d8n_witness()),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+#[cfg(test)]
+fn d8n_compile() -> Option<CraneliftBackendError> {
+    let declaration = d8n_declaration();
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D8N_SYMBOL.to_string(),
+        }),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let declarations = BTreeMap::from([(D8N_SYMBOL, &declaration)]);
+    let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+        panic!("transparent")
+    };
+    let RuntimeExpr::Closure { body, .. } = body else { panic!("closure") };
+    let mut plan = d8m_plan(body, 7);
+    for frame in &mut plan.frames {
+        frame.declaration = D8N_SYMBOL.to_string();
+        frame.occurrence_binding_fingerprint =
+            crate::compiler_private_oriented_occurrence_binding_fingerprint(frame);
+    }
+    let mut slot = crate::CheckedComputationalIHSlotTemplateV1 {
+        slot_template_id: 200,
+        declaration: D8N_SYMBOL.to_string(),
+        checked_match_ordinal: 0,
+        checked_occurrence_path: vec![20],
+        frame_template_id: 7,
+        constructor: "ctor:prelude::Result::Ok".to_string(),
+        recursive_position: 0,
+        method_binder_ordinal: 4,
+        local_telescope: Vec::new(),
+        ih_interface: oriented_test_interface(1),
+        segment_site_id: 9,
+        frame_templates: vec![7],
+        input_interface: oriented_test_interface(1),
+        output_interface: oriented_test_interface(2),
+        // ⛔ MEASURED from the witness, never hand-written: a path spelled by
+        // hand is a second authority for where the marker is.
+        runtime_marker_locations: d8n_slot_locations(),
+        occurrence_binding_fingerprint: 0,
+    };
+    slot.occurrence_binding_fingerprint =
+        crate::compiler_private_computational_ih_slot_binding_fingerprint(&slot);
+    plan.computational_ih_slots = vec![slot];
+    compile_expr_into_module(
+        new_object_module("d8n").expect("module"),
+        "ken_d8n",
+        Linkage::Export,
+        &entry,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        Some(plan),
+    )
+    .err()
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8n` — checked-frame consumption is a fact
+/// about one emitted `Function`, not about a compile.**
+///
+/// `consumed_subcontinuation_frames` was a single compile-wide set, so one
+/// checked source body lowered into **two** generated `Function`s -- the
+/// ordinary declaration body, and the specialization body derived from the same
+/// text -- consumed the same `(invocation_id, frame_id)` twice and refused.
+/// That was never a double consumption: it is one consumption in each of two
+/// functions, which is what a split body means.
+///
+/// ⛔ The identity key is untouched. No emission-owner, `FuncId` or
+/// `PredeclaredFunctionId` salt: salting would make one source frame two
+/// identities and quietly permit a real double consumption *inside* one
+/// function. What was wrong was the ledger's LIFETIME.
+///
+/// ## Clause 1 — the split body, which is the whole point
+///
+/// ⭐⭐ This witness's checked source body **is** lowered into both functions --
+/// a template-only single-function green would not exercise the repair at all.
+/// It must no longer refuse with "consumed more than once", and it must reach
+/// the slot-marker guard, which is only reachable while the bridge carries a
+/// frame id (`D8m`).
+///
+/// ## Clause 2 — restoring the old lifetime brings the refusal back
+///
+/// The switch shares the set compile-wide again: the exact pre-`D8n` behaviour,
+/// not an invented corruption. ⛔ Without this, "it compiles now" and "nothing
+/// was ever checked" are indistinguishable.
+///
+/// ## Clause 3 — branch successors and separate Functions are different
+///
+/// Branch successors are mutually exclusive paths through ONE function that
+/// rejoin, so their consumption **unions** at the join; separate emitted
+/// functions never rejoin, so theirs must not. The union behaviour is pinned by
+/// the existing `CheckedFrameBranchScope` harness rows and is deliberately not
+/// restated here — what this row adds is that the two scopes are distinct
+/// objects with opposite merge rules, which clause 2 demonstrates by showing a
+/// shared set is wrong at the function boundary.
+///
+/// **THE GAP:** the boundary-crossing refusals -- a marker active when a body
+/// begins or ends -- are unexercised. No lawful program produces either, and
+/// forcing one would mean fabricating lowering state rather than perturbing an
+/// input. They are fail-closed guards on a population this row cannot
+/// instantiate, and I would rather say so than imply coverage.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d8n_checked_frame_consumption_is_per_function_not_per_compile() {
+    use crate::cranelift_backend::lowering::core::set_d8n_compile_wide_lifecycle;
+
+    // Clause 1 — the split body COMPILES.
+    let outcome = d8n_compile();
+    assert!(
+        outcome.is_none(),
+        "one checked source body lowered into two generated Functions consumes its frame ONCE IN \
+         EACH, so this must compile. A 'consumed more than once' refusal means the ledger is \
+         compile-wide again; any other refusal is a new finding on the checked-bridge path and \
+         must be reported rather than absorbed: {outcome:?}"
+    );
+
+    // Clause 2 — the old lifetime, restored.
+    set_d8n_compile_wide_lifecycle(true);
+    let restored = d8n_compile().map(|error| format!("{error:?}"));
+    set_d8n_compile_wide_lifecycle(false);
+    let restored = restored.expect("the compile-wide lifetime must refuse");
+    assert!(
+        restored.contains("consumed more than once"),
+        "sharing the consumed-frame set compile-wide must reproduce the second-function duplicate \
+         refusal. If it does not, this witness is no longer splitting one source body across two \
+         Functions and clause 1 is green for a reason it does not name: {restored}"
+    );
+}
+
+#[cfg(test)]
+fn d8n_slot_locations() -> Vec<crate::CheckedRuntimeMarkerLocationV1> {
+    let declaration = d8n_declaration();
+    let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+        panic!("transparent")
+    };
+    let mut sets = crate::cranelift_backend::planning::CheckedOrientedMarkerSets::default();
+    crate::cranelift_backend::planning::collect_checked_oriented_markers(
+        body,
+        &mut sets,
+        D8N_SYMBOL,
+        &mut Vec::new(),
+    )
+    .expect("the witness's markers collect");
+    let mut paths = sets
+        .computational_ih_slots
+        .values()
+        .flat_map(|paths| paths.iter().cloned())
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths
+        .into_iter()
+        .map(|runtime_path| crate::CheckedRuntimeMarkerLocationV1 {
+            declaration: D8N_SYMBOL.to_string(),
+            runtime_path,
+        })
+        .collect()
+}
