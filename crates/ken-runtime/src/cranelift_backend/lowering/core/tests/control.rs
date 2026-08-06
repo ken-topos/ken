@@ -22259,6 +22259,77 @@ fn d8f_the_declined_call_does_not_answer_for_the_checked_identity() {
     );
 }
 
+/// The child index at which the marker collector enters a `Transparent`
+/// declaration's closure body.
+///
+/// ⚠ The ONE element of the expected path below that is not derived from the
+/// witness. `expression_children` enumerates a `Closure` as a single child, and
+/// the collector roots its runtime paths one convention further out; this names
+/// that convention rather than letting it hide inside a measured number. Every
+/// element after it -- the whole of the marker's position INSIDE the body, which
+/// is what a transplant moves -- is derived.
+#[cfg(test)]
+const D8F_DECLARATION_BODY_ROOT: u64 = 2;
+
+/// **The independent planning expectation:**
+/// `(declaration, checked path, template) -> locations`.
+///
+/// Derived by walking the witness's own expression tree with
+/// `expression_children` -- an independent enumeration of child order, authored
+/// for a different checkpoint -- and recording where each
+/// `CheckedComputationalIHInvocation` sits.
+///
+/// ⛔ It consults **neither** `collect_checked_oriented_markers` nor any plan
+/// built from its output. Both the actual source population and the actual plan
+/// population are required to equal it, so agreement between those two cannot
+/// stand in for correctness of either.
+#[cfg(test)]
+fn d8f_expected_marker_population(
+    with_ordinary_call: bool,
+    perturbation: D8fPerturbation,
+) -> BTreeMap<(String, Vec<u64>, u64), BTreeSet<Vec<u64>>> {
+    let declaration = d8f_declaration_with(with_ordinary_call, perturbation);
+    let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+        panic!("transparent")
+    };
+    fn walk(
+        expr: &RuntimeExpr,
+        path: &mut Vec<u64>,
+        out: &mut BTreeMap<(String, Vec<u64>, u64), BTreeSet<Vec<u64>>>,
+    ) {
+        if let RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id,
+            checked_occurrence_path,
+            ..
+        } = expr
+        {
+            let mut located = path.clone();
+            located[0] = D8F_DECLARATION_BODY_ROOT;
+            let previous = out.insert(
+                (
+                    D8F_SYMBOL.to_string(),
+                    checked_occurrence_path.clone(),
+                    *call_template_id,
+                ),
+                BTreeSet::from([located]),
+            );
+            assert!(
+                previous.is_none(),
+                "the witness must not spell two invocation markers under one \
+                 (declaration, path, template) key -- that is a fixture error, not a control"
+            );
+        }
+        for (index, child) in expression_children(expr).into_iter().enumerate() {
+            path.push(index as u64);
+            walk(child, path, out);
+            path.pop();
+        }
+    }
+    let mut expected = BTreeMap::new();
+    walk(body, &mut Vec::new(), &mut expected);
+    expected
+}
+
 /// The checked-IH invocation markers the SOURCE carries, keyed by declaration
 /// and checked occurrence path.
 ///
@@ -22269,13 +22340,18 @@ fn d8f_source_marker_population(
     with_ordinary_call: bool,
     perturbation: D8fPerturbation,
 ) -> BTreeMap<(String, Vec<u64>, u64), BTreeSet<Vec<u64>>> {
-    d8f_marker_sets(with_ordinary_call, perturbation)
-        .computational_ih_calls
-        .into_iter()
-        .map(|((template, path), locations)| {
-            ((D8F_SYMBOL.to_string(), path, template), locations)
-        })
-        .collect()
+    let mut population = BTreeMap::new();
+    for ((template, path), locations) in
+        d8f_marker_sets(with_ordinary_call, perturbation).computational_ih_calls
+    {
+        let previous = population.insert((D8F_SYMBOL.to_string(), path, template), locations);
+        assert!(
+            previous.is_none(),
+            "two source-marker entries under one (declaration, path, template) key. Collecting \
+             would have kept the last and hidden the duplicate this relation exists to see"
+        );
+    }
+    population
 }
 
 /// The checked-IH invocation templates the PLAN holds, under the same key.
@@ -22284,23 +22360,26 @@ fn d8f_plan_marker_population(
     with_ordinary_call: bool,
     perturbation: D8fPerturbation,
 ) -> BTreeMap<(String, Vec<u64>, u64), BTreeSet<Vec<u64>>> {
-    d8f_plan_with(with_ordinary_call, perturbation)
-        .computational_ih_calls
-        .into_iter()
-        .map(|call| {
+    let mut population = BTreeMap::new();
+    for call in d8f_plan_with(with_ordinary_call, perturbation).computational_ih_calls {
+        let template = call.call_template_id;
+        let previous = population.insert(
             (
-                (
-                    call.declaration.clone(),
-                    call.checked_occurrence_path.clone(),
-                    call.call_template_id,
-                ),
-                call.runtime_marker_locations
-                    .into_iter()
-                    .map(|location| location.runtime_path)
-                    .collect(),
-            )
-        })
-        .collect()
+                call.declaration.clone(),
+                call.checked_occurrence_path.clone(),
+                template,
+            ),
+            call.runtime_marker_locations
+                .into_iter()
+                .map(|location| location.runtime_path)
+                .collect::<BTreeSet<_>>(),
+        );
+        assert!(
+            previous.is_none(),
+            "two plan templates under one (declaration, path, template) key: template {template}"
+        );
+    }
+    population
 }
 
 /// The lowering observations for one compile, keyed by exact defining body and
@@ -22330,19 +22409,23 @@ fn d8f_keyed_observations() -> BTreeMap<
             )
         })
         .collect::<BTreeSet<_>>();
-    crate::cranelift_backend::lowering::d8f_dispositions()
-        .into_iter()
-        .map(|(function, origin, disposition)| {
-            let function = function.expect("every disposition names its defining Function");
-            let key = *keys
-                .get(&function)
-                .expect("every emitting body recorded its exact body key");
-            (
-                (key, origin),
-                (disposition, bound.contains(&(function, origin))),
-            )
-        })
-        .collect()
+    let mut observed = BTreeMap::new();
+    for (function, origin, disposition) in crate::cranelift_backend::lowering::d8f_dispositions() {
+        let function = function.expect("every disposition names its defining Function");
+        let key = *keys
+            .get(&function)
+            .expect("every emitting body recorded its exact body key");
+        let previous = observed.insert(
+            (key, origin),
+            (disposition, bound.contains(&(function, origin))),
+        );
+        assert!(
+            previous.is_none(),
+            "two dispositions under one (defining body, application occurrence) key. Collecting \
+             would have kept the last: one call edge, one record"
+        );
+    }
+    observed
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8f` — the remaining checked-marker refusals:
@@ -22445,6 +22528,30 @@ fn d8f_the_remaining_checked_marker_refusals() {
     );
 
     // === Wrong occurrence ===
+    //
+    // The independent side: the LAWFUL two-call run says which occurrence is the
+    // ordinary selected-argument call and which is the checked application. That
+    // is a different program's observation, so nothing in the moved run's own
+    // mechanism decides it.
+    reset_d8n_observations();
+    reset_d8o_body_authorities();
+    let _ = d8f_compile(true);
+    let lawful = d8f_keyed_observations();
+    let lawful_ordinary = lawful
+        .iter()
+        .filter(|(_, (disposition, bound))| {
+            *disposition == CheckedApplicationDisposition::PendingAtAnotherOccurrence && !bound
+        })
+        .map(|((_, origin), _)| *origin)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        lawful_ordinary.len(),
+        1,
+        "the lawful run must name exactly ONE ordinary selected-argument occurrence, or it cannot \
+         serve as the independent side: {lawful:?}"
+    );
+    let lawful_ordinary = *lawful_ordinary.iter().next().expect("one");
+
     reset_d8n_observations();
     reset_d8o_body_authorities();
     let wrong = format!(
@@ -22456,36 +22563,37 @@ fn d8f_the_remaining_checked_marker_refusals() {
         )
     );
     let moved = d8f_keyed_observations();
-    let consumed = moved
-        .iter()
-        .filter(|(_, (disposition, _))| {
-            *disposition == CheckedApplicationDisposition::ConsumedHere
-        })
-        .map(|(key, _)| *key)
-        .collect::<Vec<_>>();
-    assert!(
-        !consumed.is_empty(),
-        "the moved marker must have been CONSUMED somewhere, recorded during lowering and before \
-         closeout refuses. Without that this control cannot say the refusal is about a wrong \
-         occurrence rather than about a marker nothing touched: {moved:?}"
+    let bodies = moved.keys().map(|(key, _)| *key).collect::<BTreeSet<_>>();
+    assert_eq!(
+        bodies.len(),
+        1,
+        "the moved run's observations must sit under ONE exact defining body, or 'the ordinary \
+         call took the checked application's marker' is a claim about two bodies at once: \
+         {moved:?}"
     );
-    for key in &consumed {
-        assert!(
-            moved[key].1,
-            "and every consumed occurrence must also be bound at the seam -- two logs, two sites: \
-             {moved:?}"
-        );
-    }
-    let unbound = moved
+    let body = *bodies.iter().next().expect("one body");
+    assert_eq!(
+        moved.get(&(body, lawful_ordinary)),
+        Some(&(CheckedApplicationDisposition::ConsumedHere, true)),
+        "THE MOVED ORDINARY APPLICATION: the occurrence the LAWFUL run identifies as the ordinary \
+         selected-argument call must be ConsumedHere AND bound here. Two independent sides -- a \
+         different program for which occurrence, and the seam's own binding log for whether it \
+         bound: {moved:?}"
+    );
+    let checked = moved
         .iter()
-        .filter(|(_, (_, bound))| !bound)
-        .map(|(key, _)| *key)
+        .filter(|((_, origin), _)| *origin != lawful_ordinary)
         .collect::<Vec<_>>();
+    assert_eq!(
+        checked.len(),
+        1,
+        "THE CHECKED APPLICATION: exactly one other emitted application in that same body: \
+         {moved:?}"
+    );
     assert!(
-        !unbound.is_empty(),
-        "and at least one emitted call in the same body must be UNBOUND -- the checked \
-         application, left unaccounted because the ordinary call took its marker. If every call \
-         were bound there would be no misattribution to refuse for: {moved:?}"
+        !checked[0].1 .1,
+        "and it must be UNBOUND -- left unaccounted because the ordinary call took its marker. If \
+         it were bound there would be no misattribution for the affine law to refuse: {moved:?}"
     );
     assert!(
         wrong.contains("one causal identity was discharged twice in a single function"),
@@ -22493,31 +22601,27 @@ fn d8f_the_remaining_checked_marker_refusals() {
          marker-plane defence is the occupancy gate, established at 20b0d6be: {wrong}"
     );
 
-    // === Duplicate — population relation under exact declaration/path keys ===
+    // === Duplicate — both actual populations against the INDEPENDENT expectation ===
+    let expected = d8f_expected_marker_population(false, D8fPerturbation::NestedMarker);
     let source = d8f_source_marker_population(false, D8fPerturbation::NestedMarker);
     let planned = d8f_plan_marker_population(false, D8fPerturbation::NestedMarker);
     assert_eq!(
-        source.keys().collect::<Vec<_>>(),
-        planned.keys().collect::<Vec<_>>(),
-        "the plan must hold a template for EVERY source marker, under the same \
-         (declaration, path, template) key. If it does not, planning refuses on the population \
-         and the nesting law is never reached -- which is the mistake this control was rebuilt to \
-         exclude: {source:?} vs {planned:?}"
+        expected.len(),
+        2,
+        "the duplicate perturbation must carry exactly TWO invocation markers, or there is \
+         nothing to nest. Counted from the witness's own tree, not from a collector: {expected:?}"
     );
     assert_eq!(
-        source.len(),
-        2,
-        "and the duplicate perturbation must carry exactly TWO invocation markers, or there is \
-         nothing to nest: {source:?}"
+        source, expected,
+        "the actual SOURCE population must equal the independent expectation, under exact \
+         (declaration, path, template) keys: {source:?}"
     );
-    for (key, locations) in &source {
-        assert_eq!(
-            planned.get(key),
-            Some(locations),
-            "and each template's planned locations must be the source's own measured ones, under \
-             key {key:?}"
-        );
-    }
+    assert_eq!(
+        planned, expected,
+        "and so must the actual PLAN population. Both are compared against the same independently \
+         derived side, so their agreeing with each other cannot stand in for either being right: \
+         {planned:?}"
+    );
     let duplicated = format!(
         "{:?}",
         d8f_compile_with(false, D8fPerturbation::NestedMarker, D8fPerturbation::NestedMarker)
@@ -22528,25 +22632,34 @@ fn d8f_the_remaining_checked_marker_refusals() {
          law -- one pending checked application at a time: {duplicated}"
     );
 
-    // === Transplant — the source moved, the plan left where it was ===
+    // === Transplant — the same independent expectation pins all three facts ===
+    let moved_expected = d8f_expected_marker_population(true, D8fPerturbation::MarkerMovedInward);
+    let stale_expected = d8f_expected_marker_population(true, D8fPerturbation::None);
     let moved_source = d8f_source_marker_population(true, D8fPerturbation::MarkerMovedInward);
     let stale_plan = d8f_plan_marker_population(true, D8fPerturbation::None);
     assert_eq!(
-        moved_source.keys().collect::<Vec<_>>(),
-        stale_plan.keys().collect::<Vec<_>>(),
-        "the transplant keeps the same declaration, path and template -- only the marker's \
-         LOCATION moves. If the keys differed this would be a population mismatch rather than a \
-         transplant: {moved_source:?} vs {stale_plan:?}"
+        moved_expected.keys().collect::<Vec<_>>(),
+        stale_expected.keys().collect::<Vec<_>>(),
+        "THE UNCHANGED KEY: a transplant keeps the same declaration, path and template -- only \
+         the marker's location moves. Derived from the two witnesses' own trees. If the keys \
+         differed this would be a population mismatch and not a transplant at all"
     );
-    for (key, locations) in &moved_source {
-        assert_ne!(
-            stale_plan.get(key),
-            Some(locations),
-            "and under that identical key the source's measured location must DIFFER from the \
-             one the plan records. That disagreement is what the location comparison exists to \
-             catch, and it is the transplant stated as a relation: {key:?}"
-        );
-    }
+    assert_eq!(
+        moved_source, moved_expected,
+        "THE MOVED SOURCE LOCATION: the actual source population must equal the independent \
+         expectation for the MOVED witness: {moved_source:?}"
+    );
+    assert_eq!(
+        stale_plan, stale_expected,
+        "THE STILL-PLANNED LOCATION: the plan must still hold the location the UNMOVED witness \
+         independently expects -- that is what makes it stale rather than merely different: \
+         {stale_plan:?}"
+    );
+    assert_ne!(
+        moved_expected, stale_expected,
+        "and the two expectations must differ, or the perturbation moved nothing and every \
+         assertion above is satisfied by a transplant that never happened"
+    );
     let transplanted = format!(
         "{:?}",
         d8f_compile_with(true, D8fPerturbation::MarkerMovedInward, D8fPerturbation::None)
