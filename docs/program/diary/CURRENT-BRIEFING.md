@@ -33,17 +33,80 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~12:0xZ · `D9b` partial · `AC-1` scope cut HELD, not taken
+## LIVE — 2026-08-06 ~14:0xZ · `AC-1` correction in flight · a SCOPE FORK is inbound
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
+`origin/main` is `3015aafd`. The WP branch
+`wp/RT-DECL-CLOSURE-PORT-typed-units` tip is `2b4cb296`, 205 ahead.
 
 ### The one thing to do next
 
-**Nothing is owed by me. Wait for `D9b`'s corrected child.** The implementer is
-compacting; the leader re-releases `D9b` after. **Do not take the `AC-1` scope
-cut to the operator until the refusal-SITE measurement returns** — see below,
-this is the live trap.
+**Wait for the implementer's handoff, then rule the fork it carries.** It is
+mid-turn on the `AC-1` correction child and has already reported hitting the
+leader's explicit STOP condition. **Nothing is owed by me until that lands.**
+
+The fork, stated in advance so a compaction cannot lose it: the leader's
+release said *"if exact `PlannedCaseEmission` authority says `Reachable` or
+`Open`, stop and hand back that producer set/flow as the genuine
+capability/scope fork."* The `FsReadFile` byte-span seat is intentionally
+**specialized-only**, so `Reachable`/`Open` means AC-1's first clause cannot be
+discharged in this node without new capability. **Mechanism is the Architect's;
+the cut is mine.** Do not pre-empt it — rule scope only after the Architect
+rules whether a sound in-node path exists.
+
+### Checkpoint ledger — where the node actually is
+
+| object | state |
+|---|---|
+| `fda636d8` | **last APPROVED checkpoint.** `D9b`, Architect `evt_2r89wvcwjy4q0`. Preserve. |
+| `2b4cb296` | `AC-1` repair. **CHANGES REQUESTED**, Architect `evt_6h203ggy4m3m3`. Not acceptable partial progress. Superseded by a correction child, not reverted. |
+
+**Why `2b4cb296` was refused, because the shape recurs:** it removed the
+`Match` refusal by calling `lower_carried_match` directly — which **the binding
+frame explicitly forbids**, same blob at parent and candidate. The helper closes
+its own generic join, losing the per-arm source prefix. The repair was measured,
+honest, and took a banned route; **red-before/green-after proved the refusal was
+removed and said nothing about the route being lawful.**
+
+### `AC-1` is IN-NODE and that is settled
+
+Ruled at `evt_2hg3a46xdmxje`: the refusal executes at `core.rs:4892` in
+`lower_source_machine_with_continuation_inner` — this node's own subject.
+**No scope cut, nothing to the operator.** The three-candidate one-marker-each
+probe is what made it decisive; two earlier attempts were refused. Do not
+reopen this. The *new* effect-seat gate is a different question.
+
+### Still held, unchanged
+
+QA, candidate, publish. `D7` remains atomic with `RT-RECURSOR-TRANSPORT`.
+The green-boundary bisect on the failed `fc758323` cut is **unassigned, with
+the operator**. Data point: repairing `AC-1` did **not** turn `rt_parity_native`
+green, which supports `fc758323`'s `malformed borrowed process input` signature
+being a distinct defect.
+
+### The successor queue has NO framing debt — verified 2026-08-06 ~13:0xZ
+
+All six are `status: ready` with written frames: `RT-SEED-CALL-PORT`,
+`RT-DESCENT-RETIRE`, `RT-CONTSPEC-LEDGER`, `NATIVE-HANDLE-CARRIER`,
+`PX8-ERRID-ALLOC`, `RT-CONTSRC-CALLABLE-CONTRACT`. Measured, not inherited.
+The doc ring's empty backlog is likewise **measured** — see
+`program-wave-reconciliation.md`, "no releasable-now Produces item", every
+Wave 4/5/6 residual tied to a named gate. **Neither is your backlog.**
+
+### POWER LOSS 2026-08-06 ~12:47Z — what it taught
+
+All 28 seats restarted. **Nothing on disk was lost.** But two seats came back
+holding a false picture of their own wait, and **neither could detect it from
+inside**: `architect` read *"D9b `fda636d8` queued, standing by event-driven"*
+when the event had **already arrived** and its turn had died with the power;
+`runtime-leader` read *"awaiting Steward kickoff, no newly authorized WP"* while
+holding a live 204-commit branch.
+
+⇒ **After any restart, a seat's "waiting for X" is a claim about a delivery that
+may already have happened.** The event log shows the message landed; the seat
+shows it waiting. Both are true and the ring is dead. Repaired by one state
+correction post (`evt_4d5mfyy8zy3zz`); both woke in seconds.
 
 **State of the ring.** All `D`-checkpoints through `D6a`/`D6b`/`D6c`
 (`70d4e8d9` / `c47d94a7` / `bd79daa7`) and all nineteen execution-order rows are
@@ -134,12 +197,20 @@ share are mine.
 AC naming its owning deliverable**, and **independent keyed controls** stated up
 front. This is the next Steward unit after `D9`.
 
-### THE ACTIVE OPERATIONAL DEFECT — check this before anything else
+### THE MENTION-GAP DEFECT IS RESOLVED — 2026-08-06 ~13:5xZ, measured twice
 
-**`runtime-implementer` returns every handoff with `Mentions: none`.** It names
-the leader in prose (*"next: yours"*) and mentions nobody, so **nothing wakes
-the leader** and both seats look merely idle. **Four stalls today — roughly 11
-+ 15 + 15 + 7 minutes, about 48 minutes of critical path.**
+**Do not re-diagnose this and do not restate the instruction.** The falsifier I
+set below fired the right way: `runtime-implementer`'s handoffs at
+`evt_3h0kyxg4pwh5h` and `evt_5xq6tj2n5rykg` both carried
+`Mentions: @agt_37reqrd72cg00`, and the ring turned leader→Architect→implementer
+in **90 seconds** with no Steward hop. The fix was putting the literal
+participant id in the leader's release, exactly as the diagnosis predicted.
+
+**What survives is the diagnostic shape, not the defect:** the field silently
+drops a role name, so the seat could comply exactly and still wake nobody. The
+history below is kept only for that lesson — a seat that complies precisely on
+everything else and fails **one** thing **every** time is hitting a mechanism,
+not ignoring you. After the second failure, go read what the field accepts.
 
 **The detector, and it is one call:** `get_recent_context(detail="full")`
 prints `Mentions:` above the body. Run it on any implementer return **before**
