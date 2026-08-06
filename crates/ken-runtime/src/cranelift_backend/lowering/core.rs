@@ -2568,23 +2568,24 @@ impl<'a> Lowering<'a> {
                     selected_computational.as_ref()
                 {
                     for position in recursive_positions.iter().copied() {
-                        // The ordinary envelope: nonrecursive lowered fields in
-                        // source order with the selected recursive field
-                        // omitted. Worker captures follow in capture-ordinal
-                        // order, taken from the same lowered field run.
-                        let ordinary: Vec<LoweringOperand> = lowered_args
-                            .iter()
-                            .enumerate()
-                            .filter(|(index, _)| *index != position)
-                            .map(|(_, operand)| operand.clone())
-                            .collect();
+                        // `D9` — the WHOLE lowered field run is handed down; the
+                        // ordinary run is assembled from the planner's envelope
+                        // at the one seat that resolves the unit.
+                        //
+                        // ⛔ This site used to build the run itself, filtering
+                        // out the recursive field, under a comment claiming
+                        // *"worker captures follow in capture-ordinal order"*.
+                        // They did not: nothing here or downstream appended
+                        // them, so a continuation whose selected worker had
+                        // captures was called with its declared parameter tail
+                        // unfilled.
                         if let Some(returned) = self.claim_and_call_continuation(
                             builder,
                             static_origin,
                             *frame_origin,
                             *case_index,
                             position,
-                            &ordinary,
+                            &lowered_args,
                             producer_env,
                         )? {
                             // The call's own value is the result after the
@@ -6705,7 +6706,7 @@ impl<'a> Lowering<'a> {
         continuation_origin: StaticOriginId,
         producer_alternative: usize,
         recursive_position: usize,
-        ordinary_inputs: &[LoweringOperand],
+        fields: &[LoweringOperand],
         producer_env: &[LoweringEnvironmentBinding],
     ) -> Result<Option<RoutedAnswer>, CraneliftBackendError> {
         let alternative = u32::try_from(producer_alternative).map_err(|_| {
@@ -6746,7 +6747,13 @@ impl<'a> Lowering<'a> {
         };
         #[cfg(test)]
         d5a_trace(format!("  CLAIM bound identity={identity:?}"));
-        self.claim_and_call_resolved_continuation(builder, &identity, ordinary_inputs, producer_env)
+        self.claim_and_call_resolved_continuation(
+            builder,
+            &identity,
+            fields,
+            recursive_position,
+            producer_env,
+        )
             .map(Some)
     }
 
@@ -7142,7 +7149,14 @@ impl<'a> Lowering<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         identity: &ContinuationCallIdentity,
-        ordinary_inputs: &[LoweringOperand],
+        // `D9` — the producer constructor's WHOLE lowered field run and the
+        // ruled recursive position, not a pre-assembled ordinary run. ⛔ The
+        // assembly moved here because `unit` is resolved here: both callers
+        // previously built their own run from the nonrecursive fields alone,
+        // and each carried a comment claiming the captures were appended by the
+        // other side. One authority, one assembly, both callers.
+        fields: &[LoweringOperand],
+        recursive_position: usize,
         producer_env: &[LoweringEnvironmentBinding],
     ) -> Result<RoutedAnswer, CraneliftBackendError> {
         let identity = identity.clone();
@@ -7290,7 +7304,222 @@ impl<'a> Lowering<'a> {
                     "the claimed target has no projected continuation unit",
                 )
             })?;
-        let mut inputs = ordinary_inputs.to_vec();
+        // ⭐⭐ **`RT-CONTSRC-PRODUCER-LOCAL` `D9` — THE ORDINARY RUN IS THE
+        // PLANNER'S ENVELOPE, not the nonrecursive fields alone.**
+        //
+        // ⛔ **What this replaced, and why it was a defect rather than a
+        // shortfall.** The previous assembly filtered the ruled recursive field
+        // out of `args` and stopped, under a comment claiming *"captures are
+        // appended by the shared machinery from the planner's own ordered
+        // projection"*. **No such append exists**: the shared machinery adds the
+        // continuation inputs and nothing else. So a continuation whose selected
+        // worker has captures was called with the nonrecursive prefix only, and
+        // the callee's declared `Parameter` run went unfilled. Measured by the
+        // Architect on the `AC-1` row (`evt_1y7h08xd7ermp`): a callee declaring
+        // 6 `Parameter` + 2 `Capture` received 1 ordinary + 2 continuation
+        // inputs.
+        //
+        // ⭐ The values were never missing. The selected recursive field IS the
+        // closure, and its ordered capture vector is already in hand here at the
+        // exact source-bearing seat -- this node's landed phase-bearing
+        // closure-capture representation put it there. The envelope says which
+        // of them go where.
+        //
+        // ⛔ The envelope is the planner's ORDERED sequence and is consumed in
+        // its own order. Each role is resolved from the authority that owns it:
+        // a nonrecursive field from its **exact lowered source position**, a
+        // worker capture from the **selected closure's own ordered capture
+        // vector at that exact ordinal**. ⛔ A capture ordinal is NOT a generic
+        // environment index and is never used as one -- that is the cross-plane
+        // aliasing this node removed, and reintroducing it here would alias the
+        // closure's capture run onto the producer's environment.
+        let envelope = unit.ordinary_envelope()?;
+        // The selected recursive field, by the ruled position. Its identity is
+        // checked against the planner's own worker facts before a single
+        // capture is read from it, so a capture taken below is known to have
+        // come from the closure the plan selected.
+        let selected = fields.get(recursive_position).ok_or_else(|| {
+            unsupported(
+                "ContinuationSpecialization",
+                "the ruled recursive position names no field of the planned producer constructor",
+            )
+        })?;
+        let (selected_captures, selected_body, selected_arity) = match selected {
+            LoweringOperand::Specialized(Lowered::Closure {
+                captures,
+                params,
+                body,
+            }) => (captures, *body, params.len()),
+            _ => {
+                return Err(unsupported(
+                    "ContinuationSpecialization",
+                    format!(
+                        "the ruled recursive field at position {recursive_position} is not a retained \
+                         closure, so this continuation's selected worker has no capture run to \
+                         assemble from"
+                    ),
+                ));
+            }
+        };
+        if selected_body != unit.worker_body_origin() {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "the ruled recursive field is a closure over body {selected_body:?}, but this \
+                     continuation's selected worker names body {:?}",
+                    unit.worker_body_origin()
+                ),
+            ));
+        }
+        if selected_arity != unit.worker_declared_arity() as usize {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "the ruled recursive field is a closure of arity {selected_arity}, but this \
+                     continuation's selected worker declares {}",
+                    unit.worker_declared_arity()
+                ),
+            ));
+        }
+        if selected_captures.len() != unit.worker_capture_count() {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "the ruled recursive field closes over {} values, but this continuation's \
+                     selected worker declares {} captures",
+                    selected_captures.len(),
+                    unit.worker_capture_count()
+                ),
+            ));
+        }
+        let mut ordinary = Vec::with_capacity(envelope.len());
+        // ⛔ Capture roles are consumed in ascending contiguous ordinal order
+        // from zero. The envelope is a SEQUENCE, so two roles carrying swapped
+        // ordinals is a different run, and taking each ordinal as it comes
+        // without this check would assemble that different run silently.
+        let mut next_capture_ordinal = 0u32;
+        let mut seen_capture = false;
+        for (role_position, role) in envelope.iter().enumerate() {
+            match role {
+                ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField {
+                    source_position,
+                } => {
+                    if seen_capture {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "the ordinary envelope holds a nonrecursive field at role \
+                                 position {role_position} after a worker capture; the ruled \
+                                 envelope is the nonrecursive prefix followed by the capture run, \
+                                 and a call assembled from a permuted envelope fills the callee's \
+                                 declared parameters with the wrong values"
+                            ),
+                        ));
+                    }
+                    let source = *source_position as usize;
+                    if source == recursive_position {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "the ordinary envelope names source position {source} as a \
+                                 nonrecursive field, but that is the ruled recursive position; \
+                                 the selected recursive field is a compiler-only member and never \
+                                 an ordinary operand"
+                            ),
+                        ));
+                    }
+                    let field = fields.get(source).ok_or_else(|| {
+                        unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "the ordinary envelope names source position {source}, outside \
+                                 the planned producer constructor's {}-field run",
+                                fields.len()
+                            ),
+                        )
+                    })?;
+                    // ⛔ Cloned WHOLE, at its own phase. A carried field stays
+                    // carried; re-wrapping it as specialized here would be the
+                    // cross-plane aliasing this node removed.
+                    ordinary.push(field.clone());
+                }
+                ContinuationOrdinaryEnvelopeRole::WorkerCapture {
+                    ordinal,
+                    closure_origin,
+                    ..
+                } => {
+                    seen_capture = true;
+                    if *closure_origin != unit.worker_closure_origin() {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "the ordinary envelope's capture at role position {role_position} \
+                                 names closure occurrence {closure_origin:?}, but this \
+                                 continuation's selected worker is closure {:?}; a capture read \
+                                 from another closure's run is another closure's value",
+                                unit.worker_closure_origin()
+                            ),
+                        ));
+                    }
+                    if *ordinal != next_capture_ordinal {
+                        return Err(unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "the ordinary envelope's capture at role position {role_position} \
+                                 names ordinal {ordinal}, where the ruled run's next ordinal is \
+                                 {next_capture_ordinal}; the capture run is contiguous from zero \
+                                 in envelope order, and two roles with exchanged ordinals \
+                                 assemble a different call"
+                            ),
+                        ));
+                    }
+                    let capture = selected_captures.get(*ordinal as usize).ok_or_else(|| {
+                        unsupported(
+                            "ContinuationSpecialization",
+                            format!(
+                                "the ordinary envelope names capture ordinal {ordinal}, outside \
+                                 the selected closure's {}-value capture run",
+                                selected_captures.len()
+                            ),
+                        )
+                    })?;
+                    // ⛔ The operand is taken WHOLE, at its own phase. A carried
+                    // capture stays carried: this is the phase-bearing edge, and
+                    // re-reading it as a specialized template here is what the
+                    // representation exists to prevent.
+                    ordinary.push(capture.clone());
+                    next_capture_ordinal = next_capture_ordinal.wrapping_add(1);
+                }
+            }
+        }
+        if next_capture_ordinal as usize != selected_captures.len() {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "the ordinary envelope consumed {next_capture_ordinal} of the selected \
+                     closure's {} captures; the whole capture run is the callee's declared \
+                     parameter tail and a short run leaves declared parameters unfilled",
+                    selected_captures.len()
+                ),
+            ));
+        }
+        // The final cardinality, against the continuation's own declared
+        // ordinary-parameter count. ⛔ Checked against the DECLARATION rather
+        // than against the envelope's length: the two are separate planner
+        // facts, and comparing the assembled run with the sequence it was
+        // assembled from would be an identity.
+        if ordinary.len() != unit.ordinary_parameters() as usize {
+            return Err(unsupported(
+                "ContinuationSpecialization",
+                format!(
+                    "the assembled ordinary run holds {} operands but this continuation declares \
+                     {} ordinary parameters",
+                    ordinary.len(),
+                    unit.ordinary_parameters()
+                ),
+            ));
+        }
+        let mut inputs = ordinary;
         #[cfg(test)]
         d5a_trace(format!(
             "  CAPTURES defining={defining:?} consumer={:?} producer={:?} env_len={} inputs={:?}",
@@ -7958,23 +8187,26 @@ impl<'a> Lowering<'a> {
                 ),
             ));
         }
-        // Contract 4, second clause: ordinary operands from that exact result,
-        // with ONLY the ruled recursive field omitted. Captures are appended by
-        // the shared machinery from the planner's own ordered projection.
-        let ordinary = args
-            .iter()
-            .enumerate()
-            .filter(|(index, _)| *index != position)
-            .map(|(_, arg)| LoweringOperand::Specialized(arg.clone()))
-            .collect::<Vec<_>>();
         let identity = edge.identity.clone();
         // ⚠ `D6a`: this result becomes the defining unit's own result and
         // therefore crosses a FUNCTION BOUNDARY, which carries only the word.
         // The route is dropped here on purpose -- the caller re-attests from
         // its own exact claimed call identity, and a callee that wrote a hidden
         // route bit is exactly what the transport contract forbids.
+        // `D9` — the whole planned field run, at its own phase, plus the ruled
+        // position. The assembly is the shared seat's.
+        let field_run = args
+            .iter()
+            .map(|arg| LoweringOperand::Specialized(arg.clone()))
+            .collect::<Vec<_>>();
         Ok(self
-            .claim_and_call_resolved_continuation(builder, &identity, &ordinary, unit_env)?
+            .claim_and_call_resolved_continuation(
+                builder,
+                &identity,
+                &field_run,
+                position,
+                unit_env,
+            )?
             .value)
     }
 
