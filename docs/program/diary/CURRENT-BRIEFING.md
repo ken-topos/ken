@@ -42,6 +42,60 @@
 
 ### The one thing to do next
 
+> ## ⭐ RESOLVED. `87382297` ACCEPTED as mechanism; controls released as their own child.
+>
+> **The one thing to do next: WAIT.** `runtime-implementer` holds the
+> controls-only child of accepted exact `87382297` (released
+> `evt_7fanzp3ren9hm`, gate opened by me at `evt_5ed3cg3g6xp7`). Nothing is owed
+> by me until it lands.
+>
+> **When it lands I owe, in order:** node QA routing, **then** the
+> `RT-CARRIER-BYTESPAN-OBSERVE` frame. ⛔ Write that frame from the attribution
+> sentence pinned in `docs/program/issues/RT-CARRIER-BYTESPAN-OBSERVE.md`,
+> **never a paraphrase** — mine was wrong once already.
+>
+> ⛔ **FOURTH release of these controls; FIRST as its own child.** If it returns
+> undelivered again, **the sizing is still mine and the next cut is a split of
+> the SUITE**, not another retry.
+>
+> ### THE ARCHITECT RETRACTED ITS OWN CRITERION — this is the load-bearing part
+>
+> `evt_2qzwanx82m06r`, verbatim: *"My earlier three-cell criterion was wrong
+> because it conflated two questions: which representation the concrete
+> execution might select, and which planner-authorized alternatives the
+> compiler must successfully lower."*
+>
+> ⇒ **My recut STANDS, and my reading was right for the WRONG REASON.** I argued
+> the words were *"genuinely `Constructor`-represented, correctly decoded"* —
+> which reads as a claim about the **runtime value**, and the probe measured no
+> such thing. The correct account is about which alternatives the compiler is
+> **obliged to lower**. **Same disposition, different mechanism — and the
+> difference is exactly what a frame would have frozen.**
+>
+> **Third time on this node that a taxonomy had no cell for the case that
+> arrived.** It reads as complete while it is happening. Treat it as a standing
+> hazard, not three one-offs.
+>
+> **The corrected attribution is pinned in the issue file.** Not "HostResult
+> payloads require this"; the reachable `Constructor` **selector predecessor**
+> of match origin `268` projects a carried child into effect origin `264` whose
+> `BytesPointerLength` seat lacks carried availability. Per-seat, never a
+> blanket `CarriedWord` ban.
+>
+> **`87382297`** — all four bounded corrections verified; accepted as the stable
+> **mechanism** checkpoint only. ⛔ **Not node acceptance, not QA/candidate/
+> publish.** `fda636d8` is still the last **fully** approved checkpoint.
+>
+> ⭐ **One item I added to the split, from the Architect's catch:** the new
+> mismatch comment already speaks as though the wrong-class control pins
+> `CARRIED_REPRESENTATION_MISMATCH_STATUS`. **It does not yet.** The child must
+> add the pin and make the comment true — shipping a comment that describes an
+> unenforced guarantee, inside the very child fixing that same defect in
+> `control.rs`, would be poor.
+
+<details>
+<summary>Superseded — the fourth-cell question, resolved above</summary>
+
 > ## ⛔ THE JOINT KEY LANDED IN A CELL THE CRITERION DOES NOT HAVE
 >
 > **Ruled `evt_1pfdz8ba5yqva` on the joint-keyed probe at `87382297`.** This
@@ -108,6 +162,8 @@
 > default; grounded mismatch status + honest leaf-helper ownership.
 > `775/2/1` vs baseline `774/2/1`, same two by name. Architect preserved
 > `c6994834` as the valid-IR checkpoint; `fda636d8` still last approved.
+
+</details>
 
 <details>
 <summary>Superseded — the seat-keyed reading (outcome 2), kept for the shape</summary>
