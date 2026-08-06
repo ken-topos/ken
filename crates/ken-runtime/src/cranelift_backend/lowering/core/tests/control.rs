@@ -22712,4 +22712,3 @@ fn d8f_the_remaining_checked_marker_refusals() {
          transplanted marker never reaches the seam: {transplanted}"
     );
 }
-
