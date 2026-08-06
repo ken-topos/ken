@@ -3030,3 +3030,179 @@ fn removing_the_carried_capacity_arm_or_restoring_the_bulk_conversion_refuses_at
     set_effect_seat_dispatch_mutation(EffectSeatDispatchMutation::Exact);
     carried().expect("the fixture allocates again once the mutation clears");
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// RT-CONTSRC-PRODUCER-LOCAL AC-1, control family 4 -- the SPECIALIZED SIBLING.
+//
+// The carried source-machine `Match` repair added an arm to the seat's operand
+// dispatch. This control is the other side of that change: it holds the
+// SPECIALIZED selection path still selecting the right case and delivering its
+// value, so the repair is measurably not a regression of the path it sits
+// beside.
+// ──────────────────────────────────────────────────────────────────────────
+
+/// The selecting constructor, and the one the mutation swaps in.
+///
+/// ⛔ Same arity and same field, differing ONLY in identity. A mutation that
+/// also changed the shape would be red for a second reason and could not
+/// isolate selection.
+#[cfg(test)]
+const AC1_SIBLING_SELECTED: &str = "ctor:fixture::AC1Sibling::One";
+#[cfg(test)]
+const AC1_SIBLING_UNSELECTED: &str = "ctor:fixture::AC1Sibling::Other";
+
+/// The payload the selected arm binds and returns. Arbitrary, but it must not
+/// collide with [`AC1_SIBLING_DEFAULT_STATUS`] or the pair below could not tell
+/// "selected and delivered" from "fell to the default".
+#[cfg(test)]
+const AC1_SIBLING_PAYLOAD: i64 = 21;
+
+/// The status the match's closed default returns, spelled by
+/// `Lowering::seal_source_trap_branch`.
+#[cfg(test)]
+const AC1_SIBLING_DEFAULT_STATUS: i64 = -4;
+
+#[cfg(test)]
+const AC1_SIBLING_CALLEE: &str = "fixture::ac1_sibling::sel";
+
+/// `sel = \w -> match w { One x -> x }`, as a declared unit.
+#[cfg(test)]
+fn ac1_sibling_declaration() -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: AC1_SIBLING_CALLEE.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["w".to_string()],
+                body: Box::new(RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(0)),
+                    cases: vec![RuntimeMatchCase {
+                        constructor: AC1_SIBLING_SELECTED.to_string(),
+                        binders: 1,
+                        // The BOUND child, not a constant: a body returning a
+                        // literal would be green even if the projection were
+                        // wrong.
+                        body: RuntimeExpr::Var(0),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "ac1 specialized sibling default".to_string(),
+                    },
+                }),
+            },
+        },
+        metadata: crate::RuntimeSymbolMetadata {
+            lowerability: Some(crate::RuntimeLowerabilityStatus::Supported),
+            ..crate::RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+/// `ExitFailure(Call(DeclarationRef(sel), [<producer>(21)]))`, run as a whole
+/// process, returning its exit code.
+#[cfg(test)]
+fn run_ac1_specialized_sibling(producer: &str) -> i64 {
+    let declaration = ac1_sibling_declaration();
+    let mut declarations = BTreeMap::new();
+    declarations.insert(AC1_SIBLING_CALLEE, &declaration);
+    let program = RuntimeExpr::Construct {
+        constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+        args: vec![RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: AC1_SIBLING_CALLEE.to_string(),
+            }),
+            args: vec![RuntimeExpr::Construct {
+                constructor: producer.to_string(),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int(
+                    AC1_SIBLING_PAYLOAD.into(),
+                ))],
+            }],
+        }],
+    };
+    let compiled = compile_expr_into_module(
+        new_jit_module().expect("JIT module"),
+        "ac1_specialized_sibling",
+        Linkage::Local,
+        &program,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .expect("the specialized sibling fixture lowers");
+    let input = BorrowedFixtureValue {
+        kind: 1,
+        tag: 0,
+        data: std::ptr::null(),
+        len: 0,
+    };
+    let mut host_context = ();
+    let invocation = RootIngressFixture {
+        process_input: &input,
+        host_context: (&mut host_context as *mut ()).cast(),
+        capability: 0,
+    };
+    compiled
+        .run(Some((&invocation as *const RootIngressFixture).cast()))
+        .expect("the specialized sibling fixture runs")
+        .1
+        .expect("the specialized sibling fixture returns an exit code")
+}
+
+/// `AC-1` control family 4 -- a SPECIALIZED constructor scrutinee still selects
+/// its case and delivers the bound child, end to end.
+///
+/// MEASURED: a whole-process fixture compiles and RUNS. With the selecting
+/// producer the process exits `21` -- the payload the case body bound and
+/// returned. With the producer swapped for a same-arity constructor the case
+/// list does not name, it exits `-4`, the match's closed default.
+///
+/// CLAIMED: the carried arm added to the source-machine `Match` operand
+/// dispatch did not disturb specialized selection, projection, or delivery of
+/// the selected value to the process boundary.
+///
+/// ⭐ The pair is the control, and neither half is sufficient. `21` alone is
+/// green under an implementation that ignores the case list and always takes
+/// arm 0; `-4` alone is green under one that never selects anything. Only two
+/// producers differing in NOTHING but constructor identity, landing on two
+/// different outcomes, discriminate selection from both.
+///
+/// ⛔ SCOPE -- what this does NOT establish, stated because the name invites
+/// the stronger reading. This fixture is measured NOT to reach
+/// `SourceContinuation::MatchScrutinee`: a closure or unit parameter bound to a
+/// compile-time `Construct` template stays `Specialized(Lowered::Constructor)`
+/// and its case is selected at COMPILE time, before the source machine's
+/// operand dispatch runs. So this row must never be read as covering that
+/// seat's `Specialized` arm -- it covers the specialized SELECTION PATH only.
+/// The seat's arms are reached by a cross-unit carried producer, which no rig
+/// in this crate supplies.
+///
+/// Promise class: durable invariant. It asserts a relation between two
+/// producers and their outcomes, not a snapshot: any change preserving
+/// select-and-deliver keeps both halves green, and any change breaking
+/// selection reddens one.
+#[test]
+fn ac1_a_specialized_constructor_scrutinee_still_selects_and_delivers() {
+    let selected = run_ac1_specialized_sibling(AC1_SIBLING_SELECTED);
+    assert_eq!(
+        selected, AC1_SIBLING_PAYLOAD,
+        "the selecting producer must reach the case body and deliver the child \
+         it bound"
+    );
+
+    let unselected = run_ac1_specialized_sibling(AC1_SIBLING_UNSELECTED);
+    assert_ne!(
+        unselected, AC1_SIBLING_PAYLOAD,
+        "DISCRIMINATOR: a producer the case list does not name must not reach \
+         the selected arm's body. Equal here means selection is not keyed on \
+         constructor identity at all"
+    );
+    assert_eq!(
+        unselected, AC1_SIBLING_DEFAULT_STATUS,
+        "the unselected producer must take the match's CLOSED DEFAULT, not a \
+         trap, a neighbouring case, or a representation refusal"
+    );
+}

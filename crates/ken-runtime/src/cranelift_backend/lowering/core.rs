@@ -1369,6 +1369,90 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
     Ok(compiled)
 }
 
+/// `RT-CONTSRC-PRODUCER-LOCAL` `AC-1` -- the source-carried CONTROL mutation
+/// family, for the activation-gate controls of families 5 and 2a.
+///
+/// ⛔ Test-only, and deliberately NOT a widening of `D7`'s
+/// `EffectSeatDispatchMutation`: that family perturbs effect-seat dispatch and
+/// these two perturb the carried `Match` route. Sharing one enum would let a
+/// control claim a mutation it did not apply.
+///
+/// ⭐ Each variant refuses **after the real production decision has already been
+/// taken**, and does nothing else. It never manufactures a carrier, terminal or
+/// planner fact, never rewrites a join target, never duplicates the dispatch and
+/// never lowers an alternative. That is what makes an application evidence that
+/// the production path reached that exact point, rather than evidence about the
+/// mutation's own machinery.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SourceCarriedControlMutation {
+    /// Production behaviour.
+    Exact,
+    /// Family 5 -- refuse an ALREADY-CLASSIFIED `LoweringOperand::Carried` with
+    /// the exact refusal the pre-repair seat produced.
+    RefuseClassifiedCarried,
+    /// Family 2a -- refuse an ALREADY-SPLIT `SourcePrefixTerminal::Join` before
+    /// its inherited target is used.
+    RefuseSplitInheritedJoin,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SOURCE_CARRIED_CONTROL_MUTATION: std::cell::Cell<SourceCarriedControlMutation> =
+        const { std::cell::Cell::new(SourceCarriedControlMutation::Exact) };
+    /// How many times the active mutation actually fired.
+    ///
+    /// ⛔ This is the anti-vacuity instrument. A mutated run that refuses with
+    /// the right message but a count of zero refused for some OTHER reason, and
+    /// is not evidence.
+    static SOURCE_CARRIED_CONTROL_APPLICATIONS: std::cell::Cell<u32> =
+        const { std::cell::Cell::new(0) };
+}
+
+/// Restores `Exact` on drop, so a panicking control cannot leak a mutation into
+/// the next test on this thread.
+#[cfg(test)]
+struct SourceCarriedControlMutationGuard;
+
+#[cfg(test)]
+impl Drop for SourceCarriedControlMutationGuard {
+    fn drop(&mut self) {
+        SOURCE_CARRIED_CONTROL_MUTATION
+            .with(|cell| cell.set(SourceCarriedControlMutation::Exact));
+    }
+}
+
+/// Run `body` under `mutation`, returning its value and the number of times the
+/// mutation fired. The counter is reset on entry, and `Exact` is restored on
+/// exit even if `body` panics.
+#[cfg(test)]
+fn with_source_carried_control_mutation<R>(
+    mutation: SourceCarriedControlMutation,
+    body: impl FnOnce() -> R,
+) -> (R, u32) {
+    let _guard = SourceCarriedControlMutationGuard;
+    SOURCE_CARRIED_CONTROL_APPLICATIONS.with(|cell| cell.set(0));
+    SOURCE_CARRIED_CONTROL_MUTATION.with(|cell| cell.set(mutation));
+    let value = body();
+    let applications = SOURCE_CARRIED_CONTROL_APPLICATIONS.with(std::cell::Cell::get);
+    (value, applications)
+}
+
+/// `Some(refusal)` when `mutation` is the active one; the caller returns it
+/// unchanged. Counting happens here so a hook cannot fire without being counted.
+#[cfg(test)]
+fn source_carried_control_refusal(
+    mutation: SourceCarriedControlMutation,
+    construct: &'static str,
+    reason: &'static str,
+) -> Option<CraneliftBackendError> {
+    if SOURCE_CARRIED_CONTROL_MUTATION.with(std::cell::Cell::get) != mutation {
+        return None;
+    }
+    SOURCE_CARRIED_CONTROL_APPLICATIONS.with(|cell| cell.set(cell.get() + 1));
+    Some(unsupported(construct, reason))
+}
+
 /// The status the carried source-machine `Match` returns when the boundary
 /// word's CLASS is one this case set never decoded.
 ///
@@ -4943,6 +5027,18 @@ impl<'a> Lowering<'a> {
                                 // compile error here rather than a silent
                                 // refusal.
                                 LoweringOperand::Carried(word) => {
+                                    // Family 5 control seam. The operand is
+                                    // already classified `Carried` here, so a
+                                    // refusal below is evidence about the real
+                                    // dispatch decision and nothing else.
+                                    #[cfg(test)]
+                                    if let Some(refusal) = source_carried_control_refusal(
+                                        SourceCarriedControlMutation::RefuseClassifiedCarried,
+                                        "Match",
+                                        "scrutinee is not a constructor value",
+                                    ) {
+                                        return Err(refusal);
+                                    }
                                     return self.lower_source_carried_match(
                                         builder,
                                         word,
@@ -6197,7 +6293,20 @@ impl<'a> Lowering<'a> {
             Self::split_source_prefix(suffix_control.continuation)?;
         let mut local_completion = None;
         let target = match terminal {
-            SourcePrefixTerminal::Join(inherited_edge) => inherited_edge.target,
+            SourcePrefixTerminal::Join(inherited_edge) => {
+                // Family 2a control seam. The prefix split has already
+                // classified this terminal as an inherited join; the hook sits
+                // before the target is used and never rewrites it.
+                #[cfg(test)]
+                if let Some(refusal) = source_carried_control_refusal(
+                    SourceCarriedControlMutation::RefuseSplitInheritedJoin,
+                    "NativeJoinPlanV1",
+                    "MUTATION inherited join acquisition perturbed",
+                ) {
+                    return Err(refusal);
+                }
+                inherited_edge.target
+            }
             SourcePrefixTerminal::ResumeOuter { root_authority } => {
                 let active = suffix_control
                     .selected

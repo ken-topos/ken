@@ -8468,3 +8468,169 @@ fn a_capture_contract_claiming_the_wrong_transfer_discipline_rejects() {
          activation-frame owned, so only the transfer discipline moved: {rendered}"
     );
 }
+
+/// The one fixture in this crate that reaches `lower_source_carried_match`.
+///
+/// ⛔ Its independent abort is JOIN ACQUISITION -- this rig's enclosing
+/// continuation has no planned scalar cut -- not the `origin 264` byte-span
+/// effect seat. That matters for what the control below may assert, and it is
+/// not a choice: no `ken-runtime` lib fixture reaches the carried route through
+/// an effect seat, and the seam is `#[cfg(test)]`, so the one fixture that does
+/// (`ken-cli`'s `rt_parity_native`) links a build where the seam does not exist.
+#[cfg(test)]
+fn ac1_carried_route_fixture() -> Result<(), CraneliftBackendError> {
+    ac_c4_recursive_edge(ac1_source_machine_carried_match(vec![
+        ac1_unmatchable_case(),
+        crate::RuntimeMatchCase {
+            constructor: "ctor:fixture::C1::Leaf".to_string(),
+            binders: 0,
+            body: ac_c7_ctor("Sentinel"),
+        },
+    ]))
+    .map(|_| ())
+}
+
+#[cfg(test)]
+fn ac1_refusal_of(outcome: &Result<(), CraneliftBackendError>) -> (String, String) {
+    let Err(CraneliftBackendError::Unsupported(UnsupportedLowering {
+        construct, reason, ..
+    })) = outcome
+    else {
+        panic!("the carried-route fixture refuses: got {outcome:?}");
+    };
+    ((*construct).to_string(), reason.clone())
+}
+
+/// The refusal this rig raises when nothing is mutated -- its INDEPENDENT abort.
+#[cfg(test)]
+const AC1_INDEPENDENT_ABORT: (&str, &str) = (
+    "NativeJoinPlanV1",
+    "active checked continuation has no planned scalar cut before its outer suffix",
+);
+
+/// `AC-1` control family 5 -- the source-machine `Match` seat DISPATCHES an
+/// already-classified carried operand into the carried route, and the exact
+/// pre-repair refusal comes back when that dispatch is removed.
+///
+/// MEASURED, three runs of ONE fixture:
+/// 1. `Exact` -- the mutation fires **0** times and the fixture refuses at its
+///    independent abort, [`AC1_INDEPENDENT_ABORT`].
+/// 2. `RefuseClassifiedCarried` -- the mutation fires **exactly once** and the
+///    fixture refuses with exactly `Match: "scrutinee is not a constructor
+///    value"`, which is the pre-repair refusal, and which is raised strictly
+///    BEFORE join acquisition.
+/// 3. `Exact` again, after the scope -- back to **0** applications and the
+///    original refusal, so the mutation left nothing behind.
+///
+/// ⭐ The APPLICATION COUNT is what makes run 2 evidence. A mutated run that
+/// produced the right message with a count of zero would have refused for some
+/// other reason entirely, and the message alone cannot tell those apart. The
+/// count is taken from the hook itself, which cannot fire without incrementing.
+///
+/// ⛔ SCOPE -- this claims CARRIED DISPATCH BEFORE JOIN, and nothing else. It
+/// does not claim selector correctness, leaf lowering, physical predecessor
+/// distinction, exact-once completion, or anything about the suffix. Those are
+/// decided after this rig's abort and are not measured anywhere.
+///
+/// ⛔ The independent abort here is join acquisition, NOT the `origin 264`
+/// byte-span effect seat named in the activation gate. See
+/// [`ac1_carried_route_fixture`] for why that substitution is forced rather than
+/// chosen.
+///
+/// Promise class: durable invariant. It asserts a relation between a mutation
+/// and the refusal it produces, not a snapshot of either.
+#[test]
+fn ac1_the_seat_dispatches_a_classified_carried_operand_before_join_acquisition() {
+    let (exact, exact_applications) = with_source_carried_control_mutation(
+        SourceCarriedControlMutation::Exact,
+        ac1_carried_route_fixture,
+    );
+    assert_eq!(
+        exact_applications, 0,
+        "an unmutated run must not apply the mutation"
+    );
+    let (construct, reason) = ac1_refusal_of(&exact);
+    assert_eq!(
+        (construct.as_str(), reason.as_str()),
+        AC1_INDEPENDENT_ABORT,
+        "the unmutated fixture must refuse at its own independent abort"
+    );
+
+    let (mutated, mutated_applications) = with_source_carried_control_mutation(
+        SourceCarriedControlMutation::RefuseClassifiedCarried,
+        ac1_carried_route_fixture,
+    );
+    assert_eq!(
+        mutated_applications, 1,
+        "ANTI-VACUITY: the carried dispatch is taken exactly once by this \
+         fixture, so the mutation must fire exactly once. Zero means the run \
+         refused for a different reason and proves nothing"
+    );
+    let (construct, reason) = ac1_refusal_of(&mutated);
+    assert_eq!(
+        (construct.as_str(), reason.as_str()),
+        ("Match", "scrutinee is not a constructor value"),
+        "removing the carried dispatch must restore the EXACT pre-repair refusal"
+    );
+    assert_ne!(
+        (construct.as_str(), reason.as_str()),
+        AC1_INDEPENDENT_ABORT,
+        "DISCRIMINATOR: the mutated refusal must REPLACE the independent abort, \
+         which is what shows the dispatch is decided before it"
+    );
+
+    let (restored, restored_applications) = with_source_carried_control_mutation(
+        SourceCarriedControlMutation::Exact,
+        ac1_carried_route_fixture,
+    );
+    assert_eq!(
+        restored_applications, 0,
+        "the scoped mutation must not survive its scope"
+    );
+    assert_eq!(
+        ac1_refusal_of(&restored),
+        (
+            AC1_INDEPENDENT_ABORT.0.to_string(),
+            AC1_INDEPENDENT_ABORT.1.to_string()
+        ),
+        "after the scope the fixture must refuse exactly as it did before it"
+    );
+}
+
+/// Why family 2a ships NO control: this crate never reaches the arm it hooks.
+///
+/// MEASURED: under `RefuseSplitInheritedJoin` the carried-route fixture applies
+/// the mutation **0** times and refuses exactly as `Exact` does. This rig's
+/// prefix split classifies its terminal as `ResumeOuter`, so the inherited-join
+/// arm is not on its path at all.
+///
+/// ⛔ This is NOT a discharge of family 2a, and must never be read as one. It is
+/// the anti-vacuity evidence for why that control is absent: an inherited-join
+/// control written here would assert a refusal it did not cause. The arm IS
+/// reached by `ken-cli`'s `rt_parity_native`, which links a non-`cfg(test)`
+/// build where the seam does not exist.
+///
+/// Promise class: transition sentinel. A rig that reaches the inherited-join
+/// terminal under `#[cfg(test)]` makes `applications` nonzero and reddens this
+/// row, which is exactly when family 2a becomes writable.
+#[test]
+fn ac1_the_inherited_join_arm_is_not_reached_by_any_cfg_test_rig() {
+    let (outcome, applications) = with_source_carried_control_mutation(
+        SourceCarriedControlMutation::RefuseSplitInheritedJoin,
+        ac1_carried_route_fixture,
+    );
+    assert_eq!(
+        applications, 0,
+        "if this is nonzero the inherited-join arm became reachable under \
+         cfg(test), and family 2a's control can and must now be written"
+    );
+    assert_eq!(
+        ac1_refusal_of(&outcome),
+        (
+            AC1_INDEPENDENT_ABORT.0.to_string(),
+            AC1_INDEPENDENT_ABORT.1.to_string()
+        ),
+        "with the mutation never applied the fixture must refuse exactly as \
+         an unmutated run does"
+    );
+}
