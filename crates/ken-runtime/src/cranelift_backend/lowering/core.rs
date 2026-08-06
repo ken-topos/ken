@@ -1372,12 +1372,12 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
 /// `RT-CONTSRC-PRODUCER-LOCAL` `AC-1` -- the source-carried CONTROL mutation
 /// family, for the activation-gate controls of families 5 and 2a.
 ///
-/// ⛔ Test-only, and deliberately NOT a widening of `D7`'s
+/// Test-only, and deliberately NOT a widening of `D7`'s
 /// `EffectSeatDispatchMutation`: that family perturbs effect-seat dispatch and
 /// these two perturb the carried `Match` route. Sharing one enum would let a
 /// control claim a mutation it did not apply.
 ///
-/// ⭐ Each variant refuses **after the real production decision has already been
+/// Each variant refuses **after the real production decision has already been
 /// taken**, and does nothing else. It never manufactures a carrier, terminal or
 /// planner fact, never rewrites a join target, never duplicates the dispatch and
 /// never lowers an alternative. That is what makes an application evidence that
@@ -1402,7 +1402,7 @@ thread_local! {
         const { std::cell::Cell::new(SourceCarriedControlMutation::Exact) };
     /// How many times the active mutation actually fired.
     ///
-    /// ⛔ This is the anti-vacuity instrument. A mutated run that refuses with
+    /// This is the anti-vacuity instrument. A mutated run that refuses with
     /// the right message but a count of zero refused for some OTHER reason, and
     /// is not evidence.
     static SOURCE_CARRIED_CONTROL_APPLICATIONS: std::cell::Cell<u32> =
@@ -1456,12 +1456,12 @@ fn source_carried_control_refusal(
 /// The status the carried source-machine `Match` returns when the boundary
 /// word's CLASS is one this case set never decoded.
 ///
-/// ⚠ Named locally and deliberately: this is NOT claimed to be a canonical
+/// Named locally and deliberately: this is NOT claimed to be a canonical
 /// carrier-wide failure word. It reuses the value the dynamic-constructor
 /// emitter already returns for a malformed represented value, because both mean
 /// *"this word is not the representation this chain decodes"*.
 ///
-/// ⛔ NOTHING PINS THIS VALUE, and an earlier draft of this comment claimed a
+/// NOTHING PINS THIS VALUE, and an earlier draft of this comment claimed a
 /// wrong-class control did. It does not exist and cannot be written today:
 /// `mismatch_block` is emitted on the residual arm of the class chain, and a
 /// sentinel sweep of the whole `ken-runtime` lib suite measured that arm as

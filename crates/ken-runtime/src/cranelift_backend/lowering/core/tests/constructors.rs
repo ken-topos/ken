@@ -3714,13 +3714,13 @@ fn ac1_unmatchable_case() -> crate::RuntimeMatchCase {
 /// carried route, after the phase classification and the dispatch, so it cannot
 /// be produced by the pre-repair code path, which never reached that route.
 ///
-/// ⛔ What this row does NOT claim, and what is still OWED: it does not exercise
+/// What this row does NOT claim, and what is still OWED: it does not exercise
 /// a nontrivial post-match continuation, a nested or inherited source join,
 /// exact-once join consumption, distinct predecessor edges, or the carried
 /// identity / arity / field-order negatives. They are not claimed here and are
 /// not discharged anywhere else.
 ///
-/// ⛔ AND THE OBVIOUS NEXT STEP IS MEASURED CLOSED. An earlier draft of this
+/// AND THE OBVIOUS NEXT STEP IS MEASURED CLOSED. An earlier draft of this
 /// paragraph said those controls "need a whole-process fixture with a planned
 /// scalar cut", which reads as an instruction to go build one. A probe over the
 /// whole `ken-runtime` lib suite (779 tests) measured otherwise:
@@ -8471,7 +8471,7 @@ fn a_capture_contract_claiming_the_wrong_transfer_discipline_rejects() {
 
 /// The one fixture in this crate that reaches `lower_source_carried_match`.
 ///
-/// ⛔ Its independent abort is JOIN ACQUISITION -- this rig's enclosing
+/// Its independent abort is JOIN ACQUISITION -- this rig's enclosing
 /// continuation has no planned scalar cut -- not the `origin 264` byte-span
 /// effect seat. That matters for what the control below may assert, and it is
 /// not a choice: no `ken-runtime` lib fixture reaches the carried route through
@@ -8522,17 +8522,17 @@ const AC1_INDEPENDENT_ABORT: (&str, &str) = (
 /// 3. `Exact` again, after the scope -- back to **0** applications and the
 ///    original refusal, so the mutation left nothing behind.
 ///
-/// ⭐ The APPLICATION COUNT is what makes run 2 evidence. A mutated run that
+/// The APPLICATION COUNT is what makes run 2 evidence. A mutated run that
 /// produced the right message with a count of zero would have refused for some
 /// other reason entirely, and the message alone cannot tell those apart. The
 /// count is taken from the hook itself, which cannot fire without incrementing.
 ///
-/// ⛔ SCOPE -- this claims CARRIED DISPATCH BEFORE JOIN, and nothing else. It
+/// SCOPE -- this claims CARRIED DISPATCH BEFORE JOIN, and nothing else. It
 /// does not claim selector correctness, leaf lowering, physical predecessor
 /// distinction, exact-once completion, or anything about the suffix. Those are
 /// decided after this rig's abort and are not measured anywhere.
 ///
-/// ⛔ The independent abort here is join acquisition, NOT the `origin 264`
+/// The independent abort here is join acquisition, NOT the `origin 264`
 /// byte-span effect seat named in the activation gate. See
 /// [`ac1_carried_route_fixture`] for why that substitution is forced rather than
 /// chosen.
@@ -8604,12 +8604,12 @@ fn ac1_the_seat_dispatches_a_classified_carried_operand_before_join_acquisition(
 /// fixture's prefix split classifies its terminal as `ResumeOuter`, so the
 /// inherited-join arm is not on ITS path.
 ///
-/// ⛔ This is NOT a discharge of family 2a, and must never be read as one. It is
+/// This is NOT a discharge of family 2a, and must never be read as one. It is
 /// the anti-vacuity evidence for why that control is absent here: an
 /// inherited-join control written against this fixture would assert a refusal it
 /// did not cause.
 ///
-/// ⛔ SCOPE -- this row is LOCAL to [`ac1_carried_route_fixture`]. It is not a
+/// SCOPE -- this row is LOCAL to [`ac1_carried_route_fixture`]. It is not a
 /// crate-wide `cfg(test)` census, and an earlier heading and test name said it
 /// was. It measures one fixture and says nothing whatever about any other.
 ///

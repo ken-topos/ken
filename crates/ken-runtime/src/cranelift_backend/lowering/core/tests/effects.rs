@@ -3043,7 +3043,7 @@ fn removing_the_carried_capacity_arm_or_restoring_the_bulk_conversion_refuses_at
 
 /// The selecting constructor, and the one the mutation swaps in.
 ///
-/// ⛔ Same arity and same field, differing ONLY in identity. A mutation that
+/// Same arity and same field, differing ONLY in identity. A mutation that
 /// also changed the shape would be red for a second reason and could not
 /// isolate selection.
 #[cfg(test)]
@@ -3164,13 +3164,13 @@ fn run_ac1_specialized_sibling(producer: &str) -> i64 {
 /// dispatch did not disturb specialized selection, projection, or delivery of
 /// the selected value to the process boundary.
 ///
-/// ⭐ The pair is the control, and neither half is sufficient. `21` alone is
+/// The pair is the control, and neither half is sufficient. `21` alone is
 /// green under an implementation that ignores the case list and always takes
 /// arm 0; `-4` alone is green under one that never selects anything. Only two
 /// producers differing in NOTHING but constructor identity, landing on two
 /// different outcomes, discriminate selection from both.
 ///
-/// ⛔ SCOPE -- what this does NOT establish, stated because the name invites
+/// SCOPE -- what this does NOT establish, stated because the name invites
 /// the stronger reading. This fixture is measured NOT to reach
 /// `SourceContinuation::MatchScrutinee`: a closure or unit parameter bound to a
 /// compile-time `Construct` template stays `Specialized(Lowered::Constructor)`
