@@ -100,6 +100,53 @@ gh api repos/swe-toolkit/ken/commits/21fd46dc.../check-suites \
   --jq '.check_suites[] | "\(.app.slug) \(.status) \(.conclusion//"-")"'
 ```
 
+### THE PUBLISH REF IS FROZEN AT `21fd46dc`. A live trap was disarmed here.
+
+**The ring committed `c4112237` (RT-ENTRY-TRAP-254 `D6`) onto
+`wp/RT-DECL-CLOSURE-PORT-typed-units` — which is the HEAD OF APPROVED PR
+#1528.** Local moved to `c4112237` while origin stayed at `21fd46dc`.
+
+**The publisher force-pushes `refs/heads/$head_branch` by design, and
+`resolve_branch` derives `head_sha` from the BRANCH, not from `--target`.** So
+the queued re-run would have pushed `c4112237`, moved the PR head off the
+approved SHA, and voided `dec_4w8wn4ymn32cm`.
+
+**Disarmed 2026-08-06:** `D6` preserved at **`wp/RT-ENTRY-TRAP-254-d6`**
+(`c4112237`, nothing lost); `wp/RT-DECL-CLOSURE-PORT-typed-units` reset to
+`21fd46dc`, matching origin. Ring told to work on the `-d6` branch.
+
+⇒ **BEFORE ANY PUBLISHER RE-RUN, assert the branch is still at the approved
+SHA:**
+
+```sh
+git rev-parse wp/RT-DECL-CLOSURE-PORT-typed-units   # MUST be 21fd46dc...
+```
+
+**`--target <sha>` does NOT protect you.** The publisher resolves the SHA to a
+branch and then re-reads that branch's tip.
+
+### RT-ENTRY-TRAP-254 — `D3` WITHDRAWN, `D4` measured, `D5` released
+
+- **`D3` (the `abi_word` instrument) is WITHDRAWN, not deferred.** The only
+  encoding that retains trapping reddens a **committed**
+  `identity_preserved: false` `RootProcessSentinel` invariant and the Family-4
+  `-4` closed-default pin. **Steward ruling: do NOT retire either pin** —
+  spending a permanent detector for a one-off diagnostic, and the sentinel's
+  meaning at the process ABI boundary is the Architect's question, not a
+  diagnostic convenience. Not opened, because it is not needed.
+- **`D4` was measured BEFORE the instrument was reverted**, which is why the
+  hard-stop cost almost nothing. Identity 5 localizes the outer
+  `match input { MkProcessInput ... }` of declared unit `process_discriminator`,
+  at **generic** `lower_carried_match`, `core.rs:10420`. **The input boundary
+  word takes the borrowed-opaque lane and fails the one `ProcessInput`
+  constructor case, selecting the closed default.**
+- **Residual:** which comparison within class/kind/tag/arity fails. `D5` is
+  released as **runtime-side probing only** — no pin, no sentinel encoding, no
+  shim. Repair still held on the Steward.
+- **`D6` landed** (stale carried-scrutinee reachability comment), on
+  `wp/RT-ENTRY-TRAP-254-d6`. Targeted: 778 passed / 2 named pre-existing / 1
+  ignored.
+
 ### Origin's WP ref was DIVERGENT and the force-update was safe
 
 `origin/wp/RT-DECL-CLOSURE-PORT-typed-units` stood at `03f0510c` — **34 commits
