@@ -1417,8 +1417,16 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
-                self.enter_checked_computational_ih_invocation(*call_template_id, body)?;
+                // `D8f` — the marker's application occurrence, derived once and
+                // used both to enter the marker and to lower the body, so the
+                // occupancy check compares against the occurrence the lowering
+                // actually visits.
                 let body = self.child_occurrence(static_origin, 0, body)?;
+                self.enter_checked_computational_ih_invocation(
+                    *call_template_id,
+                    body.expr,
+                    body.static_origin,
+                )?;
                 let value = self.lower_computational_producer_expr(
                     builder,
                     body,
@@ -3664,14 +3672,22 @@ impl<'a> Lowering<'a> {
                         body,
                         ..
                     } => {
-                        self.enter_checked_computational_ih_invocation(call_template_id, &body)?;
+                        // `D8f` — the machine's own child derivation, taken
+                        // BEFORE the marker is entered so the same occurrence is
+                        // recorded and evaluated.
+                        let body = self.owned_child_occurrence(static_origin, 0, *body)?;
+                        self.enter_checked_computational_ih_invocation(
+                            call_template_id,
+                            &body.expr,
+                            body.static_origin,
+                        )?;
                         control.continuation =
                             SourceContinuation::CheckedComputationalIHInvocationReturn {
                                 call_template_id,
                                 next: Box::new(control.continuation),
                             };
                         SourceMachineState::Eval {
-                            expr: self.owned_child_occurrence(static_origin, 0, *body)?,
+                            expr: body,
                             env,
                             control,
                         }
@@ -4084,7 +4100,7 @@ impl<'a> Lowering<'a> {
                         } => {
                             if self
                                 .pending_computational_ih_call
-                                .is_some_and(|pending| pending != call_template_id)
+                                .is_some_and(|pending| pending.call_template_id != call_template_id)
                             {
                                 return Err(unsupported(
                                     "OrientedSubcontinuationPlanV1",
@@ -10341,8 +10357,13 @@ impl<'a> Lowering<'a> {
                 body,
                 ..
             } => {
-                self.enter_checked_computational_ih_invocation(*call_template_id, body)?;
+                // `D8f` — same derivation, same reason.
                 let body = self.child_occurrence(static_origin, 0, body)?;
+                self.enter_checked_computational_ih_invocation(
+                    *call_template_id,
+                    body.expr,
+                    body.static_origin,
+                )?;
                 let value = self.lower_expr(builder, body, env)?;
                 self.finish_checked_computational_ih_marker(value)
             }
@@ -11020,9 +11041,14 @@ impl<'a> Lowering<'a> {
                         // emitted.** Every identity is cross-checked against the
                         // checked plan first; a refusal leaves the marker
                         // pending so closeout still fails closed.
+                        // `D8f` — the occurrence of THIS call, so a marker is
+                        // consumed only by the application the plan issued it
+                        // for. An ordinary selected-argument call reaching this
+                        // seat with a marker pending leaves it pending.
                         self.consume_checked_ih_marker_at_static_worker_call(
                             u64::from(*index),
                             args.len(),
+                            static_origin,
                         )?;
                         return self.call_static_worker(
                             builder,

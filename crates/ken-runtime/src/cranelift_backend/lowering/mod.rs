@@ -2390,7 +2390,7 @@ struct Lowering<'a> {
     active_subcontinuation_frame: Option<u64>,
     consumed_recursive_call_templates: BTreeSet<u64>,
     pending_recursive_call: Option<CheckedRecursiveInvocationInstance>,
-    pending_computational_ih_call: Option<u64>,
+    pending_computational_ih_call: Option<PendingCheckedIhCall>,
     active_recursive_invocations: Vec<CheckedRecursiveInvocationInstance>,
     next_recursive_invocation_instance: u64,
     dynamic_splice_edges: BTreeMap<DynamicSpliceEdgeId, DynamicSpliceEdge>,
@@ -3037,6 +3037,32 @@ impl StaticWorkerBinding {
             )),
         }
     }
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8f` — a pending checked-IH marker, and the
+/// exact application occurrence it denotes.**
+///
+/// ⛔⛔ **The occurrence is the whole point of this type existing.** The marker
+/// used to be a bare template id, so "a marker is pending" was the only fact a
+/// consumption site had — and the site is the static-worker call arm, which
+/// every static-worker call reaches. A pending marker therefore meant *the next
+/// static-worker call consumes it*, and inside one checked wrapper the next
+/// call need not be the checked one: the wrapped application's own ARGUMENTS
+/// are evaluated first, and an argument can be an ordinary call on the selected
+/// recursive argument.
+///
+/// ⭐ `application_origin` is the occurrence of the expression the marker
+/// wraps, taken from the same `child_origin(marker, 0)` the lowering already
+/// derives to lower it. That is the existing checked occurrence authority
+/// projected faithfully — the marker denotes the complete application
+/// occurrence, which this file already states — and it is not a route, an
+/// arity, a binder index, a call ordinal, or any inferred shape.
+#[derive(Clone, Copy)]
+struct PendingCheckedIhCall {
+    call_template_id: u64,
+    /// The occurrence of the application this marker denotes. Only a call being
+    /// lowered AT this occurrence may consume the marker.
+    application_origin: StaticOriginId,
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8j` — what the shared static-worker emitter
@@ -12910,10 +12936,20 @@ impl<'a> Lowering<'a> {
         &mut self,
         call_template_id: u64,
         body: &RuntimeExpr,
+        // `D8f` — the occurrence of the application this marker denotes,
+        // supplied by the caller from the same `child_origin(marker, 0)` it
+        // already derives to lower the body. ⛔ Not recomputed here: a second
+        // derivation could disagree with the one the lowering actually uses,
+        // and then the marker would be pending against an occurrence nobody
+        // visits.
+        application_origin: StaticOriginId,
     ) -> Result<(), CraneliftBackendError> {
         if self
             .pending_computational_ih_call
-            .replace(call_template_id)
+            .replace(PendingCheckedIhCall {
+                call_template_id,
+                application_origin,
+            })
             .is_some()
         {
             return Err(unsupported(
@@ -12997,6 +13033,8 @@ impl<'a> Lowering<'a> {
         &mut self,
         binder_index: u64,
         supplied_arguments: usize,
+        // `D8f` — the occurrence of the call being lowered.
+        static_origin: StaticOriginId,
     ) -> Result<bool, CraneliftBackendError> {
         #[cfg(test)]
         if D5A_MARKER_MUTATION.with(std::cell::Cell::get) == D5aMarkerMutation::SuppressConsumption
@@ -13006,9 +13044,57 @@ impl<'a> Lowering<'a> {
             // must notice a real application that no consumption accounts for.
             return Ok(false);
         }
-        let Some(call_template_id) = self.pending_computational_ih_call else {
+        let Some(pending) = self.pending_computational_ih_call else {
             return Ok(false);
         };
+        // ⭐⭐ `D8f` — OCCUPANCY. A pending marker does not mean "the next
+        // static-worker call consumes it".
+        //
+        // Inside one checked wrapper the arguments of the wrapped application
+        // are evaluated before the application itself, and an argument can be
+        // an ordinary call on the selected recursive argument. That call
+        // reaches this seat with a marker pending and must leave it pending:
+        // it is not the occurrence the plan issued the marker for.
+        //
+        // ⛔ `Ok(false)`, not a refusal, and the difference is the checkpoint.
+        // An ordinary call is *untouched* by this seam -- exactly as it is when
+        // no marker is pending at all -- so the marker survives for the
+        // occurrence that owns it. Refusing here would make a lawful program
+        // fail; consuming here would attribute the checked application to a
+        // call the planner never issued a template for.
+        //
+        // ⛔ The comparison is on the OCCURRENCE and on nothing else. Route,
+        // arity, binder index, first-call order and callee shape are all
+        // properties an ordinary selected-argument call can share with the
+        // checked one -- they are the same worker at the same arity in the same
+        // frame -- so every one of them is blind here by construction. The
+        // arity and binder-ordinal agreements below stay, but as checks on the
+        // call that has already been identified, never as the identification.
+        // ⚠⚠ **UNWITNESSED, and measured to be so.** Mutating this comparison
+        // to never admit reds four `D5a` rows, so the gate is on the live path
+        // and its answer decides consumption. Mutating it to ALWAYS admit --
+        // the pre-`D8f` behaviour -- leaves the whole suite green. ⇒ No landed
+        // fixture poses the occupancy question, and this mechanism is
+        // correct-and-unwitnessed rather than proved.
+        //
+        // Two witness attempts were measured and both refuse upstream of this
+        // seat, which is why one is not landed here:
+        //   - an ordinary call on the selected recursive argument inside the
+        //     `px8tr` checked wrapper refuses in the DECLARATION's own lowering
+        //     ("a source-machine call's callee is a specialized-only surface"),
+        //     because that case body is lowered both there and in the
+        //     specialization, and the binder run's static workers exist only in
+        //     the second;
+        //   - the same shape with the induction hypothesis as the inner callee
+        //     refuses in plan validation ("oriented segment mixes checked and
+        //     inferred computational frames").
+        // ⇒ A witness needs a checked wrapper reached ONLY through the
+        // specialization path. That is fixture design of the `D8e` class, not a
+        // tweak.
+        if static_origin != pending.application_origin {
+            return Ok(false);
+        }
+        let call_template_id = pending.call_template_id;
         let plan = self.oriented_subcontinuation_plan.as_ref().ok_or_else(|| {
             unsupported(
                 "OrientedSubcontinuationPlanV1",
@@ -13075,9 +13161,10 @@ impl<'a> Lowering<'a> {
         &mut self,
         value: &mut Lowered,
     ) -> Result<Option<CheckedRecursiveInvocationInstance>, CraneliftBackendError> {
-        let Some(call_template_id) = self.pending_computational_ih_call.take() else {
+        let Some(pending) = self.pending_computational_ih_call.take() else {
             return Ok(None);
         };
+        let call_template_id = pending.call_template_id;
         let Lowered::ComputationalRecursorClosure { invocation, .. } = value else {
             return Err(unsupported(
                 "OrientedSubcontinuationPlanV1",
