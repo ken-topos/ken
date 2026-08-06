@@ -62,6 +62,24 @@
 > NOT frame it** until this resolves — it is filed against a measurement now in
 > question.
 >
+> ⭐ **ARCHITECT CONFIRMED IT (`evt_1vyw87kv98k2d`), and the answer is now
+> INSTRUMENTED — you do not need to chase it.** Verbatim: *"a panic before the
+> seat and a lawful route that never enters the seat both erase the old
+> message"*, and **`AC-1`'s attribution to the successor is PROVISIONAL** until
+> the discriminator returns; holding the node draft and unframed is correct.
+> The `c2ae3eed` refusal *was* real but occurred **after** the proven
+> HostResult-as-Constructor misdecode, so it establishes the capability defect
+> **on that emitted path**, not on the class-correct path.
+>
+> **The next valid-IR attempt carries a probe inside `claim_host_effect_seat`,
+> BEFORE `Need ⊆ Avail`**, recording the absolute keyed tuple `(source match
+> origin, physical class/case leaf, effect origin, FsReadFile, Argument(0),
+> actual operand phase, Need, Avail, satisfied/refused)`. **The physical leaf
+> key is the load-bearing part** — mutually exclusive class branches mean the
+> seat must be shown to belong to the HostResult-selected case, a Constructor
+> case, or neither. ⛔ **A count or an absent message is not evidence.**
+> ⇒ **When that report lands, it decides the successor's fate. Read it first.**
+>
 > **The discriminator is reachability, not the message:** is
 > `claim_host_effect_seat` entered for that seat, and with what `Avail`?
 > (1) reached-and-satisfied ⇒ my recut is **wrong**, close the successor;
