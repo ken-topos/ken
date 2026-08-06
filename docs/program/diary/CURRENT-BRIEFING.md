@@ -33,16 +33,17 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~02:1xZ · `D8o` — a second defect, in ambient authority
+## LIVE — 2026-08-06 ~02:2xZ · `D8n` discharged; `D8o` in flight
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Release `D8o` to Runtime once `D8n`'s review clears** — bind ambient body
-authority structurally per emitted `Function`. Architect `evt_d2yrj4fqdfjt`.
-Thread **`thr_6m43v75yndhtj`**. `D8n` landed `245615b8` and is in review.
+**Wait for `D8o`** — released `evt_7tgegxt84ep2e`, scope update relayed
+`evt_7nb9s6f54g63b`, implementer working. Thread **`thr_6m43v75yndhtj`**.
+**`D8n` is DISCHARGED.** Then: bounded `D8i`/`D8j` remeasurement on the `D8o`
+descendant, then the `D8m` witness, then `D8f`.
 
 ⛔ **A SECOND real production defect, found by `D8n`'s evidence probe.**
 `define_continuation_bodies` opens each specialization `FuncId` with
