@@ -7,6 +7,13 @@ use crate::cranelift_backend::lowering::units::{
     continuation_case_binder_run, ContinuationCaseBinderSource,
 };
 use crate::RuntimeSymbolMetadata;
+// `RT-SRCBODY-BIND-ORDER` `D3` — the whole-process run harness lives beside
+// the effect controls that first needed it; the binding-order controls below
+// run the same shape.
+use super::effects::{BorrowedFixtureValue, RootIngressFixture};
+use crate::cranelift_backend::lowering::units::{
+    srcbody_bind_order_take, SrcbodyBindHost, SrcbodyBindOrderObservation,
+};
 
 #[derive(Clone, Copy)]
 enum Px8jInstallMalformation {
@@ -15559,6 +15566,25 @@ fn d3c_shape(operand: &str) -> &str {
 /// or count is pinned. If a later checkpoint corrects the representation so the
 /// two agree, this control is the thing that must be re-cut deliberately, and
 /// its failure would be the correction announcing itself.
+///
+/// ⚠ **That re-cut has happened once, and not in the direction the paragraph
+/// above anticipated.** `RT-SRCBODY-BIND-ORDER` `D1` did not make the two
+/// answers agree; it made them differ by a KNOWN permutation, converting a
+/// source body's ABI parameter run into the de Bruijn order `lower_expr`
+/// resolves against. That reddened the zero-depth agreement half, which had
+/// asserted positional identity between the two indexings. The half was re-cut
+/// to membership-exactly-once, keeping its anti-vacuity job; see the comment at
+/// the assertion for what it no longer distinguishes.
+///
+/// ⛔ **And it widened the defect this control measures, which is the finding
+/// worth carrying forward.** The `RootIsImmediate` arm still copies
+/// `source_abi_position` into `immediate_slot` and the emission seam still
+/// reads `producer_env` there. Before `D1` that read was accidentally CORRECT
+/// at zero binder depth; after `D1` it is wrong there too, for any source body
+/// with two or more parameters. `D1` was ruled to be the repair
+/// (`RT-ENTRY-TRAP-254` `D9`, the common transfer coordinate stands), so this
+/// is a consequence to be discharged by whoever owns the projection — not a
+/// reason to revert the conversion.
 #[test]
 fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder() {
     use crate::cranelift_backend::lowering::D3cPositionSelection;
@@ -15607,13 +15633,37 @@ fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder()
          and the divergence below cannot be attributed to the binder: {observed:#?}"
     );
     for seat in &flush {
+        // `RT-SRCBODY-BIND-ORDER` `D1` re-cut. ⛔ This half previously asserted
+        // POSITIONAL identity -- `emission_environment[source_abi_position] ==
+        // entry_operand` -- and that is exactly the premise `D1` retires: the
+        // emission environment is indexed by de Bruijn position and the entry
+        // ABI run by descriptor position, and for a source body the two are
+        // reverses of each other. The old assertion was true only by the
+        // accident that nothing had yet converted between them, and it went red
+        // on `D1` at this seat (2 operands, root position 0, operand found at
+        // index 1).
+        //
+        // ⛔ What it was FOR is unchanged and is preserved: ruling out an oracle
+        // that never lines up, so the divergence measured below is attributable
+        // to the binder rather than to a misaligned instrument. Membership
+        // exactly once does that job -- a starved or garbage oracle would not
+        // appear in the environment at all -- without re-asserting a positional
+        // coincidence that is no longer production's contract.
+        //
+        // ⚠ This is weaker than the original in one stated respect: it no
+        // longer distinguishes a general PERMUTATION of the entry run from the
+        // identity. Distinguishing those needs the seat's parameter count,
+        // which this deliberately raw observation does not carry.
+        let occurrences = seat
+            .emission_environment
+            .iter()
+            .filter(|operand| *operand == &seat.entry_operand)
+            .count();
         assert_eq!(
-            seat.emission_environment
-                .get(seat.source_abi_position as usize),
-            Some(&seat.entry_operand),
-            "at zero binder depth the emission environment must hold the entry ABI operand at \
-             its own root position; if it does not, the oracle is misaligned generally and the \
-             shifted row proves nothing: {seat:#?}"
+            occurrences, 1,
+            "at zero binder depth the emission environment must hold the entry ABI operand \
+             exactly once; if it does not, the oracle is misaligned generally and the shifted \
+             row proves nothing: {seat:#?}"
         );
     }
 
@@ -24637,4 +24687,502 @@ fn d9b_the_assembled_ordinary_run_matches_the_planner_role_sequence_by_position(
             d9_assemblies()
         );
     }
+}
+
+// ── `RT-SRCBODY-BIND-ORDER` `D3` — the source-body binding-order controls ──
+//
+// `D1` splits one walk into two orders: the ABI descriptor run
+// (`defining_abi_operands`, declaration order, unchanged) and the semantic
+// environment a source body is lowered against (de Bruijn, innermost first).
+// These controls measure that split from outside, on running programs, at
+// exact values.
+
+const D3_BIND_CALLEE: &str = "decl:fixture::srcbody::two_parameter";
+const D3_BIND_MIRROR: &str = "decl:fixture::srcbody::two_parameter_mirror";
+/// The two arguments, distinct and both single-digit so the positional
+/// encoding below stays a small positive number in every reading. A negative
+/// result does not round-trip as a process exit code, so the encoding is
+/// deliberately arranged never to produce one.
+const D3_BIND_FIRST: i64 = 7;
+const D3_BIND_SECOND: i64 = 3;
+
+/// A transparent declaration whose two-parameter source body reads BOTH of its
+/// positions in one expression: `high * 10 + low`.
+///
+/// The result is a two-digit number whose tens digit is the parameter at
+/// `high` and whose units digit is the one at `low`, so a single exit code
+/// names both bindings at once and a swap of the two lands on a different
+/// number rather than on a different magnitude of the same one.
+///
+/// Under the de Bruijn reading `lower_expr` implements, `Var(0)` is the
+/// innermost binder — the LAST declared parameter — so
+/// `d3_two_parameter_declaration(sym, 1, 0)` encodes `first` in the tens place.
+/// Under the descriptor-order reading `D1` retires, the same expression encodes
+/// `second` there.
+fn d3_two_parameter_declaration(symbol: &str, high: u32, low: u32) -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: symbol.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["first".to_string(), "second".to_string()],
+                body: Box::new(RuntimeExpr::PrimitiveCall {
+                    primitive: RuntimePrimitive {
+                        symbol: "add_int".to_string(),
+                        partiality: RuntimePartiality::Total,
+                    },
+                    args: vec![
+                        RuntimeExpr::PrimitiveCall {
+                            primitive: RuntimePrimitive {
+                                symbol: "mul_int".to_string(),
+                                partiality: RuntimePartiality::Total,
+                            },
+                            args: vec![
+                                RuntimeExpr::Var(high),
+                                RuntimeExpr::Value(RuntimeValue::Int((10).into())),
+                            ],
+                        },
+                        RuntimeExpr::Var(low),
+                    ],
+                }),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(crate::RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+/// Runs `ExitFailure(<symbol>(7, 3))` as a whole process and returns its exit
+/// code.
+///
+/// Both arguments are ordinary `Int` values passed through the declared ABI, so
+/// the callee reads them out of its own activation frame — which is the run
+/// whose order `D1` converts.
+fn d3_run_two_parameter(declaration: &RuntimeDeclaration) -> i64 {
+    let mut declarations = BTreeMap::new();
+    declarations.insert(declaration.symbol.as_str(), declaration);
+    let program = RuntimeExpr::Construct {
+        constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+        args: vec![RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: declaration.symbol.clone(),
+            }),
+            args: vec![
+                RuntimeExpr::Value(RuntimeValue::Int(D3_BIND_FIRST.into())),
+                RuntimeExpr::Value(RuntimeValue::Int(D3_BIND_SECOND.into())),
+            ],
+        }],
+    };
+    let compiled = compile_expr_into_module(
+        new_jit_module().expect("JIT module"),
+        "d3_two_parameter_binding",
+        Linkage::Local,
+        &program,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .expect("the two-parameter binding fixture lowers");
+    let input = BorrowedFixtureValue {
+        kind: 1,
+        tag: 0,
+        data: std::ptr::null(),
+        len: 0,
+    };
+    let mut host_context = ();
+    let invocation = RootIngressFixture {
+        process_input: &input,
+        host_context: (&mut host_context as *mut ()).cast(),
+        capability: 0,
+    };
+    compiled
+        .run(Some((&invocation as *const RootIngressFixture).cast()))
+        .expect("the two-parameter binding fixture runs")
+        .1
+        .expect("the two-parameter binding fixture returns an exit code")
+}
+
+/// **`D3` control 1 — a two-parameter source declaration reads BOTH of its
+/// positions, and each resolves to the parameter the source named.**
+///
+/// MEASURED: two whole-process fixtures compile and RUN. They differ in nothing
+/// but which `Var` index sits in the tens place of `high * 10 + low`. Called
+/// with `(first, second) = (7, 3)`, the body `Var(1) * 10 + Var(0)` exits `73`
+/// and the mirror body `Var(0) * 10 + Var(1)` exits `37`.
+///
+/// CLAIMED: the semantic environment a `CallableDeclaration` body is lowered
+/// against is `reverse(Parameter run)` — `Var(0)` is the last declared
+/// parameter and `Var(1)` the first.
+///
+/// The pair is the control and neither half is sufficient. `73` alone is
+/// equally green under an implementation that reversed nothing and was handed
+/// its arguments in the other order; the mirror pins the digit order to the
+/// `Var` index rather than to the call site. Both are EXACT values, and each
+/// half's wrong answer is the OTHER half's right answer — a two-digit number,
+/// not a trap, a zero, or a truncation, so neither can pass by failing.
+///
+/// Red before green: at `21fd46dc` each half returns the other's value.
+///
+/// Promise class: **durable invariant** — it asserts the source language's own
+/// binder discipline, which no intended extension of the ABI layout may change.
+/// The literals are the fixture's own arguments, not a pinned ABI fact.
+#[test]
+fn d3_a_two_parameter_source_declaration_binds_its_positions_in_de_bruijn_order() {
+    let direct = d3_two_parameter_declaration(D3_BIND_CALLEE, 1, 0);
+    let mirror = d3_two_parameter_declaration(D3_BIND_MIRROR, 0, 1);
+    assert_eq!(
+        d3_run_two_parameter(&direct),
+        D3_BIND_FIRST * 10 + D3_BIND_SECOND,
+        "`Var(1) * 10 + Var(0)` must put the FIRST declared parameter in the tens place: Var(0) \
+         is the innermost binder, which is the LAST declared parameter"
+    );
+    assert_eq!(
+        d3_run_two_parameter(&mirror),
+        D3_BIND_SECOND * 10 + D3_BIND_FIRST,
+        "the mirror body must reverse the digits; if both halves agree, the fixture is not \
+         reading its Var indices and control 1 measures nothing"
+    );
+}
+
+const D3_ROLE_CALLEE: &str = "decl:fixture::srcbody::role_discriminator";
+const D3_ROLE_MIRROR: &str = "decl:fixture::srcbody::role_discriminator_mirror";
+/// The two role-shaped constructors. They stand in for the process root's own
+/// `ProcessInput` / `ProgramCaps` pair: same arity, same carrier, distinct
+/// identity — so the only thing that can select between them is WHICH operand
+/// arrived, never how it is shaped.
+const D3_ROLE_INPUT: &str = "ctor:fixture::srcbody::ProcessInputLike";
+const D3_ROLE_CAPS: &str = "ctor:fixture::srcbody::ProgramCapsLike";
+const D3_ROLE_INPUT_PAYLOAD: i64 = 11;
+const D3_ROLE_CAPS_PAYLOAD: i64 = 37;
+
+/// A two-parameter declaration that matches ONE of its parameters against ONE
+/// constructor and returns the bound field, trapping on anything else.
+///
+/// `scrutinee` selects which `Var` index is matched and `constructor` which
+/// identity the single case names. The default is closed, so a body handed the
+/// other parameter cannot silently fall through to a value.
+fn d3_role_declaration(symbol: &str, scrutinee: u32, constructor: &str) -> RuntimeDeclaration {
+    RuntimeDeclaration {
+        symbol: symbol.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::LexicalClosure {
+                captures: Vec::new(),
+                params: vec!["process_input".to_string(), "program_caps".to_string()],
+                body: Box::new(RuntimeExpr::Match {
+                    scrutinee: Box::new(RuntimeExpr::Var(scrutinee)),
+                    cases: vec![RuntimeMatchCase {
+                        constructor: constructor.to_string(),
+                        binders: 1,
+                        // The BOUND field, not a literal: a constant body would
+                        // be green even if the wrong operand had been selected
+                        // by a case list that matched anything.
+                        body: RuntimeExpr::Var(0),
+                    }],
+                    default: RuntimeTrap {
+                        code: RuntimeTrapCode::PatternMatchFailure,
+                        message: "d3 role discriminator default".to_string(),
+                    },
+                }),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(crate::RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    }
+}
+
+/// Runs `ExitFailure(<symbol>(ProcessInputLike(11), ProgramCapsLike(37)))` and
+/// returns its exit code.
+fn d3_run_role_discriminator(declaration: &RuntimeDeclaration) -> i64 {
+    let mut declarations = BTreeMap::new();
+    declarations.insert(declaration.symbol.as_str(), declaration);
+    let role = |constructor: &str, payload: i64| RuntimeExpr::Construct {
+        constructor: constructor.to_string(),
+        args: vec![RuntimeExpr::Value(RuntimeValue::Int(payload.into()))],
+    };
+    let program = RuntimeExpr::Construct {
+        constructor: crate::EXIT_FAILURE_CONSTRUCTOR.to_string(),
+        args: vec![RuntimeExpr::Call {
+            callee: Box::new(RuntimeExpr::DeclarationRef {
+                symbol: declaration.symbol.clone(),
+            }),
+            args: vec![
+                role(D3_ROLE_INPUT, D3_ROLE_INPUT_PAYLOAD),
+                role(D3_ROLE_CAPS, D3_ROLE_CAPS_PAYLOAD),
+            ],
+        }],
+    };
+    let compiled = compile_expr_into_module(
+        new_jit_module().expect("JIT module"),
+        "d3_role_discriminator",
+        Linkage::Local,
+        &program,
+        &NativeSeedEnvironment::empty(),
+        declarations,
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .expect("the role discriminator fixture lowers");
+    let input = BorrowedFixtureValue {
+        kind: 1,
+        tag: 0,
+        data: std::ptr::null(),
+        len: 0,
+    };
+    let mut host_context = ();
+    let invocation = RootIngressFixture {
+        process_input: &input,
+        host_context: (&mut host_context as *mut ()).cast(),
+        capability: 0,
+    };
+    compiled
+        .run(Some((&invocation as *const RootIngressFixture).cast()))
+        .expect("the role discriminator fixture runs")
+        .1
+        .expect("the role discriminator fixture returns an exit code")
+}
+
+/// **`D3` control 2 — the `ProcessInput`/`ProgramCaps` discriminator: a
+/// two-parameter body selects on CONSTRUCTOR IDENTITY, and each parameter
+/// carries the operand its position named.**
+///
+/// This is `RT-ENTRY-TRAP-254`'s shape reduced to one crate. The defect there
+/// was not a missing value: a well-formed operand of the right carrier arrived
+/// at a `Match` that then found no case naming its constructor and took its
+/// closed default. The two arguments here differ in NOTHING but identity — same
+/// arity, same carrier, same payload shape — so the only thing that can decide
+/// which case fires is which parameter the body bound.
+///
+/// MEASURED: two whole-process fixtures compile and RUN. `match Var(0) {
+/// ProgramCapsLike(x) -> x }` exits `37`; `match Var(1) { ProcessInputLike(x)
+/// -> x }` exits `11`.
+///
+/// CLAIMED: at a two-parameter source body, `Var(0)` is the SECOND declared
+/// parameter and `Var(1)` the first — measured through constructor selection
+/// rather than through arithmetic, so it holds for the carried-operand path
+/// control 1 does not reach.
+///
+/// The pair is the control. Each half's default is closed, so under the
+/// retired order neither half returns the other's number — both fall to the
+/// match default, which is how the real defect presented. Asserting one half
+/// alone would be green under a body that ignored its case list and always
+/// took arm 0.
+///
+/// Red before green: at `21fd46dc` both halves take their default.
+///
+/// Promise class: **durable invariant** — a relation between which parameter a
+/// source position names and which constructor arrives there. The payload
+/// literals are the fixture's own arguments.
+#[test]
+fn d3_a_two_parameter_body_selects_the_constructor_its_position_named() {
+    let caps_at_zero = d3_role_declaration(D3_ROLE_CALLEE, 0, D3_ROLE_CAPS);
+    let input_at_one = d3_role_declaration(D3_ROLE_MIRROR, 1, D3_ROLE_INPUT);
+    assert_eq!(
+        d3_run_role_discriminator(&caps_at_zero),
+        D3_ROLE_CAPS_PAYLOAD,
+        "Var(0) is the innermost binder, so it must carry the SECOND declared parameter — the \
+         caps-shaped operand — and its case must select"
+    );
+    assert_eq!(
+        d3_run_role_discriminator(&input_at_one),
+        D3_ROLE_INPUT_PAYLOAD,
+        "Var(1) must carry the FIRST declared parameter — the input-shaped operand; if this \
+         half also traps, both parameters resolve to one operand and the pair measures nothing"
+    );
+}
+
+
+/// Compiles control 1's population and returns every semantic environment
+/// production actually built, drained from the `D3` instrument.
+fn d3_observed_bind_orders() -> Vec<SrcbodyBindOrderObservation> {
+    let _ = srcbody_bind_order_take();
+    let declaration = d3_two_parameter_declaration(D3_BIND_CALLEE, 1, 0);
+    let _ = d3_run_two_parameter(&declaration);
+    srcbody_bind_order_take()
+}
+
+/// **`D3` control 3 — the ROOT adapter was not reversed.**
+///
+/// `D1`'s conversion is owed to source parameter runs. The process root's
+/// parameters are not one: they are the closed `ProcessInput`/`Capability`
+/// ingress roles, resolved by `AbiProcessParameter` ordinal, so reversing them
+/// would rename the two roles rather than reindex a binder.
+///
+/// MEASURED, from the environments PRODUCTION built while compiling control
+/// 1's running population: every `SchedulingEntry` environment holds its
+/// parameter ordinals in ascending descriptor order, and in the same compile at
+/// least one source-body environment holds its ordinals in strictly descending
+/// order.
+///
+/// CLAIMED: `D1` discriminates by definition arm at the emission seam itself,
+/// so the root keeps descriptor order while the declaration bodies beside it do
+/// not.
+///
+/// ⛔ **This reads the recorded ORDINAL SEQUENCE, never the predicate.** An
+/// earlier cut of this control asserted `source_body_binding_order` directly
+/// and was measured GREEN against a build whose classification was correct and
+/// whose environments ignored it — a mutation that reddened controls 1 and 2
+/// left it passing. A control on the classifier answers whether the classifier
+/// agrees with itself; only the sequence answers what the body was handed.
+///
+/// ⛔ The second assertion is the discriminating half. "The root is ascending"
+/// is trivially green under a build that reverses nothing anywhere — which is
+/// precisely the retired behaviour. Requiring both answers OUT OF ONE COMPILE
+/// is what makes the negative a decision rather than a constant.
+///
+/// Red before green: at `21fd46dc` no environment is descending, so the second
+/// assertion fails.
+///
+/// Promise class: **durable invariant** — a relation between two definition
+/// arms observed in one compile. No count, ordinal, or unit population is
+/// pinned.
+#[test]
+fn d3_the_process_root_keeps_descriptor_order_while_source_bodies_do_not() {
+    let observed = d3_observed_bind_orders();
+    assert!(
+        !observed.is_empty(),
+        "the instrument recorded no environment at all, so every comparison below would pass \
+         vacuously"
+    );
+
+    let ascending = |ordinals: &[u32]| ordinals.windows(2).all(|pair| pair[0] < pair[1]);
+    let descending = |ordinals: &[u32]| ordinals.windows(2).all(|pair| pair[0] > pair[1]);
+
+    let roots = observed
+        .iter()
+        .filter(|row| matches!(row.definition, AbiUnitDefinition::SchedulingEntry { .. }))
+        .collect::<Vec<_>>();
+    assert!(
+        !roots.is_empty(),
+        "this compile built no scheduling-entry environment, so the negative below is vacuous: \
+         {observed:#?}"
+    );
+    for row in &roots {
+        assert!(
+            ascending(&row.parameter_ordinals),
+            "a scheduling entry's ingress roles must reach its body in descriptor order; this \
+             root was handed {:?}: {row:#?}",
+            row.parameter_ordinals
+        );
+    }
+
+    let reversed = observed
+        .iter()
+        .filter(|row| row.parameter_ordinals.len() > 1 && descending(&row.parameter_ordinals))
+        .collect::<Vec<_>>();
+    assert!(
+        !reversed.is_empty(),
+        "no environment in this compile is in reversed order, so 'the root is ascending' is \
+         green under a build that converts nothing and decides nothing: {observed:#?}"
+    );
+    for row in &reversed {
+        assert!(
+            matches!(
+                row.definition,
+                AbiUnitDefinition::CallableDeclaration { .. }
+                    | AbiUnitDefinition::ClosureBody { .. }
+            ),
+            "only a source body may be handed a reversed parameter run, but this one was: \
+             {row:#?}"
+        );
+    }
+}
+
+/// **`D3` control 4 — the generated-context seat obeys the SAME binding law as
+/// the unit seat.**
+///
+/// `D2`'s claim is an equivalence between two hosts for one body. ⛔ It cannot
+/// be measured as a join across the two hosts, and the reason is structural: a
+/// raw worker every selecting specialization has retargeted is
+/// **template-only** and is absent from the emitted-`Function` population, so
+/// the body that reaches a generated context has no ordinary unit to compare
+/// against — in this witness, in either setting of the deforested answer route.
+/// A control that joined on body origin would find nothing and say so, which is
+/// how this one was first written and why it is not written that way now.
+///
+/// What is comparable is the LAW. Both seats build a semantic environment from
+/// the same descriptor run under the same conversion, so at either seat the
+/// recorded parameter ordinals must be the descriptor's own ascending run,
+/// reversed exactly when that seat converted. Checking one law at both hosts
+/// asks whether the generated context follows the unit seat's rule, without
+/// needing the two to meet on one body.
+///
+/// MEASURED, on the `D5a` generated-context witness: every recorded
+/// environment — at both hosts — holds `0..n` ascending when it did not convert
+/// and descending when it did; at least one environment was built at a
+/// generated context; and at least one environment of length two or more is
+/// recorded reversed.
+///
+/// ⛔ **THE GAP, and it is the part of `D3` this node did not deliver.** Every
+/// generated-context environment in this crate's only such populations has
+/// exactly ONE parameter, and a one-element sequence satisfies the law under
+/// either conversion. So over the generated-context rows this control has **no
+/// discriminating power today**: it would stay green against a `D2` seat that
+/// converted when it should not, or not when it should. Its power over those
+/// rows is latent and arrives with the first multi-parameter worker. The
+/// two-or-more reversed environment it also requires belongs to a
+/// `CallableDeclaration` at the UNIT seat, so that clause discriminates `D1`,
+/// not `D2`. The frame asked for a distinguishable two-parameter body carried
+/// through a generated context; the populations that build one (`px8tr`,
+/// `governed_nested_resource_bracket`) declare single-parameter workers, and
+/// giving one a second parameter also requires changing the arity its checked
+/// IH call site passes. That is a fixture change beyond this node — left
+/// undone and reported, not silently narrowed.
+///
+/// Promise class: **durable invariant** — a law relating a recorded
+/// environment to the descriptor run it was built from. No count, ordinal, or
+/// population is pinned.
+#[test]
+fn d3_both_binding_seats_obey_one_conversion_law() {
+    let _ = srcbody_bind_order_take();
+    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "d3_bind_order_law",
+        false,
+    )
+    .expect("the D5a generated-context witness compiles");
+    let observed = srcbody_bind_order_take();
+    assert!(
+        !observed.is_empty(),
+        "the instrument recorded no environment, so every check below is vacuous"
+    );
+
+    for row in &observed {
+        let ascending = (0..row.parameter_ordinals.len() as u32).collect::<Vec<_>>();
+        let expected = if row.converted {
+            ascending.iter().rev().copied().collect::<Vec<_>>()
+        } else {
+            ascending
+        };
+        assert_eq!(
+            row.parameter_ordinals, expected,
+            "this seat recorded converted = {} but handed its body {:?}, which is neither the \
+             descriptor's ascending run nor its reverse: {row:#?}",
+            row.converted, row.parameter_ordinals
+        );
+    }
+
+    assert!(
+        observed
+            .iter()
+            .any(|row| row.host == SrcbodyBindHost::GeneratedContext),
+        "this witness built no generated-context environment, so the law above was checked at \
+         one seat only and says nothing about D2: {observed:#?}"
+    );
+    assert!(
+        observed
+            .iter()
+            .any(|row| row.parameter_ordinals.len() > 1 && row.converted),
+        "no environment of length two or more was converted, so the law above is satisfied by \
+         every row trivially and discriminates nothing: {observed:#?}"
+    );
 }

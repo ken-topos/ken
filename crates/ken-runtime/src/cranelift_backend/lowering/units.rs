@@ -2333,6 +2333,15 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
         enclosing: ContinuationSpecializationId,
         worker_body_origin: StaticOriginId,
         raw_owner: PredeclaredFunctionId,
+        /// `RT-SRCBODY-BIND-ORDER` `D2` — the RAW owner's definition arm, read
+        /// from the raw owner's own descriptor rather than judged here.
+        ///
+        /// This context lowers someone else's body, so the binding order that
+        /// body needs is decided by the unit that owns it. Taking the answer
+        /// from that descriptor is what makes the claimed equivalence hold by
+        /// construction; deciding it independently here would make it two
+        /// judgments that happen to agree.
+        raw_owner_definition: AbiUnitDefinition,
         slots: Vec<AbiSlot>,
         offsets: Vec<u32>,
         header_parameters: u32,
@@ -2340,17 +2349,37 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
     }
     // Own every projected fact before the loop: the projection borrows the plan
     // and definition below needs the compiler mutably.
+    let unit_definitions = compiler
+        .static_transition_plan
+        .emittable_units()?
+        .into_iter()
+        .map(|unit| (unit.function(), unit.definition()))
+        .collect::<Vec<_>>();
     let contexts = compiler
         .static_transition_plan
         .continuation_contexts()?
         .into_iter()
         .map(|context| {
             let (offsets, _frame_bytes) = context.slot_offsets()?;
+            let raw_owner = context.raw_owner();
+            // `D2` — a context whose raw owner has no descriptor is a context
+            // whose body has no declared ABI, which is not a binding-order
+            // question to answer conservatively.
+            let raw_owner_definition = unit_definitions
+                .iter()
+                .find(|(function, _)| *function == raw_owner)
+                .map(|(_, definition)| *definition)
+                .ok_or_else(|| {
+                    backend_module(
+                        "a generated context's raw owner has no ABI descriptor".to_string(),
+                    )
+                })?;
             Ok(OwnedContext {
                 id: context.id(),
                 enclosing: context.enclosing_specialization(),
                 worker_body_origin: context.worker_body_origin(),
-                raw_owner: context.raw_owner(),
+                raw_owner,
+                raw_owner_definition,
                 slots: context.slots().to_vec(),
                 offsets,
                 header_parameters: context.header().parameters,
@@ -2520,12 +2549,26 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
                 crate::cranelift_backend::lowering::D8oBodyKey::GeneratedContext(context.id),
             );
 
-            // The environment: Parameter slots then Capture slots, in slot
-            // order. ⭐ This is the SAME walk `define_unit_body` uses, which is
-            // why the raw body's binder positions resolve identically here --
-            // the parameter prefix is byte-for-byte the run its own unit binds,
-            // and the continuation inputs sit strictly after it.
-            let mut env = Vec::new();
+            // The environment: the Parameter run then the Capture run. This is
+            // the SAME conversion `define_unit_body` applies, which is why the
+            // raw body's binder positions resolve identically here -- the
+            // parameter prefix is byte-for-byte the run its own unit binds, and
+            // the continuation inputs sit strictly after it.
+            //
+            // `RT-SRCBODY-BIND-ORDER` `D2`: "the same walk" is no longer enough
+            // to say that, because the walk and the environment are now two
+            // orders. The equivalence is preserved by taking the conversion
+            // from the RAW OWNER's definition arm -- so if that body's own unit
+            // reverses its parameter run, this context reverses the identical
+            // prefix, and if it does not, neither does this. The capture run is
+            // the enclosing specialization's ordered input projection and is
+            // positional by construction, so it is never reversed.
+            let mut context_parameters = Vec::new();
+            let mut context_captures = Vec::new();
+            #[cfg(test)]
+            let mut context_parameter_ordinals = Vec::new();
+            #[cfg(test)]
+            let mut context_capture_ordinals = Vec::new();
             for (slot, offset) in slots.iter().zip(offsets) {
                 if !matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
                     continue;
@@ -2538,10 +2581,39 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
                 let word = builder
                     .ins()
                     .load(types::I64, MemFlags::trusted(), frame, offset);
-                env.push(LoweringEnvironmentBinding::Value(LoweringOperand::Carried(
+                let binding = LoweringEnvironmentBinding::Value(LoweringOperand::Carried(
                     CarriedBoundaryWord { word },
-                )));
+                ));
+                match slot.kind {
+                    AbiSlotKind::Parameter => {
+                        #[cfg(test)]
+                        context_parameter_ordinals.push(slot.ordinal);
+                        context_parameters.push(binding)
+                    }
+                    _ => {
+                        #[cfg(test)]
+                        context_capture_ordinals.push(slot.ordinal);
+                        context_captures.push(binding)
+                    }
+                }
             }
+            let context_converts = source_body_binding_order(context.raw_owner_definition);
+            if context_converts {
+                context_parameters.reverse();
+                #[cfg(test)]
+                context_parameter_ordinals.reverse();
+            }
+            #[cfg(test)]
+            srcbody_bind_order_record(SrcbodyBindOrderObservation {
+                host: SrcbodyBindHost::GeneratedContext,
+                definition: context.raw_owner_definition,
+                converted: context_converts,
+                body_origin: context.worker_body_origin,
+                parameter_ordinals: context_parameter_ordinals,
+                capture_ordinals: context_capture_ordinals,
+            });
+            let mut env = context_parameters;
+            env.extend(context_captures);
 
             let body = compiler.retained_body_occurrence(context.worker_body_origin)?;
             let lowered = compiler.lower_expr(&mut builder, body, &env)?;
@@ -3426,6 +3498,7 @@ pub(super) fn define_unit_bodies<M: Module>(
             Ok(OwnedUnitEmission {
                 function: unit.function(),
                 origin: unit.origin(),
+                definition: unit.definition(),
                 header: unit.header(),
                 slots: unit.slots().to_vec(),
                 offsets,
@@ -3479,10 +3552,102 @@ pub(super) fn define_unit_bodies<M: Module>(
 struct OwnedUnitEmission {
     function: PredeclaredFunctionId,
     origin: StaticOriginId,
+    /// `RT-SRCBODY-BIND-ORDER` `D1` — carried because the ABI descriptor run
+    /// and the source body's semantic environment are now two different orders,
+    /// and only the definition arm says which units get the conversion.
+    definition: AbiUnitDefinition,
     header: AbiFrameHeader,
     slots: Vec<AbiSlot>,
     offsets: Vec<u32>,
     frame_bytes: u32,
+}
+
+/// **`RT-SRCBODY-BIND-ORDER` `D1` — does this unit's body bind a SOURCE
+/// parameter run?**
+///
+/// The ABI lays parameters out in declaration order; a source body indexes its
+/// binders as de Bruijn levels from the innermost, which is the reverse. The
+/// conversion is therefore owed exactly where the run being bound is a source
+/// parameter run:
+///
+/// - `CallableDeclaration` and `ClosureBody` — yes. Both bind a written
+///   parameter list, and `RT-DECL-CLOSURE-PORT` `D2` already treats the two
+///   identically wherever the question is about their parameter/capture runs.
+/// - `SchedulingEntry` — no. Its parameters are the closed process ingress
+///   roles, resolved by `AbiProcessParameter` ordinal rather than by a binder
+///   index, and reversing them would rename the two roles.
+/// - `ContinuationSpecialization` — no. Its run is the planner's own ordered
+///   input projection, positional by construction.
+///
+/// This is a question about the run's PROVENANCE, not its length: a one-
+/// parameter source body is unaffected by the reversal but is still a source
+/// body, and a two-role scheduling entry is affected but is still not one.
+/// **`RT-SRCBODY-BIND-ORDER` `D3` — which host bound a semantic environment.**
+///
+/// The two seats that build one: a unit's own body, and a generated context
+/// that lowers someone else's body. The equivalence `D2` owes is between them.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum SrcbodyBindHost {
+    OrdinaryUnit,
+    GeneratedContext,
+}
+
+/// **`RT-SRCBODY-BIND-ORDER` `D3` — one semantic environment, as PRODUCTION
+/// built it.**
+///
+/// The row is deliberately raw: it records the ABI ordinals in the order they
+/// were pushed into the environment, so a control re-derives the conversion
+/// from the sequence rather than being told about it. `converted` is recorded
+/// beside them precisely so a control can catch a build whose classification
+/// is right and whose environment does not follow it — the failure a control
+/// that reads the predicate alone is blind to.
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub(in crate::cranelift_backend) struct SrcbodyBindOrderObservation {
+    pub(in crate::cranelift_backend) host: SrcbodyBindHost,
+    pub(in crate::cranelift_backend) definition: AbiUnitDefinition,
+    /// What `source_body_binding_order` answered for `definition`.
+    pub(in crate::cranelift_backend) converted: bool,
+    /// The body this environment was built for. The join key for `D2`'s
+    /// cross-host equivalence: one body, two hosts.
+    pub(in crate::cranelift_backend) body_origin: StaticOriginId,
+    /// Parameter ABI ordinals, in SEMANTIC ENVIRONMENT order.
+    pub(in crate::cranelift_backend) parameter_ordinals: Vec<u32>,
+    /// Capture ABI ordinals, in SEMANTIC ENVIRONMENT order.
+    pub(in crate::cranelift_backend) capture_ordinals: Vec<u32>,
+}
+
+#[cfg(test)]
+thread_local! {
+    static SRCBODY_BIND_ORDER: std::cell::RefCell<Vec<SrcbodyBindOrderObservation>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn srcbody_bind_order_record(
+    observation: SrcbodyBindOrderObservation,
+) {
+    SRCBODY_BIND_ORDER.with(|cell| cell.borrow_mut().push(observation));
+}
+
+/// Drains every environment built on this thread since the last take.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn srcbody_bind_order_take()
+-> Vec<SrcbodyBindOrderObservation> {
+    SRCBODY_BIND_ORDER.with(|cell| std::mem::take(&mut *cell.borrow_mut()))
+}
+
+pub(in crate::cranelift_backend) fn source_body_binding_order(
+    definition: AbiUnitDefinition,
+) -> bool {
+    match definition {
+        AbiUnitDefinition::CallableDeclaration { .. } | AbiUnitDefinition::ClosureBody { .. } => {
+            true
+        }
+        AbiUnitDefinition::SchedulingEntry { .. }
+        | AbiUnitDefinition::ContinuationSpecialization { .. } => false,
+    }
 }
 
 fn define_unit_body<M: Module>(
@@ -3698,7 +3863,30 @@ fn define_unit_body<M: Module>(
                 "fixed host-dispatch context is not semantic process-pair storage".to_string(),
             ));
         }
-        let mut env = Vec::new();
+        // `RT-SRCBODY-BIND-ORDER` `D1` — ONE walk, TWO orders.
+        //
+        // The walk below is still the single load of each Parameter/Capture
+        // slot, and `defining_abi_operands` still receives them in descriptor
+        // order, unchanged. What is no longer the same order is the **semantic
+        // environment** the body is lowered against: `lower_expr` resolves
+        // `Var(i)` as a de Bruijn index (`RuntimeExpr::Let` prepends at 0), so
+        // the innermost binder is position 0 — while the ABI lays parameters
+        // out in declaration order, ordinal 0 first. For a source body those
+        // two are reverses of each other, and binding the descriptor run
+        // directly delivered parameter 0 where the body asked for the last
+        // parameter.
+        //
+        // The conversion applies only where the body IS a source body with
+        // declared parameters — `CallableDeclaration` and `ClosureBody`. A
+        // `SchedulingEntry`'s root ingress pair is a closed ABI role, not a
+        // source binder run, and a `ContinuationSpecialization`'s projection is
+        // the planner's own; both keep the descriptor order they had.
+        let mut parameters = Vec::new();
+        let mut captures = Vec::new();
+        #[cfg(test)]
+        let mut parameter_ordinals = Vec::new();
+        #[cfg(test)]
+        let mut capture_ordinals = Vec::new();
         for (slot, offset) in unit.slots.iter().zip(&unit.offsets) {
             if matches!(slot.kind, AbiSlotKind::Parameter | AbiSlotKind::Capture) {
                 #[cfg(test)]
@@ -3780,16 +3968,46 @@ fn define_unit_body<M: Module>(
                     LoweringOperand::Carried(carried)
                 };
                 // `D5a` checkpoint 4 step 1b: the SAME operand, recorded by ABI
-                // position. ⭐ Taken from this one walk rather than rebuilt, so
+                // position. Taken from this one walk rather than rebuilt, so
                 // "index i is ABI position i" holds by construction instead of
                 // by two walks agreeing.
+                //
+                // `RT-SRCBODY-BIND-ORDER` `D1` — that invariant is about THIS
+                // vector and is unchanged: the push below is still in
+                // descriptor order and is the only thing that writes it. The
+                // semantic environment is now built separately, from the same
+                // operands, and the two orders agree only where the definition
+                // arm takes no conversion. Do not restore the old reading that
+                // one push served both jobs.
                 compiler
                     .function_local
                     .defining_abi_operands
                     .push(operand.clone());
-                env.push(LoweringEnvironmentBinding::Value(operand));
+                match slot.kind {
+                    AbiSlotKind::Parameter => {
+                        #[cfg(test)]
+                        parameter_ordinals.push(slot.ordinal);
+                        parameters.push(LoweringEnvironmentBinding::Value(operand))
+                    }
+                    _ => {
+                        #[cfg(test)]
+                        capture_ordinals.push(slot.ordinal);
+                        captures.push(LoweringEnvironmentBinding::Value(operand))
+                    }
+                }
             }
         }
+        // `validate_slot_run` proves the Parameter run is a contiguous prefix
+        // of the Capture run, so concatenating the two IS the descriptor order
+        // — which is what the non-source arms below must keep byte-identically.
+        let converts = source_body_binding_order(unit.definition);
+        if converts {
+            parameters.reverse();
+            #[cfg(test)]
+            parameter_ordinals.reverse();
+        }
+        let mut env = parameters;
+        env.extend(captures);
         // The in-process validation API historically stages one ground
         // `RuntimeValue` as the root environment.  It is compile-time material,
         // not launch ingress and not a generated-call transfer, so it does not
@@ -3817,6 +4035,15 @@ fn define_unit_body<M: Module>(
         } else {
             unit.origin
         };
+        #[cfg(test)]
+        srcbody_bind_order_record(SrcbodyBindOrderObservation {
+            host: SrcbodyBindHost::OrdinaryUnit,
+            definition: unit.definition,
+            converted: converts,
+            body_origin,
+            parameter_ordinals,
+            capture_ordinals,
+        });
         let body = compiler.retained_body_occurrence(body_origin)?;
         compiler.select_terminal_result_origins(body_origin, body.expr)?;
         let lowered = compiler.lower_expr(&mut builder, body, &env)?;

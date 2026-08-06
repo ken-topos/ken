@@ -1678,19 +1678,19 @@ fn px8n_read_arm_fixture_with_start(
 
 #[cfg(test)]
 #[repr(C)]
-struct BorrowedFixtureValue {
-    kind: u64,
-    tag: u64,
-    data: *const std::ffi::c_void,
-    len: usize,
+pub(super) struct BorrowedFixtureValue {
+    pub(super) kind: u64,
+    pub(super) tag: u64,
+    pub(super) data: *const std::ffi::c_void,
+    pub(super) len: usize,
 }
 
 #[cfg(test)]
 #[repr(C)]
-struct RootIngressFixture {
-    process_input: *const BorrowedFixtureValue,
-    host_context: *mut std::ffi::c_void,
-    capability: u64,
+pub(super) struct RootIngressFixture {
+    pub(super) process_input: *const BorrowedFixtureValue,
+    pub(super) host_context: *mut std::ffi::c_void,
+    pub(super) capability: u64,
 }
 
 #[cfg(test)]

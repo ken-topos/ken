@@ -195,17 +195,22 @@ fn real_source_builds_one_identity_bound_linked_process_artifact() {
 }
 
 #[cfg(target_os = "linux")]
-// Ignored pending RT-ENTRY-TRAP-254.
+// RT-SRCBODY-BIND-ORDER D4 -- un-ignored here, in the commit that greens it.
 //
-// Observed signature, exactly:
+// It was ignored pending RT-ENTRY-TRAP-254 with the exact signature
 //   ken native trap: explicit entry trap, exit Some(1) where Some(254) is expected
+// and that node's D5-D9 traced the cause to the source-body binding order: the
+// entry's two-parameter run reached its body in ABI descriptor order, so the
+// body's innermost binder resolved to `MkProcessInput` where the source named
+// `MkProgramCaps`, the outermost `ProcessInput` match found no case for the
+// constructor that arrived, and its closed default trapped at the entry.
 //
-// Owner node: RT-ENTRY-TRAP-254.
-// Branch-introduced by RT-DECL-CLOSURE-PORT: absent at the branch merge base
-// e6b4a13b and absent on main 3015aafd. Annotation only -- the test is unchanged
-// and still compiles; nothing here repairs the cause.
+// D1 converts a source body's parameter run to the de Bruijn order `lower_expr`
+// resolves against; this row is the end-to-end confirmation. Measured red at
+// 21fd46dc with the signature above and green with D1/D2 applied. The other
+// four px4b ignores are a different node (RT-CARRIER-BYTESPAN-OBSERVE) and are
+// deliberately untouched.
 #[test]
-#[ignore = "RT-ENTRY-TRAP-254: the linked process traps at the explicit entry and exits 1, not 254"]
 fn public_source_observes_raw_argv_environment_cwd_bytes_in_field_order() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
