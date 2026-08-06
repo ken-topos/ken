@@ -89,8 +89,47 @@ as a list.**
    `RT-ENTRY-TRAP-254`.
 3. **A root-adapter control proving its fixed ABI-role order was NOT reversed.**
    Without this, `D1`'s exclusion is a promise rather than a mechanism.
-4. **Raw-worker versus generated-context equivalence for a distinguishable
-   two-parameter body** — the `D2` claim, made checkable.
+4. **AMENDED 2026-08-06 — the required population does not exist, so this
+   control is RESHAPED AND GATED. Read all of it.**
+
+   > **Original:** raw-worker versus generated-context equivalence for a
+   > distinguishable two-parameter body.
+   >
+   > **Measured (ring, `evt_62nrk1cvnafjt`): no body is present at both hosts.**
+   > Retargeted raw workers are template-only, and **every generated-context
+   > worker currently has one parameter.** The ring did not quietly widen the
+   > fixture to manufacture the population, which was the right call.
+
+   **The shipped control:** observe each host's **actual ordinal environment
+   sequence** and verify the conversion law **at any arity**. It states plainly
+   that generated-context rows **have no discriminating power against a wrong
+   `D2` decision.** Keep that sentence; do not soften it.
+
+   **Why that is acceptable here, and it is ONE FACT:** every generated-context
+   worker is **unary**, and `reverse([p]) ++ captures` is **identical** to the
+   parameter-then-capture order it already installs. **So `D2`'s change to that
+   path is INERT today** — a wrong `D2` decision has no observable consequence
+   because nothing exercises it. That bounds the present risk and the present
+   claim together.
+
+   ⇒ **THE OBLIGATION DOES NOT DISAPPEAR. IT BECOMES AN ACTIVATION GATE**,
+   binding on whoever first produces a **multi-parameter generated-context
+   worker**. At that moment `D2`'s conversion stops being inert and the
+   equivalence test becomes both writable and required.
+
+   **AND IT SHIPS AS A TRANSITION SENTINEL, NOT AS A NOTE.** Assert the measured
+   population — **every generated-context worker has at most one parameter** —
+   so the control **reddens by itself** the moment a two-parameter one appears.
+   A blocked control that asserts its own unreachability is a mechanism; a
+   residual paragraph is something a reader has to notice at the right moment,
+   and nobody audits a confession.
+
+   **NOT authorized:** creating a two-parameter generated-context fixture by
+   changing the checked IH call-site arity. That is a population expansion into
+   a checked mechanism, and it is not needed to make this change safe — the
+   constraint demanding it was this frame's own prose, guarding a decision
+   nothing currently exercises. If a later unit needs that arity for its own
+   reasons, it is that unit's call and it routes to the Architect.
 
 **Each control asserts its exact expected values, not merely that it passes**, and
 each must be seen RED before green. A control whose red was never observed is
