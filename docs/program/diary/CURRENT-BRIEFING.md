@@ -42,18 +42,45 @@
 
 ### The one thing to do next
 
-**Wait for the implementer's handoff, then rule the fork it carries.** It is
-mid-turn on the `AC-1` correction child and has already reported hitting the
-leader's explicit STOP condition. **Nothing is owed by me until that lands.**
+**Nothing is owed by me.** Ruled at `evt_2j83zm8j9zqvv`. Two things are out and
+I hold for both: the **Architect's mechanism verdict on exact `c2ae3eed`**, and
+the **fixture-buildability measurement** the leader released off my ruling.
 
-The fork, stated in advance so a compaction cannot lose it: the leader's
-release said *"if exact `PlannedCaseEmission` authority says `Reachable` or
-`Open`, stop and hand back that producer set/flow as the genuine
-capability/scope fork."* The `FsReadFile` byte-span seat is intentionally
-**specialized-only**, so `Reachable`/`Open` means AC-1's first clause cannot be
-discharged in this node without new capability. **Mechanism is the Architect's;
-the cut is mine.** Do not pre-empt it — rule scope only after the Architect
-rules whether a sound in-node path exists.
+**The fork FIRED and it is measured.** Exact `PlannedCaseEmission` authority on
+both of AC-1's carried source matches: `status=Reachable`, `producers=Open`,
+`producer_origins=0`, with an **`OpaqueIngress` self-edge**. The scrutinee
+arrives over the host boundary, so no result route is statically known and every
+case is `Reachable` by **positive fail-closed authority** —
+`case_emission_status` returns `None`-fails-closed rather than defaulting.
+**Case-emission pruning structurally cannot reach that seat**, so AC-1's first
+clause needs capability the frame bars. ⛔ **I have NOT taken the recut** — it
+depends on the Architect's answer, and if a sound in-node path exists there is
+nothing to cut.
+
+> ### THE BIGGER RISK IS NOT THE FORK — read this before pricing anything
+>
+> `lower_source_carried_match` is **new production mechanism** and **four of its
+> five required discriminators are undelivered**: the JIT edge rig raises
+> `no planned scalar cut` before reaching the arms.
+>
+> **This node's standing rule is that "correct and unreachable" is the DEFAULT**,
+> already paid three times here (`D6b`'s raw table, `D7a2`'s retention, `D8d`'s
+> binding). A fourth instance is a **larger** exposure than the capability gap,
+> because **the capability gap is loudly red and this one would be silently
+> green.** That is why the one unit I authorized is the *reachability
+> measurement*, not the suite: if the fixture cannot be built, the route is
+> unwitnessable on this object and that is a **whole-node finding that outranks
+> the fork**. Both answers change what I do next; neither waits on mechanism.
+
+**Successor NAMED, not created.** If the Architect confirms no in-node path, the
+carried-bytes / host-ingress capability becomes a node and I cut it **against
+the measured `OpaqueIngress` flow, not a description of it**. Do not create it
+on an unruled mechanism — six nodes already sit behind this branch.
+
+**Also open, folded into the node as a named item, not chased:** the
+implementer self-reported that the `control.rs` allowed-inventory pin **did not
+catch its own addition** — a subset check whose comments read as an exact
+inventory. A pin that reads stronger than it is, is worse than no pin.
 
 ### Checkpoint ledger — where the node actually is
 
