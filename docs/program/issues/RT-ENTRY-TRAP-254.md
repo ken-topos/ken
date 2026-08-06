@@ -3,7 +3,7 @@ id: RT-ENTRY-TRAP-254
 title: "public_source_observes_raw_argv_environment_cwd_bytes_in_field_order exits 1 with an explicit entry trap where it expects 254 — branch-introduced, and the only tip failure that is not the byte-span gap"
 status: ready
 owner: runtime
-size: S
+size: M
 gate: none
 depends_on: [RT-CONTSRC-PRODUCER-LOCAL]
 blocks: []
@@ -11,13 +11,26 @@ github: null
 origin: Measured at candidate tip b914c7ff (evt_2h8wm2ff99ayq) and provenance-probed (evt_fxgentgrpw6g). Filed by the Steward because it was the one attributed tip failure with no owning node; an unowned failure is what gets lost. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> ## THE FRAME IS WRITTEN. This node is `ready`, and it is DIAGNOSIS ONLY.
+> ## DIAGNOSIS DISCHARGED. Recut to instrument, localize, repair. `size: M`.
 >
-> **`docs/program/wp/RT-ENTRY-TRAP-254.md`, 2026-08-06.** It attributes the trap
-> and returns for sizing. **It does not repair it** — the repair is a separate
-> cut the Steward makes on the return, because a guessed size on this campaign
-> has been wrong every time it was guessed. `size: S` covers the diagnosis, not
-> the fix.
+> **`docs/program/wp/RT-ENTRY-TRAP-254.md`, recut 2026-08-06** on the ring's
+> return (`evt_29m0gnx2r43jw`) and the Architect's population ruling
+> (`evt_m36y2zegby7m`).
+>
+> **The `-4` is attributed** — `lowering/mod.rs:16468`, `emit_current_trap`,
+> `TrapExitAuthority::Root`, via `seal_source_trap_branch`. The borrowed-input
+> hypothesis is **REFUTED**. The trap is reached **after** host observation was
+> recorded (not after each field was decoded — the ring bounded that correctly).
+>
+> **The Architect ruled this is NOT an activation** of the source-machine
+> carried-match mechanism: the path is a functionized declaration-unit call whose
+> `Carried` scrutinee reaches the **generic** `lower_carried_match`, never
+> `SourceContinuation::MatchScrutinee`. **The activation gate has NOT fired.**
+>
+> **What remains, and it reorders the work:** the root process-sentinel discards
+> `identity.abi_word()`, so the run does not localize **which** nested ordinary
+> match default fired. That discard is not a tidiness item — **it is the missing
+> instrument**, and it is now the first deliverable.
 >
 > **Two things the frame settles that this node had left open.**
 >
@@ -97,9 +110,13 @@ did not exist at the commit in question, and the words agreed only because they
 were generic.
 
 **Measured position:** a byte-span observer **cannot** clear this trap. Byte-span
-is a lowering refusal at a host-effect seat; this is a runtime `-1` sentinel.
-Whether the two share a root cause is **unmeasured and must be measured, not
-argued from the name.**
+is a lowering refusal at a host-effect seat; this is a runtime **`-4`** sentinel
+from a program that compiled and ran.
+
+**CORRECTED: this paragraph said `-1` until 2026-08-06.** The `-1` attribution
+was the Architect's working hypothesis and the ring **refuted** it — `-1` comes
+from separate require/validation emitters and `emit_current_trap` emits it zero
+times (`evt_29m0gnx2r43jw`).
 
 ## First obligations — SUPERSEDED by the frame, and one is discharged
 

@@ -1,13 +1,17 @@
-# RT-ENTRY-TRAP-254 — attribute the explicit entry trap, then return for sizing
+# RT-ENTRY-TRAP-254 — localize the explicit entry trap, then repair it
 
 **A linked native program that should observe its raw argv, environment and cwd
 bytes and return one of them as its exit code instead traps at the entrypoint.
-This unit finds out why. It does not repair it.**
+The diagnosis is DISCHARGED and the trap is attributed. What remains is that the
+attribution stops one level short: the root process-sentinel discards the
+identity that would say WHICH default fired. Build that instrument, localize,
+repair.**
 
-**Owner:** Team Runtime. **Size:** S — diagnosis only.
+**Owner:** Team Runtime. **Size:** M — diagnosis DISCHARGED; now instrument, localize, repair.
 **Node:** `docs/program/issues/RT-ENTRY-TRAP-254.md`.
-**Risk:** low as framed. The repair is unsized by construction and is re-cut by
-the Steward on this unit's return.
+**Risk:** low. The instrument must not change which programs trap, and that is
+`AC-6`. The repair is bounded by `D4`; if it exceeds about an hour it returns to
+the Steward rather than being absorbed.
 
 **Authority:** Steward, on the tip measurement `evt_2h8wm2ff99ayq` and the
 provenance probe `evt_fxgentgrpw6g`. Filed because this was the one attributed
@@ -31,8 +35,9 @@ the landed code, say so and escalate — do not quietly build around it.**
 only. It was annotated under the operator's 2026-08-06 publish ruling and
 **measures nothing while the attribute is present.**
 
-⇒ **`D0` un-skips it.** Nothing in this frame may be asserted against an ignored
-row.
+⇒ **`D0` un-skipped it and is DISCHARGED (section 3).** The attribute is back on
+at `21fd46dc`. **Nothing may be asserted against an ignored row**, so `D5` must
+remove it in the same commit that greens the row.
 
 ### The observed signature
 
@@ -131,83 +136,137 @@ Byte-span is a lowering refusal at a host-effect seat; this is a runtime
 sentinel from a program that compiled. Whether the two share a root cause is
 **unmeasured and must be measured, not argued from the name.**
 
-## 3. Deliverables
+## 3. Diagnosis: DISCHARGED 2026-08-06. What it returned.
 
-### `D0` — un-skip and confirm the live failure
+`D0`-`D2` are complete (`evt_29m0gnx2r43jw`), tree byte-identical to `21fd46dc`
+with all five ignores restored. **Do not re-run them.**
 
-Remove the `#[ignore]` from this one test, run it, and record the **exact**
-stderr line and exit code. Confirm the signature is still
-`explicit entry trap` and not something that has since changed shape.
+- **`D0`** — one executed failing test, exact stderr `ken native trap: explicit
+  entry trap`, exit `Some(1)` versus expected `Some(254)`. Signature unchanged.
+- **`D1`** — the `-4` is emitted at `lowering/mod.rs:16468`, `emit_current_trap`,
+  under `TrapExitAuthority::Root { process_sentinel: true, source_authorized:
+  true }`, reached from `seal_source_trap_branch` for
+  `Specialized(Lowered::Trap(..))`.
+- **The borrowed-input hypothesis is REFUTED**, and reported as such: `-1` comes
+  from separate require/validation emitters and `emit_current_trap` has **zero**
+  `-1` emissions.
+- **The trap is reached AFTER host observation** — a 98-byte `KETRACE2` trace
+  exists before termination. **Bounded correctly by the ring and kept bounded
+  here: that establishes observation was RECORDED, not that each field was
+  DECODED.**
 
-**If it now fails differently, that is the finding** and it outranks continuing
-the plan. If it passes, say so immediately — the row would have recovered as a
-side effect of something else, and that is worth more than this whole unit.
+### The Architect's population ruling, and it closes the biggest open question
 
-Leave the other four `#[ignore]` attributes alone; they belong to
-[[RT-CARRIER-BYTESPAN-OBSERVE]].
+**`evt_m36y2zegby7m`.** This row is **NOT** an activation of the `AC-1`
+source-machine carried-match mechanism, and the ruling is by path, not by
+vocabulary:
 
-### `D1` — attribute the `-4`
+`process_discriminator` is called as a functionized declaration closure;
+`RuntimeExpr::Call` routes a `DeclarationClosure` to
+`call_declaration_closure_unit`; the declared-unit call makes every specialized
+input a carrier word at the call boundary, so parameters install as
+`LoweringOperand::Carried`; an ordinary `RuntimeExpr::Match` on a `Carried`
+scrutinee dispatches to the **generic** `lower_carried_match`.
+**`lower_source_carried_match` has one caller on the relevant path —
+`SourceContinuation::MatchScrutinee` — and this path never constructs or resumes
+that continuation.**
 
-**Name the emitter and the condition.** Which path in the emitted entrypoint
-returns `-4`, and what makes this program take it.
+⇒ **The activation gate has NOT fired. This node stays independent.** Do not
+fold it into the source-machine mechanism and do not rescope
+[[RT-CARRIER-BYTESPAN-OBSERVE]]'s `D6` register on this evidence.
 
-The node recorded a hypothesis worth testing rather than assuming: the `-1`
-sentinel is rendered from borrowed-input validation paths (Architect,
-`evt_7v61ed5pn9q3t`). **Confirm or refute that `-4` shares that emitter.** A
-refutation is as good a result as a confirmation; say which.
+## 4. The recut — the ATTRIBUTION IS INCOMPLETE, and the missing instrument is the first deliverable
 
-State whether the trap is reached **before or after** the program observes any
-process bytes. Those are different defects: a trap before observation means the
-entry path never ran, and a trap after means observation ran and something it
-produced was rejected.
+**Steward, 2026-08-06, on the ruling above.** The Architect named the remaining
+gap precisely:
 
-### `D2` — return for sizing
+> Because the root process-sentinel arm discards `identity.abi_word()`, the
+> present run does not localize which nested ordinary match default fired; that
+> remaining attribution gap must not be converted into a source-machine
+> attribution.
 
-**Stop and hand back.** State the emitter, the condition, whether observation
-ran, and what a repair would have to change. **Do not repair anything**, and do
-not propose a size — the Steward re-cuts on this return.
+**So the `abi_word` discard is not a separate tidiness item. It is the reason
+attribution stopped**, and the sibling branch already shows the shape: it
+encodes the identity in `ROOT_TRAP_TOKEN`. **Build the instrument, then measure,
+then repair.** Sizing the repair before the instrument exists is guessing, and
+guessed sizes on this campaign have been wrong every time.
 
-**A guessed size on this campaign has been wrong every time it was guessed**,
-which is why this unit ends here rather than continuing into a fix.
+### `D3` — make the root process-sentinel carry `identity.abi_word()`
 
-## 4. Acceptance criteria
+Follow the sibling `ROOT_TRAP_TOKEN` encoding rather than inventing a second
+one. **This is an instrument, and it must not change which programs trap** —
+only what a trap reports.
 
-- **`AC-1` (`D0`) — the live signature is recorded from an un-skipped run**,
-  quoted exactly, with the executed test count asserted. **A green run that
-  executed nothing is indistinguishable from a pass**, and an ignored test
-  reports neither.
-- **`AC-2` (`D1`) — the emitter of `-4` is named at `file:line`**, with the
-  condition that selects it. **"It traps" is not an attribution.**
-- **`AC-3` (`D1`) — before-or-after observation is stated**, with the evidence
-  that decides it, not an inference from the sentinel's name.
-- **`AC-4` (`D1`) — the borrowed-input-emitter hypothesis is explicitly
-  confirmed or refuted**, and reported either way. An untested hypothesis
-  reported as "not investigated" is an acceptable answer; silence is not.
-- **`AC-5` (`D2`) — the four `RT-CARRIER-BYTESPAN-OBSERVE` rows are still
-  ignored and untouched**, and this unit's diff contains no production change.
+### `D4` — localize the default
 
-## 5. Banned scope
+With `D3` in hand, name **which nested ordinary match selects a closed default**,
+at `file:line`, and why this program's carried process-input-derived scrutinee
+reaches it.
+
+**State the population.** The finding is about the **generic** carried/borrowed
+match family, not the source-machine one. Any sentence that drifts back to
+`lower_source_carried_match` is the exact conversion the Architect forbade.
+
+### `D5` — repair, or hard-stop and return
+
+If `D4` bounds a repair to about an hour, do it. **If it does not, stop and
+return the bound** — the Steward re-cuts. Do not absorb a large repair.
+
+### `D6` — the stale comment the ruling exposed
+
+`core.rs:10416-10419` still says **nothing in production emits a carried
+scrutinee**. **The px4b functionized-unit path refutes that sentence** (Architect,
+`evt_m36y2zegby7m`). Correct it to what is now measured.
+
+**This is folded here rather than given its own node** because this unit's work
+is the very path that refutes it and its author is already in that file.
+**It is a comment on the GENERIC helper and it is NOT an `AC-1` activation
+erratum** — do not write it as one, and do not let it merge the two nodes.
+
+## 5. Acceptance criteria
+
+- **`AC-6` (`D3`) — the sentinel carries the identity, and NO program changes
+  which way it terminates.** Show a program that trapped before still traps, and
+  a program that returned a value still returns the same value. **An instrument
+  that alters the population it measures is not an instrument.**
+- **`AC-7` (`D3`) — the encoding is the sibling's, not a second one.** Name the
+  shared encoder. Two spellings of one token drift, and the drift is invisible
+  because each arm is exercised by different programs.
+- **`AC-8` (`D4`) — the default is named at `file:line`**, with the exact
+  scrutinee and case set. **"A nested match" is not a localization.**
+- **`AC-9` (`D4`) — the report states the family as GENERIC**, and contains no
+  claim about `lower_source_carried_match`.
+- **`AC-10` (`D5`) — if the row greens, it greens by un-ignoring**, and the
+  `#[ignore]` attribute is removed in the same commit. A green suite that still
+  carries the attribute has discharged nothing. Report `passed / failed /
+  ignored` as three numbers.
+- **`AC-11` (`D6`) — the corrected comment states the measured path**, and does
+  not claim an activation.
+- **`AC-12` — the other four `#[ignore]` attributes are untouched.**
+
+## 6. Banned scope
 
 - **Do not change the test's expectations.** Making it expect `1`, or relaxing
-  `assert_ne!`, converts a real defect into a green row and destroys the only
-  signal anyone has. This is the cheapest available "fix" and it is forbidden.
-- **Do not change the shim's `if (value < 0) return 1;` collapse.** Passing
-  sentinels through as exit codes is a process-ABI change; it would also make
-  `-2` indistinguishable from a legitimate exit `254`. If the diagnosis argues
-  for it, that is a finding for the Architect, not a deliverable here.
-- **Do not repair the trap.** Attribution first; the repair is a separate cut.
-- **Do not touch the byte-span capability, the seat table, or the class
-  dispatch.**
+  `assert_ne!`, converts a real defect into a green row. `254` is correct: the
+  program observes a raw process byte and returns it, and `return (int)value`
+  passes non-negative values straight through.
+- **Do not change the shim's `if (value < 0) return 1;` collapse.** That is a
+  process-ABI change and it would make `-2` indistinguishable from a legitimate
+  exit `254`. If the diagnosis argues for it, that is a finding for the
+  Architect.
+- **Do not attribute anything here to `lower_source_carried_match`.** Ruled
+  `evt_m36y2zegby7m`.
+- **Do not fold this node into byte-span**, and do not touch the byte-span
+  capability, the seat table, or the class dispatch.
 - **Do not un-skip the other four rows.**
 
-## 6. Hard stop
+## 7. Hard stop
 
 Stop and report, with the concrete evidence, if:
 
-- `D0` shows a different signature, or the row passes;
-- the `-4` emitter cannot be named without changing production code; or
-- attribution turns out to require the byte-span capability after all — which
-  would be a real finding and would need to be **measured**, since the node's
-  standing position is that it does not.
+- `D3` cannot encode the identity without changing which programs trap;
+- `D4` cannot localize the default even with the instrument — that is a finding
+  about the instrument, and it returns to the Architect; or
+- `D5`'s repair exceeds about an hour.
 
 **Do not absorb any of these and do not work around them.**

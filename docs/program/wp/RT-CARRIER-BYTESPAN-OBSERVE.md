@@ -397,6 +397,17 @@ allowed **only because no completing Runtime rig executes the carried
 source-Match route at all** — one fact, which bounds the present risk and the
 present claim together.
 
+**NARROWED by the Architect, `evt_m36y2zegby7m`, 2026-08-06.** Say **"no
+ENUMERATED completing rig executes `lower_source_carried_match`"**. The census is
+explicitly the `ken-runtime` crate plus `rt_parity`; `px4b_native_production` is
+a **third rig that completes lowering** and was in neither. It was checked and
+ruled a **negative by path** — a functionized declaration-unit call whose
+`Carried` scrutinee dispatches to the *generic* `lower_carried_match`, never
+constructing or resuming `SourceContinuation::MatchScrutinee`, which is
+`lower_source_carried_match`'s only caller on that path. **So it is an
+enumerated negative, not a universal proof about every possible rig.**
+
+
 **This node is one of the two visible activation routes.** The moment a carried
 source-Match path becomes successfully executable, the dormancy argument
 expires. That is what `D6` and `AC-8` exist to catch.

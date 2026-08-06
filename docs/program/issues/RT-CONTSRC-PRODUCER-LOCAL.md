@@ -28,6 +28,17 @@ origin: Steward ruling 2026-08-05 (RT-DECL-CLOSURE-PORT checkpoint 1f) on the D7
 > executable result. **No completing rig executes this mechanism at all.** That
 > bounds the present risk and the present claim simultaneously.
 >
+> **NARROWED by the Architect, `evt_m36y2zegby7m`, 2026-08-06.** Say **"no
+> ENUMERATED completing rig executes `lower_source_carried_match`"**. The census
+> is explicitly the `ken-runtime` crate plus `rt_parity`;
+> `px4b_native_production` is a **third rig that completes lowering** and was in
+> neither. It was checked and ruled a **negative by path** — a functionized
+> declaration-unit call whose `Carried` scrutinee dispatches to the *generic*
+> `lower_carried_match`, never constructing or resuming
+> `SourceContinuation::MatchScrutinee`, which is `lower_source_carried_match`'s
+> only caller on that path. **An enumerated negative, not a universal proof
+> about every possible rig.** The activation gate has NOT fired.
+>
 > ⇒ **THE OWED CONTROLS DO NOT DISAPPEAR. THEY BECOME AN ACTIVATION GATE**,
 > recorded on **`RT-CARRIER-BYTESPAN-OBSERVE`** and binding on **any** route
 > that makes a carried source-Match path successfully executable — the gate is

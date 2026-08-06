@@ -94,6 +94,17 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > source-Match route at all** — which bounds the present risk and the present
 > claim together.
 >
+> **NARROWED by the Architect, `evt_m36y2zegby7m`, 2026-08-06.** Say **"no
+> ENUMERATED completing rig executes `lower_source_carried_match`"**. The census
+> is explicitly the `ken-runtime` crate plus `rt_parity`;
+> `px4b_native_production` is a **third rig that completes lowering** and was in
+> neither. It was checked and ruled a **negative by path** — a functionized
+> declaration-unit call whose `Carried` scrutinee dispatches to the *generic*
+> `lower_carried_match`, never constructing or resuming
+> `SourceContinuation::MatchScrutinee`, which is `lower_source_carried_match`'s
+> only caller on that path. **An enumerated negative, not a universal proof
+> about every possible rig.** The activation gate has NOT fired.
+>
 > **THIS NODE IS ONE OF THE TWO VISIBLE ACTIVATION ROUTES.** It removes the
 > first downstream blocker on the existing `rt_parity` route. **The moment a
 > carried source-Match path becomes successfully executable, the dormancy
