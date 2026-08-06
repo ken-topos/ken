@@ -23982,10 +23982,16 @@ fn d6b_every_raw_emission_sits_where_the_tables_agree_and_every_context_emission
 ///
 /// ⛔ **Not all of them are single inputs, and saying so would be false.**
 /// `CrossRouteTargets` is a **paired exchange** — the hypothesis takes the raw
-/// route and the argument takes the context route, together, because a law about
-/// crossing two routes cannot be violated by moving one of them. `WrongOrder`
-/// (in the sibling row) is a **segment permutation**, not an input at all. The
-/// remaining three do move exactly one argument.
+/// route and the argument takes the context route **together**, because a law
+/// about crossing two routes cannot be violated by moving only one of them.
+/// **The other four of this row's five selection perturbations each move exactly
+/// one producer input.**
+///
+/// ⚠ **`WrongOrder` is not among them and is not in this row's count of five.**
+/// It is a **sibling segment permutation**, proved in
+/// [`d6c_the_sealed_binder_run_refuses_a_miscounted_or_permuted_run_at_its_producer`],
+/// and it moves no input at all — it reorders whole segments of an otherwise
+/// exact run.
 ///
 /// ## Two mutations that DECLINE rather than lie — and they decline for DIFFERENT reasons
 ///
@@ -24163,9 +24169,11 @@ fn d6c_each_moved_selection_input_is_refused_by_the_guard_that_owns_it_before_em
 ///
 /// Before it, all three were **accepted BY THEIR PRODUCER**: the run was returned
 /// malformed in every case. ⛔ That is not the same as "unrefused" — what each
-/// one then met differs, and the differences are the point. `D6c`'s census
-/// (`evt_na5pwjmxwxvn`, six cells, every one with a positive application count
-/// and a genuinely changed member run):
+/// one then met differs, and the differences are the point. ⇒ **The sealed
+/// postcondition now owns all three canonical run-shape violations**, which is
+/// what makes their several downstream fates no longer load-bearing. `D6c`'s
+/// census (`evt_na5pwjmxwxvn`, six cells, every one with a positive application
+/// count and a genuinely changed member run):
 ///
 /// | perturbation | mixed witness | governed witness |
 /// |---|---|---|
@@ -24179,11 +24187,13 @@ fn d6c_each_moved_selection_input_is_refused_by_the_guard_that_owns_it_before_em
 /// exactly, and it compiled because that case body reads only `Var(0)`, so every
 /// later binder shifted with nothing positioned to notice.
 ///
-/// ⛔ **The permutation was never unguarded.** On the mixed witness it reached
-/// the producer and was then refused downstream — a real refusal, but by a
-/// callee-shape check that does not own run shape. On the governed witness its
-/// clean compile is **equal-value identity**, not an absent guard. Both readings
-/// were corrected before this row landed.
+/// ⛔ **`WrongOrder` was never unguarded, and neither witness says it was.** On
+/// the **non-degenerate** `px8tr` — where the two members carry distinct routes —
+/// it was **producer-accepted and then downstream-refused** at the callee-shape
+/// check: a real refusal, by a guard that does not own run shape. On the governed
+/// witness it is **equal-value identity**, so its clean compile was never
+/// evidence about any guard at all. Two different facts, neither of them an
+/// absent guard, and both were corrected before this row landed.
 ///
 /// ## The proof attribution, stated exactly
 ///
