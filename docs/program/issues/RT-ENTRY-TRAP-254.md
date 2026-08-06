@@ -1,7 +1,7 @@
 ---
 id: RT-ENTRY-TRAP-254
 title: "public_source_observes_raw_argv_environment_cwd_bytes_in_field_order exits 1 with an explicit entry trap where it expects 254 — branch-introduced, and the only tip failure that is not the byte-span gap"
-status: draft
+status: ready
 owner: runtime
 size: TBD
 gate: none

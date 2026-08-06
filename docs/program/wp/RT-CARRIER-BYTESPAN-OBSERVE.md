@@ -19,33 +19,38 @@ recut `AC-1` clause 1 out of `RT-CONTSRC-PRODUCER-LOCAL` into this node.
 
 ---
 
-## 0. What is fixed here, and the one input set at release
+## 0. The base is now fixed
 
-Everything in this frame is fixed except **the governing base SHA**, which the
-Steward sets at release (section 1). The base is the one input that turns on the
-operator's pending gate-readiness decision about the `b914c7ff` candidate, and
-it is the reason this node is `draft` rather than `ready`.
-
-**Nothing else waits on that decision.** The deliverables and acceptance
-criteria below are about seats, phases and helpers, not about which commit they
-land on, and the content anchors are the same blobs either way.
+This frame's one open input was the governing base, which turned on the
+operator's gate-readiness decision. **That decision landed on 2026-08-06: land
+the candidate, with the five failing rows marked skipped and restored as work
+allows.** Section 1a is settled accordingly and nothing in this frame is
+outstanding.
 
 ## 1. Base and fixed inputs
 
-### 1a. The governing base
+### 1a. The governing base is `main`
 
-**Measured at exact `b914c7ffec5b99cb15edcd9987a3130e04ae4159` on branch
-`wp/RT-DECL-CLOSURE-PORT-typed-units`.** The governing base for the work is set
-by the Steward at release, and is one of:
+**Cut from current `origin/main`, after the `RT-CONTSRC-PRODUCER-LOCAL`
+candidate merges.** Do not continue `wp/RT-DECL-CLOSURE-PORT-typed-units`: the
+publisher **squashes**, so `b914c7ff` is not an ancestor of `main` once it
+lands, and continuing that branch would re-offer 212 already-merged commits.
 
-- **the branch tip**, if the `b914c7ff` candidate is still held — this node is
-  then the next unit *on* that branch; or
-- **`main`**, if the candidate has merged. The publisher squashes, so
-  `b914c7ff` is **not** an ancestor of `main` after the merge and the branch
-  must not be continued. Re-verify the blob table below against `main`.
+**The anchors in 1b were measured at `b914c7ff` and must be re-verified against
+`main` before you rely on one.** The squash preserves content, not commit
+identity, so the blobs should match and the commit will not.
 
-**Do not choose between these yourself.** If you reach this node and the base
-line has not been filled in, that is a release defect — hard-stop and return it.
+### 1a-i. Four of this node's rows are SKIPPED, not passing
+
+The four byte-span rows in section 2d ship marked `#[ignore]`, each carrying its
+exact observed signature and this node's id. **A skipped row measures nothing**,
+so at your `D0` the suite will report them ignored rather than failed.
+
+⇒ **`D0` must un-skip the four rows and record their live failure**, and `AC-1`
+is discharged against that live baseline, not against an ignored one. **Removing
+the four `#[ignore]` attributes is this node's deliverable**, and a green suite
+that still carries them has discharged nothing. The fifth row stays ignored — it
+belongs to [[RT-ENTRY-TRAP-254]].
 
 ### 1b. Content anchors at `b914c7ff`
 
@@ -306,9 +311,14 @@ Every AC names its owning deliverable. **If one cannot, that is the finding.**
   not be reported as if it did.
 
 - **`AC-3` (`D0`, `D5`) — per row, never a total.** Every row green at `D0` is
-  still green, stated per row. **The `explicit entry trap` row stays red and
-  that is correct** — it belongs to [[RT-ENTRY-TRAP-254]]. A total that improves
-  from 14/5 to 18/1 would hide it going the other way.
+  still green, stated per row. **The `explicit entry trap` row stays ignored and
+  that is correct** — it belongs to [[RT-ENTRY-TRAP-254]].
+
+  **Report ignored separately from passed, always.** The suite lands with five
+  rows ignored, so a bare `passed / failed` pair reads green while this node has
+  changed nothing. `18 passed / 0 failed / 1 ignored` and
+  `14 passed / 0 failed / 5 ignored` are the success and the no-op, and only the
+  ignored count tells them apart.
 
 - **`AC-4` (`D5`) — the per-seat disposition table, over all SIX seats.**
   For each of the six seats in section 2d, exactly one of:

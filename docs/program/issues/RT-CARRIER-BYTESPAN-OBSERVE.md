@@ -1,7 +1,7 @@
 ---
 id: RT-CARRIER-BYTESPAN-OBSERVE
 title: "Carrier byte-span observation capability — every BytesPointerLength seat is SPECIALIZED_ONLY and the carrier has no total emitted byte-span observer, so a carried host result cannot satisfy a byte-span effect seat"
-status: draft
+status: ready
 owner: runtime
 size: L
 gate: none
@@ -11,14 +11,27 @@ github: null
 origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no sound in-node repair exists under the current capability. Steward ruling evt_3pr04vk7zrd7c recut AC-1 clause 1 out of RT-CONTSRC-PRODUCER-LOCAL into this node. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> ## THE FRAME IS OWED. This node is `draft` and is NOT startable.
+> ## THE FRAME IS WRITTEN. This node is `ready`.
 >
-> What follows is the Architect's ruled **shape**, captured while fresh. It is
-> not a frame: it has no fixed inputs measured at a named SHA, no acceptance
-> criteria with controls, and no contention check. **The Steward owes those
-> before this flips `ready`.**
+> **`docs/program/wp/RT-CARRIER-BYTESPAN-OBSERVE.md`, 2026-08-06.** It has fixed
+> inputs measured at `b914c7ff`, acceptance criteria with named controls, the
+> inherited activation gate as a deliverable rather than a note, and a settled
+> base. **Build from the frame; this node is the tracker record.**
 >
-> ## CORRECTED 2026-08-06 ~18:0xZ — THIS NODE IS THE PUBLISH BLOCKER
+> Two findings from grounding the frame against the tip, both of which change
+> the work: the `BytesPointerLength` seat population is **six**, of which only
+> three have been measured failing; and the carrier can read a carried byte
+> value **one byte at a time and cannot read its extent at all** — there is a
+> `store_bytes_len` writer and no length reader in `BOUNDARY_LOCAL_HELPERS`.
+> A per-index reader does **not** establish that a contiguous pointer can be
+> produced. See the frame's section 2d and 2e.
+>
+> **The four rows this node owns ship marked `#[ignore]`** under the operator's
+> 2026-08-06 publish ruling, each carrying its exact observed signature. **A
+> skipped row measures nothing**, so this node's `D0` must un-skip them and
+> record the live failure before asserting anything.
+>
+> ## THIS NODE WAS THE PUBLISH BLOCKER, and the operator resolved it by skipping
 >
 > **This block previously read "off the critical path; it gates nothing;
 > `blocks` is empty." All three were FALSE and all three were mine.**
@@ -34,11 +47,15 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > | 1 | `ConsoleWrite Argument(1)` — same need, same phase |
 > | 1 | `FsReadFile Argument(0)` — same need, same phase |
 >
-> The fifth is `ken native trap: explicit entry trap`, provenance under
-> measurement.
+> The fifth is `ken native trap: explicit entry trap`. Its provenance was
+> measured and it is owned by [[RT-ENTRY-TRAP-254]] — **not this node**, and not
+> on the strength of "bytes" appearing in its test name.
 >
-> ⇒ **This node gates the merge of 212 reviewed commits with six nodes behind
-> them.** It is the critical path until something measured says otherwise.
+> ⇒ **This node no longer gates that merge.** It did, and the operator resolved
+> the block on 2026-08-06 by ruling the rows skipped rather than repaired, so
+> the 212 commits and the six nodes behind them land without it. **What the node
+> now owns is the capability and the restoration of its four rows** — the debt
+> is real, it is just no longer on the critical path.
 >
 > ### The evidence route matters — do not cite the wrong one
 >
