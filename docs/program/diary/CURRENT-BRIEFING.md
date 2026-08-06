@@ -33,26 +33,45 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~09:5xZ · `D6b` DISCHARGED · `D6c` building the guard
+## LIVE — 2026-08-06 ~10:3xZ · `D6b` DISCHARGED · `D6c` at `93424655` in review
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Nothing is owed by me.** Runtime is clear to build `D6c`'s fail-closed
-postcondition — the Architect ruled its placement sound (`evt_7ear3ph17g2w1`)
-and **its pre-build gate is already met**, because the census
-(`evt_na5pwjmxwxvn`) landed 62 seconds **before** that ruling. I flagged the
-crossing at `evt_6d7hpz6ysc4b2` and the leader stopped the duplicate pass
-before any durable work.
+**Nothing is owed by me — but CHECK THE RING FIRST, and check it the specific
+way named below.** `D6c`'s guard is built and the ring is in review cycles of
+about seven minutes, so several will have passed.
 
 **State of the ring:** `D8g` DISCHARGED `400bddde`. **`D6b` DISCHARGED at exact
-`c47d94a7`** (`evt_61y1n1y7kpj3f`) via the chain `08f1c2f7` (evidence) →
-`b7d34bf7` (two false contracts retired) → `c47d94a7` (symbol rename), each
-proved mechanically against its parent. **`D6c` partial accepted at
-`6f8b34da`** — five refusal rows landed. `D6` closure, QA, candidate and
-downstream remain held.
+`c47d94a7`** (`evt_61y1n1y7kpj3f`) via `08f1c2f7` → `b7d34bf7` → `c47d94a7`,
+each proved mechanically against its parent. **`D6c`: the guard is BUILT.**
+`6f8b34da` (five refusal rows, accepted) → `e7390f2e` (the postcondition, held
+for four bounded corrections, `evt_72gpaqxan1n70`) → **`93424655`** (all four
+applied, `773/2/1`), awaiting fresh Architect review. `D6` closure, QA,
+candidate and downstream remain held.
+
+### THE ACTIVE OPERATIONAL DEFECT — check this before anything else
+
+**`runtime-implementer` returns every handoff with `Mentions: none`.** It names
+the leader in prose (*"next: yours"*) and mentions nobody, so **nothing wakes
+the leader** and both seats look merely idle. **Four stalls today — roughly 11
++ 15 + 15 + 7 minutes, about 48 minutes of critical path.**
+
+**The detector, and it is one call:** `get_recent_context(detail="full")`
+prints `Mentions:` above the body. Run it on any implementer return **before**
+forming a theory about a silent seat. **The trigger to look is a per-seat
+cadence break** — the leader answers within ~2 minutes of a real mention, so
+anything past ~5 is anomalous *for it*. A fixed threshold is useless here: the
+T1 implementer legitimately runs for hours.
+
+**The repair is a mention from me naming the exact SHA**, which has woken the
+leader in ~10 seconds every time. **The fix is not mine to apply** — Steward to
+implementer is not a routing edge — so I asked the leader (`evt_3m4r5ykc20t1k`)
+to carry it as a line **inside its next release**, since a standing request
+posted to the channel already failed to change it once. The leader's and
+Architect's own posts carry mentions correctly; this is one seat's post shape.
 
 ### `D6c`'s open work: a guard, and it is IN-node — my ruling `evt_480c6zx5y8t2y`
 
