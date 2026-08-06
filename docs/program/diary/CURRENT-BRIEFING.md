@@ -125,125 +125,82 @@ git rev-parse wp/RT-DECL-CLOSURE-PORT-typed-units   # MUST be 21fd46dc...
 **`--target <sha>` does NOT protect you.** The publisher resolves the SHA to a
 branch and then re-reads that branch's tip.
 
-### RT-ENTRY-TRAP-254 — `D3` WITHDRAWN, `D4` measured, `D5` released
+### RT-ENTRY-TRAP-254 is CLOSED (superseded). The repair is RT-SRCBODY-BIND-ORDER.
 
-- **`D3` (the `abi_word` instrument) is WITHDRAWN, not deferred.** The only
-  encoding that retains trapping reddens a **committed**
-  `identity_preserved: false` `RootProcessSentinel` invariant and the Family-4
-  `-4` closed-default pin. **Steward ruling: do NOT retire either pin** —
-  spending a permanent detector for a one-off diagnostic, and the sentinel's
-  meaning at the process ABI boundary is the Architect's question, not a
-  diagnostic convenience. Not opened, because it is not needed.
-- **`D4` was measured BEFORE the instrument was reverted**, which is why the
-  hard-stop cost almost nothing. Identity 5 localizes the outer
-  `match input { MkProcessInput ... }` of declared unit `process_discriminator`,
-  at **generic** `lower_carried_match`, `core.rs:10420`. **The input boundary
-  word takes the borrowed-opaque lane and fails the one `ProcessInput`
-  constructor case, selecting the closed default.**
-- **`D5` RETURNED, no commit, no repair.** The failing comparison is the
-  **class** comparison at `core.rs:10420`: expected
-  `BoundaryClass::BorrowedOpaque` (8), observed `BoundaryClass::Constructor`
-  (4). A compile-time-gated probe scoped to only the single-case
-  `ProcessInput::MkProcessInput` match returned exit `Some(4)`; sibling `List`
-  and `Prod` untouched. **Class is the borrowed-lane entry condition**, so
-  kind/tag/arity are never evaluated —
-  `brif(class == BorrowedOpaque, borrowed, represented)` diverts first. The
-  generic declared-unit parameter is **carrier-represented, not a borrowed
-  handle**.
-- **ARCHITECT RULED (`evt_1ayrezmann8zz`): the CONSUMER is correct; this ingress
-  must remain `BorrowedOpaque`.** Class 4 is not a lawful relabelling. The
-  producer chain admits no lawful step that turns the borrow into a
-  `Constructor`: `units.rs:2738-2742` → `units.rs:3749-3765` →
-  `transfer_into_carrier` `mod.rs:6128-6203` → `mod.rs:6998-7007` /
-  `mod.rs:9688-9692`, disposition `InvocationBorrowed / BorrowedOpaque`.
-  **The defect is on the PRODUCER / call-input path** — wrong operand delivered
-  to parameter 0 (stronger hypothesis), or an unauthorized reconstruction.
-- **TWO CORRECTIONS, one of them the Steward's.**
-  **(a) "Carrier-represented" and "borrowed handle" are NOT opposites** — a
-  `BorrowedNativeValue` crosses a declared unit *as* a carrier word whose
-  representation is `InvocationBorrowed / BorrowedOpaque`; the class-8 node is
-  the carrier wrapper around the host pointer. The ring framed them as
-  alternatives and **the Steward relayed that framing without catching it.**
-  **(b) "Two stacked failures" is REJECTED and the rejection is right** — one
-  wrong constructor word explains both observations: it is class 4, and then its
-  non-`MkProcessInput` tag correctly defaults in the represented branch.
-  **The Steward was about to hold a repair against an unmeasured second defect.
-  Do not carry that framing forward.**
-- **BANNED (Architect):** do not change or remove the generic borrowed-lane
-  test; do not teach the consumer that class 4 means borrowed process input; do
-  not patch the observed node's class in place — that makes a constructor
-  payload be read as a host pointer and is a confused-deputy hole.
-- **`D7` RELEASED (`evt_5veydsvsv7b1n`) — a PROVENANCE/KEYED measurement, not
-  another class probe.** Measure the represented word's observed constructor
-  **tag and field count** against the planner-issued `MkProcessInput` case
-  identity and against every constructor live at the caller-side argument
-  occurrence (especially `MkProgramCaps` and `Failure`); record the caller-side
-  argument origin and the callee parameter-0 slot ordinal. **The three-way
-  partition sizes the repair:** another constructor ⇒ wrong operand, repair the
-  call-input producer; `MkProcessInput` but a differing identity ⇒ constructor
-  identity authority mismatch; identity equal and field count 3 ⇒ the
-  closed-default report is itself incomplete and the next selector must be
-  measured. **Repair and recut are the Steward's on that return.**
-- **`D7` RETURNED, no change from `c4112237`. Bucket 1: another-constructor /
-  wrong-operand.** Planner `MkProcessInput` identity `3470333575222` (low byte
-  54), binders 3. **Observed identity differs, low byte 52, field count 1 vs an
-  expected 3.** The **arity independently rules out** `MkProcessInput` and the
-  authority-mismatch bucket — two axes from different evidence, which is why
-  this one is trustworthy. No live named case at this seat has low byte 52:
-  `ProcessInput` 54/3, `List::Cons` 36/2, `List::Nil` 35/0, `Prod::MkProd` 38/2.
-  **So the observed constructor is currently UNNAMED.**
-- **The provenance half is INCOMPLETE** and the implementer stopped rather than
-  absorb another build — **correct behaviour, the one-hour target working; do
-  not train it out.** Unrecorded: the observed constructor's name, the
-  caller-side argument origin, the callee parameter-0 slot ordinal.
-- **`D8` RELEASED (`evt_1zp55czkaws7h`):** those three, plus settle the
-  one-field adjacent **`Failure`** producer **BY IDENTITY**. It was reported as
-  *consistent with* the word and **unmeasured**, which was the right way to
-  report it — **"field count 1" is shared by every one-field constructor in
-  scope, so consistency ranks it a CANDIDATE, not the answer.** A refuted
-  candidate is worth as much as a confirmed one: it would mean the operand comes
-  from somewhere nobody has enumerated.
-- **No repair authorized.** Knowing *which* wrong operand arrives does not yet
-  say *why*, and that gap is where the repair scope lives. Recut is the
-  Steward's.
-- **`D8` COMPLETE, no branch change. THE WRONG OPERAND IS NAMED:**
-  `ProgramCaps::MkProgramCaps`, identity **52**, minted at `StaticOriginId(3)`,
-  one field, arriving at `process_discriminator` **parameter-0, slot ordinal
-  0** where the borrowed process root belongs. Confirms the Architect's
-  stronger hypothesis — wrong operand delivered, not an unauthorized
-  reconstruction.
-- **The `Failure` candidate is REFUTED BY IDENTITY**, not waved off:
-  `StaticOriginId(109)`, identity `3697966841899`, low byte 43 vs observed 52.
-  The refutation is what leaves exactly one candidate standing.
-- Frame layout: 0 Parameter, 1 Parameter, 2 Result, 3 Control, 4 Trap, 5 Store.
-  Call-seat scheduling entries are origins 6 and 109. **The caller
-  argument-occurrence ID is still uncaptured.**
-- **`D9` RELEASED (`evt_5hnq7741yz410`) and it is THE LAST MEASUREMENT.** Two
-  items: (1) **why origin 3 is selected for parameter 0** — name the step that
-  builds the argument list, and capture the argument-occurrence ID linking the
-  scheduling entries to the delivered operand; (2) **settle the
-  identity-magnitude anomaly.** `MkProcessInput` is `3470333575222`, `Failure`
-  is `3697966841899`, `MkProgramCaps` is **52** — not the same order of
-  magnitude. **Is 52 a lawfully interned identity or an unset/defaulted field?**
-  If minting is inconsistent, "the wrong operand arrived" may be the wrong
-  diagnosis and "the identity was never set" the right one. **One field is
-  consistent with a real `MkProgramCaps`, and that consistency is exactly what
-  would hide a defaulted value.**
-- **ON `D9`'s RETURN: frame the repair, or hand the mechanism to the Architect.
-  NOT another measurement.** We are at `D9` with one commit landed, which is
-  the recuts-produce-labels-rather-than-merges shape the playbook warns about.
-  Each measurement did genuinely narrow — trap, class, bucket, named operand —
-  but the next artifact must be a repair or a ruling.
-- **KEEP IN VIEW, do not act on:** `process_discriminator` is called as a
-  **functionized declaration closure**, and the branch being merged is
-  `RT-DECL-CLOSURE-PORT` — *port declaration closures to the functionized lane*.
-  **If `D9` locates the selection defect inside that call path, the defect lives
-  in the work being landed** and goes to the Architect, not into a
-  Steward-scoped repair. **This does NOT reopen the publish** — the operator
-  ruled, the row is skipped, and this node owns it.
-- **`D6` landed** (stale carried-scrutinee reachability comment), on
-  `wp/RT-ENTRY-TRAP-254-d6`. Targeted: 778 passed / 2 named pre-existing / 1
-  ignored.
+**Architect mechanism ruling `evt_7yfs6qxp9hm5b`.** The `D0`-`D9` chain found a
+**general multi-parameter source-body binding permutation**; the skipped
+`ProcessInput` row is **one discriminator** for it.
+
+**THE DEFECT.** `lowering/units.rs:3701-3790` does **one slot-order walk doing
+two jobs**: it records `defining_abi_operands` in ABI descriptor order
+(**correct**) and pushes the same operands into `env` in that order
+(**wrong**). A declaration body reads **de Bruijn-NEAREST-FIRST**, and
+`core.rs:14705-14714` **already states** reverse-then-append. So
+`main(input, caps)` gives `env = [input, caps]` while the body names `input` as
+`Var(1)` ⇒ `Var(1)` reads `ProgramCaps`. **A bug fix restoring a stated
+contract, not a mechanism change.**
+
+**REPAIR:** keep the ABI run and `defining_abi_operands` unchanged; build the
+semantic env as `reverse(Parameter run) ++ Capture run in D3 order`.
+
+**`D9`'s ATTRIBUTION WAS REFUTED and the refutation is load-bearing.** It blamed
+the common transfer coordinate. `call_declared_unit_target` **already pairs
+positionally**, `carry_call_input` cannot select a sibling or change position,
+and **a carried word bypasses `transfer_into_carrier` entirely** — so a caller
+occurrence there cannot change which word occupies slot 0. ⇒ **Per-argument
+transfer coordinates are BANNED: a design change that would leave the defect
+intact.** Also banned: reversing the process root's ABI roles, rewriting
+continuation specializations, touching `carry_source_call_inputs`,
+`carry_call_input`, `call_declared_unit_target`, or `mod.rs:5958-5978`.
+
+**BLAST RADIUS — AGGREGATE-NESS IS NOT CAUSAL.** Not one row, and **not "every
+aggregate through `call_declared_unit_target`" — that framing was the Steward's
+and is wrong.** The class is **every activated non-root functionized source-body
+unit with at least two parameters whose body distinguishes parameter
+positions**; it surfaces for ints, bools, capabilities, borrowed handles or
+constructors. The 97-`Constructor` census does **not** bound it. **Unary units,
+unused parameters and equal values MASK it.** Operator told; **it does not alter
+the publish ruling by itself** but is materially larger in logical scope.
+
+**`D2` is not optional:** generated contexts claim **byte-for-byte equivalence**
+with the raw unit while installing parameter-then-capture order
+(`units.rs:2523-2547`). Fixing the unit alone makes that committed claim
+**false** — worse than the original defect, because the claim is what a reader
+relies on.
+
+**Four controls, and control 1 is the important one:** a two-parameter
+declaration with distinct **NONAGGREGATE** values reading both positions
+(proves the fix is not aggregate-shaped); the `ProcessInput`/`ProgramCaps`
+discriminator; a root-adapter control proving its ABI-role order was **not**
+reversed; raw-worker vs generated-context equivalence on a body that
+**distinguishes** its parameters (a unary body proves nothing — unary units are
+invariant under reversal). **Expect CI reds and attribute each individually;
+never re-baseline.**
+
+**`D6` landed** (stale carried-scrutinee reachability comment) at `c4112237` on
+`wp/RT-ENTRY-TRAP-254-d6` — follow-up PR when Actions returns.
+
+### GATE MISS, MINE: I released a new node without the before-work compaction
+
+**`COORDINATION §15` / `steward/compaction.md`: always compact before new work,
+no exceptions, no threshold, ctx unread.** I released `RT-SRCBODY-BIND-ORDER`
+after roughly fifteen consecutive diagnostic releases to the same ring **and
+never ran the handoff gate once.** The **implementer asked for the seam** —
+the backstop caught what the gate should have.
+
+⇒ **The gate is the fix, the ctx scan is only the backstop.** When the scan (or
+a seat's own request) is what catches it, **the gate already failed upstream.**
+Run `scripts/handoff-gate-compact.sh <every member>` at each new-node release.
+
+**Mechanism note for next time:** the script does `git reset --hard
+origin/main` on each worktree. It was safe here **only because** all three
+runtime worktrees sat on their own `<role>/work` branches at `3015aafd ==
+origin/main`, so no protected ref was checked out. **Check that first** — the
+frozen publish ref `wp/RT-DECL-CLOSURE-PORT-typed-units` (`21fd46dc`) and
+`wp/RT-ENTRY-TRAP-254-d6` (`c4112237`) must never be the checked-out branch when
+it runs. **And note the base mismatch:** this node's base is `21fd46dc`, not
+`origin/main`, so the reset puts worktrees on the wrong base and the ring must
+re-checkout.
 
 ### Origin's WP ref was DIVERGENT and the force-update was safe
 
