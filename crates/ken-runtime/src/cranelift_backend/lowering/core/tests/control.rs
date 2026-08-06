@@ -15712,8 +15712,14 @@ fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder()
         );
     }
 
-    // ⛔ The flip must not be a BOUNDS mismatch. The root position is a lawful
-    // index into the emission environment; production reads it without error.
+    // The flip must not be a BOUNDS mismatch. The root position is a lawful
+    // index into this environment -- and that is precisely what made the
+    // RETIRED root-as-immediate shape silently wrong rather than loudly wrong:
+    // indexing here with a root ABI position returned a value without error,
+    // just not the right one. Current production reads neither position at this
+    // seam; it resolves `CurrentLexical`'s `nearest_alias_index`. So the
+    // in-bounds read below is the `D3c` mutation reconstructing that retired
+    // substitution, not a description of what production does today.
     let at_root = seat
         .emission_environment
         .get(seat.source_abi_position as usize)
