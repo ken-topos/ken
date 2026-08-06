@@ -40,10 +40,17 @@
 
 ### The one thing to do next
 
-**When the Architect's `D8p` verdict lands, route ONE question to it:** is the
+**Nothing is owed by me. Wait for the corrected `D8p` child.** The Architect
+**BLOCKED** `198b7c14` on **evidence fidelity while ACCEPTING the production
+mechanism** (`evt_w6wc0xt9gkqf`); the leader released the bounded correction
+(`evt_2fjj0vddn0ep7`) and the implementer is working it. **Next mover is the
+ring, not me.**
+
+⛔ **Do NOT route the `D8f` classification question yet.** It waits for the
+`D8p` **accept**. When that lands, route ONE question to the Architect: is the
 double-discharge refusal an **in-`D8f` fixture question** or a **further
-mechanism boundary**? ⛔ **`D8f` must NOT be released until that is classified**
-— not on the `D8p` accept alone. The leader is holding on my `evt_39ykmh3ehqg8b`.
+mechanism boundary**? `D8f` is not released until that is classified — not on
+the accept alone. Leader holding on my `evt_39ykmh3ehqg8b`.
 
 **`D8p` is IN REVIEW at exact `198b7c14`** (`763/2/1`) — implementer
 `evt_14tv58v4k5wxr`, leader's review request `evt_68ry7r5bz86n5`, Architect
@@ -80,9 +87,25 @@ history.
 occupancy were the only question, while the implementer had already measured
 that the two-call witness **refuses downstream** at *"one causal identity was
 discharged twice in a single function"*. Recut landed; see the **`D8f` RECUT**
-section of the frame. `D8f`'s remaining scope is now **only the four refusals —
-omission, duplicate, transplant, wrong occurrence — each on its own live path.**
-⛔ **Do not let `D8f` re-ask the occupancy ordering; `D8p` measured it.**
+section of the frame.
+
+⚠ **THE RECUT ITSELF THEN NEEDED CORRECTING, and the error is instructive.** I
+made it *"conditional on the `D8p` accept — unless the block is on mechanism."*
+**The verdict was NEITHER branch:** it blocks on **evidence fidelity** while
+**accepting the mechanism**, and one finding **retires a claim the recut
+quotes**. ⛔ **A two-branch condition has no cell for that**, which is the same
+defect shape the recut exists to fix — committed inside the fix.
+
+**What survives, at the strength actually earned:** the **always-admit mutation
+reds** and that stands (untouched by all three findings), so the standing
+"UNWITNESSED" production comment is genuinely retired. ⛔ **But the cross-body
+permutation discriminator is RETIRED — both bodies observe the SAME occurrence
+and target values, so the swap is a no-op** — and the **two-call ordering is
+NOT settled either way**, being a within-body claim where finding 3 is
+cross-body. ⇒ **`D8f` must not re-run the always-admit mutation, but it may NOT
+treat the two-call ordering as discharged.** The trap the original wording set:
+skipping a within-body proof on the strength of a cross-body discriminator just
+measured **absent**.
 
 ⭐ **`D8g` is now framed too, and its FIRST deliverable is a MEASUREMENT** — see
 the frame's *"`D8g` — RE-MEASURE the owner-separation prohibition before obeying

@@ -1390,7 +1390,7 @@ all six failing `D0` rows.
   | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | **DISCHARGED** `3a63fe64`, after two bounded evidence corrections |
   | 13 | `D8o` — ambient body authority | lowering compiler state | **DISCHARGED** `3aadbaae`, after two evidence blocks (`5154d94a`, `d3f7e32c`) |
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | **DISCHARGED** `01263e44` (`760/2/1`), after a matrix block and two fidelity children |
-  | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **IN REVIEW** at exact `198b7c14` (`763/2/1`) — `evt_68ry7r5bz86n5` |
+  | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **MECHANISM ACCEPTED, evidence BLOCKED** at exact `198b7c14` — Architect `evt_w6wc0xt9gkqf`; bounded post-emission evidence correction in flight, leader `evt_2fjj0vddn0ep7` |
   | 16 | `D8f` — checked-marker occupancy | integration | **HARD STOP accepted** at `0eb04397` (evidence only). **RECUT — see the `D8f` RECUT section.** Release gated on the Architect's classification of the double-discharge closure, NOT on the `D8p` accept alone |
   | 17 | `D8g` — non-vacuous closeout, both paths | proof | held. **FIRST deliverable is a MEASUREMENT** — re-measure the `D8a` owner-separation prohibition before obeying it |
   | 18 | `D6b` closeout, then `D6c` refusal set | — | held |
@@ -2646,10 +2646,32 @@ all six failing `D0` rows.
   ###### `D8f` RECUT — `D8p` moved the frontier. Do not re-ask what it proved.
 
   **Grounded on the `D8p` handoff `evt_14tv58v4k5wxr` and the leader's review
-  request `evt_68ry7r5bz86n5`, at exact `198b7c14`.** Both are **pre-Architect**.
-  Everything in this section is **conditional on the `D8p` accept** — if that
-  review blocks on **mechanism** rather than on evidence fidelity, this section
-  moves with it and must be re-derived, not patched.
+  request `evt_68ry7r5bz86n5`, at exact `198b7c14`.**
+
+  > ### CORRECTION — my escape condition was BINARY and the real verdict was neither branch
+  >
+  > This section originally said it was *"conditional on the `D8p` accept — if
+  > that review blocks on **mechanism** rather than on evidence fidelity, this
+  > section moves with it."* **The Architect's verdict `evt_w6wc0xt9gkqf` is
+  > neither branch.** It **BLOCKS on evidence fidelity while explicitly
+  > accepting the production mechanism** — and one of its three findings
+  > **retires a claim this section quotes.**
+  >
+  > ⛔ **A two-branch condition has no cell for a fidelity block that lands on
+  > the evidence the section leans on.** That is the same defect shape this
+  > section exists to fix in `D8f`, committed in the fix itself. **Re-derived
+  > below rather than patched around.**
+
+  **What the verdict SETTLES, and it is the load-bearing half.** The production
+  mechanism is **accepted**: both source-machine `StaticWorker` seats consult
+  the existing checked-IH seam after their exact operand run is available; the
+  exact source occurrence and carried binder ordinal identify the pending
+  application; **no new identity, validator, target lookup, ABI widening, or
+  route/shape/order inference**; the zero/one/declined population is real, the
+  ordinary body is reached, and **all three refusals remain load-bearing.**
+  ⇒ **`D8p`'s mechanism is not in question and `D8f`'s dependence on it is
+  sound.** What is in question is what the committed **proof** may be said to
+  have established.
 
   **What `D8p` already established. Quoted narrowly, because the temptation is
   to round it up.** On the witness carrying an ordinary call on the same
@@ -2665,16 +2687,50 @@ all six failing `D0` rows.
   `198b7c14` states the current measurement and keeps the old one as dated
   history.
 
-  **So `D8f` must NOT re-ask the occupancy ordering.** It is measured, on a live
-  witness, with the admit mutation red. A second fixture posing a question that
-  is already answered is the exact shape this node has paid for repeatedly, and
-  it would be **green-by-construction** rather than discriminating.
+  ⛔ **DO NOT read the quoted paragraph as more than the verdict allows.** The
+  Architect's finding 3 is that **the permutation is not meaningful on the
+  measured population** — both bodies presently observe **the same** occurrence
+  and target values, so swapping them is a **no-op**. That is lawful under this
+  frame's own equal-value limit, but the handoff prose **called the occurrences
+  distinct and the permutation discriminating**, and that prose is retired
+  against the measurement.
 
-  **What `D8f` still owes, and it is smaller than the original cut.** The four
-  refusals — **omission, duplicate, transplant, wrong occurrence** — **each on
-  its own live path.** `D8p`'s evidence covers the ordering and the two admit
-  mutations; it does **not** put each of the four on a path of its own. That
-  residue is `D8f`'s remaining scope.
+  **What survives, stated at the strength it was actually earned:**
+
+  | claim | status after `evt_w6wc0xt9gkqf` |
+  |---|---|
+  | the seam is consulted at both source-machine emission seats, on the exact occurrence and carried binder ordinal | **accepted** — mechanism |
+  | the always-admit mutation reds, retiring the standing "UNWITNESSED" production comment | **stands** — a mutation result, untouched by all three findings |
+  | route, arity, binder index and call order are blind **as a cross-body permutation discriminator** | **RETIRED** — the two bodies observe the same values, so the swap is a no-op |
+  | the two-call ordering: the ordinary call leaves the marker pending and the exact checked occurrence consumes it | **NOT settled by this verdict either way.** It is a within-body claim and finding 3 is a cross-body one, so the verdict neither endorses nor retires it |
+
+  **So the instruction to `D8f` is narrower than this section first stated.**
+  `D8f` **must not re-run the always-admit mutation** — that result stands. But
+  it **may not treat the two-call ordering as discharged** on `D8p`'s evidence,
+  because the corrected `D8p` child has not yet been reviewed and the only
+  finding touching a permutation retired it as a no-op.
+
+  ⛔ **The trap that would follow from the original wording:** a reader takes
+  *"do not re-ask the occupancy ordering"* as licence to skip the within-body
+  proof, on the strength of a cross-body discriminator that has just been
+  measured **absent**. **That is a proof skipped on evidence that does not
+  cover it** — worse than the duplicate fixture the instruction was written to
+  prevent.
+
+  **Re-derive this row against the corrected `D8p` child when it is accepted.**
+  Not against this section, and not against the original handoff prose.
+
+  **What `D8f` still owes.** The four refusals — **omission, duplicate,
+  transplant, wrong occurrence** — **each on its own live path**, plus **the
+  two-call ordering itself**, which the row above records as *not settled either
+  way* by `evt_w6wc0xt9gkqf`. `D8p`'s evidence puts none of the four on a path
+  of its own.
+
+  ⚠ **This paragraph originally said the scope was "smaller than the original
+  cut" and named only the four refusals.** That rested on the two-call ordering
+  being discharged, which the verdict does not support. **The scope is smaller
+  than the original cut only by the always-admit mutation** — the one result
+  that survives all three findings intact.
 
   **The closure `D8p` exposed, which the previous `D8f` text does not name.**
   The implementer stated it as the handoff's honest limit and did **not** claim
