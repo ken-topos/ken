@@ -18110,40 +18110,44 @@ fn d8l2_envelope_positions(fields: usize, recursive: usize) -> Vec<Vec<u32>> {
 /// | omission | yes | the existing exact `Parameter`-slot reconciliation |
 /// | duplication | yes | the case binder run, on the position left uncovered |
 /// | dense prefix | yes | the case binder run — this IS the pre-repair defect |
-/// | wrong order | **no, by construction** | see below |
+/// | wrong order | yes | clause 1's exact population equality, at the planner |
 ///
-/// ⚠ **Wrong order is not detectable at this seam, and that is a property of
-/// the design rather than a hole in this row.** The envelope is *itself* the
-/// authority for which `Parameter` slot carries which field, and
-/// `continuation_case_binder_run` looks a role up by source position, so a
-/// permutation is followed faithfully rather than refused —
-/// [`checked_computational_ih_binder_run_admits_a_permuted_envelope`] is the
-/// landed row that rules exactly that lawful. Detecting a permutation would
-/// need a second authority for slot order, which is representation work this
-/// checkpoint must not do. ⇒ Reported, not invented.
+/// ⭐ **Wrong order is caught HERE, at the planner, not downstream.** Clause 1
+/// asserts the whole population in order — `[0, 2]` for selected-middle is
+/// order-sensitive — so a permuted emission fails that equality. ⛔ There is
+/// deliberately no downstream wrong-order refusal and no second slot-order
+/// authority: `continuation_case_binder_run` looks a role up by source
+/// position, so a *self-consistent consumer permutation* is lawful for it
+/// ([`checked_computational_ih_binder_run_admits_a_permuted_envelope`] rules
+/// exactly that), and that is a statement about the consumer. It is **not** a
+/// licence for the planner to emit anything but source order, which is what
+/// this row pins.
 ///
 /// ⛔ Duplication and wrong order are **no-ops on a two-field producer** — one
 /// nonrecursive field cannot be reordered or shadowed — so both are exercised
 /// on the three-field orientation. A matrix that only ran the two-field shapes
 /// would have reported them uncaught for the wrong reason.
 ///
-/// ## Clause 3 — the capture tail
+/// ## Clause 3 — the capture tail, measured
 ///
-/// Header and `Parameter`-slot counts are unchanged, and the capture roles are
-/// byte-for-byte what they were: the capture loop is untouched and its
-/// positions are relative to the nonrecursive run's LENGTH, which the repair
-/// does not change. **THE GAP:** every worker in reach is capture-free, so the
-/// capture tail's ordering is unchanged by construction and not by measurement.
-/// A non-empty capture witness would be needed to measure it, and none exists.
+/// A witness with a **non-empty nonrecursive prefix and two captures**, in both
+/// orientations: the repair renumbers the prefix, so the tail's invariance is
+/// only measurable where a prefix exists to renumber, and only two captures can
+/// show the tail keeps its ORDER. The full `WorkerCapture` run — ordinal,
+/// owner, closure origin, source, lifetime — is compared against the immutable
+/// worker provenance the planner interned, not against a second read of the
+/// envelope. Envelope length, `header.parameters` and the actual `Parameter`
+/// slot count are three independently derived numbers and must all agree.
+///
+/// ⛔ The production capture loop is byte-identical to `1f9a2020`; the repair
+/// touches the nonrecursive prefix and nothing else.
 ///
 /// ## Clause 4 — both orientations reach emission
 ///
 /// Both compile, and their populations differ, so the ordinary values a
-/// specialization reads are source-position-dependent. ⚠ **THE GAP:** this
-/// asserts the populations and the reach, not an executing differential on the
-/// returned answer. The fields carry distinguishable payloads so such a
-/// differential is constructible, but building one needs an execution harness
-/// this row does not have.
+/// specialization reads are source-position-dependent. The executing
+/// differential lives in its own row,
+/// [`d8l2_the_composed_call_returns_the_ordinary_payload_it_consumed`].
 ///
 /// ## Clause 5 — the pre-repair derivation reds where it was wrong
 ///
@@ -18179,6 +18183,105 @@ fn d8l2_the_ordinary_envelope_names_source_positions_in_every_orientation() {
                 "the ordinary envelope must name the producer's own source positions with the \
                  selected recursive position omitted. A dense prefix has the right LENGTH here \
                  and the wrong positions, which is why this compares the whole population"
+            );
+        }
+    }
+
+    // Clause 1b — wrong order is caught by that same equality, measured rather
+    // than argued. ⛔ Armed on the selected-middle orientation, the only one
+    // whose population has an order to get wrong.
+    set_envelope_defect(EnvelopeDefect::WrongOrder);
+    let permuted = d8l2_envelope_positions(3, 1);
+    set_envelope_defect(EnvelopeDefect::Exact);
+    assert!(
+        permuted.iter().all(|population| *population == vec![2u32, 0]),
+        "the wrong-order defect must actually permute the planned population, or clause 1's \
+         equality is not what rejects it and this row is claiming a check it does not have: \
+         {permuted:?}"
+    );
+    assert!(
+        permuted.iter().all(|population| *population != vec![0u32, 2]),
+        "and the permuted population must DIFFER from source order, which is exactly what \
+         clause 1 asserts against -- so a planner that emitted this would red there"
+    );
+
+    // Clause 3 — the capture tail, byte-for-byte against immutable provenance.
+    //
+    // ⭐ A witness with a non-empty nonrecursive prefix AND two captures, in
+    // both orientations: the repair renumbers the prefix, so the tail's
+    // invariance is only measurable where a prefix exists to renumber.
+    // ⛔ The comparison is against `ComposedCallTarget`'s own worker
+    // provenance -- the immutable planner record -- not against a second read
+    // of the envelope.
+    for worker_last in [false, true] {
+        let entry = d8l2_capture_witness(worker_last);
+        let plan = plan_static_transition_graph_with_symbols(
+            &entry,
+            &BTreeMap::new(),
+            &crate::NativeProcessSymbols::legacy_prelude(),
+            AbiRootIngress::Value,
+            true,
+        )
+        .expect("the capture witness plans");
+        let targets = plan.composed_call_targets().expect("targets");
+        assert!(
+            !targets.is_empty(),
+            "the capture witness must mint a target, or its provenance side is vacuous"
+        );
+        let provenance = targets[0]
+            .worker()
+            .captures()
+            .iter()
+            .map(|capture| {
+                (
+                    capture.ordinal(),
+                    capture.owner(),
+                    capture.closure_origin(),
+                    capture.source(),
+                    capture.lifetime(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            provenance.len(),
+            2,
+            "the witness must carry TWO captures; one cannot show that the tail keeps its ORDER"
+        );
+        for unit in plan.continuation_units().expect("units") {
+            let envelope = unit.ordinary_envelope().expect("the envelope builds");
+            let tail = envelope
+                .iter()
+                .filter_map(|role| match role {
+                    crate::cranelift_backend::planning::ContinuationOrdinaryEnvelopeRole::WorkerCapture {
+                        ordinal,
+                        owner,
+                        closure_origin,
+                        source,
+                        lifetime,
+                    } => Some((*ordinal, *owner, *closure_origin, *source, *lifetime)),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                tail, provenance,
+                "the WorkerCapture tail must equal the immutable worker provenance in order, \
+                 field for field -- ordinal, owner, closure origin, source and lifetime. The \
+                 repair renumbers only the nonrecursive prefix; a tail that moved would mean it \
+                 reached past its own population"
+            );
+            let parameter_slots = unit
+                .slots()
+                .iter()
+                .filter(|slot| {
+                    slot.kind == crate::cranelift_backend::planning::AbiSlotKind::Parameter
+                })
+                .count();
+            assert_eq!(
+                (envelope.len(), unit.header().parameters as usize, parameter_slots),
+                (3, 3, 3),
+                "and the envelope length, the header's declared parameter count and the ACTUAL \
+                 Parameter-slot run must all still agree: one nonrecursive field plus two \
+                 captures. These are three independently derived numbers, not three reads of one"
             );
         }
     }
@@ -18222,7 +18325,10 @@ fn d8l2_the_ordinary_envelope_names_source_positions_in_every_orientation() {
         // ⭐ The asymmetry that IS the finding: dense prefix is a no-op exactly
         // where the two derivations agree.
         (EnvelopeDefect::DensePrefix, 2, 1, None),
-        // ⚠ Wrong order is admitted by design -- see the row header.
+        // ⚠ Wrong order is NOT checked here: it is a planner-population fault,
+        // and clause 1 below is where it is caught. Compiling under it is
+        // expected, and says only that the consumer follows a self-consistent
+        // permutation -- which is the landed ruling, not a licence.
         (EnvelopeDefect::WrongOrder, 3, 1, None),
     ] {
         set_envelope_defect(defect);
@@ -18271,4 +18377,276 @@ fn d8l2_compile(fields: usize, recursive: usize) -> Option<CraneliftBackendError
         None,
     )
     .err()
+}
+
+/// A composed witness whose worker RETURNS the ordinary payload the bridge
+/// matched, so the payload is consumed by the real composed call and reaches
+/// the program's answer.
+#[cfg(test)]
+fn d8l2_payload_witness(worker_last: bool, payload: i64) -> RuntimeExpr {
+    let wrap = "ctor:fixture::D8L2P::Wrap";
+    let done = "ctor:fixture::D8L2P::Done";
+    let unit = || RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+        args: Vec::new(),
+    };
+    // ⭐ The worker returns its argument, so the payload is CONSUMED -- passed
+    // through the composed call and observable in the answer -- rather than
+    // merely carried in the envelope or used to choose a case.
+    let worker = RuntimeExpr::LexicalClosure {
+        captures: Vec::new(),
+        params: vec!["carried".to_string()],
+        body: Box::new(RuntimeExpr::Var(0)),
+    };
+    let selected_field = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Bool::True".to_string(),
+            args: Vec::new(),
+        }),
+        cases: [
+            ("ctor:prelude::Bool::True", "ctor:prelude::Result::Ok"),
+            ("ctor:prelude::Bool::False", "ctor:prelude::Result::Err"),
+        ]
+        .into_iter()
+        .map(|(constructor, result)| RuntimeMatchCase {
+            constructor: constructor.to_string(),
+            binders: 0,
+            body: RuntimeExpr::Construct {
+                constructor: result.to_string(),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int(payload.into()))],
+            },
+        })
+        .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "d8l2 payload field default".to_string(),
+        },
+    };
+    let (args, recursive_positions, scrutinee_var, callee_var) = if worker_last {
+        (vec![selected_field, worker], vec![1usize], 1u32, 4u32)
+    } else {
+        (vec![worker, selected_field], vec![0usize], 2u32, 3u32)
+    };
+    let bridge = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Var(scrutinee_var)),
+        cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+            .into_iter()
+            .map(|constructor| crate::RuntimeComputationalMatchCase {
+                constructor: constructor.to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(callee_var)),
+                    args: vec![RuntimeExpr::Var(1)],
+                },
+            })
+            .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "d8l2 payload bridge default".to_string(),
+        },
+    };
+    RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: wrap.to_string(),
+                args,
+            }),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: wrap.to_string(),
+                    argument_binders: 2,
+                    recursive_positions,
+                    body: bridge,
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: done.to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: unit(),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "d8l2 payload eliminator default".to_string(),
+            },
+        }),
+        body: Box::new(RuntimeExpr::Var(0)),
+    }
+}
+
+#[cfg(test)]
+fn d8l2_capture_witness(worker_last: bool) -> RuntimeExpr {
+    let wrap = "ctor:fixture::D8L2C::Wrap";
+    let done = "ctor:fixture::D8L2C::Done";
+    let unit = || RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+        args: Vec::new(),
+    };
+    let worker = RuntimeExpr::LexicalClosure {
+        captures: vec![
+            RuntimeExpr::Value(RuntimeValue::Int((11).into())),
+            RuntimeExpr::Value(RuntimeValue::Int((12).into())),
+        ],
+        params: vec!["carried".to_string()],
+        body: Box::new(RuntimeExpr::Var(0)),
+    };
+    let selected_field = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Bool::True".to_string(),
+            args: Vec::new(),
+        }),
+        cases: [
+            ("ctor:prelude::Bool::True", "ctor:prelude::Result::Ok"),
+            ("ctor:prelude::Bool::False", "ctor:prelude::Result::Err"),
+        ]
+        .into_iter()
+        .map(|(constructor, result)| RuntimeMatchCase {
+            constructor: constructor.to_string(),
+            binders: 0,
+            body: RuntimeExpr::Construct {
+                constructor: result.to_string(),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((41).into()))],
+            },
+        })
+        .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "d8l2 capture field default".to_string(),
+        },
+    };
+    let (args, recursive_positions, scrutinee_var, callee_var) = if worker_last {
+        (vec![selected_field, worker], vec![1usize], 1u32, 4u32)
+    } else {
+        (vec![worker, selected_field], vec![0usize], 2u32, 3u32)
+    };
+    let bridge = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Var(scrutinee_var)),
+        cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+            .into_iter()
+            .map(|constructor| crate::RuntimeComputationalMatchCase {
+                constructor: constructor.to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(callee_var)),
+                    args: vec![RuntimeExpr::Var(1)],
+                },
+            })
+            .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "d8l2 capture bridge default".to_string(),
+        },
+    };
+    RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::Construct {
+                constructor: wrap.to_string(),
+                args,
+            }),
+            cases: vec![
+                crate::RuntimeComputationalMatchCase {
+                    constructor: wrap.to_string(),
+                    argument_binders: 2,
+                    recursive_positions,
+                    body: bridge,
+                },
+                crate::RuntimeComputationalMatchCase {
+                    constructor: done.to_string(),
+                    argument_binders: 0,
+                    recursive_positions: Vec::new(),
+                    body: unit(),
+                },
+            ],
+            default: RuntimeTrap {
+                code: RuntimeTrapCode::PatternMatchFailure,
+                message: "d8l2 capture eliminator default".to_string(),
+            },
+        }),
+        body: Box::new(RuntimeExpr::Var(0)),
+    }
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8l2` — the composed call returns the ordinary
+/// payload it consumed, and the answer depends on the source position.**
+///
+/// ⭐⭐ **This is the executing differential, and it is the strongest evidence
+/// the repair is about values rather than about a population.** The witness's
+/// worker returns its argument, and the bridge hands it the payload its own
+/// case matched — so the payload is **consumed** by the real composed call and
+/// reaches the program's answer. It is not merely carried in the envelope, and
+/// it is not used only to choose a case.
+///
+/// Both orientations execute; two distinguishable payloads produce two exactly
+/// distinct ground observations. ⛔ Asserted as the exact value, not as
+/// "different from each other": two wrong answers can differ.
+///
+/// The composed path is asserted to be the one taken — one target-derived
+/// binding installed, a verified composed discharge in the relation — so this
+/// cannot be an ordinary call that happens to return the right number, and the
+/// end-to-end compile and `D8h`–`D8k` ledger facts are carried here beside the
+/// differential rather than assumed from another row.
+///
+/// `DensePrefix` still refuses on the selected-first orientation and is still a
+/// no-op on selected-last. That asymmetry is the regression control: the defect
+/// was invisible on every landed fixture because `px8tr` selects its last field.
+///
+/// **Promise class: durable invariant.** The observations are the payloads the
+/// fixture supplies, so a changed fixture moves both sides together.
+#[test]
+fn d8l2_the_composed_call_returns_the_ordinary_payload_it_consumed() {
+    use crate::cranelift_backend::lowering::{
+        d8d_bindings, d8j_discharged, reset_d8d_bindings, reset_d8j_discharged,
+    };
+    use crate::cranelift_backend::planning::{set_envelope_defect, EnvelopeDefect};
+
+    for worker_last in [false, true] {
+        for payload in [41i64, 58] {
+            reset_d8d_bindings();
+            reset_d8j_discharged();
+            let expr = d8l2_payload_witness(worker_last, payload);
+            let compiled = compile_expr(&expr, &NativeSeedEnvironment::empty()).unwrap_or_else(
+                |error| {
+                    panic!(
+                        "the payload witness must compile in both orientations. Selected-first \
+                         refusing at the ordinary envelope means D8l2's source-position \
+                         population has regressed: {error:?}"
+                    )
+                },
+            );
+            assert_eq!(
+                compiled.run(None).expect("the payload witness runs").0,
+                RuntimeObservation::Returned(RuntimeGroundValue::Int(payload.into())),
+                "the composed call must return the ordinary payload it consumed. ⛔ The EXACT \
+                 value, not merely one that differs from the other payload's: two wrong answers \
+                 can differ from each other"
+            );
+            // ⛔ And it must be the composed path that produced it. Without
+            // this the differential would be satisfied by any lowering that
+            // happened to thread the payload through.
+            assert_eq!(
+                (d8d_bindings(), d8j_discharged().len()),
+                (1, 1),
+                "one target-derived binding installed and one verified composed discharge in the \
+                 relation, so this answer came through the composed call and its causal \
+                 obligation closed"
+            );
+        }
+    }
+
+    // The regression control, on the orientation the defect was invisible on
+    // and the one it was not.
+    for (worker_last, refuses) in [(false, true), (true, false)] {
+        set_envelope_defect(EnvelopeDefect::DensePrefix);
+        let outcome = compile_expr(&d8l2_payload_witness(worker_last, 41), &NativeSeedEnvironment::empty());
+        set_envelope_defect(EnvelopeDefect::Exact);
+        assert_eq!(
+            outcome.is_err(),
+            refuses,
+            "the pre-repair dense-prefix derivation must refuse on the selected-FIRST \
+             orientation and be a no-op on selected-last, where dense index and source position \
+             genuinely coincide. That asymmetry is why the defect survived every landed fixture"
+        );
+    }
 }
