@@ -22428,6 +22428,74 @@ fn d8f_keyed_observations() -> BTreeMap<
     observed
 }
 
+/// **The two application occurrences of the moved witness, named from PLANNER
+/// authority.**
+///
+/// Returns `(ordinary selected-argument application, checked application)`.
+///
+/// ⛔ Derived by walking `StaticTransitionPlan::child_static_origin` -- the
+/// planner's sole child-origin production point -- down a positional path
+/// spelled from the witness's own shape. It consults **neither**
+/// `CheckedApplicationDisposition` nor a `D8p` binding, on this program or any
+/// other, and neither origin is the complement of an observed relation.
+///
+/// The path, from the continuation unit's own frame occurrence:
+///
+/// | step | node |
+/// |---|---|
+/// | `1` | case 0's body of the eliminator: the `CheckedSubcontinuationFrame` |
+/// | `0` | the bridge `ComputationalMatch` it wraps |
+/// | `1` | that match's case 0 body: the `CheckedComputationalIHSlots` marker |
+/// | `0` | the slot marker's body: the OUTER application |
+/// | `1` | its argument: the `CheckedComputationalIHInvocation` marker |
+/// | `0` | the marker's body: the INNER application |
+///
+/// The outer application is the checked one -- the marker moved off it -- and
+/// the inner is the ordinary selected-argument call the marker now names.
+#[cfg(test)]
+fn d8f_moved_application_origins() -> (StaticOriginId, StaticOriginId) {
+    let declaration = d8f_declaration_with(true, D8fPerturbation::MarkerMovedInward);
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D8F_SYMBOL.to_string(),
+        }),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let declarations = BTreeMap::from([(D8F_SYMBOL, &declaration)]);
+    let plan = plan_static_transition_graph_with_symbols(
+        &entry,
+        &declarations,
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .expect("the moved witness plans");
+    let units = plan.continuation_units().expect("continuation units");
+    let unit = units.first().expect("one continuation unit");
+    let mut cursor = unit.continuation_origin();
+    for step in [1usize, 0, 1, 0] {
+        cursor = plan
+            .child_static_origin(cursor, step)
+            .expect("the planner names this child occurrence");
+    }
+    let checked = cursor;
+    for step in [1usize, 0] {
+        cursor = plan
+            .child_static_origin(cursor, step)
+            .expect("the planner names this child occurrence");
+    }
+    let ordinary = cursor;
+    assert_ne!(
+        ordinary, checked,
+        "the two applications must be distinct occurrences, or the path above collapsed and this \
+         control has one subject rather than two"
+    );
+    (ordinary, checked)
+}
+
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8f` — the remaining checked-marker refusals:
 /// omission, duplicate, transplant, wrong occurrence.**
 ///
@@ -22529,28 +22597,10 @@ fn d8f_the_remaining_checked_marker_refusals() {
 
     // === Wrong occurrence ===
     //
-    // The independent side: the LAWFUL two-call run says which occurrence is the
-    // ordinary selected-argument call and which is the checked application. That
-    // is a different program's observation, so nothing in the moved run's own
-    // mechanism decides it.
-    reset_d8n_observations();
-    reset_d8o_body_authorities();
-    let _ = d8f_compile(true);
-    let lawful = d8f_keyed_observations();
-    let lawful_ordinary = lawful
-        .iter()
-        .filter(|(_, (disposition, bound))| {
-            *disposition == CheckedApplicationDisposition::PendingAtAnotherOccurrence && !bound
-        })
-        .map(|((_, origin), _)| *origin)
-        .collect::<BTreeSet<_>>();
-    assert_eq!(
-        lawful_ordinary.len(),
-        1,
-        "the lawful run must name exactly ONE ordinary selected-argument occurrence, or it cannot \
-         serve as the independent side: {lawful:?}"
-    );
-    let lawful_ordinary = *lawful_ordinary.iter().next().expect("one");
+    // The independent side: BOTH application occurrences are named by the
+    // planner's own child-origin walk over the moved witness. Nothing here is
+    // read from a disposition, from a binding, or as the complement of one.
+    let (named_ordinary, named_checked) = d8f_moved_application_origins();
 
     reset_d8n_observations();
     reset_d8o_body_authorities();
@@ -22573,27 +22623,19 @@ fn d8f_the_remaining_checked_marker_refusals() {
     );
     let body = *bodies.iter().next().expect("one body");
     assert_eq!(
-        moved.get(&(body, lawful_ordinary)),
+        moved.get(&(body, named_ordinary)),
         Some(&(CheckedApplicationDisposition::ConsumedHere, true)),
-        "THE MOVED ORDINARY APPLICATION: the occurrence the LAWFUL run identifies as the ordinary \
-         selected-argument call must be ConsumedHere AND bound here. Two independent sides -- a \
-         different program for which occurrence, and the seam's own binding log for whether it \
-         bound: {moved:?}"
+        "THE MOVED ORDINARY APPLICATION, named by the planner's child-origin walk before any \
+         observation is read: it must be EMITTED (a record exists at all, and dispositions are \
+         written after the instruction), ConsumedHere, AND bound at the seam: {moved:?}"
     );
-    let checked = moved
-        .iter()
-        .filter(|((_, origin), _)| *origin != lawful_ordinary)
-        .collect::<Vec<_>>();
     assert_eq!(
-        checked.len(),
-        1,
-        "THE CHECKED APPLICATION: exactly one other emitted application in that same body: \
-         {moved:?}"
-    );
-    assert!(
-        !checked[0].1 .1,
-        "and it must be UNBOUND -- left unaccounted because the ordinary call took its marker. If \
-         it were bound there would be no misattribution for the affine law to refuse: {moved:?}"
+        moved.get(&(body, named_checked)),
+        Some(&(CheckedApplicationDisposition::NoPendingApplication, false)),
+        "THE CHECKED APPLICATION, named the same way: emitted and UNBOUND -- left unaccounted \
+         because the ordinary call took its marker. If it were bound there would be no \
+         misattribution for the affine law to refuse, and this control would be describing a \
+         lawful program: {moved:?}"
     );
     assert!(
         wrong.contains("one causal identity was discharged twice in a single function"),
@@ -22670,3 +22712,4 @@ fn d8f_the_remaining_checked_marker_refusals() {
          transplanted marker never reaches the seam: {transplanted}"
     );
 }
+
