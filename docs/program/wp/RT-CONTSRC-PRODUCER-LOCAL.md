@@ -2862,8 +2862,31 @@ all six failing `D0` rows.
   ###### `D8o` sizing and sequencing
 
   **In-node, on the same branch-topology grounds as `D8n`** — the fix must land
-  on the held shared branch, and the rebase that a separate node would require
-  destroys the preserved exact SHAs this node's evidence is addressed by.
+  on the held shared branch, and a separately mergeable node cannot presently
+  keep both the live exact-SHA verdict chain and Ken's fresh-main /
+  one-WP-one-branch model.
+
+  > **CORRECTED 2026-08-06, and the correction matters because this sentence
+  > gets CITED.** It read *"the rebase a separate node would require **destroys
+  > the preserved exact SHAs** this node's evidence is addressed by."* **That is
+  > false as a git claim** (research `evt_2y8a2e5n281ye`, which I asked to
+  > challenge it): every object from `179af863` to the held tip is still a
+  > commit, a branch can be cut **at** the tip without rewriting a byte, and a
+  > preservation ref retains the old lineage indefinitely.
+  >
+  > **What is actually binding is two different things.** (1) **Verdict
+  > transfer** — reviews bind exact SHAs (`COORDINATION §14`,
+  > `04-git-and-integration.md`), and a rebased or cherry-picked commit does
+  > **not** inherit them; the cost is re-anchoring and revalidation, not
+  > destroyed history. (2) **Merge boundary** — a child cut at an unmerged tip
+  > is a stacked dependency that cannot merge before its parent, and one cut
+  > from fresh `main` lacks the substrate and must replay it.
+  >
+  > ⇒ **Read it as "prevents verdict transfer and forces re-anchoring."** The
+  > conclusion — in-node — is unchanged; the reason was wrong, and a wrong
+  > reason gets reused where it does not hold. **For `D7`+Recursor the decisive
+  > constraint is not this one at all: it is semantic atomicity** — one half
+  > regresses alone and the other has no reaching witness alone.
 
   **Sequencing, per the Architect:** it does **not** mechanically block `D8n`'s
   evidence-only edit, **but it must be resolved before a candidate or any
