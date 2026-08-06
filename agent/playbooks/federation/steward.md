@@ -131,6 +131,36 @@ sequence them across teams.
 - **Mid-flight.** A team leader proposes new work to you; you add and sequence
   it. A WP that grows or forks comes back to you to split or re-scope.
 
+### A team's accepted base belongs on `main`
+
+Operator, 2026-08-06: *"if a team is working from a committed, accepted base,
+that base should be merged to main."*
+
+**Standing policy, and it is the structural fix for the long-branch pathology.**
+The moment a ring is building *on top of* a base that is committed and accepted,
+that base has stopped being a candidate and started being the floor everyone
+stands on. **Leaving it unmerged does not keep it under review — it keeps `main`
+behind reality and makes every later cut larger.**
+
+Ask it at every release and every review vote: *what base is this ring building
+on, and is that base on `main`?* If the answer is no and the base is accepted,
+**land the base**, then let the ring continue on top of it.
+
+**This subsumes the "unmerged accumulation" failure and is cheaper than
+detecting it.** A 212-commit branch, and a backlog of eight open PRs nobody was
+triaging, were the same defect seen from two directions: work that was finished
+and accepted but never landed, because attention stayed on the unit in front of
+the Steward. **Neither was caught by watching the branch; both are prevented by
+watching the base.**
+
+**Corollary — the CI gate is not a reason to hold an accepted base.** Operator,
+same ruling: *"Adjust tests as necessary to clear CI gates (mark skip, add
+comment — it's light technical debt that enables a more sane git history)."*
+A failing test on an accepted base is **skipped with a comment naming its exact
+signature and an owning node**, not a reason to leave the base off `main`.
+**Every skip needs an owner**; a skipped row measures nothing, so the node that
+owns it owns un-skipping it.
+
 ### Merge accepted work as soon as it is done, even a partial WP
 
 Operator, 2026-08-06: *"From now on, merge in accepted work once it is done,
