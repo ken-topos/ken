@@ -41,9 +41,64 @@
 
 ### The one thing to do next
 
-**Wait for the second-signature boundary measurement** (released
-`evt_x9z9pt5nd3hg`). Nothing else is owed by me. **Do not publish until it
-returns.**
+**Wait for the operator's gate-readiness decision.** Everything measurable is
+measured; the accounting is CLOSED. The ring is holding with a named reason and
+has nothing it can act on. Do not restart measurement, do not publish, do not
+cut.
+
+### THE DECISION IN FRONT OF THE OPERATOR
+
+**Land 212 reviewed commits behind a documented gate, or build two more
+capabilities before anything lands.** That is gate readiness, which the playbook
+sends to the operator.
+
+**My recommendation, already given: LAND IT, with two hard conditions.**
+
+1. **Each residual row asserts its EXACT SIGNATURE**, so a *different* failure
+   at that row still reds. This is the skip-not-bad discipline that made every
+   measurement today sound, installed as a permanent control instead of a
+   one-off probe — it is what stopped the first bisect locating the wrong
+   defect.
+2. **Every row names an owning node.** Byte-span for the four; **a NEW node for
+   the explicit-entry trap**, which I would file as part of the same decision.
+
+**The honest counterweight:** a gate that tolerates known reds is a gate that
+can hide an unknown one. Against that, holding is what grew this branch to 212
+commits in the first place.
+
+### FINAL ACCOUNTING at tip `b914c7ff` — all five failures attributed
+
+Suite `px4b_native_production`: **14 passed / 5 failed** (was 8/11 at the failed
+`fc758323` publish). All five branch-introduced, absent at merge-base and `main`.
+
+| count | cause | owner |
+|---|---|---|
+| 4 | per-seat `BytesPointerLength` / `CarriedWord` | `RT-CARRIER-BYTESPAN-OBSERVE` |
+| 1 | `explicit entry trap`, exit `Some(1)` vs `Some(254)` | **UNOWNED — no node exists** |
+
+**Byte-span alone does NOT make the branch green.** The explicit-entry trap is
+a runtime trap, not a lowering refusal, and a byte-span observer cannot clear
+it. Two separately owned repairs.
+
+**Do NOT infer that "raw argv/env/cwd BYTES" puts the explicit-entry trap in the
+byte-span family.** That is the vocabulary inference the Architect refuted
+(`evt_7v61ed5pn9q3t`) and it must not be made a second time.
+
+### The signature history, complete
+
+| transition | last | first | note |
+|---|---|---|---|
+| green to `malformed borrowed process input` | `b9189ee9` | `c7410b79` | *"activation lands, and it exposes a RUNTIME failure the compile evidence could not see"* |
+| `malformed...` to `explicit entry trap` | `fb663bf3` | `9cea8a5e` | *"(RED at this tip)"* |
+
+**No last-green/first-red pair exists for the explicit trap** — the test is red
+continuously from `c7410b79`, so every older-signature commit is a *skip* by
+construction. The right question was **when the signature CHANGED SHAPE**, and
+both endpoints were re-probed directly rather than inherited from the bisect log.
+
+**All three transitions land on commits that ANNOUNCE THEMSELVES.** Nothing was
+hidden; each red row's reason was written down by its author at the time. That
+is not proof the failures are benign — a declared defect is still a defect.
 
 ### Candidate state — fully reviewed, held by me alone
 
