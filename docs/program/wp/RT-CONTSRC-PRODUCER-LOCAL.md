@@ -1380,9 +1380,10 @@ all six failing `D0` rows.
   | 9 | `D8e` DISCHARGES — causal obligation dischargeable and discharged | — | **DISCHARGED, Steward ruling below** |
   | 10 | `D8l1` — MEASURE the envelope frontier | planner | ANSWERED at `aaef1772`: **not structural** |
   | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | DISCHARGED `1f9a2020`+`abe46dda`, **QA-approved** |
-  | 12 | `D8m` — preserve the source frame through the bridge | lowering preservation | **NEXT** |
-  | 13 | `D8f` — checked-marker occupancy | integration | gate landed, **UNWITNESSABLE until `D8m`**; evidence `e80fd42f` |
-  | 14 | `D8g` — non-vacuous closeout, both paths | proof | held |
+  | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | **NEXT** — a real production defect |
+  | 13 | `D8m` — preserve the source frame through the bridge | lowering preservation | mechanism accepted `7d7f248b`; **witness blocked on `D8n`** |
+  | 14 | `D8f` — checked-marker occupancy | integration | gate landed, **UNWITNESSABLE until `D8m`**; evidence `e80fd42f` |
+  | 15 | `D8g` — non-vacuous closeout, both paths | proof | held |
   | 12 | `D6b` closeout, then `D6c` refusal set | — | held |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
@@ -2227,6 +2228,96 @@ all six failing `D0` rows.
   **This is a correction within `D8m`** — not a new node, and **not permission
   to alter `D8f`**, which stays held until the corrected exact object is
   reviewed.
+
+  ###### `D8n` — per-Function consumption lifecycle. A REAL defect. `evt_2v8pzbp9ek8r2`.
+
+  **`D8n` precedes the `D8m` witness.** Preserve exact `7d7f248b` as partial
+  `D8m` progress — its shared four-field checked-computational derivation is
+  accepted and the dead `second_frame` axis removal is correct.
+
+  **The defect.** The source marker is **one** source identity, but the ordinary
+  declaration `Function` and the generated specialization `Function` are
+  **distinct emitted code bodies**. Each lowers its own copy of that source body
+  and each must validate **one** consumption of the same semantic
+  `(invocation_id, frame_id)` pair. ⛔ **A compile-wide set conflates those two
+  function-local validations, because both function roots currently use
+  invocation id 0.**
+
+  ⭐ **This is NOT the dynamic-branch case, and the distinction is the whole
+  argument.** Branch successors **rejoin**, so `CheckedFrameBranchScope` unions
+  their consumptions and correctly rejects a later post-join revisit. **Distinct
+  emitted functions do not rejoin in one lowering control-flow graph, so their
+  consumption sets must not be unioned.**
+
+  **This is the function-splitting collision the earlier pair-versus-triple
+  ruling left CONDITIONAL** — that ruling rejected a dormant
+  `PredeclaredFunctionId` key salt but required a fresh ruling if the same pair
+  collided across function splitting. **The collision now exists, and its lawful
+  repair is lifecycle scoping, not restoring the salt.**
+
+  **Ruled mechanism.** ⛔ **Keep the live element type exactly `(u64, u64)` — do
+  NOT add emission owner, `FuncId`, `PredeclaredFunctionId` or any other salt to
+  the key.** Make `consumed_subcontinuation_frames` a **per-emitted-`Function`
+  lowering scope**:
+
+  1. enter a **fresh empty** pair set before lowering each source-bearing
+     generated `Function`;
+  2. use that same set — **including the existing branch transactions** — for
+     the whole function body;
+  3. require **no active checked marker to cross the function boundary**;
+  4. restore the enclosing compiler state after the function build; ⛔ **do not
+     union one function's consumptions into another's**;
+  5. apply the boundary **uniformly** to ordinary unit bodies, continuation
+     specialization bodies and generated continuation-context bodies. The
+     recursive-descent root remains one function and therefore one scope.
+
+  ⛔ **One structural function-body transaction around the EXISTING validator** —
+  not an ad hoc clear at the second lowering, and not a second validator. The
+  source plan/Runtime-marker bijection stays source-level and unchanged.
+
+  **Required discriminators, before the remaining `D8m` proof resumes:**
+
+  - the lawful witness records **two** defining function identities/emission
+    owners and the **same colliding pair**, and **each function consumes it
+    exactly once**;
+  - **both** functions reach the exact checked-IH slot reconciliation named by
+    the plan;
+  - **restoring the old compile-wide lifecycle reproduces the second-function
+    duplicate refusal**;
+  - duplicating the marker on one executable path **inside** either function
+    still produces the existing consumed-more-than-once refusal;
+  - ⛔ **a template-only single-function form is green but is NOT the sole
+    positive** — it removes one side of the collision and would leave the
+    production defect intact;
+  - branch-scope duplicate/transplant controls unchanged;
+  - pair key shape, plan-frame count, Runtime-marker count, fingerprints and the
+    full transported tuple all unchanged.
+
+  ###### `D8n` sizing — in-node, and BRANCH TOPOLOGY is what decides it
+
+  **An ordered in-node predecessor checkpoint, not a separate substrate node.**
+
+  ⚠ **The honest case for a node is real and I am recording it rather than
+  brushing past it:** this is a **production lifecycle change to a law that
+  predates this node**, applying uniformly across three body kinds, and unlike
+  `D8h`-`D8k` it **would stand alone** — it repairs a defect reachable by any
+  program splitting a checked body across a declaration and a specialization,
+  independently of anything `D8` built. By the standalone test I used for
+  `D8h`-`D8k`, this one passes.
+
+  ⛔ **What decides it against a node is that the fix must land on the HELD
+  SHARED BRANCH.** A separate node could only get there by (a) cutting from
+  `main`, merging, then **rebasing** `wp/RT-DECL-CLOSURE-PORT-typed-units` onto
+  it — which **destroys every preserved exact checkpoint SHA on that branch**,
+  and this node's whole evidence chain is preserved-SHA-addressed — or (b)
+  landing on the same shared branch anyway, which recreates the
+  "two nodes, one branch, one candidate" shape [[RT-UNIT-CLOSURE-CONVERT]]
+  needed three paragraphs to explain was not a deadlock.
+
+  ⇒ **Neither is acceptable, so the classification concern loses to the
+  topology.** Recorded so a later reader knows the substrate argument was
+  weighed and what beat it — **if this node's branch ever merges before the
+  lifecycle work is done, the answer flips to a node.**
 
   ###### `D8k`'s ledger row is proved ON THE LAW, not on reach — and that is owed
 
