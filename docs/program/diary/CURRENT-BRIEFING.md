@@ -180,6 +180,33 @@ never re-baseline.**
 **`D6` landed** (stale carried-scrutinee reachability comment) at `c4112237` on
 `wp/RT-ENTRY-TRAP-254-d6` — follow-up PR when Actions returns.
 
+### RT-SRCBODY-BIND-ORDER in flight — candidate `5d388e37`, QA HELD
+
+- **`5d388e37`** meets `D1`, `D2`, `D4`, all four controls red-before-green.
+- **`D3` control 4 and `AC-3` were AMENDED by the Steward** (`evt_gpekyt7jzb67`).
+  The required population does not exist — no body is present at both hosts,
+  retargeted raw workers are template-only, **every generated-context worker is
+  unary**. The ring reported the weakness instead of widening the fixture.
+  **`AC-3` as originally written was UNDISCHARGEABLE and that was a frame defect
+  of mine.**
+- **The ruling, one fact:** `reverse([p]) ++ captures` is identical to the
+  parameter-then-capture order already installed, so **`D2` is INERT at unary
+  arity.** ⇒ the obligation becomes an **ACTIVATION GATE** on the first
+  multi-parameter generated-context worker, shipped as a **TRANSITION
+  SENTINEL** that asserts the measured population and reddens by itself.
+  **Non-vacuity required:** observed RED against a hand-added two-parameter
+  worker, then restored. **`AC-3` must NOT be recorded as "equivalence
+  verified"** — equivalence is unfalsifiable at unary arity.
+- **NOT authorized:** changing the checked IH call-site arity to manufacture the
+  fixture. Population expansion into a checked mechanism, and the constraint
+  demanding it was **this frame's own prose**.
+- **ARCHITECT is reviewing `D3c` unrequested** (`evt_28gv50xst6sqf`): tracing
+  `RootIsImmediate` from its stored coordinate into the **post-`D1` semantic
+  environment**. **This is the right question and I did not think to ask it** —
+  `D1` reorders the semantic env, and `D3c`'s per-consumer availability claims
+  are keyed to that env, so a claim could now name the wrong value. **QA is
+  correctly held pending it. Do not release QA or alter `D3c` until it lands.**
+
 ### GATE MISS, MINE: I released a new node without the before-work compaction
 
 **`COORDINATION §15` / `steward/compaction.md`: always compact before new work,
