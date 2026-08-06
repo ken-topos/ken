@@ -1582,6 +1582,7 @@ all six failing `D0` rows.
   | 17 | `D8g` — non-vacuous closeout, over TWO populations | proof | **Owner re-measurement DISCHARGED** `1b367065` (Architect `evt_7v6ve6rsc8d39`) — **outcome (1): the owner VARIES but SEPARATES nothing**, so the prohibition stands and no owner positive is required. **Closeout then HARD-STOPPED** (`evt_9yrrhnjp6dfd`): its two facts live in disjoint witness families. **RECUT over both populations** by Architect disposition `evt_6afmy0398n847`; frame clauses replaced 2026-08-06. Closeout then ran four review rounds — `b0614513`, `337ee9d9`, `6d884090`, `90f96c00`, `0665b9d5` all preserved as held progress. **Two review requirements were withdrawn as STRONGER THAN THE FRAME**: post-emission-FIRST refusal for the mutations (`evt_5vwdtrznf3km4` — earliest structural guard is accepted, and is the stronger evidence), and the independent `(defining Function, call origin)` expectation (`evt_399j195rn8fpa` — **no authority exists to derive it from**; see `EXACT-KEY LIMIT`). **SECOND RECUT landed 2026-08-06.** ⇒ **DISCHARGED at exact `400bddde`** (Architect `evt_4mzks855xpw8h`) |
   | 18 | `D6b` closeout | proof | **DISCHARGED at exact `c47d94a7`** (Architect `evt_61y1n1y7kpj3f`), reached as `08f1c2f7` → `b7d34bf7` → `c47d94a7`. `08f1c2f7` was the accepted bounded evidence block, not the completion object (Architect `evt_6grnfx2psztcn`; three commits on `400bddde`, `771/2/1`, no production change). **ONE conjunct retired as a permanent LIMIT**: *"resolves through `raw_worker_calls`"* read as attribution — the tables are equal wherever a raw call emits, the body where they differ emits none, and the retention that would change it is banned on measurement (`evt_3dcafs581921e` Finding 2). **The *"selected recursive argument is actually called"* conjunct is DELIVERED, not limited** — `D8e`/`D8j` is the accepted positive on the composed source-machine path; `08f1c2f7`'s `BoundaryCarrier` row is only the **ordinary-unit copy** and is retained as a local fail-closed control. The remaining work was a **comment/failure-text-only fidelity chain** and it landed: `b7d34bf7` retired two false source contracts, `c47d94a7` named the discriminator the row actually has — proved by inversion, substituting the identifier back reproduces the parent blob byte for byte |
   | 19 | `D6c` — the refusal set, pre-emission | proof | **DISCHARGED at exact `bd79daa7`** (Architect `evt_41j4y5rpy4zfc`). **Entirely a refusal set, so the refusal plane is its whole proof** — see `TWO PROOF PLANES`. Mechanism accepted at `93424655`: a checked, producer-local, exhaustive canonical-run postcondition in `continuation_case_binder_run`, five refusal rows, two positives, the `px8tr` order discriminator and the governed equal-value limit. `e7390f2e` → `93424655` → `8ec921aa` → `bd79daa7`, the last two comment-only |
+  | 20 | `D9` — assemble the ordinary run from the planner envelope | lowering producer | **NEXT.** Found by node QA, not by a checkpoint review: `AC-1` had no owning deliverable. Classified in-node with no new planner/ABI authority (Architect `evt_1y7h08xd7ermp`) |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
   This heading previously read *"label order, for the first time on this
@@ -1597,7 +1598,15 @@ all six failing `D0` rows.
   label for different content.** The same reasoning forbids the reuse here, so
   the ordering invariant is what gives way.
 
-  ###### STEWARD RULING — all checkpoints DISCHARGED. No `D6`-closure unit. QA released.
+  ###### STEWARD RULING — the `D6` cut is CLOSED; QA then BLOCKED. See `D9`.
+
+  > **AMENDED 2026-08-06 after node QA. Two claims below were WRONG when I made
+  > them and are corrected in place, not appended to.** QA blocked the candidate
+  > on `AC-1` (`evt_28qa9ee7wx1sk`), which **no deliverable had ever been
+  > assigned to close.** So *"the whole ledger is discharged"* was true only of
+  > the `D`-checkpoints, and *"next unit: node QA"* skipped a unit that did not
+  > yet exist. **`D9` below is that unit.** Everything about the `D6` cut and
+  > the two candidate gates is unaffected and still holds.
 
   **Issued 2026-08-06, answering `runtime-leader`'s `evt_9gq3s2n9rcj2` and the
   Architect's disposition. The leader's frame read was correct and its refusal
@@ -1609,9 +1618,11 @@ all six failing `D0` rows.
   `D6b` `c47d94a7`, `D6c` `bd79daa7` — so `D6` is closed by that fact alone.
   Nothing further is owed at `D6` and **no `D6d` may be allocated.**
 
-  **The whole ledger is discharged.** `D0`-`D4` landed; `D5`'s work is the
+  **Every `D`-checkpoint is discharged.** `D0`-`D4` landed; `D5`'s work is the
   `D6a`/`D6b`/`D6c` cut above (`D5a-1`/`D5a-2` spent, GOVERNING block); the
-  `D8` series is complete across all nineteen execution-order rows.
+  `D8` series is complete across all nineteen execution-order rows. **That is
+  not the same as the node being acceptable** — see the amendment above and
+  `D9`.
 
   **The two candidate gates this frame sets are both MET, and I checked each
   against its own text rather than against the discharge table:**
@@ -1626,11 +1637,11 @@ all six failing `D0` rows.
   section above. `D8e`'s own layer is exercised end to end, which is what
   distinguishes it from the `D6b` limit.
 
-  ⇒ **Next unit: node QA against `AC-1` through `AC-5`.** Then the candidate.
-  `AC-1` and `AC-1b` are **per row, never a total**, and `AC-1`'s row refuses
-  at a different site from the other five — report the two populations
-  separately. `AC-4` is workspace green **in CI**, never a local `--workspace`
-  run (`COORDINATION §12`).
+  ⇒ **Next unit: `D9`.** Then QA **resumes at `AC-2`** — `AC-1`'s siblings were
+  never reached and do not need re-running. `AC-1` and `AC-1b` are **per row,
+  never a total**, and `AC-1`'s row refuses at a different site from the other
+  five, so report the two populations separately. `AC-4` is workspace green
+  **in CI**, never a local `--workspace` run (`COORDINATION §12`).
 
   ###### `D8c` IS RETIRED — folded into `D8e`. Architect `evt_nwgvvr4vaf7y`.
 
@@ -3891,9 +3902,110 @@ all six failing `D0` rows.
 
   ⭐ **All 17 parity instances are in `V`** — that is the critical-path fact.
 
+- **`D9` — assemble the continuation's ordinary run from the PLANNER ENVELOPE,
+  not from the nonrecursive fields alone. ADDED 2026-08-06; this is the node's
+  LAST deliverable and it is what `AC-1` was always asking for.**
+
+  **Why it exists, stated plainly: this is a framing defect of mine.** `AC-1`
+  named an outcome and **no deliverable was ever assigned to produce it.** Node
+  QA blocked on it at `evt_28qa9ee7wx1sk` — correctly, and it is the first
+  reader that could have, because **QA checks ACs against the artifact while
+  every checkpoint review checks a checkpoint against a ruling.** A pass/fail
+  total would have hidden it, which is exactly what `AC-1b` exists to prevent.
+
+  **It is NOT a regression.** The row
+  `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds`
+  has been red since `D0` at `179af863`. What moved is where it dies: a
+  front-end `Match: scrutinee is not a constructor value` at `D0`, and now a
+  fail-closed arity refusal at emission.
+
+  ###### The measurement — Architect `evt_1y7h08xd7ermp`, on exact `bd79daa7`
+
+  Taken with a temporary diagnostic in a detached worktree, since deleted; the
+  candidate was never touched. The failing call is the **direct continuation
+  emission at `core.rs:7621`, for `ContinuationSpecializationId(0)`**:
+
+  | fact | value |
+  |---|---|
+  | callee target | origin `12`, declared **6 `Parameter` + 2 `Capture`** |
+  | caller supplied | `1` ordinary + `2` projected continuation inputs = **3** |
+  | planner ordinary envelope | one `NonrecursiveConstructorField(0)`, then **five exact `WorkerCapture` roles** |
+  | selected recursive value | closure occurrence `381`, body `375`, arity `1`, **five captures already present** in `Lowered::Closure::captures` |
+
+  **The identity and the planner envelope independently name the same closure,
+  body, arity, five capture ordinals, owner, source origins and lifetimes.** So
+  the callee descriptor is not inventing operands and the ABI is not missing a
+  slot. **The caller builds only the nonrecursive field run — despite its own
+  comment and the planner contract both requiring the selected worker's capture
+  run to follow.** The five values are already available at that exact
+  source-bearing seat through this node's landed phase-bearing closure-capture
+  representation.
+
+  **No hard stop fires.** The Architect classified this as a bounded omission in
+  existing producer-side assembly: no environment lookup, new locator, new
+  carrier, new slot kind or widened ABI. Section 7 clauses 1 and 2 are **not**
+  triggered, which is what makes this framable in-node at all.
+
+  ###### The repair surface — exactly three things
+
+  1. Assemble the continuation's ordinary run from the **planner-issued
+     `ContinuationOrdinaryEnvelopeRole` sequence.**
+  2. Take **nonrecursive roles from their exact lowered source positions** and
+     **worker-capture roles from the exact selected closure's existing ordered
+     capture vector.**
+  3. **Fail closed before emission** on closure occurrence/body/arity, capture
+     ordinal/count/provenance, role order, or final header-cardinality
+     disagreement.
+
+  ###### BANNED repairs — each discards authority that already exists
+
+  - weakening the six-parameter descriptor;
+  - padding from `producer_env`;
+  - treating capture ordinals as **generic environment indices**.
+
+  The last two reintroduce the **cross-plane aliasing this node removed**. A
+  green `AC-1` obtained by any of the three is not a discharge and will be
+  rejected on review.
+
+  ###### The controls, and the rule they are authored against
+
+  **Author them against the GOVERNING block — *name the INDEPENDENT SIDE, and
+  KEY the relation* — BEFORE writing them, not after review sends them back.**
+  That shape has now cost this node **eight** holds, and `D9`'s proof is the
+  same shape yet again: it compares an assembled run against a planner
+  expectation.
+
+  - **The independent side is the planner envelope**, which exists before any
+    lowering assembly and is derivable without consulting the assembler.
+    **Deriving the expectation from the assembled run is the defect** the whole
+    GOVERNING section is about.
+  - **Key the relation by exact role position.** A multiset of five capture
+    values proves only that the right values exist *somewhere*. Ask the cheap
+    discriminating question: *what lawful permutation of my observed data
+    leaves this assertion green?* **Swapping two capture ordinals between two
+    roles must RED.**
+  - **The positive is `AC-1`'s row itself** — it reaches the real producer and
+    returns `InvalidBounds` at the exact `264 -> 262 / position 1` consumer,
+    with shared-host dispatch count **zero**. Removing the carried-capacity arm
+    recreates the refusal at that exact seat.
+  - **Report `AC-1` separately from the five-row `ComputationalMatch`
+    population, always.** They refuse at different sites and greening one says
+    nothing about the other.
+
+  ###### Sizing
+
+  One turn. The Architect's measurement means nothing needs discovering — the
+  values, the authority and the contract all exist and are named above. **If the
+  refusal set alone grows past a turn, split `D9` into `D9a` (assembly plus the
+  `AC-1` positive) and `D9b` (the refusal set) rather than hard-stopping** — but
+  do not split the guard away from the assembly it guards by default.
+
 ## 4. Acceptance criteria
 
-- **`AC-1` — the linked row closes.** The `D0` row
+- **`AC-1` — the linked row closes. OWNED BY `D9`.** Until 2026-08-06 this AC
+  named an outcome **no deliverable was assigned to produce**, and node QA is
+  what found it. **Every AC in this section must name its owning deliverable;
+  if one cannot, that is the finding.** The `D0` row
   `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds` reaches the
   real producer and returns `InvalidBounds` at the exact `264 -> 262 /
   position 1` consumer, with shared-host dispatch count **zero**. Removing the
