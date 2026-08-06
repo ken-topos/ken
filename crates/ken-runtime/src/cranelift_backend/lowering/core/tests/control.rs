@@ -21218,6 +21218,28 @@ const D8F_SYMBOL: &str = "decl:fixture::d8f::witness";
 /// construction, which is the whole point.
 #[cfg(test)]
 fn d8f_witness(with_ordinary_call: bool) -> RuntimeExpr {
+    d8f_witness_with(with_ordinary_call, D8fPerturbation::None)
+}
+
+/// How the `D8f` witness is perturbed. Each variant moves exactly one fact about
+/// WHICH call may consume the pending checked-IH marker.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum D8fPerturbation {
+    /// The lawful witness.
+    None,
+    /// The marker's application is a call on a VALUE binder, so no static-worker
+    /// call ever visits the occurrence the marker names.
+    NoConsumingCall,
+    /// A second invocation marker inside the first.
+    NestedMarker,
+    /// The marker moved onto the inner ordinary call, with the plan still built
+    /// for the outer one.
+    MarkerMovedInward,
+}
+
+#[cfg(test)]
+fn d8f_witness_with(with_ordinary_call: bool, perturbation: D8fPerturbation) -> RuntimeExpr {
     let expr = d8n_witness();
     let RuntimeExpr::Let { value, body } = expr else {
         panic!("let")
@@ -21266,23 +21288,12 @@ fn d8f_witness(with_ordinary_call: bool) -> RuntimeExpr {
                 body: RuntimeExpr::CheckedComputationalIHSlots {
                     slot_template_ids: slot_template_ids.clone(),
                     checked_occurrence_paths: checked_occurrence_paths.clone(),
-                    body: Box::new(RuntimeExpr::CheckedComputationalIHInvocation {
-                        call_template_id: 100,
-                        checked_occurrence_path: vec![30],
-                        body: Box::new(RuntimeExpr::Call {
-                            callee: callee.clone(),
-                            // The ordinary selected-argument call: the SAME
-                            // worker, the SAME arity, at a DIFFERENT occurrence.
-                            args: if with_ordinary_call {
-                                vec![RuntimeExpr::Call {
-                                    callee: callee.clone(),
-                                    args: args.clone(),
-                                }]
-                            } else {
-                                args.clone()
-                            },
-                        }),
-                    }),
+                    body: Box::new(d8f_marked_application(
+                        callee,
+                        args,
+                        with_ordinary_call,
+                        perturbation,
+                    )),
                 },
             }
         })
@@ -21311,15 +21322,103 @@ fn d8f_witness(with_ordinary_call: bool) -> RuntimeExpr {
     }
 }
 
+/// The marked application at the bridge case body, under one perturbation.
+///
+/// `callee` is the induction-hypothesis binder the lawful application calls;
+/// `args` its lawful argument run.
+#[cfg(test)]
+fn d8f_marked_application(
+    callee: &RuntimeExpr,
+    args: &[RuntimeExpr],
+    with_ordinary_call: bool,
+    perturbation: D8fPerturbation,
+) -> RuntimeExpr {
+    // The ordinary selected-argument call: the SAME worker, the SAME arity, at a
+    // DIFFERENT occurrence.
+    let application = |callee: &RuntimeExpr| RuntimeExpr::Call {
+        callee: Box::new(callee.clone()),
+        args: if with_ordinary_call {
+            vec![RuntimeExpr::Call {
+                callee: Box::new(callee.clone()),
+                args: args.to_vec(),
+            }]
+        } else {
+            args.to_vec()
+        },
+    };
+    let marker = |call_template_id: u64, path: Vec<u64>, body: RuntimeExpr| {
+        RuntimeExpr::CheckedComputationalIHInvocation {
+            call_template_id,
+            checked_occurrence_path: path,
+            body: Box::new(body),
+        }
+    };
+    match perturbation {
+        D8fPerturbation::None => marker(100, vec![30], application(callee)),
+        // A call on a VALUE binder. The marker still wraps one complete
+        // application of the right arity, so entry admits it -- and no
+        // static-worker call ever visits the occurrence it names.
+        D8fPerturbation::NoConsumingCall => marker(
+            100,
+            vec![30],
+            RuntimeExpr::Call {
+                callee: Box::new(RuntimeExpr::Var(1)),
+                args: args.to_vec(),
+            },
+        ),
+        // A second marker inside the first, on the same application.
+        // The outer marker wraps a complete application, as entry requires; its
+        // ARGUMENT carries a second marker. So the inner marker is entered while
+        // the outer is still pending.
+        D8fPerturbation::NestedMarker => marker(
+            100,
+            vec![30],
+            RuntimeExpr::Call {
+                callee: Box::new(callee.clone()),
+                args: vec![marker(
+                    101,
+                    vec![31],
+                    RuntimeExpr::Call {
+                        callee: Box::new(callee.clone()),
+                        args: args.to_vec(),
+                    },
+                )],
+            },
+        ),
+        // The marker moved onto the INNER ordinary call. The outer application
+        // is left unmarked, so the marker names an occurrence the plan built for
+        // the outer one does not.
+        D8fPerturbation::MarkerMovedInward => RuntimeExpr::Call {
+            callee: Box::new(callee.clone()),
+            args: vec![marker(
+                100,
+                vec![30],
+                RuntimeExpr::Call {
+                    callee: Box::new(callee.clone()),
+                    args: args.to_vec(),
+                },
+            )],
+        },
+    }
+}
+
 #[cfg(test)]
 fn d8f_declaration(with_ordinary_call: bool) -> RuntimeDeclaration {
+    d8f_declaration_with(with_ordinary_call, D8fPerturbation::None)
+}
+
+#[cfg(test)]
+fn d8f_declaration_with(
+    with_ordinary_call: bool,
+    perturbation: D8fPerturbation,
+) -> RuntimeDeclaration {
     RuntimeDeclaration {
         symbol: D8F_SYMBOL.to_string(),
         kind: RuntimeDeclarationKind::Transparent {
             body: RuntimeExpr::Closure {
                 captures: Vec::new(),
                 params: vec!["state".to_string()],
-                body: Box::new(d8f_witness(with_ordinary_call)),
+                body: Box::new(d8f_witness_with(with_ordinary_call, perturbation)),
             },
         },
         metadata: RuntimeSymbolMetadata {
@@ -21332,8 +21431,11 @@ fn d8f_declaration(with_ordinary_call: bool) -> RuntimeDeclaration {
 /// Every checked marker location in the `D8f` witness, measured by the
 /// production collector.
 #[cfg(test)]
-fn d8f_marker_sets(with_ordinary_call: bool) -> crate::cranelift_backend::planning::CheckedOrientedMarkerSets {
-    let declaration = d8f_declaration(with_ordinary_call);
+fn d8f_marker_sets(
+    with_ordinary_call: bool,
+    perturbation: D8fPerturbation,
+) -> crate::cranelift_backend::planning::CheckedOrientedMarkerSets {
+    let declaration = d8f_declaration_with(with_ordinary_call, perturbation);
     let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
         panic!("transparent")
     };
@@ -21365,7 +21467,15 @@ fn d8f_located(
 
 #[cfg(test)]
 fn d8f_plan(with_ordinary_call: bool) -> crate::OrientedSubcontinuationPlanV1 {
-    let declaration = d8f_declaration(with_ordinary_call);
+    d8f_plan_with(with_ordinary_call, D8fPerturbation::None)
+}
+
+#[cfg(test)]
+fn d8f_plan_with(
+    with_ordinary_call: bool,
+    perturbation: D8fPerturbation,
+) -> crate::OrientedSubcontinuationPlanV1 {
+    let declaration = d8f_declaration_with(with_ordinary_call, perturbation);
     let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
         panic!("transparent")
     };
@@ -21378,7 +21488,7 @@ fn d8f_plan(with_ordinary_call: bool) -> crate::OrientedSubcontinuationPlanV1 {
         frame.occurrence_binding_fingerprint =
             crate::compiler_private_oriented_occurrence_binding_fingerprint(frame);
     }
-    let sets = d8f_marker_sets(with_ordinary_call);
+    let sets = d8f_marker_sets(with_ordinary_call, perturbation);
     let slot_paths = sets
         .computational_ih_slots
         .get(&(200, vec![20]))
@@ -21426,13 +21536,44 @@ fn d8f_plan(with_ordinary_call: bool) -> crate::OrientedSubcontinuationPlanV1 {
     };
     call.occurrence_binding_fingerprint =
         crate::compiler_private_computational_ih_call_binding_fingerprint(&call);
-    plan.computational_ih_calls = vec![call];
+    plan.computational_ih_calls = vec![call.clone()];
+    // The nested-marker perturbation carries a SECOND source marker, so the plan
+    // must hold its template too -- otherwise planning refuses on the marker
+    // population and the nesting law is never reached.
+    if perturbation == D8fPerturbation::NestedMarker {
+        let mut inner = crate::CheckedComputationalIHCallTemplateV1 {
+            call_template_id: 101,
+            checked_occurrence_path: vec![31],
+            runtime_marker_locations: d8f_located(
+                sets.computational_ih_calls
+                    .get(&(101, vec![31]))
+                    .expect("the nested marker is located"),
+            ),
+            occurrence_binding_fingerprint: 0,
+            ..call
+        };
+        inner.occurrence_binding_fingerprint =
+            crate::compiler_private_computational_ih_call_binding_fingerprint(&inner);
+        plan.computational_ih_calls.push(inner);
+    }
     plan
 }
 
 #[cfg(test)]
 fn d8f_compile(with_ordinary_call: bool) -> Option<CraneliftBackendError> {
-    let declaration = d8f_declaration(with_ordinary_call);
+    d8f_compile_with(with_ordinary_call, D8fPerturbation::None, D8fPerturbation::None)
+}
+
+/// `source` spells the witness the SOURCE carries; `planned` the one the plan is
+/// derived from. Passing different values perturbs one side while the other
+/// stays lawful.
+#[cfg(test)]
+fn d8f_compile_with(
+    with_ordinary_call: bool,
+    source: D8fPerturbation,
+    planned: D8fPerturbation,
+) -> Option<CraneliftBackendError> {
+    let declaration = d8f_declaration_with(with_ordinary_call, source);
     let entry = RuntimeExpr::Call {
         callee: Box::new(RuntimeExpr::DeclarationRef {
             symbol: D8F_SYMBOL.to_string(),
@@ -21453,7 +21594,7 @@ fn d8f_compile(with_ordinary_call: bool) -> Option<CraneliftBackendError> {
         true,
         None,
         Some(test_only_distinguished_root_join_plan()),
-        Some(d8f_plan(with_ordinary_call)),
+        Some(d8f_plan_with(with_ordinary_call, planned)),
     )
     .err()
 }
@@ -22129,5 +22270,135 @@ fn d8f_the_declined_call_does_not_answer_for_the_checked_identity() {
         "and every disposition on that program is NoPendingApplication, so clause 4 is about the \
          first case and not about a program that quietly has a marker somewhere: {:?}",
         d8f_dispositions()
+    );
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8f` — the remaining checked-marker refusals:
+/// omission, duplicate, transplant, wrong occurrence.**
+///
+/// All four are about **which call consumes a pending checked-IH marker**, and
+/// each is stated with the plane that refuses it, because "it refuses" and "it
+/// refuses at the seam" are different findings.
+///
+/// ## The independent side
+///
+/// Each control names the exact law it must reach and the message that law
+/// emits, and the lawful witness is compiled alongside so a refusal that
+/// appears on every program would be visible as one. The plan for each
+/// perturbed program is rebuilt from that program's own text -- marker
+/// locations measured by the production collector -- so a control only reaches
+/// a later plane when the earlier ones genuinely admit it.
+///
+/// ## Omission — the marker is entered and nothing consumes it
+///
+/// The sole producer of the consumption is withheld and nothing else moves: the
+/// call is still emitted, lawfully and unchanged. The marker then reaches its
+/// close still pending and fails closed. ⛔ No lawful source produces this
+/// population -- the planner issues a call template only for an application it
+/// saw -- so withholding the consumption is the honest way to instantiate it,
+/// and it is a difference proof rather than a fixture.
+///
+/// ## Duplicate — a second marker while one is pending
+///
+/// The outer marker wraps a complete application, as entry requires, and its
+/// ARGUMENT carries a second marker. The plan holds BOTH call templates, so
+/// planning admits the program and the nesting law is genuinely reached: one
+/// pending checked application at a time.
+///
+/// ## Transplant — the marker moved, the plan unchanged
+///
+/// PLANNING plane, and that is the finding rather than a shortfall: a marker at
+/// an occurrence the plan does not name is settled before lowering, by the
+/// location comparison, and never reaches the seam.
+///
+/// ## Wrong occurrence — the marker names the ordinary call
+///
+/// Both sides moved together, so the program is well formed and reaches
+/// lowering. The marker is then consumed by the ordinary selected-argument call,
+/// the checked application goes unaccounted, and both calls answer for the one
+/// composed causal identity. The AFFINE CAUSAL law refuses.
+///
+/// ⚠ Stated exactly: this is the wrong-occurrence hazard reaching a live law,
+/// and that law is the affine one, not a marker law. The marker-plane defence
+/// against a wrong occurrence is the gate itself, whose always-admit mutation is
+/// established at `20b0d6be` and is not re-run here.
+///
+/// **Promise class: durable invariant.** Named refusals under existing laws,
+/// each labelled with the plane that produced it.
+#[test]
+fn d8f_the_remaining_checked_marker_refusals() {
+    use crate::cranelift_backend::lowering::{with_d5a_marker_mutation, D5aMarkerMutation};
+
+    // The lawful witness compiles, so no refusal below is one this program has
+    // anyway.
+    assert!(
+        d8f_compile(false).is_none() && d8f_compile(true).is_none(),
+        "both lawful witnesses must compile, or every control below could be reporting a refusal \
+         the program carries regardless of its perturbation"
+    );
+
+    // Omission — withhold the sole producer of the consumption.
+    let omitted = with_d5a_marker_mutation(D5aMarkerMutation::SuppressConsumption, || {
+        format!("{:?}", d8f_compile(false))
+    });
+    assert!(
+        omitted.contains("a checked computational-IH marker is a specialized-only surface"),
+        "a marker nothing consumed must fail closed at its own close. The call is still emitted \
+         and unchanged -- only the consumption is withheld -- so this is the omission population \
+         stated as a difference: {omitted}"
+    );
+
+    // Duplicate — a second marker entered while one is pending.
+    let duplicated = format!(
+        "{:?}",
+        d8f_compile_with(false, D8fPerturbation::NestedMarker, D8fPerturbation::NestedMarker)
+    );
+    assert!(
+        duplicated.contains("nested computational IH invocation marker"),
+        "one pending checked application at a time. The plan holds BOTH templates here, so this \
+         must be the nesting law and not a plan/marker population refusal -- if it is the latter \
+         the control never reached the law it names: {duplicated}"
+    );
+
+    // Transplant — the marker moved, the plan left naming the old occurrence.
+    let transplanted = format!(
+        "{:?}",
+        d8f_compile_with(true, D8fPerturbation::MarkerMovedInward, D8fPerturbation::None)
+    );
+    assert!(
+        transplanted.contains("checked computational-IH call Runtime occurrences differ"),
+        "a marker at an occurrence the plan does not name is settled in PLANNING, by the location \
+         comparison, and never reaches the seam. That is where this law lives: {transplanted}"
+    );
+
+    // Wrong occurrence — the marker names the ordinary call, both sides moved.
+    let wrong = format!(
+        "{:?}",
+        d8f_compile_with(
+            true,
+            D8fPerturbation::MarkerMovedInward,
+            D8fPerturbation::MarkerMovedInward,
+        )
+    );
+    assert!(
+        wrong.contains("one causal identity was discharged twice in a single function"),
+        "with the marker on the ordinary call the checked application goes unaccounted and both \
+         calls answer for the one composed identity. MEASURED: the law that refuses is the AFFINE \
+         CAUSAL one, not a marker law -- the marker-plane defence is the occupancy gate, whose \
+         always-admit mutation is established at 20b0d6be. If this message ever changes, the \
+         hazard has moved and this expectation should be restated rather than deleted: {wrong}"
+    );
+
+    // Each control must name a DIFFERENT law, or two of them are the same test.
+    let refusals = [&omitted, &duplicated, &transplanted, &wrong]
+        .into_iter()
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        refusals.len(),
+        4,
+        "the four controls must reach four distinct refusals. Two identical messages would mean \
+         one perturbation is being caught by another's law and the matrix has a hole where it \
+         looks covered: {refusals:?}"
     );
 }
