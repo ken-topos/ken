@@ -1388,8 +1388,8 @@ all six failing `D0` rows.
   | 10 | `D8l1` — MEASURE the envelope frontier | planner | ANSWERED at `aaef1772`: **not structural** |
   | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | DISCHARGED `1f9a2020`+`abe46dda`, **QA-approved** |
   | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | **DISCHARGED** `3a63fe64`, after two bounded evidence corrections |
-  | 13 | `D8o` — ambient body authority | lowering compiler state | mechanism accepted `5154d94a`; evidence blocked **twice** (`5154d94a`, `d3f7e32c`) — **exact-body-key** correction in flight |
-  | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | mechanism accepted `7d7f248b`; **witness blocked** |
+  | 13 | `D8o` — ambient body authority | lowering compiler state | **DISCHARGED** `3aadbaae`, after two evidence blocks (`5154d94a`, `d3f7e32c`) |
+  | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | mechanism accepted `7d7f248b`; **witness blocked** — **NEXT**, releases from `3aadbaae` |
   | 15 | `D8f` — checked-marker occupancy | integration | gate landed, **UNWITNESSABLE until `D8m`**; evidence `e80fd42f` |
   | 16 | `D8g` — non-vacuous closeout, both paths | proof | held |
   | 17 | `D6b` closeout, then `D6c` refusal set | — | held |
