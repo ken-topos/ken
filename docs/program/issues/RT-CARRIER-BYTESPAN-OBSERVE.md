@@ -18,9 +18,54 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > criteria with controls, and no contention check. **The Steward owes those
 > before this flips `ready`.**
 >
-> This node is **off the critical path**. It gates nothing — `blocks` is empty.
-> It exists because a real capability gap was measured, not to make a graph
-> tidy.
+> ## CORRECTED 2026-08-06 ~18:0xZ — THIS NODE IS THE PUBLISH BLOCKER
+>
+> **This block previously read "off the critical path; it gates nothing;
+> `blocks` is empty." All three were FALSE and all three were mine.**
+>
+> **Measured at candidate tip `b914c7ff`** (`evt_2h8wm2ff99ayq`), suite
+> `px4b_native_production` at **14 passed / 5 failed**, down from 8/11 at
+> `fc758323`. **Four of the five remaining failures are this node's subject,
+> verbatim:**
+>
+> | count | seat |
+> |---|---|
+> | 2 | `FsWriteFile Argument(0)` needs `BytesPointerLength`, cannot observe in `CarriedWord` |
+> | 1 | `ConsoleWrite Argument(1)` — same need, same phase |
+> | 1 | `FsReadFile Argument(0)` — same need, same phase |
+>
+> The fifth is `ken native trap: explicit entry trap`, provenance under
+> measurement.
+>
+> ⇒ **This node gates the merge of 212 reviewed commits with six nodes behind
+> them.** It is the critical path until something measured says otherwise.
+>
+> ### The evidence route matters — do not cite the wrong one
+>
+> **Do NOT justify this node from the historical `c7410b79` `BoundaryCarrier:
+> a host-effect operand is a specialized-only surface` signature.** The
+> Architect refuted that attribution and the refutation stands
+> (`evt_7v61ed5pn9q3t`): `claim_host_effect_seat` **did not exist** at that
+> commit, the refusal fires in `specialized_at` before any seat key or need is
+> consulted, and the wording is the **generic** phase-boundary vocabulary every
+> specialized-only leaf uses. The Steward matched generic words against a
+> function that did not yet exist — an invalid inference that happened to point
+> the right way.
+>
+> **What establishes this node is the FOUR typed per-seat refusals measured at
+> the tip**, naming exact operation, argument index, need and phase. The
+> Architect predicted exactly this: *"after the bulk boundary is removed, this
+> source shape can expose the real byte-span gap — a later seat-specific
+> dependency, not what raised the historical signature."*
+>
+> ### The `depends_on` is NOT a cycle, and that needs a ruling not a default
+>
+> This node's `depends_on` names `RT-CONTSRC-PRODUCER-LOCAL`, whose branch
+> cannot merge without this node. **That is only circular if this node must
+> wait for a merge — it does not.** Its inputs are that branch's code, which is
+> present on the branch. **The sound reading is that byte-span is the next unit
+> ON that branch, not a successor awaiting a merge.** Steward to rule formally
+> once the fifth failure's provenance returns.
 
 > ## ACTIVATION GATE — THIS NODE INHERITS AN OBLIGATION IT DID NOT CREATE
 >
