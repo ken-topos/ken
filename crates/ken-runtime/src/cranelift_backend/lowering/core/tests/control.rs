@@ -24017,8 +24017,14 @@ fn d6b_every_raw_emission_sits_where_the_tables_agree_and_every_context_emission
 /// about an argument handed to the constructor, so they are owned by the sealed
 /// binder run's own postcondition and proved in
 /// [`d6c_the_sealed_binder_run_refuses_a_miscounted_or_permuted_run_at_its_producer`].
-/// They were measured as unguarded when this row landed; the postcondition that
-/// now owns them was built on that measurement.
+/// ⛔ **They were NOT all measured as unguarded, and the sentence that once said
+/// so here was wrong.** Only **omission** and **duplicate** were genuinely
+/// unguarded. **`WrongOrder` was producer-accepted and then downstream-refused**
+/// on the **non-degenerate** `px8tr`, where the two members carry distinct
+/// routes, while on the governed witness it is **equal-value identity** — so its
+/// clean compile there was never evidence about any guard. ⇒ **The sealed
+/// postcondition now owns all three canonical run-shape violations**, and it was
+/// built on those measurements as they actually stand.
 ///
 /// **Promise class: durable invariant.** Each clause is a typed refusal keyed to
 /// the input it perturbs. A fixture that grows keeps it green; only a guard
