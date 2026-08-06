@@ -151,10 +151,28 @@ numbers: a suite still carrying the attribute has discharged nothing.
   physical ABI run does not move. Show it.
 - **`AC-2` (`D1`) — the body environment is `reverse(Parameter run) ++ Capture
   run`,** and the root `SchedulingEntry` is provably excluded (`D3` control 3).
-- **`AC-3` (`D2`) — the raw-worker / generated-context equivalence claim is TRUE
-  after the change**, demonstrated by `D3` control 4 on a body that
-  distinguishes its parameters. **A body that cannot distinguish them proves
-  nothing** — unary units are invariant under reversal.
+- **`AC-3` (`D2`) — AMENDED 2026-08-06, because the original text made this AC
+  UNDISCHARGEABLE.** It required a body that distinguishes its parameters, and
+  the ring measured that **no such body exists at both hosts**. An AC whose only
+  route to discharge does not exist is a frame defect, not a finding about the
+  work, and it was mine.
+
+  **What is required now, and it is two things, not one:**
+
+  1. **The conversion law holds at the arity that exists**, verified against each
+     host's actual ordinal environment sequence.
+  2. **The transition sentinel is committed and non-vacuous**: it asserts the
+     measured population (every generated-context worker is unary) and has been
+     **observed RED** against a hand-added two-parameter worker before being
+     restored. **A sentinel nobody has seen fail is a claim, not a control** —
+     and this one exists precisely to fire in a future nobody will be watching
+     for.
+
+  **`D2` is NOT thereby proved correct, and the frame says so rather than
+  implying it.** Equivalence is unfalsifiable at unary arity. What is proved is
+  that `D2` is **inert** at the current population and that the moment it stops
+  being inert, something reddens. **Do not record `AC-3` as "equivalence
+  verified."**
 - **`AC-4` (`D3`) — all four controls, each with an observed RED before green,
   and each asserting exact values.** Report which operand moved for each.
 - **`AC-5` (`D4`) — the inherited row greens by un-ignoring**, three numbers
