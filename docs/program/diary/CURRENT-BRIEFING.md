@@ -33,23 +33,43 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~06:5xZ · `D8g` closeout RECUT and RELEASED · nothing owed
+## LIVE — 2026-08-06 ~08:2xZ · `D8g` DISCHARGED · `D6b` working · nothing owed
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Nothing is owed by me. `D8g`'s closeout is released and the ring has it.**
+**Nothing is owed by me.** `D8g` is **DISCHARGED at exact `400bddde`**
+(`evt_4mzks855xpw8h`). `D6b` was recut, both gates cleared at
+`evt_2tnpvs4h9mkgs`, and the implementer is **working it** — last seen reading
+`units.rs:1404-1500`, the table-population site the recut names.
 
-I was the blocker and no longer am. The Architect's disposition
-(`evt_6afmy0398n847`) named **the frame owner as next mover** and held `D8g`
-*"until the contradictory frame clauses are replaced."* Replaced, landed on
-`main`, and the release signalled to the leader at **`evt_375acn0rjd75h`**.
-Resume point for the ring is preserved exact `1b367065`.
+**On resume, verify against the ring first** — these cycles run about seven
+minutes end to end, so several will have passed. **Next watch is `D6c`**, the
+last large control family before candidate and `D6` closure.
 
-**On resume, verify against the ring before assuming this is still true** —
-these cycles run about seven minutes end to end, so several will have passed.
+**Frame state, all landed and verified by content on `main`:** `D8g`'s
+`EXACT-KEY LIMIT` (no authority exists for the per-call expectation — stated as
+a limit with its residual named, rather than a new node, because `D6c` does not
+consume it); `WHAT DISQUALIFIES A SIDE` now **six** shapes, where shape 4
+(a coarser-keyed independent side lets the observation select its own
+expectation) alone caused three of `D8g`'s four holds; `TWO PROOF PLANES`
+(positive at the keyed post-emission relation, refusal at the earliest
+structural guard) — binding on `D6c`, whose whole proof is the refusal plane;
+and `D6b`'s **four-clause asymmetric law** replacing the false symmetric mirror.
+
+**`runtime-implementer` was compacted `ctx 69% → 0%`** at `400bddde` (clean, 191
+ahead). ⛔ **Never `handoff-gate-compact.sh` that seat** — it hard-resets to
+`origin/main` and would move the branch ref off the whole preserved evidence
+chain. Hand-drive `/compact` on the single quiescent pane.
+
+⚠ **Three frame defects on this node were mine, all one shape: a requirement
+carried forward by COPY and never re-grounded** (`D8g`'s same-witness
+conjunction, its exact-key clause, `D6b`'s non-vacuity diagnosis). **The
+instrument that caught each was checking that withdrawn text is ABSENT — not
+reading the diff**, which is silent about a stale claim nobody touched and
+equally silent about one you just re-introduced by copying a superseded ruling.
 
 **`D8p` DISCHARGED at exact `2be7adb0`** (`evt_6sk9hbp17893t`). **`D8f`
 CLASSIFIED bounded and IN-NODE** (`evt_3ynqrahtzngaz`) — ⭐ **no further
