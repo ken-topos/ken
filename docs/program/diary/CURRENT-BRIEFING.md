@@ -42,9 +42,50 @@
 
 ### The one thing to do next
 
-**Nothing is owed by me.** Ruled at `evt_2j83zm8j9zqvv`. Two things are out and
-I hold for both: the **Architect's mechanism verdict on exact `c2ae3eed`**, and
-the **fixture-buildability measurement** the leader released off my ruling.
+> ## ⛔ FIRST: MY OWN RECUT IS UNDER REVIEW. Read this before acting on it.
+>
+> I recut `AC-1` clause 1 out of this node (`evt_3pr04vk7zrd7c`), filed
+> **`RT-CARRIER-BYTESPAN-OBSERVE`**, and retired `D9`'s positive — all on the
+> strength of the `FsReadFile / BytesPointerLength / CarriedWord` refusal being
+> a genuine capability gap.
+>
+> **The uncommitted four-class dispatch reports that refusal DISAPPEARS
+> ENTIRELY** — `HostResult` words taking the `HostResult` arm instead of being
+> mis-decoded as represented constructors. **But all five rows panic inside
+> Cranelift in the same run**, so *"no longer refuses"* and *"dies before it
+> would have refused"* are the **identical observation**. A panic upstream of a
+> gate deletes that gate's message for free.
+>
+> ⇒ **If class dispatch removes the byte-span need, the capability successor is
+> unnecessary and clause 1 is in-node after all.** Raised at
+> `evt_1099997v0fewg`. ⛔ **`RT-CARRIER-BYTESPAN-OBSERVE` stays `draft` and I do
+> NOT frame it** until this resolves — it is filed against a measurement now in
+> question.
+>
+> **The discriminator is reachability, not the message:** is
+> `claim_host_effect_seat` entered for that seat, and with what `Avail`?
+> (1) reached-and-satisfied ⇒ my recut is **wrong**, close the successor;
+> (2) reached-and-still-refuses ⇒ my recut **stands**;
+> (3) never reached ⇒ my recut is **unsupported** and needs new grounds.
+> ⛔ Do not resolve it by re-running and reading for the message — absence is
+> the confounded observable.
+>
+> **This is the third variant on this node of one shape: an observed outcome
+> and a claimed cause that are not keyed to each other.**
+
+**Where the ring is.** The class-completion correction was released
+(`evt_59556q5a8gywe`) and **handed back UNDELIVERED and UNCOMMITTED** —
+correctly. The dispatch was built and works, then all five whole-process rows
+panic: `you have to fill your block before switching`, `core.rs:6345`, at the
+constructor chain's `switch_to_block(class_test)`. Cause: arms are filled as
+emitted, so a returning arm leaves an unterminated block discovered one switch
+too late. Proposed repair is a **two-phase CFG layout** — emit the whole
+class-test skeleton first, fill arms after. **The Architect is ruling that now**
+(`evt_1n6056fdkk6yj` → `evt_7mpn9xew0qc3d`). Tip is clean and free at
+`c2ae3eed`; suite back to 775/2/1.
+
+**Nothing is owed by me** beyond the question above. Earlier ruling
+`evt_2j83zm8j9zqvv` and its reachability answer are discharged.
 
 **The fork FIRED and it is measured.** Exact `PlannedCaseEmission` authority on
 both of AC-1's carried source matches: `status=Reachable`, `producers=Open`,
