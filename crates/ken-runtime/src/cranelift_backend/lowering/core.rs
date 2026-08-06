@@ -4886,7 +4886,46 @@ impl<'a> Lowering<'a> {
                                         control,
                                     }
                                 }
-                                _ => {
+                                // A runtime boundary word has no compile-time
+                                // template, so it is classified by PHASE before
+                                // any arm asks for a `Lowered` shape. Without
+                                // this arm it fell past every shape test onto
+                                // the refusal below -- a true sentence about the
+                                // wrong thing, naming a cause that is not the
+                                // cause: the value is fine, the question is.
+                                //
+                                // This is the same arm the generic `lower_expr`
+                                // `Match` emitter and the source machine's
+                                // `ComputationalMatchScrutinee` already carry,
+                                // and it eliminates through the SAME helper the
+                                // generic route uses, so the borrowed-opaque
+                                // process-input lane is not re-decided here.
+                                // The elimination merges in the carrier lane to
+                                // one operand and the machine then resumes with
+                                // the continuation once -- exactly how the
+                                // computational sibling resumes after
+                                // `lower_carried_computational_match`.
+                                //
+                                // Taken as an explicit arm rather than a
+                                // fallback, so this match is exhaustive over
+                                // `LoweringOperand` and a third variant is a
+                                // compile error here rather than a silent
+                                // refusal.
+                                LoweringOperand::Carried(word) => {
+                                    let eliminated = self.lower_carried_match(
+                                        builder,
+                                        word,
+                                        &cases,
+                                        &default,
+                                        static_origin,
+                                        &env,
+                                    )?;
+                                    SourceMachineState::Value {
+                                        value: RoutedAnswer::direct(eliminated),
+                                        control,
+                                    }
+                                }
+                                LoweringOperand::Specialized(_) => {
                                     return Err(unsupported(
                                         "Match",
                                         "scrutinee is not a constructor value",
