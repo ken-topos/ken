@@ -1389,7 +1389,7 @@ all six failing `D0` rows.
   | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | DISCHARGED `1f9a2020`+`abe46dda`, **QA-approved** |
   | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | **DISCHARGED** `3a63fe64`, after two bounded evidence corrections |
   | 13 | `D8o` — ambient body authority | lowering compiler state | **DISCHARGED** `3aadbaae`, after two evidence blocks (`5154d94a`, `d3f7e32c`) |
-  | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | matrix complete `e5ad0e10` (`759/2/1`), **in Architect review** — corrects a clause accepted at `7d7f248b` |
+  | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | matrix `e5ad0e10` accepted as progress; **test/fidelity BLOCKED** — correction in flight |
   | 15 | `D8f` — checked-marker occupancy | integration | gate landed, **UNWITNESSABLE until `D8m`**; evidence `e80fd42f` |
   | 16 | `D8g` — non-vacuous closeout, both paths | proof | held |
   | 17 | `D6b` closeout, then `D6c` refusal set | — | held |
@@ -2605,6 +2605,31 @@ all six failing `D0` rows.
   are different findings and **only the second is about `D8m`**; and where a
   control **refuses identically without** the new witness, that is **stated as
   a bound on what the witness buys** rather than quietly counted as coverage.
+
+  ⛔ **CORRECTING A CLAIM HAS TWO SURFACES, AND THE EXECUTABLE ONE IS THE ONE
+  THAT GETS MISSED.** Architect `evt_58ggvqc2d771q` blocked `e5ad0e10` on
+  exactly this: the doc block and the new clause 1b **correctly** establish that
+  withholding the bridge tuple leaves the refusal unchanged — while the
+  **executable row still read** `Clause 1 — the identity arrives` and *"the
+  bridge must carry ... and the proof is WHICH guard is reached"*. ⇒ **The
+  refuted inference was still the assertion's own label and failure message**,
+  which is what a reader sees when it fires and what a maintainer greps.
+
+  ⇒ **When a checkpoint refutes a claim, sweep the CLAUSE LABELS and ASSERTION
+  MESSAGES, not only the doc comment.** A correction that lands only in prose
+  leaves the operative text still issuing the claim. **Same shape as
+  [[a-later-note-saying-a-deliverable-is-false-does-not-replace-the-deliverable]]**,
+  reached through test code rather than through a frame.
+
+  ⚠ **The second block finding is the `D8o` zero again, in a new place:**
+  `d8m_the_bridge_arm_populations_move_only_with_the_marker` runs **only**
+  `ComputationalMatch` sites, so **no fixture in the row reaches
+  `D8mBridgeArm::Ordinary`.** It observes zero ordinary sites before and after
+  **on a population that contains no ordinary bridge.** ⛔ **A zero measured on
+  an empty population is not the framed "unchanged" proof** — it needs a lawful
+  ordinary bridge that reaches the same production recorder, with **the
+  expected arm derived from the source descriptor, not from the recorder under
+  test.**
 
   Three sub-shapes have now appeared, and all three read as rigorous:
 
