@@ -1380,11 +1380,12 @@ all six failing `D0` rows.
   | 9 | `D8e` DISCHARGES — causal obligation dischargeable and discharged | — | **DISCHARGED, Steward ruling below** |
   | 10 | `D8l1` — MEASURE the envelope frontier | planner | ANSWERED at `aaef1772`: **not structural** |
   | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | DISCHARGED `1f9a2020`+`abe46dda`, **QA-approved** |
-  | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | **NEXT** — a real production defect |
-  | 13 | `D8m` — preserve the source frame through the bridge | lowering preservation | mechanism accepted `7d7f248b`; **witness blocked on `D8n`** |
-  | 14 | `D8f` — checked-marker occupancy | integration | gate landed, **UNWITNESSABLE until `D8m`**; evidence `e80fd42f` |
-  | 15 | `D8g` — non-vacuous closeout, both paths | proof | held |
-  | 12 | `D6b` closeout, then `D6c` refusal set | — | held |
+  | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | landed `245615b8`, **in Architect review** |
+  | 13 | `D8o` — ambient body authority | lowering compiler state | **NEXT** — a second real production defect |
+  | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | mechanism accepted `7d7f248b`; **witness blocked** |
+  | 15 | `D8f` — checked-marker occupancy | integration | gate landed, **UNWITNESSABLE until `D8m`**; evidence `e80fd42f` |
+  | 16 | `D8g` — non-vacuous closeout, both paths | proof | held |
+  | 17 | `D6b` closeout, then `D6c` refusal set | — | held |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
   This heading previously read *"label order, for the first time on this
@@ -2318,6 +2319,80 @@ all six failing `D0` rows.
   topology.** Recorded so a later reader knows the substrate argument was
   weighed and what beat it — **if this node's branch ever merges before the
   lifecycle work is done, the answer flips to a node.**
+
+  ###### `D8o` — ambient body authority. A SECOND defect. `evt_d2yrj4fqdfjt`.
+
+  **Found by `D8n`'s evidence probe at exact `ef41b513`.** Not an
+  observation-only curiosity, and ⛔ **it must not be folded into the bounded
+  `D8n` correction.**
+
+  **The defect.** `define_continuation_bodies` opens each specialization
+  `FuncId` with `open_aggregate_events(id)` (`units.rs:1361`), which sets
+  **only** `defining_function_id`. **That loop never binds
+  `defining_emission_owner` before lowering its source body.** Ordinary unit
+  bodies bind `Predeclared(unit.function)` (`units.rs:3172`) and generated
+  contexts bind `Specialization(context.enclosing)` (`units.rs:2100`).
+  ⇒ **A specialization body inherits whichever emission owner the prior pass
+  left behind.** The probe measured distinct specialization and ordinary
+  `Function` consumptions **under the same stale predeclared owner**.
+
+  ⛔ **This field is active production authority, not diagnostics.** It is read
+  by continuation claiming/calling, **composed-worker selection and authority
+  checks**, **composed-discharge ownership**, carried-context resolution, and
+  synthesized aggregate occurrence/root/dynamic reconciliation —
+  `core.rs:6788, 8398, 8426, 9373, 9584-9587, 9766`; `mod.rs:10051, 10486,
+  10557`. **A stale value can select or validate against the wrong
+  planner-owner population; `None` can also silently decline some paths.**
+
+  ⛔ **`defining_unit` is a neighbouring ambient field, likewise unbound in the
+  specialization loop** — so a one-field patch **without a read/write census is
+  unsafe.**
+
+  **Mechanism.** Emitted-body ambient authority must be a **structural
+  body-lifetime binding, not inherited mutable residue.** For a specialization
+  body the planner-issued owner is
+  `ContinuationEmissionOwner::Specialization(unit.id)`; ordinary and
+  generated-context bindings keep their existing exact domains. **Entry binds
+  the body facts before ANY source lowering; exit restores/clears them so no
+  later `Function` can inherit them.**
+
+  ⛔ **First inventory every production reader of BOTH
+  `defining_emission_owner` and `defining_unit`**, then prove each of the three
+  source-bearing body kinds sees its exact planner-issued authority and that
+  **cross-body inheritance is red**. ⛔ **Do not infer the owner from `FuncId`,
+  raw body origin, or whichever field was last set.**
+
+  ###### `D8o` — the RETROACTIVE question I am raising, not assuming away
+
+  ⚠ **`D8a`'s selector is FIVE-FIELD and its first field is the emission
+  owner.** `D8i`'s wrong-owner refusal and `D8j`'s verification clause 2 —
+  *"the claiming function equals `identity.emission_owner()`"* — are both
+  owner-keyed, and `D8j` clause 2 is precisely the check that would compare a
+  **stale ambient owner** against a planner identity.
+
+  ⇒ **Open question for @architect, and it is candidate-blocking rather than
+  academic: does any `D8a`-`D8k` control derive BOTH sides from the stale
+  ambient owner, and therefore pass vacuously?** A control whose two sides share
+  a defective source agrees with itself regardless of the defect. **I am not
+  asserting the evidence is bad — I am refusing to assume it is fine**, because
+  the field the defect is in is the field that chain is keyed on.
+
+  **If the answer is that some rows need re-derivation after `D8o`, that is a
+  finding about the evidence chain, not a new mechanism** — and it lands as
+  re-measurement on preserved SHAs, not as reopened checkpoints.
+
+  ###### `D8o` sizing and sequencing
+
+  **In-node, on the same branch-topology grounds as `D8n`** — the fix must land
+  on the held shared branch, and the rebase that a separate node would require
+  destroys the preserved exact SHAs this node's evidence is addressed by.
+
+  **Sequencing, per the Architect:** it does **not** mechanically block `D8n`'s
+  evidence-only edit, **but it must be resolved before a candidate or any
+  downstream proof that treats specialization-owner checks as authoritative.**
+  ⇒ `D8o` runs after `D8n` closes and **before** the `D8m` witness, since that
+  witness spans both function kinds and its ownership facts must be trustworthy
+  when measured.
 
   ###### `D8k`'s ledger row is proved ON THE LAW, not on reach — and that is owed
 
