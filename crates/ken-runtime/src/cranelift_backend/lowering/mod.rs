@@ -13913,6 +13913,22 @@ impl<'a> Lowering<'a> {
                             "computational IH case names a stale slot template",
                         )
                     })?;
+                // `D8m` — the PAIR, recorded BEFORE the binding law runs.
+                //
+                // Recorded after it, the two components could not disagree: the
+                // law is exactly `slot.frame_template_id == frame_id`, so an
+                // observation taken past it agrees with the plan by
+                // construction and a test comparing them would be agreeing with
+                // itself. Taken here it reports what the bridge actually
+                // transported beside what the plan named for that slot, and the
+                // transplant control can show the disagreement rather than only
+                // the refusal it causes.
+                #[cfg(test)]
+                record_d8m_slot_frame_pair(
+                    self.defining_function_id,
+                    frame_id,
+                    slot.slot_template_id,
+                );
                 if slot.frame_template_id != frame_id
                     || slot.constructor != case.constructor
                     || slot.recursive_position != recursive_position as u64
@@ -13928,17 +13944,6 @@ impl<'a> Lowering<'a> {
                 // the plan's own; the identity is the defining `FuncId`.
                 #[cfg(test)]
                 record_d8n_slot_reconciliation(self.defining_function_id, slot.slot_template_id);
-                // `D8m` — the same seam, recording the PAIR: the frame the
-                // bridge transported here beside the slot the plan held it to.
-                // The two are only meaningfully related when a program has more
-                // than one checked occurrence, which is what the two-occurrence
-                // witness supplies.
-                #[cfg(test)]
-                record_d8m_slot_frame_pair(
-                    self.defining_function_id,
-                    frame_id,
-                    slot.slot_template_id,
-                );
                 Ok(Some(slot_template_id))
             })
             .collect()

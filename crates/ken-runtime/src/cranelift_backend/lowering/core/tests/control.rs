@@ -20575,6 +20575,7 @@ fn d8m_the_checked_bridge_refuses_every_way_the_transported_identity_can_go_wron
     };
 
     // Transplant — the two occurrences exchange frame ids, plan untouched.
+    crate::cranelift_backend::lowering::reset_d8n_observations();
     let transplanted = refusal(
         d8m_two_occurrence_compile(
             (
@@ -20593,6 +20594,26 @@ fn d8m_the_checked_bridge_refuses_every_way_the_transported_identity_can_go_wron
          compares equal fingerprints and admits the exchange. If this refuses with a planning \
          message the control has stopped reaching the bridge and proves nothing about D8m: \
          {transplanted}"
+    );
+    // And WHAT the seam saw, which is the disagreement itself rather than only
+    // the refusal it caused. The pair is recorded before the binding law runs,
+    // so the two components are free to differ here; the plan pairs the first
+    // occurrence's slot with the first occurrence's frame, and the transplanted
+    // bridge brought its neighbour's instead.
+    let seen = crate::cranelift_backend::lowering::d8m_slot_frame_pairs()
+        .into_iter()
+        .map(|(_, frame_id, slot_template_id)| (frame_id, slot_template_id))
+        .collect::<BTreeSet<_>>();
+    assert!(
+        seen.contains(&(second.frame_id, first.slot_template_id)),
+        "the transplanted bridge must be OBSERVED carrying its neighbour's frame to the first \
+         occurrence's slot. If the seam only ever records agreeing pairs then the observation is \
+         downstream of the law it is meant to witness and says nothing: {seen:?}"
+    );
+    assert!(
+        !seen.contains(&(first.frame_id, first.slot_template_id)),
+        "and it must not ALSO be observed carrying the right one -- that would mean the exchange \
+         never reached this occurrence and something else refused: {seen:?}"
     );
 
     // Omission — occurrence two loses its frame marker; its slot binds to the
