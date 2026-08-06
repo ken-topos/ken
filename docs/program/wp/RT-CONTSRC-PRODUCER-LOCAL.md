@@ -1011,7 +1011,17 @@ all six failing `D0` rows.
   executable population, so a raw route is not yet consumable in a retargeted
   specialization.
 
-  **`D6c` — the refusal set, pre-emission.** Refuse on omission, duplicate,
+  **`D6c` — the refusal set, pre-emission.**
+
+  > ⛔ **NOT `D8f`'s refusal set, despite opening with the same two words.**
+  > `D8f` owes *omission, duplicate, transplant, wrong occurrence* about **which
+  > call consumes a pending checked-IH marker.** `D6c` owes the list below about
+  > **selecting the raw/IH target and its selected-recursive-argument member,
+  > pre-emission.** ⛔ **Different subjects, overlapping vocabulary, same frame,
+  > both owed.** Discharging one discharges **nothing** of the other; say which
+  > you mean whenever you write "the omission refusal" on this node.
+
+  Refuse on omission, duplicate,
   wrong source position, wrong closure/body, wrong capture run, wrong order,
   fabricated availability, or cross-routing the raw and IH targets. Plus:
   exactly one selected-recursive-argument member for the unit's exact recursive
@@ -2811,6 +2821,11 @@ all six failing `D0` rows.
   two-call ordering itself**, which the row above records as *not settled either
   way* by `evt_w6wc0xt9gkqf`. `D8p`'s evidence puts none of the four on a path
   of its own.
+
+  ⛔ **These are about WHICH CALL CONSUMES A PENDING CHECKED-IH MARKER.** `D6c`
+  owes a **different** refusal set that also opens *omission, duplicate* — its
+  subject is **selecting the raw/IH target and its selected-recursive-argument
+  member, pre-emission.** **Discharging one discharges nothing of the other.**
 
   ⚠ **This paragraph originally said the scope was "smaller than the original
   cut" and named only the four refusals.** That rested on the two-call ordering
