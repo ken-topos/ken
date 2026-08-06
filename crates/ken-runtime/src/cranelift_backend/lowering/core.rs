@@ -8241,6 +8241,29 @@ impl<'a> Lowering<'a> {
             supplied_operands: inputs.len(),
             route: worker.route,
         });
+        // `D8g` — the same instant, recorded with the facts a keyed relation
+        // needs: which body is emitting, which call occurrence, the decoded raw
+        // callee, its declared contract, the route that chose the table, the run
+        // the instruction carried, and whether the binding answers for a
+        // composed causal obligation.
+        //
+        // ⛔ This is the ONE emitter the functionized and composed populations
+        // share. Recording here is what lets `D8g` relate two different programs
+        // at one seat rather than compare two logs that merely look alike.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d8g_emission(
+            crate::cranelift_backend::lowering::D8gEmission {
+                function: self.defining_function_id,
+                call_origin: static_origin,
+                target_body_origin: worker.body_origin,
+                declared_arity: worker.declared_arity,
+                captures: worker.captures.len(),
+                route: worker.route,
+                raw_operands,
+                supplied_operands: inputs.len(),
+                composed_discharge: worker.composed_continuation_authority().is_ok(),
+            },
+        );
         // `D8j` — the instruction is HANDED BACK, not recorded. Which consumer
         // may answer for a causal obligation with it is the caller's question,
         // and both this emitter's callers reach here.

@@ -3740,6 +3740,50 @@ thread_local! {
     static D8F_DISPOSITIONS: std::cell::RefCell<
         Vec<(Option<FuncId>, StaticOriginId, CheckedApplicationDisposition)>,
     > = const { std::cell::RefCell::new(Vec::new()) };
+    /// `D8g` — every static-worker call, written at the ONE emitter both
+    /// populations reach, after the instruction exists.
+    ///
+    /// The functionized and composed populations are different programs and
+    /// different ingresses; this is the seat they share, so a relation keyed
+    /// here compares like with like rather than two logs that happen to be
+    /// shaped alike.
+    static D8G_EMISSIONS: std::cell::RefCell<Vec<D8gEmission>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// `D8g` — one static-worker call, as the shared emitter wrote it.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct D8gEmission {
+    pub(in crate::cranelift_backend) function: Option<FuncId>,
+    /// The occurrence of the call being lowered.
+    pub(in crate::cranelift_backend) call_origin: StaticOriginId,
+    /// The decoded raw callee this binding names.
+    pub(in crate::cranelift_backend) target_body_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) declared_arity: u32,
+    pub(in crate::cranelift_backend) captures: usize,
+    pub(in crate::cranelift_backend) route: StaticWorkerCallRoute,
+    /// The raw run the worker's own contract accounts for.
+    pub(in crate::cranelift_backend) raw_operands: usize,
+    /// What the instruction actually carried.
+    pub(in crate::cranelift_backend) supplied_operands: usize,
+    /// Whether this binding carries a composed causal authority.
+    pub(in crate::cranelift_backend) composed_discharge: bool,
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8g_emission(emission: D8gEmission) {
+    D8G_EMISSIONS.with(|log| log.borrow_mut().push(emission));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8g_emissions() -> Vec<D8gEmission> {
+    D8G_EMISSIONS.with(|log| log.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_d8g_emissions() {
+    D8G_EMISSIONS.with(|log| log.borrow_mut().clear());
 }
 
 /// `D8p` — what the plan bound at one checked application.

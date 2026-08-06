@@ -22712,3 +22712,323 @@ fn d8f_the_remaining_checked_marker_refusals() {
          transplanted marker never reaches the seam: {transplanted}"
     );
 }
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8g` — the functionized population's table
+/// choice and suffix contract, keyed at the shared emitter.**
+///
+/// ## The two populations, and why they are two rows
+///
+/// `D8g` closes over the two populations that actually exist. No combined
+/// witness is built: the `px8tr` A/B witness reaches a same-body
+/// `GeneratedContext` IH and makes no composed-call-target emission, and the
+/// composed family is the reverse. Measured at `1b367065` and recorded in the
+/// hard stop that produced this recut.
+///
+/// They are joined where they genuinely meet: `call_static_worker_with_inputs`,
+/// the one emitter both ingresses reach. Every fact below is written there,
+/// after the instruction exists.
+///
+/// ## The independent side
+///
+/// The planner's own continuation-context population: for each generated
+/// context, the raw worker body it retargets and the capture run it declares.
+/// Read from a plan built independently of the emission run, so a claim cannot
+/// be an echo of the compile that produced it.
+///
+/// ## Clause 1 — the keyed relation, one emission per call occurrence
+///
+/// `(defining Function, call occurrence) -> (target, route, raw run, supplied
+/// run)`. Built by explicit insertion that fails on a previous value, so a
+/// second emission under one key is a red rather than an overwrite. That is the
+/// "neither duplicates target or operand assembly" half.
+///
+/// ## Clause 2 — the table choice owns the suffix
+///
+/// A context-routed call carries the raw run followed by exactly the capture run
+/// its generated context declares; a raw-routed call carries the raw run and
+/// nothing. Both are compared against the planner's declaration, not against
+/// each other.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emitter() {
+    use crate::cranelift_backend::lowering::{d8g_emissions, reset_d8g_emissions};
+
+    reset_d8g_emissions();
+    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "ken_d8g_functionized",
+        false,
+    )
+    .map(|_| ())
+    .map_err(|error| format!("{error:?}"))
+    .expect("the A/B witness compiles");
+    let emissions = d8g_emissions();
+
+    // Clause 1 — one emission per (defining Function, call occurrence).
+    let mut keyed = BTreeMap::new();
+    for emission in &emissions {
+        let function = emission
+            .function
+            .expect("every static-worker call names its defining Function");
+        let previous = keyed.insert(
+            (function, emission.call_origin),
+            (
+                emission.target_body_origin,
+                emission.route,
+                emission.raw_operands,
+                emission.supplied_operands,
+                emission.captures,
+            ),
+        );
+        assert!(
+            previous.is_none(),
+            "one call occurrence emits at most ONE static-worker call in one defining Function. A \
+             second under the same key is a duplicated target or operand assembly, and \
+             overwriting would hide exactly that: {emissions:?}"
+        );
+    }
+    assert!(
+        !keyed.is_empty(),
+        "the witness must emit static-worker calls, or every clause below is vacuous"
+    );
+
+    // The independent side: the planner's own contexts.
+    let contexts = with_d5a_witness_plan(|plan| {
+        let mut declared = BTreeMap::new();
+        for context in plan.continuation_contexts().expect("contexts") {
+            let previous =
+                declared.insert(context.worker_body_origin(), context.header().captures as usize);
+            assert!(
+                previous.is_none(),
+                "two generated contexts for one raw worker body would make the expectation below \
+                 ambiguous, and this row would be choosing between them"
+            );
+        }
+        declared
+    });
+
+    // Clause 2 — the table choice owns the suffix.
+    let mut context_routed = 0usize;
+    let mut raw_routed = 0usize;
+    for ((function, call), (target, route, raw, supplied, captures)) in &keyed {
+        match route {
+            StaticWorkerCallRoute::GeneratedContext => {
+                let declared = contexts.get(target).copied().unwrap_or_else(|| {
+                    panic!(
+                        "the call at {call:?} in {function:?} routed to a generated context, but \
+                         the PLANNER declares none for body {target:?}. The route is not a free \
+                         choice at the call edge: {contexts:?}"
+                    )
+                });
+                assert_eq!(
+                    supplied - raw,
+                    declared,
+                    "a context-routed call carries the raw run followed by EXACTLY the capture \
+                     run its generated context declares. Shorter drops continuation inputs; \
+                     longer is an arity error a large enough frame absorbs silently. Key \
+                     ({function:?}, {call:?})"
+                );
+                assert!(
+                    declared > 0,
+                    "a context declaring zero captures makes the prefix relation hold trivially \
+                     and this clause stops discriminating"
+                );
+                context_routed += 1;
+            }
+            StaticWorkerCallRoute::RawWorker => {
+                assert_eq!(
+                    supplied, raw,
+                    "a raw-routed call is the raw operand run and nothing else -- and this holds \
+                     even where a generated context DOES exist for that body, which is the D6a \
+                     case where only the route separates two bindings on one body origin. Key \
+                     ({function:?}, {call:?})"
+                );
+                assert_eq!(
+                    *captures,
+                    supplied - raw + captures,
+                    "and its own capture run is what the raw contract accounts for, not a suffix"
+                );
+                raw_routed += 1;
+            }
+        }
+    }
+    assert!(
+        context_routed > 0 && raw_routed > 0,
+        "the A/B witness must emit BOTH routes ({context_routed} context, {raw_routed} raw). With \
+         one kind the row cannot tell 'the suffix is confined to the retargeted call' from 'a \
+         suffix is appended everywhere' or from 'none ever is'"
+    );
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8g` — the composed population's selected
+/// recursive argument reaches its `D8b` target and the same emitter.**
+///
+/// The second of `D8g`'s two populations. It is a different program from the
+/// functionized one and reaches the emitter by a different ingress; the join is
+/// `call_static_worker_with_inputs`, where both write.
+///
+/// ## The independent side
+///
+/// The planner's own continuation-call and unit populations, from a plan built
+/// separately from the emission run: which specialization the composed call
+/// targets, and that target's worker body origin, declared arity and capture
+/// count. Nothing is read from the binding, the emitted call, or the other
+/// population's log.
+///
+/// ## Clause 1 — one emission per call occurrence per body
+///
+/// Explicit insertion that fails on a previous value, so a duplicated target or
+/// operand assembly reds instead of overwriting.
+///
+/// ## Clause 2 — the composed discharge sits on the ordinary-unit body
+///
+/// Actual body kind is `D8o`'s supplied key, never an owner variant. The exact
+/// selected recursive argument -- the one carrying a composed causal authority
+/// -- is emitted from the ordinary unit body; the specialization's own binding
+/// at the same call occurrence and the same target carries none. Both reach the
+/// same emitter with the same decoded raw callee and the same operand run, so
+/// the composed discharge is the only thing separating them, and it is exactly
+/// what `D8i` made a separate facet from the route.
+///
+/// ## Clause 3 — target and operand run against the planner
+///
+/// The decoded raw callee must be the worker body the planner's own unit names
+/// for the composed call's target, and the instruction's run must be that unit's
+/// declared arity plus its capture count. Neither side is derived from the
+/// other.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter() {
+    use crate::cranelift_backend::lowering::{
+        d8g_emissions, d8o_body_keys, reset_d8g_emissions, reset_d8n_observations,
+        reset_d8o_body_authorities, D8oBodyKey,
+    };
+
+    reset_d8g_emissions();
+    reset_d8n_observations();
+    reset_d8o_body_authorities();
+    let outcome = d8f_compile(false);
+    assert!(
+        outcome.is_none(),
+        "the composed witness must compile, or the emitter is never reached: {outcome:?}"
+    );
+    let keys = d8o_body_keys()
+        .into_iter()
+        .map(|(function, key)| (function.expect("body keys are labelled"), key))
+        .collect::<BTreeMap<_, _>>();
+
+    // Clause 1 — one emission per (exact defining body, call occurrence).
+    let mut keyed = BTreeMap::new();
+    for emission in d8g_emissions() {
+        let function = emission
+            .function
+            .expect("every static-worker call names its defining Function");
+        let key = *keys
+            .get(&function)
+            .expect("every emitting body recorded its exact body key");
+        let previous = keyed.insert(
+            (key, emission.call_origin),
+            (
+                emission.target_body_origin,
+                emission.declared_arity,
+                emission.captures,
+                emission.supplied_operands,
+                emission.composed_discharge,
+            ),
+        );
+        assert!(
+            previous.is_none(),
+            "one call occurrence emits at most ONE static-worker call in one exact defining body. \
+             A second is a duplicated target or operand assembly, and overwriting would hide it"
+        );
+    }
+    assert_eq!(
+        keyed.len(),
+        2,
+        "the composed witness's selected recursive argument is emitted from TWO bodies -- the \
+         ordinary unit body and the specialization derived from the same source text. One means \
+         the population is not the composed one at all: {keyed:?}"
+    );
+
+    // The independent side: the planner's own call target and unit contract.
+    let declaration = d8f_declaration_with(false, D8fPerturbation::None);
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D8F_SYMBOL.to_string(),
+        }),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let plan = plan_static_transition_graph_with_symbols(
+        &entry,
+        &BTreeMap::from([(D8F_SYMBOL, &declaration)]),
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .expect("the composed witness plans");
+    let calls = plan.continuation_calls().expect("continuation calls");
+    let call = calls.first().expect("one planned composed call");
+    let units = plan.continuation_units().expect("continuation units");
+    let target = units
+        .iter()
+        .find(|unit| unit.id() == call.target())
+        .expect("the planner defines the unit its composed call targets");
+    let planned = (
+        target.worker_body_origin(),
+        target.worker_declared_arity(),
+        target.worker_capture_count(),
+    );
+
+    // Clause 2 — the composed discharge sits on the ordinary-unit body.
+    let composed = keyed
+        .iter()
+        .filter(|(_, (_, _, _, _, discharge))| *discharge)
+        .map(|(key, _)| *key)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        composed.len(),
+        1,
+        "exactly ONE of the two emissions may answer for a composed causal obligation: {keyed:?}"
+    );
+    assert!(
+        matches!(composed[0].0, D8oBodyKey::OrdinaryUnit(_)),
+        "and it is the ORDINARY UNIT body's, classified by D8o's supplied body key and never by \
+         an owner variant. The specialization's binding at the same occurrence and the same \
+         target carries none, which is why D8i made the discharge a facet separate from the \
+         route: {composed:?}"
+    );
+    let specialization = keyed
+        .iter()
+        .find(|(key, _)| matches!(key.0, D8oBodyKey::ContinuationSpecialization(_)))
+        .expect("the specialization body also emits here");
+    assert!(
+        !specialization.1 .4,
+        "the specialization's own binding answers for no composed obligation: {keyed:?}"
+    );
+    assert_eq!(
+        composed[0].1, specialization.0 .1,
+        "and both reach the emitter at the SAME call occurrence, so the composed discharge is the \
+         only thing separating them"
+    );
+
+    // Clause 3 — target and operand run against the planner.
+    for (key, (target_body, declared_arity, captures, supplied, _)) in &keyed {
+        assert_eq!(
+            (*target_body, *declared_arity, *captures),
+            planned,
+            "the decoded raw callee and its declared contract must be the ones the PLANNER names \
+             for the composed call's target unit, under key {key:?}"
+        );
+        assert_eq!(
+            *supplied,
+            planned.1 as usize + planned.2,
+            "and the instruction's operand run must be that unit's declared arity plus its \
+             capture count -- read off the emission, compared with the planner, neither derived \
+             from the other, under key {key:?}"
+        );
+    }
+}
