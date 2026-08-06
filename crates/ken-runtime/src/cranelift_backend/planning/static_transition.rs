@@ -1753,8 +1753,94 @@ impl<'plan> ContinuationUnitView<'plan> {
             ));
         }
 
+        // ⭐⭐ `RT-CONTSRC-PRODUCER-LOCAL` `D8l2` — THE NONRECURSIVE POPULATION
+        // IS SOURCE POSITIONS, NOT ENVELOPE INDICES.
+        //
+        // The producer `Construct` has `N + 1` fields: `N` nonrecursive ones
+        // and the selected recursive one. The roles are those `N` fields at
+        // their OWN source positions, in source order, with the selected
+        // position skipped.
+        //
+        // ⛔ What stood here emitted `0..N` — the envelope index — and called it
+        // `source_position`. The two coincide only while every nonrecursive
+        // field precedes the selected recursive position, because omitting a
+        // later position does not renumber the earlier ones but omitting an
+        // earlier one renumbers every later one. `px8tr` selects its last field,
+        // so the defect was unreachable on every landed fixture and the method's
+        // own doc comment — "in producer source order with the selected
+        // recursive position omitted" — described the rule the loop did not
+        // implement. `D8l1` measured it with two witnesses differing only in
+        // field order.
+        //
+        // ⛔ This is neither a reverse source walk nor a new identity: the
+        // producer's field count is `N + 1` by construction from the checked
+        // capture subtraction above, and the selected position is the key's own
+        // `recursive_position`. Nothing is inferred from a body, a shape, or an
+        // ABI slot.
+        let field_count = nonrecursive_field_count.checked_add(1).ok_or_else(|| {
+            planner_error("the producer constructor's field count overflows the envelope")
+        })?;
+        // ⛔ The range refusal is REQUIRED, not defensive: a selected position
+        // at or past the field count would leave the loop below emitting `N + 1`
+        // roles for `N` slots, and the slot reconciliation would then report a
+        // length disagreement that says nothing about the real fault.
+        if self.key.recursive_position >= field_count {
+            return Err(planner_error(
+                "a continuation selects a recursive position outside its producer constructor's \
+                 field run, so the ordinary envelope cannot omit it and the remaining fields do \
+                 not name a population",
+            ));
+        }
+        // ⛔ `D8l2` — the defect switch perturbs the SELECTION the population is
+        // built from, never the range check or the loop. Out-of-range selection
+        // is unreachable through any plan the planner builds -- the key's
+        // recursive position and the field count are derived from one producer
+        // -- so the refusal would otherwise ship unexercised.
+        #[cfg(test)]
+        let selected = match envelope_defect() {
+            EnvelopeDefect::SelectionOutOfRange => field_count,
+            _ => self.key.recursive_position,
+        };
+        #[cfg(not(test))]
+        let selected = self.key.recursive_position;
+        // ⛔ The range refusal is REQUIRED, not defensive: a selected position
+        // at or past the field count would leave the loop below emitting `N + 1`
+        // roles for `N` slots, and the slot reconciliation would then report a
+        // length disagreement that says nothing about the real fault.
+        if selected >= field_count {
+            return Err(planner_error(
+                "a continuation selects a recursive position outside its producer constructor's \
+                 field run, so the ordinary envelope cannot omit it and the remaining fields do \
+                 not name a population",
+            ));
+        }
         let mut envelope = Vec::with_capacity(parameter_slots);
-        for source_position in 0..nonrecursive_field_count {
+        let mut nonrecursive = (0..field_count)
+            .filter(|position| *position != selected)
+            .collect::<Vec<_>>();
+        // ⛔ `D8l2` — the four population defects, applied to the built
+        // population. Each is a shape a wrong derivation would actually
+        // produce: the dense prefix is exactly what stood here before this
+        // repair.
+        #[cfg(test)]
+        match envelope_defect() {
+            EnvelopeDefect::Exact | EnvelopeDefect::SelectionOutOfRange => {}
+            EnvelopeDefect::Omit => {
+                nonrecursive.pop();
+            }
+            EnvelopeDefect::Duplicate => {
+                if let Some(first) = nonrecursive.first().copied() {
+                    if let Some(last) = nonrecursive.last_mut() {
+                        *last = first;
+                    }
+                }
+            }
+            EnvelopeDefect::DensePrefix => {
+                nonrecursive = (0..nonrecursive_field_count).collect();
+            }
+            EnvelopeDefect::WrongOrder => nonrecursive.reverse(),
+        }
+        for source_position in nonrecursive {
             envelope.push(ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField {
                 source_position,
             });
@@ -7595,6 +7681,45 @@ struct ContinuationDiscovery {
 thread_local! {
     static WEAKEN_CONTINUATION_DECREASING_MEASURE: Cell<bool> = const { Cell::new(false) };
     static DUPLICATE_DESCENT_AS_TOP_LEVEL: Cell<bool> = const { Cell::new(false) };
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8l2` — the ordinary-envelope population
+/// defects.**
+///
+/// ⛔ Every one is a shape a wrong derivation would actually produce, not an
+/// invented corruption. [`Self::DensePrefix`] is exactly what this method
+/// emitted before `D8l2`, so the control that reds on it is a regression test
+/// for the defect `D8l1` measured.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum EnvelopeDefect {
+    Exact,
+    /// Select a recursive position at the field count, which no plan produces.
+    SelectionOutOfRange,
+    /// Drop the last nonrecursive field.
+    Omit,
+    /// Repeat the first nonrecursive field in the last slot, so the length is
+    /// right and the set is not.
+    Duplicate,
+    /// The pre-`D8l2` derivation: envelope indices emitted as source positions.
+    DensePrefix,
+    /// Every field present, in reverse source order.
+    WrongOrder,
+}
+
+#[cfg(test)]
+thread_local! {
+    static ENVELOPE_DEFECT: Cell<EnvelopeDefect> = const { Cell::new(EnvelopeDefect::Exact) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_envelope_defect(defect: EnvelopeDefect) {
+    ENVELOPE_DEFECT.with(|cell| cell.set(defect));
+}
+
+#[cfg(test)]
+fn envelope_defect() -> EnvelopeDefect {
+    ENVELOPE_DEFECT.with(Cell::get)
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8a` — instantiate the second emission owner.**

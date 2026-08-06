@@ -3510,6 +3510,7 @@ pub(in crate::cranelift_backend) fn reset_d8d_bindings() {
     D8D_RECURSIVE_SITES.with(|count| count.set(0));
     D8E_CONSUMPTIONS.with(|count| count.set(0));
     D8I_DISCHARGES.with(|log| log.borrow_mut().clear());
+    D8L2_CONSUMED_FACETS.with(|log| log.borrow_mut().clear());
 }
 
 /// **`D8i` — what discharge facet each constructed binding actually carried.**
@@ -3624,6 +3625,29 @@ pub(in crate::cranelift_backend) fn d8j_mutation() -> D8jMutation {
 thread_local! {
     static D8J_DISCHARGED: std::cell::RefCell<Vec<ContinuationCallIdentity>> =
         const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// **`D8l2` — the discharge facet each source-machine consumption carried.**
+///
+/// ⛔ Recorded at the CONSUMPTION seat, not at construction. `D8I_DISCHARGES`
+/// already says what each binding was built with; this says what was actually
+/// consumed, and the two populations differ -- a binding can be built and never
+/// consumed, and a program can reach the seat with bindings from several
+/// sources. `true` is a composed authority.
+#[cfg(test)]
+thread_local! {
+    static D8L2_CONSUMED_FACETS: std::cell::RefCell<Vec<bool>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8l2_consumed_facet(composed: bool) {
+    D8L2_CONSUMED_FACETS.with(|log| log.borrow_mut().push(composed));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8l2_consumed_facets() -> Vec<bool> {
+    D8L2_CONSUMED_FACETS.with(|log| log.borrow().clone())
 }
 
 #[cfg(test)]

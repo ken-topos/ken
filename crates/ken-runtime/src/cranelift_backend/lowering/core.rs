@@ -3810,6 +3810,16 @@ impl<'a> Lowering<'a> {
                         if let Some(worker) = static_worker {
                             #[cfg(test)]
                             d8e_record_consumption();
+                            // `D8l2` — which facet this consumption carried,
+                            // recorded beside the count so "three consumptions"
+                            // can be attributed rather than merely counted.
+                            #[cfg(test)]
+                            crate::cranelift_backend::lowering::record_d8l2_consumed_facet(
+                                matches!(
+                                    worker.discharge,
+                                    ContinuationDischarge::ComposedSourceContinuation(_)
+                                ),
+                            );
                             // Arguments are evaluated under the machine's own
                             // control and phase, exactly as for a value callee;
                             // only the completion differs.
