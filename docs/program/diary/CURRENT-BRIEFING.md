@@ -184,6 +184,28 @@ branch and then re-reads that branch's tip.
   identity authority mismatch; identity equal and field count 3 ⇒ the
   closed-default report is itself incomplete and the next selector must be
   measured. **Repair and recut are the Steward's on that return.**
+- **`D7` RETURNED, no change from `c4112237`. Bucket 1: another-constructor /
+  wrong-operand.** Planner `MkProcessInput` identity `3470333575222` (low byte
+  54), binders 3. **Observed identity differs, low byte 52, field count 1 vs an
+  expected 3.** The **arity independently rules out** `MkProcessInput` and the
+  authority-mismatch bucket — two axes from different evidence, which is why
+  this one is trustworthy. No live named case at this seat has low byte 52:
+  `ProcessInput` 54/3, `List::Cons` 36/2, `List::Nil` 35/0, `Prod::MkProd` 38/2.
+  **So the observed constructor is currently UNNAMED.**
+- **The provenance half is INCOMPLETE** and the implementer stopped rather than
+  absorb another build — **correct behaviour, the one-hour target working; do
+  not train it out.** Unrecorded: the observed constructor's name, the
+  caller-side argument origin, the callee parameter-0 slot ordinal.
+- **`D8` RELEASED (`evt_1zp55czkaws7h`):** those three, plus settle the
+  one-field adjacent **`Failure`** producer **BY IDENTITY**. It was reported as
+  *consistent with* the word and **unmeasured**, which was the right way to
+  report it — **"field count 1" is shared by every one-field constructor in
+  scope, so consistency ranks it a CANDIDATE, not the answer.** A refuted
+  candidate is worth as much as a confirmed one: it would mean the operand comes
+  from somewhere nobody has enumerated.
+- **No repair authorized.** Knowing *which* wrong operand arrives does not yet
+  say *why*, and that gap is where the repair scope lives. Recut is the
+  Steward's.
 - **`D6` landed** (stale carried-scrutinee reachability comment), on
   `wp/RT-ENTRY-TRAP-254-d6`. Targeted: 778 passed / 2 named pre-existing / 1
   ignored.
