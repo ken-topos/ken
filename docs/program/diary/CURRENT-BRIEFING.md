@@ -33,18 +33,23 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~04:1xZ · `D8f` HARD STOP accepted; I cut `D8p`
+## LIVE — 2026-08-06 ~04:2xZ · `D8p` RELEASED and in flight
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Release `D8p` to the runtime ring.** ⛔ **`D8f`'s HARD STOP IS ACCEPTED and
-`D8f` is NOT discharged** (Architect `evt_6jay1wesbfhbw`, preserved exact
-`0eb04397`). **No Runtime edit is authorized until the recut lands** — the
-frame section is *"`D8p` — cross-body checked-application binding."*
-**`D8m` DISCHARGED `01263e44`, `D8o` `3aadbaae`, `D8n` `3a63fe64`.**
+**Wait for `D8p`** — released by the leader `evt_c4p1ffpzd7dm` at 04:15Z from
+the accepted tip `01263e44`, implementer **working**. **The ring owes nothing to
+me.** ⭐ **The Architect confirmed the landed `D8p` section faithfully reflects
+its ruling** (04:16Z), so the frame is not in doubt. Then `D8f` resumes, then
+`D8g`, `D6b` closeout, `D6c`, candidate.
+
+⛔ **`D8f`'s HARD STOP IS ACCEPTED and `D8f` is NOT discharged** (Architect
+`evt_6jay1wesbfhbw`, preserved exact `0eb04397`). ⛔ **Do not re-release `D8f`
+before `D8p` discharges.** **`D8m` DISCHARGED `01263e44`, `D8o` `3aadbaae`,
+`D8n` `3a63fe64`.**
 
 ⛔ **`D8f` could not absorb it.** `D8f` owns one question — whether exact
 application occurrence distinguishes the ordinary call from the checked call
