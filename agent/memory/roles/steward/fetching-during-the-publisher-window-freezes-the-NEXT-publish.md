@@ -40,6 +40,28 @@ trustworthy is the habit that trips the freeze.**
 notification is the interlock. Never verify off a `sleep`, and never verify
 "just to see if it landed yet."
 
+> ### THE ABOVE DID NOT BIND ME. Here is the mechanical form that does.
+>
+> **I raced the window three times in one session — including twice AFTER
+> writing this file.** So "wait for the notification" is not sufficient as
+> stated, and the reason is specific and worth naming:
+>
+> ⛔ **The relapse is BUNDLING.** I did wait for the notification, then wrote a
+> single shell call that read the publisher log **and** ran `git fetch` — so the
+> intent "just read the log" carried a fetch along with it. The check that felt
+> like reading a file was a check that hit the network.
+>
+> ⇒ **The rule at the point of work: `git fetch` NEVER shares a shell call with
+> a publisher-log read.** Two calls, always. Read the log; decide; then fetch.
+> A rule about *timing* is easy to believe you are honouring while violating;
+> a rule about *which command line the word `fetch` may appear on* is checkable
+> by looking at what you just typed.
+>
+> **Also do not bundle `git reset --hard origin/main` into the verify call.**
+> If the publish did fail, that reset discards the very commit you were trying
+> to land — recoverable from the reflog and the pushed branch, but only if you
+> notice.
+
 ## Clearing it — diagnose first, then by hand
 
 The freeze is deliberate and there is no auto-clear. Before removing it,
