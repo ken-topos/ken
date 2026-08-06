@@ -23969,9 +23969,16 @@ fn d6b_every_raw_emission_sits_where_the_tables_agree_and_every_context_emission
 /// | wrong capture run | the constructor's declared-versus-projected capture count |
 /// | raw/IH cross-routing | the route's own table, which has no raw callee for a retargeted body |
 ///
-/// ⭐ **Each mutation moves exactly ONE argument at the selection seam** and
-/// leaves the constructor, the hypothesis and the rest of the run untouched, so
-/// a refusal is attributable to that input and not to a rewritten resolver.
+/// ⭐ **Each mutation moves the smallest thing its law is about**, and leaves the
+/// constructor, the hypothesis and the rest of the run untouched, so a refusal is
+/// attributable to that perturbation and not to a rewritten resolver.
+///
+/// ⛔ **Not all of them are single inputs, and saying so would be false.**
+/// `CrossRouteTargets` is a **paired exchange** — the hypothesis takes the raw
+/// route and the argument takes the context route, together, because a law about
+/// crossing two routes cannot be violated by moving one of them. `WrongOrder`
+/// (in the sibling row) is a **segment permutation**, not an input at all. The
+/// remaining three do move exactly one argument.
 ///
 /// ## Two mutations that DECLINE rather than lie
 ///
@@ -23982,14 +23989,14 @@ fn d6b_every_raw_emission_sits_where_the_tables_agree_and_every_context_emission
 /// it did not perform would let this row read a green as a defence when the
 /// mutation never happened.
 ///
-/// ## THE GAP — three of the eight named refusals are NOT here
+/// ## The other three refusals live in the sibling row
 ///
-/// **Omission, duplicate and wrong order have no production guard that owns
-/// them**, measured rather than assumed, and they are reported to the frame owner
-/// rather than approximated here. They are absent from this row because a control
-/// asserting a refusal that production does not perform would be a false green,
-/// and one asserting the incidental downstream failure instead would credit the
-/// wrong mechanism. See the `D6c` handoff for the measurement.
+/// Omission, duplicate and wrong order are about the run's **shape** rather than
+/// about an argument handed to the constructor, so they are owned by the sealed
+/// binder run's own postcondition and proved in
+/// [`d6c_the_sealed_binder_run_refuses_a_miscounted_or_permuted_run_at_its_producer`].
+/// They were measured as unguarded when this row landed; the postcondition that
+/// now owns them was built on that measurement.
 ///
 /// **Promise class: durable invariant.** Each clause is a typed refusal keyed to
 /// the input it perturbs. A fixture that grows keeps it green; only a guard
@@ -24008,10 +24015,17 @@ fn d6c_each_moved_selection_input_is_refused_by_the_guard_that_owns_it_before_em
     /// the match discriminating: without it, any refusal of the same category
     /// would satisfy the row.
     const OWNED: &[(D6cSelectionMutation, &str, &str)] = &[
+        // ⚠ **THIS EXPECTATION MOVED when `D6c`'s sealed-run postcondition
+        // landed, and the move is an improvement rather than a regression.** It
+        // used to name the case environment's own position check. The sealed run
+        // now refuses first, and it is the better owner: the perturbation makes
+        // the RUN name a wrong source position, and run shape is exactly what
+        // the postcondition owns. The downstream check still exists and still
+        // fails closed; it is simply no longer first.
         (
             D6cSelectionMutation::WrongSourcePosition,
             "Module",
-            "the binder run names a selected recursive argument at source position",
+            "at the slot belonging to source position",
         ),
         (
             D6cSelectionMutation::FabricatedAvailability,
@@ -24116,4 +24130,170 @@ fn d6c_each_moved_selection_input_is_refused_by_the_guard_that_owns_it_before_em
         "and it emits, so the zero-emission assertions above are a fact about the refusals rather \
          than about a witness that never emits at all"
     );
+}
+
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6c` — the sealed binder run refuses a
+/// miscounted or permuted run at its own producer, before anything consumes it.**
+///
+/// ## What this row is about
+///
+/// The sibling row perturbs arguments handed to the static-worker constructor.
+/// These three perturb the **run's shape**, which is a different subject and has
+/// a different owner: [`continuation_case_binder_run`]'s own postcondition,
+/// applied where the run is sealed.
+///
+/// ## Why the guard exists — measured, not assumed
+///
+/// Before it, all three were **accepted**. `D6c`'s census
+/// (`evt_na5pwjmxwxvn`, six cells, every one with a positive application count
+/// and a genuinely changed member run):
+///
+/// | perturbation | mixed witness | governed witness |
+/// |---|---|---|
+/// | omission | **compiled**, 2 emissions | `Var: no runtime binding for index 2` |
+/// | duplicate | **compiled**, 2 emissions | `a Var in value position` |
+/// | permutation | `Call: "callee is not a closure"` | **compiled** |
+///
+/// ⛔ **Omission is the pre-`D6a` defect**, and on the mixed witness it compiled
+/// clean: that case body reads only `Var(0)`, so every later binder shifted with
+/// nothing positioned to notice. Where the old behaviour refused at all, the
+/// catcher was a **downstream consumer of a shifted binder** — fixture-dependent,
+/// and crediting a guard that does not own run shape.
+///
+/// ## The proof attribution, stated exactly
+///
+/// - **Omission and duplicate discriminate CARDINALITY.** Both change the run's
+///   length, and the postcondition's checked total is what refuses them.
+/// - **The mixed witness discriminates SEGMENT ORDER**, and this row requires the
+///   refusal to have **moved** from the downstream callee-shape check to the
+///   producer guard. That migration is the deliverable, not merely that some
+///   refusal happens.
+/// - ⚠ **The governed witness is the EQUAL-VALUE LIMIT.** Its two members hold
+///   identical route and body origin, so permuting them is **observational
+///   identity** and its old clean compile **never proved a missing guard**. It
+///   refuses here now — but that refusal proves **typed-role order**, that a
+///   `SelectedRecursiveArgument` is not sitting in the induction-hypothesis
+///   prefix. ⛔ It does **not** prove distinct materialized values, and no reader
+///   may take it as evidence that the two bindings differ there.
+///
+/// ## What the postcondition deliberately does NOT require
+///
+/// Numerically source-ordered `Ordinary(index)` values, or any reconstruction of
+/// ordinary-envelope order. Each member is checked against the **role its own
+/// index names**, so a self-consistent envelope permutation stays lawful.
+///
+/// ## Plane
+///
+/// Refusal, entirely. Each case asserts the perturbation **fired**, the **typed**
+/// `Module` category with a discriminating reason, and **zero** post-emission
+/// records; the exact positive is rerun separately on both witnesses.
+///
+/// **Promise class: durable invariant.** Each clause is a refusal keyed to the
+/// shape it perturbs. Only a guard ceasing to own run shape reds it.
+#[test]
+fn d6c_the_sealed_binder_run_refuses_a_miscounted_or_permuted_run_at_its_producer() {
+    use crate::cranelift_backend::lowering::{
+        d8g_emissions, reset_d8g_emissions, with_d6c_selection_mutation, D6cSelectionMutation,
+    };
+    use crate::cranelift_backend::surface::{BackendFailure, CraneliftBackendError};
+
+    /// `(perturbation, the discriminating fact the sealed run's refusal must name)`
+    const SHAPES: &[(D6cSelectionMutation, &str)] = &[
+        (
+            D6cSelectionMutation::OmitSelectedArgument,
+            "the sealed binder run holds",
+        ),
+        (
+            D6cSelectionMutation::DuplicateSelectedArgument,
+            "the sealed binder run holds",
+        ),
+        (
+            D6cSelectionMutation::WrongOrder,
+            "inside the 1-member induction-hypothesis prefix",
+        ),
+    ];
+
+    for (mutation, discriminating) in SHAPES {
+        // ── the mixed witness ───────────────────────────────────────────────
+        reset_d8g_emissions();
+        let (outcome, applications) = with_d6c_selection_mutation(*mutation, || {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                "ken_d6c_sealed",
+                false,
+            )
+            .map(|_| ())
+        });
+        assert!(
+            applications > 0,
+            "{mutation:?} never reshaped the run on the mixed witness, so the refusal below would \
+             be about some other program"
+        );
+        let reason = match &outcome {
+            Err(CraneliftBackendError::Backend(BackendFailure::Module(reason))) => reason.clone(),
+            Err(other) => panic!(
+                "{mutation:?} must be refused by the SEALED RUN's own postcondition, a typed \
+                 Module failure. ⛔ A different category means the run was returned malformed and \
+                 something downstream caught it, which is the misattribution this guard exists to \
+                 end: {other:?}"
+            ),
+            Ok(()) => panic!(
+                "{mutation:?} COMPILED on the mixed witness. The malformed run reached emission, \
+                 which is the pre-guard behaviour this row exists to have ended"
+            ),
+        };
+        assert!(
+            reason.contains(discriminating),
+            "{mutation:?}: the refusal must name the shape fact it caught, or any Module failure \
+             would satisfy this row; got {reason}"
+        );
+        assert!(
+            d8g_emissions().is_empty(),
+            "{mutation:?} refused, but a static-worker call was emitted first. The postcondition \
+             runs at the producer, so nothing may have been written: {:?}",
+            d8g_emissions()
+        );
+
+        // ── the governed witness ────────────────────────────────────────────
+        //
+        // ⚠ For the permutation this is the EQUAL-VALUE LIMIT: the refusal below
+        // proves typed-ROLE order, never that the two members differ in value.
+        let expr = crate::cranelift_backend::planning::governed_nested_resource_bracket(3);
+        let (governed, governed_applications) =
+            with_d6c_selection_mutation(*mutation, || recursive_port_process_compiles(&expr));
+        assert!(
+            governed_applications > 0,
+            "{mutation:?} never reshaped the run on the governed witness"
+        );
+        let governed = governed
+            .err()
+            .unwrap_or_else(|| panic!("{mutation:?} COMPILED on the governed witness"));
+        assert!(
+            format!("{governed}").contains("the sealed binder run"),
+            "{mutation:?} on the governed witness must also be refused by the sealed run's \
+             postcondition rather than by a downstream consumer of a shifted binder; got \
+             {governed}"
+        );
+    }
+
+    // The exact positive, on BOTH witnesses, rerun separately. Without it every
+    // refusal above is consistent with fixtures that simply cannot compile.
+    reset_d8g_emissions();
+    let (exact, applications) = with_d6c_selection_mutation(D6cSelectionMutation::Exact, || {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "ken_d6c_sealed_exact",
+            false,
+        )
+        .map(|_| ())
+        .map_err(|error| format!("{error:?}"))
+    });
+    assert_eq!(applications, 0, "the exact run applies no perturbation");
+    exact.expect("THE EXACT POSITIVE: the unperturbed mixed witness still compiles");
+    assert!(
+        !d8g_emissions().is_empty(),
+        "and it still emits, so the zero-emission clauses above are facts about the refusals"
+    );
+    let expr = crate::cranelift_backend::planning::governed_nested_resource_bracket(3);
+    recursive_port_process_compiles(&expr)
+        .expect("THE EXACT POSITIVE: the unperturbed governed witness still compiles");
 }

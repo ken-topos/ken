@@ -3861,10 +3861,16 @@ pub(in crate::cranelift_backend) enum D8gMutation {
 /// target and its `SelectedRecursiveArgument` member**, before any instruction
 /// exists. Say which you mean whenever you write "the omission refusal" here.
 ///
-/// Each variant moves **one** producer input at the selection seam and nothing
-/// else, so a refusal is attributable to that input rather than to a rewritten
-/// resolver. Every arm bumps the application counter when it fires, which is what
-/// makes "the mutation reached the seat" a measurement instead of an assumption.
+/// Each variant moves the smallest thing its law is about and nothing else, so a
+/// refusal is attributable to that perturbation rather than to a rewritten
+/// resolver. Every arm bumps the application counter **only when it actually
+/// changes something**, which is what makes "the mutation reached the seat" a
+/// measurement instead of an assumption.
+///
+/// ⛔ **They are not all single inputs.** [`Self::CrossRouteTargets`] is a
+/// **paired route exchange** — a law about crossing two routes cannot be violated
+/// by moving one of them — and [`Self::WrongOrder`] is a **segment permutation**
+/// rather than an input at all. The other six move one thing each.
 #[cfg(test)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(in crate::cranelift_backend) enum D6cSelectionMutation {
@@ -3876,7 +3882,9 @@ pub(in crate::cranelift_backend) enum D6cSelectionMutation {
     DuplicateSelectedArgument,
     /// Name a source position other than the one the unit projects a worker for.
     WrongSourcePosition,
-    /// Emit the run's IH prefix and argument segment in the opposite order.
+    /// Permute the run: the IH prefix and the argument segment are exchanged,
+    /// with the same members, the same count and the same tail. ⛔ A permutation,
+    /// not a moved input.
     WrongOrder,
     /// Claim a member for a recursive position this specialization projects no
     /// worker for — availability the plan does not grant.
@@ -3887,8 +3895,10 @@ pub(in crate::cranelift_backend) enum D6cSelectionMutation {
     /// Build the argument binding with a capture run that is not the envelope's
     /// worker-capture segment.
     WrongCaptureRun,
-    /// Cross the two routes: the hypothesis takes the raw route while a context
-    /// was resolved, and the argument takes the context route.
+    /// Exchange the two routes as a PAIR: the hypothesis takes the raw route
+    /// while a context was resolved, and the argument takes the context route.
+    /// ⛔ Both halves together -- crossing is a relation between the two members,
+    /// so moving only one would be a different (and lawful) perturbation.
     CrossRouteTargets,
 }
 

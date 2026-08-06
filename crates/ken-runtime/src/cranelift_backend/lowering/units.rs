@@ -1295,6 +1295,150 @@ pub(super) fn continuation_case_binder_run(
     for ordinal in 0..continuation_inputs {
         run.push(ContinuationCaseBinderSource::ContinuationInput(ordinal));
     }
+
+    // ⭐⭐ **`RT-CONTSRC-PRODUCER-LOCAL` `D6c` — THE CANONICAL-RUN
+    // POSTCONDITION. The run is SEALED here, and nothing leaves this function
+    // unvalidated.**
+    //
+    // This function's doc has always claimed *"every gap is a hard stop rather
+    // than a hole"*, and for the gaps it names that was true. It was NOT true of
+    // the run's own SHAPE: `D6c` measured a member omitted, a member duplicated,
+    // and the two segments permuted, and in each case the malformed run was
+    // returned and lowered. Omission is the pre-`D6a` defect exactly, and on the
+    // mixed witness it compiled clean -- the case body reads only `Var(0)`, so
+    // every later binder shifted with nothing positioned to notice.
+    //
+    // ⛔ **Validated IN PLACE against this function's own inputs. There is no
+    // second builder and no second population.** Constructing an expected run
+    // and comparing would be a parallel authority able to reproduce the very
+    // defect it checks, and the equality would prove only that two
+    // constructions agree with each other.
+    //
+    // ⚠ **What this deliberately does NOT require:** that `Ordinary(index)`
+    // values be numerically source-ordered, or any reconstruction of the
+    // ordinary envelope's order. A self-consistent envelope permutation is
+    // lawful -- each member is checked against the ROLE its own index names, so
+    // the envelope may be laid out however the planner chose.
+    let hypotheses = recursive_positions.len();
+    let sealed_total = hypotheses + argument_binders + continuation_inputs;
+    if run.len() != sealed_total {
+        return Err(backend_module(format!(
+            "the sealed binder run holds {} members, but this case seals {hypotheses} induction \
+             hypotheses + {argument_binders} constructor arguments + {continuation_inputs} \
+             continuation inputs = {sealed_total}. A run of the wrong length shifts every later \
+             binder, which is a wrong program rather than a refused one",
+            run.len()
+        )));
+    }
+
+    // Segment 1's exact extent. ⛔ Both directions: a non-hypothesis inside the
+    // prefix and a hypothesis outside it are different defects and both are
+    // caught, the second by the segment walks below.
+    for (position, source) in run.iter().enumerate().take(hypotheses) {
+        if !matches!(
+            source,
+            ContinuationCaseBinderSource::InductionHypothesis
+        ) {
+            return Err(backend_module(format!(
+                "the sealed binder run holds {source:?} at position {position}, inside the \
+                 {hypotheses}-member induction-hypothesis prefix. The IH prefix leads the run and \
+                 the constructor arguments follow it; a member of another kind here is the two \
+                 segments permuted"
+            )));
+        }
+    }
+
+    // Segment 2 -- every constructor argument at its own source position.
+    //
+    // ⛔ The match is EXHAUSTIVE over the closed source sum with no wildcard, so
+    // a future variant is a compile error here rather than a silent acceptance.
+    for position in 0..argument_binders {
+        let index = hypotheses + position;
+        let source_position = u32::try_from(position).map_err(|_| {
+            backend_module(
+                "a continuation case binder position exceeds the planner's field width".to_string(),
+            )
+        })?;
+        let recursive = recursive_positions.contains(&position);
+        match &run[index] {
+            ContinuationCaseBinderSource::SelectedRecursiveArgument {
+                source_position: named,
+            } => {
+                if !recursive {
+                    return Err(backend_module(format!(
+                        "the sealed binder run names a selected recursive argument at run \
+                         position {index} for source position {source_position}, which this case \
+                         does not list as recursive"
+                    )));
+                }
+                if *named != source_position {
+                    return Err(backend_module(format!(
+                        "the sealed binder run's argument segment holds a selected recursive \
+                         argument for source position {named} at the slot belonging to source \
+                         position {source_position}"
+                    )));
+                }
+                if position != worker_position {
+                    return Err(backend_module(format!(
+                        "the sealed binder run names a selected recursive argument at source \
+                         position {source_position}, but this specialization projects a worker \
+                         for position {worker_position}"
+                    )));
+                }
+            }
+            ContinuationCaseBinderSource::Ordinary(role_index) => {
+                if recursive {
+                    return Err(backend_module(format!(
+                        "the sealed binder run takes source position {source_position} from the \
+                         ordinary envelope, but this case lists it as recursive -- the recursive \
+                         field is a compiler-only member and has no envelope operand"
+                    )));
+                }
+                // ⚠ The ROLE the index names, never the index's own value. This
+                // is what keeps a lawful envelope permutation lawful.
+                let role = envelope.get(*role_index).ok_or_else(|| {
+                    backend_module(format!(
+                        "the sealed binder run points at ordinary-envelope index {role_index}, \
+                         which this frame's {}-role envelope does not hold",
+                        envelope.len()
+                    ))
+                })?;
+                match role {
+                    ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField {
+                        source_position: candidate,
+                    } if *candidate == source_position => {}
+                    other => {
+                        return Err(backend_module(format!(
+                            "the sealed binder run takes source position {source_position} from \
+                             ordinary-envelope index {role_index}, which names {other:?} instead"
+                        )));
+                    }
+                }
+            }
+            other @ (ContinuationCaseBinderSource::InductionHypothesis
+            | ContinuationCaseBinderSource::ContinuationInput(_)) => {
+                return Err(backend_module(format!(
+                    "the sealed binder run holds {other:?} at run position {index}, inside the \
+                     constructor-argument segment for source position {source_position}"
+                )));
+            }
+        }
+    }
+
+    // Segment 3 -- the continuation-input tail, by exact ordinal.
+    for ordinal in 0..continuation_inputs {
+        let index = hypotheses + argument_binders + ordinal;
+        match &run[index] {
+            ContinuationCaseBinderSource::ContinuationInput(named) if *named == ordinal => {}
+            other => {
+                return Err(backend_module(format!(
+                    "the sealed binder run holds {other:?} at run position {index}, where this \
+                     frame's continuation input {ordinal} belongs"
+                )));
+            }
+        }
+    }
+
     Ok(run)
 }
 
