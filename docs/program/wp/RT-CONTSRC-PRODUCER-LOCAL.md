@@ -1011,6 +1011,32 @@ all six failing `D0` rows.
   executable population, so a raw route is not yet consumable in a retargeted
   specialization.
 
+  ###### `D8g`'s LANDED EVIDENCE for the clauses above — read before building
+
+  **`D8g` discharged at `400bddde` and measured things `D6b` would otherwise
+  re-derive.** Two of them cut in opposite directions, so take both:
+
+  1. **A raw route DOES reach emission.** On `px8tr` the two routes emit against
+     **distinct** declared callees — `FuncRef` 33 for the generated context,
+     30 for raw — where the **body origin is identical on both by design**
+     (that is `D6a`). ⇒ **Do not build the emission witness as though no raw
+     route ever emits**, and do not use body origin to tell the routes apart.
+  2. **The premise above was INTERROGATED against that evidence and is NOT
+     contradicted.** `D8g`'s `WrongTable` mutation refuses with *"no
+     `raw_worker_calls` target for body origin"* — which is what "the raw body
+     is removed from the executable population" predicts for the **retargeted**
+     body. ⛔ **This is an inference from a refusal message, not a direct
+     measurement of the retargeted population. Re-measure before building, and
+     if the representation turns out already present, CLOSE the obligation and
+     say so — do not manufacture the work to match this paragraph.**
+
+  **`D8g` also settled where a refusal may land** — see `TWO PROOF PLANES`.
+  `D6b`'s *"substituting `worker_calls` for that lookup reddens it"* is
+  discharged at the **earliest structural guard**, pre-emission, with an empty
+  emission set. It does **not** owe a post-emission relation failure, and the
+  refusal must be matched on the **typed** error — category plus discriminating
+  reason — never `is_err()` or a `contains` over formatted text.
+
   **`D6c` — the refusal set, pre-emission.**
 
   > ⛔ **NOT `D8f`'s refusal set, despite opening with the same two words.**
@@ -1402,7 +1428,7 @@ all six failing `D0` rows.
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | **DISCHARGED** `01263e44` (`760/2/1`), after a matrix block and two fidelity children |
   | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **DISCHARGED** `2be7adb0` (Architect `evt_6sk9hbp17893t`), after a mechanism-accepted evidence block at `198b7c14` |
   | 16 | `D8f` — checked-marker occupancy | integration | **DISCHARGED** at exact `04c40d4c` (Architect `evt_6cka0ecwnd25t`). Three-case disposition partial accepted at `c49d0652`; the four refusal controls then took **five** bounded evidence holds, closing at `d94a3df9` with both wrong-occurrence origins named from planner authority. `04c40d4c` is a whitespace-only identity child of it |
-  | 17 | `D8g` — non-vacuous closeout, over TWO populations | proof | **Owner re-measurement DISCHARGED** `1b367065` (Architect `evt_7v6ve6rsc8d39`) — **outcome (1): the owner VARIES but SEPARATES nothing**, so the prohibition stands and no owner positive is required. **Closeout then HARD-STOPPED** (`evt_9yrrhnjp6dfd`): its two facts live in disjoint witness families. **RECUT over both populations** by Architect disposition `evt_6afmy0398n847`; frame clauses replaced 2026-08-06. Closeout then ran four review rounds — `b0614513`, `337ee9d9`, `6d884090`, `90f96c00`, `0665b9d5` all preserved as held progress. **Two review requirements were withdrawn as STRONGER THAN THE FRAME**: post-emission-FIRST refusal for the mutations (`evt_5vwdtrznf3km4` — earliest structural guard is accepted, and is the stronger evidence), and the independent `(defining Function, call origin)` expectation (`evt_399j195rn8fpa` — **no authority exists to derive it from**; see `EXACT-KEY LIMIT`). **SECOND RECUT landed 2026-08-06.** Ready for release |
+  | 17 | `D8g` — non-vacuous closeout, over TWO populations | proof | **Owner re-measurement DISCHARGED** `1b367065` (Architect `evt_7v6ve6rsc8d39`) — **outcome (1): the owner VARIES but SEPARATES nothing**, so the prohibition stands and no owner positive is required. **Closeout then HARD-STOPPED** (`evt_9yrrhnjp6dfd`): its two facts live in disjoint witness families. **RECUT over both populations** by Architect disposition `evt_6afmy0398n847`; frame clauses replaced 2026-08-06. Closeout then ran four review rounds — `b0614513`, `337ee9d9`, `6d884090`, `90f96c00`, `0665b9d5` all preserved as held progress. **Two review requirements were withdrawn as STRONGER THAN THE FRAME**: post-emission-FIRST refusal for the mutations (`evt_5vwdtrznf3km4` — earliest structural guard is accepted, and is the stronger evidence), and the independent `(defining Function, call origin)` expectation (`evt_399j195rn8fpa` — **no authority exists to derive it from**; see `EXACT-KEY LIMIT`). **SECOND RECUT landed 2026-08-06.** ⇒ **DISCHARGED at exact `400bddde`** (Architect `evt_4mzks855xpw8h`) |
   | 18 | `D6b` closeout, then `D6c` refusal set | — | held |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
