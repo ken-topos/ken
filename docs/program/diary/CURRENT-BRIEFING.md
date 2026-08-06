@@ -33,18 +33,46 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~04:2xZ · `D8p` RELEASED and in flight
+## LIVE — 2026-08-06 ~04:5xZ · `D8p` IN REVIEW · `D8f` RECUT and HELD
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for `D8p`** — released by the leader `evt_c4p1ffpzd7dm` at 04:15Z from
-the accepted tip `01263e44`, implementer **working**. **The ring owes nothing to
-me.** ⭐ **The Architect confirmed the landed `D8p` section faithfully reflects
-its ruling** (04:16Z), so the frame is not in doubt. Then `D8f` resumes, then
-`D8g`, `D6b` closeout, `D6c`, candidate.
+**When the Architect's `D8p` verdict lands, route ONE question to it:** is the
+double-discharge refusal an **in-`D8f` fixture question** or a **further
+mechanism boundary**? ⛔ **`D8f` must NOT be released until that is classified**
+— not on the `D8p` accept alone. The leader is holding on my `evt_39ykmh3ehqg8b`.
+
+**`D8p` is IN REVIEW at exact `198b7c14`** (`763/2/1`) — implementer
+`evt_14tv58v4k5wxr`, leader's review request `evt_68ry7r5bz86n5`. **The ring
+owes nothing to me.**
+
+⭐ **`D8p` found the missing relation was SMALLER than the frame's shape
+suggested: a second call edge that never consulted the seam.** Two call edges
+emit a static-worker call — the direct descent in `lower_expr`, and the source
+machine's. **The direct one has consulted the checked-IH seam since `D5a`; the
+source machine's never did.** ⛔ My earlier reading — *"the ordinary unit body
+has no static-worker seat at the application"* — was **wrong**: `env[4]` **is**
+a `StaticWorker` and the call takes the worker route. **What was absent was the
+seam call, not the binding.**
+
+⭐ **`D8p` retired a standing production claim.** The gate's comment read
+*"UNWITNESSED, and measured to be so — mutating it to ALWAYS admit leaves the
+whole suite green."* **True until `D8p`, false now** — the always-admit mutation
+reds. `198b7c14` states the current measurement and keeps the old one as dated
+history.
+
+⛔ **`D8f`'s frame WAS defective and the defect was mine** — it read as though
+occupancy were the only question, while the implementer had already measured
+that the two-call witness **refuses downstream** at *"one causal identity was
+discharged twice in a single function"*. Recut landed; see the **`D8f` RECUT**
+section of the frame. `D8f`'s remaining scope is now **only the four refusals —
+omission, duplicate, transplant, wrong occurrence — each on its own live path.**
+⛔ **Do not let `D8f` re-ask the occupancy ordering; `D8p` measured it.**
+
+Then `D8g`, `D6b` closeout, `D6c`, candidate.
 
 ⛔ **`D8f`'s HARD STOP IS ACCEPTED and `D8f` is NOT discharged** (Architect
 `evt_6jay1wesbfhbw`, preserved exact `0eb04397`). ⛔ **Do not re-release `D8f`

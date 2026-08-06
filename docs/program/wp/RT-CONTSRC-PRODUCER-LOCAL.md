@@ -1390,8 +1390,8 @@ all six failing `D0` rows.
   | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | **DISCHARGED** `3a63fe64`, after two bounded evidence corrections |
   | 13 | `D8o` — ambient body authority | lowering compiler state | **DISCHARGED** `3aadbaae`, after two evidence blocks (`5154d94a`, `d3f7e32c`) |
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | **DISCHARGED** `01263e44` (`760/2/1`), after a matrix block and two fidelity children |
-  | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **NEXT** — `D8f`'s missing predecessor, Architect `evt_6jay1wesbfhbw` |
-  | 16 | `D8f` — checked-marker occupancy | integration | **HARD STOP accepted** at `0eb04397` (evidence only); resumes after `D8p` |
+  | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **IN REVIEW** at exact `198b7c14` (`763/2/1`) — `evt_68ry7r5bz86n5` |
+  | 16 | `D8f` — checked-marker occupancy | integration | **HARD STOP accepted** at `0eb04397` (evidence only). **RECUT — see the `D8f` RECUT section.** Release gated on the Architect's classification of the double-discharge closure, NOT on the `D8p` accept alone |
   | 17 | `D8g` — non-vacuous closeout, both paths | proof | held |
   | 18 | `D6b` closeout, then `D6c` refusal set | — | held |
 
@@ -1849,7 +1849,14 @@ all six failing `D0` rows.
   that fact OBLIGES, not only what it provides.** On this node, ask it at the
   point the fact is minted rather than at the point it is consumed.
 
-  **`D8f` — checked-marker occupancy.** The witness places an ordinary
+  **`D8f` — checked-marker occupancy.** ⛔ **SUPERSEDED IN PART — read the
+  `D8f` RECUT section before acting on this paragraph.** `D8p` measured the
+  occupancy ordering on a live witness, so the first three sentences below are
+  **established, not owed**, and `D8f`'s remaining scope is the four refusals
+  each on its own live path. Its release is gated on the Architect classifying
+  the double-discharge closure `D8p` exposed.
+
+  The witness places an ordinary
   selected-argument call **before** the checked IH call inside one checked
   wrapper. So *"a marker is pending"* **cannot** mean *"the next static-worker
   call consumes it."* The selected-argument call **leaves the marker pending**;
@@ -2584,6 +2591,78 @@ all six failing `D0` rows.
   campaign should be restructured now that this node has absorbed `D8h`-`D8p`.
   **That is the standing campaign-sizing question, not a per-checkpoint call**,
   and no in-node ruling should be read as answering it.
+
+  ###### `D8f` RECUT — `D8p` moved the frontier. Do not re-ask what it proved.
+
+  **Grounded on the `D8p` handoff `evt_14tv58v4k5wxr` and the leader's review
+  request `evt_68ry7r5bz86n5`, at exact `198b7c14`.** Both are **pre-Architect**.
+  Everything in this section is **conditional on the `D8p` accept** — if that
+  review blocks on **mechanism** rather than on evidence fidelity, this section
+  moves with it and must be re-derived, not patched.
+
+  **What `D8p` already established. Quoted narrowly, because the temptation is
+  to round it up.** On the witness carrying an ordinary call on the same
+  selected recursive argument **inside the pending marker's own application**:
+  the first emitted call carries **no** consumption, and the second consumes at
+  the plan's **exact occurrence**. Same worker, same arity, same frame — so
+  **route, arity, binder index and call order are all blind, and the occurrence
+  decides.** The **always-admit mutation reds.**
+
+  That last clause retires a claim that was standing in production. The gate's
+  comment read *"UNWITNESSED, and measured to be so — mutating it to ALWAYS
+  admit leaves the whole suite green."* **True until `D8p`, false now**;
+  `198b7c14` states the current measurement and keeps the old one as dated
+  history.
+
+  **So `D8f` must NOT re-ask the occupancy ordering.** It is measured, on a live
+  witness, with the admit mutation red. A second fixture posing a question that
+  is already answered is the exact shape this node has paid for repeatedly, and
+  it would be **green-by-construction** rather than discriminating.
+
+  **What `D8f` still owes, and it is smaller than the original cut.** The four
+  refusals — **omission, duplicate, transplant, wrong occurrence** — **each on
+  its own live path.** `D8p`'s evidence covers the ordering and the two admit
+  mutations; it does **not** put each of the four on a path of its own. That
+  residue is `D8f`'s remaining scope.
+
+  **The closure `D8p` exposed, which the previous `D8f` text does not name.**
+  The implementer stated it as the handoff's honest limit and did **not** claim
+  `D8f`: the two-call witness now refuses **downstream** at *"one causal
+  identity was discharged twice in a single function"*, because **the ordinary
+  call re-uses a binding carrying a composed authority.** By the implementer's
+  own reading that is a question about **the ordinary call's discharge**, not
+  about occupancy, and it is recorded in the row and at the gate so the binding
+  evidence is not read as more than it is.
+
+  **Whose that is: the Architect's, and the routing is deliberate.** Whether the
+  double-discharge refusal is an **in-`D8f` fixture question** or a **further
+  mechanism boundary** is a design classification of exactly the kind that
+  produced `D8p` from `D8f`'s previous hard stop. **It is not mine to rule and
+  not the ring's to absorb.** It routes once the `D8p` verdict lands, so it
+  costs one message rather than an interrupt to a review in progress.
+
+  **`D8f`'s release is gated on that classification.** Not on the `D8p` accept
+  alone.
+
+  | classification | what happens to `D8f` |
+  |---|---|
+  | in-fixture | `D8f` absorbs it and is released on the residue above |
+  | mechanism boundary | a further ordered predecessor, and the `D8n` flip condition is applied to it as it was to `D8p` — not re-derived |
+
+  **Why this section exists at all, stated once.** This node already records the
+  rule it is an instance of: *a checkpoint that establishes a required fact owes
+  a statement of what that fact OBLIGES, not only what it provides.* `D8p`
+  establishes the binding and **obliges** a disposition of the discharge
+  question it exposed. **The previous defect was mine** — `D8f`'s section read
+  as though occupancy were the only question, so releasing it unchanged would
+  have sent the implementer at a witness **already measured to refuse for a
+  reason the frame does not name.** That is what the `0eb04397` round cost, and
+  it is not to be paid twice.
+
+  **What this does NOT settle.** It does not discharge `D8f`, does not accept
+  `D8p`, and does not touch the standing operator question of whether the
+  **campaign** should be restructured now that this node has absorbed
+  `D8h`-`D8p`.
 
   ###### GOVERNING — name the INDEPENDENT SIDE, and KEY the relation.
 
