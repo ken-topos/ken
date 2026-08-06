@@ -18809,27 +18809,30 @@ fn d8m_compile(expr: &RuntimeExpr, frame_id: u64) -> Option<CraneliftBackendErro
 /// checked IH slot inside a composed case body refused as *"detached from its
 /// checked frame"* — the `D8f` hard stop.
 ///
-/// ## Clause 1 — which refusal fires, and what that does NOT establish
+/// ## Clause 1 — the missing-slot guard boundary. NOT a transport proof.
 ///
-/// With the marker on the case body the bridge is built from, the program
-/// refuses with **"checked computational case is missing its IH slot marker"**.
-/// That branch of `computational_ih_slots_for_case` is guarded by
-/// `checked_frame_id.is_some()`. Completing that program needs IH slot markers
-/// in the bridge's cases, which is `D8f`'s business and is held.
+/// With the marker on the case body the bridge is built from, the program stops
+/// at **"checked computational case is missing its IH slot marker"** rather than
+/// at the `D8f` hard stop. This clause pins that boundary and nothing more.
+/// Completing the program needs IH slot markers in the bridge's cases, which is
+/// `D8f`'s business and is held.
 ///
-/// **CORRECTION, measured by clause 1b below.** This clause was originally
-/// written as `D8m`'s difference-proof, on the reasoning that the guard is
-/// unreachable while the bridge carries `None`. That reasoning is wrong for
-/// THIS witness: the same match is also lowered by the DIRECT path, which
-/// carried the frame identity before `D8m` and still does, so the refusal
-/// arrives whether or not the bridge transports anything. Reverting the bridge
-/// to its complete pre-`D8m` all-`None` tuple leaves this row green, which is
-/// what clause 1b now pins. The refusal identity is still worth asserting -- it
-/// is the guard the composed path must not land short of -- but it is not a
-/// difference, and the difference-proofs are
-/// `d8m_the_transported_tuple_is_what_carries_the_source_frame` and
-/// `d8m_two_distinct_occurrences_each_keep_their_own_frame`, both of which red
-/// under that revert.
+/// **This witness does not establish that the bridge transported an identity,
+/// and this clause must not be read as saying so.** It was originally written
+/// that way, on the reasoning that the guard is unreachable while the bridge
+/// carries `None`. That reasoning is wrong here: the same match is also lowered
+/// by the DIRECT path, which carried the frame identity before `D8m` and still
+/// does, so the refusal arrives whether or not the bridge transports anything.
+/// Clause 1b measures exactly that and pins it permanently.
+///
+/// **The transport-difference evidence lives in two other rows**, both of which
+/// red when the bridge is reverted to its complete pre-`D8m` all-`None` tuple:
+/// `d8m_the_transported_tuple_is_what_carries_the_source_frame`, which withdraws
+/// the tuple and recovers the detached-frame refusal, and the transplant control
+/// in `d8m_the_checked_bridge_refuses_every_way_the_transported_identity_can_go_wrong`,
+/// which observes the bridge carrying a neighbour's frame on a program where the
+/// transported id and the plan's disagree. The keyed pairing relation is in
+/// `d8m_two_distinct_occurrences_each_keep_their_own_frame`.
 ///
 /// ## Clause 2 — an unwrapped bridge stays all-None
 ///
@@ -18866,13 +18869,18 @@ fn d8m_the_source_frame_identity_survives_the_bridge() {
     );
     assert!(
         refusal.contains("missing its IH slot marker"),
-        "the bridge must carry the source frame's identity, and the proof is WHICH guard is \
-         reached: this branch is guarded by `checked_frame_id.is_some()`. A 'detached from its \
-         checked frame' refusal here means the identity was dropped at the bridge again: {refusal}"
+        "this witness must stop at the missing-slot guard rather than at the D8f hard stop. That \
+         is a boundary, NOT a transport proof: the same match is also lowered by the direct path, \
+         so this refusal does not say the bridge transported anything -- clause 1b measures that \
+         directly, and the transport-difference evidence is in \
+         d8m_the_transported_tuple_is_what_carries_the_source_frame and the transplant control: \
+         {refusal}"
     );
     assert!(
         !refusal.contains("detached from its checked frame"),
-        "and specifically not the D8f hard-stop refusal, which is the one D8m exists to retire"
+        "and specifically not the D8f hard-stop refusal, which is the one D8m exists to retire. \
+         Again a boundary claim about which guard this program lands on, not a claim about where \
+         the identity reaching that guard came from"
     );
 
     // Clause 1b — the boundary of clause 1, as a committed measurement rather
@@ -20767,10 +20775,15 @@ fn d8m_the_checked_bridge_refuses_every_way_the_transported_identity_can_go_wron
 /// The closed descriptor has three arms and they are disjoint by source
 /// constructor. On the lawful witness both composed sites take the checked arm.
 /// Unwrapping ONE occurrence moves exactly one site to the unwrapped arm and
-/// leaves the total unchanged: the ordinary arm's population is empty in both,
-/// so `D8m` did not take a program from it. That is what "the ordinary bridge
-/// population is unchanged" means as a measurement rather than as a reading of
-/// the match.
+/// leaves the total unchanged.
+///
+/// The ordinary arm's population is empty in both, which is a description of
+/// THIS program and not a proof about the ordinary bridge: an arm nothing
+/// reaches is an arm nothing tests. The positive is
+/// `d8m_the_ordinary_bridge_arm_is_reached_and_untouched`, which reaches the arm
+/// with an ordinary `Match` bridge, classifies it from the source descriptor,
+/// and holds its classification, count and outcome equal across all three of
+/// `D8m`'s test-only perturbations.
 ///
 /// ## Clause 2 — an unwrapped bridge contributes nothing checked
 ///
@@ -20821,9 +20834,10 @@ fn d8m_the_bridge_arm_populations_move_only_with_the_marker() {
             (D8mBridgeArm::Computational, 1),
             (D8mBridgeArm::CheckedComputational, 1),
         ]),
-        "removing ONE marker moves exactly ONE site from the checked arm to the unwrapped one. \
-         The total is unchanged and the ordinary arm is still empty, so D8m neither created a \
-         composed site nor took one from the ordinary bridge: {mixed_arms:?}"
+        "removing ONE marker moves exactly ONE site from the checked arm to the unwrapped one, \
+         and the total is unchanged. The ordinary arm being empty here describes this program \
+         only; the positive for that arm is \
+         d8m_the_ordinary_bridge_arm_is_reached_and_untouched: {mixed_arms:?}"
     );
 
     // Clause 2 — the unwrapped bridge contributes nothing checked.
@@ -20896,4 +20910,271 @@ fn d8m_the_bridge_arm_populations_move_only_with_the_marker() {
         "and so must a source marker the plan does not name. Preserving an identity through the \
          bridge must neither create nor consume a frame: {extra_marked:?}"
     );
+}
+
+/// The `D8m` witness with its bridge spelled as an ORDINARY `Match` instead of a
+/// `ComputationalMatch`.
+///
+/// Same scrutinee, same constructors, same binder counts, same case bodies, same
+/// default: the only difference is which `RuntimeExpr` constructor the case body
+/// is, which is the only thing the closed descriptor keys on. That is what makes
+/// it a control for the ordinary arm rather than a second unrelated program.
+#[cfg(test)]
+fn d8m_ordinary_bridge_witness() -> RuntimeExpr {
+    let RuntimeExpr::Let { value, body } = d8m_witness(7) else {
+        panic!("let")
+    };
+    let RuntimeExpr::ComputationalMatch {
+        scrutinee,
+        cases,
+        default,
+    } = *value
+    else {
+        panic!("eliminator")
+    };
+    let RuntimeExpr::CheckedSubcontinuationFrame { body: bridge, .. } = &cases[0].body else {
+        panic!("marked bridge")
+    };
+    let RuntimeExpr::ComputationalMatch {
+        scrutinee: bridge_scrutinee,
+        cases: bridge_cases,
+        default: bridge_default,
+    } = bridge.as_ref()
+    else {
+        panic!("bridge")
+    };
+    let ordinary = RuntimeExpr::Match {
+        scrutinee: bridge_scrutinee.clone(),
+        cases: bridge_cases
+            .iter()
+            .map(|case| crate::RuntimeMatchCase {
+                constructor: case.constructor.clone(),
+                binders: case.argument_binders,
+                // The ordinary arm has no induction hypothesis, so the case body
+                // returns its own bound payload rather than calling the method
+                // binder the computational bridge's bodies reach for. That
+                // binder does not exist on this arm, and a body that named it
+                // would refuse for the missing callee rather than exercise the
+                // arm. It returns a unit, which is what the eliminator's OTHER
+                // case already returns, so both arms of the outer match agree.
+                body: RuntimeExpr::Construct {
+                    constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+                    args: Vec::new(),
+                },
+            })
+            .collect(),
+        default: bridge_default.clone(),
+    };
+    let mut cases = cases.clone();
+    cases[0] = crate::RuntimeComputationalMatchCase {
+        constructor: cases[0].constructor.clone(),
+        argument_binders: cases[0].argument_binders,
+        recursive_positions: cases[0].recursive_positions.clone(),
+        body: ordinary,
+    };
+    RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee,
+            cases,
+            default,
+        }),
+        body,
+    }
+}
+
+/// Which arm the closed descriptor must take, read off the SOURCE.
+///
+/// The independent side of the arm classification: the descriptor keys on the
+/// case body's `RuntimeExpr` constructor and on nothing else, so restating that
+/// mapping over the witness's own text derives the expected arm without
+/// consulting the recorder, the plan, or the lowering.
+#[cfg(test)]
+fn d8m_expected_arm(
+    witness: &RuntimeExpr,
+) -> crate::cranelift_backend::lowering::D8mBridgeArm {
+    use crate::cranelift_backend::lowering::D8mBridgeArm;
+    let RuntimeExpr::Let { value, .. } = witness else {
+        panic!("let")
+    };
+    let RuntimeExpr::ComputationalMatch { cases, .. } = value.as_ref() else {
+        panic!("eliminator")
+    };
+    match &cases[0].body {
+        RuntimeExpr::CheckedSubcontinuationFrame { body, .. }
+            if matches!(body.as_ref(), RuntimeExpr::ComputationalMatch { .. }) =>
+        {
+            D8mBridgeArm::CheckedComputational
+        }
+        RuntimeExpr::ComputationalMatch { .. } => D8mBridgeArm::Computational,
+        RuntimeExpr::Match { .. } => D8mBridgeArm::Ordinary,
+        other => panic!("the witness's case body is not a bridge at all: {other:?}"),
+    }
+}
+
+#[cfg(test)]
+const D8M_ORDINARY_SYMBOL: &str = "decl:fixture::d8m_ordinary::witness";
+
+#[cfg(test)]
+fn d8m_ordinary_compile() -> Option<CraneliftBackendError> {
+    let declaration = RuntimeDeclaration {
+        symbol: D8M_ORDINARY_SYMBOL.to_string(),
+        kind: RuntimeDeclarationKind::Transparent {
+            body: RuntimeExpr::Closure {
+                captures: Vec::new(),
+                params: vec!["state".to_string()],
+                body: Box::new(d8m_ordinary_bridge_witness()),
+            },
+        },
+        metadata: RuntimeSymbolMetadata {
+            lowerability: Some(RuntimeLowerabilityStatus::Supported),
+            ..RuntimeSymbolMetadata::empty()
+        },
+    };
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D8M_ORDINARY_SYMBOL.to_string(),
+        }),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    compile_expr_into_module(
+        new_object_module("d8m-ordinary").expect("module"),
+        "ken_d8m_ordinary",
+        Linkage::Export,
+        &entry,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::from([(D8M_ORDINARY_SYMBOL, &declaration)]),
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .err()
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8m` — the ORDINARY bridge arm, positively
+/// observed, and untouched by everything `D8m` added.**
+///
+/// The sibling row `d8m_the_bridge_arm_populations_move_only_with_the_marker`
+/// measures the ordinary arm's population as ZERO on the two-occurrence witness.
+/// A zero is a description of that program, not a proof that the arm still
+/// works: an arm nothing reaches is an arm nothing tests. This row supplies the
+/// positive.
+///
+/// ## The witness
+///
+/// The `D8m` witness with its bridge spelled as an ordinary `Match` instead of a
+/// `ComputationalMatch`. Same scrutinee, same constructors, same binder counts,
+/// same default. The one difference is the case body's `RuntimeExpr`
+/// constructor, which is the only thing the closed descriptor keys on -- so this
+/// is a control on the classification rather than a second unrelated program.
+///
+/// ## The independent side
+///
+/// `d8m_expected_arm` restates the descriptor's mapping over the witness's own
+/// SOURCE text. It never consults the recorder, the plan, or the lowering; if
+/// the descriptor and the source disagree about which arm this is, the two sides
+/// disagree and the clause reds.
+///
+/// ## Clause 1 — the arm is reached, once, and classified from the source
+///
+/// ## Clause 2 — nothing `D8m` added moves it
+///
+/// Each of the three test-only perturbations of the checked path is armed in
+/// turn and the ordinary witness's classification, count AND outcome must be
+/// byte-identical each time. Two of them are marker-focused -- withholding the
+/// tuple the checked bridge transports, and substituting the wrapper's own
+/// occurrence for the wrapped match's -- and the third restores the pre-`D8n`
+/// compile-wide ledger. An ordinary bridge has no marker, no transported tuple
+/// and no consumed frame, so all three must be invisible to it. If one is ever
+/// visible, `D8m`'s checked path has reached into a population it does not own.
+///
+/// ## Where this witness stops, and why that is not a defect in the row
+///
+/// It does not compile green. It reaches the arm, is classified, and then stops
+/// at the projected-causal-edge seat -- *"the unit result at a projected causal
+/// edge is not the planner's own constructor for that edge's producer Construct
+/// origin"* -- which is the same held `D8e`/`D8f` obligation every witness in
+/// this family stops at, the checked one included. The clauses below are about
+/// the arm, and the outcome is compared for EQUALITY across perturbations rather
+/// than asserted to be success, so the stop is pinned rather than papered over:
+/// if it ever changes under one of the three switches, that is the finding.
+///
+/// **Promise class: durable invariant.** A source-derived classification, a
+/// count, and an outcome held equal across three perturbations.
+#[test]
+fn d8m_the_ordinary_bridge_arm_is_reached_and_untouched() {
+    use crate::cranelift_backend::lowering::core::{
+        set_d8m_suppress_transported_tuple, set_d8m_wrapper_origin_substitution,
+        set_d8n_compile_wide_lifecycle,
+    };
+    use crate::cranelift_backend::lowering::{
+        d8m_bridge_arms, reset_d8n_observations, D8mBridgeArm,
+    };
+
+    let witness = d8m_ordinary_bridge_witness();
+    let expected = d8m_expected_arm(&witness);
+    assert_eq!(
+        expected,
+        D8mBridgeArm::Ordinary,
+        "the witness's own source text must say this is an ordinary bridge, or the control is \
+         classifying something else"
+    );
+
+    let observe = || {
+        reset_d8n_observations();
+        let outcome = format!("{:?}", d8m_ordinary_compile());
+        (d8m_bridge_arms(), outcome)
+    };
+
+    // Clause 1 — reached, once, and classified as the source says.
+    let (arms, outcome) = observe();
+    assert_eq!(
+        arms.len(),
+        1,
+        "the ordinary bridge must reach the composed arm recorder exactly once. Zero means the \
+         witness never reaches the arm and the sibling row's zero is all there is; more than one \
+         means it is not the single-site control it claims to be: {arms:?}"
+    );
+    assert_eq!(
+        arms[0].1, expected,
+        "and production must classify it the way the source descriptor does. This is the join \
+         that makes the arm population a measurement: the expected side is read off the witness's \
+         case body constructor, never off the recorder: {arms:?}"
+    );
+
+    // Clause 2 — nothing D8m added moves it.
+    for (name, arm_switch) in [
+        (
+            "withholding the checked bridge's transported tuple",
+            set_d8m_suppress_transported_tuple as fn(bool),
+        ),
+        (
+            "substituting the wrapper's own occurrence for the wrapped match's",
+            set_d8m_wrapper_origin_substitution as fn(bool),
+        ),
+        (
+            "restoring the pre-D8n compile-wide consumed-frame ledger",
+            set_d8n_compile_wide_lifecycle as fn(bool),
+        ),
+    ] {
+        arm_switch(true);
+        let (perturbed_arms, perturbed_outcome) = observe();
+        arm_switch(false);
+        assert_eq!(
+            perturbed_arms, arms,
+            "an ordinary bridge has no marker, no transported tuple and no consumed frame, so \
+             {name} must be invisible to it -- same arm, same count, same Function. A difference \
+             here means D8m's checked path has reached into a population it does not own: \
+             {perturbed_arms:?}"
+        );
+        assert_eq!(
+            perturbed_outcome, outcome,
+            "and the outcome must be identical too, not merely still-an-error: {name} changed \
+             where this witness stops, which is the same finding by a different route"
+        );
+    }
 }
