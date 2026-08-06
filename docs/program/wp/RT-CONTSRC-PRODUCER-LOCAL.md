@@ -1379,7 +1379,7 @@ all six failing `D0` rows.
   | 8 | `D8k` — partitioned global closeout | proof | held |
   | 9 | `D8e` DISCHARGES — causal obligation dischargeable and discharged | — | **DISCHARGED, Steward ruling below** |
   | 10 | `D8l1` — MEASURE the envelope frontier | planner | ANSWERED at `aaef1772`: **not structural** |
-  | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | **NEXT** |
+  | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | repair DONE `1f9a2020`; **evidence completion NEXT** |
   | 12 | `D8f` — checked-marker occupancy | integration | held; WIP written and green, **restore not rewrite** |
   | 13 | `D8g` — non-vacuous closeout, both paths | proof | held, needs a composed witness at emission |
   | 12 | `D6b` closeout, then `D6c` refusal set | — | held |
@@ -1974,9 +1974,9 @@ all six failing `D0` rows.
   1. Planner-level exact populations — selected first of two ->
      `[source_position: 1]`; selected last -> `[source_position: 0]`; selected
      mid of at least three -> `[0, 2, ...]` in source order.
-  2. An out-of-range selected position **refuses in planning**; omission,
-     duplication, dense-prefix substitution and wrong order each fail their own
-     population check.
+  2. ⛔ **SUPERSEDED — this clause asked for a refusal at the WRONG PLANE.**
+     Replaced by item 2' below. Architect `evt_2ffwkpgnmr8xd`, its own error,
+     transcribed by me without catching it.
   3. The capture tail stays **byte-for-byte ordered** after the corrected
      nonrecursive prefix, header and slot counts unchanged.
   4. Both field-order witnesses reach specialization emission. ⛔ **Their
@@ -2007,6 +2007,97 @@ all six failing `D0` rows.
   discharge) but it is **reasoned, not measured**. Confirm the two carry
   `DirectSpecializationCall`. **This adds no mechanism** — it converts a
   reasoned claim into a measured one.
+
+  ###### `D8l2` EVIDENCE COMPLETION — item 2 was at the wrong plane. `evt_2ffwkpgnmr8xd`.
+
+  **The production repair at `1f9a2020` is the RIGHT repair** and is preserved
+  as accepted partial progress, **not a candidate**: the planner now emits true
+  source positions, the formerly refusing selected-first witness compiles, and
+  the non-empty composed half reaches whole-pass closure. Items 1, 5, 6, 7 and
+  8 are discharged. **The three reported gaps do not share one disposition.**
+
+  ###### Item 2' — the producer/consumer PLANE split
+
+  ⛔ **Item 2 asked for a wrong-order refusal at the consumer, and that was
+  never satisfiable.** `ordinary_envelope` produces a **slot-ordered
+  authority**; `continuation_case_binder_run` **consumes** it by finding the
+  slot carrying a given source position, so it **follows any internally
+  consistent permutation it is handed**. The landed
+  `checked_computational_ih_binder_run_admits_a_permuted_envelope` row is
+  **correct and stays unchanged**. Making that consumer independently
+  reconstruct source order would add exactly the **second slot-order
+  authority** this release forbids.
+
+  ⭐ **That does NOT make a wrong-order planner population lawful, and the
+  record must not say it does.** The distinction is the whole of item 2':
+
+  | plane | rule |
+  |---|---|
+  | **producer** (`ordinary_envelope`) | **required** to emit the exact source-ordered vector |
+  | **consumer** (`continuation_case_binder_run`) | follows a self-consistent permutation faithfully; this is by design |
+
+  **Item 2' replaces item 2:**
+
+  - out-of-range selection **refuses in planning**;
+  - omission, duplication and dense-prefix substitution reach their **existing
+    exact refusal**;
+  - **wrong order fails the PLANNER-LEVEL exact-population equality** — item 1
+    already carries the net, since selected-middle must be exactly `[0, 2]` and
+    reversing the producer order makes that assertion red. **No downstream
+    refusal is required or authorized.**
+
+  ⛔ **Fidelity correction to the `D8l2` record:** it must **not** say broadly
+  that wrong order is *"admitted by design"* — that is true of the **consumer
+  presented with** a permutation and false of the **planner producer**. Remove
+  or reframe the `WrongOrder` no-op entry in the defect matrix. **Add no
+  production validator and no second representation.**
+
+  ###### Item 3' — the capture tail. NOT waived; bounded test work.
+
+  **The repair changes the prefix immediately before the capture tail, so a
+  capture-free witness cannot prove the join.** Every worker currently in reach
+  is capture-free, which makes the present evidence **construction-only, not
+  measured**.
+
+  Extend the existing `contspec_multiple_worker_captures_fixture` ordinary-path
+  shape — or add its narrow `D8l` sibling — so it **also has a non-empty
+  nonrecursive prefix**. For **both** orientations assert the complete
+  `WorkerCapture` tail — **ordinal, owner, closure origin, source and
+  lifetime** — equals the immutable worker-capture provenance **in order**,
+  plus the full envelope length, `header.parameters`, and the actual
+  Parameter-slot count. ⛔ **At least two captures; a length-only or empty-tail
+  assertion is insufficient.**
+
+  **Planner/test evidence only — the production capture loop stays
+  byte-identical.**
+
+  ###### Item 4' — the observable answer. NOT waived; bounded execution fixture.
+
+  ⛔ **The current fields carry different integers but the program never makes
+  its result depend on them. That is the exact vacuity the clause exists to
+  prevent** — populations and reach were proved, an answer was not.
+
+  The test crate already has a linked execution harness:
+  `artifact::compile_expr_for_lowering_tests(...).run(None)`. Route the matched
+  ordinary payload through the **real composed call** and return it as a ground
+  `Int`. Selected-first and selected-last must carry **distinguishable
+  payloads** and assert their **exact returned observations**.
+
+  ⛔ **The value must be CONSUMED — not merely present in the envelope, and not
+  used only to select a case.** Presence and case-selection are the two ways
+  this goes vacuous while looking green.
+
+  The exact repair must green **both** orientations; **`DensePrefix` must still
+  red the selected-first orientation.** Preserve the existing end-to-end
+  compile, non-empty composed-discharge and `D8h`-`D8k` ledger assertions
+  **beside** this differential.
+
+  ###### Scope of the completion, stated so it is not read as a re-opening
+
+  **One bounded `D8l2` evidence completion after a fidelity correction** — not
+  `D8f`, not a new node, not a planner/ABI redesign. ⛔ **Apart from correcting
+  stale comments and records and adding the two fixtures and controls above, no
+  production edit beyond `1f9a2020` is authorized.**
 
   ###### `D8k`'s ledger row is proved ON THE LAW, not on reach — and that is owed
 

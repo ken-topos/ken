@@ -33,49 +33,54 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~00:1xZ · `D8l1` answered: a planner defect; `D8l2` repairs it
+## LIVE — 2026-08-06 ~00:3xZ · `D8l2` repair DONE; evidence completion is next
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Release `D8l2` to Runtime on exact `aaef1772`** — the bounded planner repair,
-per Architect ruling `evt_5bs9fxyxww8gy`. Thread **`thr_6m43v75yndhtj`**.
-⛔ **The frame authorized measurement only, so Runtime must not edit from that
-ruling alone** — the transcription in the frame is what authorizes it.
+**Release the bounded `D8l2` EVIDENCE COMPLETION on exact `1f9a2020`**, per
+Architect ruling `evt_2ffwkpgnmr8xd`. Thread **`thr_6m43v75yndhtj`**.
 
-**`D8l1` answered: NOT structural.** A composed witness compiles **end to end**
-when the selected recursive position is the *last* constructor field. The only
-variable is field order; both witnesses place a `Match` at the selected field,
-so the deforestable shape is not what is rejected.
+**The production repair is DONE and is the right repair.** The composed witness
+compiles end to end at `1f9a2020` — installation, consumption, verified
+discharge, causal partition and specialization emission all on one program,
+with the ledger closing on a **non-empty composed half**. Items 1, 5, 6, 7, 8
+discharged. `1f9a2020` is **accepted partial progress, not a candidate**.
 
-**The defect:** `ContinuationUnitView::ordinary_envelope`
-(`planning/static_transition.rs:1755`) emits nonrecursive roles from a **dense
-loop index**, while `continuation_case_binder_run` (`lowering/units.rs:1198`)
-looks them up by **true source position**. They agree only while every
-nonrecursive field precedes the selected recursive position. The method's own
-doc comment states the correct rule and the loop does not implement it. `px8tr`
-has the recursive position last, so the defect was never reachable until now.
-**It is a real production defect reachable by any producer whose selected
-recursive position is not last — composed or not.**
+⛔ **Item 2 asked for a refusal at the WRONG PLANE — the Architect's error, my
+transcription.** `ordinary_envelope` is a slot-ordered **producer**;
+`continuation_case_binder_run` **consumes** it by source-position lookup and so
+follows any self-consistent permutation. The landed permuted-envelope row is
+correct and stays. Item 2' moves the order net to the **planner-level
+exact-population equality** — item 1 already carries it, since selected-middle
+must be exactly `[0, 2]`.
 
-`D8h`-`D8k` are complete and `D8e` is DISCHARGED. `D8h` `a435d180`, `D8i`
-`abfd67ff`, `D8j` `8d0d6fca`, `D8k` `372097de`+`aaef1772`.
+⭐ **The record must NOT say wrong order is "admitted by design"** — true of the
+**consumer presented with** a permutation, false of the **planner producer**,
+which is still required to emit source order.
 
-⭐ **`D8k`'s reach is now closable** — the compiling witness closed the causal
-ledger with a **non-empty composed half**. The end-to-end assertion goes
-**beside** `D8k`'s law-level row, never in place of it (`D8l2` item 5).
+**Two evidence items are NOT waived:**
 
-**Two additions of mine to the Architect's closure list**, both from the
-implementer's own measured warnings: enumerate every `ordinary_envelope`
-consumer against the renumbering (no current fixture would red on this fix),
-and attribute the compiling witness's three consumptions against one discharge
-(reasoned, not measured).
+- **capture tail** — the repair changes the prefix immediately before it, so a
+  capture-free witness cannot prove the join. Extend
+  `contspec_multiple_worker_captures_fixture` to have a non-empty nonrecursive
+  prefix; assert the complete `WorkerCapture` tail in order. Two captures
+  minimum; length-only is insufficient.
+- **observable answer** — fields carry different integers but the program never
+  makes its result depend on them, which is the exact vacuity the clause
+  prevents. Route the payload through the **real composed call** via
+  `artifact::compile_expr_for_lowering_tests(...).run(None)`. **The value must
+  be consumed**, not merely present or used to select a case.
 
-**`D8f`'s work is written and green at 749/2/1, unlanded.** If `D8f` is
-re-released after `D8l`, say so explicitly — the implementer will **restore it
-rather than rewrite it**.
+**Bounded: not `D8f`, not a new node, not a planner/ABI redesign.** No
+production edit beyond `1f9a2020` except stale comments/records and those two
+fixtures.
+
+`D8h`-`D8k` complete, `D8e` DISCHARGED, `D8l1` answered. **`D8f`'s work is
+preserved unlanded** and now needs re-measuring against a witness that executes
+further than when it was written.
 
 ⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
 published *"new member at ordinal 2, not 3"*. So is the whole
