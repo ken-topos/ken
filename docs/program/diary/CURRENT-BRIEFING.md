@@ -183,11 +183,29 @@ function kinds and needs trustworthy ownership facts when measured.
 ### Environment
 
 **Disk was reclaimed 2026-08-06 ~01:35Z: 99% -> 85%, 33G free**, from 30G of
-stale `tmp/ken-*` scratch, **no `target/` touched**. ⛔ **`tmp/` refills at ~400
-dirs/hour and is already back to 18G** — this recurs in a day or two. The fix is
-per-test scratch cleanup in the `ken-runtime` harness; **do not fold it into any
-`D8` checkpoint.** See the memory `devcontainer-disk-topology-and-safe-reclaim`,
-whose header block now carries the three rules that matter.
+stale `tmp/ken-*` scratch, **no `target/` touched**. The fix is per-test scratch
+cleanup in the `ken-runtime` harness; **do not fold it into any `D8`
+checkpoint.** See the memory `devcontainer-disk-topology-and-safe-reclaim`,
+whose header block carries the three rules that matter.
+
+⛔⛔ **THE REFILL RATE IS MUCH HIGHER UNDER AN ACTIVE RING THAN THE EARLIER
+~400 dirs/hour FIGURE. Re-measure before you plan against it.** Two readings
+taken 38 minutes apart during `D8m`'s matrix work:
+
+| time | disk | free | `tmp/` | dirs |
+|---|---|---|---|---|
+| 02:47Z | 80% | 46G | 24G | 911 |
+| 03:25Z | 82% | 40G | 29G | 1091 |
+
+⇒ **~8G/hour and ~280 dirs/hour**, because a matrix checkpoint re-runs the
+`ken-runtime` suite repeatedly. **At 40G free that is roughly five hours of
+headroom, not days.**
+
+⛔ **Do NOT reclaim while the implementer is LIVE** — it holds the shared build
+turn and **no instrument reads a `flock`; ask the holder.** ⭐ **Reclaim at the
+next handoff seam**, freeing only `tmp/ken-*` older than 2h (576 such dirs at
+03:25Z). ⛔ **Never `target/` while the ring is mid-node** — that costs a cold
+rebuild under the machine-wide `ken-cargo` lock.
 
 ⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
 published *"new member at ordinal 2, not 3"*. So is the whole
