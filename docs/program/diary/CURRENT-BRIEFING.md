@@ -207,6 +207,21 @@ never re-baseline.**
   are keyed to that env, so a claim could now name the wrong value. **QA is
   correctly held pending it. Do not release QA or alter `D3c` until it lands.**
 
+### Compaction verification: a LOW ctx is proof, a HIGH ctx is NOT disproof
+
+**Measured 2026-08-06 on runtime-implementer.** `handoff-gate-compact.sh`
+returned, the pane still read `ctx 27%`, and a **full-stream** grep for
+`Compacting|Context compacted` returned **0**. I resent `/compact` to that one
+pane and ctx went **27% -> 7%** — while the marker grep *still* returned **0**.
+
+⇒ **The marker text is transient and its absence proves nothing** (the progress
+bar clears). **The ctx number showing a DROP is conclusive; the ctx number
+showing HIGH is inconclusive**, because it can be a stale render.
+
+**So verify in this order:** ctx dropped ⇒ done. Otherwise resend to that one
+pane and re-check ctx. Do not conclude "did not compact" from an absent marker,
+and do not conclude "did compact" from the script returning.
+
 ### GATE MISS, MINE: I released a new node without the before-work compaction
 
 **`COORDINATION §15` / `steward/compaction.md`: always compact before new work,
