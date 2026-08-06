@@ -75,6 +75,44 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > **`ALL LEAVES LOWERED` never does.** Phase 3 leaf lowering and Phase 4 join
 > completion are after the abort.
 >
+> ### ⛔ SECOND, INDEPENDENT GATE ENTRY — this node does NOT remove it
+>
+> **Measured `evt_eb1deg5r0j0r`, ruled `evt_7rdd0jgtg6zwh`.** Family
+> **2a-acquisition** (inherited join acquisition), and possibly **family 5**,
+> are blocked on a producer that is **not** the shared cross-unit carried word:
+>
+> > the `#[cfg(test)]` control seam must be **VISIBLE TO THE BUILD THAT REACHES
+> > THE ARM.** It exists only in the `ken-runtime` **lib** build; the rig that
+> > exercises the carried route — `rt_parity_native` — lives in **`ken-cli`**
+> > and links a **non-`cfg(test)`** build.
+>
+> ⛔ **Byte-span observation does not fix this.** Two independent blockers, kept
+> separate deliberately so a successor cannot read one discharge as both.
+> Feature-gating the seam across that boundary is a real change to what ships
+> and belongs to the gate — ⛔ **not to a bounded control child.**
+>
+> **Family 2a ships a TRANSITION SENTINEL, not a discharge:** it asserts
+> `applications == 0` and **reddens the moment the arm becomes reachable under
+> `cfg(test)`** — exactly when 2a becomes writable. ⭐ **Prefer this shape for
+> every remaining gate entry where it is cheap:** a blocked family that asserts
+> its own unreachability converts a promise into a mechanism that fires by
+> itself, instead of a note someone must read at the right moment.
+>
+> ### ⛔ THE GOVERNING HAZARD — state the POPULATION with every claim
+>
+> Three times on this node a **true** fact about one population was transferred
+> to a neighbouring one. None was carelessness; each read as obviously
+> transferable:
+>
+> | true of | falsely transferred to |
+> |---|---|
+> | the route is **entered** 10 times on `rt_parity` | a **control** can be written on it |
+> | a closure parameter is carried at an **effect argument** | carried at a **Match scrutinee** |
+> | the mutation reddens on **`rt_parity`** | it reddens in the **lib build where the seam lives** |
+>
+> ⇒ **"Buildable" is meaningless without "in which build, on which rig."** Say
+> the population in the same sentence as the claim.
+>
 > ### GATE-SHAPED is not GATE-SATISFYING
 >
 > **A control whose red can only be demonstrated by an UNCOMMITTED production
