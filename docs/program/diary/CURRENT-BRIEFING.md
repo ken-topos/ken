@@ -40,17 +40,24 @@
 
 ### The one thing to do next
 
-**Nothing is owed by me. Wait for the corrected `D8p` child.** The Architect
-**BLOCKED** `198b7c14` on **evidence fidelity while ACCEPTING the production
-mechanism** (`evt_w6wc0xt9gkqf`); the leader released the bounded correction
-(`evt_2fjj0vddn0ep7`) and the implementer is working it. **Next mover is the
-ring, not me.**
+**Nothing is owed by me. Wait for the Architect's `D8f` classification.**
 
-⛔ **Do NOT route the `D8f` classification question yet.** It waits for the
-`D8p` **accept**. When that lands, route ONE question to the Architect: is the
-double-discharge refusal an **in-`D8f` fixture question** or a **further
-mechanism boundary**? `D8f` is not released until that is classified — not on
-the accept alone. Leader holding on my `evt_39ykmh3ehqg8b`.
+**`D8p` is DISCHARGED at exact `2be7adb0`** (Architect `evt_6sk9hbp17893t`),
+after a mechanism-accepted evidence block at `198b7c14`.
+
+⭐ **The leader routed the classification gate ITSELF** (`evt_z0k71pe8006d`) —
+the same question I had queued. ⛔ **Do NOT re-route it.** The Architect picked
+it up at `evt_7rh1kx42d8k`. **No implementer action is authorized until the
+disposition**, so the implementer being idle is correct, not stalled.
+
+**The question on the table:** is the same-function double-discharge refusal a
+**bounded fixture/authority correction inside the recut `D8f` matrix**, or a
+**further mechanism boundary needing another predecessor**? If the latter, apply
+the `D8n` flip condition to it as I did for `D8p` — **do not re-derive a sizing
+rule.**
+
+**When the disposition lands**, that is my move: release `D8f` on the recut if
+bounded, or cut the predecessor if not.
 
 **`D8p` is IN REVIEW at exact `198b7c14`** (`763/2/1`) — implementer
 `evt_14tv58v4k5wxr`, leader's review request `evt_68ry7r5bz86n5`, Architect
@@ -106,6 +113,15 @@ cross-body. ⇒ **`D8f` must not re-run the always-admit mutation, but it may NO
 treat the two-call ordering as discharged.** The trap the original wording set:
 skipping a within-body proof on the strength of a cross-body discriminator just
 measured **absent**.
+
+⭐ **RE-DERIVED against accepted `2be7adb0`, and BOTH rows stand.** Finding 4 of
+the accept: both defining bodies bind `StaticOriginId(21)` and call
+`StaticOriginId(29)` **with the same contract**, so the swap is **explicitly** a
+no-op — the "retired" row is correct. And the leader's gate states the other
+directly: *"`D8f`'s actual two-call occupancy state is now **reachable**, but it
+refuses downstream."* ⛔ **Reachable is not proved.** ⇒ Had the original wording
+survived, `D8f` would have been released with licence to skip a proof the
+accepted object shows is **reachable and unproved**.
 
 ⭐ **`D8g` is now framed too, and its FIRST deliverable is a MEASUREMENT** — see
 the frame's *"`D8g` — RE-MEASURE the owner-separation prohibition before obeying
