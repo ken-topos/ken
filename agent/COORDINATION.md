@@ -616,6 +616,27 @@ finding, they must not be sequenced.
   and must state which approvals it is carrying forward, so a stale carry-forward
   is visible rather than assumed.
 
+### A candidate is accepted work, not a finished WP
+
+Operator, 2026-08-06: *"From now on, merge in accepted work once it is done,
+even if it is only a partial WP."*
+
+**Do not wait for a WP's remaining deliverables before assembling a
+candidate.** Once a deliverable is complete and every touched domain has a live
+approval on its exact SHA, it is a candidate — route it to the Steward to
+publish. WP closure and merge are separate events, and a leader holding
+finished work for its unfinished siblings is the thing this rule retires.
+
+**The one bar is semantic atomicity**: a declared atomic pair lands together,
+because one half regresses alone or has no reaching witness alone. That is a
+property of the work, and it is the only qualifying reason. "The branch carries
+the evidence chain", "a rebase would cost re-anchoring", and "a working path
+would go red" are not bars (see §12 and the 2026-07-28 no-users ruling).
+
+**Prefer a cut that is a straight ancestor of the working tip** — a contiguous
+prefix preserves every exact SHA and every review verdict below it with no
+rebase, so verdict transfer is paid only on what is still in flight.
+
 **`scripts/` and `agent/` are not in the operator's split.** Until the operator
 rules, treat publisher/tooling changes under `scripts/` as the **Architect's**
 review surface (machinery, not library content) and `agent/` as the **Steward's**

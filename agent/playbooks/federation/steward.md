@@ -131,6 +131,50 @@ sequence them across teams.
 - **Mid-flight.** A team leader proposes new work to you; you add and sequence
   it. A WP that grows or forks comes back to you to split or re-scope.
 
+### Merge accepted work as soon as it is done, even a partial WP
+
+Operator, 2026-08-06: *"From now on, merge in accepted work once it is done,
+even if it is only a partial WP."*
+
+**WP closure and merge are separate events.** A WP closes when its ACs are met;
+a completed portion merges as soon as it is accepted. Do not hold a finished
+deliverable because its siblings are unfinished. The unit of merge is
+**accepted work**, not the WP.
+
+The bar is *accepted*, not *finished-looking*: reviewed and cleared on its own
+terms. Its deliverables must be complete — landing a deliverable's first half
+is not partial-WP merging, it is shipping a fragment.
+
+**The one genuine bar is semantic atomicity.** Where two deliverables are a
+declared atomic pair — one regresses alone, or the other has no reaching
+witness alone — they land together. That is a property of the work. Nothing
+else qualifies: not "the branch is the evidence chain", not "a rebase would
+cost re-anchoring", and above all not "a currently-working path would go red"
+(operator, 2026-07-28 — Ken has no users).
+
+**Prefer a cut that is a straight ancestor.** A contiguous prefix cut at an
+existing commit preserves every exact SHA and every review verdict below it
+with no rebase, so verdict transfer is paid only on what remains in flight.
+Look for that boundary before concluding a split is expensive.
+
+> **Measured 2026-08-06, and this is why the rule exists.**
+> `RT-DECL-CLOSURE-PORT` reached **203 unmerged commits over three days, three
+> node ids on one ref, with six nodes blocked behind it.** Its `D1`-`D6a`
+> prefix — 34 commits, complete, cuttable at an ancestor with zero rebase —
+> had been pushed to origin two days earlier and simply never had a PR opened
+> against it.
+>
+> The branch grew because every split proposal was refused with *"a rebase
+> destroys the preserved exact SHAs."* **That is false as a git claim.** Each
+> refusal then produced a new deliverable label inside the same branch
+> (`D3b`, `D6a/b/c`, `D8n/o/p`, `D9a/b`) instead of a mergeable node. **A recut
+> whose output cannot merge independently is a subdivision, and subdividing a
+> held branch makes it longer, not smaller.**
+>
+> ⇒ **The tell is a recut that produces labels rather than merges.** If you
+> have recut a node more than twice and nothing has landed, the recuts are not
+> working and the next one will not either.
+
 ### Sizing: the one-hour turn
 
 Operator, 2026-07-31: *"Ideally, each implementer turn should complete in under
