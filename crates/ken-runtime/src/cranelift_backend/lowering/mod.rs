@@ -3683,7 +3683,8 @@ pub(in crate::cranelift_backend) fn d8l2_consumed_facets() -> Vec<bool> {
 /// rebuilt from a fixture or an expected plan. The point of the split-body
 /// witness is that one source body is lowered under two different defining
 /// Functions; an observation that reconstructed the identity would be a second
-/// authority for the very fact under test.
+/// authority for the very fact under test. Each record carries the **defining
+/// `FuncId`** -- never an emission owner.
 ///
 /// ⚠ The identity is `defining_function_id`, set by `open_aggregate_events` at
 /// the START of every body -- the one per-`Function` fact in scope at both
@@ -3701,19 +3702,21 @@ thread_local! {
 
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn record_d8n_frame_consumption(
-    owner: Option<FuncId>,
+    defining_function: Option<FuncId>,
     invocation_id: u64,
     frame_id: u64,
 ) {
-    D8N_FRAME_CONSUMPTIONS.with(|log| log.borrow_mut().push((owner, invocation_id, frame_id)));
+    D8N_FRAME_CONSUMPTIONS
+        .with(|log| log.borrow_mut().push((defining_function, invocation_id, frame_id)));
 }
 
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn record_d8n_slot_reconciliation(
-    owner: Option<FuncId>,
+    defining_function: Option<FuncId>,
     slot_template_id: u64,
 ) {
-    D8N_SLOT_RECONCILIATIONS.with(|log| log.borrow_mut().push((owner, slot_template_id)));
+    D8N_SLOT_RECONCILIATIONS
+        .with(|log| log.borrow_mut().push((defining_function, slot_template_id)));
 }
 
 #[cfg(test)]
@@ -13605,8 +13608,7 @@ impl<'a> Lowering<'a> {
         }
         // `D8n` — the observation, at the REAL consumption seam and written from
         // production state that is in hand here: the pair the ledger just
-        // accepted, and the emission owner of the function currently being
-        // defined. ⛔ Nothing is reconstructed from a fixture or looked up in an
+        // accepted, and the defining `FuncId` of the function being emitted. ⛔ Nothing is reconstructed from a fixture or looked up in an
         // expected plan; a reader that rebuilt either side would agree with
         // itself and say nothing about what production did.
         #[cfg(test)]
@@ -13724,8 +13726,8 @@ impl<'a> Lowering<'a> {
                 }
                 // `D8n` — the observation at the REAL slot-reconciliation seam,
                 // recorded only once the plan-named slot has been resolved and
-                // held to its frame, constructor and position. The id is the
-                // plan's own; the owner is the function being defined.
+                // held to its frame, constructor and position. The slot id is
+                // the plan's own; the identity is the defining `FuncId`.
                 #[cfg(test)]
                 record_d8n_slot_reconciliation(self.defining_function_id, slot.slot_template_id);
                 Ok(Some(slot_template_id))

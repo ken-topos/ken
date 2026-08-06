@@ -19214,22 +19214,32 @@ fn d8n_checked_frame_consumption_is_per_function_not_per_compile() {
     // ⭐⭐ This is what makes "split across two Functions" a measurement rather
     // than a claim about the fixture's shape. Both observations are written at
     // the real seams from state production holds there: the pair the ledger
-    // accepted, the slot the plan named, and in each case `defining_function_id`
-    // -- the identity `open_aggregate_events` sets at the start of every body.
+    // accepted, the slot the plan named, and in each case the defining
+    // `FuncId` -- the identity `open_aggregate_events` sets at every body start.
     // ⛔ Nothing here is reconstructed; a reader that rebuilt the identity or
     // the pair would be agreeing with itself.
     //
     // ⚠ MEASURED on the way to this: `defining_emission_owner` reports the SAME
-    // owner for both consumptions, because only the ordinary unit-body and
+    // value for both consumptions, because only the ordinary unit-body and
     // generated-context passes set it and it is stale inside a specialization
     // body. It would have made this clause read as a single-Function witness.
     let consumptions = crate::cranelift_backend::lowering::d8n_frame_consumptions();
-    let owners = consumptions
+    // ⛔ EVERY record must name a Function before distinctness is asked. A
+    // `None` beside a `Some` makes a two-element set just as well as two real
+    // Functions do, so counting first would let "one Function and one
+    // unattributed body" pass as a split.
+    let defining_functions = consumptions
         .iter()
-        .map(|(owner, _, _)| *owner)
+        .map(|(defining_function, _, _)| {
+            defining_function.expect(
+                "every checked-frame consumption must name the Function it happened in; a `None` \
+                 means a body reached the seam without `open_aggregate_events`, and no \
+                 distinctness claim over such a record means anything",
+            )
+        })
         .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(
-        owners.len(),
+        defining_functions.len(),
         2,
         "the one checked source body must be consumed under TWO distinct defining Functions. One \
          means only a single Function lowered it and this witness is not a split body at all, \
@@ -19249,19 +19259,42 @@ fn d8n_checked_frame_consumption_is_per_function_not_per_compile() {
     assert_eq!(
         consumptions.len(),
         2,
-        "once under each owner: not once in total, and not three times: {consumptions:?}"
+        "once under each Function: not once in total, and not three times: {consumptions:?}"
     );
     let slots = crate::cranelift_backend::lowering::d8n_slot_reconciliations();
-    let slot_owners = slots
+    let slot_functions = slots
         .iter()
-        .map(|(owner, _)| *owner)
+        .map(|(defining_function, _)| {
+            defining_function.expect(
+                "every slot reconciliation must name the Function it happened in, for the same \
+                 reason the consumptions must",
+            )
+        })
         .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(
-        (slots.len(), slot_owners.len()),
-        (2, 2),
-        "the plan-named checked-IH slot must reconcile once under EACH relevant Function too. \
-         The slot seam is downstream of the frame seam, so a single reconciliation would mean \
-         only one Function got far enough to use the frame it consumed: {slots:?}"
+        slots.len(),
+        2,
+        "the plan-named checked-IH slot must reconcile exactly twice -- the slot seam is \
+         downstream of the frame seam, so one reconciliation would mean only one Function got \
+         far enough to use the frame it consumed: {slots:?}"
+    );
+    assert_eq!(
+        slot_functions, defining_functions,
+        "⛔ and across the SAME two Functions, as set equality rather than as two counts that \
+         happen to agree. Equal sizes with different members would mean the frame was consumed \
+         in one pair of Functions and the slot reconciled in another: {slots:?}"
+    );
+    let slot_templates = slots
+        .iter()
+        .map(|(_, slot_template_id)| *slot_template_id)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        slot_templates.len(),
+        1,
+        "and it must be ONE plan-named slot reconciling once in each Function, not two different \
+         slots reconciling once each. ⛔ Asserted as the number of distinct observed ids rather \
+         than against the fixture's literal, so the clause cannot be satisfied by agreeing with \
+         the number this test happens to write into the plan: {slots:?}"
     );
 
     // Clause 2 — the old lifetime, restored.
