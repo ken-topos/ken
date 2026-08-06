@@ -33,25 +33,47 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~09:0xZ · `D6b` HELD at `08f1c2f7` · recut RULED, publishing
+## LIVE — 2026-08-06 ~09:5xZ · `D6b` DISCHARGED · `D6c` building the guard
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Publish the corrected `D6b` recut, doc-only.** The Architect ruled at
-`evt_6grnfx2psztcn`: my two-limit reading was **half right**, and the frame now
-reflects their exact disposition. After it lands, Runtime may make **only** a
-comment/failure-text-only fidelity child on `08f1c2f7` — no executable or
-test-condition change.
+**Nothing is owed by me.** Runtime is clear to build `D6c`'s fail-closed
+postcondition — the Architect ruled its placement sound (`evt_7ear3ph17g2w1`)
+and **its pre-build gate is already met**, because the census
+(`evt_na5pwjmxwxvn`) landed 62 seconds **before** that ruling. I flagged the
+crossing at `evt_6d7hpz6ysc4b2` and the leader stopped the duplicate pass
+before any durable work.
 
-**State of the ring:** `D8g` DISCHARGED at `400bddde` (`evt_4mzks855xpw8h`).
-`D6b` partial landed at **`08f1c2f7`** (`771/2/1`) and the leader **froze** it
-(`evt_7aycs8sv9w0tv`) awaiting my frame correction and an Architect exact-SHA
-verdict. `D6c`, QA, candidate and `D6` closure remain held.
+**State of the ring:** `D8g` DISCHARGED `400bddde`. **`D6b` DISCHARGED at exact
+`c47d94a7`** (`evt_61y1n1y7kpj3f`) via the chain `08f1c2f7` (evidence) →
+`b7d34bf7` (two false contracts retired) → `c47d94a7` (symbol rename), each
+proved mechanically against its parent. **`D6c` partial accepted at
+`6f8b34da`** — five refusal rows landed. `D6` closure, QA, candidate and
+downstream remain held.
 
-### ONE conjunct is a permanent LIMIT. The other is DELIVERED, not limited.
+### `D6c`'s open work: a guard, and it is IN-node — my ruling `evt_480c6zx5y8t2y`
+
+Omission and duplicate reach **no owning production guard**. The fix is a
+fail-closed structural postcondition in `continuation_case_binder_run`, after
+segment 3 and immediately before `Ok(run)` (Architect's placement).
+
+**I ruled it is `D6c`'s own work, not a new node**, on frame grounds: `D6c`'s
+framed shape already **is** *"a perturbation **and a guard** at the selection
+seam"*, and the frame already assigns `D6c` the cardinality law. It is **not**
+`D6b`'s banned production change — it mints nothing, uses only values already
+passed in, and enforces an invariant the function's **own doc already claims**
+(*"a gap-filled run would silently shift every later binder, which is a wrong
+program rather than a refused one"*). Its consumer is correctness, not a test.
+
+**Premise correction the Architect had not seen when ruling:** wrong order is
+**not** unguarded. The unguarded set is **two, not three**. Steps 3-4 of the
+placement still stand, but now because the order half is caught **downstream by
+the wrong mechanism**, not because it is uncaught.
+
+### `D6b`, as discharged — ONE permanent LIMIT, one DELIVERED positive
 
 I proposed retiring **both** and the Architect corrected me
 (`evt_6grnfx2psztcn`). The publish gate is what stopped it reaching `main`.
@@ -89,6 +111,17 @@ that concentration is the parked campaign-sizing question for the operator.
 ahead). ⛔ **Never `handoff-gate-compact.sh` that seat** — it hard-resets to
 `origin/main` and would move the branch ref off the whole preserved evidence
 chain. Hand-drive `/compact` on the single quiescent pane.
+
+### A clean compile has THREE explanations — standing check now in the frame
+
+**This node has reported "equal values" as "no guard" three times**: `D8m`'s
+permutation, `D6b`'s raw-to-`worker_calls` mirror, `D6c`'s wrong-order swap.
+The frame now carries a `STANDING PRE-REPORT CHECK` beside the swap LIMIT:
+before reporting a clean compile as a missing refusal, say whether the two
+subjects hold **equal values**, and record application count separately from
+outcome. **My own gate asked the right question naming the wrong mechanism** —
+I demanded `hits > 0` (mutation never applied); every cell fired and the tell
+was equal values instead.
 
 ### FIVE frame defects were mine, in TWO shapes. The second shape is new.
 
