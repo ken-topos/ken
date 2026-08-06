@@ -18809,15 +18809,27 @@ fn d8m_compile(expr: &RuntimeExpr, frame_id: u64) -> Option<CraneliftBackendErro
 /// checked IH slot inside a composed case body refused as *"detached from its
 /// checked frame"* — the `D8f` hard stop.
 ///
-/// ## Clause 1 — the identity arrives, and the proof is which refusal fires
+/// ## Clause 1 — which refusal fires, and what that does NOT establish
 ///
-/// ⭐⭐ With the marker on the case body the bridge is built from, the program
-/// refuses with **"checked computational case is missing its IH slot marker"**
-/// instead. That branch of `computational_ih_slots_for_case` is guarded by
-/// `checked_frame_id.is_some()` and is **unreachable while the bridge carries
-/// `None`** — so the change of refusal is the identity arriving, not a
-/// coincidence of two errors. ⛔ Completing that program needs IH slot markers
+/// With the marker on the case body the bridge is built from, the program
+/// refuses with **"checked computational case is missing its IH slot marker"**.
+/// That branch of `computational_ih_slots_for_case` is guarded by
+/// `checked_frame_id.is_some()`. Completing that program needs IH slot markers
 /// in the bridge's cases, which is `D8f`'s business and is held.
+///
+/// **CORRECTION, measured by clause 1b below.** This clause was originally
+/// written as `D8m`'s difference-proof, on the reasoning that the guard is
+/// unreachable while the bridge carries `None`. That reasoning is wrong for
+/// THIS witness: the same match is also lowered by the DIRECT path, which
+/// carried the frame identity before `D8m` and still does, so the refusal
+/// arrives whether or not the bridge transports anything. Reverting the bridge
+/// to its complete pre-`D8m` all-`None` tuple leaves this row green, which is
+/// what clause 1b now pins. The refusal identity is still worth asserting -- it
+/// is the guard the composed path must not land short of -- but it is not a
+/// difference, and the difference-proofs are
+/// `d8m_the_transported_tuple_is_what_carries_the_source_frame` and
+/// `d8m_two_distinct_occurrences_each_keep_their_own_frame`, both of which red
+/// under that revert.
 ///
 /// ## Clause 2 — an unwrapped bridge stays all-None
 ///
@@ -18861,6 +18873,25 @@ fn d8m_the_source_frame_identity_survives_the_bridge() {
     assert!(
         !refusal.contains("detached from its checked frame"),
         "and specifically not the D8f hard-stop refusal, which is the one D8m exists to retire"
+    );
+
+    // Clause 1b — the boundary of clause 1, as a committed measurement rather
+    // than a caveat. Withholding the tuple the bridge transports leaves this
+    // witness's refusal unchanged, because the same match is also lowered by the
+    // direct path and that path carried the identity before D8m. So clause 1 is
+    // an assertion about which guard the composed path must not land short of --
+    // not a proof that the bridge transports anything.
+    crate::cranelift_backend::lowering::core::set_d8m_suppress_transported_tuple(true);
+    let withheld = d8m_compile(&marked, 7).map(|error| format!("{error:?}"));
+    crate::cranelift_backend::lowering::core::set_d8m_suppress_transported_tuple(false);
+    assert!(
+        withheld
+            .as_deref()
+            .is_some_and(|reason| reason.contains("missing its IH slot marker")),
+        "MEASURED: this witness refuses identically with the bridge's transported tuple withheld. \
+         If that ever stops being true the composed path has become the only route to this guard \
+         on this program, clause 1 has become a difference-proof, and this expectation should be \
+         inverted rather than deleted: {withheld:?}"
     );
 
     // Clause 2 — the same shape, unmarked, borrows nothing.
@@ -20368,6 +20399,13 @@ fn d8m_observed_frame_slots() -> BTreeMap<u64, BTreeSet<u64>> {
 /// ## Clause 1 — the keyed pairing relation
 ///
 /// The relation observed at the real slot seam must equal the planned one.
+/// MEASURED limit: on the LAWFUL witness the transported frame and the slot's
+/// own planned frame necessarily agree, so recording either one satisfies this
+/// clause. It establishes the population -- which pairs were reached and how
+/// often -- and the transplant control in
+/// `d8m_the_checked_bridge_refuses_every_way_the_transported_identity_can_go_wrong`
+/// is what shows the observation is of the frame the BRIDGE carried: it asserts
+/// the disagreement on a program where the two differ.
 ///
 /// ## Clause 2 — the permutation, and here it BITES
 ///
