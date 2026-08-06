@@ -3937,8 +3937,17 @@ all six failing `D0` rows.
   ⭐ **All 17 parity instances are in `V`** — that is the critical-path fact.
 
 - **`D9` — assemble the continuation's ordinary run from the PLANNER ENVELOPE,
-  not from the nonrecursive fields alone. ADDED 2026-08-06; this is the node's
-  LAST deliverable and it is what `AC-1` was always asking for.**
+  not from the nonrecursive fields alone. ADDED 2026-08-06.**
+
+  > ⛔ **CORRECTED 2026-08-06 (`evt_3pr04vk7zrd7c`). This deliverable's header
+  > used to say `D9` was "the node's LAST deliverable and what `AC-1` was always
+  > asking for." Both halves are now false.**
+  >
+  > **It is not the last:** the class-complete `lower_source_carried_match`
+  > correction follows it (Architect `evt_4c26q24rp7xqb`).
+  > **And it is not what `AC-1` was asking for:** `AC-1` clause 1 has been
+  > **recut out of this node** into `RT-CARRIER-BYTESPAN-OBSERVE`. `D9` owns
+  > clause 2 only.
 
   **Why it exists, stated plainly: this is a framing defect of mine.** `AC-1`
   named an outcome and **no deliverable was ever assigned to produce it.** Node
@@ -4018,10 +4027,23 @@ all six failing `D0` rows.
     discriminating question: *what lawful permutation of my observed data
     leaves this assertion green?* **Swapping two capture ordinals between two
     roles must RED.**
-  - **The positive is `AC-1`'s row itself** — it reaches the real producer and
-    returns `InvalidBounds` at the exact `264 -> 262 / position 1` consumer,
-    with shared-host dispatch count **zero**. Removing the carried-capacity arm
-    recreates the refusal at that exact seat.
+  - ⛔ **THE POSITIVE WAS `AC-1`'s ROW ITSELF, AND IT IS RETIRED — it can no
+    longer go green in this node** (`evt_3pr04vk7zrd7c`). It read: *"it reaches
+    the real producer and returns `InvalidBounds` at the exact `264 -> 262 /
+    position 1` consumer, with shared-host dispatch count zero; removing the
+    carried-capacity arm recreates the refusal at that exact seat."* **That is
+    `AC-1` clause 1, which is now `RT-CARRIER-BYTESPAN-OBSERVE`'s.** The row
+    stops earlier, at the `BytesPointerLength / CarriedWord` effect seat, and
+    no in-node repair exists. ⇒ **Do not chase it and do not weaken it into
+    something reachable** — a positive rewritten until it passes is worse than
+    a retired one.
+
+    **The replacement positive is clause 2, stated as an absolute pair:** the
+    count of `Match: scrutinee is not a constructor value` refusals on the
+    `AC-1` row is **0** at the candidate against **5** at approved `fda636d8`.
+    ⛔ **Give both readings.** The total is `1 passed / 6 failed` on *both*
+    sides — a count comparison says nothing changed while every `Match` refusal
+    is in fact gone.
   - **Report `AC-1` separately from the five-row `ComputationalMatch`
     population, always.** They refuse at different sites and greening one says
     nothing about the other.
@@ -4036,14 +4058,51 @@ all six failing `D0` rows.
 
 ## 4. Acceptance criteria
 
-- **`AC-1` — the linked row closes. OWNED BY `D9`.** Until 2026-08-06 this AC
-  named an outcome **no deliverable was assigned to produce**, and node QA is
-  what found it. **Every AC in this section must name its owning deliverable;
-  if one cannot, that is the finding.** The `D0` row
-  `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds` reaches the
-  real producer and returns `InvalidBounds` at the exact `264 -> 262 /
-  position 1` consumer, with shared-host dispatch count **zero**. Removing the
-  carried-capacity arm recreates the refusal at that exact seat.
+- **`AC-1` — SPLIT 2026-08-06. Only clause 2 is this node's. OWNED BY `D9`.**
+  Steward ruling `evt_3pr04vk7zrd7c`, on Architect capability disposition
+  `evt_4c26q24rp7xqb`.
+
+  > **CLAUSE 2 — IN SCOPE, and it is DISCHARGED.** The `AC-1` row no longer
+  > fails with `Match: scrutinee is not a constructor value`. Measured at
+  > `c2ae3eed`: **0** such refusals against **5** at approved `fda636d8`.
+  >
+  > **CLAUSE 1 — REMOVED FROM THIS NODE.** *"The row reaches successful
+  > lowering"* now belongs to **`RT-CARRIER-BYTESPAN-OBSERVE`**.
+  > ⛔ **This node can no longer fail on it and must not be held for it.**
+  >
+  > **Why, measured not asserted:** the row now stops at
+  > `claim_host_effect_seat`'s `Need ⊆ Avail` gate —
+  > `seat Argument(0) of FsReadFile needs BytesPointerLength, which it cannot
+  > observe in CarriedWord`. Exact `PlannedCaseEmission` authority on both
+  > carried source matches is `status=Reachable, producers=Open,
+  > producer_origins=0` with an **`OpaqueIngress` self-edge**
+  > (`evt_657rvy4d1m4k9`). **Zero producer origins does not make it closed** —
+  > the self-edge is *positive fail-closed authority*, so case-emission pruning
+  > structurally cannot reach that seat. Every `BytesPointerLength` seat is
+  > `SPECIALIZED_ONLY` and the carrier has **no total emitted byte-span
+  > observer**, so there is no sound in-node repair.
+  >
+  > ⛔ **Do not "fix" clause 1 here.** Setting this seat — or only `FsReadFile`
+  > — to `EITHER_PHASE` asserts a capability that does not exist.
+  > `OpaqueIngress` describes planner flow, not runtime tag/class/owner, so it
+  > cannot choose a representation row either.
+
+  **What is NOT recut:** `AC-1`'s refusal is still **in-node** at `core.rs:4892`
+  in `lower_source_machine_with_continuation_inner` (`evt_2hg3a46xdmxje`). The
+  seat was this node's; the *capability behind it* is not.
+
+  **The historical framing defect stands as written, because it still binds:**
+  until 2026-08-06 this AC named an outcome **no deliverable was assigned to
+  produce**, and node QA is what found it. **Every AC in this section must name
+  its owning deliverable; if one cannot, that is the finding.**
+
+  The original clause-1 target, retained for the successor's frame to build
+  against: the `D0` row
+  `buffer_allocate_malformed_capacity_narrows_to_invalid_bounds` should reach
+  the real producer and return `InvalidBounds` at the exact `264 -> 262 /
+  position 1` consumer, with shared-host dispatch count **zero**; removing the
+  carried-capacity arm should recreate the refusal at that exact seat. ⛔ **That
+  is `RT-CARRIER-BYTESPAN-OBSERVE`'s to discharge, not this node's.**
 
   ⛔⛔ **THE SIX RED ROWS ARE TWO POPULATIONS, NOT ONE — measured at `D0`
   (`evt_1srfqjmkp5eh8`).** The `AC-1` row refuses at a different site from the
