@@ -13456,24 +13456,41 @@ impl<'a> Lowering<'a> {
         // frame -- so every one of them is blind here by construction. The
         // arity and binder-ordinal agreements below stay, but as checks on the
         // call that has already been identified, never as the identification.
-        // ⚠⚠ **UNWITNESSED, and measured to be so.** Mutating this comparison
-        // to never admit reds four `D5a` rows, so the gate is on the live path
-        // and its answer decides consumption. Mutating it to ALWAYS admit --
-        // the pre-`D8f` behaviour -- leaves the whole suite green. ⇒ No landed
-        // fixture poses the occupancy question, and this mechanism is
-        // correct-and-unwitnessed rather than proved.
+        // ⭐⭐ **WITNESSED SINCE `D8p`.** Mutating this comparison to never
+        // admit reds `D5a` rows and two `D8p` rows. Mutating it to ALWAYS admit
+        // -- the pre-`D8f` behaviour -- now reds
+        // `d8p_binding_is_zero_one_or_declined_per_application_occurrence`,
+        // whose witness puts two static-worker calls under one pending marker:
+        // the same worker, the same arity, the same frame, so route, arity,
+        // binder index and call order are all blind and the occurrence is the
+        // only thing that decides. The first call emits with no consumption; the
+        // second consumes at the plan's exact occurrence.
         //
-        // ⛔⛔ **EVERY ROUTE TO A WITNESS MEASURED SO FAR IS CLOSED.** This is a
-        // hard stop, not an unfinished fixture. The committed sentinel is
-        // `d8f_the_composed_route_still_cannot_host_an_invocation_marker`.
+        // ⚠ This paragraph previously read "UNWITNESSED, and measured to be so
+        // -- mutating it to ALWAYS admit leaves the whole suite green". That was
+        // true until `D8p` put the checked-application seam on the source
+        // machine's call edge, which is what made a program with two candidate
+        // calls reachable at all.
         //
-        // ⚠ **Route 2's reason below was RESTATED after `D8m` landed.** It
-        // previously read that a composed bridge frame can never carry a checked
-        // identity, because `immediate_binder_eliminator` synthesized it with
-        // `checked_frame_id: None`. `D8m` retired exactly that: the bridge now
-        // transports the source marker's whole tuple, and the composed route
-        // reaches strictly further than it did. The route is still closed, by a
-        // different law one step downstream.
+        // ⭐ **ROUTE 2 IS NOW OPEN; `D8f`'s remaining question is elsewhere.**
+        // The history below is retained because each entry says what a route
+        // costs, and two of the three are still closed.
+        //
+        // Route 2's stated reason has been restated twice. It first read that a
+        // composed bridge frame can never carry a checked identity, because
+        // `immediate_binder_eliminator` synthesized it with
+        // `checked_frame_id: None` -- `D8m` retired that. It then read that the
+        // ordinary unit body has no static-worker seat at the application --
+        // `D8p` retired that too, by putting this seam on the source machine's
+        // call edge. The composed route now hosts a checked-IH invocation
+        // marker, binds it, and emits the call: see the `D8p` rows.
+        //
+        // ⛔ `D8f` is still not discharged, and the reason has moved off this
+        // seat. Its two-call witness now reaches the affine causal law -- "one
+        // causal identity was discharged twice in a single function" -- because
+        // the ordinary call re-uses a binding that carries a composed authority.
+        // That is a question about the ordinary call's discharge, not about
+        // occupancy, and this gate's answer is no longer what blocks it.
         //
         // Route 1 -- a NON-COMPOSED checked wrapper (`px8tr`), which hosts the
         // invocation marker green. Nesting an ordinary call on the same recursor
@@ -13485,26 +13502,22 @@ impl<'a> Lowering<'a> {
         // that must leave the marker pending is exactly the call that would have
         // to have consumed one.**
         //
-        // Route 2 -- a COMPOSED checked wrapper. Transport validation passes and
-        // the bridge now carries the source frame identity, so the pre-`D8m`
-        // "detached from its checked frame" refusal is gone. Lowering instead
-        // refuses at `finish_checked_computational_ih_marker` with "a checked
-        // computational-IH marker is a specialized-only surface": the ordinary
-        // unit body that lowers the case body has no static-worker seat at the
-        // application, so the marker is entered there, never consumed, and fails
-        // closed before any specialization body is reached.
-        //
-        // ⭐ Measured with AND without the ordinary call, identically. ⇒ What
-        // closes route 2 is the marker in a composed body, not the occupancy
-        // shape -- so a better occupancy fixture on this route cannot help.
+        // Route 2 -- a COMPOSED checked wrapper. OPEN since `D8p`. It refused at
+        // `finish_checked_computational_ih_marker` with "a checked
+        // computational-IH marker is a specialized-only surface", because the
+        // ordinary unit body that lowers the case body reached the application
+        // through the source machine, whose call edge did not consult this seam.
+        // It does now, so the marker is consumed there and the route carries the
+        // occupancy witness.
         //
         // Route 3 -- a COMPOSED static-worker call as the checked application's
         // argument, so the seat is reached without instantiating an IH layer.
         // Refuses with "source open occurrence disagrees with the
         // closure-selected dynamic parent".
         //
-        // ⇒ The occupancy property is correct and unwitnessed. The attempt is
-        // preserved rather than discarded.
+        // ⇒ The occupancy property is witnessed on route 2. Routes 1 and 3 stay
+        // recorded because each names a law that a future witness would have to
+        // satisfy rather than route around.
         if static_origin != pending.application_origin {
             return Ok(false);
         }
