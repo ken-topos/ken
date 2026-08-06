@@ -978,12 +978,31 @@ all six failing `D0` rows.
 
   ⛔ **`D6b` also owes a NON-VACUOUS raw-call emission witness** (Architect
   `evt_21ytnjgdw147`, on partial progress `d86be55d`). The route consumer and
-  the two function-local target tables are accepted and preserved — but **the
-  landed-object row proves the mixed binding pair is in the environment without
-  ever calling the selected recursive argument.** The corpus therefore never
-  consumes `raw_worker_calls` in the retargeted case, and the mutation *"resolve
-  `RawWorker` through `worker_calls`"* **survives**. ⚠ **A green suite cannot
-  discharge a callee-selection law whose wrong table is observationally inert.**
+  the two function-local target tables are accepted and preserved.
+
+  > ⛔ **THE DIAGNOSIS THIS PARAGRAPH CARRIED WAS FALSE, and it was mine.** It
+  > said the mixed binding pair sits in the environment *"without ever calling
+  > the selected recursive argument"*, so the corpus never consumes
+  > `raw_worker_calls` and the mutation *"resolve `RawWorker` through
+  > `worker_calls`"* survives **for want of a call**.
+  >
+  > **Measured at `400bddde`: the selected argument IS called.** The raw route
+  > emits — `raw 1, supplied 1`, no suffix, against declared callee 30 — and
+  > `raw_worker_calls` **is** consumed. **The mutation survives for a different
+  > reason entirely:** at a body that was never retargeted, `worker_calls` and
+  > `raw_worker_calls` lawfully hold **the same declared target**, so the swap is
+  > byte-for-byte the same lookup and callee.
+  >
+  > ⇒ **Building the witness was never going to make that mutation red.** The
+  > requirement rested on the wrong cause, not on a missing fixture. Rulings:
+  > leader `evt_31bj4wm8064xr`, Architect `evt_4125xc5qw8g0x`.
+
+  ⛔ **Do not conflate the two, here or anywhere else in this frame.** *"The
+  mechanism is unreached"* is a real gap and may never be accepted as delivered
+  semantics. *"Both tables hold the same entry, so there is no callee-selection
+  decision at this seat"* is **the absence of a distinction** — nothing is left
+  unproved, and no mutation can discriminate what the representation does not
+  encode.
 
   The witness is a test fixture built from **existing source constructs on the
   ordinary planner/lowering path**, where the selected recursive argument is
@@ -993,9 +1012,27 @@ all six failing `D0` rows.
   closure/body provenance yields a `GeneratedContext` IH and a `RawWorker`
   selected argument; the argument is invoked at the planner-derived binder
   position with its real raw arity and captures; the emitted raw event carries
-  **no** generated-context suffix and resolves through `raw_worker_calls`;
-  substituting `worker_calls` for that lookup **reddens** it; and the existing
-  `GeneratedContext` append-nothing mutation **stays red**.
+  **no** generated-context suffix and resolves through `raw_worker_calls`; and
+  the existing `GeneratedContext` append-nothing mutation **stays red**.
+
+  ⛔ **WITHDRAWN: *"substituting `worker_calls` for that lookup reddens it."***
+  It is **structurally unsatisfiable at an equal-table seat** — see the
+  correction above. **The lawful law is ASYMMETRIC and conditional on actual
+  retargeting**, per Architect `evt_4125xc5qw8g0x`:
+
+  | # | clause |
+  |---|---|
+  | 1 | `RawWorker` consumes the raw operand run, appends **no** context suffix, resolves through `raw_worker_calls` |
+  | 2 | `GeneratedContext` consumes the **same raw prefix plus its exact planned suffix**, resolves through `worker_calls` |
+  | 3 | **Where retargeting makes the table answers differ**, swapping the context route to the raw table must refuse **at the earliest structural guard**. ⇐ **this existing live negative IS the callee-selection discriminator** |
+  | 4 | **Where no retarget occurred and the entries are equal**, a table swap is **observational identity — not a missing negative** |
+
+  ⛔ **Do NOT narrow `worker_calls` to context-only targets to manufacture a
+  red.** It would replace the established *"declared worker targets, selectively
+  overwritten by retargeting"* contract at all three population sites
+  (`units.rs:1404`, `:2042`, `:3236`), create new absence semantics for ordinary
+  and generated bodies, and change production solely so a test can fail. **No
+  production consumer requires it.**
 
   ⛔ **Fail closed on the population edge:** if the ordinary fixture reaches a
   template-only raw body and `raw_worker_calls` cannot be populated without
@@ -1123,10 +1160,18 @@ all six failing `D0` rows.
 
   ⇒ ⛔ **This is a production representation/consumer gap, NOT a missing fixture.**
   The bounded witness repair released for `D6b` could not have discharged it —
-  the only source shape that would exercise the raw table is **refused earlier**,
-  which is exactly why its wrong-table mutation stays green. ⛔ **Do not accept
-  the raw table as a permanently unwitnessed residual**; calling `D6b` complete
-  would turn an unreachable mechanism into delivered semantics. ⛔ **And do not
+  the only source shape that would exercise the raw table is **refused earlier**.
+  ⛔ **Do not accept the raw table as a permanently unwitnessed residual**;
+  calling `D6b` complete would turn an unreachable mechanism into delivered
+  semantics.
+
+  > ⚠ **SUPERSEDED CLAUSE — this paragraph used to add *"which is exactly why
+  > its wrong-table mutation stays green."* That causal claim is FALSE and is
+  > removed.** Measured at `400bddde`: the raw route **is** reached and emits,
+  > and the mutation stays green because at an unretargeted body both tables
+  > hold the **same** declared target. **The unreachability finding above is
+  > unaffected — it is about a different source shape.** Do not re-derive
+  > "the raw table is unreached" from the mutation's greenness. ⛔ **And do not
   add a carrier callable/helper route** — worker body, arity, captures and route
   are already compiler/planner facts, so encoding callable identity or a template
   descriptor in the carrier would widen the ABI/runtime boundary, duplicate the
@@ -1642,7 +1687,17 @@ all six failing `D0` rows.
   unreachable **because the mechanism was incomplete** — the source shape that
   would exercise it was refused earlier by the very gap under repair, so
   accepting it would have turned an unreachable mechanism into delivered
-  semantics. The owner-collision refusal is unreachable **because the planner
+  semantics.
+
+  > ⚠ **Read that in the past tense, and do not extend it to the table swap.**
+  > At `400bddde` the raw route **is** reached and emits. A **third** category
+  > exists that this contrast does not name: `D6b`'s Raw→`worker_calls` swap is
+  > inert because **both tables lawfully hold the same target** at an
+  > unretargeted body. That is neither an incomplete mechanism nor an impossible
+  > population — it is **the absence of a distinction**, and it is the only one
+  > of the three that requires no repair and no prohibition.
+
+  The owner-collision refusal is unreachable **because the planner
   proves the population impossible**, which is `D8a`'s finding rather than a
   symptom of one. Do not cite `D6b`'s prohibition against this deletion, and do
   not cite this deletion as precedent for accepting an unwitnessed mechanism.
@@ -1709,8 +1764,13 @@ all six failing `D0` rows.
   - **The mechanism is the cheap half. The witness that reaches it is the
     deliverable**, and a checkpoint that lands a mechanism with no witness has
     delivered its easier half.
-  - **A green suite is not evidence about an unreached mechanism** — that is
-    exactly what made `D6b`'s wrong-table mutation stay green and cost a recut.
+  - **A green suite is not evidence about an unreached mechanism.** ⚠ **The
+    example this line used to give — `D6b`'s wrong-table mutation — is
+    RETRACTED.** That mutation stays green because both tables lawfully hold the
+    same target at an unretargeted body, **not** because anything is unreached
+    (`400bddde`; Architect `evt_4125xc5qw8g0x`). The rule stands; **it was
+    illustrated with a case that turned out to be the other failure mode**, and
+    that mis-attribution is itself the thing to watch for.
   - **Two counters, not one**, whenever *"unreadable by design"* and *"never
     built"* would look identical from outside.
 
@@ -3443,6 +3503,12 @@ all six failing `D0` rows.
   wrong-table mutation **red**, keep the context-suffix mutation **red**, and prove
   the raw target is **both declared and defined**. ⛔ `D6c`'s refusal set follows
   only after this positive closes.
+
+  > ⚠ **A THIRD clause of this superseded paragraph is now also qualified.**
+  > *"Make the wrong-table mutation red"* holds **only where retargeting makes
+  > the two tables differ** — see `D6b`'s asymmetric-law table. At an
+  > equal-table seat it is unsatisfiable, and it was inherited forward from here
+  > exactly like the two below.
 
   > ### THIS IS WHERE THE `D8g` DEFECT CAME FROM. Two clauses are WITHDRAWN.
   >
