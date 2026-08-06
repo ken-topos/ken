@@ -33,7 +33,89 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~14:0xZ · `AC-1` correction in flight · a SCOPE FORK is inbound
+## LIVE — 2026-08-06 ~17:4xZ · candidate APPROVED and HELD on a second unmeasured signature
+
+**Verify `origin/main` before trusting anything below.** `origin/main` is
+`3015aafd`. `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread
+`thr_6m43v75yndhtj`.
+
+### The one thing to do next
+
+**Wait for the second-signature boundary measurement** (released
+`evt_x9z9pt5nd3hg`). Nothing else is owed by me. **Do not publish until it
+returns.**
+
+### Candidate state — fully reviewed, held by me alone
+
+**`b914c7ff` on `wp/RT-DECL-CLOSURE-PORT-typed-units`, 212 commits ahead.**
+Decision **`dec_5dv6rcga5g7n0` is RESOLVED-APPROVED** — QA approved, Architect
+approved and resolved on cast. **The Architect stated its approval does not
+release publish and that my hold is authoritative.** Base axis is clean:
+merge-base `e6b4a13b`, and the intersection of files the branch touched with
+files `main` moved since is **EMPTY**, so no rebase is warranted.
+
+### THE GREEN BOUNDARY — measured, and it is NOT a publishable one
+
+| | SHA | note |
+|---|---|---|
+| last green | `b9189ee9` | `D5a` checkpoint 4 step 3 |
+| first non-green | `c7410b79` | `D6: activation lands, and it exposes a RUNTIME failure the compile evidence could not see` |
+
+Adjacent (`c7410b79^ == b9189ee9`), six decisive probes, no skipped revisions,
+signature stable. **The commit announces its own failure** — this is the
+activation commit and the trap is the residual its author named, not a
+surprise regression.
+
+> **`b9189ee9` IS GREEN ON ONE SIGNATURE ONLY. That is not green.** At
+> `fc758323` the suite is 8 passed / 11 failed and **10 of the 11 carry a
+> DIFFERENT signature** — `BoundaryCarrier: a host-effect operand is a
+> specialized-only surface`. Only one carries the
+> `malformed borrowed process input` trap that was bisected.
+>
+> **The decisive open question:** is that second signature **introduced on this
+> branch at all**, or present at merge-base `e6b4a13b` and therefore not ours?
+> `specialized-only` is the same vocabulary as the `BytesPointerLength` seat
+> behind `RT-CARRIER-BYTESPAN-OBSERVE`. **If those ten are the known recorded
+> residual rather than a regression, the publish question is entirely
+> different.**
+
+**Not cutting a prefix at `b9189ee9`:** straight ancestor, preserves every
+verdict below it with no rebase — but 28 commits of 212, closes neither node,
+unblocks none of the six dependents, and unmeasured on the second signature.
+**A cut that lands reviewed work and still fails CI buys nothing.**
+
+### The node itself is DONE, with a durable gate
+
+`RT-CONTSRC-PRODUCER-LOCAL` ships `lower_source_carried_match` as a **reviewed
+DORMANT partial** with an explicit unmeasured runtime residual. The blocked
+control families became an **ACTIVATION GATE** recorded on
+`RT-CARRIER-BYTESPAN-OBSERVE` (still `draft`, deliberately unframed until the
+publish question settles). **Two independent gate entries:** the shared
+cross-unit carried producer, and the `cfg(test)` seam-visibility boundary
+between the `ken-runtime` lib and `ken-cli`.
+
+### THE DAY'S GOVERNING HAZARD — seven instances
+
+**A true fact about population A, transferred to population B.** Two were mine,
+one the Architect's, one a register's, one a test's own name. The seventh was
+caught *before* it cost anything: bisecting on "suite red" would have located
+whichever cause appeared first, not the one the question named — the probe keyed
+on exact stderr bytes and classified everything else *skip*, not *bad*.
+**State the population in the same sentence as the claim.**
+
+### Routing defect seen three times today — over an hour of critical path
+
+**A post that moves the ball to a specific seat, carrying no mention of it.**
+An Architect verdict mentioning only me; one mentioning only the leader while QA
+held 29 minutes; a Decision announcement mentioning nobody while the Architect
+owed the vote, 37 minutes. **No new edge is needed — COORDINATION §2/§14
+already require it.** Detector given to the leader: **an open governance object
+whose named actor has no mention carrying it**, checkable in one call.
+
+<details>
+<summary>Earlier windows — resolved, kept for their shapes</summary>
+
+## Superseded — 2026-08-06 ~14:0xZ · `AC-1` correction in flight
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
@@ -1067,6 +1149,8 @@ function kinds and needs trustworthy ownership facts when measured.
 
 `D8h`-`D8l` complete, `D8e` DISCHARGED, `D8l2` QA-approved. **`D8f`, `D8g`,
 `D6b` closeout, `D6c`, candidate, `D6` closure and downstream remain held.**
+
+</details>
 
 ### Environment
 
