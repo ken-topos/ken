@@ -33,31 +33,43 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~02:4xZ · `D8n` discharged; `D8o` evidence blocked TWICE
+## LIVE — 2026-08-06 ~02:5xZ · `D8o` DISCHARGED; `D8m` witness is NEXT
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for the `D8o` exact-body-key evidence correction.** Architect blocked
-`5154d94a` (`evt_6gk0n7p2eazn2`) and then `d3f7e32c` (`evt_4y1q8s6cq5m11`);
-runtime-leader routed at `evt_5wxqyyxgep98`. **The ring is working and owes
-nothing to me.** **`D8n` is DISCHARGED at `3a63fe64`.** Then: the `D8m`
-witness, then `D8f`.
+**Wait for the `D8m` witness.** `D8o` is **DISCHARGED at exact `3aadbaae`**
+(`evt_3d58kezzyqzwn`), tree `ca86dceb`. The Architect named **runtime-leader**
+next mover, to release `D8m` from that accepted tip. **`D8n` is DISCHARGED at
+`3a63fe64`.** Then `D8f`, `D8g`, `D6b` closeout, `D6c`, candidate.
 
-⛔ **Both blocks are EVIDENCE ONLY — the mechanism is accepted.** Census
-complete, three call sites carry the intended domains, `D8a`-`D8k` not
-reopened. ⛔ **Do not re-cut `D8o` and do not size a new node from the blocks.**
-⛔ **The bounded `D8i`/`D8j` remeasurement is ALREADY DONE, inside `D8o`.**
+**I posted the governing pointer to the leader at `evt_5q4p5tm2kx47c`** — the
+frame changed under `D8m` while `D8o` was in flight. ⛔ **Nothing there
+reopens `D8o` or changes `D8m`'s scope.**
+
+⛔ **`D8o` took THREE rounds: mechanism accepted first pass, evidence blocked
+TWICE** (`evt_6gk0n7p2eazn2`, `evt_4y1q8s6cq5m11`). ⛔ **Do not re-cut `D8o`
+and do not size a new node from those blocks — they were evidence-only.**
+⛔ **The bounded `D8i`/`D8j` remeasurement is DONE, inside `D8o`.**
 
 ⛔⛔ **MY FRAME UNDERSPECIFIED THE GATE, AND THAT IS WHY THERE WERE TWO
-ROUNDS.** It said *"compare its live `defining_unit` / `defining_emission_owner`
-**pair** to the planner-issued body authority."* **That asks for a PAIR
-COMPARISON. The requirement is a KEYED RELATION.** The ring built what I asked
-for, twice. **The frame is corrected** — `exact body key → live (owner, unit)`,
-each of the three kinds non-empty, **and swapping two lawful pairs between two
-bodies must RED.**
+EVIDENCE ROUNDS.** It said *"compare its live `defining_unit` /
+`defining_emission_owner` **pair** to the planner-issued body authority."*
+**That asks for a PAIR COMPARISON. The requirement is a KEYED RELATION.** The
+ring built what I asked for, twice. **The frame is corrected** — `exact body
+key → live (owner, unit)`, each of the three kinds non-empty, **and swapping
+two lawful pairs between two bodies must RED.**
+
+⭐ **What discharged it, and the shape to copy into `D8m`:** `D8oBodyKey` is a
+**closed sum over the exact planner descriptor identities**, supplied at the
+pass that owns each descriptor — never reconstructed from ambient owner,
+`FuncId`, raw origin, or a composed identity. **The swap discriminator is a
+PERMANENT control, not an argument in a comment:** it builds the swapped
+expectation and requires it not to match, and the implementer **measured that
+the swap reds before writing it.** Map cardinality prevents body collapse; all
+three kinds explicitly non-empty.
 
 ⭐ **THE GOVERNING FINDING — fifth of its shape on this node**, now stated in
 the frame as *"GOVERNING — name the INDEPENDENT SIDE, and KEY the relation."*
