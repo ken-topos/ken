@@ -33,14 +33,15 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~05:4xZ · `D8p` DISCHARGED · `D8f` refusal matrix IN REVIEW
+## LIVE — 2026-08-06 ~06:2xZ · `D8f` DISCHARGED · `D8g` measurement IN FLIGHT
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Nothing is owed by me. `D8f` is in flight and the ring is self-driving.**
+**Nothing is owed by me. `D8g`'s measurement is in flight and the ring is
+self-driving — it routed `D8g` off the frame without me.**
 
 **`D8p` DISCHARGED at exact `2be7adb0`** (`evt_6sk9hbp17893t`). **`D8f`
 CLASSIFIED bounded and IN-NODE** (`evt_3ynqrahtzngaz`) — ⭐ **no further
@@ -59,14 +60,15 @@ so the ordinary call claims first and the unchanged affine ledger **correctly**
 rejects the duplicate. ⛔ **Nothing was missing.** The three-case law and its
 bans are in the frame's **`D8f` CLASSIFIED** section.
 
-**Where `D8f` actually is:** the **disposition PARTIAL is ACCEPTED** at exact
-`c49d0652` (Architect `evt_2azbt52vxm47g`), via a bounded evidence/fidelity
-child of `20b0d6be`. ⭐ **The real two-call witness COMPILES** — first call
-`PendingAtAnotherOccurrence` with no claim, exact second call `ConsumedHere`
-with one. ⛔ **NOT a `D8f` completion and NOT a candidate.**
+**`D8f` IS DISCHARGED** at exact `04c40d4c` (Architect `evt_6cka0ecwnd25t`).
+The route: three-case disposition partial accepted at `c49d0652`, then the four
+refusal controls took **five** bounded evidence holds, closing substantively at
+`d94a3df9`. `04c40d4c` is a whitespace-only identity child of it — one deletion,
+zero words moved.
 
-**The four refusals are RELEASED and in flight** (leader `evt_7gxhvgpn5v7sw`,
-implementer working).
+**Still NOT a candidate.** The discharge verdict says so explicitly: it
+releases neither `D8g` nor the candidate, and the frame's post-`D8f` sequencing
+governs.
 
 ⭐ **The shared-identity shape I flagged for QA was resolved in that child:**
 the two defining bodies share **one** planner-issued causal identity, so the
@@ -90,10 +92,16 @@ marker**, `D6c`'s about **selecting the raw/IH target pre-emission.**
 **Discharging one discharges nothing of the other.** Disambiguated at both
 sites in the frame.
 
-**Next for me:** `D8g` when `D8f` discharges — its first deliverable is the
-owner-separation re-measurement, already framed. Then `D6b` closeout (which
-also owes the raw-target declared-call-table representation `D6a` left
-honestly inert), `D6c`, candidate, `D6` closure.
+**Next for me: nothing until `D8g`'s measurement returns.** The leader released
+that first deliverable itself (`evt_6bzantbemt8jt`), quoting the frame — an
+ANSWER not a mechanism, the two exact outcomes, no production edit authorized,
+no manufactured population. Do not re-route it. Then `D6b` closeout (which also
+owes the raw-target declared-call-table representation `D6a` left honestly
+inert), `D6c`, candidate, `D6` closure.
+
+**Watch `D6c` specifically.** It is the next control family big enough to
+repeat `D8f`'s five-hold arc, and it inherits the same governing rule. The
+frame's new **WHAT DISQUALIFIES A SIDE** block exists for it.
 
 **The successor node is framed and its staleness is repaired.**
 `RT-CONTSRC-CALLABLE-CONTRACT` is the sole live successor —
@@ -107,12 +115,21 @@ restating the execution-order table is what went stale. Its `D0`
 re-derivation and hard stop on measurement 3 were already right and are
 untouched.
 
-**`D8f`'s refusal matrix is IN REVIEW at exact `f42fff78`** (`765/2/1`) —
-implementer `evt_1cdx4z3vgb86r`, leader's review request `evt_6rdwqq0kfbwj0`,
-Architect picked it up at `evt_sqz1qtt50q39`. All four refusals are built on
-the accepted two-call
-witness, each stated with the plane that refuses it. **The ring owes nothing
-to me.**
+**What the five holds cost and bought, because the shape will recur.** Every
+one landed on the SAME axis — the independent side — and I set myself a trigger
+that a fifth would mean the rule was underspecified. It fired, and the
+assessment came out the other way: the rule adjudicated cleanly each time and
+the implementer conceded each finding. **The rule was not ambiguous; it was
+satisfiable three ways that feel independent and are not** — distance (reading
+the mechanism on a lawful comparison compile), complement (naming one subject
+and defining the other as "the rest"), and a shared collector. Those are now
+written into the frame as **WHAT DISQUALIFIES A SIDE**.
+
+**The accepted surface climbed on every pass**, which is why this was
+convergence and not mis-sizing: refusal planes accepted at `f42fff78`, keyed
+relations at `8671825c`, independent populations at `cf770717`, both origins
+named from `StaticTransitionPlan::child_static_origin` at `d94a3df9`. Repeated
+rejects mean mis-sized only against a FLAT accepted surface.
 
 **Read one detail before `D8g`:** the implementer declined to overclaim the
 wrong-occurrence row. It refuses at the **affine causal** law, not a marker
