@@ -8198,9 +8198,14 @@ impl<'a> Lowering<'a> {
                     ),
                 )
             })?;
-        // `D8g` — the decoded callee, captured where the table answered.
+        // `D8g` — the emitted callee identity, captured where the table
+        // answered. The FuncRef, not the origin: the two routes share a worker
+        // body origin by design, so only this separates them.
         #[cfg(test)]
-        let decoded_callee_origin = exact.origin;
+        let emitted_callee = {
+            use cranelift_codegen::entity::EntityRef;
+            exact.function.index() as u32
+        };
 
         // `AC-5` clause (b): the redirect selects a **distinct** target by
         // `AC-6`'s definition of same-shape -- **same declared arity and same
@@ -8296,7 +8301,7 @@ impl<'a> Lowering<'a> {
                 raw_operands,
                 supplied_operands: inputs.len(),
                 composed_discharge: worker.composed_continuation_authority().is_ok(),
-                decoded_callee_origin,
+                emitted_callee,
             },
         );
         // `D8j` — the instruction is HANDED BACK, not recorded. Which consumer

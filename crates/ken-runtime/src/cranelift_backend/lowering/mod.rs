@@ -3769,14 +3769,15 @@ pub(in crate::cranelift_backend) struct D8gEmission {
     pub(in crate::cranelift_backend) supplied_operands: usize,
     /// Whether this binding carries a composed causal authority.
     pub(in crate::cranelift_backend) composed_discharge: bool,
-    /// **The DECODED callee**: the target origin the route's own table resolved
-    /// for this call, read off the declared record the instruction is emitted
+    /// **The emitted callee IDENTITY**: the declared `FuncRef` the route's own
+    /// table answered with, which is the callee the instruction is written
     /// against.
     ///
-    /// ⛔ Not `target_body_origin`, which is the BINDING's expectation. The two
-    /// agree on a lawful program and separate the moment the wrong table
-    /// answers, which is what makes this a decode rather than a restatement.
-    pub(in crate::cranelift_backend) decoded_callee_origin: StaticOriginId,
+    /// ⛔ NOT the target origin. The raw and generated-context routes
+    /// intentionally SHARE a worker body origin -- that is the whole of `D6a` --
+    /// so an origin recorded here is identical on both routes and a wrong-table
+    /// mutation cannot move it. The `FuncRef` is the one fact that does.
+    pub(in crate::cranelift_backend) emitted_callee: u32,
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8g`** — the durable producer-input mutations,

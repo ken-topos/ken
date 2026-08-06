@@ -22779,7 +22779,7 @@ fn d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emit
                 emission.supplied_operands,
                 emission.captures,
                 emission.declared_arity,
-                emission.decoded_callee_origin,
+                emission.emitted_callee,
             ),
         );
         assert!(
@@ -22819,15 +22819,16 @@ fn d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emit
     // the emitter never appended to.
     let mut context_routed = 0usize;
     let mut raw_routed = 0usize;
+    let mut emitted_callees: Vec<u32> = Vec::new();
     for ((function, call), (target, route, raw, supplied, captures, declared_arity, decoded)) in
         &keyed
     {
-        assert_eq!(
-            decoded, target,
-            "the DECODED callee -- the origin the route's own table answered with -- must be the \
-             body the binding names. These separate the moment the wrong table answers, under \
-             key ({function:?}, {call:?})"
-        );
+        // The emitted callee IDENTITY. ⛔ The declared `FuncRef` the route's own
+        // table answered with -- what the instruction is written against -- and
+        // NOT the target origin: the raw and generated-context routes SHARE a
+        // worker body origin by design (`D6a`), so an origin recorded here is
+        // identical on both routes and says nothing about which table answered.
+        emitted_callees.push(*decoded);
         assert_eq!(
             *raw,
             *declared_arity as usize + captures,
@@ -22874,6 +22875,13 @@ fn d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emit
         "the A/B witness must emit BOTH routes ({context_routed} context, {raw_routed} raw). With \
          one kind the row cannot tell 'the suffix is confined to the retargeted call' from 'a \
          suffix is appended everywhere' or from 'none ever is'"
+    );
+    assert_eq!(
+        emitted_callees.iter().collect::<BTreeSet<_>>().len(),
+        keyed.len(),
+        "and each emission was written against a DISTINCT declared callee. Because the two routes \
+         share a worker body origin, this identity is the only recorded fact that separates which \
+         table answered: {emitted_callees:?}"
     );
 }
 
@@ -22953,7 +22961,7 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
                 emission.captures,
                 emission.supplied_operands,
                 emission.composed_discharge,
-                emission.decoded_callee_origin,
+                emission.emitted_callee,
             ),
         );
         assert!(
@@ -23090,15 +23098,15 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
          one this coordinate is about: {keyed:?}"
     );
 
-    // Clause 3 — target, decode and operand run against the planner.
+    // Clause 3 — target, emitted callee identity and operand run.
+    let mut emitted_callees: Vec<u32> = Vec::new();
     for (key, (target_body, declared_arity, captures, supplied, _, decoded)) in &keyed {
-        assert_eq!(
-            decoded, target_body,
-            "the DECODED callee -- what the route's own table answered with, read where the \
-             instruction was emitted against it -- must be the body the binding names. This is a \
-             decode and not a restatement of the binding: the two separate the moment the wrong \
-             table answers, under key {key:?}"
-        );
+        // The emitted callee IDENTITY. ⛔ The declared `FuncRef` the route's own
+        // table answered with -- what the instruction is written against -- and
+        // NOT the target origin: the raw and generated-context routes SHARE a
+        // worker body origin by design (`D6a`), so an origin recorded here is
+        // identical on both routes and says nothing about which table answered.
+        emitted_callees.push(*decoded);
         assert_eq!(
             (*target_body, *declared_arity, *captures),
             planned,
@@ -23113,6 +23121,14 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
              from the other, under key {key:?}"
         );
     }
+    assert_eq!(
+        emitted_callees.iter().collect::<BTreeSet<_>>().len(),
+        keyed.len(),
+        "MEASURED: each defining body emits against its OWN declared callee, even though both \
+         reach the same planner target unit -- the `FuncRef` is function-local, so one target \
+         reached from two bodies is two declared refs. The shared fact is the target and the \
+         operand contract, checked above; the callee identity is per-body: {emitted_callees:?}"
+    );
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8g` — the two producer-input mutations, each
@@ -23174,3 +23190,4 @@ fn d8g_the_producer_input_mutations_fire_and_are_caught_by_their_own_relation() 
          also shows the RAII restore survived the unwinding panics above"
     );
 }
+
