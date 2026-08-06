@@ -57,20 +57,40 @@ clause needs capability the frame bars. ⛔ **I have NOT taken the recut** — i
 depends on the Architect's answer, and if a sound in-node path exists there is
 nothing to cut.
 
-> ### THE BIGGER RISK IS NOT THE FORK — read this before pricing anything
+> ### THE UNWITNESSABLE-ROUTE RISK IS RETIRED — measured `evt_657rvy4d1m4k9`
 >
-> `lower_source_carried_match` is **new production mechanism** and **four of its
-> five required discriminators are undelivered**: the JIT edge rig raises
-> `no planned scalar cut` before reaching the arms.
+> I authorized one unit (reachability, **not** the suite) because a fourth
+> correct-and-unreachable instance would have outranked the fork — the
+> capability gap is loudly red, an unwitnessed route would be silently green.
+> **Answer: FEASIBLE. Nothing needs to be constructed.**
 >
-> **This node's standing rule is that "correct and unreachable" is the DEFAULT**,
-> already paid three times here (`D6b`'s raw table, `D7a2`'s retention, `D8d`'s
-> binding). A fourth instance is a **larger** exposure than the capability gap,
-> because **the capability gap is loudly red and this one would be silently
-> green.** That is why the one unit I authorized is the *reachability
-> measurement*, not the suite: if the fixture cannot be built, the route is
-> unwitnessable on this object and that is a **whole-node finding that outranks
-> the fork**. Both answers change what I do next; neither waits on mechanism.
+> The JIT edge rig does refuse (`RESUME_OUTER scalar_cut_ok=false`, zero arms) —
+> it has no planned scalar cut, which is why the suite cannot live there. But
+> **landed whole-process `rt_parity_native` fixtures already enter the route 10
+> times**: 5 `INHERITED_JOIN`, 5 `RESUME_OUTER scalar_cut_ok=true`, 5 arms at
+> `binders=1` and 5 at `binders=2`, across four origins. **The nested/inherited
+> join — one of the four undelivered controls — is reachable TODAY**: outer
+> origin `271` takes a real scalar-cut local join whose arm reaches inner origin
+> `268` inheriting it.
+>
+> ⛔ **THE SIZING CONSTRAINT, and it is the part that will be missed.** On the
+> `rt_parity` program **every** one of those lowerings aborts inside arm 0's
+> body at the `FsReadFile` seat. So that family can host the *structural*
+> controls but **cannot carry a COMPLETING one.** A completing control needs
+> carried-match arm bodies that drive no specialized-only host effect — the
+> **capacity fixture family** is the candidate. ⇒ The suite is a fixture-family
+> switch, not four more rows. **Do not price it as small**; mis-sizing is this
+> node's most repeated cost (four explicit recuts).
+>
+> ⭐ **The correction the implementer volunteered, which is the most valuable
+> line in the measurement:** only `index=0` is ever emitted, and the obvious
+> reading — that the planner's `Eliminated` verdict pruned cases 1..16 — is
+> **FALSE**. The refusal follows `ARM_EMITTED` immediately: lowering descends
+> into arm 0, hits the effect seat, and `?` propagates before the loop reaches
+> case 1. **The single arm is an ABORT, not pruning.** Had that been reported as
+> pruning it would have read as *corroborating* the `Open`/`Reachable` authority
+> while actually contradicting it. ⇒ **Cases 1..16 have never been lowered at
+> all; the route's behaviour on them is unmeasured.**
 
 **Successor NAMED, not created.** If the Architect confirms no in-node path, the
 carried-bytes / host-ingress capability becomes a node and I cut it **against
