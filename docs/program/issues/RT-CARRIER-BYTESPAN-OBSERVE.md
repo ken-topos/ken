@@ -22,6 +22,42 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > It exists because a real capability gap was measured, not to make a graph
 > tidy.
 
+> ## ACTIVATION GATE — THIS NODE INHERITS AN OBLIGATION IT DID NOT CREATE
+>
+> **Architect `evt_7qfayjcebxv5y`, ratified by the Steward `evt_4nabbpm2crz82`.**
+>
+> `RT-CONTSRC-PRODUCER-LOCAL` lands `lower_source_carried_match` as a
+> **reviewed DORMANT partial mechanism with an unmeasured runtime residual.**
+> That was allowed **only because no completing Runtime rig executes the carried
+> source-Match route at all** — which bounds the present risk and the present
+> claim together.
+>
+> ⛔ **THIS NODE IS ONE OF THE TWO VISIBLE ACTIVATION ROUTES.** It removes the
+> first downstream blocker on the existing `rt_parity` route. **The moment a
+> carried source-Match path becomes successfully executable, the dormancy
+> argument expires.**
+>
+> ⇒ **This node may NOT merge as an activation without carrying forward the
+> still-BLOCKED control families from `RT-CONTSRC-PRODUCER-LOCAL`** — their
+> completing producer **and** their red-before-green controls. Read that node's
+> per-family register (BUILDABLE / BLOCKED, each BLOCKED family naming its exact
+> first missing producer) and discharge what activation makes reachable.
+>
+> ⛔ **Removing the first blocker is NOT a promise that byte-span alone
+> completes every row.** It may reveal a later one. Treat the register as the
+> checklist, not this paragraph.
+>
+> **The other activation route, if someone builds it instead:** a typed-unit /
+> closure-parameter producer delivering a genuine carried word into
+> source-machine `Match` under a planned scalar cut. **It carries the identical
+> obligation** — the gate is on *activation*, not on this node's id.
+>
+> **The admissibility rule any such control must meet:** the entire claimed
+> property is decided **before** any independent abort, and a mutation of that
+> property has been observed to make the exact assertion **RED** before the run
+> reaches the same abort. ⛔ Route entry, an emitted counter, or plausible IR is
+> **not** evidence.
+
 > ## THE ATTRIBUTION — write the frame from THIS SENTENCE, not a paraphrase
 >
 > **Architect `evt_2qzwanx82m06r`, and it CORRECTS an earlier reading of mine.**

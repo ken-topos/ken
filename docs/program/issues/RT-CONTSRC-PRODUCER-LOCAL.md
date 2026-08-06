@@ -11,6 +11,45 @@ github: null
 origin: Steward ruling 2026-08-05 (RT-DECL-CLOSURE-PORT checkpoint 1f) on the D7 1d/1e measurements (evt_5kws532ac99c9, evt_5ngh190h9b1k5) and the Architect representation gate evt_75k8cydbj5127. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
+> ## AC-1 SHIPS DORMANT, WITH AN UNMEASURED RUNTIME RESIDUAL AND A GATE ATTACHED
+>
+> **Architect `evt_7qfayjcebxv5y`, ratified Steward `evt_4nabbpm2crz82`,
+> 2026-08-06.** Read this before concluding anything about `AC-1`'s controls.
+>
+> `lower_source_carried_match` lands as a **reviewed DORMANT partial
+> mechanism**: structurally complete class/tag/arity selectors, valid IR,
+> planner authority consumed exhaustively, mismatch separated from semantic
+> default. ⛔ **NOT tested functionality and NOT a completed `AC-1`.**
+>
+> **Why that was allowed, and it is one fact:** a census over 779 `ken-runtime`
+> lib tests found the route **entered exactly once** — refusing at join
+> acquisition before emitting any selector — and the whole-process `rt_parity`
+> route stops at the independently-named byte-span seat before producing an
+> executable result. **No completing rig executes this mechanism at all.** That
+> bounds the present risk and the present claim simultaneously.
+>
+> ⇒ **THE OWED CONTROLS DO NOT DISAPPEAR. THEY BECOME AN ACTIVATION GATE**,
+> recorded on **`RT-CARRIER-BYTESPAN-OBSERVE`** and binding on **any** route
+> that makes a carried source-Match path successfully executable — the gate is
+> on *activation*, not on a node id.
+>
+> **`AC-1` clause 1 was already recut out** to that successor
+> (`evt_3pr04vk7zrd7c`); clause 2 is discharged. ⛔ **This node is NOT blocked
+> on the controls** and must not be held for them.
+>
+> **Admissibility, for anything later claimed as a control here:** the entire
+> claimed property is decided **before** any independent abort, **and** a
+> mutation of it has been observed to make the exact assertion **RED** before
+> the run reaches the same abort. ⛔ Route entry, an emitted counter, or
+> plausible IR is **not** evidence. Measured dead ends, so nobody re-spends
+> them: the **capacity family reaches this route zero times** (a
+> `Construct`-bound closure parameter stays `Specialized` and is selected at
+> compile time — the doc comment claiming otherwise is true for an *effect
+> argument*, false for a *match scrutinee*); the **mismatch block is reached
+> zero times**, so the wrong-class control cannot be written today; and the
+> `control.rs` inventory list is **`#[cfg(any())]` dead code** whose "repair"
+> would resurrect a prohibited repository-text oracle — ⛔ do not resurrect it.
+
 ## Why this is a node and not a fold
 
 Two prior attempts to fold this into [[RT-DECL-CLOSURE-PORT]] were refused by
