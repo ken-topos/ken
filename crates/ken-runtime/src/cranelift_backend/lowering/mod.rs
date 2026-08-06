@@ -1651,13 +1651,23 @@ pub(in crate::cranelift_backend) fn d4a_describe_binding(
 /// copy was only sound at zero binder depth, and every population before `D4a`
 /// was at zero binder depth.
 ///
-/// **`RootIsImmediate` is RETIRED, on parent and candidate alike.** Production
-/// resolves the claim through `resolve_direct_emission_claim` on
-/// `ContinuationEnvironmentClaim::CurrentLexical`. `source_abi_position`
-/// survives only in this `cfg(test)` observatory and its mutation, so this
-/// instrument measures a shape that no longer reaches production. Stated in the
-/// present tense because the paragraph above reads as live otherwise, and a
-/// reader who takes it as live will file a production defect that does not
+/// **`RootIsImmediate` is RETIRED, on parent and candidate alike.** What
+/// determines direct-emission availability today is
+/// `resolve_direct_emission_claim` reading `nearest_alias_index` off a
+/// `ContinuationEnvironmentClaim::CurrentLexical` — an index into the emitting
+/// environment. A root ABI position no longer decides it.
+///
+/// **`source_abi_position` is NOT retired, and this paragraph previously said
+/// it was.** It remains lawful production provenance: the root component of
+/// `ContinuationSourceCoordinate::EntryAbi`, consumed outside any `cfg(test)`
+/// gate — the planner's exact-source re-derivation locates an owner's entry
+/// slot by matching on it. What retired is the **substitution**: using that
+/// root coordinate as an index into the emitter's own environment. Only the
+/// substitution is `cfg(test)` mutation material, and it is the only thing this
+/// observatory reconstructs. The distinction has to be stated, in both
+/// directions: a reader who takes the retirement to cover the field goes
+/// looking for dead production code that is load-bearing, and a reader who
+/// takes the substitution as live files a production defect that does not
 /// exist.
 ///
 /// **The oracle, and why it is independent.** Production already records the
@@ -1670,9 +1680,11 @@ pub(in crate::cranelift_backend) fn d4a_describe_binding(
 /// the two must go through the derived mapping recorded beside each seat, not
 /// through a shared index.
 /// That record is keyed by ABI position and never by an environment index, so
-/// comparing it against `producer_env[source_abi_position]` is a comparison of
-/// two independently-derived answers to "which value is this", not a walk
-/// checked against itself.
+/// comparing it against the emission environment **at the position derived from
+/// the descriptor** is a comparison of two independently-derived answers to
+/// "which value is this", not a walk checked against itself. Reading the
+/// environment at `source_abi_position` directly is the retired substitution,
+/// and it is present here only as the mutation below.
 ///
 /// ⛔ **The identity reported is the Cranelift SSA `Value`**, for `D4a`'s reason:
 /// the carrier, the phase and the lowering shape all agree between the entry
@@ -1684,11 +1696,13 @@ pub(in crate::cranelift_backend) enum D3cPositionSelection {
     /// Read the emission environment where the entry value **actually is**,
     /// located by operand identity against the entry oracle.
     MeasuredImmediate,
-    /// `D3c` mutation — read at `source_abi_position` instead, which is exactly
-    /// what production does today. ⭐ This is the Architect's condition 4: the
-    /// substitution must flip the observed operand, and flip it because the two
-    /// positions hold **different values**, not because one is out of bounds or
-    /// of a different shape.
+    /// `D3c` mutation — read the emission environment at `source_abi_position`
+    /// instead. This reconstructs the **retired** `RootIsImmediate`
+    /// substitution; it is not what production does today, and the name
+    /// describes the retired shape rather than a live one. This is the
+    /// Architect's condition 4: the substitution must flip the observed
+    /// operand, and flip it because the two positions hold **different
+    /// values**, not because one is out of bounds or of a different shape.
     SourceAbiPosition,
 }
 
@@ -1716,8 +1730,11 @@ pub(in crate::cranelift_backend) struct D3cSeatObservation {
     /// How many carry a `ProducerLocal` root — the Architect's condition 2 needs
     /// at least one of each **in the same vector**.
     pub(in crate::cranelift_backend) producer_local_inputs: usize,
-    /// This input's root ABI position, which the projection also used as its
-    /// `immediate_slot`.
+    /// This input's root ABI position, read from
+    /// `ContinuationSourceCoordinate::EntryAbi`. Production still carries and
+    /// consumes it there as root provenance. What the retired `RootIsImmediate`
+    /// arm did **in addition**, and no longer does, was copy it into
+    /// `immediate_slot` and index the emitter's environment with it.
     pub(in crate::cranelift_backend) source_abi_position: u32,
     /// Production's own entry-walk record at that ABI position — the oracle.
     pub(in crate::cranelift_backend) entry_operand: String,

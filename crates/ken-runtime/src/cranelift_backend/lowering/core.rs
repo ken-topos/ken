@@ -8475,9 +8475,14 @@ impl<'a> Lowering<'a> {
                         .map(|operand| LoweringEnvironmentBinding::Value(operand.clone()))
                         .as_ref(),
                 );
-                // `D3c` mutation point. ⭐ The selection perturbs WHICH POSITION
-                // of the real emission environment the instrument reads — the
-                // measured one, or the root ABI position production uses.
+                // `D3c` mutation point. The selection perturbs WHICH POSITION
+                // of the real emission environment the instrument reads: the
+                // measured one, or the root ABI position that the RETIRED
+                // `RootIsImmediate` substitution used. Production today reads
+                // neither -- it resolves `CurrentLexical`'s
+                // `nearest_alias_index`. The root position itself is still
+                // lawful production provenance on the `EntryAbi` coordinate;
+                // only indexing an environment with it is the retired shape.
                 let observed_position = match d3c_position_selection() {
                     D3cPositionSelection::SourceAbiPosition => Some(source_abi_position),
                     D3cPositionSelection::MeasuredImmediate => emission_environment

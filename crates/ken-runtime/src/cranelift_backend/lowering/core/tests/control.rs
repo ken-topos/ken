@@ -15547,10 +15547,18 @@ fn d3c_shape(operand: &str) -> &str {
 /// and is now false. `RootIsImmediate` is **retired** on both parent and
 /// candidate; production resolves the claim through
 /// `resolve_direct_emission_claim` on `ContinuationEnvironmentClaim::
-/// CurrentLexical`. `source_abi_position` survives only inside this
-/// `cfg(test)` `D3c`/`D5a` observatory and its mutation — there is **no live
-/// production consequence** behind this measurement, and no production repair
-/// or residual node is authorized by it.
+/// CurrentLexical`, whose `nearest_alias_index` indexes the emitting
+/// environment.
+///
+/// **Be exact about what retired**, because an earlier version of this
+/// paragraph was not. `source_abi_position` did NOT retire: it is the root
+/// component of `ContinuationSourceCoordinate::EntryAbi`, and production
+/// consumes it there outside any `cfg(test)` gate. What retired is the
+/// SUBSTITUTION of that root position for an index into the emitter's
+/// environment, and that substitution now exists only as this observatory's
+/// `cfg(test)` mutation. So there is **no live production consequence** behind
+/// this measurement, and no production repair or residual node is authorized by
+/// it.
 ///
 /// MEASURED: compiling the existing `governed_nested_resource_bracket(3)`
 /// population through the production planner and lowering path reaches a
@@ -15562,11 +15570,12 @@ fn d3c_shape(operand: &str) -> &str {
 /// present in that environment exactly once, at a **different** index; and the
 /// operand sitting at `p` is in bounds and of the identical lowering shape.
 ///
-/// CLAIMED: the `RootIsImmediate` copy is unsound at nonzero lexical depth. A
-/// predeclared emitter reading `producer_env[source_abi_position]` obtains a
-/// well-formed operand of exactly the right contract that is **a different
-/// value** — the silent-wrong-value class this node exists to prevent, and the
-/// class no bounds check or contract check can see.
+/// CLAIMED: the `RootIsImmediate` copy **was** unsound at nonzero lexical
+/// depth — stated of the retired shape, which is what this measurement is
+/// about. A predeclared emitter reading `producer_env[source_abi_position]`
+/// obtains a well-formed operand of exactly the right contract that is **a
+/// different value** — the silent-wrong-value class this node exists to
+/// prevent, and the class no bounds check or contract check can see.
 ///
 /// THE GAP: this measures **one** population at **one** depth. It does not
 /// establish how the corrected representation should be spelled, and it does not
@@ -25223,52 +25232,66 @@ fn d3_both_binding_seats_obey_one_conversion_law() {
     );
 }
 
-/// **`D3` control 4, amended — TRANSITION SENTINEL: no generated-context worker
-/// is multi-parameter yet.**
+/// **`D3` control 4, amended — the REACHING POSITIVE CONTROL for the
+/// producer-wide arity sentinel.**
 ///
-/// **This test is designed to go RED, and that red is its purpose.** It is
-/// not a note and it is not a regression guard. It exists so that the
-/// unmeasured half of `D2` cannot be introduced silently.
+/// **The sentinel itself is not in this file.** It is a `cfg(test)` gate at the
+/// generated-context construction edge in `define_continuation_context_bodies`,
+/// immediately before the `SrcbodyBindHost::GeneratedContext` observation is
+/// recorded. Every generated context this crate's lib-test population builds
+/// passes through that edge, so the bound is closed over the producer. What it
+/// watches, what activates it, what retires it, and its `cfg(test)` residual
+/// are all stated there, once, beside the code that enforces it.
 ///
-/// **What `D2` claims and why it is currently inert.** `D2` says a generated
+/// **Why this test still exists, and it is the half a producer-side gate cannot
+/// do for itself.** An assertion sited inside production code is vacuous if
+/// nothing reaches it, and that vacuity is SILENT: a gate that never runs is
+/// indistinguishable from a gate that always passes. This control compiles a
+/// real witness and proves the edge is **reached** — that a generated context
+/// is genuinely constructed and recorded — so the gate is known to be armed
+/// against a live population rather than watching an empty set.
+///
+/// **The earlier cut, and why it was insufficient.** This test previously
+/// carried the bound itself, over the observations of this one compile. That
+/// made it a witness-local sentinel wearing a population-wide name: a
+/// multi-parameter worker introduced by any other program would never have
+/// entered its observation vector, so it would have stayed green at exactly the
+/// moment the obligation activated. Moving the bound to the producer is the
+/// correction; renaming this test would not have been one.
+///
+/// **What `D2` claims and why it is inert today.** `D2` says a generated
 /// context binds its raw owner's parameter run in the same order that owner's
-/// own unit would. `D1`'s conversion reverses that run, and **reversal is the
-/// identity on a run of length one**. Every worker that reaches a generated
-/// context in this crate's only such populations declares exactly ONE
-/// parameter, so today `D2` cannot be observed doing anything at all — the
-/// conversion law checked at both seats by
+/// own unit would. `D1`'s conversion reverses that run, and reversal is the
+/// identity on a run of length one. Every worker reaching a generated context
+/// in this crate declares exactly ONE parameter, so `D2` cannot be observed
+/// doing anything at all — the conversion law checked at both seats by
 /// [`d3_both_binding_seats_obey_one_conversion_law`] is satisfied by those rows
-/// trivially, under either decision. `D2` is inert at unary arity.
+/// trivially, under either decision.
 ///
-/// **What activates it.** The first generated-context worker with two or more
-/// parameters makes `D2`'s order observable, and at that moment the full
-/// equivalence obligation becomes live: it must then be shown that the body
-/// binds the same order in its own unit and in the context that lowers it —
-/// the measurement this node could not make and did not fake. That obligation
-/// is not discharged anywhere; it is deferred, and this sentinel is what stops
-/// the deferral from being forgotten.
+/// MEASURED: compiling the `D5a` generated-context witness records at least one
+/// `GeneratedContext` environment.
 ///
-/// **The retiring event, named:** the introduction of a generated-context
-/// worker of arity two or more. Whoever introduces it reds this test, and the
-/// deliverable at that point is the cross-host equivalence control, not a
-/// bumped bound here.
+/// **This test deliberately does NOT re-assert the arity bound**, and the
+/// reason is worth stating so nobody adds it back as belt-and-braces. The
+/// producer gate fires *during* the `emit_...` call below, so a violation this
+/// witness reaches panics inside the compile and the `expect` here never
+/// returns. A local bound after it could not fail for the intended reason under
+/// any input — it would be an assertion that reads as coverage and can never
+/// run. The bound is enforced in exactly one place; this test's only claim is
+/// that the place is reachable.
 ///
-/// Do NOT satisfy this by relaxing the bound. A `<= 2` would restate the
-/// current population as the contract and destroy the only thing the test does.
+/// Red before green: against a temporary hand-added two-parameter
+/// generated-context worker, the producer gate reds tests that were **not**
+/// modified — which is the evidence that its reach is not witness-local. The
+/// witness is not committed; see the node's handoff for the observed rows.
+/// Nothing in the checked IH call-site arity, the fixture population, or the
+/// worker declarations is persistently changed.
 ///
-/// MEASURED: compiling the `D5a` generated-context witness, every environment
-/// built at a generated context has at most one parameter ordinal.
-///
-/// Red before green: demonstrated against a temporary hand-added two-parameter
-/// generated-context worker, which is not committed — see the node's handoff for
-/// the observed row. Nothing in the checked IH call-site arity, the fixture
-/// population, or the worker declarations is persistently changed by this test.
-///
-/// Promise class: **transition sentinel**, labelled as one. It is named for the
-/// boundary it watches rather than for the population's current size, and the
-/// event that retires it is stated above.
+/// Promise class: the **transition sentinel** is the producer gate; this test
+/// is its non-vacuity control and is a **durable invariant** — it asserts that
+/// the edge is reachable at all, which every intended extension preserves.
 #[test]
-fn d3_no_generated_context_worker_is_multi_parameter_yet() {
+fn d3_generated_context_arity_sentinel_edge_is_reached() {
     let _ = srcbody_bind_order_take();
     crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
         "d3_bind_order_arity_sentinel",
@@ -25281,23 +25304,14 @@ fn d3_no_generated_context_worker_is_multi_parameter_yet() {
         .iter()
         .filter(|row| row.host == SrcbodyBindHost::GeneratedContext)
         .collect::<Vec<_>>();
-    // The sentinel watches a population, so an EMPTY population would let it
-    // pass while watching nothing. That failure mode is the one a bound-check
-    // is most prone to, so it is asserted first and separately.
+    // The producer gate is an assertion inside production code, so its failure
+    // mode is not "it says the wrong thing" but "nothing ever reaches it" --
+    // and a gate that never runs is indistinguishable from one that always
+    // passes. This is the row that tells the two apart.
     assert!(
         !contexts.is_empty(),
-        "this witness built no generated-context environment, so the arity bound below is \
-         asserted over nothing and the sentinel is watching an empty set: {observed:#?}"
+        "this witness built no generated-context environment, so the producer-edge arity \
+         sentinel in define_continuation_context_bodies was never reached by this compile and \
+         its passing says nothing: {observed:#?}"
     );
-
-    for row in &contexts {
-        assert!(
-            row.parameter_ordinals.len() <= 1,
-            "a generated-context worker now declares {} parameters. D2's binding order is no \
-             longer inert, so its cross-host equivalence is now OBSERVABLE and UNMEASURED. The \
-             deliverable is the equivalence control described in this test's documentation — \
-             not a wider bound here: {row:#?}",
-            row.parameter_ordinals.len()
-        );
-    }
 }

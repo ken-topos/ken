@@ -2603,6 +2603,54 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
                 #[cfg(test)]
                 context_parameter_ordinals.reverse();
             }
+            // `RT-SRCBODY-BIND-ORDER` `D3` control 4, amended (Architect,
+            // producer-wide) -- the TRANSITION SENTINEL, sited at the producer
+            // edge rather than inside one witness's test.
+            //
+            // **This gate is designed to go RED, and that red is its purpose.**
+            // `D2` says a generated context binds its raw owner's parameter run
+            // in the same order that owner's own unit would. `D1`'s conversion
+            // reverses that run, and reversal is the IDENTITY on a run of
+            // length one -- so at unary arity `D2` is inert and its cross-host
+            // equivalence is not observable at all. The first generated-context
+            // worker of arity two or more makes it observable, and at that
+            // moment the equivalence obligation this node deferred becomes live
+            // and UNMEASURED.
+            //
+            // **Sited here because a test can only watch the compiles it runs.**
+            // The first cut asserted this bound inside the `px8tr` control, over
+            // the observations of that one compile. A multi-parameter worker
+            // introduced by any other program would never have entered that
+            // observation vector, so the sentinel would have stayed green while
+            // the obligation activated -- watching a witness while claiming a
+            // population. Every generated context this crate builds passes
+            // through this loop, so the gate is closed over the PRODUCER.
+            //
+            // **The residual, stated rather than implied.** `cfg(test)` here
+            // means the `ken-runtime` lib-test build: a generated context built
+            // while compiling an integration-test binary or a downstream crate
+            // does not arm this gate. The fixture population that could
+            // introduce a multi-parameter worker is itself `cfg(test)`
+            // (`mod test_objects`), so it lies inside the reach; a worker
+            // arising only from a real Ken program exercised solely by an
+            // integration test lies outside it.
+            //
+            // Do NOT satisfy this by relaxing the bound -- a `<= 2` restates the
+            // current population as the contract and destroys the gate. The
+            // retiring event is the introduction of the arity-two worker, and
+            // the deliverable then is the equivalence control, not a wider
+            // bound. `d3_generated_context_arity_sentinel_edge_is_reached` is
+            // the reaching positive control that keeps this non-vacuous.
+            #[cfg(test)]
+            assert!(
+                context_parameter_ordinals.len() <= 1,
+                "a generated-context worker declares {} parameters. D2's binding order is no \
+                 longer inert, so its cross-host equivalence is now OBSERVABLE and UNMEASURED. \
+                 The deliverable is the cross-host equivalence control -- that this body binds \
+                 the same order in its own unit and in the context that lowers it -- not a \
+                 wider bound at this gate. Recorded ordinals: {context_parameter_ordinals:?}",
+                context_parameter_ordinals.len()
+            );
             #[cfg(test)]
             srcbody_bind_order_record(SrcbodyBindOrderObservation {
                 host: SrcbodyBindHost::GeneratedContext,
