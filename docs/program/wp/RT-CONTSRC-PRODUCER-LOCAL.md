@@ -3283,6 +3283,24 @@ all six failing `D0` rows.
   the raw target is **both declared and defined**. ⛔ `D6c`'s refusal set follows
   only after this positive closes.
 
+  > ### THIS IS WHERE THE `D8g` DEFECT CAME FROM. Two clauses are WITHDRAWN.
+  >
+  > It sits in the superseded region, so it governs nothing — but it states two
+  > retired requirements **affirmatively**, and it is the text `D8g`'s closeout
+  > was derived from by copy. Anyone tracing *why* `D8g` was recut lands here.
+  >
+  > | clause | status |
+  > |---|---|
+  > | **one witness reaches BOTH** a same-body `GeneratedContext` IH and the composed/raw selected-argument emission | **WITHDRAWN 2026-08-06** — no population in reach satisfies it, and it was **never derived from a production contract** (Architect `evt_6afmy0398n847`). `D8g` is recut over the **two actual populations**, joined at `call_static_worker_with_inputs` |
+  > | the raw target is **both declared and defined** | **WITHDRAWN** — the standalone `Function` clause, see Finding 2 |
+  >
+  > **The provenance is the lesson.** The conjunction was **inherited, not
+  > derived** — it rode from `D7e` into `D8g` unchanged while the `D8l` clause
+  > independently assigned composed emission to a **composed** witness, and the
+  > two were never reconciled. It cost a full implementer turn to a hard stop.
+  > **A requirement you carried forward by copy has not been grounded by the
+  > checkpoint that copied it.**
+
   ##### SPENT — `D5a` cut into `D5a-1`/`D5a-2` (Steward, `evt_62ee5f2dvmvp1`). REFUTED, see above.
 
   **The hard stop above is ANSWERED: no.** The representation already exists —
