@@ -33,47 +33,43 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~01:4xZ · `D8n` — a real production defect in consumption scope
+## LIVE — 2026-08-06 ~01:5xZ · `D8n` landed `245615b8`; Architect reviewing
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Release `D8n` to Runtime on exact `7d7f248b`** — make
-`consumed_subcontinuation_frames` a per-emitted-`Function` lowering scope.
-Architect `evt_2v8pzbp9ek8r2`. Thread **`thr_6m43v75yndhtj`**.
+**Wait for the Architect's review of `D8n` at exact `245615b8`** (requested
+`evt_7819penwk4wcy`, picked up `evt_3r5gsv0bhgbr9`). Thread
+**`thr_6m43v75yndhtj`**. Then the `D8m` witness resumes, then `D8f`.
 
-⭐ **`D8m`'s witness uncovered a REAL production defect.** The source marker is
-one source identity, but the ordinary declaration `Function` and the generated
-specialization `Function` are **distinct emitted bodies**. Each lowers its own
-copy and each must validate one consumption of the same
-`(invocation_id, frame_id)` pair — **and a compile-wide set conflates them,
-because both function roots use invocation id 0.**
+**`D8n` landed the lifecycle fix.** `CheckedFrameFunctionScope` spans each
+source-bearing generated `Function`: fresh empty set at open, enclosing set
+restored at close, **no active marker crossing in either direction**. Installed
+at the ordinary unit body, the specialization body and the generated-context
+body; the root adapter is not source-bearing and is not wrapped. **The key is
+untouched** — salting it would make one source frame two identities and quietly
+permit a real double consumption *inside* one function, which is the thing the
+ledger exists to catch.
 
-**Not the dynamic-branch case:** branch successors **rejoin**, so
-`CheckedFrameBranchScope` unions them correctly. **Distinct emitted functions
-do not rejoin, so their consumption sets must not be unioned.**
+⭐ **Two green-but-vacuous rows were caught by the implementer, not by review** —
+worth knowing because both would have shipped as coverage:
 
-⛔ **Keep the key exactly `(u64, u64)` — no emission-owner/`FuncId`/
-`PredeclaredFunctionId` salt.** This is the function-splitting collision the
-earlier pair-versus-triple ruling left conditional; **its lawful repair is
-lifecycle scoping, not restoring the salt.** One structural function-body
-transaction around the **existing** validator — not an ad hoc clear, not a
-second validator.
+- **the positive**: without IH slot markers the compile stops inside the
+  **first** function at `D8m`'s slot guard, so the second is never lowered and
+  **both the duplicate and its absence are vacuous**;
+- **the negative**: restoring the old compile-wide lifetime must be faithful at
+  **both** ends — shared at open **and** no rollback at close. Sharing only at
+  open still hands the second function an empty set and reproduces nothing.
 
-⛔ **A template-only single-function fixture is green but cannot be the sole
-positive** — it removes one side of the collision and leaves the defect intact.
+**Stated gap:** the boundary-crossing refusals (marker active when a body
+begins or ends) are **unexercised** — no lawful program produces either, and
+forcing one means fabricating lowering state rather than perturbing an input.
+Fail-closed guards on an empty population. **Decide at candidate whether that
+is acceptable; do not let it pass silently.**
 
-**Sizing was mine: in-node, decided by BRANCH TOPOLOGY, not size.** The
-standalone case for a separate node is genuinely good and is recorded in the
-frame — but the fix must land on the held shared branch, and a node could only
-get there by rebasing `wp/RT-DECL-CLOSURE-PORT-typed-units` (**destroying every
-preserved exact checkpoint SHA**, which is how this node's entire evidence chain
-is addressed) or by recreating the two-nodes-one-branch shape. **If the branch
-ever merges before the lifecycle work is done, the answer flips to a node.**
-
-`D8m`'s mechanism is accepted at `7d7f248b`; only its witness is blocked.
+`D8m`'s mechanism is accepted at `7d7f248b`; only its witness was blocked.
 `D8h`-`D8l` complete, `D8e` DISCHARGED, `D8l2` QA-approved. **`D8f`, `D8g`,
 `D6b` closeout, `D6c`, candidate, `D6` closure and downstream remain held.**
 
