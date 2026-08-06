@@ -1401,7 +1401,7 @@ all six failing `D0` rows.
   | 13 | `D8o` — ambient body authority | lowering compiler state | **DISCHARGED** `3aadbaae`, after two evidence blocks (`5154d94a`, `d3f7e32c`) |
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | **DISCHARGED** `01263e44` (`760/2/1`), after a matrix block and two fidelity children |
   | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **DISCHARGED** `2be7adb0` (Architect `evt_6sk9hbp17893t`), after a mechanism-accepted evidence block at `198b7c14` |
-  | 16 | `D8f` — checked-marker occupancy | integration | **CLASSIFIED bounded and IN-NODE** (Architect `evt_3ynqrahtzngaz`) — no further predecessor, `D8p` not reopened. Three-case claim-disposition repair **released from `2be7adb0`** by the leader `evt_4m0ad56ry110r`; implementer working. The four refusals remain owed on separate live paths |
+  | 16 | `D8f` — checked-marker occupancy | integration | **PARTIAL ACCEPTED** at exact `c49d0652` (Architect `evt_2azbt52vxm47g`) — three-case disposition landed, real two-call witness **compiles**, identity-global nonduplication. **NOT a completion, NOT a candidate.** The four refusals released `evt_7gxhvgpn5v7sw`; implementer working |
   | 17 | `D8g` — non-vacuous closeout, both paths | proof | held. **FIRST deliverable is a MEASUREMENT** — re-measure the `D8a` owner-separation prohibition before obeying it |
   | 18 | `D6b` closeout, then `D6c` refusal set | — | held |
 

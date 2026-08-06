@@ -59,18 +59,30 @@ so the ordinary call claims first and the unchanged affine ledger **correctly**
 rejects the duplicate. ⛔ **Nothing was missing.** The three-case law and its
 bans are in the frame's **`D8f` CLASSIFIED** section.
 
-**Where `D8f` actually is:** a **disposition PARTIAL** at exact `20b0d6be`
-(implementer `evt_1zbszmgc08yc7`, review request `evt_3qnqxm7w4xkqf`, Architect
-reading `evt_42jz30xzyw2h`). ⭐ **The real two-call witness now COMPILES** —
-first call `PendingAtAnotherOccurrence` with no claim, exact second call
-`ConsumedHere` with one. ⛔ **This is NOT a `D8f` completion and NOT a
-candidate:** the four refusals remain open on their own live paths, and the
-implementer and leader both said so unprompted.
+**Where `D8f` actually is:** the **disposition PARTIAL is ACCEPTED** at exact
+`c49d0652` (Architect `evt_2azbt52vxm47g`), via a bounded evidence/fidelity
+child of `20b0d6be`. ⭐ **The real two-call witness COMPILES** — first call
+`PendingAtAnotherOccurrence` with no claim, exact second call `ConsumedHere`
+with one. ⛔ **NOT a `D8f` completion and NOT a candidate.**
 
-⚠ **One evidence shape to watch when it reaches QA:** the two defining bodies
-**share one causal identity**, so the closeout asserts non-duplication **per
-identity** rather than once per body. That is the Architect's lane and it is
-reviewing now.
+**The four refusals are RELEASED and in flight** (leader `evt_7gxhvgpn5v7sw`,
+implementer working).
+
+⭐ **The shared-identity shape I flagged for QA was resolved in that child:**
+the two defining bodies share **one** planner-issued causal identity, so the
+closeout now asserts **identity-global** nonduplication and **no per-body claim
+law remains.** `reset_d8j_discharged()` runs before **each** named compilation,
+so clause 2 cannot inherit another test's events and clause 4 cannot inherit
+clause 1's — **each observation is attributable to the program its clause
+names.**
+
+⭐ **The frame is being executed verbatim.** The release carries my `D6c`
+disambiguation (*"not `D6c`'s separately scoped target-selection refusals"*)
+and the GOVERNING rules — independent side, keyed relation not a bag, actual
+body kind, **the permutation LIMIT** (required only where subjects hold
+distinct values; record a same-valued no-op honestly and name what would make
+it discriminate), and **the sixth sub-shape** (a difference proof must withhold
+the sole producer of its observable).
 
 ⛔ **`D8f`'s four refusals are NOT `D6c`'s.** Both lists open *omission,
 duplicate*; `D8f`'s is about **which call consumes a pending checked-IH
