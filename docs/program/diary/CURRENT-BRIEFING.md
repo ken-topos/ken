@@ -42,6 +42,74 @@
 
 ### The one thing to do next
 
+> ## ⛔ THE CONTROLS ARE MEASURED UNBUILDABLE. THREE OF MY OWN CALLS WERE WRONG.
+>
+> **Ruled `evt_g627kq9hxakp` on the census at `fd75415d` (comment-only child).**
+> ⛔ **NO FOURTH RELEASE OF THE CONTROLS.**
+>
+> **The census, over 779 `ken-runtime` lib tests:** `MatchScrutinee` reached
+> **7** times, carried **once**; `lower_source_carried_match` entered **exactly
+> once** and it **refuses at join acquisition before emitting any selector**;
+> the capacity family reaches it **zero** times; the mismatch block **zero**
+> times. Cause: a `Construct`-bound closure parameter stays
+> `Specialized(Lowered::Constructor)` and is selected at **compile** time, so
+> the carried arm is never taken. **The `carried_capacity_fixture` doc comment
+> saying a closure parameter makes an operand carried is true for an EFFECT
+> ARGUMENT and FALSE for a MATCH SCRUTINEE** — that false comment is what made
+> the vehicle look right.
+>
+> ### My three errors, because each would otherwise repeat
+>
+> **1. I retired the "unwitnessable route" risk on the wrong property.** I did
+> it on ten `rt_parity_native` entries. ⇒ **ENTRIES PROVE THE ROUTE IS ENTERED;
+> THEY DO NOT PROVE AN ASSERTION CAN BE MADE TO FAIL.** Two properties, and I
+> collapsed them. The measurement answered correctly — **I asked the wrong
+> question.** Memory: `reachability-is-not-controllability`.
+>
+> **2. My armed trigger presumed SIZING; the finding is REACHABILITY.** It said
+> a fourth undelivered return means split the suite. **Splitting produces eight
+> failures instead of one.** Retracted. ⇒ **A trigger encodes a diagnosis;
+> when the evidence names a different cause, RETRACT it rather than fire it.**
+>
+> **3. The inventory-pin item in my split was wrong — WITHDRAWN.** It is not
+> subset-only, it is **`#[cfg(any())]` dead code that has never compiled or
+> run**, retired deliberately because it asserts facts about repository text.
+> "Making it exact" would **resurrect a prohibited text oracle**. ⛔ Do not
+> resurrect it; its live behavioural successor already covers the property.
+>
+> ### The two populations, which is what nobody had side by side
+>
+> | vehicle | reaches the route | can complete |
+> |---|---|---|
+> | `rt_parity_native` (whole-process, out-of-crate) | **yes, 10 entries** | **no** — arm 0 aborts at the byte-span seat |
+> | capacity family (in-crate) | **no, zero** | yes |
+>
+> ⇒ **No vehicle both reaches AND completes.** That is the whole finding.
+>
+> ### OUT AND OWED TO ME
+>
+> - **@architect:** does "use capacity, not `rt_parity`" survive the census —
+>   are **non-completing structural controls on `rt_parity_native`** acceptable
+>   for the join / predecessor / identity-arity-order / specialized-sibling
+>   families? **Item 3 turns on it.**
+> - **Next unit is a PER-FAMILY DISCRIMINATING-POWER REGISTER, not controls.**
+>   Each family returns **BUILDABLE** (exact fixture + exact assertion + **a
+>   demonstrated RED before green**) or **BLOCKED** (the exact producer named).
+>   ⛔ **Write no assertions under it.** Output is a register.
+> - **Then** I rule residual-versus-block, **against the register, not a
+>   summary.** The two failure modes: closing on a mechanism nobody can
+>   exercise, or blocking six successors on a capability when structural
+>   evidence was available.
+>
+> ⭐ **Why the report is trustworthy:** it built eight capacity fixtures, got
+> plausible values back (`21, -4, -1, 41/42`), **instrumented before asserting,
+> and found every one green from a DIFFERENT route.** Asserting would have
+> shipped eight controls measuring nothing — the exact outcome the prior three
+> releases existed to prevent, arriving disguised as success.
+
+<details>
+<summary>Superseded — the controls-released window</summary>
+
 > ## ⭐ RESOLVED. `87382297` ACCEPTED as mechanism; controls released as their own child.
 >
 > **The one thing to do next: WAIT.** `runtime-implementer` holds the
@@ -93,8 +161,10 @@
 > unenforced guarantee, inside the very child fixing that same defect in
 > `control.rs`, would be poor.
 
+</details>
+
 <details>
-<summary>Superseded — the fourth-cell question, resolved above</summary>
+<summary>Superseded — the fourth-cell question, resolved earlier</summary>
 
 > ## ⛔ THE JOINT KEY LANDED IN A CELL THE CRITERION DOES NOT HAVE
 >
