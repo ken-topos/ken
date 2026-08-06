@@ -33,54 +33,65 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~02:4xZ · `D8n` discharged; `D8o` BLOCKED on evidence
+## LIVE — 2026-08-06 ~02:4xZ · `D8n` discharged; `D8o` evidence blocked TWICE
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for the `D8o` evidence correction.** Architect **BLOCKED** exact
-`5154d94a` at `evt_6gk0n7p2eazn2`; runtime-leader routed the bounded correction
-at `evt_713k0cje009nh`. **The ring is working and owes nothing to me.**
-**`D8n` is DISCHARGED at `3a63fe64`.** Then: the `D8m` witness, then `D8f`.
+**Wait for the `D8o` exact-body-key evidence correction.** Architect blocked
+`5154d94a` (`evt_6gk0n7p2eazn2`) and then `d3f7e32c` (`evt_4y1q8s6cq5m11`);
+runtime-leader routed at `evt_5wxqyyxgep98`. **The ring is working and owes
+nothing to me.** **`D8n` is DISCHARGED at `3a63fe64`.** Then: the `D8m`
+witness, then `D8f`.
 
-⛔ **The block is EVIDENCE/FIDELITY ONLY — the mechanism is accepted.** The
-census is complete, the three production call sites carry the intended domains,
-and `D8a`-`D8k` are not reopened. ⛔ **Do not re-cut `D8o` and do not size a new
-node from the block.**
+⛔ **Both blocks are EVIDENCE ONLY — the mechanism is accepted.** Census
+complete, three call sites carry the intended domains, `D8a`-`D8k` not
+reopened. ⛔ **Do not re-cut `D8o` and do not size a new node from the blocks.**
+⛔ **The bounded `D8i`/`D8j` remeasurement is ALREADY DONE, inside `D8o`.**
 
-⛔ **The bounded `D8i`/`D8j` remeasurement is ALREADY DONE, inside `D8o`** — do
-not re-release it as separate work.
+⛔⛔ **MY FRAME UNDERSPECIFIED THE GATE, AND THAT IS WHY THERE WERE TWO
+ROUNDS.** It said *"compare its live `defining_unit` / `defining_emission_owner`
+**pair** to the planner-issued body authority."* **That asks for a PAIR
+COMPARISON. The requirement is a KEYED RELATION.** The ring built what I asked
+for, twice. **The frame is corrected** — `exact body key → live (owner, unit)`,
+each of the three kinds non-empty, **and swapping two lawful pairs between two
+bodies must RED.**
 
-⭐ **THE GOVERNING FINDING, and it is the fourth of its shape on this node.**
-Two of the three block counts are one defect: **a control whose two sides are
-not independent.** Full statement, binding on `D8m`/`D8f`/`D8g`, is in the frame
-— *"GOVERNING — name the INDEPENDENT SIDE."* The three sub-shapes:
+⭐ **THE GOVERNING FINDING — fifth of its shape on this node**, now stated in
+the frame as *"GOVERNING — name the INDEPENDENT SIDE, and KEY the relation."*
+**Binding on `D8m`/`D8f`/`D8g`.** Two halves:
 
-1. **Observation on the INPUT side of the assignment under test.**
-   `AmbientBodyAuthority::bind` recorded its `owner`/`unit` **arguments before
-   installing them** ⇒ the row proved what the writer *intended to install*,
-   never what a reader sees.
-2. **The KEY dropped from a membership test.** Recorded pairs compared against
-   an **unkeyed union**, ignoring the recorded `function` ⇒ a specialization
-   can be handed any pair from any other lawful body and still pass. This is
-   `D8n`'s `owners.len() == 2` in a second costume.
-3. **An emptiness claim established THROUGH the field under validation.**
+1. **Name the INDEPENDENT SIDE** — derivable without consulting the mechanism
+   under test.
+2. **KEY THE RELATION** — when the property is *"each X has its own Y"*,
+   compare `exact key → value`. ⛔ **Comparing the BAG of values proves only
+   that the right values exist SOMEWHERE.**
 
-⛔ **The EMPTY specialization population is CIRCULAR, not merely unexercised.**
-It filters by the claimed identity's emission owner — **the same guard being
-remeasured** — so a predeclared-owned identity observed under a *wrongly bound*
-specialization body classifies as predeclared and **preserves the asserted
-zero.** ⚠ **My briefing called this "the one place where 'we checked' means
-there was nothing to check." Right place, understated problem:** the zero would
-**survive the defect that makes it false.** ⇒ **A zero needs a STRONGER
-independent side than a positive, not a weaker one.**
+⛔ **Two corollaries that LOOK like they close the gap and do not:**
 
-⭐ **The subtlest tell: the ordinary-unit call records its `function` BEFORE
-`open_aggregate_events(id)`, so that field was already wrong on the landed
-object — and the test missed it only because it never USED the field.** ⇒ **An
-unused recorded field is not harmless slack; it is unmeasured surface.**
+- **A component's DISTINCTNESS is not a key.** "Every observed `FuncId` is
+  distinct", alongside a pair-multiset equality, **does not restore the missing
+  join.**
+- **A VARIANT is not a KIND.** ⚠ **A generated context and a specialization
+  body BOTH lawfully carry a `Specialization(...)` owner**, so an assertion
+  named `from_specialization` over `(FuncId, ContinuationEmissionOwner)`
+  classifies an **owner variant**, not a body kind. ⇒ **When a kind must be
+  proved, the kind must be PRESENT IN THE COMPARED VALUE.**
+
+⭐ **The cheap discriminating question for any such control:** *what lawful
+permutation of my observed data leaves this assertion green?* **If swapping two
+records between two subjects passes, the relation is unkeyed.**
+
+⭐ **Round 1's own findings, all still standing:** the ordinary-unit call
+recorded its `function` **before** `open_aggregate_events(id)`, so that field
+was already wrong on the landed object — **and the test missed it only because
+it never USED the field** (⇒ an unused recorded field is unmeasured surface,
+not slack); **three of four observations had `function: None`** and could not
+be joined at all; and the expectation needs **`executable_units`, not
+`emittable_units`** — a template-only unit is declared and never defined, so it
+binds nothing.
 
 **What `D8o`'s accepted mechanism landed:** a committed census
 (`docs/notes/rt-contsrc-d8o-ambient-body-authority-census.md`); **writers were

@@ -1388,7 +1388,7 @@ all six failing `D0` rows.
   | 10 | `D8l1` — MEASURE the envelope frontier | planner | ANSWERED at `aaef1772`: **not structural** |
   | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | DISCHARGED `1f9a2020`+`abe46dda`, **QA-approved** |
   | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | **DISCHARGED** `3a63fe64`, after two bounded evidence corrections |
-  | 13 | `D8o` — ambient body authority | lowering compiler state | mechanism accepted `5154d94a`; **evidence BLOCKED**, correction in flight |
+  | 13 | `D8o` — ambient body authority | lowering compiler state | mechanism accepted `5154d94a`; evidence blocked **twice** (`5154d94a`, `d3f7e32c`) — **exact-body-key** correction in flight |
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | mechanism accepted `7d7f248b`; **witness blocked** |
   | 15 | `D8f` — checked-marker occupancy | integration | gate landed, **UNWITNESSABLE until `D8m`**; evidence `e80fd42f` |
   | 16 | `D8g` — non-vacuous closeout, both paths | proof | held |
@@ -2440,14 +2440,39 @@ all six failing `D0` rows.
 
   ###### `D8o`'s candidate gate, and the BOUNDED remeasurement it enables
 
-  **`D8o` must supply the independent missing premise:** for ordinary,
-  specialization **and** generated-context bodies, observe the defining
-  `Function` and compare its **live `defining_unit` / `defining_emission_owner`
-  pair** to the **planner-issued body authority**, with **cross-body
-  inheritance red**. ⛔ **The expected owner comes from the body
-  descriptor/pass input — never from the ambient field, `FuncId`, raw origin,
-  or a selected composed identity.** Deriving the expectation from the thing
-  under test is the defect this whole section is about.
+  ⛔⛔ **CORRECTED 2026-08-06 — THIS GATE UNDERSPECIFIED THE COMPARISON, AND
+  THAT IS MY DEFECT.** It read *"observe the defining `Function` and compare
+  its live `defining_unit` / `defining_emission_owner` **pair** to the
+  planner-issued body authority."* **That asks for a PAIR COMPARISON.** The
+  ring built one, twice, and both were blocked (`evt_6gk0n7p2eazn2`,
+  `evt_4y1q8s6cq5m11`). **What is required is a KEYED RELATION**, and the
+  corrected statement is below. ⛔ Do not restore the old wording.
+
+  **`D8o` must supply the independent missing premise as a RELATION, not a
+  multiset:**
+
+  - **the domain is a closed, independently meaningful exact body key** —
+    ordinary unit, continuation specialization, or generated context, **each
+    carrying its exact planner descriptor identity**. An equivalent independent
+    `Function`-to-body mapping is lawful;
+  - **compare the complete `exact body key → live (owner, unit)` relation**
+    against a planner-derived expectation;
+  - **assert each of the three body kinds has a NON-EMPTY observed
+    population** — the kind must be present *in the compared value*, not
+    inferred beside it;
+  - **cross-body inheritance stays red.**
+
+  ⛔ **The discriminating test the frame previously could not state:
+  SWAPPING TWO LAWFUL PAIRS BETWEEN TWO BODIES MUST RED.** Under an unkeyed
+  multiset it does not — the multiset is unchanged and the `FuncId`s stay
+  distinct.
+
+  ⛔ **The expected pair comes from the body descriptor/pass input — never from
+  the ambient field, `FuncId` alone, raw origin, or a selected composed
+  identity.** A `FuncId` may *label* the observed `Function` only if its
+  expected pair is joined through the independent declaration/body mapping.
+  Deriving the expectation from the thing under test is the defect this whole
+  section is about.
 
   **Then re-run and record, on the `D8o` descendant:** `D8i` clause 2, and
   `D8j` verification 2's positive **and** negative rows.
@@ -2466,27 +2491,52 @@ all six failing `D0` rows.
   recorded.** `D8m` remains correctly sequenced after `D8o`, because it does
   span ordinary and specialization `Function`s.
 
-  ###### GOVERNING — name the INDEPENDENT SIDE. Fourth occurrence on this node.
+  ###### GOVERNING — name the INDEPENDENT SIDE, and KEY the relation.
 
   **Binding on `D8m`, `D8f` and `D8g`. Author their controls against this
   before writing them, not after review sends them back.**
 
-  Architect verdict `evt_6gk0n7p2eazn2` blocked `D8o`'s first evidence on two
-  counts that are the same defect wearing different clothes, and it is now the
-  **fourth** instance in this node:
+  Two Architect verdicts blocked `D8o`'s evidence — `evt_6gk0n7p2eazn2` and
+  `evt_4y1q8s6cq5m11` — and with the earlier rounds this shape has now
+  surfaced **five** times in this node:
 
   | # | where | how the two sides agreed with each other |
   |---|---|---|
   | 1 | `D8j` 4b | a degenerate `1 == 1` comparator |
   | 2 | `D8n` | two rows green on a population the compile never reached |
   | 3 | `D8i` clause 2 | mutation picks "foreign" **relative to** `defining_emission_owner`; the guard compares **back to that same field** |
-  | 4 | `D8o` | the authority row records the **bind arguments**, and the EMPTY specialization population is filtered by **the field under validation** |
+  | 4 | `D8o` round 1 | the authority row records the **bind arguments**, and the EMPTY specialization population is filtered by **the field under validation** |
+  | 5 | `D8o` round 2 | timing fixed, but the proof **erases the body key** — an unkeyed pair multiset, so **swapping two lawful pairs between two bodies stays green** |
 
-  **The rule, stated once so each remaining checkpoint can be checked against
-  it:** a control has to name **which of its two sides is independent of the
-  mechanism under test**, and that side must be derivable without consulting
-  the mechanism. If a checkpoint cannot name it, the control is not yet
-  evidence, however green and however specific.
+  **The rule, in two halves. The second half is the one that took two rounds.**
+
+  1. **Name the INDEPENDENT SIDE.** A control has to name which of its two
+     sides is independent of the mechanism under test, and that side must be
+     derivable without consulting the mechanism. If a checkpoint cannot name
+     it, the control is not yet evidence, however green and however specific.
+  2. **KEY THE RELATION.** When the property is *"each X has its own Y"*, the
+     control must compare **`exact key → value` as a relation**. Comparing the
+     **bag of values** proves only that the right values exist *somewhere*.
+
+  ⛔ **Two corollaries, both of which look like they close the gap and do
+  not:**
+
+  - **A component's DISTINCTNESS is not a key on the relation.** Asserting
+    every observed `FuncId` is distinct alongside a pair-multiset equality
+    **does not restore the missing join** — the pairs are still unattached to
+    the bodies that produced them.
+  - **A VARIANT is not a KIND.** `D8O_COMPOSED_CLAIM_BODIES` recorded
+    `(FuncId, ContinuationEmissionOwner)` and the assertion was named
+    `from_specialization` — but **a generated context and a specialization
+    body both lawfully carry a `Specialization(...)` owner.** Classifying the
+    owner variant cannot answer *"which body kind made this claim?"* ⇒ **When
+    a kind must be proved, the kind has to be PRESENT IN THE COMPARED VALUE**,
+    not recoverable beside it.
+
+  ⭐ **The cheap discriminating question to ask of any such control, which the
+  frame could not state until now:** *what lawful permutation of my observed
+  data leaves this assertion green?* If swapping two records between two
+  subjects passes, the relation is unkeyed.
 
   Three sub-shapes have now appeared, and all three read as rigorous:
 
