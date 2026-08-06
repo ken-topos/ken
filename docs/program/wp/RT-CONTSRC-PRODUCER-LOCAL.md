@@ -2192,6 +2192,42 @@ all six failing `D0` rows.
   — that is the fact that would convert this into a node, and it is not a
   decision to absorb quietly.
 
+  ⭐ **RESOLVED — the census RAN and did NOT trigger the hatch** (Architect
+  `evt_502e30ws16ary`, reviewing `6c711bf5`). **The in-node sizing holds and
+  this conditional is spent.** Do not re-run the census to re-open it.
+
+  ###### `D8m` at `6c711bf5` was BLOCKED — two findings worth carrying forward
+
+  **The mechanism is right** — descriptor family, exact marker-child-0 origin,
+  existing enter/consume path, unchanged `answer_route`, all-`None` unwrapped
+  branch. `6c711bf5` is preserved as partial progress. Two acceptance findings
+  blocked it, and both are shapes this node has hit before:
+
+  **1. A partial tuple that reaches the guard anyway.** The checked branch
+  retained `checked_frame_id` but wrote `checked_invocation_id: None`,
+  `checked_invocation_source: None`, `checked_invocation_depth: 0`. The normal
+  path derives those from `active_recursive_invocations` — at a checked root
+  `checked_invocation_id` is `Some(0)`, not `None` — and they feed
+  selected-scope, delimiter, splice-edge and invocation validation.
+  ⛔ **Reaching the missing-slot guard proves only that `checked_frame_id`
+  survived; it does NOT prove preservation of the required tuple.** Share or
+  exactly reuse the normal derivation; do not hard-code three fields and do not
+  add another validator.
+
+  **2. Controls that passed for the wrong reason.** ⛔ **The "distinct
+  occurrence" control was not distinct** — `d8m_witness(..., second_frame)`
+  ended with `let _ = second_frame`, so the second occurrence was never
+  constructed. And the unmarked and one-shape-off controls compiled with **no
+  oriented plan**, so plan/marker validation could reject them **before** the
+  bridge descriptor or the borrowing hazard was reached. ⭐ **Assertions that
+  merely exclude the later slot-marker text cannot distinguish that masking** —
+  the control refuses, but at an earlier guard than the one under test. The
+  fingerprint-change and duplicate-consumption controls were absent entirely.
+
+  **This is a correction within `D8m`** — not a new node, and **not permission
+  to alter `D8f`**, which stays held until the corrected exact object is
+  reviewed.
+
   ###### `D8k`'s ledger row is proved ON THE LAW, not on reach — and that is owed
 
   Recorded because the implementer stated it plainly rather than letting it
