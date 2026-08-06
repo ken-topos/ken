@@ -33,19 +33,41 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~03:1xZ · `D8o` discharged; `D8m` MATRIX in flight
+## LIVE — 2026-08-06 ~03:3xZ · `D8m` matrix COMPLETE, in Architect review
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for the `D8m` matrix completion.** `D8m` is **PARTIAL at exact
-`cc88e745`** — the tuple-withholding difference proof and the independent keyed
-seam relation are committed; the fixture/control matrix is **not**. Re-released
-`evt_a80rgykhcn0q`, implementer **working**. **`D8o` DISCHARGED `3aadbaae`,
-`D8n` DISCHARGED `3a63fe64`.** Then `D8f`, `D8g`, `D6b` closeout, `D6c`,
-candidate.
+**Wait for the Architect's `D8m` verdict.** Matrix complete at exact
+`e5ad0e10`, **`759/2/1`** (up three rows), delivered `evt_4bafjp8qnw8mp`.
+**`D8o` DISCHARGED `3aadbaae`, `D8n` DISCHARGED `3a63fe64`.** Then `D8f`,
+`D8g`, `D6b` closeout, `D6c`, candidate.
+
+⚠ **`D8m` CORRECTS EVIDENCE ACCEPTED AT `7d7f248b`, and flagged it as such** —
+the Architect should review it as a change to accepted text, not as new work.
+⛔ **`d8m_the_source_frame_identity_survives_the_bridge` clause 1 was GREEN FOR
+THE WRONG REASON.** It assumed the slot-marker guard is unreachable while the
+bridge carries `None`; **the same match is ALSO lowered by the DIRECT path**,
+which carried the identity before `D8m` and still does, **so the refusal
+arrives whether or not the bridge transports anything.**
+
+⭐ **Caught by mutation, and this is the cheap test:** reverting the bridge to
+its pre-`D8m` all-`None` tuple **reds four of five rows and leaves clause 1
+GREEN.** ⇒ **A difference proof that survives removal of the difference is not
+a difference proof** — it needs the withheld mechanism to be **the ONLY
+producer of the observable.** ⛔ **Binding on `D8f`/`D8g`; the defect is in the
+SUBJECT, not the comparison, so a perfectly chosen independent side does not
+save it.** Corrected in place (clause 1b) rather than removed, because a false
+difference proof standing beside four real ones is worse.
+
+⭐ **The second occurrence, and why it works:** two structurally identical
+checked composed bridges side by side, distinct frame ids and slot templates,
+**deliberately EQUAL fingerprints** — invisible to every shape-keyed check, so
+transported identity is the only discriminator, **and** equal fingerprints are
+what let a transplant reach lowering at all. ⇒ **The anti-vacuity permutation
+is now ENFORCED, not recorded.**
 
 ⛔ **`wp/RT-DECL-CLOSURE-PORT-typed-units` is 168 commits ahead of
 `origin/main` and `D8m` resumes from `cc88e745`, NOT from `main`.** ⛔ **Do NOT
