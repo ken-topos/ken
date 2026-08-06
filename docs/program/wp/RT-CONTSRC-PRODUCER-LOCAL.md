@@ -1390,8 +1390,8 @@ all six failing `D0` rows.
   | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | **DISCHARGED** `3a63fe64`, after two bounded evidence corrections |
   | 13 | `D8o` — ambient body authority | lowering compiler state | **DISCHARGED** `3aadbaae`, after two evidence blocks (`5154d94a`, `d3f7e32c`) |
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | **DISCHARGED** `01263e44` (`760/2/1`), after a matrix block and two fidelity children |
-  | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **MECHANISM ACCEPTED, evidence BLOCKED** at exact `198b7c14` — Architect `evt_w6wc0xt9gkqf`; bounded post-emission evidence correction in flight, leader `evt_2fjj0vddn0ep7` |
-  | 16 | `D8f` — checked-marker occupancy | integration | **HARD STOP accepted** at `0eb04397` (evidence only). **RECUT — see the `D8f` RECUT section.** Release gated on the Architect's classification of the double-discharge closure, NOT on the `D8p` accept alone |
+  | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **DISCHARGED** `2be7adb0` (Architect `evt_6sk9hbp17893t`), after a mechanism-accepted evidence block at `198b7c14` |
+  | 16 | `D8f` — checked-marker occupancy | integration | **AT THE CLASSIFICATION GATE.** Two-call state now **reachable** on `2be7adb0` but refuses downstream at same-function double causal discharge. Leader routed the gate `evt_z0k71pe8006d`; Architect reading `evt_7rh1kx42d8k`. **No implementer action authorized until the disposition.** Recut section is re-derived and final |
   | 17 | `D8g` — non-vacuous closeout, both paths | proof | held. **FIRST deliverable is a MEASUREMENT** — re-measure the `D8a` owner-separation prohibition before obeying it |
   | 18 | `D6b` closeout, then `D6c` refusal set | — | held |
 
@@ -2717,8 +2717,30 @@ all six failing `D0` rows.
   cover it** — worse than the duplicate fixture the instruction was written to
   prevent.
 
-  **Re-derive this row against the corrected `D8p` child when it is accepted.**
-  Not against this section, and not against the original handoff prose.
+  ###### RE-DERIVED against accepted `2be7adb0`. The table above STANDS.
+
+  **The instruction one paragraph up is DISCHARGED, not pending.** `D8p` is
+  **discharged** at exact `2be7adb0` (Architect `evt_6sk9hbp17893t`), and the
+  accepted object confirms both rows that were in doubt:
+
+  - **The permutation stays a no-op, now on the record rather than in retired
+    prose.** Finding 4 of the accept: both defining bodies bind
+    `StaticOriginId(21)` and call `StaticOriginId(29)` **with the same
+    contract**, so the swap is **explicitly** a no-op and the text claims no
+    present discriminator. ⇒ **The "retired" row is correct as written**, and
+    the corrected child states the absence rather than papering it.
+  - **The two-call ordering is still NOT discharged, and it is now reachable.**
+    The leader's classification gate `evt_z0k71pe8006d` states it directly:
+    *"`D8f`'s actual two-call occupancy state is now reachable, but it refuses
+    downstream."* ⇒ **Reachable is not proved.** The row stands.
+
+  ⭐ **So the correction was load-bearing, and this is the check that says so.**
+  Had the original wording survived, `D8f` would have been released with licence
+  to skip a within-body proof that the accepted object shows is **reachable and
+  unproved** — the exact failure the re-derivation was scheduled to catch.
+
+  ⛔ **Nothing further re-derives here.** `D8f`'s remaining gate is the
+  classification, not this section.
 
   **What `D8f` still owes.** The four refusals — **omission, duplicate,
   transplant, wrong occurrence** — **each on its own live path**, plus **the
