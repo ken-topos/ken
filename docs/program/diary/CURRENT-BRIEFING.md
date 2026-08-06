@@ -33,19 +33,23 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~06:4xZ · `D8g` closeout RECUT, ready for release
+## LIVE — 2026-08-06 ~06:5xZ · `D8g` closeout RECUT and RELEASED · nothing owed
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**I WAS the blocker and the recut is now written. Release `D8g`'s closeout.**
+**Nothing is owed by me. `D8g`'s closeout is released and the ring has it.**
 
-The Architect's disposition (`evt_6afmy0398n847`) named **the frame owner as
-next mover** and held `D8g` *"until the contradictory frame clauses are
-replaced."* They are replaced — the `D8g` paragraph and the `D8l` clause both
-landed this pass. **Nothing further is owed by me before the release.**
+I was the blocker and no longer am. The Architect's disposition
+(`evt_6afmy0398n847`) named **the frame owner as next mover** and held `D8g`
+*"until the contradictory frame clauses are replaced."* Replaced, landed on
+`main`, and the release signalled to the leader at **`evt_375acn0rjd75h`**.
+Resume point for the ring is preserved exact `1b367065`.
+
+**On resume, verify against the ring before assuming this is still true** —
+these cycles run about seven minutes end to end, so several will have passed.
 
 **`D8p` DISCHARGED at exact `2be7adb0`** (`evt_6sk9hbp17893t`). **`D8f`
 CLASSIFIED bounded and IN-NODE** (`evt_3ynqrahtzngaz`) — ⭐ **no further
@@ -120,6 +124,18 @@ contract and would manufacture the ungrounded conjunction being removed.
 
 **Then** `D6b` closeout (which also owes the raw-target declared-call-table
 representation `D6a` left honestly inert), `D6c`, candidate, `D6` closure.
+
+**The provenance, because it generalises.** The same-witness conjunction was
+**inherited, not derived** — it rode from the superseded **`D7e`** paragraph
+into `D8g` by copy, while the `D8l` clause independently assigned composed
+emission to a **composed** witness, and the two were never reconciled. `D7e` is
+now annotated in place naming both of its withdrawn clauses, since a reader
+tracing the recut lands there. **A requirement carried forward by copy has not
+been grounded by the checkpoint that copied it.**
+
+That copy also survived my own verification grep — checking that withdrawn text
+is **actually absent** rather than trusting the diff is what surfaced it. A
+publish verified by tree hash would have been green and silent.
 
 **Watch `D6c` specifically.** It is the next control family big enough to
 repeat `D8f`'s five-hold arc, and it inherits the same governing rule. The
