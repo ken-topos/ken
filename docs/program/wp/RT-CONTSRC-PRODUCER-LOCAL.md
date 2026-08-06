@@ -3374,6 +3374,42 @@ all six failing `D0` rows.
   ⇒ **Where the values coincide, the discriminating power has to come from
   somewhere else** — on `D8m` that is the real distinct occurrence.
 
+  ###### STANDING PRE-REPORT CHECK — this tell has now cost the node THREE times
+
+  **Before reporting a clean compile as a MISSING REFUSAL, check whether the two
+  subjects lawfully hold the SAME value.** A clean compile has at least three
+  explanations and only the first is a gap:
+
+  | explanation | what it actually means |
+  |---|---|
+  | production has no guard that owns the moved input | a real gap — the finding |
+  | the two subjects hold **equal values** | an **observational identity**; there is no distinction to discriminate, and no such mutation exists to build |
+  | the mutation **never applied** | an **instrument defect**; count applications separately from outcome |
+
+  **Three occurrences, each reported as a gap before being reclassified:**
+
+  1. **`D8m`'s permutation** — same plan-named frame and slot (above).
+  2. **`D6b`'s raw-to-`worker_calls` mirror** — both tables lawfully hold the
+     same declared target at an unretargeted body. Cost a release and a frame
+     recut.
+  3. **`D6c`'s wrong-order swap** — the governed witness's two members hold
+     **identical route and body origin**; the census showed the permutation
+     fires (`hits=3`) and is not discriminating. Where the members **are**
+     distinct (`px8tr`), production **refuses**. ⇒ The unguarded set was **two,
+     not three**.
+
+  **The discriminator between explanations 2 and 3 is cheap and must be
+  recorded separately:** application count proves the mutation **fired**;
+  a structural read of the reshaped subject proves it **changed what it
+  claimed to change**. Counting entry to an arm proves neither. Explanation 2
+  is then settled by reading the two subjects' values — **not** by re-running
+  the compile.
+
+  ⇒ **State the subjects' values in the report, every time.** A finding of the
+  form *"mutation X compiles clean, therefore no guard owns it"* is
+  **incomplete** until it also says the two subjects differ. Two of the three
+  above would have been caught before they reached a leader.
+
   ⭐ **RESOLVED at `e5ad0e10`, and the mechanism is worth copying.** The second
   occurrence is **two structurally identical checked composed bridges side by
   side in one scope, with distinct frame ids and distinct slot templates but
