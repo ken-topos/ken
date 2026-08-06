@@ -2538,6 +2538,29 @@ all six failing `D0` rows.
   data leaves this assertion green?* If swapping two records between two
   subjects passes, the relation is unkeyed.
 
+  ⛔ **LIMIT ON THAT QUESTION — added 2026-08-06 from the `D8m` partial, and it
+  is a correction to the rule as I first wrote it.** **The swap discriminator
+  requires the two subjects to hold DISTINCT values.** Where two subjects
+  lawfully observe **the same** value, swapping them is a **no-op that neither
+  the bag nor the keyed relation can see**, and no such swap exists to build.
+
+  Measured on `D8m`'s current witness: its two bodies observe the **same**
+  plan-named frame and slot, so the permutation is constructible and **not
+  discriminating**.
+
+  ⛔ **The right response is NOT to skip the clause and NOT to claim a
+  rejection that does not happen.** Assert the equality explicitly and **name
+  what would change it** — which is what the implementer did rather than
+  reporting a discrimination it did not have. ⭐ **A control that says "this
+  permutation is a no-op here, and here is the witness property that would make
+  it bite" is stronger than one that quietly omits the check** — the first goes
+  red when the witness gains a distinct second occurrence; the second never
+  does.
+
+  ⇒ **Where the values coincide, the discriminating power has to come from
+  somewhere else** — on `D8m` that is the real distinct occurrence, which is
+  exactly the outstanding fixture work.
+
   Three sub-shapes have now appeared, and all three read as rigorous:
 
   1. **The observation sits on the input side of the assignment under test.**
