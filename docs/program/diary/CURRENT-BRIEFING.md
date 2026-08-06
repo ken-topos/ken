@@ -150,19 +150,40 @@ branch and then re-reads that branch's tip.
   `brif(class == BorrowedOpaque, borrowed, represented)` diverts first. The
   generic declared-unit parameter is **carrier-represented, not a borrowed
   handle**.
-- **WITH THE ARCHITECT (`evt_6ffzd8pfpj7ba`):** should a declared-unit parameter
-  carrying `ProcessInput` arrive `BorrowedOpaque`, or is `Constructor` correct
-  and the borrowed-lane expectation misplaced? Producer defect or consumer
-  defect. Representation/ABI, so not the Steward's.
-- **TWO STACKED FAILURES ARE LIKELY. Do not treat "fix the class" as
-  complete.** The ring flagged it: *"restoring only the borrowed class would not
-  prove selection works"* — the `represented` branch runs and **also** reaches
-  the closed default, and its failing comparison is **unmeasured**. Hold the
-  repair until that is measured, or the only evidence would be one row going
-  green.
-- **Repair held on SCOPE**, raised by the ring rather than absorbed. This began
-  as an `S` diagnosis; re-cut it honestly on the Architect's answer rather than
-  growing it in place.
+- **ARCHITECT RULED (`evt_1ayrezmann8zz`): the CONSUMER is correct; this ingress
+  must remain `BorrowedOpaque`.** Class 4 is not a lawful relabelling. The
+  producer chain admits no lawful step that turns the borrow into a
+  `Constructor`: `units.rs:2738-2742` → `units.rs:3749-3765` →
+  `transfer_into_carrier` `mod.rs:6128-6203` → `mod.rs:6998-7007` /
+  `mod.rs:9688-9692`, disposition `InvocationBorrowed / BorrowedOpaque`.
+  **The defect is on the PRODUCER / call-input path** — wrong operand delivered
+  to parameter 0 (stronger hypothesis), or an unauthorized reconstruction.
+- **TWO CORRECTIONS, one of them the Steward's.**
+  **(a) "Carrier-represented" and "borrowed handle" are NOT opposites** — a
+  `BorrowedNativeValue` crosses a declared unit *as* a carrier word whose
+  representation is `InvocationBorrowed / BorrowedOpaque`; the class-8 node is
+  the carrier wrapper around the host pointer. The ring framed them as
+  alternatives and **the Steward relayed that framing without catching it.**
+  **(b) "Two stacked failures" is REJECTED and the rejection is right** — one
+  wrong constructor word explains both observations: it is class 4, and then its
+  non-`MkProcessInput` tag correctly defaults in the represented branch.
+  **The Steward was about to hold a repair against an unmeasured second defect.
+  Do not carry that framing forward.**
+- **BANNED (Architect):** do not change or remove the generic borrowed-lane
+  test; do not teach the consumer that class 4 means borrowed process input; do
+  not patch the observed node's class in place — that makes a constructor
+  payload be read as a host pointer and is a confused-deputy hole.
+- **`D7` RELEASED (`evt_5veydsvsv7b1n`) — a PROVENANCE/KEYED measurement, not
+  another class probe.** Measure the represented word's observed constructor
+  **tag and field count** against the planner-issued `MkProcessInput` case
+  identity and against every constructor live at the caller-side argument
+  occurrence (especially `MkProgramCaps` and `Failure`); record the caller-side
+  argument origin and the callee parameter-0 slot ordinal. **The three-way
+  partition sizes the repair:** another constructor ⇒ wrong operand, repair the
+  call-input producer; `MkProcessInput` but a differing identity ⇒ constructor
+  identity authority mismatch; identity equal and field count 3 ⇒ the
+  closed-default report is itself incomplete and the next selector must be
+  measured. **Repair and recut are the Steward's on that return.**
 - **`D6` landed** (stale carried-scrutinee reachability comment), on
   `wp/RT-ENTRY-TRAP-254-d6`. Targeted: 778 passed / 2 named pre-existing / 1
   ignored.
