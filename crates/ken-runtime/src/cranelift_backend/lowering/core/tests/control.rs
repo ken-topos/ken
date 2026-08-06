@@ -8032,7 +8032,11 @@ fn governed_nested_brackets_n3_through_n7_emit_complete_functionized_bundles() {
 /// [`d5a_the_landed_object_fixture_consumes_its_ih_marker_before_emitting_the_worker_call`]
 /// runs on a plan that **does** issue a context, and asserts the exact mixed
 /// pair `[StaticWorker(GeneratedContext), .., StaticWorker(RawWorker), ..]`.
-/// It is the future `D6b` discriminator; this row is the membership-and-order
+/// `D6b` then asserts it **structurally** rather than as rendered text, in
+/// [`d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_disagree`]:
+/// the two routes carry their body origins with them, so that row settles the
+/// further question a rendered pair cannot — whether the mixed pair is over
+/// **one** worker body or two. This row remains the membership-and-order
 /// control that holds even where no context is in play.
 ///
 /// **Promise class: durable invariant.** Every clause is a relation over the
@@ -8131,6 +8135,19 @@ fn d6a_a_specialization_binds_two_leading_static_workers_for_the_ih_and_its_recu
 /// this row pins that the argument occupies its exact position with a
 /// static-worker binding, which is what `D6a` represents and what a consumer
 /// would resolve — it does **not** and cannot pin what calling it emits.
+///
+/// ⭐ **`D6b` measured WHY that gap stands, and it is two obstacles rather than
+/// a missing fixture.** Both are behavioural rows on the mixed witness, not
+/// notes:
+/// [`d6b_calling_the_selected_recursive_argument_from_ordinary_source_fails_closed_at_the_carrier`]
+/// shows the call refused at the source machine's callee edge, because the same
+/// case body is also lowered into the ordinary unit body where that member is a
+/// carried word — upstream of any worker seat. And
+/// [`d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_disagree`]
+/// shows that in the one body where the argument *is* raw-routed beside a
+/// context-routed hypothesis, `raw_worker_calls` cannot answer for it at all:
+/// the retargeted body has a descriptor and no `Function`. ⇒ Closing this gap
+/// is a representation change, not a fixture.
 ///
 /// **Promise class: durable invariant.** The assertion is a correspondence
 /// between two derivations of the same law. A fixture that grows fields or
@@ -23443,11 +23460,18 @@ fn d8g_each_producer_input_mutation_is_caught_by_the_guard_that_owns_it() {
 /// **CLAIMED:** that the asymmetric law's precondition holds as stated — the
 /// tables diverge exactly at a retargeted body and nowhere else.
 ///
-/// **THE GAP:** this row observes what the tables *can answer for*. It does not
-/// observe a call, so it says nothing about which table a given emission read;
-/// that is
+/// **THE GAP:** this row observes which body origins each table *can answer
+/// for*. It does not observe a call, so it says nothing about which table a given
+/// emission read; that is
 /// [`d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emitter`]'s
 /// subject, at the emitter.
+///
+/// ⛔ **An evasion that survives every clause here, stated because it exists:** a
+/// defect that kept both key sets exactly as measured and changed the `FuncRef`
+/// one entry holds -- right key, wrong function -- is invisible to this row. It
+/// is caught, if at all, by the emitted-callee identity at the emitter, and it is
+/// the same family as `D8g`'s stated residual. ⇒ This row owns which bodies each
+/// table ANSWERS FOR; it does not own what it answers WITH.
 ///
 /// ## Promise class
 ///
@@ -23715,3 +23739,4 @@ fn d6b_calling_the_selected_recursive_argument_from_ordinary_source_fails_closed
         ),
     }
 }
+
