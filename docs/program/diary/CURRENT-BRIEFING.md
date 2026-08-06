@@ -33,17 +33,44 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~02:2xZ · `D8n` discharged; `D8o` in flight
+## LIVE — 2026-08-06 ~02:3xZ · `D8n` discharged; `D8o` UNDER REVIEW
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for `D8o`** — released `evt_7tgegxt84ep2e`, scope update relayed
-`evt_7nb9s6f54g63b`, implementer working. Thread **`thr_6m43v75yndhtj`**.
-**`D8n` is DISCHARGED.** Then: bounded `D8i`/`D8j` remeasurement on the `D8o`
-descendant, then the `D8m` witness, then `D8f`.
+**Wait for the Architect's `D8o` verdict** — `D8o` is **committed at exact
+`5154d94a`**, review requested `evt_5r746wwz8g7vk`, Architect picked it up
+`evt_3xznmd23shckk`. **`D8n` is DISCHARGED at `3a63fe64`.** Then: the `D8m`
+witness, then `D8f`.
+
+⛔ **The bounded `D8i`/`D8j` remeasurement is ALREADY DONE, inside `D8o`** — do
+not re-release it as separate work. Both clause rows hold on the descendant,
+positive and negative, recorded beside `D8o`'s evidence.
+
+**What `D8o` landed**, pending acceptance:
+
+- a committed census artifact,
+  `docs/notes/rt-contsrc-d8o-ambient-body-authority-census.md`;
+- **writers were TWO, not three** — a specialization body set **neither**
+  ambient field;
+- **eight readers of `defining_emission_owner`: two fail closed, two compare,
+  and FOUR DECLINE.** ⭐ **That split is why this was silent** — a declining
+  reader cannot tell *"no body is being defined"* from *"a body is being defined
+  and left the wrong value here"*, so a stale owner just changes the answer,
+  quietly. ⇒ **Only the writer can distinguish those two cases**, which is why
+  the repair had to be a body-lifetime binding and not validation at the
+  readers;
+- `AmbientBodyAuthority` binds both facts before any source lowering and
+  **restores** (not clears) the enclosing scope on exit, at all three body
+  kinds. Owner **supplied, never inferred**.
+
+⚠ **The specialization-body composed-claim population is recorded EMPTY, not
+fabricated** — every composed claim in reach is `Predeclared`-owned. ⛔ **This
+is the one place where "we checked" means "there was nothing to check."** The
+row is written to start **failing** rather than silently widening if a later
+checkpoint creates such a claim.
 
 ⛔ **A SECOND real production defect, found by `D8n`'s evidence probe.**
 `define_continuation_bodies` opens each specialization `FuncId` with
