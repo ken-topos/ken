@@ -33,43 +33,47 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~01:5xZ · `D8n` landed `245615b8`; Architect reviewing
+## LIVE — 2026-08-06 ~02:1xZ · `D8o` — a second defect, in ambient authority
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for the Architect's review of `D8n` at exact `245615b8`** (requested
-`evt_7819penwk4wcy`, picked up `evt_3r5gsv0bhgbr9`). Thread
-**`thr_6m43v75yndhtj`**. Then the `D8m` witness resumes, then `D8f`.
+**Release `D8o` to Runtime once `D8n`'s review clears** — bind ambient body
+authority structurally per emitted `Function`. Architect `evt_d2yrj4fqdfjt`.
+Thread **`thr_6m43v75yndhtj`**. `D8n` landed `245615b8` and is in review.
 
-**`D8n` landed the lifecycle fix.** `CheckedFrameFunctionScope` spans each
-source-bearing generated `Function`: fresh empty set at open, enclosing set
-restored at close, **no active marker crossing in either direction**. Installed
-at the ordinary unit body, the specialization body and the generated-context
-body; the root adapter is not source-bearing and is not wrapped. **The key is
-untouched** — salting it would make one source frame two identities and quietly
-permit a real double consumption *inside* one function, which is the thing the
-ledger exists to catch.
+⛔ **A SECOND real production defect, found by `D8n`'s evidence probe.**
+`define_continuation_bodies` opens each specialization `FuncId` with
+`open_aggregate_events(id)`, which sets **only** `defining_function_id` — the
+loop **never binds `defining_emission_owner`** before lowering its source body.
+Ordinary bodies bind `Predeclared(unit.function)`; generated contexts bind
+`Specialization(context.enclosing)`. ⇒ **A specialization body inherits
+whatever owner the prior pass left behind**, and the probe measured exactly
+that: distinct specialization and ordinary `Function` consumptions under **one
+stale predeclared owner**.
 
-⭐ **Two green-but-vacuous rows were caught by the implementer, not by review** —
-worth knowing because both would have shipped as coverage:
+**This field is active production authority** — continuation claiming/calling,
+composed-worker selection and authority checks, composed-discharge ownership,
+carried-context resolution, aggregate reconciliation. ⛔ **`defining_unit` is
+likewise unbound there, so a one-field patch without a read/write census is
+unsafe.**
 
-- **the positive**: without IH slot markers the compile stops inside the
-  **first** function at `D8m`'s slot guard, so the second is never lowered and
-  **both the duplicate and its absence are vacuous**;
-- **the negative**: restoring the old compile-wide lifetime must be faithful at
-  **both** ends — shared at open **and** no rollback at close. Sharing only at
-  open still hands the second function an empty set and reproduces nothing.
+⚠ **THE RETROACTIVE QUESTION, raised to @architect and candidate-blocking:**
+`D8a`'s selector is five-field and its **first field is the emission owner**;
+`D8i`'s wrong-owner refusal and `D8j`'s clause 2 (*"claiming function equals
+`identity.emission_owner()`"*) are both owner-keyed. **Does any `D8a`-`D8k`
+control derive BOTH sides from the stale ambient owner and therefore pass
+vacuously?** Not asserting the evidence is bad — **refusing to assume it is
+fine**, because the defect is in the field that chain is keyed on. If rows need
+re-derivation, that is re-measurement on preserved SHAs, not reopened
+checkpoints.
 
-**Stated gap:** the boundary-crossing refusals (marker active when a body
-begins or ends) are **unexercised** — no lawful program produces either, and
-forcing one means fabricating lowering state rather than perturbing an input.
-Fail-closed guards on an empty population. **Decide at candidate whether that
-is acceptable; do not let it pass silently.**
+**Sequencing:** `D8o` does not mechanically block `D8n`'s evidence-only edit,
+but must precede a candidate **and** the `D8m` witness, which spans both
+function kinds and needs trustworthy ownership facts when measured.
 
-`D8m`'s mechanism is accepted at `7d7f248b`; only its witness was blocked.
 `D8h`-`D8l` complete, `D8e` DISCHARGED, `D8l2` QA-approved. **`D8f`, `D8g`,
 `D6b` closeout, `D6c`, candidate, `D6` closure and downstream remain held.**
 
