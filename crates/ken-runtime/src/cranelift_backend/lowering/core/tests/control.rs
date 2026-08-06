@@ -18861,7 +18861,7 @@ fn d8m_compile(expr: &RuntimeExpr, frame_id: u64) -> Option<CraneliftBackendErro
 /// program that compiles.
 #[test]
 fn d8m_the_source_frame_identity_survives_the_bridge() {
-    // Clause 1 — the identity arrives.
+    // Clause 1 — the missing-slot guard boundary. NOT bridge transport.
     let marked = d8m_witness(7);
     let refusal = format!(
         "{:?}",
@@ -20915,10 +20915,20 @@ fn d8m_the_bridge_arm_populations_move_only_with_the_marker() {
 /// The `D8m` witness with its bridge spelled as an ORDINARY `Match` instead of a
 /// `ComputationalMatch`.
 ///
-/// Same scrutinee, same constructors, same binder counts, same case bodies, same
-/// default: the only difference is which `RuntimeExpr` constructor the case body
-/// is, which is the only thing the closed descriptor keys on. That is what makes
-/// it a control for the ordinary arm rather than a second unrelated program.
+/// Same scrutinee, same constructors, same binder counts, same default. The case
+/// BODIES necessarily differ, and saying so is part of the control rather than a
+/// caveat on it: the computational bridge's bodies are `Call(Var(4), Var(1))`,
+/// and `Var(4)` is the computational method binder, which an ordinary match does
+/// not have. They are replaced by lawful `Unit` bodies, because a body naming an
+/// absent binder would refuse for the missing callee instead of exercising the
+/// arm.
+///
+/// That substitution costs the control nothing, because the classification never
+/// reads the subtrees. `immediate_binder_eliminator` keys on the case body's
+/// OUTER `RuntimeExpr` form and on the scrutinee being a `Var` in binder range;
+/// what sits below is not consulted. So it is the outer descriptor form that
+/// proves the arm here -- not identical subtrees -- and that form is exactly what
+/// this witness varies.
 #[cfg(test)]
 fn d8m_ordinary_bridge_witness() -> RuntimeExpr {
     let RuntimeExpr::Let { value, body } = d8m_witness(7) else {
@@ -21068,9 +21078,15 @@ fn d8m_ordinary_compile() -> Option<CraneliftBackendError> {
 ///
 /// The `D8m` witness with its bridge spelled as an ordinary `Match` instead of a
 /// `ComputationalMatch`. Same scrutinee, same constructors, same binder counts,
-/// same default. The one difference is the case body's `RuntimeExpr`
-/// constructor, which is the only thing the closed descriptor keys on -- so this
-/// is a control on the classification rather than a second unrelated program.
+/// same default.
+///
+/// The case bodies necessarily differ: the computational bridge's are
+/// `Call(Var(4), Var(1))`, and `Var(4)` is the computational method binder, which
+/// an ordinary match does not have, so they become lawful `Unit` bodies. The
+/// classification does not read them. `immediate_binder_eliminator` keys on the
+/// case body's OUTER `RuntimeExpr` form and on the scrutinee being a `Var` in
+/// binder range, and it is that form -- not identical subtrees -- that this
+/// witness varies and this row proves.
 ///
 /// ## The independent side
 ///
@@ -21092,16 +21108,24 @@ fn d8m_ordinary_compile() -> Option<CraneliftBackendError> {
 /// and no consumed frame, so all three must be invisible to it. If one is ever
 /// visible, `D8m`'s checked path has reached into a population it does not own.
 ///
-/// ## Where this witness stops, and why that is not a defect in the row
+/// ## Where THIS witness stops, and what that does not say about the others
 ///
 /// It does not compile green. It reaches the arm, is classified, and then stops
 /// at the projected-causal-edge seat -- *"the unit result at a projected causal
 /// edge is not the planner's own constructor for that edge's producer Construct
-/// origin"* -- which is the same held `D8e`/`D8f` obligation every witness in
-/// this family stops at, the checked one included. The clauses below are about
-/// the arm, and the outcome is compared for EQUALITY across perturbations rather
-/// than asserted to be success, so the stop is pinned rather than papered over:
-/// if it ever changes under one of the three switches, that is the finding.
+/// origin"* -- a held `D8e`/`D8f` obligation.
+///
+/// That stop is a fact about THIS ordinary witness only, and clause 2 pins it
+/// only as an EQUALITY across the three perturbations, never as an outcome the
+/// checked path shares. The checked population does not stop there: the
+/// two-occurrence checked witness COMPILES, and the single checked witness in
+/// `d8m_the_source_frame_identity_survives_the_bridge` stops earlier, at the
+/// missing-slot guard. Three different outcomes on three different programs, and
+/// no one of them may be read onto another.
+///
+/// Pinning the stop as an equality rather than as a success is what keeps it
+/// honest: if it ever changes under one of the three switches, that is the
+/// finding.
 ///
 /// **Promise class: durable invariant.** A source-derived classification, a
 /// count, and an outcome held equal across three perturbations.
