@@ -8597,32 +8597,37 @@ fn ac1_the_seat_dispatches_a_classified_carried_operand_before_join_acquisition(
     );
 }
 
-/// Why family 2a ships NO control: this crate never reaches the arm it hooks.
+/// Why family 2a ships no control ON THE CURRENT CARRIED-ROUTE FIXTURE.
 ///
-/// MEASURED: under `RefuseSplitInheritedJoin` the carried-route fixture applies
-/// the mutation **0** times and refuses exactly as `Exact` does. This rig's
-/// prefix split classifies its terminal as `ResumeOuter`, so the inherited-join
-/// arm is not on its path at all.
+/// MEASURED: under `RefuseSplitInheritedJoin`, [`ac1_carried_route_fixture`]
+/// applies the mutation **0** times and refuses exactly as `Exact` does. That
+/// fixture's prefix split classifies its terminal as `ResumeOuter`, so the
+/// inherited-join arm is not on ITS path.
 ///
 /// ⛔ This is NOT a discharge of family 2a, and must never be read as one. It is
-/// the anti-vacuity evidence for why that control is absent: an inherited-join
-/// control written here would assert a refusal it did not cause. The arm IS
-/// reached by `ken-cli`'s `rt_parity_native`, which links a non-`cfg(test)`
-/// build where the seam does not exist.
+/// the anti-vacuity evidence for why that control is absent here: an
+/// inherited-join control written against this fixture would assert a refusal it
+/// did not cause.
 ///
-/// Promise class: transition sentinel. A rig that reaches the inherited-join
-/// terminal under `#[cfg(test)]` makes `applications` nonzero and reddens this
-/// row, which is exactly when family 2a becomes writable.
+/// ⛔ SCOPE -- this row is LOCAL to [`ac1_carried_route_fixture`]. It is not a
+/// crate-wide `cfg(test)` census, and an earlier heading and test name said it
+/// was. It measures one fixture and says nothing whatever about any other.
+///
+/// Promise class: LOCAL transition sentinel. This row reds if
+/// [`ac1_carried_route_fixture`] itself begins reaching the inherited-Join arm.
+/// It does not census other `cfg(test)` fixtures; any new reaching fixture must
+/// land family 2a's gate-satisfying control.
 #[test]
-fn ac1_the_inherited_join_arm_is_not_reached_by_any_cfg_test_rig() {
+fn ac1_the_current_carried_route_fixture_does_not_reach_the_inherited_join_arm() {
     let (outcome, applications) = with_source_carried_control_mutation(
         SourceCarriedControlMutation::RefuseSplitInheritedJoin,
         ac1_carried_route_fixture,
     );
     assert_eq!(
         applications, 0,
-        "if this is nonzero the inherited-join arm became reachable under \
-         cfg(test), and family 2a's control can and must now be written"
+        "if this is nonzero THIS FIXTURE began reaching the inherited-join arm, \
+         and family 2a's gate-satisfying control can and must now be written \
+         against it"
     );
     assert_eq!(
         ac1_refusal_of(&outcome),
@@ -8630,7 +8635,7 @@ fn ac1_the_inherited_join_arm_is_not_reached_by_any_cfg_test_rig() {
             AC1_INDEPENDENT_ABORT.0.to_string(),
             AC1_INDEPENDENT_ABORT.1.to_string()
         ),
-        "with the mutation never applied the fixture must refuse exactly as \
-         an unmutated run does"
+        "with the mutation never applied THIS FIXTURE must refuse exactly as \
+         an unmutated run of it does"
     );
 }
