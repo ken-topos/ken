@@ -42,7 +42,57 @@
 
 ### The one thing to do next
 
-> ## ⛔ FIRST: MY OWN RECUT IS UNDER REVIEW. Read this before acting on it.
+> ## ⭐ ANSWERED — OUTCOME 2. The recut STANDS, provisionally at the leaf.
+>
+> **Ruled `evt_717v77e36vr32` on the keyed probe at `c6994834`.** The block
+> below is the history of the question; this is the answer.
+>
+> ```
+> origin=264 slot=Argument(0) op=FsReadFile phase=CarriedWord
+>     need=BytesPointerLength   avail={specialized:true, carried:FALSE} REFUSED
+> origin=264 slot=Capability   op=FsReadFile phase=CarriedWord
+>     need=CapabilityTokenScalar avail={specialized:true, carried:true} SATISFIED
+> ```
+>
+> **REACHED + REFUSED** ⇒ the capability gap is real and independent of the
+> misdecode; the earlier disappearance was the panic. `AC-1` clause 1 stays out
+> of this node and `RT-CARRIER-BYTESPAN-OBSERVE` keeps its premise.
+>
+> ⛔ **STILL PROVISIONAL AT THE LEAF, and do not let that harden by
+> repetition.** The tuple is keyed to the **effect seat**, not jointly to the
+> source-match origin + physical class/case leaf the ruling required. Mutually
+> exclusive class branches are the point of the correction, so *which leaf
+> reached this seat* is what separates *"the lawful HostResult path needs the
+> capability"* from *"some other leaf does."* **If the joint key names a
+> Constructor leaf, THIS DISPOSITION REOPENS.** The leaf key is folded into the
+> next attempt's probe. ⛔ **Do not frame the successor until it lands.**
+>
+> ⭐ **THE SECOND ROW NARROWS THE SUCCESSOR — carry it into the frame.** Same
+> operation, same origin, same `CarriedWord` phase, **satisfied** at the
+> `Capability` seat. So `carried:false` is **per-seat, not a blanket phase
+> ban**. The successor is therefore **not** "make `CarriedWord` observable" and
+> **not** a phase relaxation — it is precisely *give `BytesPointerLength` a
+> total emitted observer over the carrier*. ⛔ **A frame opening "carried words
+> cannot satisfy this operation" would be FALSE**, and it is the frame I would
+> have written from the earlier evidence.
+>
+> **Where the mechanism is:** valid-IR class completion at exact `c6994834`
+> (child of `c2ae3eed`, free, unaccepted; Architect reviewing). Selector graph
+> fully emitted/terminated before any leaf; **0** Cranelift panics against 5;
+> `775/2/1` vs baseline `774/2/1`, same two failures by name; Match refusals
+> still 0. The last panic's named cause: `switch_to_block(class_test)` where
+> `class_test` **is** the still-open entry block — Cranelift allows switching
+> from a pristine block, not from one holding instructions and no terminator.
+>
+> **Still owed on the node:** the eight control families, the `control.rs`
+> inventory-pin **enforcement** correction, the generic-helper comments. That is
+> the bulk of what remains. Three AC-1 rounds, accepted surface climbed every
+> time ⇒ **convergence, not mis-sizing.**
+
+<details>
+<summary>History of the confound question — resolved above, kept for the shape</summary>
+
+> ## ⛔ MY OWN RECUT WAS UNDER REVIEW. Read this before acting on it.
 >
 > I recut `AC-1` clause 1 out of this node (`evt_3pr04vk7zrd7c`), filed
 > **`RT-CARRIER-BYTESPAN-OBSERVE`**, and retired `D9`'s positive — all on the
@@ -90,6 +140,8 @@
 >
 > **This is the third variant on this node of one shape: an observed outcome
 > and a claimed cause that are not keyed to each other.**
+
+</details>
 
 **Where the ring is.** The class-completion correction was released
 (`evt_59556q5a8gywe`) and **handed back UNDELIVERED and UNCOMMITTED** —
