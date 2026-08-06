@@ -33,7 +33,7 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~04:5xZ · `D8p` IN REVIEW · `D8f` RECUT and HELD
+## LIVE — 2026-08-06 ~05:4xZ · `D8p` DISCHARGED · `D8f` refusal matrix IN REVIEW
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
@@ -95,9 +95,30 @@ owner-separation re-measurement, already framed. Then `D6b` closeout (which
 also owes the raw-target declared-call-table representation `D6a` left
 honestly inert), `D6c`, candidate, `D6` closure.
 
-**`D8p` is IN REVIEW at exact `198b7c14`** (`763/2/1`) — implementer
-`evt_14tv58v4k5wxr`, leader's review request `evt_68ry7r5bz86n5`, Architect
-picked it up at `evt_3238g2jbhky95`. **The ring owes nothing to me.**
+**The successor node is framed and its staleness is repaired.**
+`RT-CONTSRC-CALLABLE-CONTRACT` is the sole live successor —
+`RT-UNIT-CLOSURE-CONVERT` also names this node in `depends_on` but is
+`closed`, so it is not frontier work. Its frame described `D8e` as **open on a
+whole-node causal-projection hard stop** and the series as ending at `D8g`;
+`D8e` was ruled and discharged at row 9 and the series ran to `D8p`. A reader
+would have priced the predecessor as possibly-not-delivering. Corrected, and
+the enumeration of what-remains-ahead was **removed rather than refreshed** —
+restating the execution-order table is what went stale. Its `D0`
+re-derivation and hard stop on measurement 3 were already right and are
+untouched.
+
+**`D8f`'s refusal matrix is IN REVIEW at exact `f42fff78`** (`765/2/1`) —
+implementer `evt_1cdx4z3vgb86r`, leader's review request `evt_6rdwqq0kfbwj0`,
+Architect picked it up at `evt_sqz1qtt50q39`. All four refusals are built on
+the accepted two-call
+witness, each stated with the plane that refuses it. **The ring owes nothing
+to me.**
+
+**Read one detail before `D8g`:** the implementer declined to overclaim the
+wrong-occurrence row. It refuses at the **affine causal** law, not a marker
+law, and they said plainly that no marker-plane wrong-occurrence refusal
+distinct from the occupancy gate was found on the ordinary production path.
+That is the honest shape, not a shortfall — do not ask for the stronger claim.
 
 ⚠ **That review was STRANDED for ~10 minutes and I nearly missed it.** The
 leader's request sat **unsubmitted in the Architect's composer** under a

@@ -43,21 +43,32 @@ around it.**
 
 This frame is written by objective and acceptance for that reason. Its
 current-state claims are measured at `e6d4f085`. **That anchor is now far
-behind:** `RT-CONTSRC-PRODUCER-LOCAL` has since been recut past `D3c`/`D4b`
-onto a `D8a`-`D8g` series and holds at exact `89e36ec1`, so the distance is
-tens of checkpoints, not several. **Verify every section-1 measurement against
-the landed code, not against this line.**
+behind:** `RT-CONTSRC-PRODUCER-LOCAL` was recut past `D3c`/`D4b` onto a `D8`
+series that has since run to `D8p`, so the distance is tens of checkpoints,
+not several. **Verify every section-1 measurement against the landed code, not
+against this line.**
+
+> **Do not read the paragraph above for the predecessor's current position.**
+> It is perishable under the very clause it states, and it has already been
+> wrong once: it described `D8e` as open on a whole-node causal-projection hard
+> stop, which was **ruled and discharged** at row 9 of that node's
+> execution-order table. A reader who took it at face value would have priced
+> the predecessor as possibly-not-delivering.
+>
+> ⇒ **The one live source is `RT-CONTSRC-PRODUCER-LOCAL`'s own execution-order
+> table.** Read it at kickoff. This frame deliberately does not restate it,
+> because a restatement is what went stale.
 
 ---
 
 ## 1. Base and fixed inputs
 
 **Base:** whatever `RT-CONTSRC-PRODUCER-LOCAL` merges as. That node is
-unmerged, recut onto a `D8a`-`D8g` series, and holds at exact `89e36ec1` with
-`D8e` open on a whole-node causal-projection hard stop, plus `D8f`/`D8g`, the
-`D6b` closeout, `D6c`, QA and its candidate still ahead. **Naming the exact
-base and re-deriving the three measurements below is `D0` of this node, not
-this section's claim.**
+unmerged and its `D8` series has run to `D8p`. **Naming the exact base and
+re-deriving the three measurements below is `D0` of this node, not this
+section's claim** — which is why this section no longer enumerates what remains
+ahead of the predecessor. That enumeration is what went stale in §0a; read it
+from the node's execution-order table instead.
 
 ### The three measurements that establish the boundary, at `e6d4f085`
 
@@ -162,10 +173,12 @@ answers two questions, separately:
 1. **On the projection surface** — are `BoundaryUseAvail::Callable` and
    `BoundaryUseNeed::PreserveCallableIdentity` still reachable only from
    `cfg(test)` mutation helpers? Answer by enumerating their setters, not by
-   grepping the names: at `89e36ec1` the sole setters sit in
-   `mutate_projection_field`, and a comment elsewhere *restates* the property
-   without being a setter. **A grep hit on a comment that asserts the
-   measurement is not a measurement.**
+   grepping the names: **when this frame was written**, at `89e36ec1`, the sole
+   setters sat in `mutate_projection_field`, and a comment elsewhere *restated*
+   the property without being a setter. **That is where to look first, not what
+   to conclude** — re-enumerate the setters at your actual base, since the `D8`
+   series has since worked the emission and projection machinery. **A grep hit
+   on a comment that asserts the measurement is not a measurement.**
 2. **On the lowering surface** — are the two sums still as section 2 records
    them, and did either grow a value carrier, ownership or storage field?
 
