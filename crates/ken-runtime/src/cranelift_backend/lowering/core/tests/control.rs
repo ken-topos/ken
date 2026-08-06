@@ -23740,3 +23740,157 @@ fn d6b_calling_the_selected_recursive_argument_from_ordinary_source_fails_closed
     }
 }
 
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6b` — the asymmetric law across BOTH planes:
+/// every raw emission sits where the two tables agree, and every context
+/// emission sits where they differ.**
+///
+/// ## What this closes
+///
+/// [`d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_disagree`]
+/// measures the tables at the body-definition seat.
+/// [`d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emitter`]
+/// measures the calls at the emitter. Neither can say **which emissions land on
+/// which side of the retarget split** — and that is the fact the asymmetric law's
+/// clauses 3 and 4 are *about*. This row joins them on body origin and asserts
+/// exactly that correspondence.
+///
+/// ## ⛔ Both sides are OBSERVATIONS, and this row does not pretend otherwise
+///
+/// The table record and the emission log are two seats of the **same** compile.
+/// This is therefore a **consistency law between two planes**, not an independent
+/// derivation of either. What is genuinely independent is the expectation for
+/// which side a body falls on: the planner's own continuation-context population,
+/// read from a plan built separately from the emission run.
+///
+/// The join itself is the already-governed one — emitting `FuncId` to `D8o`'s
+/// body authority to the specialization identity — so no new key is minted here.
+///
+/// ## The consequence worth writing down
+///
+/// Where the two tables hold the **same** entry, *"this emission resolved through
+/// `raw_worker_calls`"* is not an observable fact: the other table would answer
+/// identically. ⇒ **Raw-table attribution is unprovable at every raw emission on
+/// this witness**, and this row is what stops a later reader assuming it was
+/// proved. The single body whose tables *do* differ emits no raw call, because
+/// the raw route has no callee there at all.
+///
+/// That is not a coverage hole. It is clause 4 of the law — an inert table swap
+/// at an equal-table seat is the absence of a distinction, not a missing
+/// negative.
+///
+/// **Promise class: durable invariant.** The assertion is a correspondence
+/// between two planes keyed on body origin, with the planner supplying the side.
+/// A fixture that adds bodies or calls keeps it green; only a change to which
+/// side of the retarget split an emission lands on reds it.
+#[test]
+fn d6b_every_raw_emission_sits_where_the_tables_agree_and_every_context_emission_where_they_differ()
+{
+    use crate::cranelift_backend::lowering::{
+        d6b_specialization_bodies, d8g_emissions, d8o_body_keys, reset_d6b_specialization_bodies,
+        reset_d8g_emissions, reset_d8o_body_authorities, D8oBodyKey,
+    };
+
+    reset_d6b_specialization_bodies();
+    reset_d8g_emissions();
+    reset_d8o_body_authorities();
+    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "ken_d6b_two_planes",
+        false,
+    )
+    .map(|_| ())
+    .map_err(|error| format!("{error:?}"))
+    .expect("the mixed A/B witness compiles");
+
+    // The independent side: which worker bodies the PLANNER gives a generated
+    // execution context, from a plan built separately from the run above.
+    let planned_contexts = with_d5a_witness_plan(|plan| {
+        plan.continuation_contexts()
+            .expect("contexts")
+            .into_iter()
+            .map(|context| context.worker_body_origin())
+            .collect::<BTreeSet<_>>()
+    });
+
+    // The governed join: emitting `FuncId` -> `D8o` body authority -> the
+    // specialization identity the table record is keyed by.
+    let mut body_of_function = BTreeMap::new();
+    for (function, key) in d8o_body_keys() {
+        if let (Some(function), D8oBodyKey::ContinuationSpecialization(unit)) = (function, key) {
+            body_of_function.insert(function, unit);
+        }
+    }
+    let mut tables_of_unit = BTreeMap::new();
+    for body in d6b_specialization_bodies() {
+        tables_of_unit.insert(body.unit, body);
+    }
+
+    let mut agreed = 0usize;
+    let mut differed = 0usize;
+    for emission in d8g_emissions() {
+        let function = emission
+            .function
+            .expect("every static-worker call names its defining Function");
+        let Some(unit) = body_of_function.get(&function) else {
+            // Emissions from ordinary-unit and generated-context bodies are a
+            // different plane; this row is about the specialization seat, and
+            // skipping them is deliberate rather than a silent narrowing.
+            continue;
+        };
+        let tables = tables_of_unit
+            .get(unit)
+            .unwrap_or_else(|| panic!("{unit:?} emitted a call but recorded no table state"));
+        let target = emission.target_body_origin;
+        let in_worker = tables.worker_call_targets.contains(&target);
+        let in_raw = tables.raw_worker_call_targets.contains(&target);
+
+        // Which side the PLANNER says this target falls on.
+        match planned_contexts.contains(&target) {
+            true => {
+                assert_eq!(
+                    emission.route,
+                    StaticWorkerCallRoute::GeneratedContext,
+                    "the planner declares a context for {target:?}, so a call reaching it must be \
+                     context-routed: {emission:?}"
+                );
+                assert!(
+                    in_worker && !in_raw,
+                    "CLAUSE 3's SEAT: at a target the planner gave a context, the two tables must \
+                     genuinely differ -- `worker_calls` answers and `raw_worker_calls` does not. \
+                     This is what makes the existing wrong-table negative a live discriminator \
+                     here rather than an inert swap: {tables:?}"
+                );
+                differed += 1;
+            }
+            false => {
+                assert_eq!(
+                    emission.route,
+                    StaticWorkerCallRoute::RawWorker,
+                    "the planner declares no context for {target:?}, so a call reaching it must be \
+                     raw-routed: {emission:?}"
+                );
+                assert!(
+                    in_worker && in_raw,
+                    "CLAUSE 4's SEAT: at a target with no context BOTH tables answer, so a table \
+                     swap at this emission is observational identity. ⛔ It follows that \
+                     'this call resolved through `raw_worker_calls`' is NOT observable here -- the \
+                     other table holds the same entry. No row may claim raw-table attribution at \
+                     this seat: {tables:?}"
+                );
+                assert_eq!(
+                    emission.supplied_operands, emission.raw_operands,
+                    "and the raw run carries no suffix, which IS observable and is the half of \
+                     clause 1 this seat can prove: {emission:?}"
+                );
+                agreed += 1;
+            }
+        }
+    }
+
+    assert!(
+        agreed > 0 && differed > 0,
+        "the witness must emit on BOTH sides of the retarget split ({agreed} where the tables \
+         agree, {differed} where they differ). With one side this row cannot tell the \
+         correspondence from a constant"
+    );
+}
