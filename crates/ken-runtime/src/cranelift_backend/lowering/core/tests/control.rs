@@ -8148,7 +8148,7 @@ fn d6a_a_specialization_binds_two_leading_static_workers_for_the_ih_and_its_recu
 ///
 /// ⇒ Nothing here is owed. A reader wanting the call, rather than the binding,
 /// should go to the `D8e`/`D8j` evidence — **not** to
-/// [`d6b_calling_the_selected_recursive_argument_from_ordinary_source_fails_closed_at_the_carrier`],
+/// [`d6b_calling_the_selected_recursive_argument_in_the_ordinary_unit_copy_fails_closed_at_the_carrier`],
 /// which is a local fail-closed control over one copy of one case body and
 /// generalizes to nothing.
 ///
@@ -23733,7 +23733,7 @@ fn d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_
 /// matched on the error's construct category with the callee edge named, never
 /// on formatted text alone.
 #[test]
-fn d6b_calling_the_selected_recursive_argument_from_ordinary_source_fails_closed_at_the_carrier() {
+fn d6b_calling_the_selected_recursive_argument_in_the_ordinary_unit_copy_fails_closed_at_the_carrier() {
     use crate::cranelift_backend::surface::{CraneliftBackendError, UnsupportedLowering};
 
     // The positive control, first: the same fixture with nothing armed.
