@@ -74,7 +74,16 @@ Suite `px4b_native_production`: **14 passed / 5 failed** (was 8/11 at the failed
 | count | cause | owner |
 |---|---|---|
 | 4 | per-seat `BytesPointerLength` / `CarriedWord` | `RT-CARRIER-BYTESPAN-OBSERVE` |
-| 1 | `explicit entry trap`, exit `Some(1)` vs `Some(254)` | **UNOWNED — no node exists** |
+| 1 | `explicit entry trap`, exit `Some(1)` vs `Some(254)` | `RT-ENTRY-TRAP-254` — **FILED** `b8b67f0d`, `draft`, size `TBD` |
+
+**The one unconditional piece I still owe: the `RT-CARRIER-BYTESPAN-OBSERVE`
+frame.** It is needed under every publish option, so it does **not** wait on the
+operator. Inputs are ready: the four measured seats at the tip, the Architect's
+five-step shape, and the pinned attribution sentence. Write it from that
+sentence, never a paraphrase, and never justify the node from the historical
+`c7410b79` `BoundaryCarrier` wording. **Do not author it from a depleted
+context** — frame defects are this campaign's most repeated cost (11+ before
+`D9`; five were mine on 2026-08-06 alone).
 
 **Byte-span alone does NOT make the branch green.** The explicit-entry trap is
 a runtime trap, not a lowering refusal, and a byte-span observer cannot clear
