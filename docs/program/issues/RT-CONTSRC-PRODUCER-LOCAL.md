@@ -19,7 +19,7 @@ origin: Steward ruling 2026-08-05 (RT-DECL-CLOSURE-PORT checkpoint 1f) on the D7
 > `lower_source_carried_match` lands as a **reviewed DORMANT partial
 > mechanism**: structurally complete class/tag/arity selectors, valid IR,
 > planner authority consumed exhaustively, mismatch separated from semantic
-> default. ⛔ **NOT tested functionality and NOT a completed `AC-1`.**
+> default. **NOT tested functionality and NOT a completed `AC-1`.**
 >
 > **Why that was allowed, and it is one fact:** a census over 779 `ken-runtime`
 > lib tests found the route **entered exactly once** — refusing at join
@@ -34,13 +34,13 @@ origin: Steward ruling 2026-08-05 (RT-DECL-CLOSURE-PORT checkpoint 1f) on the D7
 > on *activation*, not on a node id.
 >
 > **`AC-1` clause 1 was already recut out** to that successor
-> (`evt_3pr04vk7zrd7c`); clause 2 is discharged. ⛔ **This node is NOT blocked
+> (`evt_3pr04vk7zrd7c`); clause 2 is discharged. **This node is NOT blocked
 > on the controls** and must not be held for them.
 >
 > **Admissibility, for anything later claimed as a control here:** the entire
 > claimed property is decided **before** any independent abort, **and** a
 > mutation of it has been observed to make the exact assertion **RED** before
-> the run reaches the same abort. ⛔ Route entry, an emitted counter, or
+> the run reaches the same abort. Route entry, an emitted counter, or
 > plausible IR is **not** evidence. Measured dead ends, so nobody re-spends
 > them: the **capacity family reaches this route zero times** (a
 > `Construct`-bound closure parameter stays `Specialized` and is selected at
@@ -48,7 +48,7 @@ origin: Steward ruling 2026-08-05 (RT-DECL-CLOSURE-PORT checkpoint 1f) on the D7
 > argument*, false for a *match scrutinee*); the **mismatch block is reached
 > zero times**, so the wrong-class control cannot be written today; and the
 > `control.rs` inventory list is **`#[cfg(any())]` dead code** whose "repair"
-> would resurrect a prohibited repository-text oracle — ⛔ do not resurrect it.
+> would resurrect a prohibited repository-text oracle — do not resurrect it.
 
 ## Why this is a node and not a fold
 

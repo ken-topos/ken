@@ -32,7 +32,7 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > source-Match route at all** — which bounds the present risk and the present
 > claim together.
 >
-> ⛔ **THIS NODE IS ONE OF THE TWO VISIBLE ACTIVATION ROUTES.** It removes the
+> **THIS NODE IS ONE OF THE TWO VISIBLE ACTIVATION ROUTES.** It removes the
 > first downstream blocker on the existing `rt_parity` route. **The moment a
 > carried source-Match path becomes successfully executable, the dormancy
 > argument expires.**
@@ -41,7 +41,7 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > still-BLOCKED control families from `RT-CONTSRC-PRODUCER-LOCAL`** — their
 > completing producer **and** their red-before-green controls.
 >
-> ### ⭐ THE GATE IS ONE PRODUCER, NOT FIVE OBLIGATIONS
+> ### THE GATE IS ONE PRODUCER, NOT FIVE OBLIGATIONS
 >
 > **Measured per-family register `evt_5tzqtkgw02gxg`, disposition
 > `evt_5p3hcgng950pw`.** Four of the five non-buildable families name the
@@ -59,7 +59,7 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > | 7 borrowed route | BLOCKED | the producer above, word classed `BorrowedOpaque`, whole case set the borrowed family |
 > | 8 wrong-class | NOT RELEASABLE | `mismatch_block` measured reached **zero** times |
 >
-> ⛔ **Family 7 is UNREACHED, not UNREACHABLE.** It was never measured
+> **Family 7 is UNREACHED, not UNREACHABLE.** It was never measured
 > unreachable. **Do not compress that** — unreached is a producer gap someone
 > closes; unreachable is a closed question, and they license opposite decisions.
 >
@@ -75,7 +75,7 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > **`ALL LEAVES LOWERED` never does.** Phase 3 leaf lowering and Phase 4 join
 > completion are after the abort.
 >
-> ### ⛔ SECOND, INDEPENDENT GATE ENTRY — this node does NOT remove it
+> ### SECOND, INDEPENDENT GATE ENTRY — this node does NOT remove it
 >
 > **Measured `evt_eb1deg5r0j0r`, ruled `evt_7rdd0jgtg6zwh`.** Family
 > **2a-acquisition** (inherited join acquisition), and possibly **family 5**,
@@ -86,19 +86,19 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > > exercises the carried route — `rt_parity_native` — lives in **`ken-cli`**
 > > and links a **non-`cfg(test)`** build.
 >
-> ⛔ **Byte-span observation does not fix this.** Two independent blockers, kept
+> **Byte-span observation does not fix this.** Two independent blockers, kept
 > separate deliberately so a successor cannot read one discharge as both.
 > Feature-gating the seam across that boundary is a real change to what ships
-> and belongs to the gate — ⛔ **not to a bounded control child.**
+> and belongs to the gate — **not to a bounded control child.**
 >
 > **Family 2a ships a TRANSITION SENTINEL, not a discharge:** it asserts
 > `applications == 0` and **reddens the moment the arm becomes reachable under
-> `cfg(test)`** — exactly when 2a becomes writable. ⭐ **Prefer this shape for
+> `cfg(test)`** — exactly when 2a becomes writable. **Prefer this shape for
 > every remaining gate entry where it is cheap:** a blocked family that asserts
 > its own unreachability converts a promise into a mechanism that fires by
 > itself, instead of a note someone must read at the right moment.
 >
-> ### ⛔ THE GOVERNING HAZARD — state the POPULATION with every claim
+> ### THE GOVERNING HAZARD — state the POPULATION with every claim
 >
 > Three times on this node a **true** fact about one population was transferred
 > to a neighbouring one. None was carelessness; each read as obviously
@@ -121,7 +121,7 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > observed once in a turn and not committed discharges *that day's* question and
 > guards nothing here.
 >
-> ⛔ **Removing the first blocker is NOT a promise that byte-span alone
+> **Removing the first blocker is NOT a promise that byte-span alone
 > completes every row.** It may reveal a later one. Treat the register as the
 > checklist, not this paragraph.
 >
@@ -133,7 +133,7 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > **The admissibility rule any such control must meet:** the entire claimed
 > property is decided **before** any independent abort, and a mutation of that
 > property has been observed to make the exact assertion **RED** before the run
-> reaches the same abort. ⛔ Route entry, an emitted counter, or plausible IR is
+> reaches the same abort. Route entry, an emitted counter, or plausible IR is
 > **not** evidence.
 
 > ## THE ATTRIBUTION — write the frame from THIS SENTENCE, not a paraphrase
@@ -145,8 +145,8 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > > a carried child into effect origin `264`; that child's
 > > `BytesPointerLength` seat lacks carried availability.
 >
-> ⛔ **It is NOT "HostResult payloads require this."**
-> ⛔ **Do NOT claim the probe identified the concrete runtime class of the
+> **It is NOT "HostResult payloads require this."**
+> **Do NOT claim the probe identified the concrete runtime class of the
 > child, or a `HostResult`-selected path. It identified neither.**
 >
 > **Why the obvious reading is wrong.** The joint-keyed probe reported
@@ -162,7 +162,7 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > `HostResult`.** A different runtime arm cannot rescue a compile-time failure
 > in an independently reachable leaf. ⇒ **Lawful decode, not a class gap.**
 >
-> ⭐ **THE SCOPE BOUNDARY, and it is the sentence that sizes this node.** The
+> **THE SCOPE BOUNDARY, and it is the sentence that sizes this node.** The
 > *same leaf*, *same `CarriedWord` phase*, a *different slot of the same
 > operation* is **SATISFIED**:
 >
@@ -173,7 +173,7 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 >
 > ⇒ **Per-seat availability, never a blanket phase ban.** This node is *give
 > `BytesPointerLength` a total emitted observer over the carrier*. It is **not**
-> "make `CarriedWord` observable" and **not** a phase relaxation. ⛔ A frame
+> "make `CarriedWord` observable" and **not** a phase relaxation. A frame
 > opening *"carried words cannot satisfy this operation"* would be **FALSE**.
 
 ## The gap, as measured rather than described
