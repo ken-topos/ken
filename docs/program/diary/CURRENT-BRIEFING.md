@@ -33,53 +33,58 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~01:1xZ · `D8f` hard-stopped; `D8m` preserves the bridge frame
+## LIVE — 2026-08-06 ~01:4xZ · `D8n` — a real production defect in consumption scope
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Release `D8m` to Runtime on exact `e80fd42f`** — preserve the source frame
-through the immediate-binder bridge. Thread **`thr_6m43v75yndhtj`**. Architect
-ruling `evt_7vghm2dzh0k4w`; frame section *"`D8m` — PRESERVE the source frame
-through the bridge."*
+**Release `D8n` to Runtime on exact `7d7f248b`** — make
+`consumed_subcontinuation_frames` a per-emitted-`Function` lowering scope.
+Architect `evt_2v8pzbp9ek8r2`. Thread **`thr_6m43v75yndhtj`**.
 
-**`D8f` hard-stopped and BOTH ways out were refused.** The gate may not ship
-without a witness — the always-admit mutation leaving the suite green **proves
-zero trust delta**, so the production population does not distinguish the new
-law from its predecessor. And a lowering-synthesized bridge may **not** be
-minted a `CheckedSubcontinuationFrame` identity: the oriented plan proves a
-**bijection** between checked frame entries and source Runtime frame markers,
-which an unmarked synthetic frame weakens and which borrowing by
-fingerprint/shape/coincidence would restore the banned inference to.
+⭐ **`D8m`'s witness uncovered a REAL production defect.** The source marker is
+one source identity, but the ordinary declaration `Function` and the generated
+specialization `Function` are **distinct emitted bodies**. Each lowers its own
+copy and each must validate one consumption of the same
+`(invocation_id, frame_id)` pair — **and a compile-wide set conflates them,
+because both function roots use invocation id 0.**
 
-⇒ **The bridge is not a new semantic frame** — it is an optimization of the
-exact source `ComputationalMatch` that `immediate_binder_eliminator` consumes,
-so `D8m` **preserves** that frame across the optimization rather than creating
-one. The new work only stops the fusion from dropping an identity the source
-already issued.
+**Not the dynamic-branch case:** branch successors **rejoin**, so
+`CheckedFrameBranchScope` unions them correctly. **Distinct emitted functions
+do not rejoin, so their consumption sets must not be unioned.**
 
-⛔ **`D8m` sizing is in-node with ONE real escape hatch:** *unless the
-implementation census shows the identity must cross another producer/consumer
-family.* If `D8m`'s census finds that, **it hard-stops back to me** — that fact
-converts this into a node and must not be absorbed quietly.
+⛔ **Keep the key exactly `(u64, u64)` — no emission-owner/`FuncId`/
+`PredeclaredFunctionId` salt.** This is the function-splitting collision the
+earlier pair-versus-triple ruling left conditional; **its lawful repair is
+lifecycle scoping, not restoring the salt.** One structural function-body
+transaction around the **existing** validator — not an ad hoc clear, not a
+second validator.
 
-**The two routes fail for OPPOSITE reasons, and both are recorded at the gate
-so nobody repeats the search:** the non-composed (`px8tr`) route has a source
-frame but no static worker in declaration lowering; the composed bridge has the
-static worker but `checked_frame_id: None`, because the bridge is synthesized
-by `immediate_binder_eliminator` and has no source expression.
+⛔ **A template-only single-function fixture is green but cannot be the sole
+positive** — it removes one side of the collision and leaves the defect intact.
 
-⭐ **Fourth occurrence of this node's standing pattern** — "correct and
-unreachable" is the DEFAULT and the WITNESS is the deliverable. Keep the
-implementer's distinction: the gate is **unwitnessABLE** at this checkpoint,
-which is not the same claim as unwitnessed.
+**Sizing was mine: in-node, decided by BRANCH TOPOLOGY, not size.** The
+standalone case for a separate node is genuinely good and is recorded in the
+frame — but the fix must land on the held shared branch, and a node could only
+get there by rebasing `wp/RT-DECL-CLOSURE-PORT-typed-units` (**destroying every
+preserved exact checkpoint SHA**, which is how this node's entire evidence chain
+is addressed) or by recreating the two-nodes-one-branch shape. **If the branch
+ever merges before the lifecycle work is done, the answer flips to a node.**
 
-**Completed:** `D8h` `a435d180`, `D8i` `abfd67ff`, `D8j` `8d0d6fca`, `D8k`
-`372097de`+`aaef1772`, `D8e` DISCHARGED, `D8l1` answered, `D8l2`
-`1f9a2020`+`abe46dda` **QA-approved** (`evt_7kx4dtax3gqrv`). **`D8g`, `D6b`
-closeout, `D6c`, candidate, `D6` closure and downstream remain held.**
+`D8m`'s mechanism is accepted at `7d7f248b`; only its witness is blocked.
+`D8h`-`D8l` complete, `D8e` DISCHARGED, `D8l2` QA-approved. **`D8f`, `D8g`,
+`D6b` closeout, `D6c`, candidate, `D6` closure and downstream remain held.**
+
+### Environment
+
+**Disk was reclaimed 2026-08-06 ~01:35Z: 99% -> 85%, 33G free**, from 30G of
+stale `tmp/ken-*` scratch, **no `target/` touched**. ⛔ **`tmp/` refills at ~400
+dirs/hour and is already back to 18G** — this recurs in a day or two. The fix is
+per-test scratch cleanup in the `ken-runtime` harness; **do not fold it into any
+`D8` checkpoint.** See the memory `devcontainer-disk-topology-and-safe-reclaim`,
+whose header block now carries the three rules that matter.
 
 ⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
 published *"new member at ordinal 2, not 3"*. So is the whole
