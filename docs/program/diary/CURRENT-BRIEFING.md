@@ -33,44 +33,63 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~02:3xZ · `D8n` discharged; `D8o` UNDER REVIEW
+## LIVE — 2026-08-06 ~02:4xZ · `D8n` discharged; `D8o` BLOCKED on evidence
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for the Architect's `D8o` verdict** — `D8o` is **committed at exact
-`5154d94a`**, review requested `evt_5r746wwz8g7vk`, Architect picked it up
-`evt_3xznmd23shckk`. **`D8n` is DISCHARGED at `3a63fe64`.** Then: the `D8m`
-witness, then `D8f`.
+**Wait for the `D8o` evidence correction.** Architect **BLOCKED** exact
+`5154d94a` at `evt_6gk0n7p2eazn2`; runtime-leader routed the bounded correction
+at `evt_713k0cje009nh`. **The ring is working and owes nothing to me.**
+**`D8n` is DISCHARGED at `3a63fe64`.** Then: the `D8m` witness, then `D8f`.
+
+⛔ **The block is EVIDENCE/FIDELITY ONLY — the mechanism is accepted.** The
+census is complete, the three production call sites carry the intended domains,
+and `D8a`-`D8k` are not reopened. ⛔ **Do not re-cut `D8o` and do not size a new
+node from the block.**
 
 ⛔ **The bounded `D8i`/`D8j` remeasurement is ALREADY DONE, inside `D8o`** — do
-not re-release it as separate work. Both clause rows hold on the descendant,
-positive and negative, recorded beside `D8o`'s evidence.
+not re-release it as separate work.
 
-**What `D8o` landed**, pending acceptance:
+⭐ **THE GOVERNING FINDING, and it is the fourth of its shape on this node.**
+Two of the three block counts are one defect: **a control whose two sides are
+not independent.** Full statement, binding on `D8m`/`D8f`/`D8g`, is in the frame
+— *"GOVERNING — name the INDEPENDENT SIDE."* The three sub-shapes:
 
-- a committed census artifact,
-  `docs/notes/rt-contsrc-d8o-ambient-body-authority-census.md`;
-- **writers were TWO, not three** — a specialization body set **neither**
-  ambient field;
-- **eight readers of `defining_emission_owner`: two fail closed, two compare,
-  and FOUR DECLINE.** ⭐ **That split is why this was silent** — a declining
-  reader cannot tell *"no body is being defined"* from *"a body is being defined
-  and left the wrong value here"*, so a stale owner just changes the answer,
-  quietly. ⇒ **Only the writer can distinguish those two cases**, which is why
-  the repair had to be a body-lifetime binding and not validation at the
-  readers;
-- `AmbientBodyAuthority` binds both facts before any source lowering and
-  **restores** (not clears) the enclosing scope on exit, at all three body
-  kinds. Owner **supplied, never inferred**.
+1. **Observation on the INPUT side of the assignment under test.**
+   `AmbientBodyAuthority::bind` recorded its `owner`/`unit` **arguments before
+   installing them** ⇒ the row proved what the writer *intended to install*,
+   never what a reader sees.
+2. **The KEY dropped from a membership test.** Recorded pairs compared against
+   an **unkeyed union**, ignoring the recorded `function` ⇒ a specialization
+   can be handed any pair from any other lawful body and still pass. This is
+   `D8n`'s `owners.len() == 2` in a second costume.
+3. **An emptiness claim established THROUGH the field under validation.**
 
-⚠ **The specialization-body composed-claim population is recorded EMPTY, not
-fabricated** — every composed claim in reach is `Predeclared`-owned. ⛔ **This
-is the one place where "we checked" means "there was nothing to check."** The
-row is written to start **failing** rather than silently widening if a later
-checkpoint creates such a claim.
+⛔ **The EMPTY specialization population is CIRCULAR, not merely unexercised.**
+It filters by the claimed identity's emission owner — **the same guard being
+remeasured** — so a predeclared-owned identity observed under a *wrongly bound*
+specialization body classifies as predeclared and **preserves the asserted
+zero.** ⚠ **My briefing called this "the one place where 'we checked' means
+there was nothing to check." Right place, understated problem:** the zero would
+**survive the defect that makes it false.** ⇒ **A zero needs a STRONGER
+independent side than a positive, not a weaker one.**
+
+⭐ **The subtlest tell: the ordinary-unit call records its `function` BEFORE
+`open_aggregate_events(id)`, so that field was already wrong on the landed
+object — and the test missed it only because it never USED the field.** ⇒ **An
+unused recorded field is not harmless slack; it is unmeasured surface.**
+
+**What `D8o`'s accepted mechanism landed:** a committed census
+(`docs/notes/rt-contsrc-d8o-ambient-body-authority-census.md`); **writers were
+TWO, not three** — a specialization body set **neither** field; and **eight
+readers, of which FOUR DECLINE.** ⭐ **That split is why this was silent** — a
+declining reader cannot tell *"no body is being defined"* from *"a body is being
+defined and left the wrong value here."* ⇒ **Only the writer can distinguish
+those two cases**, which is why the repair is a body-lifetime binding and not
+validation at the readers.
 
 ⛔ **A SECOND real production defect, found by `D8n`'s evidence probe.**
 `define_continuation_bodies` opens each specialization `FuncId` with

@@ -1387,8 +1387,8 @@ all six failing `D0` rows.
   | 9 | `D8e` DISCHARGES — causal obligation dischargeable and discharged | — | **DISCHARGED, Steward ruling below** |
   | 10 | `D8l1` — MEASURE the envelope frontier | planner | ANSWERED at `aaef1772`: **not structural** |
   | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | DISCHARGED `1f9a2020`+`abe46dda`, **QA-approved** |
-  | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | landed `245615b8`, **in Architect review** |
-  | 13 | `D8o` — ambient body authority | lowering compiler state | **NEXT** — a second real production defect |
+  | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | **DISCHARGED** `3a63fe64`, after two bounded evidence corrections |
+  | 13 | `D8o` — ambient body authority | lowering compiler state | mechanism accepted `5154d94a`; **evidence BLOCKED**, correction in flight |
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | mechanism accepted `7d7f248b`; **witness blocked** |
   | 15 | `D8f` — checked-marker occupancy | integration | gate landed, **UNWITNESSABLE until `D8m`**; evidence `e80fd42f` |
   | 16 | `D8g` — non-vacuous closeout, both paths | proof | held |
@@ -2465,6 +2465,63 @@ all six failing `D0` rows.
   **Candidate stays held until `D8o` AND this bounded remeasurement are both
   recorded.** `D8m` remains correctly sequenced after `D8o`, because it does
   span ordinary and specialization `Function`s.
+
+  ###### GOVERNING — name the INDEPENDENT SIDE. Fourth occurrence on this node.
+
+  **Binding on `D8m`, `D8f` and `D8g`. Author their controls against this
+  before writing them, not after review sends them back.**
+
+  Architect verdict `evt_6gk0n7p2eazn2` blocked `D8o`'s first evidence on two
+  counts that are the same defect wearing different clothes, and it is now the
+  **fourth** instance in this node:
+
+  | # | where | how the two sides agreed with each other |
+  |---|---|---|
+  | 1 | `D8j` 4b | a degenerate `1 == 1` comparator |
+  | 2 | `D8n` | two rows green on a population the compile never reached |
+  | 3 | `D8i` clause 2 | mutation picks "foreign" **relative to** `defining_emission_owner`; the guard compares **back to that same field** |
+  | 4 | `D8o` | the authority row records the **bind arguments**, and the EMPTY specialization population is filtered by **the field under validation** |
+
+  **The rule, stated once so each remaining checkpoint can be checked against
+  it:** a control has to name **which of its two sides is independent of the
+  mechanism under test**, and that side must be derivable without consulting
+  the mechanism. If a checkpoint cannot name it, the control is not yet
+  evidence, however green and however specific.
+
+  Three sub-shapes have now appeared, and all three read as rigorous:
+
+  1. **The observation sits on the input side of the assignment under test.**
+     `AmbientBodyAuthority::bind` recorded `owner`/`unit` **before** installing
+     them, so the row proved *what the writer intended to install* — never what
+     a reader sees. **Observe after the write, through the same field
+     production reads.**
+  2. **The key is dropped from a membership test.** Comparing recorded pairs
+     against an **unkeyed union** while ignoring the recorded `function` admits
+     cross-body substitution: hand a specialization any pair belonging to some
+     other lawful body and membership still passes. **One-to-one against a
+     per-body expectation, never set membership.** This is `D8n`'s
+     `owners.len() == 2` over `BTreeSet<Option<FuncId>>` in a second costume.
+  3. **An emptiness claim established through the field under validation.**
+     Filtering `d8i_discharges()` by the claimed identity's emission owner and
+     reading a `Specialization` owner as proof the construction happened inside
+     a specialization body **is the very guard being remeasured.** A
+     predeclared-owned identity observed under a wrongly bound specialization
+     body classifies as predeclared and **preserves the asserted zero.**
+
+  **A zero needs a stronger independent side than a positive, not a weaker
+  one.** The briefing called this population *"the one place where 'we checked'
+  means there was nothing to check."* That was the right place to look and it
+  **understated the problem** — the population is not merely unexercised, it is
+  **circularly established**, so the zero would survive the defect that makes it
+  false.
+
+  **The tell that the shape is present, and it is subtle:** the ordinary-unit
+  call records its `function` **before** `open_aggregate_events(id)`, so that
+  field was already wrong on the landed object. **The test never caught it
+  because the test never used the field** — the weak assertion was itself the
+  reason the defect stayed invisible. A control that ignores a field cannot
+  report that the field is broken, so **an unused recorded field is not
+  harmless slack; it is unmeasured surface.**
 
   ###### `D8k`'s ledger row is proved ON THE LAW, not on reach — and that is owed
 
