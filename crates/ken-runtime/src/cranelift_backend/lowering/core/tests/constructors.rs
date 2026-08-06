@@ -226,6 +226,7 @@ fn run_dynamic_constructor_dispatch_fixture(
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
             defining_abi_operands: Vec::new(),
+            defining_abi_slot_kinds: Vec::new(),
             context_calls: BTreeMap::new(),
             worker_templates: BTreeMap::new(),
             generated_context_captures: None,
@@ -1932,6 +1933,7 @@ fn bare_carrier_test_lowering<'src>(
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
             defining_abi_operands: Vec::new(),
+            defining_abi_slot_kinds: Vec::new(),
             context_calls: BTreeMap::new(),
             worker_templates: BTreeMap::new(),
             generated_context_captures: None,

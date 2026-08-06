@@ -90,6 +90,7 @@ fn root_authority_test_lowering<'a>(seed_env: &'a NativeSeedEnvironment) -> Lowe
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
             defining_abi_operands: Vec::new(),
+            defining_abi_slot_kinds: Vec::new(),
             context_calls: BTreeMap::new(),
             worker_templates: BTreeMap::new(),
             generated_context_captures: None,
@@ -253,6 +254,7 @@ fn run_px8j_malformed_recursor_consumer(
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
             defining_abi_operands: Vec::new(),
+            defining_abi_slot_kinds: Vec::new(),
             context_calls: BTreeMap::new(),
             worker_templates: BTreeMap::new(),
             generated_context_captures: None,
@@ -2165,6 +2167,7 @@ fn distinguished_root_cannot_discharge_missing_match_site_marker() {
         bounded_nat_mutation: BoundedNatLoweringMutation::Exact,
         function_local: FunctionLocalRefs {
             defining_abi_operands: Vec::new(),
+            defining_abi_slot_kinds: Vec::new(),
             context_calls: BTreeMap::new(),
             worker_templates: BTreeMap::new(),
             generated_context_captures: None,
@@ -15535,9 +15538,19 @@ fn d3c_shape(operand: &str) -> &str {
 /// intervening binder.**
 ///
 /// This is the Architect's bounded measurement (`evt_56jh63qntwtfe`, Steward
-/// recut `evt_7he9qv8wbv1yq`), and ⛔ **it authorizes no production edit.** The
-/// projection's `RootIsImmediate` arm still copies `source_abi_position` into
-/// `immediate_slot`, and the emission seam still reads `producer_env` there.
+/// recut `evt_7he9qv8wbv1yq`), and ⛔ **it authorizes no production edit.**
+///
+/// ⚠ **The sentence that stood here is stale and its staleness mattered.** It
+/// read: *"the projection's `RootIsImmediate` arm still copies
+/// `source_abi_position` into `immediate_slot`, and the emission seam still
+/// reads `producer_env` there."* That was true when this control was written
+/// and is now false. `RootIsImmediate` is **retired** on both parent and
+/// candidate; production resolves the claim through
+/// `resolve_direct_emission_claim` on `ContinuationEnvironmentClaim::
+/// CurrentLexical`. `source_abi_position` survives only inside this
+/// `cfg(test)` `D3c`/`D5a` observatory and its mutation — there is **no live
+/// production consequence** behind this measurement, and no production repair
+/// or residual node is authorized by it.
 ///
 /// MEASURED: compiling the existing `governed_nested_resource_bracket(3)`
 /// population through the production planner and lowering path reaches a
@@ -15572,19 +15585,22 @@ fn d3c_shape(operand: &str) -> &str {
 /// answers agree; it made them differ by a KNOWN permutation, converting a
 /// source body's ABI parameter run into the de Bruijn order `lower_expr`
 /// resolves against. That reddened the zero-depth agreement half, which had
-/// asserted positional identity between the two indexings. The half was re-cut
-/// to membership-exactly-once, keeping its anti-vacuity job; see the comment at
-/// the assertion for what it no longer distinguishes.
+/// asserted positional identity between the two indexings.
 ///
-/// ⛔ **And it widened the defect this control measures, which is the finding
-/// worth carrying forward.** The `RootIsImmediate` arm still copies
-/// `source_abi_position` into `immediate_slot` and the emission seam still
-/// reads `producer_env` there. Before `D1` that read was accidentally CORRECT
-/// at zero binder depth; after `D1` it is wrong there too, for any source body
-/// with two or more parameters. `D1` was ruled to be the repair
-/// (`RT-ENTRY-TRAP-254` `D9`, the common transfer coordinate stands), so this
-/// is a consequence to be discharged by whoever owns the projection — not a
-/// reason to revert the conversion.
+/// The half is now asserted at the **exact derived position**, computed from
+/// the seat's own descriptor facts. An intermediate cut used
+/// membership-exactly-once and was **rejected as insufficient**: every
+/// permutation of a run of unique operands satisfies membership, so it cannot
+/// distinguish the intended conversion from arbitrary misalignment. See the
+/// comment at the assertion for the mapping and why it is derived rather than
+/// searched.
+///
+/// ⚠ **A correction to a claim made in this doc by `RT-SRCBODY-BIND-ORDER`.**
+/// It said `D1` "widened the defect this control measures", on the premise that
+/// the `RootIsImmediate` copy was still live and had been accidentally correct
+/// at zero binder depth. That premise is false — see the retirement noted at
+/// the top — so there is no widened production defect and nothing to discharge.
+/// `D1` changed what this **observatory** observes, and only that.
 #[test]
 fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder() {
     use crate::cranelift_backend::lowering::D3cPositionSelection;
@@ -15633,37 +15649,57 @@ fn d3c_an_entry_abi_root_position_is_not_the_immediate_position_under_a_binder()
          and the divergence below cannot be attributed to the binder: {observed:#?}"
     );
     for seat in &flush {
-        // `RT-SRCBODY-BIND-ORDER` `D1` re-cut. ⛔ This half previously asserted
-        // POSITIONAL identity -- `emission_environment[source_abi_position] ==
-        // entry_operand` -- and that is exactly the premise `D1` retires: the
-        // emission environment is indexed by de Bruijn position and the entry
-        // ABI run by descriptor position, and for a source body the two are
-        // reverses of each other. The old assertion was true only by the
-        // accident that nothing had yet converted between them, and it went red
-        // on `D1` at this seat (2 operands, root position 0, operand found at
-        // index 1).
+        // `RT-SRCBODY-BIND-ORDER` `D3c` re-cut, Architect-directed.
         //
-        // ⛔ What it was FOR is unchanged and is preserved: ruling out an oracle
-        // that never lines up, so the divergence measured below is attributable
-        // to the binder rather than to a misaligned instrument. Membership
-        // exactly once does that job -- a starved or garbage oracle would not
-        // appear in the environment at all -- without re-asserting a positional
-        // coincidence that is no longer production's contract.
+        // ⛔ This half previously asserted POSITIONAL identity --
+        // `emission_environment[source_abi_position] == entry_operand` -- and
+        // that is the premise `D1` retires: the emission environment is indexed
+        // by de Bruijn position and the entry ABI run by descriptor position,
+        // and for a source body the two are reverses of each other. The old
+        // equality was true only while nothing converted between them.
         //
-        // ⚠ This is weaker than the original in one stated respect: it no
-        // longer distinguishes a general PERMUTATION of the entry run from the
-        // identity. Distinguishing those needs the seat's parameter count,
-        // which this deliberately raw observation does not carry.
-        let occurrences = seat
-            .emission_environment
-            .iter()
-            .filter(|operand| *operand == &seat.entry_operand)
-            .count();
+        // ⛔ An intermediate cut asserted MEMBERSHIP-once instead, and that is
+        // insufficient: every permutation of a run of unique operands satisfies
+        // it, so it cannot tell the intended conversion from arbitrary
+        // misalignment. What replaces both is the EXACT derived position.
+        //
+        // The mapping is computed from the seat's own descriptor facts -- the
+        // slot kind at the ABI position and the length of the `Parameter` run --
+        // never by searching the environment for the operand. A search would
+        // make the instrument agree with whatever production did, which is the
+        // one thing an oracle must not do.
+        //
+        //   Parameter at ABI position p, run length P  ->  P - 1 - p
+        //   Capture   at ABI position p                ->  p
+        //
+        // Captures keep descriptor order and sit strictly after the reversed
+        // parameter prefix, so a capture's ABI position and its semantic
+        // position coincide.
+        let parameter_run = seat.source_parameter_run;
+        let position = seat.source_abi_position as usize;
+        let derived = match seat.source_slot_kind {
+            Some(AbiSlotKind::Parameter) => {
+                assert!(
+                    position < parameter_run,
+                    "the descriptor calls ABI position {position} a Parameter but its Parameter \
+                     run is only {parameter_run} long, so the two recorded facts disagree and no \
+                     mapping can be derived: {seat:#?}"
+                );
+                parameter_run - 1 - position
+            }
+            Some(AbiSlotKind::Capture) => position,
+            other => panic!(
+                "ABI position {position} has descriptor kind {other:?}, which is neither of the \
+                 two kinds the entry run is built from; the observatory is reading a slot run it \
+                 does not understand: {seat:#?}"
+            ),
+        };
         assert_eq!(
-            occurrences, 1,
-            "at zero binder depth the emission environment must hold the entry ABI operand \
-             exactly once; if it does not, the oracle is misaligned generally and the shifted \
-             row proves nothing: {seat:#?}"
+            seat.emission_environment.get(derived),
+            Some(&seat.entry_operand),
+            "at zero binder depth the entry ABI operand at position {position} must sit at the \
+             semantic position its descriptor derives ({derived}); if it does not, the oracle is \
+             misaligned and the shifted row below proves nothing: {seat:#?}"
         );
     }
 
@@ -25185,4 +25221,83 @@ fn d3_both_binding_seats_obey_one_conversion_law() {
         "no environment of length two or more was converted, so the law above is satisfied by \
          every row trivially and discriminates nothing: {observed:#?}"
     );
+}
+
+/// **`D3` control 4, amended — TRANSITION SENTINEL: no generated-context worker
+/// is multi-parameter yet.**
+///
+/// ⛔ **This test is designed to go RED, and that red is its purpose.** It is
+/// not a note and it is not a regression guard. It exists so that the
+/// unmeasured half of `D2` cannot be introduced silently.
+///
+/// **What `D2` claims and why it is currently inert.** `D2` says a generated
+/// context binds its raw owner's parameter run in the same order that owner's
+/// own unit would. `D1`'s conversion reverses that run, and **reversal is the
+/// identity on a run of length one**. Every worker that reaches a generated
+/// context in this crate's only such populations declares exactly ONE
+/// parameter, so today `D2` cannot be observed doing anything at all — the
+/// conversion law checked at both seats by
+/// [`d3_both_binding_seats_obey_one_conversion_law`] is satisfied by those rows
+/// trivially, under either decision. `D2` is inert at unary arity.
+///
+/// **What activates it.** The first generated-context worker with two or more
+/// parameters makes `D2`'s order observable, and at that moment the full
+/// equivalence obligation becomes live: it must then be shown that the body
+/// binds the same order in its own unit and in the context that lowers it —
+/// the measurement this node could not make and did not fake. That obligation
+/// is not discharged anywhere; it is deferred, and this sentinel is what stops
+/// the deferral from being forgotten.
+///
+/// **The retiring event, named:** the introduction of a generated-context
+/// worker of arity two or more. Whoever introduces it reds this test, and the
+/// deliverable at that point is the cross-host equivalence control, not a
+/// bumped bound here.
+///
+/// ⛔ Do NOT satisfy this by relaxing the bound. A `<= 2` would restate the
+/// current population as the contract and destroy the only thing the test does.
+///
+/// MEASURED: compiling the `D5a` generated-context witness, every environment
+/// built at a generated context has at most one parameter ordinal.
+///
+/// Red before green: demonstrated against a temporary hand-added two-parameter
+/// generated-context worker, which is not committed — see the node's handoff for
+/// the observed row. Nothing in the checked IH call-site arity, the fixture
+/// population, or the worker declarations is persistently changed by this test.
+///
+/// Promise class: **transition sentinel**, labelled as one. It is named for the
+/// boundary it watches rather than for the population's current size, and the
+/// event that retires it is stated above.
+#[test]
+fn d3_no_generated_context_worker_is_multi_parameter_yet() {
+    let _ = srcbody_bind_order_take();
+    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "d3_bind_order_arity_sentinel",
+        false,
+    )
+    .expect("the D5a generated-context witness compiles");
+    let observed = srcbody_bind_order_take();
+
+    let contexts = observed
+        .iter()
+        .filter(|row| row.host == SrcbodyBindHost::GeneratedContext)
+        .collect::<Vec<_>>();
+    // The sentinel watches a population, so an EMPTY population would let it
+    // pass while watching nothing. That failure mode is the one a bound-check
+    // is most prone to, so it is asserted first and separately.
+    assert!(
+        !contexts.is_empty(),
+        "this witness built no generated-context environment, so the arity bound below is \
+         asserted over nothing and the sentinel is watching an empty set: {observed:#?}"
+    );
+
+    for row in &contexts {
+        assert!(
+            row.parameter_ordinals.len() <= 1,
+            "a generated-context worker now declares {} parameters. D2's binding order is no \
+             longer inert, so its cross-host equivalence is now OBSERVABLE and UNMEASURED. The \
+             deliverable is the equivalence control described in this test's documentation — \
+             not a wider bound here: {row:#?}",
+            row.parameter_ordinals.len()
+        );
+    }
 }

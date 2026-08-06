@@ -8448,6 +8448,16 @@ impl<'a> Lowering<'a> {
                 .map(|binding| d4a_describe_binding(Some(binding)))
                 .collect::<Vec<_>>();
             let abi_operands = self.function_local.defining_abi_operands.len();
+            // ⛔ The independent source-descriptor authority. Both facts come
+            // from the slot walk's recorded KINDS, so the derived position
+            // below is computed from the descriptor and never found by looking
+            // for the operand in the environment.
+            let source_parameter_run = self
+                .function_local
+                .defining_abi_slot_kinds
+                .iter()
+                .filter(|kind| **kind == AbiSlotKind::Parameter)
+                .count();
             for input in &vector {
                 let D3cCoordinate::EntryAbi {
                     source_abi_position, ..
@@ -8485,6 +8495,12 @@ impl<'a> Lowering<'a> {
                     source_abi_position,
                     entry_operand,
                     abi_operands,
+                    source_slot_kind: self
+                        .function_local
+                        .defining_abi_slot_kinds
+                        .get(source_abi_position as usize)
+                        .copied(),
+                    source_parameter_run,
                     emission_environment: emission_environment.clone(),
                     observed_position,
                     observed_operand,

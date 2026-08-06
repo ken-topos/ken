@@ -92,6 +92,7 @@ fn run_checked_bounded_nat_fixture(
         bounded_nat_mutation: mutation,
         function_local: FunctionLocalRefs {
             defining_abi_operands: Vec::new(),
+            defining_abi_slot_kinds: Vec::new(),
             context_calls: BTreeMap::new(),
             worker_templates: BTreeMap::new(),
             generated_context_captures: None,

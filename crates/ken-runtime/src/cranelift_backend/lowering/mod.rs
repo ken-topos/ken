@@ -855,6 +855,8 @@ impl ArtifactHelpers<'_> {
             worker_templates: BTreeMap::new(),
             context_calls: BTreeMap::new(),
             defining_abi_operands: Vec::new(),
+            #[cfg(test)]
+            defining_abi_slot_kinds: Vec::new(),
             generated_context_captures: None,
             continuation_calls: BTreeMap::new(),
             continuation_emissions: BTreeMap::new(),
@@ -1027,9 +1029,16 @@ struct FunctionLocalRefs {
     /// **`RT-DECL-CLOSURE-PORT` `D5a` checkpoint 4 step 1b** -- this function's
     /// own ABI-slot operands, indexed by ABI position.
     ///
-    /// The `Parameter` run followed by the `Capture` run, in the one slot walk
-    /// that also builds the body's environment -- so index `i` here is ABI
-    /// position `i` of the function being defined.
+    /// The `Parameter` run followed by the `Capture` run, in descriptor order,
+    /// from the one slot walk -- so index `i` here is ABI position `i` of the
+    /// function being defined.
+    ///
+    /// ⚠ **`RT-SRCBODY-BIND-ORDER` `D1`: this is no longer the body's
+    /// environment order.** The same walk still produces both, but a source
+    /// body's semantic environment is `reverse(Parameter run) ++ Capture run`,
+    /// because `lower_expr` resolves `Var(i)` as a de Bruijn index. THIS vector
+    /// keeps descriptor order and is the ABI-position authority; do not read an
+    /// environment index out of it or an ABI position out of an environment.
     ///
     /// ⭐ A retargeted carried invocation reads its context's capture suffix
     /// from here, at the **immediate slots** the planner assigned. It is stored
@@ -1041,6 +1050,20 @@ struct FunctionLocalRefs {
     /// ⛔ Reset per function, like every other field here: these are `ir::Value`
     /// operands of one `Function` and mean nothing in another.
     defining_abi_operands: Vec<LoweringOperand>,
+    /// **`RT-SRCBODY-BIND-ORDER` `D3c`** -- the slot KIND at each ABI position
+    /// of [`Self::defining_abi_operands`], recorded in the same walk.
+    ///
+    /// ⛔ Independent source-descriptor authority for the `D3c` observatory,
+    /// and that independence is the point. Deriving where an ABI position lands
+    /// in the semantic environment needs two descriptor facts -- whether the
+    /// position is a `Parameter` and how long the `Parameter` run is -- and
+    /// both must come from the DESCRIPTOR, never from searching the environment
+    /// for the operand. A search would make the instrument agree with whatever
+    /// production did.
+    ///
+    /// `cfg(test)`: nothing in production needs a slot's kind after the walk.
+    #[cfg(test)]
+    defining_abi_slot_kinds: Vec<AbiSlotKind>,
     /// **`RT-DECL-CLOSURE-PORT` `D5a`** -- the operand suffix a **retargeted**
     /// worker call must append, and the one body origin it applies to.
     ///
@@ -1619,18 +1642,33 @@ pub(in crate::cranelift_backend) fn d4a_describe_binding(
 /// `#[cfg(test)]` throughout, disarmed by default, consulted by no lowering
 /// decision. ⛔ **`D3c` authorizes no production edit**, and nothing here is one.
 ///
-/// **The question.** `exact_continuation_projection`'s `RootIsImmediate` arm
-/// copies an `EntryAbi` root's `source_abi_position` straight into
-/// `immediate_slot`, and the emission seam then reads `producer_env` at that
-/// slot. `D4a` established that `producer_env` at a predeclared seat is the
-/// **current lexical environment, with intervening binders prepended** — not the
-/// entry ABI operand run. So the copy is only sound at zero binder depth, and
-/// every population before `D4a` was at zero binder depth.
+/// **The question, as it was originally posed.**
+/// `exact_continuation_projection`'s `RootIsImmediate` arm copied an `EntryAbi`
+/// root's `source_abi_position` straight into `immediate_slot`, and the
+/// emission seam then read `producer_env` at that slot. `D4a` established that
+/// `producer_env` at a predeclared seat is the **current lexical environment,
+/// with intervening binders prepended** — not the entry ABI operand run. So the
+/// copy was only sound at zero binder depth, and every population before `D4a`
+/// was at zero binder depth.
+///
+/// ⚠ **`RootIsImmediate` is RETIRED, on parent and candidate alike.** Production
+/// resolves the claim through `resolve_direct_emission_claim` on
+/// `ContinuationEnvironmentClaim::CurrentLexical`. `source_abi_position`
+/// survives only in this `cfg(test)` observatory and its mutation, so this
+/// instrument measures a shape that no longer reaches production. Stated in the
+/// present tense because the paragraph above reads as live otherwise, and a
+/// reader who takes it as live will file a production defect that does not
+/// exist.
 ///
 /// **The oracle, and why it is independent.** Production already records the
 /// entry ABI operands, in ABI-position order, at unit entry: `D5a` built
 /// `defining_abi_operands` from the same single slot walk that seeds the entry
 /// environment, so "index `i` is ABI position `i`" holds there by construction.
+/// ⚠ `RT-SRCBODY-BIND-ORDER` `D1`: that walk now yields TWO orders, and this
+/// record keeps the descriptor one. The environment a source body is lowered
+/// against is `reverse(Parameter run) ++ Capture run`, so a comparison between
+/// the two must go through the derived mapping recorded beside each seat, not
+/// through a shared index.
 /// That record is keyed by ABI position and never by an environment index, so
 /// comparing it against `producer_env[source_abi_position]` is a comparison of
 /// two independently-derived answers to "which value is this", not a walk
@@ -1685,6 +1723,18 @@ pub(in crate::cranelift_backend) struct D3cSeatObservation {
     pub(in crate::cranelift_backend) entry_operand: String,
     /// Length of the entry ABI operand run.
     pub(in crate::cranelift_backend) abi_operands: usize,
+    /// **`RT-SRCBODY-BIND-ORDER` `D3c`** -- the DESCRIPTOR's kind at
+    /// `source_abi_position`, and the length of the descriptor's `Parameter`
+    /// run. Read from `defining_abi_slot_kinds`, never from the environment.
+    ///
+    /// ⛔ These two are what let the control derive the exact semantic position
+    /// an ABI position maps to. Without them the only available check is
+    /// membership, which every unique-operand permutation satisfies and which
+    /// therefore cannot tell the intended conversion from arbitrary
+    /// misalignment. `None` when the position is outside the recorded run,
+    /// which is itself a finding rather than a reason to fall back to a search.
+    pub(in crate::cranelift_backend) source_slot_kind: Option<AbiSlotKind>,
+    pub(in crate::cranelift_backend) source_parameter_run: usize,
     /// The whole emission-seat environment, in order.
     pub(in crate::cranelift_backend) emission_environment: Vec<String>,
     /// The position this instrument read, under the active selection.

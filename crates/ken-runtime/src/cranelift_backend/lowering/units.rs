@@ -3983,6 +3983,15 @@ fn define_unit_body<M: Module>(
                     .function_local
                     .defining_abi_operands
                     .push(operand.clone());
+                // `RT-SRCBODY-BIND-ORDER` `D3c` -- the kind at the same ABI
+                // position, from the same walk, so the observatory can derive a
+                // semantic position from the descriptor instead of searching
+                // the environment for the operand.
+                #[cfg(test)]
+                compiler
+                    .function_local
+                    .defining_abi_slot_kinds
+                    .push(slot.kind);
                 match slot.kind {
                     AbiSlotKind::Parameter => {
                         #[cfg(test)]
