@@ -13077,20 +13077,37 @@ impl<'a> Lowering<'a> {
         // fixture poses the occupancy question, and this mechanism is
         // correct-and-unwitnessed rather than proved.
         //
-        // Two witness attempts were measured and both refuse upstream of this
-        // seat, which is why one is not landed here:
-        //   - an ordinary call on the selected recursive argument inside the
-        //     `px8tr` checked wrapper refuses in the DECLARATION's own lowering
-        //     ("a source-machine call's callee is a specialized-only surface"),
-        //     because that case body is lowered both there and in the
-        //     specialization, and the binder run's static workers exist only in
-        //     the second;
-        //   - the same shape with the induction hypothesis as the inner callee
-        //     refuses in plan validation ("oriented segment mixes checked and
-        //     inferred computational frames").
-        // ⇒ A witness needs a checked wrapper reached ONLY through the
-        // specialization path. That is fixture design of the `D8e` class, not a
-        // tweak.
+        // ⛔⛔ **BOTH ROUTES TO A WITNESS ARE CLOSED, measured, and the second
+        // is structural.** This is a hard stop, not an unfinished fixture.
+        //
+        // Route 1 -- a NON-COMPOSED checked wrapper (`px8tr`). An ordinary call
+        // on the selected recursive argument refuses in the DECLARATION's own
+        // lowering ("a source-machine call's callee is a specialized-only
+        // surface"): that case body is lowered both there and in the
+        // specialization, and the binder run's static workers exist only in the
+        // second. The same shape with the induction hypothesis as the inner
+        // callee refuses in plan validation ("oriented segment mixes checked and
+        // inferred computational frames").
+        //
+        // Route 2 -- a COMPOSED checked wrapper, where both lowerings DO carry a
+        // static worker at the callee position. Transport validation passes:
+        // frame marker, slot and call templates, occurrence paths and
+        // fingerprints all reconcile. Lowering then refuses with
+        // **"computational IH slot marker is detached from its checked frame"**
+        // (`computational_ih_slots_for_case`, which requires `checked_frame_id`
+        // to be `Some`).
+        //
+        // ⭐ That refusal is structural and cannot be fixtured around. The frame
+        // in force inside a composed case body is the BRIDGE, synthesized by
+        // `immediate_binder_eliminator` with `checked_frame_id: None` -- it has
+        // no source expression, so no `CheckedSubcontinuationFrame` marker can
+        // ever supply it one. A checked IH wrapper inside a composed bridge case
+        // body therefore needs a way for a lowering-synthesized frame to carry a
+        // checked frame identity, which is planner/marker mechanism this
+        // checkpoint must not add.
+        //
+        // ⇒ The occupancy property is correct and unwitnessable at this
+        // checkpoint. The attempt is preserved rather than discarded.
         if static_origin != pending.application_origin {
             return Ok(false);
         }
