@@ -31,6 +31,24 @@ fn recursive_position_unit_calls() -> usize {
 
 type ConsumedSubcontinuationFrame = (u64, u64);
 
+/// **`D8m`** — withhold the tuple the checked bridge transports, restoring the
+/// pre-`D8m` shape at that one site.
+#[cfg(test)]
+thread_local! {
+    static D8M_SUPPRESS_TRANSPORTED_TUPLE: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn set_d8m_suppress_transported_tuple(armed: bool) {
+    D8M_SUPPRESS_TRANSPORTED_TUPLE.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn d8m_suppress_transported_tuple() -> bool {
+    D8M_SUPPRESS_TRANSPORTED_TUPLE.with(std::cell::Cell::get)
+}
+
 /// **`D8n`** — restore the compile-wide consumed-frame lifetime.
 #[cfg(test)]
 thread_local! {
@@ -2346,6 +2364,23 @@ impl<'a> Lowering<'a> {
                             // ⭐ `D8m` — the SAME derivation the direct path
                             // uses, whole. All four facts, not the id alone.
                             let checked = self.checked_computational_frame(cases, default)?;
+                            // ⛔ `D8m` — SUPPRESS THE TRANSPORTED TUPLE, under
+                            // test only. The marker is still entered and
+                            // consumed above, so the plan side is untouched and
+                            // only the transport is withheld: the bridge then
+                            // carries what it carried before this checkpoint,
+                            // and the detached-frame refusal must come back.
+                            #[cfg(test)]
+                            let checked = if d8m_suppress_transported_tuple() {
+                                CheckedComputationalFrame {
+                                    id: None,
+                                    invocation_id: None,
+                                    invocation_source: None,
+                                    invocation_depth: 0,
+                                }
+                            } else {
+                                checked
+                            };
                             EliminatorFrame::Computational(ComputationalEliminatorFrame {
                                 cases,
                                 default,

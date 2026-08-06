@@ -19743,3 +19743,157 @@ fn d8o_remeasures_the_two_owner_keyed_guards_on_the_descendant() {
          than as the absence of the other two kinds: {claim_kinds:?}"
     );
 }
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8m` — the transported tuple is what carries
+/// the source frame through the bridge, proved by withdrawing it.**
+///
+/// ## The independent side, stated first
+///
+/// Everything the observed side is compared against comes from the **oriented
+/// plan the witness was compiled with** — its frame id, its slot template id —
+/// and from `D8o`'s independently supplied **body key**. ⛔ Nothing is read back
+/// out of the bridge descriptor, the ambient owner, or the transported tuple
+/// itself; those are the mechanism under test.
+///
+/// ## Clause 1 — the keyed relation, not a bag
+///
+/// For each exact body that reached the two checked seams, the observed value is
+/// `(consumed pair, reconciled slot)`. That relation must equal the one the plan
+/// names. ⛔ A bag of pairs plus component distinctness is insufficient and the
+/// permutation control below is the demonstration: exchanging two bodies'
+/// observations leaves every bag and every component set identical.
+///
+/// ## Clause 2 — withdrawing the tuple restores the pre-`D8m` refusal
+///
+/// ⭐⭐ The marker is still entered and consumed, so the plan side is untouched
+/// and **only the transport is withheld**. The bridge then carries what it
+/// carried before this checkpoint, and `computational_ih_slots_for_case` must
+/// refuse with *"detached from its checked frame"* — the `D8f` hard stop. That
+/// is the whole claim of `D8m` stated as a difference.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d8m_the_transported_tuple_is_what_carries_the_source_frame() {
+    use crate::cranelift_backend::lowering::{
+        d8n_frame_consumptions, d8n_slot_reconciliations, d8o_body_keys, reset_d8n_observations,
+        reset_d8o_body_authorities, D8oBodyKey,
+    };
+    use crate::cranelift_backend::lowering::core::set_d8m_suppress_transported_tuple;
+
+    // Clause 1 — the keyed relation.
+    reset_d8n_observations();
+    reset_d8o_body_authorities();
+    let outcome = d8n_compile();
+    assert!(
+        outcome.is_none(),
+        "the checked-bridge witness must compile, or the seams below are not reached: {outcome:?}"
+    );
+    let keys = d8o_body_keys()
+        .into_iter()
+        .map(|(function, key)| (function.expect("body keys are labelled"), key))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let mut observed: std::collections::BTreeMap<D8oBodyKey, (Vec<(u64, u64)>, Vec<u64>)> =
+        std::collections::BTreeMap::new();
+    for (function, invocation_id, frame_id) in d8n_frame_consumptions() {
+        let function = function.expect("consumptions are labelled");
+        let key = *keys.get(&function).expect("a consuming body has a key");
+        observed.entry(key).or_default().0.push((invocation_id, frame_id));
+    }
+    for (function, slot_template_id) in d8n_slot_reconciliations() {
+        let function = function.expect("reconciliations are labelled");
+        let key = *keys.get(&function).expect("a reconciling body has a key");
+        observed.entry(key).or_default().1.push(slot_template_id);
+    }
+    assert_eq!(
+        observed.len(),
+        2,
+        "exactly two bodies reach the checked seams on this witness -- the ordinary declaration \
+         body and the specialization derived from the same source text: {observed:?}"
+    );
+    // The independent side: the plan's own frame and slot ids.
+    let (plan_frame, plan_slot) = d8m_plan_named_ids();
+    for (key, (consumed, reconciled)) in &observed {
+        assert_eq!(
+            consumed,
+            &vec![(0u64, plan_frame)],
+            "each body must consume the PLAN-NAMED frame exactly once, under key {key:?}"
+        );
+        assert_eq!(
+            reconciled,
+            &vec![plan_slot],
+            "and reconcile the PLAN-NAMED slot exactly once, under key {key:?}"
+        );
+    }
+    // ⛔ The permanent anti-vacuity permutation. Exchanging two bodies'
+    // observations leaves every bag and every component set identical, so an
+    // unkeyed comparison stays green; the keyed relation must reject it.
+    let permuted = {
+        let entries = observed.iter().map(|(k, v)| (*k, v.clone())).collect::<Vec<_>>();
+        let mut permuted = observed.clone();
+        permuted.insert(entries[0].0, entries[1].1.clone());
+        permuted.insert(entries[1].0, entries[0].1.clone());
+        permuted
+    };
+    let bag = |relation: &std::collections::BTreeMap<D8oBodyKey, (Vec<(u64, u64)>, Vec<u64>)>| {
+        let mut values = relation.values().cloned().collect::<Vec<_>>();
+        values.sort();
+        values
+    };
+    assert_eq!(
+        bag(&permuted),
+        bag(&observed),
+        "the permutation must be invisible to an UNKEYED comparison, or it is not the control it \
+         claims to be -- a swap that changes the bag would red anywhere"
+    );
+    // ⚠ On this witness the two bodies observe identical values, so the keyed
+    // relation cannot distinguish the swap either. Recorded as a real limit
+    // rather than asserted away: the permutation control is constructible here
+    // but not DISCRIMINATING, and it needs a witness whose two bodies reach the
+    // seams with different plan-named ids.
+    assert_eq!(
+        permuted, observed,
+        "MEASURED: this witness's two bodies observe the same plan-named frame and slot, so a \
+         swap is a no-op and the keyed relation is not discriminated by it here. If this ever \
+         differs, the permutation has become a real control and this expectation should be \
+         inverted rather than deleted"
+    );
+
+    // Clause 2 — withdrawing the transported tuple.
+    set_d8m_suppress_transported_tuple(true);
+    let suppressed = d8n_compile();
+    set_d8m_suppress_transported_tuple(false);
+    let refusal = format!(
+        "{:?}",
+        suppressed.expect("withholding the transported tuple must refuse")
+    );
+    assert!(
+        refusal.contains("detached from its checked frame"),
+        "and it must be the pre-D8m refusal exactly -- the marker is still entered and consumed, \
+         so only the transport is withheld and this is D8m's claim stated as a difference: \
+         {refusal}"
+    );
+}
+
+/// The frame and slot ids the witness's own oriented plan names.
+///
+/// ⛔ The independent side: read from the plan the compile is given, never from
+/// the bridge, the ambient owner, or the transported tuple.
+#[cfg(test)]
+fn d8m_plan_named_ids() -> (u64, u64) {
+    let declaration = d8n_declaration();
+    let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+        panic!("transparent")
+    };
+    let RuntimeExpr::Closure { body, .. } = body else { panic!("closure") };
+    let mut plan = d8m_plan(body, 7);
+    for frame in &mut plan.frames {
+        frame.declaration = D8N_SYMBOL.to_string();
+    }
+    (
+        plan.frames.first().expect("one planned frame").frame_id,
+        plan.computational_ih_slots
+            .first()
+            .map(|slot| slot.slot_template_id)
+            .unwrap_or(200),
+    )
+}
