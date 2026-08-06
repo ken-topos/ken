@@ -19199,6 +19199,7 @@ fn d8n_checked_frame_consumption_is_per_function_not_per_compile() {
     use crate::cranelift_backend::lowering::core::set_d8n_compile_wide_lifecycle;
 
     // Clause 1 — the split body COMPILES.
+    crate::cranelift_backend::lowering::reset_d8n_observations();
     let outcome = d8n_compile();
     assert!(
         outcome.is_none(),
@@ -19206,6 +19207,61 @@ fn d8n_checked_frame_consumption_is_per_function_not_per_compile() {
          EACH, so this must compile. A 'consumed more than once' refusal means the ledger is \
          compile-wide again; any other refusal is a new finding on the checked-bridge path and \
          must be reported rather than absorbed: {outcome:?}"
+    );
+
+    // Clause 1b — WHAT THE TWO SEAMS ACTUALLY SAW.
+    //
+    // ⭐⭐ This is what makes "split across two Functions" a measurement rather
+    // than a claim about the fixture's shape. Both observations are written at
+    // the real seams from state production holds there: the pair the ledger
+    // accepted, the slot the plan named, and in each case `defining_function_id`
+    // -- the identity `open_aggregate_events` sets at the start of every body.
+    // ⛔ Nothing here is reconstructed; a reader that rebuilt the identity or
+    // the pair would be agreeing with itself.
+    //
+    // ⚠ MEASURED on the way to this: `defining_emission_owner` reports the SAME
+    // owner for both consumptions, because only the ordinary unit-body and
+    // generated-context passes set it and it is stale inside a specialization
+    // body. It would have made this clause read as a single-Function witness.
+    let consumptions = crate::cranelift_backend::lowering::d8n_frame_consumptions();
+    let owners = consumptions
+        .iter()
+        .map(|(owner, _, _)| *owner)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        owners.len(),
+        2,
+        "the one checked source body must be consumed under TWO distinct defining Functions. One \
+         means only a single Function lowered it and this witness is not a split body at all, \
+         which would make the whole row vacuous: {consumptions:?}"
+    );
+    let pairs = consumptions
+        .iter()
+        .map(|(_, invocation_id, frame_id)| (*invocation_id, *frame_id))
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        pairs.len(),
+        1,
+        "and it must be the SAME (invocation_id, frame_id) pair each time -- that is the whole \
+         point. Two pairs would mean the key had been salted per function, which is the repair \
+         this checkpoint deliberately did not make: {consumptions:?}"
+    );
+    assert_eq!(
+        consumptions.len(),
+        2,
+        "once under each owner: not once in total, and not three times: {consumptions:?}"
+    );
+    let slots = crate::cranelift_backend::lowering::d8n_slot_reconciliations();
+    let slot_owners = slots
+        .iter()
+        .map(|(owner, _)| *owner)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        (slots.len(), slot_owners.len()),
+        (2, 2),
+        "the plan-named checked-IH slot must reconcile once under EACH relevant Function too. \
+         The slot seam is downstream of the frame seam, so a single reconciliation would mean \
+         only one Function got far enough to use the frame it consumed: {slots:?}"
     );
 
     // Clause 2 — the old lifetime, restored.

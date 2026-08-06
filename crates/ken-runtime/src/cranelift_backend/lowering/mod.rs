@@ -3676,6 +3676,62 @@ pub(in crate::cranelift_backend) fn d8l2_consumed_facets() -> Vec<bool> {
     D8L2_CONSUMED_FACETS.with(|log| log.borrow().clone())
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8n` — what the two checked seams actually
+/// saw, per compilation.**
+///
+/// ⛔ Written AT the seams from state production already holds there, never
+/// rebuilt from a fixture or an expected plan. The point of the split-body
+/// witness is that one source body is lowered under two different defining
+/// Functions; an observation that reconstructed the identity would be a second
+/// authority for the very fact under test.
+///
+/// ⚠ The identity is `defining_function_id`, set by `open_aggregate_events` at
+/// the START of every body -- the one per-`Function` fact in scope at both
+/// seams. ⛔ NOT `defining_emission_owner`, which is set only by the ordinary
+/// unit-body and generated-context passes and is therefore **stale** inside a
+/// specialization body: measured, both consumptions reported the same owner
+/// there while genuinely occurring in two different Functions.
+#[cfg(test)]
+thread_local! {
+    static D8N_FRAME_CONSUMPTIONS: std::cell::RefCell<Vec<(Option<FuncId>, u64, u64)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    static D8N_SLOT_RECONCILIATIONS: std::cell::RefCell<Vec<(Option<FuncId>, u64)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8n_frame_consumption(
+    owner: Option<FuncId>,
+    invocation_id: u64,
+    frame_id: u64,
+) {
+    D8N_FRAME_CONSUMPTIONS.with(|log| log.borrow_mut().push((owner, invocation_id, frame_id)));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8n_slot_reconciliation(
+    owner: Option<FuncId>,
+    slot_template_id: u64,
+) {
+    D8N_SLOT_RECONCILIATIONS.with(|log| log.borrow_mut().push((owner, slot_template_id)));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8n_frame_consumptions() -> Vec<(Option<FuncId>, u64, u64)> {
+    D8N_FRAME_CONSUMPTIONS.with(|log| log.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8n_slot_reconciliations() -> Vec<(Option<FuncId>, u64)> {
+    D8N_SLOT_RECONCILIATIONS.with(|log| log.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_d8n_observations() {
+    D8N_FRAME_CONSUMPTIONS.with(|log| log.borrow_mut().clear());
+    D8N_SLOT_RECONCILIATIONS.with(|log| log.borrow_mut().clear());
+}
+
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn d8j_discharged() -> Vec<ContinuationCallIdentity> {
     D8J_DISCHARGED.with(|log| log.borrow().clone())
@@ -13547,6 +13603,14 @@ impl<'a> Lowering<'a> {
                 "checked Runtime frame marker was consumed more than once",
             ));
         }
+        // `D8n` — the observation, at the REAL consumption seam and written from
+        // production state that is in hand here: the pair the ledger just
+        // accepted, and the emission owner of the function currently being
+        // defined. ⛔ Nothing is reconstructed from a fixture or looked up in an
+        // expected plan; a reader that rebuilt either side would agree with
+        // itself and say nothing about what production did.
+        #[cfg(test)]
+        record_d8n_frame_consumption(self.defining_function_id, invocation_id, frame_id);
         Ok(Some(frame_id))
     }
 
@@ -13658,6 +13722,12 @@ impl<'a> Lowering<'a> {
                         "computational IH slot constructor/position/frame binding is stale",
                     ));
                 }
+                // `D8n` — the observation at the REAL slot-reconciliation seam,
+                // recorded only once the plan-named slot has been resolved and
+                // held to its frame, constructor and position. The id is the
+                // plan's own; the owner is the function being defined.
+                #[cfg(test)]
+                record_d8n_slot_reconciliation(self.defining_function_id, slot.slot_template_id);
                 Ok(Some(slot_template_id))
             })
             .collect()
