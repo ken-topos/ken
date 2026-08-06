@@ -2787,8 +2787,10 @@ all six failing `D0` rows.
   ⛔ **What decides it against a node is that the fix must land on the HELD
   SHARED BRANCH.** A separate node could only get there by (a) cutting from
   `main`, merging, then **rebasing** `wp/RT-DECL-CLOSURE-PORT-typed-units` onto
-  it — which **destroys every preserved exact checkpoint SHA on that branch**,
-  and this node's whole evidence chain is preserved-SHA-addressed — or (b)
+  it — which **breaks exact-SHA verdict transfer for every preserved checkpoint
+  on that branch** (the objects survive; the *reviews* do not follow them, so
+  each must be re-anchored and revalidated), and this node's whole evidence
+  chain is preserved-SHA-addressed — or (b)
   landing on the same shared branch anyway, which recreates the
   "two nodes, one branch, one candidate" shape [[RT-UNIT-CLOSURE-CONVERT]]
   needed three paragraphs to explain was not a deadlock.
@@ -3065,10 +3067,19 @@ all six failing `D0` rows.
   done, the answer flips to a node."* **`wp/RT-DECL-CLOSURE-PORT-typed-units`
   is UNMERGED and 168+ commits ahead of `origin/main`.** ⇒ **The condition is
   NOT met, so the topology argument stands unchanged:** a separate node reaches
-  the held branch only by rebasing it — **destroying every preserved exact
-  checkpoint SHA this node's evidence chain is addressed by**, including the
-  `0eb04397` the Architect just ruled on — or by landing on the same branch
+  the held branch only by rebasing it — which **breaks exact-SHA verdict
+  transfer for every preserved checkpoint this node's evidence chain is
+  addressed by**, including the `0eb04397` the Architect just ruled on, so each
+  would need re-anchoring and revalidation — or by landing on the same branch
   anyway, which recreates "two nodes, one branch, one candidate".
+
+  > **Same correction as at `D8o` above, and this copy is why I am recording
+  > the sweep failure rather than just the fix.** I swept for the *phrasing* I
+  > remembered writing (*"destroys the preserved exact SHAs"*) and this site
+  > says *"destroying every preserved exact checkpoint SHA"*. **A grep for your
+  > own wording finds the copy you remember and misses the ones you paraphrased.**
+  > Research caught both survivors (`evt_3max8t72dag64`). Sweep the **claim**,
+  > not the sentence.
 
   ⭐ **Applying my own recorded criterion rather than re-deriving one is the
   point.** A sizing rule that is re-argued at each use is not a rule.
