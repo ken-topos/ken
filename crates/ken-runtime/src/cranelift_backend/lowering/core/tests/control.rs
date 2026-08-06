@@ -21228,9 +21228,6 @@ fn d8f_witness(with_ordinary_call: bool) -> RuntimeExpr {
 enum D8fPerturbation {
     /// The lawful witness.
     None,
-    /// The marker's application is a call on a VALUE binder, so no static-worker
-    /// call ever visits the occurrence the marker names.
-    NoConsumingCall,
     /// A second invocation marker inside the first.
     NestedMarker,
     /// The marker moved onto the inner ordinary call, with the plan still built
@@ -21355,17 +21352,6 @@ fn d8f_marked_application(
     };
     match perturbation {
         D8fPerturbation::None => marker(100, vec![30], application(callee)),
-        // A call on a VALUE binder. The marker still wraps one complete
-        // application of the right arity, so entry admits it -- and no
-        // static-worker call ever visits the occurrence it names.
-        D8fPerturbation::NoConsumingCall => marker(
-            100,
-            vec![30],
-            RuntimeExpr::Call {
-                callee: Box::new(RuntimeExpr::Var(1)),
-                args: args.to_vec(),
-            },
-        ),
         // A second marker inside the first, on the same application.
         // The outer marker wraps a complete application, as entry requires; its
         // ARGUMENT carries a second marker. So the inner marker is entered while
@@ -22273,105 +22259,194 @@ fn d8f_the_declined_call_does_not_answer_for_the_checked_identity() {
     );
 }
 
+/// The checked-IH invocation markers the SOURCE carries, keyed by declaration
+/// and checked occurrence path.
+///
+/// Measured by the production collector over the witness's own text. This is the
+/// actual source-marker population a planning row compares against.
+#[cfg(test)]
+fn d8f_source_marker_population(
+    with_ordinary_call: bool,
+    perturbation: D8fPerturbation,
+) -> BTreeMap<(String, Vec<u64>, u64), BTreeSet<Vec<u64>>> {
+    d8f_marker_sets(with_ordinary_call, perturbation)
+        .computational_ih_calls
+        .into_iter()
+        .map(|((template, path), locations)| {
+            ((D8F_SYMBOL.to_string(), path, template), locations)
+        })
+        .collect()
+}
+
+/// The checked-IH invocation templates the PLAN holds, under the same key.
+#[cfg(test)]
+fn d8f_plan_marker_population(
+    with_ordinary_call: bool,
+    perturbation: D8fPerturbation,
+) -> BTreeMap<(String, Vec<u64>, u64), BTreeSet<Vec<u64>>> {
+    d8f_plan_with(with_ordinary_call, perturbation)
+        .computational_ih_calls
+        .into_iter()
+        .map(|call| {
+            (
+                (
+                    call.declaration.clone(),
+                    call.checked_occurrence_path.clone(),
+                    call.call_template_id,
+                ),
+                call.runtime_marker_locations
+                    .into_iter()
+                    .map(|location| location.runtime_path)
+                    .collect(),
+            )
+        })
+        .collect()
+}
+
+/// The lowering observations for one compile, keyed by exact defining body and
+/// application occurrence.
+///
+/// `D8oBodyKey` is the body kind carried from the pass that owns the descriptor,
+/// never recovered from an owner variant.
+#[cfg(test)]
+#[allow(clippy::type_complexity)]
+fn d8f_keyed_observations() -> BTreeMap<
+    (crate::cranelift_backend::lowering::D8oBodyKey, StaticOriginId),
+    (
+        crate::cranelift_backend::lowering::CheckedApplicationDisposition,
+        bool,
+    ),
+> {
+    let keys = crate::cranelift_backend::lowering::d8o_body_keys()
+        .into_iter()
+        .map(|(function, key)| (function.expect("body keys are labelled"), key))
+        .collect::<BTreeMap<_, _>>();
+    let bound = crate::cranelift_backend::lowering::d8p_application_bindings()
+        .into_iter()
+        .map(|binding| {
+            (
+                binding.function.expect("bindings name their Function"),
+                binding.application_origin,
+            )
+        })
+        .collect::<BTreeSet<_>>();
+    crate::cranelift_backend::lowering::d8f_dispositions()
+        .into_iter()
+        .map(|(function, origin, disposition)| {
+            let function = function.expect("every disposition names its defining Function");
+            let key = *keys
+                .get(&function)
+                .expect("every emitting body recorded its exact body key");
+            (
+                (key, origin),
+                (disposition, bound.contains(&(function, origin))),
+            )
+        })
+        .collect()
+}
+
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8f` — the remaining checked-marker refusals:
 /// omission, duplicate, transplant, wrong occurrence.**
 ///
-/// All four are about **which call consumes a pending checked-IH marker**, and
-/// each is stated with the plane that refuses it, because "it refuses" and "it
-/// refuses at the seam" are different findings.
+/// All four are about **which call consumes a pending checked-IH marker**. Each
+/// is proved by a relation derived independently of the mechanism under test;
+/// the refusal message is retained only as a supplementary guard on WHICH PLANE
+/// caught it, never as the proof.
 ///
-/// ## The independent side
+/// ## The lowering key
 ///
-/// Each control names the exact law it must reach and the message that law
-/// emits, and the lawful witness is compiled alongside so a refusal that
-/// appears on every program would be visible as one. The plan for each
-/// perturbed program is rebuilt from that program's own text -- marker
-/// locations measured by the production collector -- so a control only reaches
-/// a later plane when the earlier ones genuinely admit it.
+/// `(exact defining body, exact application occurrence) -> (disposition, was it
+/// bound)`. The disposition is recorded **after the call instruction exists**, so
+/// a record means "this exact call was emitted"; the binding half comes from the
+/// seam, a different site. Body kind is `D8o`'s supplied key.
 ///
-/// ## Omission — the marker is entered and nothing consumes it
+/// ## Omission — emitted, and nothing consumed it
 ///
-/// The sole producer of the consumption is withheld and nothing else moves: the
-/// call is still emitted, lawfully and unchanged. The marker then reaches its
-/// close still pending and fails closed. ⛔ No lawful source produces this
-/// population -- the planner issues a call template only for an application it
-/// saw -- so withholding the consumption is the honest way to instantiate it,
-/// and it is a difference proof rather than a fixture.
+/// The sole producer of the consumption is withheld and nothing else moves. Every
+/// call that reaches the edge is still emitted -- the relation is non-empty -- and
+/// **no key is bound**. That is the omission population stated as a difference,
+/// and no lawful source constructs it: the planner issues a call template only
+/// for an application it saw, which is why the source-shaped variant this
+/// checkpoint first tried was removed rather than kept as scaffolding.
 ///
-/// ## Duplicate — a second marker while one is pending
+/// ## Wrong occurrence — the moved marker was consumed before closeout refused
 ///
-/// The outer marker wraps a complete application, as entry requires, and its
-/// ARGUMENT carries a second marker. The plan holds BOTH call templates, so
-/// planning admits the program and the nesting law is genuinely reached: one
-/// pending checked application at a time.
+/// With the marker on the ordinary call and the plan following it, the keyed
+/// relation shows the **moved** occurrence bound and `ConsumedHere`, and the
+/// checked application's own occurrence unbound. Those are lowering facts,
+/// recorded before the affine closeout refuses, so the refusal is attributed to
+/// a consumption that demonstrably happened at the wrong call rather than
+/// inferred from the error.
 ///
-/// ## Transplant — the marker moved, the plan unchanged
+/// ⚠ The law that refuses is the AFFINE CAUSAL one, not a marker law. The
+/// marker-plane defence is the occupancy gate, whose always-admit mutation is
+/// established at `20b0d6be` and is not re-run.
 ///
-/// PLANNING plane, and that is the finding rather than a shortfall: a marker at
-/// an occurrence the plan does not name is settled before lowering, by the
-/// location comparison, and never reaches the seam.
+/// ## Duplicate and transplant — population relations, not errors
 ///
-/// ## Wrong occurrence — the marker names the ordinary call
+/// Both are settled in planning, so the proof is a comparison of populations
+/// under exact `(declaration, checked occurrence path, template)` keys: what the
+/// SOURCE carries, against what the PLAN holds. Duplicate: the source carries two
+/// invocation markers and the plan holds both templates, so the program is
+/// admitted that far and the nesting law is genuinely what refuses. Transplant:
+/// the source's marker location under the plan's own key differs from the
+/// location the plan records for it, which is exactly the disagreement the
+/// location comparison exists to catch.
 ///
-/// Both sides moved together, so the program is well formed and reaches
-/// lowering. The marker is then consumed by the ordinary selected-argument call,
-/// the checked application goes unaccounted, and both calls answer for the one
-/// composed causal identity. The AFFINE CAUSAL law refuses.
-///
-/// ⚠ Stated exactly: this is the wrong-occurrence hazard reaching a live law,
-/// and that law is the affine one, not a marker law. The marker-plane defence
-/// against a wrong occurrence is the gate itself, whose always-admit mutation is
-/// established at `20b0d6be` and is not re-run here.
-///
-/// **Promise class: durable invariant.** Named refusals under existing laws,
-/// each labelled with the plane that produced it.
+/// **Promise class: durable invariant.**
 #[test]
 fn d8f_the_remaining_checked_marker_refusals() {
-    use crate::cranelift_backend::lowering::{with_d5a_marker_mutation, D5aMarkerMutation};
+    use crate::cranelift_backend::lowering::{
+        d5a_marker_events, reset_d5a_marker_events, reset_d8j_discharged,
+        reset_d8n_observations, reset_d8o_body_authorities, with_d5a_marker_mutation,
+        CheckedApplicationDisposition, D5aMarkerEvent, D5aMarkerMutation,
+    };
 
-    // The lawful witness compiles, so no refusal below is one this program has
-    // anyway.
+    // The lawful witnesses compile, so no refusal below is one these programs
+    // carry anyway.
+    reset_d8n_observations();
+    reset_d8o_body_authorities();
+    reset_d8j_discharged();
     assert!(
         d8f_compile(false).is_none() && d8f_compile(true).is_none(),
         "both lawful witnesses must compile, or every control below could be reporting a refusal \
          the program carries regardless of its perturbation"
     );
 
-    // Omission — withhold the sole producer of the consumption.
+    // === Omission ===
+    reset_d8n_observations();
+    reset_d8o_body_authorities();
+    reset_d5a_marker_events();
     let omitted = with_d5a_marker_mutation(D5aMarkerMutation::SuppressConsumption, || {
         format!("{:?}", d8f_compile(false))
     });
+    let observed = d8f_keyed_observations();
+    assert!(
+        !observed.is_empty(),
+        "the calls must still be EMITTED -- only the consumption is withheld. An empty relation \
+         means nothing reached the emission edge and the control is measuring an unreached path"
+    );
+    assert!(
+        observed.values().all(|(_, bound)| !bound),
+        "and NO key may be bound: the sole producer of a consumption is absent, so every emitted \
+         call is unconsumed. This is the omission population as a relation, not as an error \
+         string: {observed:?}"
+    );
+    assert!(
+        d5a_marker_events()
+            .iter()
+            .any(|event| matches!(event, D5aMarkerEvent::WorkerCallEmitted { .. })),
+        "and a real call instruction exists, from the independent marker-event log"
+    );
     assert!(
         omitted.contains("a checked computational-IH marker is a specialized-only surface"),
-        "a marker nothing consumed must fail closed at its own close. The call is still emitted \
-         and unchanged -- only the consumption is withheld -- so this is the omission population \
-         stated as a difference: {omitted}"
+        "supplementary: the plane that catches it is the marker's own close, which fails closed \
+         on a marker nothing consumed: {omitted}"
     );
 
-    // Duplicate — a second marker entered while one is pending.
-    let duplicated = format!(
-        "{:?}",
-        d8f_compile_with(false, D8fPerturbation::NestedMarker, D8fPerturbation::NestedMarker)
-    );
-    assert!(
-        duplicated.contains("nested computational IH invocation marker"),
-        "one pending checked application at a time. The plan holds BOTH templates here, so this \
-         must be the nesting law and not a plan/marker population refusal -- if it is the latter \
-         the control never reached the law it names: {duplicated}"
-    );
-
-    // Transplant — the marker moved, the plan left naming the old occurrence.
-    let transplanted = format!(
-        "{:?}",
-        d8f_compile_with(true, D8fPerturbation::MarkerMovedInward, D8fPerturbation::None)
-    );
-    assert!(
-        transplanted.contains("checked computational-IH call Runtime occurrences differ"),
-        "a marker at an occurrence the plan does not name is settled in PLANNING, by the location \
-         comparison, and never reaches the seam. That is where this law lives: {transplanted}"
-    );
-
-    // Wrong occurrence — the marker names the ordinary call, both sides moved.
+    // === Wrong occurrence ===
+    reset_d8n_observations();
+    reset_d8o_body_authorities();
     let wrong = format!(
         "{:?}",
         d8f_compile_with(
@@ -22380,25 +22455,105 @@ fn d8f_the_remaining_checked_marker_refusals() {
             D8fPerturbation::MarkerMovedInward,
         )
     );
+    let moved = d8f_keyed_observations();
+    let consumed = moved
+        .iter()
+        .filter(|(_, (disposition, _))| {
+            *disposition == CheckedApplicationDisposition::ConsumedHere
+        })
+        .map(|(key, _)| *key)
+        .collect::<Vec<_>>();
+    assert!(
+        !consumed.is_empty(),
+        "the moved marker must have been CONSUMED somewhere, recorded during lowering and before \
+         closeout refuses. Without that this control cannot say the refusal is about a wrong \
+         occurrence rather than about a marker nothing touched: {moved:?}"
+    );
+    for key in &consumed {
+        assert!(
+            moved[key].1,
+            "and every consumed occurrence must also be bound at the seam -- two logs, two sites: \
+             {moved:?}"
+        );
+    }
+    let unbound = moved
+        .iter()
+        .filter(|(_, (_, bound))| !bound)
+        .map(|(key, _)| *key)
+        .collect::<Vec<_>>();
+    assert!(
+        !unbound.is_empty(),
+        "and at least one emitted call in the same body must be UNBOUND -- the checked \
+         application, left unaccounted because the ordinary call took its marker. If every call \
+         were bound there would be no misattribution to refuse for: {moved:?}"
+    );
     assert!(
         wrong.contains("one causal identity was discharged twice in a single function"),
-        "with the marker on the ordinary call the checked application goes unaccounted and both \
-         calls answer for the one composed identity. MEASURED: the law that refuses is the AFFINE \
-         CAUSAL one, not a marker law -- the marker-plane defence is the occupancy gate, whose \
-         always-admit mutation is established at 20b0d6be. If this message ever changes, the \
-         hazard has moved and this expectation should be restated rather than deleted: {wrong}"
+        "supplementary: the plane that catches it is the AFFINE CAUSAL law, not a marker law. The \
+         marker-plane defence is the occupancy gate, established at 20b0d6be: {wrong}"
     );
 
-    // Each control must name a DIFFERENT law, or two of them are the same test.
-    let refusals = [&omitted, &duplicated, &transplanted, &wrong]
-        .into_iter()
-        .cloned()
-        .collect::<BTreeSet<_>>();
+    // === Duplicate — population relation under exact declaration/path keys ===
+    let source = d8f_source_marker_population(false, D8fPerturbation::NestedMarker);
+    let planned = d8f_plan_marker_population(false, D8fPerturbation::NestedMarker);
     assert_eq!(
-        refusals.len(),
-        4,
-        "the four controls must reach four distinct refusals. Two identical messages would mean \
-         one perturbation is being caught by another's law and the matrix has a hole where it \
-         looks covered: {refusals:?}"
+        source.keys().collect::<Vec<_>>(),
+        planned.keys().collect::<Vec<_>>(),
+        "the plan must hold a template for EVERY source marker, under the same \
+         (declaration, path, template) key. If it does not, planning refuses on the population \
+         and the nesting law is never reached -- which is the mistake this control was rebuilt to \
+         exclude: {source:?} vs {planned:?}"
+    );
+    assert_eq!(
+        source.len(),
+        2,
+        "and the duplicate perturbation must carry exactly TWO invocation markers, or there is \
+         nothing to nest: {source:?}"
+    );
+    for (key, locations) in &source {
+        assert_eq!(
+            planned.get(key),
+            Some(locations),
+            "and each template's planned locations must be the source's own measured ones, under \
+             key {key:?}"
+        );
+    }
+    let duplicated = format!(
+        "{:?}",
+        d8f_compile_with(false, D8fPerturbation::NestedMarker, D8fPerturbation::NestedMarker)
+    );
+    assert!(
+        duplicated.contains("nested computational IH invocation marker"),
+        "supplementary: with the populations agreeing, the plane that catches it is the nesting \
+         law -- one pending checked application at a time: {duplicated}"
+    );
+
+    // === Transplant — the source moved, the plan left where it was ===
+    let moved_source = d8f_source_marker_population(true, D8fPerturbation::MarkerMovedInward);
+    let stale_plan = d8f_plan_marker_population(true, D8fPerturbation::None);
+    assert_eq!(
+        moved_source.keys().collect::<Vec<_>>(),
+        stale_plan.keys().collect::<Vec<_>>(),
+        "the transplant keeps the same declaration, path and template -- only the marker's \
+         LOCATION moves. If the keys differed this would be a population mismatch rather than a \
+         transplant: {moved_source:?} vs {stale_plan:?}"
+    );
+    for (key, locations) in &moved_source {
+        assert_ne!(
+            stale_plan.get(key),
+            Some(locations),
+            "and under that identical key the source's measured location must DIFFER from the \
+             one the plan records. That disagreement is what the location comparison exists to \
+             catch, and it is the transplant stated as a relation: {key:?}"
+        );
+    }
+    let transplanted = format!(
+        "{:?}",
+        d8f_compile_with(true, D8fPerturbation::MarkerMovedInward, D8fPerturbation::None)
+    );
+    assert!(
+        transplanted.contains("checked computational-IH call Runtime occurrences differ"),
+        "supplementary: the plane that catches it is PLANNING's location comparison, so a \
+         transplanted marker never reaches the seam: {transplanted}"
     );
 }

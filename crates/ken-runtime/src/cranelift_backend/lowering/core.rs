@@ -4244,12 +4244,6 @@ impl<'a> Lowering<'a> {
                                 // written only now that the call instruction
                                 // exists and carrying the run it actually took.
                                 #[cfg(test)]
-                                crate::cranelift_backend::lowering::record_d8f_disposition(
-                                    self.defining_function_id,
-                                    static_origin,
-                                    disposition,
-                                );
-                                #[cfg(test)]
                                 if disposition == CheckedApplicationDisposition::ConsumedHere {
                                     crate::cranelift_backend::lowering::record_d8p_emitted_target(
                                         crate::cranelift_backend::lowering::D8pEmittedTarget {
@@ -4262,6 +4256,17 @@ impl<'a> Lowering<'a> {
                                         },
                                     );
                                 }
+                                // `D8f` — the disposition, recorded AFTER the
+                                // call instruction exists. A record here is
+                                // therefore "this exact call was emitted, with
+                                // this disposition", which is what an omission
+                                // control needs: emitted, and not consumed.
+                                #[cfg(test)]
+                                crate::cranelift_backend::lowering::record_d8f_disposition(
+                                    self.defining_function_id,
+                                    static_origin,
+                                    disposition,
+                                );
                                 // `D8j` — the call is emitted and its result is
                                 // in hand under the SAME `control` this arm was
                                 // entered with. Only now may a composed
@@ -5375,12 +5380,6 @@ impl<'a> Lowering<'a> {
                                             )?;
                                         // `D8p` — the target side, post-instruction.
                                         #[cfg(test)]
-                                        crate::cranelift_backend::lowering::record_d8f_disposition(
-                                            self.defining_function_id,
-                                            static_origin,
-                                            disposition,
-                                        );
-                                        #[cfg(test)]
                                         if disposition
                                             == CheckedApplicationDisposition::ConsumedHere
                                         {
@@ -5395,6 +5394,13 @@ impl<'a> Lowering<'a> {
                                                 },
                                             );
                                         }
+                                        // `D8f` — post-instruction, as above.
+                                        #[cfg(test)]
+                                        crate::cranelift_backend::lowering::record_d8f_disposition(
+                                            self.defining_function_id,
+                                            static_origin,
+                                            disposition,
+                                        );
                                         // `D8j` — the non-empty argument run
                                         // reached here through `CallArgument`
                                         // under the machine's own control, and
