@@ -22794,7 +22794,26 @@ fn d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emit
         "the witness must emit static-worker calls, or every clause below is vacuous"
     );
 
-    // The independent side: the planner's own contexts.
+    // The independent side: the planner's own unit definitions and contexts.
+    //
+    // ⛔ Both read from a plan built separately from the emission run, so no
+    // expectation below is an echo of the compile that produced the
+    // observations.
+    let worker_contracts = with_d5a_witness_plan(|plan| {
+        let mut declared: BTreeMap<StaticOriginId, (u32, usize)> = BTreeMap::new();
+        for unit in plan.continuation_units().expect("continuation units") {
+            let previous = declared.insert(
+                unit.worker_body_origin(),
+                (unit.worker_declared_arity(), unit.worker_capture_count()),
+            );
+            assert!(
+                previous.is_none() || previous == Some((unit.worker_declared_arity(), unit.worker_capture_count())),
+                "two units declare DIFFERENT contracts for one worker body, so the expectation \
+                 below would be choosing between them"
+            );
+        }
+        declared
+    });
     let contexts = with_d5a_witness_plan(|plan| {
         let mut declared = BTreeMap::new();
         for context in plan.continuation_contexts().expect("contexts") {
@@ -22829,11 +22848,29 @@ fn d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emit
         // worker body origin by design (`D6a`), so an origin recorded here is
         // identical on both routes and says nothing about which table answered.
         emitted_callees.push(*decoded);
+        // The RAW CONTRACT, from unit definition rather than from the binding.
+        //
+        // ⛔ `declared_arity` and `captures` on the emission are the
+        // `StaticWorkerBinding`'s own fields; comparing the raw run against them
+        // is the binding agreeing with itself. The planner's unit population is
+        // asked instead, keyed by the worker body this call targets.
+        let (planned_arity, planned_captures) = *worker_contracts.get(target).unwrap_or_else(|| {
+            panic!(
+                "the call at {call:?} in {function:?} targets body {target:?}, which the PLANNER \
+                 defines no unit for: {worker_contracts:?}"
+            )
+        });
+        assert_eq!(
+            (*declared_arity, *captures),
+            (planned_arity, planned_captures),
+            "the binding's declared contract must be the one unit definition states for that \
+             worker body, under key ({function:?}, {call:?})"
+        );
         assert_eq!(
             *raw,
-            *declared_arity as usize + captures,
-            "the raw run is the worker's own declared contract: its arity plus its stored \
-             captures, under key ({function:?}, {call:?})"
+            planned_arity as usize + planned_captures,
+            "and the raw run is exactly that independently declared arity plus capture count, \
+             under key ({function:?}, {call:?})"
         );
         let expected_suffix = contexts.get(target).copied();
         let expected_route = match expected_suffix {
@@ -23017,20 +23054,56 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
         "the planner's composed calls must be distinct under their causal coordinate, or naming \
          one by coordinate is ambiguous"
     );
-    let wanted = *coordinates
-        .iter()
-        .next()
-        .expect("the witness plans a composed call");
+    // The two source-authored halves of the coordinate, read off the WITNESS's
+    // own text rather than off the planned set: the composed bridge sits in the
+    // eliminator's case 0, and its producer's recursive position is 0.
+    //
+    // ⛔ Not `coordinates.iter().next()`, not an observed set, not a
+    // complement, and not any order surrogate. The construct and continuation
+    // origins are then read from the ONE call this source-named key selects --
+    // which is sound precisely because the key did the selecting.
+    let (source_alternative, source_recursive_position) = {
+        let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
+            panic!("transparent")
+        };
+        let RuntimeExpr::Closure { body, .. } = body else {
+            panic!("closure")
+        };
+        let RuntimeExpr::Let { value, .. } = body.as_ref() else {
+            panic!("let")
+        };
+        let RuntimeExpr::ComputationalMatch { cases, .. } = value.as_ref() else {
+            panic!("eliminator")
+        };
+        let alternative = cases
+            .iter()
+            .position(|case| {
+                matches!(case.body, RuntimeExpr::CheckedSubcontinuationFrame { .. })
+            })
+            .expect("the witness's composed bridge sits in exactly one case");
+        let position = *cases[alternative]
+            .recursive_positions
+            .first()
+            .expect("that case declares its recursive position");
+        (alternative as u32, position as u32)
+    };
     let matching = calls
         .iter()
-        .filter(|call| coordinate(call) == wanted)
+        .filter(|call| {
+            call.producer_alternative() == source_alternative
+                && call.recursive_position() == source_recursive_position
+        })
         .collect::<Vec<_>>();
     assert_eq!(
         matching.len(),
         1,
-        "exactly ONE planned call carries this causal coordinate: {wanted:?}"
+        "exactly ONE planned call carries the coordinate the SOURCE names -- alternative \
+         {source_alternative}, recursive position {source_recursive_position}. More would make \
+         the source-authored key ambiguous and force an order surrogate; none would mean the \
+         planner issued no call for the bridge the witness spells"
     );
     let call = matching[0];
+    let wanted = coordinate(call);
     let units = plan.continuation_units().expect("continuation units");
     let target = units
         .iter()
@@ -23132,62 +23205,90 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8g` — the two producer-input mutations, each
-/// proved to have fired and to be caught by its own relation first.**
+/// caught by the first production guard that owns the input it moved.**
 ///
-/// Both are durable `#[cfg(test)]` RAII switches in production, restored however
-/// the body leaves, with an application counter. A control that silently never
-/// applied is a green that proves the opposite of what it claims, so the count
-/// is asserted before the refusal is.
+/// ## Two proof planes, and this row is the second
 ///
-/// ## Wrong table
+/// The positive plane is post-emission: the keyed relation in
+/// `d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emitter`.
+/// This row is the **mutation plane**, and its refusals are **pre-emission**.
+/// That is not a weaker result and it is not described as a relation failure.
 ///
-/// Each route reads the other's target table. The call key, the binding, the
-/// route field and the operand run are all untouched -- only which table answers
-/// moves. The decoded callee then differs from the body the binding names, and
-/// the functionized relation's decode clause is where that lands.
+/// Both mutations move an input that must be valid **before** an instruction
+/// exists, so the first guard that owns that input refuses and no call is ever
+/// written. Measured: the `D8g` emission set is **empty** in both. An earlier
+/// fail-closed guard is stronger than arranging a bad-but-emittable call so a
+/// downstream observer can reject it — and arranging one would mean declaring
+/// the other table's target into the function, which is the route/target
+/// authority expansion this checkpoint bans. Architect ruling, `evt_5vwdtrznf3km4`.
 ///
-/// ## Withheld context suffix
+/// ## What each row asserts
 ///
-/// The sole producer of the generated-context capture run is withheld; the raw
-/// run and the call itself stay exact. The context-routed call then carries the
-/// raw run alone, against a planner that independently declares a capture run
-/// for that target.
+/// The mutation **fired** (a control that silently never applied is a green
+/// proving the opposite of its claim); the **exact named refusal**, by category
+/// and discriminating reason, not `is_err()`; and **zero post-emission records**
+/// for that compilation. Only the compilation under test is run — not the
+/// positive row with its setup `.expect`s, whose panic would be indistinguishable
+/// from the refusal being measured.
 ///
 /// **Promise class: durable invariant.**
 #[test]
-fn d8g_the_producer_input_mutations_fire_and_are_caught_by_their_own_relation() {
-    use crate::cranelift_backend::lowering::{with_d8g_mutation, D8gMutation};
+fn d8g_each_producer_input_mutation_is_caught_by_the_guard_that_owns_it() {
+    use crate::cranelift_backend::lowering::{
+        d8g_emissions, reset_d8g_emissions, with_d8g_mutation, D8gMutation,
+    };
 
-    for (mutation, expected) in [
-        (D8gMutation::WrongTable, "wrong table"),
-        (D8gMutation::WithholdContextSuffix, "withheld context suffix"),
+    let compile = || {
+        crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+            "ken_d8g_mutation",
+            false,
+        )
+        .map(|_| ())
+    };
+
+    for (mutation, guard) in [
+        // The table lookup owns which table answers.
+        (D8gMutation::WrongTable, "no raw_worker_calls target for body origin"),
+        // Callee-frame input coverage owns the operand run.
+        (
+            D8gMutation::WithholdContextSuffix,
+            "callee frame is missing a declared input",
+        ),
     ] {
-        let (outcome, applications) = with_d8g_mutation(mutation, || {
-            std::panic::catch_unwind(
-                d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emitter,
-            )
-        });
+        reset_d8g_emissions();
+        let (outcome, applications) = with_d8g_mutation(mutation, compile);
         assert!(
             applications > 0,
-            "the {expected} mutation must have FIRED. Zero applications means the switch never \
-             reached its site and the refusal below, if any, is about something else"
+            "the {mutation:?} mutation must have FIRED. Zero applications means the switch never \
+             reached its site, and any refusal below is about something else"
+        );
+        let refusal = outcome.expect_err(&format!(
+            "{mutation:?} moves an input a production guard owns, so the compile must refuse"
+        ));
+        let refusal = format!("{refusal:?}");
+        assert!(
+            refusal.contains(guard),
+            "and it must be the EXACT guard that owns the moved input, by its discriminating \
+             reason -- not merely an error. A different refusal means the mutation is being \
+             caught by something that does not own what it moved: {refusal}"
         );
         assert!(
-            outcome.is_err(),
-            "and the functionized relation must reject it: {expected} moved a producer input the \
-             relation owns, so a green here means the relation is not comparing that input"
+            d8g_emissions().is_empty(),
+            "and NO instruction was emitted: the guard is pre-emission, which is why this plane \
+             is not the post-emission relation and is not described as one. A non-empty set here \
+             would mean an invalid call was allowed to exist: {:?}",
+            d8g_emissions()
         );
     }
 
-    // And the switch is restored however the body leaves -- the panic above
-    // unwound through it.
-    let (_, applications) = with_d8g_mutation(D8gMutation::Exact, || {
-        d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emitter()
-    });
+    // The positive plane, rerun exactly, with the switch restored -- which also
+    // shows the scoped RAII survived both refusals above.
+    reset_d8g_emissions();
+    let (outcome, applications) = with_d8g_mutation(D8gMutation::Exact, compile);
     assert_eq!(
         applications, 0,
-        "with no mutation armed the switch must not apply, and the relation must pass -- which \
-         also shows the RAII restore survived the unwinding panics above"
+        "with no mutation armed the switch must not apply"
     );
+    outcome.expect("and the exact witness compiles");
+    d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emitter();
 }
-
