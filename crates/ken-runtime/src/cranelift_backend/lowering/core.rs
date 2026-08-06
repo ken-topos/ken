@@ -5991,6 +5991,72 @@ impl<'a> Lowering<'a> {
     /// not lowered. The runtime closed default covers it, so an eliminated
     /// constructor arriving anyway still reaches a defined outcome rather than
     /// falling into a neighbouring case.
+    /// The planner's emission verdict for one ordinary `Match` case, asked per
+    /// case and never defaulted. An origin with no record is a refusal to
+    /// answer, so it fails closed rather than being read as `Reachable`.
+    fn source_carried_case_is_emitted(
+        &self,
+        static_origin: StaticOriginId,
+        index: usize,
+    ) -> Result<bool, CraneliftBackendError> {
+        let status = self
+            .static_transition_plan
+            .case_emission_status(static_origin, index)?
+            .ok_or_else(|| {
+                unsupported(
+                    "Match",
+                    "a carried source match has no planned case-emission verdict",
+                )
+            })?;
+        Ok(status == CaseEmissionStatus::Reachable)
+    }
+
+    /// Lower one preallocated semantic leaf of a carried source match.
+    ///
+    /// The leaf already holds its bindings as block parameters, so the selector
+    /// graph that jumped here is closed. This mints exactly ONE source
+    /// predecessor for this physical leaf, instantiates the prefix on it, and
+    /// lowers the case body under the match's original continuation. The only
+    /// accepted terminal results are a sealed trap or a `RecursiveBackedge`.
+    #[allow(clippy::too_many_arguments)]
+    fn lower_source_carried_leaf<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        frame_scope: &mut CheckedFrameBranchScope,
+        static_origin: StaticOriginId,
+        index: usize,
+        body: RuntimeExpr,
+        bindings: Vec<LoweringOperand>,
+        env: &[LoweringEnvironmentBinding],
+        target: &SourceJoinTarget<'b>,
+        source_prefix_template: &SourcePrefixTemplate,
+        branch_control: SourceControl<'b>,
+    ) -> Result<(), CraneliftBackendError> {
+        let _ = (target, source_prefix_template);
+        let case_body = self.owned_case_body_occurrence(static_origin, index, body)?;
+        let lowered = self.lower_forked_branch(
+            builder,
+            frame_scope,
+            case_body,
+            env_with_operands(bindings, env),
+            branch_control,
+        )?;
+        if self.seal_source_trap_branch(builder, &lowered)? {
+            // A trap terminates this mutually exclusive predecessor.
+            return Ok(());
+        }
+        if !matches!(
+            lowered,
+            LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+        ) {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                format!("carried-match leaf {index} did not seal its distinct affine join edge"),
+            ));
+        }
+        Ok(())
+    }
+
     fn lower_source_carried_match<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -6001,6 +6067,71 @@ impl<'a> Lowering<'a> {
         env: &[LoweringEnvironmentBinding],
         suffix_control: SourceControl<'b>,
     ) -> Result<LoweringOperand, CraneliftBackendError> {
+        // ── PHASE 0 — PREVALIDATE, BEFORE A SINGLE BLOCK EXISTS ──
+        //
+        // A malformed table must fail as an `Err`, not as half an emitted
+        // graph. Everything decided here is a compile-time fact about the case
+        // set, so none of it can depend on a block being open.
+        let mut emitted = Vec::new();
+        for index in 0..cases.len() {
+            if self.source_carried_case_is_emitted(static_origin, index)? {
+                emitted.push(index);
+            }
+        }
+
+        let ok_case = cases
+            .iter()
+            .position(|case| case.constructor == self.process_symbols.result_ok);
+        let err_case = cases
+            .iter()
+            .position(|case| case.constructor == self.process_symbols.result_err);
+        let admits_host_result = ok_case.is_some() || err_case.is_some();
+        if admits_host_result {
+            let (Some(ok_index), Some(err_index)) = (ok_case, err_case) else {
+                return Err(unsupported(
+                    "HostResult",
+                    "a carried HostResult match requires both closed Result cases",
+                ));
+            };
+            if cases[ok_index].binders != 1 || cases[err_index].binders != 1 {
+                return Err(unsupported(
+                    "HostResult",
+                    "carried Result cases must each bind exactly one selected payload",
+                ));
+            }
+        }
+
+        // The whole case set must be process-input family: a runtime class test
+        // alone would wrongly demand borrowed identities of unrelated source
+        // constructors, which is why this is decided from the cases.
+        let admits_borrowed = self.process_object
+            && cases.iter().all(|case| {
+                borrowed_constructor_identity(&self.process_symbols, &case.constructor).is_some()
+            });
+        let mut borrowed_identities = Vec::new();
+        if admits_borrowed {
+            for case in cases {
+                let (tag, arity) =
+                    borrowed_constructor_identity(&self.process_symbols, &case.constructor)
+                        .ok_or_else(|| {
+                            unsupported(
+                                "Match",
+                                format!(
+                                    "{} has no borrowed constructor identity",
+                                    case.constructor
+                                ),
+                            )
+                        })?;
+                if case.binders != arity {
+                    return Err(unsupported(
+                        "Match",
+                        format!("{} borrowed arity mismatch", case.constructor),
+                    ));
+                }
+                borrowed_identities.push((tag, arity));
+            }
+        }
+
         let (source_prefix_template, terminal) =
             Self::split_source_prefix(suffix_control.continuation)?;
         let mut local_completion = None;
@@ -6038,116 +6169,326 @@ impl<'a> Lowering<'a> {
                 }
             }
         };
+        let arm_selected = suffix_control.selected.clone();
+        let arm_lineage = suffix_control.selected_lineage.clone();
+        let arm_outer = suffix_control.terminal_outer;
 
-        // Read once, in the block that dominates every arm below.
-        let tag = self.emit_carrier_tag(builder, scrutinee)?;
-        let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
+        // ── PHASE 1 — ALLOCATE EVERY BLOCK ──
+        //
+        // Leaves take their bindings as BLOCK PARAMETERS. That is what makes
+        // the selector graph closable before any body is lowered: a selector
+        // never has to wait for a leaf, it just jumps with the values it read.
+        let pointer_type = builder.func.dfg.value_type(self.carrier_arena()?);
+        let mismatch_block = builder.create_block();
+        let default_block = builder.create_block();
 
-        let mut frame_scope =
-            CheckedFrameBranchScope::capture(&self.consumed_subcontinuation_frames);
-        let mut test_block = builder
+        // One carried leaf per emitted case. Constructor and `HostResult` SHARE
+        // a case's carried leaf, which is sound exactly because their payload
+        // shapes agree there: a Result case binds one child, and the
+        // represented route projects one field for it.
+        let mut carried_leaves = Vec::new();
+        for &index in &emitted {
+            let leaf = builder.create_block();
+            for _ in 0..cases[index].binders {
+                builder.append_block_param(leaf, types::I64);
+            }
+            carried_leaves.push((index, leaf));
+        }
+        // Borrowed leaves are DISTINCT, never shared with the carried ones:
+        // their environment is `BorrowedNativeValue` pointers into host memory,
+        // and relabelling those as represented carrier children is precisely
+        // the mislabelling this route must not do.
+        let mut borrowed_leaves = Vec::new();
+        if admits_borrowed {
+            for &index in &emitted {
+                let leaf = builder.create_block();
+                for _ in 0..borrowed_identities[index].1 {
+                    builder.append_block_param(leaf, pointer_type);
+                }
+                borrowed_leaves.push((index, leaf));
+            }
+        }
+        let leaf_of = |leaves: &[(usize, cranelift_codegen::ir::Block)], index: usize| {
+            leaves
+                .iter()
+                .find(|(candidate, _)| *candidate == index)
+                .map(|(_, block)| *block)
+        };
+
+        // ── PHASE 2 — EMIT AND TERMINATE THE ENTIRE SELECTOR GRAPH ──
+        //
+        // Nothing below lowers a source body. Every path created here ends in a
+        // `brif`, a `jump` or a `return_`, so no block is left live when leaf
+        // lowering begins.
+        let class = self.emit_carrier_class(builder, scrutinee)?;
+        let mut class_test = builder
             .current_block()
             .expect("carried source match block");
 
-        for (index, case) in cases.iter().enumerate() {
-            // The planner's verdict, asked per case and never defaulted. An
-            // origin with no record is a refusal to answer, so it fails closed
-            // rather than being read as `Reachable`.
-            let status = self
-                .static_transition_plan
-                .case_emission_status(static_origin, index)?
-                .ok_or_else(|| {
-                    unsupported(
-                        "Match",
-                        "a carried source match has no planned case-emission verdict",
-                    )
-                })?;
-            if status == CaseEmissionStatus::Eliminated {
-                continue;
+        if admits_host_result {
+            let ok_index = ok_case.expect("prevalidated");
+            let err_index = err_case.expect("prevalidated");
+            let host_result = builder.create_block();
+            let next_class = builder.create_block();
+            if builder.current_block() != Some(class_test) {
+                builder.switch_to_block(class_test);
             }
+            let is_host_result = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                class,
+                BoundaryClass::HostResult as i64,
+            );
+            builder
+                .ins()
+                .brif(is_host_result, host_result, &[], next_class, &[]);
 
-            if builder.current_block() != Some(test_block) {
-                builder.switch_to_block(test_block);
+            builder.switch_to_block(host_result);
+            let success = self.emit_carrier_host_success(builder, scrutinee)?;
+            let payload = self.emit_carrier_host_payload(builder, scrutinee)?;
+            // An eliminated alternative has no leaf, so it takes the closed
+            // default -- exactly as an unmatched constructor does.
+            let ok_target = leaf_of(&carried_leaves, ok_index).unwrap_or(default_block);
+            let err_target = leaf_of(&carried_leaves, err_index).unwrap_or(default_block);
+            let ok_args: Vec<_> = if ok_target == default_block {
+                Vec::new()
+            } else {
+                vec![payload.word.into()]
+            };
+            let err_args: Vec<_> = if err_target == default_block {
+                Vec::new()
+            } else {
+                vec![payload.word.into()]
+            };
+            builder
+                .ins()
+                .brif(success, ok_target, &ok_args, err_target, &err_args);
+            class_test = next_class;
+        }
+
+        if admits_borrowed {
+            let borrowed = builder.create_block();
+            let next_class = builder.create_block();
+            if builder.current_block() != Some(class_test) {
+                builder.switch_to_block(class_test);
+            }
+            let is_borrowed = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                class,
+                BoundaryClass::BorrowedOpaque as i64,
+            );
+            builder
+                .ins()
+                .brif(is_borrowed, borrowed, &[], next_class, &[]);
+
+            builder.switch_to_block(borrowed);
+            let pointer = self.emit_carrier_scalar(builder, scrutinee)?;
+            let kind = builder
+                .ins()
+                .load(types::I64, MemFlags::trusted(), pointer, 0);
+            Self::require_i64(builder, kind, 2);
+            let tag = builder
+                .ins()
+                .load(types::I64, MemFlags::trusted(), pointer, 8);
+            let arity = builder
+                .ins()
+                .load(types::I64, MemFlags::trusted(), pointer, 24);
+            let fields = builder
+                .ins()
+                .load(pointer_type, MemFlags::trusted(), pointer, 16);
+            let mut borrowed_test = builder
+                .current_block()
+                .expect("borrowed carried source match block");
+            for &index in &emitted {
+                let (expected_tag, expected_arity) = borrowed_identities[index];
+                let leaf = leaf_of(&borrowed_leaves, index)
+                    .expect("every emitted case has a borrowed leaf when admitted");
+                let selected = builder.create_block();
+                let next = builder.create_block();
+                if builder.current_block() != Some(borrowed_test) {
+                    builder.switch_to_block(borrowed_test);
+                }
+                let matched = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    tag,
+                    expected_tag,
+                );
+                builder.ins().brif(matched, selected, &[], next, &[]);
+
+                builder.switch_to_block(selected);
+                Self::require_i64(builder, arity, expected_arity as i64);
+                if expected_arity != 0 {
+                    Self::require_nonzero(builder, fields);
+                }
+                let projected: Vec<_> = (0..expected_arity)
+                    .map(|position| {
+                        builder
+                            .ins()
+                            .iadd_imm(fields, (position * 32) as i64)
+                            .into()
+                    })
+                    .collect();
+                builder.ins().jump(leaf, &projected);
+                borrowed_test = next;
+            }
+            builder.switch_to_block(borrowed_test);
+            builder.ins().jump(default_block, &[]);
+            class_test = next_class;
+        }
+
+        // The represented-constructor chain, and the residual class test. A
+        // class this case set never admitted reaches `mismatch_block`.
+        let constructor_block = builder.create_block();
+        if builder.current_block() != Some(class_test) {
+            builder.switch_to_block(class_test);
+        }
+        let is_constructor = builder.ins().icmp_imm(
+            cranelift_codegen::ir::condcodes::IntCC::Equal,
+            class,
+            BoundaryClass::Constructor as i64,
+        );
+        builder
+            .ins()
+            .brif(is_constructor, constructor_block, &[], mismatch_block, &[]);
+
+        builder.switch_to_block(constructor_block);
+        let tag = self.emit_carrier_tag(builder, scrutinee)?;
+        let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
+        let mut tag_test = builder
+            .current_block()
+            .expect("represented carried source match block");
+        for &index in &emitted {
+            let leaf =
+                leaf_of(&carried_leaves, index).expect("every emitted case has a carried leaf");
+            let selected = builder.create_block();
+            let next = builder.create_block();
+            if builder.current_block() != Some(tag_test) {
+                builder.switch_to_block(tag_test);
             }
             let identity = self
                 .static_transition_plan
                 .case_constructor_identity(static_origin, index)?
                 .tag_abi_word()?;
-            let arm = builder.create_block();
-            let next = builder.create_block();
             let matched = builder.ins().icmp_imm(
                 cranelift_codegen::ir::condcodes::IntCC::Equal,
                 tag,
                 identity as i64,
             );
-            builder.ins().brif(matched, arm, &[], next, &[]);
+            builder.ins().brif(matched, selected, &[], next, &[]);
 
-            builder.switch_to_block(arm);
-            let binders = i64::try_from(case.binders).map_err(|_| {
+            builder.switch_to_block(selected);
+            let binders = i64::try_from(cases[index].binders).map_err(|_| {
                 unsupported(
                     "BoundaryCarrier",
                     "a case binds more constructor arguments than the carrier ABI can count",
                 )
             })?;
-            // The declared arity is checked against the word actually delivered,
-            // at runtime, which is where a disagreement between a case header
-            // and a boundary value belongs.
+            // The declared arity is checked against the word actually
+            // delivered, at runtime, which is where a disagreement between a
+            // case header and a boundary value belongs.
             Self::require_i64(builder, field_count, binders);
-            let mut children = Vec::with_capacity(case.binders);
-            for position in 0..case.binders {
+            let mut projected = Vec::with_capacity(cases[index].binders);
+            for position in 0..cases[index].binders {
                 let child = self.emit_carrier_field(builder, scrutinee, position)?;
-                children.push(LoweringOperand::Carried(child));
+                projected.push(child.word.into());
             }
+            builder.ins().jump(leaf, &projected);
+            tag_test = next;
+        }
+        builder.switch_to_block(tag_test);
+        builder.ins().jump(default_block, &[]);
 
+        // The representation this case set never decoded. It is NOT the match's
+        // default: nothing was decoded, so no alternative was ruled out. It
+        // mints no predecessor, consumes no branch frame, joins nothing, and
+        // does not lower the default.
+        builder.switch_to_block(mismatch_block);
+        let mismatch = builder
+            .ins()
+            .iconst(types::I64, MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS);
+        builder.ins().return_(&[mismatch]);
+
+        // ── PHASE 3 — LOWER ONLY THE PREALLOCATED SEMANTIC LEAVES ──
+        let mut frame_scope =
+            CheckedFrameBranchScope::capture(&self.consumed_subcontinuation_frames);
+
+        for (index, leaf) in carried_leaves {
+            builder.switch_to_block(leaf);
+            let bindings: Vec<_> = builder
+                .block_params(leaf)
+                .to_vec()
+                .into_iter()
+                .map(|word| LoweringOperand::Carried(CarriedBoundaryWord { word }))
+                .collect();
             let edge = self.mint_source_predecessor(target.clone());
             let continuation =
                 Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
             let branch_control = SourceControl {
                 continuation,
-                selected: suffix_control.selected.clone(),
-                selected_lineage: suffix_control.selected_lineage.clone(),
-                terminal_outer: suffix_control.terminal_outer,
+                selected: arm_selected.clone(),
+                selected_lineage: arm_lineage.clone(),
+                terminal_outer: arm_outer,
             };
-            let body = self.owned_case_body_occurrence(static_origin, index, case.body.clone())?;
-            let lowered = self.lower_forked_branch(
+            self.lower_source_carried_leaf(
                 builder,
                 &mut frame_scope,
-                body,
-                env_with_operands(children, env),
+                static_origin,
+                index,
+                cases[index].body.clone(),
+                bindings,
+                env,
+                &target,
+                &source_prefix_template,
                 branch_control,
             )?;
-            if self.seal_source_trap_branch(builder, &lowered)? {
-                // A trap terminates this mutually exclusive predecessor.
-            } else if !matches!(
-                lowered,
-                LoweringOperand::Specialized(Lowered::RecursiveBackedge)
-            ) {
-                return Err(unsupported(
-                    "NativeJoinPlanV1",
-                    format!(
-                        "carried-match predecessor {index} did not seal its distinct affine join edge"
-                    ),
-                ));
-            }
-            test_block = next;
         }
 
-        // The runtime closed default. It carries every case the planner
-        // eliminated as well as every constructor outside the case set, so the
-        // chain is closed by construction rather than by exhausting the arms.
-        // `default` is an ATOM of the match occurrence rather than a child of
-        // it, so the honest origin for this synthesized term is the match
-        // occurrence's own; `Trap` is a leaf, so no child is derived from it.
-        // Do not mint an origin here.
-        builder.switch_to_block(test_block);
+        for (index, leaf) in borrowed_leaves {
+            builder.switch_to_block(leaf);
+            let bindings: Vec<_> = builder
+                .block_params(leaf)
+                .to_vec()
+                .into_iter()
+                .map(|pointer| {
+                    LoweringOperand::Specialized(Lowered::BorrowedNativeValue { pointer })
+                })
+                .collect();
+            let edge = self.mint_source_predecessor(target.clone());
+            let continuation =
+                Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
+            let branch_control = SourceControl {
+                continuation,
+                selected: arm_selected.clone(),
+                selected_lineage: arm_lineage.clone(),
+                terminal_outer: arm_outer,
+            };
+            self.lower_source_carried_leaf(
+                builder,
+                &mut frame_scope,
+                static_origin,
+                index,
+                cases[index].body.clone(),
+                bindings,
+                env,
+                &target,
+                &source_prefix_template,
+                branch_control,
+            )?;
+        }
+
+        // The shared semantic default, lowered exactly once. `default` is an
+        // ATOM of the match occurrence rather than a child of it, so the honest
+        // origin for this synthesized term is the match occurrence's own;
+        // `Trap` is a leaf, so no child is derived from it. Do not mint an
+        // origin here.
+        builder.switch_to_block(default_block);
         let edge = self.mint_source_predecessor(target.clone());
         let continuation =
             Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
         let default_control = SourceControl {
             continuation,
-            selected: suffix_control.selected.clone(),
-            selected_lineage: suffix_control.selected_lineage.clone(),
-            terminal_outer: suffix_control.terminal_outer,
+            selected: arm_selected.clone(),
+            selected_lineage: arm_lineage.clone(),
+            terminal_outer: arm_outer,
         };
         let lowered = self.lower_forked_branch(
             builder,
@@ -6159,17 +6500,19 @@ impl<'a> Lowering<'a> {
             env.to_vec(),
             default_control,
         )?;
-        if self.seal_source_trap_branch(builder, &lowered)? {
-            // The default trap terminates the fall-through predecessor.
-        } else if !matches!(
-            lowered,
-            LoweringOperand::Specialized(Lowered::RecursiveBackedge)
-        ) {
+        if !self.seal_source_trap_branch(builder, &lowered)?
+            && !matches!(
+                lowered,
+                LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+            )
+        {
             return Err(unsupported(
                 "NativeJoinPlanV1",
                 "carried-match default predecessor did not seal its distinct affine join edge",
             ));
         }
+
+        // ── PHASE 4 — UNION ONCE, FINISH ONCE ──
         self.consumed_subcontinuation_frames = frame_scope.finish();
         let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
             local_completion
