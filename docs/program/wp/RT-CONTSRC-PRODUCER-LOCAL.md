@@ -1378,9 +1378,10 @@ all six failing `D0` rows.
   | 7 | `D8j` — verified source-machine discharge + function-local relation | lowering consumer + proof | held |
   | 8 | `D8k` — partitioned global closeout | proof | held |
   | 9 | `D8e` DISCHARGES — causal obligation dischargeable and discharged | — | **DISCHARGED, Steward ruling below** |
-  | 10 | `D8l` — the ordinary-envelope frontier; `D8l1` is a MEASUREMENT | specialization emission | **NEXT** |
-  | 11 | `D8f` — checked-marker occupancy | integration | held, needs a composed witness at emission |
-  | 12 | `D8g` — non-vacuous closeout, both paths | proof | held, needs a composed witness at emission |
+  | 10 | `D8l1` — MEASURE the envelope frontier | planner | ANSWERED at `aaef1772`: **not structural** |
+  | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | **NEXT** |
+  | 12 | `D8f` — checked-marker occupancy | integration | held; WIP written and green, **restore not rewrite** |
+  | 13 | `D8g` — non-vacuous closeout, both paths | proof | held, needs a composed witness at emission |
   | 12 | `D6b` closeout, then `D6c` refusal set | — | held |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
@@ -1912,6 +1913,100 @@ all six failing `D0` rows.
   **Sizing the repair before that measurement is the error this node has
   already paid for twice** — `RT-UNIT-CLOSURE-CONVERT` was framed on a premise
   measurement retired, and `D7` was cut before its own premise was checked.
+
+  ###### `D8l1` ANSWERED — NOT structural. A real planner defect, fixture-exposed.
+
+  **Measured at exact `aaef1772`, nothing committed.** Two witnesses identical
+  except the order of the producer `Construct`'s two fields:
+
+  | producer | recursive position | outcome |
+  |---|---|---|
+  | `Wrap(worker, field)` | 0 — nonrecursive field **after** it | refuses: ordinary envelope has no nonrecursive field at source position 1 |
+  | `Wrap(field, worker)` | 1 — nonrecursive field **before** it | **compiles end to end** |
+
+  Both place a `Match` at the selected field, so **the deforestable shape is
+  not what is being rejected — the only variable is field order.**
+
+  **The defect, exactly.** `ContinuationUnitView::ordinary_envelope`
+  (`planning/static_transition.rs:1755`) emits nonrecursive roles from a
+  **dense loop index**, while `continuation_case_binder_run`
+  (`lowering/units.rs:1198`) looks them up by the producer's **true source
+  position**. The two agree only while every nonrecursive field precedes the
+  selected recursive position — **omitting a later position does not renumber
+  the earlier ones, but omitting an earlier one renumbers the later ones.**
+
+  ⭐ **The method's own doc comment states the correct rule** — *"nonrecursive
+  producer-`Construct` fields in producer source order with the selected
+  recursive position omitted"* — **and the loop does not implement it.** It
+  emits the envelope *index*, not the source position it stands for. `px8tr`
+  has the recursive position last, so the two coincide and the defect has
+  **never been reachable** until now.
+
+  ⇒ A real production defect with a live witness, reachable by **any** producer
+  whose selected recursive position is not last — composed or not.
+
+  ###### `D8l2` — the bounded repair. Architect `evt_5bs9fxyxww8gy`.
+
+  ⛔ **Repair ONLY `ordinary_envelope`'s nonrecursive-field population.** The
+  view already has sufficient closed authority: `ordinary_parameters`, the exact
+  ordered worker-capture run, and the selected `recursive_position`.
+
+  After checked subtraction of captures, let `N` be the nonrecursive
+  source-field count; the source constructor has `N + 1` fields in this
+  single-selected-worker projection. **Require `recursive_position < N + 1`,
+  then enumerate source positions `0..N + 1` in source order EXCLUDING that
+  exact selected position**, emitting one `NonrecursiveConstructorField {
+  source_position }` per remaining position. Append the existing worker-capture
+  roles unchanged in capture-ordinal order. **Not a reverse source walk, and it
+  adds no identity** — the selected position and the count are already
+  immutable planner facts. Reconcile to the exact `Parameter`-slot count.
+
+  ⛔ **Do NOT change `continuation_case_binder_run`** — it already performs the
+  correct lookup, and **its refusal is what exposed the bad planner record.**
+  No renumbering in lowering, no inferring a missing role from the case body, no
+  padding, no ABI slot count/order change, and no touching `D8h`-`D8k`'s
+  pairing, transport, verification, filter or partition laws. **No planner/ABI
+  redesign is authorized: this is a population correction inside the existing
+  representation.**
+
+  **Required to close (Architect's list, verbatim in substance):**
+
+  1. Planner-level exact populations — selected first of two ->
+     `[source_position: 1]`; selected last -> `[source_position: 0]`; selected
+     mid of at least three -> `[0, 2, ...]` in source order.
+  2. An out-of-range selected position **refuses in planning**; omission,
+     duplication, dense-prefix substitution and wrong order each fail their own
+     population check.
+  3. The capture tail stays **byte-for-byte ordered** after the corrected
+     nonrecursive prefix, header and slot counts unchanged.
+  4. Both field-order witnesses reach specialization emission. ⛔ **Their
+     ordinary fields must carry DISTINGUISHABLE values and the observable
+     answer must depend on the selected source-position mapping — mere
+     compilation with an unused field is not evidence of correct binding.**
+  5. The formerly refusing recursive-position-0 witness **compiles and
+     executes**, and the whole-pass causal ledger closes with a **non-empty
+     composed half**. ⭐ Add this reach assertion **beside** `D8k`'s law-level
+     ledger row, **never in place of it**.
+  6. The old dense-prefix implementation, or an equivalent mutation, makes the
+     recursive-position-0 row **red** while the exact correction makes **both**
+     orientations green. All `D8h`-`D8k` local and global controls preserved.
+
+  **Two additions of mine, both from the implementer's own measured warnings:**
+
+  ⛔ **7. Enumerate every consumer of `ordinary_envelope` and state, per
+  consumer, whether the renumbering changes what it sees.** The implementer
+  measured that **no current fixture would red on this fix** — a change that
+  silently alters a numbering every consumer reads, with no existing test
+  catching it, is exactly the shape that surfaces three checkpoints later. The
+  enumeration is reviewable output, not a step.
+
+  ⛔ **8. Attribute the compiling witness's THREE consumptions against ONE
+  discharge.** The implementer flagged this rather than rounding it off, and
+  was right to: the reasoning that the other two are ordinary direct-facet
+  bindings is sound (two claims of one identity would refuse as a double
+  discharge) but it is **reasoned, not measured**. Confirm the two carry
+  `DirectSpecializationCall`. **This adds no mechanism** — it converts a
+  reasoned claim into a measured one.
 
   ###### `D8k`'s ledger row is proved ON THE LAW, not on reach — and that is owed
 

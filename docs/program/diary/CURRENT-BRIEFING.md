@@ -33,68 +33,49 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~00:0xZ · `D8h`-`D8k` DONE, `D8e` discharged; `D8l` is next
+## LIVE — 2026-08-06 ~00:1xZ · `D8l1` answered: a planner defect; `D8l2` repairs it
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Release `D8l1` to Runtime on exact `aaef1772`** — a MEASUREMENT, not a fix:
-is the ordinary-envelope refusal **structural to the composed shape or a
-fixture accident?** Thread **`thr_6m43v75yndhtj`**. Do not size the repair
-before that answer exists.
+**Release `D8l2` to Runtime on exact `aaef1772`** — the bounded planner repair,
+per Architect ruling `evt_5bs9fxyxww8gy`. Thread **`thr_6m43v75yndhtj`**.
+⛔ **The frame authorized measurement only, so Runtime must not edit from that
+ruling alone** — the transcription in the frame is what authorizes it.
 
-**`D8h`-`D8k` are complete and the causal-projection repair is PROVED.** The
-`D8e` witness passes the former `D5a` detached-result seat. `D8h` `a435d180`,
-`D8i` `abfd67ff`, `D8j` `8d0d6fca`, `D8k` `372097de`+`aaef1772`. **`D8e` is
-DISCHARGED** on my ruling — its own law is proved and specialization emission
-was never in its scope.
+**`D8l1` answered: NOT structural.** A composed witness compiles **end to end**
+when the selected recursive position is the *last* constructor field. The only
+variable is field order; both witnesses place a `Match` at the selected field,
+so the deforestable shape is not what is rejected.
 
-⛔ **`D8e` closing is NOT the node closing.** The witness still does not compile
-end to end: it stops in **specialization emission**, building the
-specialization's case binder run, because the ordinary envelope carries no
-nonrecursive field at the selected field's source position. **Both** witnesses
-hit it, and both place a `Match` there — which is exactly what
-`requires_heterogeneous_deforestation` demands. If the shape that triggers the
-composed path is the shape the envelope cannot carry, that is an Architect
-mechanism question and possibly a second whole-node finding.
+**The defect:** `ContinuationUnitView::ordinary_envelope`
+(`planning/static_transition.rs:1755`) emits nonrecursive roles from a **dense
+loop index**, while `continuation_case_binder_run` (`lowering/units.rs:1198`)
+looks them up by **true source position**. They agree only while every
+nonrecursive field precedes the selected recursive position. The method's own
+doc comment states the correct rule and the loop does not implement it. `px8tr`
+has the recursive position last, so the defect was never reachable until now.
+**It is a real production defect reachable by any producer whose selected
+recursive position is not last — composed or not.**
 
-**`D8l` precedes `D8f`/`D8g`**, which both need a composed witness that reaches
-emission. Label order still does not track execution order here.
+`D8h`-`D8k` are complete and `D8e` is DISCHARGED. `D8h` `a435d180`, `D8i`
+`abfd67ff`, `D8j` `8d0d6fca`, `D8k` `372097de`+`aaef1772`.
 
-**Owed by whoever closes `D8l`:** the end-to-end ledger assertion, **added
-beside** `D8k`'s row rather than replacing it — `D8k` proves the law, not that
-any program reaches it.
+⭐ **`D8k`'s reach is now closable** — the compiling witness closed the causal
+ledger with a **non-empty composed half**. The end-to-end assertion goes
+**beside** `D8k`'s law-level row, never in place of it (`D8l2` item 5).
 
-**Architect ruling `evt_37fa3rdegb3yc` settled the fork as outcome (c) —
-BOTH mechanisms I offered were refused.** (a) would execute the continuation
-twice; (b) would erase a real planner-issued obligation and make one
-specialization both create and not create it depending on the query. The lawful
-fix is a **typed alternative discharge of the same exact causal identity**:
-`ContinuationDischarge = DirectSpecializationCall | ComposedSourceContinuation`.
-The identity stays in the planned population **exactly once**.
+**Two additions of mine to the Architect's closure list**, both from the
+implementer's own measured warnings: enumerate every `ordinary_envelope`
+consumer against the renumbering (no current fixture would red on this fix),
+and attribute the compiling witness's three consumptions against one discharge
+(reasoned, not measured).
 
-**Sizing was mine and I ruled four in-node checkpoints, not a predecessor
-node** — the work builds on `D8a`/`D8b`/`D8d`, all unmerged on this branch, so
-a predecessor would depend on its own successor's unmerged checkpoints; and
-this node is the sole gate on the seven-node `RecursiveDescent` campaign.
-
-⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g` despite sorting after them.** Label
-order no longer tracks execution order on this node. Renumbering was rejected:
-`D8f`/`D8g` already carry public meaning across six thread posts, and this node
-already ruled at `D8c` that a gap beats reusing a spent label.
-
-Discharged: `D8a` `e02ef413`, `D8b` `e4b4c26c`, `D8d` `c2e8314f`. `D8c`
-retired. **`D8e`'s consumer is discharged (`70171a99`) and its witness proved
-(`89e36ec1`) — but `D8e` itself is NOT discharged** and does not discharge by
-re-measuring `89e36ec1`; it closes only once `D8h`-`D8k` land. Preserve
-`89e36ec1` as **non-candidate, load-bearing evidence**.
-
-Frame sections: *"`D8e`'s causal obligation is real and gets a SECOND DISCHARGE
-FORM"*, *"SIZING RULING — four in-node checkpoints"*, *"EXECUTION ORDER"*, and
-*"STANDING — satisfying a required fact can CREATE an undischargeable
-obligation"*.
+**`D8f`'s work is written and green at 749/2/1, unlanded.** If `D8f` is
+re-released after `D8l`, say so explicitly — the implementer will **restore it
+rather than rewrite it**.
 
 ⛔ **`D5a-1` and `D5a-2` are SPENT LABELS — their text is refuted.** So is my
 published *"new member at ordinal 2, not 3"*. So is the whole
