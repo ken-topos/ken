@@ -3789,6 +3789,47 @@ pub(in crate::cranelift_backend) fn d8o_body_authorities() -> Vec<D8oBodyAuthori
 pub(in crate::cranelift_backend) fn reset_d8o_body_authorities() {
     D8O_BODY_AUTHORITIES.with(|log| log.borrow_mut().clear());
     D8O_COMPOSED_CLAIM_BODIES.with(|log| log.borrow_mut().clear());
+    D8O_BODY_KEYS.with(|log| log.borrow_mut().clear());
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8o` — the exact body key.**
+///
+/// ⛔⛔ **Closed, and independently meaningful.** Each variant names the body by
+/// the planner descriptor identity that pass was handed -- not by the ambient
+/// owner, not by the `FuncId` alone, not by a raw origin, and not by a selected
+/// composed identity. Supplied at each of the three body sites, which is the
+/// only place that knows which kind it is without inferring it.
+///
+/// ⭐ **A generated context carries a `Specialization` OWNER and is not a
+/// specialization BODY.** That distinction is the whole reason this key exists
+/// separately from the owner: an owner-variant filter counts a context body as
+/// a specialization body, which is exactly the mistake the previous evidence
+/// made.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub(in crate::cranelift_backend) enum D8oBodyKey {
+    OrdinaryUnit(PredeclaredFunctionId),
+    ContinuationSpecialization(ContinuationSpecializationId),
+    GeneratedContext(ContinuationContextId),
+}
+
+#[cfg(test)]
+thread_local! {
+    static D8O_BODY_KEYS: std::cell::RefCell<Vec<(Option<FuncId>, D8oBodyKey)>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8o_body_key(
+    function: Option<FuncId>,
+    key: D8oBodyKey,
+) {
+    D8O_BODY_KEYS.with(|log| log.borrow_mut().push((function, key)));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8o_body_keys() -> Vec<(Option<FuncId>, D8oBodyKey)> {
+    D8O_BODY_KEYS.with(|log| log.borrow().clone())
 }
 
 /// **`D8o`** — the emitter body of every composed claim actually reached.

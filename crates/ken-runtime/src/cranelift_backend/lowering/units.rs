@@ -1554,6 +1554,12 @@ pub(super) fn define_continuation_bodies<M: Module>(
             ContinuationEmissionOwner::Specialization(unit.id),
             unit.consumer_owner,
         );
+        // `D8o` — the exact body key, supplied by the pass that knows it.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d8o_body_key(
+            compiler.defining_function_id,
+            crate::cranelift_backend::lowering::D8oBodyKey::ContinuationSpecialization(unit.id),
+        );
         let mut func_ctx = FunctionBuilderContext::new();
         {
             let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
@@ -2120,6 +2126,13 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
             // ⛔ After `open_aggregate_events`, so the observation this binding
             // writes is labelled with the Function it belongs to.
             let ambient = AmbientBodyAuthority::bind(compiler, emission_owner, context.raw_owner);
+            // `D8o` — a generated CONTEXT body, whose owner is a Specialization
+            // and whose kind is not.
+            #[cfg(test)]
+            crate::cranelift_backend::lowering::record_d8o_body_key(
+                compiler.defining_function_id,
+                crate::cranelift_backend::lowering::D8oBodyKey::GeneratedContext(context.id),
+            );
 
             // The environment: Parameter slots then Capture slots, in slot
             // order. ⭐ This is the SAME walk `define_unit_body` uses, which is
@@ -3197,6 +3210,11 @@ fn define_unit_body<M: Module>(
         compiler,
         ContinuationEmissionOwner::Predeclared(unit.function),
         unit.function,
+    );
+    #[cfg(test)]
+    crate::cranelift_backend::lowering::record_d8o_body_key(
+        compiler.defining_function_id,
+        crate::cranelift_backend::lowering::D8oBodyKey::OrdinaryUnit(unit.function),
     );
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;

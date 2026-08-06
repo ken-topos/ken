@@ -19392,42 +19392,118 @@ fn d8o_every_emitted_body_binds_its_own_planner_issued_authority() {
     .expect("the D5a witness compiles");
     let bound = d8o_body_authorities();
 
-    // Clause 1 — a ONE-TO-ONE correspondence with the plan's own bodies.
+    // Clause 1 — the complete EXACT-BODY-KEY -> (owner, unit) relation.
     //
-    // ⛔ The expected multiset has exactly one pair per emittable unit, per
-    // continuation unit and per generated context, all read from planner views.
-    // The observed multiset must EQUAL it -- not merely be contained in it,
-    // which is what the previous membership check asked and which two bodies
-    // binding one pair would have satisfied. ⛔ The `FuncId` labels the observed
-    // body and is never used to derive its expected pair.
-    let expected = d8o_expected_authorities();
-    let mut observed = bound
-        .iter()
-        .map(|authority| (authority.owner, authority.unit))
-        .collect::<Vec<_>>();
-    observed.sort();
-    let mut expected_sorted = expected.clone();
-    expected_sorted.sort();
-    assert_eq!(
-        observed, expected_sorted,
-        "the bodies that bound authority must correspond one-to-one with the bodies the PLAN \
-         names. A missing pair means a body kind never bound; an extra or repeated one means a \
-         body bound something no descriptor issued"
-    );
-    let functions = bound
+    // ⛔⛔ Keyed by the body's own planner descriptor identity, supplied by the
+    // pass that knows which kind it is. A multiset of lawful pairs plus distinct
+    // `FuncId`s -- what this clause asked before -- is insufficient: **swapping
+    // two bodies' pairs leaves both multisets identical** and every id distinct,
+    // so it would pass. The relation catches it because each pair is attached to
+    // the body that bound it.
+    //
+    // ⛔ The key is never derived from the ambient owner, the `FuncId` alone, a
+    // raw origin, or a selected identity.
+    let keys = crate::cranelift_backend::lowering::d8o_body_keys()
+        .into_iter()
+        .map(|(function, key)| {
+            (
+                function.expect("every body key must be labelled with its Function"),
+                key,
+            )
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let observed = bound
         .iter()
         .map(|authority| {
-            authority
+            let function = authority
                 .function
-                .expect("every binding must be labelled with the Function it belongs to")
+                .expect("every binding must be labelled with the Function it belongs to");
+            let key = *keys
+                .get(&function)
+                .expect("every bound body must have recorded its exact body key");
+            (key, (authority.owner, authority.unit))
         })
-        .collect::<std::collections::BTreeSet<_>>();
+        .collect::<std::collections::BTreeMap<_, _>>();
     assert_eq!(
-        functions.len(),
+        observed.len(),
         bound.len(),
-        "and each observation must belong to a DISTINCT Function, or the one-to-one claim above \
-         is between bodies that are not actually separate: {bound:?}"
+        "each body must key distinctly, or the relation below is collapsing two bodies into one \
+         entry: {bound:?}"
     );
+    let expectation = d8o_expected_authorities();
+    assert_eq!(
+        observed,
+        expectation,
+        "the complete exact-body-key -> live (owner, unit) relation must equal the planner's own. \
+         ⛔ Asserted as a RELATION: a pair attached to the wrong body reds here and would not \
+         have reded a multiset comparison"
+    );
+
+    // ⛔ And the relation must be SWAP-SENSITIVE, demonstrated rather than
+    // argued: exchange two bodies' pairs and the comparison above must fail.
+    // The multiset of pairs and the set of `FuncId`s are both unchanged by that
+    // exchange, which is precisely why the earlier unkeyed form could not see
+    // it.
+    let swapped = {
+        let mut swapped = expectation.clone();
+        let specializations = swapped
+            .keys()
+            .filter(|key| {
+                matches!(
+                    key,
+                    crate::cranelift_backend::lowering::D8oBodyKey::ContinuationSpecialization(_)
+                )
+            })
+            .copied()
+            .collect::<Vec<_>>();
+        assert!(
+            specializations.len() >= 2,
+            "the witness must emit at least two specialization bodies for a swap to be \
+             constructible, or this control cannot be built: {expectation:?}"
+        );
+        let first = swapped[&specializations[0]];
+        let second = swapped[&specializations[1]];
+        swapped.insert(specializations[0], second);
+        swapped.insert(specializations[1], first);
+        swapped
+    };
+    assert_ne!(
+        observed, swapped,
+        "a pair attached to the WRONG body must be distinguishable. If this matches, the relation \
+         is not keyed by body at all and clause 1 has degenerated into the multiset comparison it \
+         replaced"
+    );
+
+    // ⭐ And all three body kinds must be present, or a kind's clause is vacuous.
+    for (kind, present) in [
+        (
+            "ordinary unit",
+            observed.keys().any(|key| {
+                matches!(key, crate::cranelift_backend::lowering::D8oBodyKey::OrdinaryUnit(_))
+            }),
+        ),
+        (
+            "continuation specialization",
+            observed.keys().any(|key| {
+                matches!(
+                    key,
+                    crate::cranelift_backend::lowering::D8oBodyKey::ContinuationSpecialization(_)
+                )
+            }),
+        ),
+        (
+            "generated context",
+            observed.keys().any(|key| {
+                matches!(key, crate::cranelift_backend::lowering::D8oBodyKey::GeneratedContext(_))
+            }),
+        ),
+    ] {
+        assert!(
+            present,
+            "the {kind} body population must be non-empty on this witness, or the relation above \
+             says nothing about that kind: {observed:?}"
+        );
+    }
 
     // Clause 2 — nothing inherits.
     assert!(
@@ -19465,16 +19541,21 @@ fn d8o_every_emitted_body_binds_its_own_planner_issued_authority() {
     );
 }
 
-/// The `(owner, unit)` pairs the plan itself names — **one per body**, so the
-/// result is a multiset a one-to-one correspondence can be asserted against.
+/// The complete **exact body key -> `(owner, unit)`** relation the plan itself
+/// names: one entry per executable unit, per continuation unit, and per
+/// generated context.
 ///
-/// ⛔ Built from planner views and unit descriptors only. Nothing here reads the
+/// ⛔ Built from planner views and descriptors only. Nothing here reads the
 /// ambient fields, a `FuncId`, a raw origin, or a composed identity.
 #[cfg(test)]
-fn d8o_expected_authorities() -> Vec<(
-    crate::cranelift_backend::planning::ContinuationEmissionOwner,
-    PredeclaredFunctionId,
-)> {
+fn d8o_expected_authorities() -> std::collections::BTreeMap<
+    crate::cranelift_backend::lowering::D8oBodyKey,
+    (
+        crate::cranelift_backend::planning::ContinuationEmissionOwner,
+        PredeclaredFunctionId,
+    ),
+> {
+    use crate::cranelift_backend::lowering::D8oBodyKey;
     use crate::cranelift_backend::planning::ContinuationEmissionOwner;
     let (entry, declarations) =
         crate::cranelift_backend::test_objects::px8tr_nested_post_effect_planning_inputs();
@@ -19490,28 +19571,36 @@ fn d8o_expected_authorities() -> Vec<(
         true,
     )
     .expect("the D5a witness plans");
-    let mut expected = Vec::new();
+    let mut expected = std::collections::BTreeMap::new();
     // ⛔ `executable_units`, not `emittable_units`: the executable population is
-    // the one `define_unit_bodies` actually walks. A template-only unit is
-    // declared but never defined, so it emits no body and binds no authority --
-    // expecting one would make this correspondence fail for a lawful program.
+    // what `define_unit_bodies` walks. A template-only unit is declared and
+    // never defined, so it emits no body and binds no authority.
     for unit in plan.executable_units().expect("executable units") {
-        expected.push((
-            ContinuationEmissionOwner::Predeclared(unit.function()),
-            unit.function(),
-        ));
+        expected.insert(
+            D8oBodyKey::OrdinaryUnit(unit.function()),
+            (
+                ContinuationEmissionOwner::Predeclared(unit.function()),
+                unit.function(),
+            ),
+        );
     }
     for unit in plan.continuation_units().expect("continuation units") {
-        expected.push((
-            ContinuationEmissionOwner::Specialization(unit.id()),
-            unit.consumer_owner(),
-        ));
+        expected.insert(
+            D8oBodyKey::ContinuationSpecialization(unit.id()),
+            (
+                ContinuationEmissionOwner::Specialization(unit.id()),
+                unit.consumer_owner(),
+            ),
+        );
     }
     for context in plan.continuation_contexts().expect("contexts") {
-        expected.push((
-            ContinuationEmissionOwner::Specialization(context.enclosing_specialization()),
-            context.raw_owner(),
-        ));
+        expected.insert(
+            D8oBodyKey::GeneratedContext(context.id()),
+            (
+                ContinuationEmissionOwner::Specialization(context.enclosing_specialization()),
+                context.raw_owner(),
+            ),
+        );
     }
     expected
 }
@@ -19606,31 +19695,51 @@ fn d8o_remeasures_the_two_owner_keyed_guards_on_the_descendant() {
         "the witness must reach the composed claim seam at least once, or the population question \
          below is not being asked at all"
     );
-    // ⛔ The emitter body is the one RECORDED AT THE SEAM from the live ambient
-    // fields -- never `identity.emission_owner()`, which is the field the owner
-    // guard validates and would make this question answer itself.
-    let from_specialization = claim_bodies
+    // ⛔⛔ Classified BY BODY KIND, joined through the independent
+    // Function-to-body-key mapping -- never by the owner variant.
+    //
+    // ⭐ A generated context carries a `Specialization` OWNER and is **not** a
+    // specialization BODY. The previous form filtered on the owner variant and
+    // would have counted a context-body claim as a specialization-body one,
+    // which is the opposite of what this population is about.
+    //
+    // ⛔ And never from `identity.emission_owner()`, which is the field the
+    // owner guard validates: that would make the question answer itself.
+    let keys = crate::cranelift_backend::lowering::d8o_body_keys()
+        .into_iter()
+        .map(|(function, key)| (function.expect("body keys are labelled"), key))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let claim_kinds = claim_bodies
         .iter()
-        .filter(|(_, body_owner)| {
+        .map(|(function, _)| {
+            let function = function.expect("every composed claim must name its Function");
+            *keys
+                .get(&function)
+                .expect("every claiming body must have recorded its exact body key")
+        })
+        .collect::<Vec<_>>();
+    let from_specialization = claim_kinds
+        .iter()
+        .filter(|key| {
             matches!(
-                body_owner,
-                Some(crate::cranelift_backend::planning::ContinuationEmissionOwner::Specialization(
-                    _
-                ))
+                key,
+                crate::cranelift_backend::lowering::D8oBodyKey::ContinuationSpecialization(_)
             )
         })
         .count();
     assert_eq!(
         from_specialization, 0,
-        "MEASURED at the seam and recorded rather than fabricated: every composed claim in reach \
-         is made from an ORDINARY body, so the specialization-body composed-claim population is \
-         EMPTY and there is nothing to re-measure there. If this ever becomes non-zero that \
-         population exists and needs its own owner-correctness evidence: {claim_bodies:?}"
+        "MEASURED at the seam and classified by BODY KIND: the specialization-body composed-claim \
+         population is EMPTY, so there is nothing to re-measure there. If this ever becomes \
+         non-zero that population exists and needs its own owner-correctness evidence: \
+         {claim_kinds:?}"
     );
     assert!(
-        claim_bodies
-            .iter()
-            .all(|(function, _)| function.is_some()),
-        "and each must be labelled with the Function it was claimed in: {claim_bodies:?}"
+        claim_kinds.iter().all(|key| matches!(
+            key,
+            crate::cranelift_backend::lowering::D8oBodyKey::OrdinaryUnit(_)
+        )),
+        "and every claim in reach must come from an ORDINARY unit body, stated positively rather \
+         than as the absence of the other two kinds: {claim_kinds:?}"
     );
 }
