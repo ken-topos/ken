@@ -1004,16 +1004,45 @@ all six failing `D0` rows.
   unproved, and no mutation can discriminate what the representation does not
   encode.
 
-  The witness is a test fixture built from **existing source constructs on the
-  ordinary planner/lowering path**, where the selected recursive argument is
-  actually **called**. Ordinary source syntax in a fixture is authorized; ⛔ a
-  new production occurrence kind, authority, fabricated identity, population
-  mechanism, or hand-constructed plan is not. It must prove: same exact
-  closure/body provenance yields a `GeneratedContext` IH and a `RawWorker`
-  selected argument; the argument is invoked at the planner-derived binder
-  position with its real raw arity and captures; the emitted raw event carries
-  **no** generated-context suffix and resolves through `raw_worker_calls`; and
-  the existing `GeneratedContext` append-nothing mutation **stays red**.
+  The witness is a test fixture built from **existing source constructs**.
+  Ordinary source syntax in a fixture is authorized; **a new production
+  occurrence kind, authority, fabricated identity, population mechanism, or
+  hand-constructed plan is NOT.** It must prove: same exact closure/body
+  provenance yields a `GeneratedContext` IH and a `RawWorker` selected
+  argument; the argument is invoked at the planner-derived binder position
+  with its real raw arity and captures; the emitted raw event carries **no**
+  generated-context suffix; and the existing `GeneratedContext`
+  append-nothing mutation **stays red**. All four hold at `08f1c2f7`.
+
+  **The *"selected recursive argument is actually called"* conjunct is ALREADY
+  DELIVERED — credit it, do not rebuild it.** Architect `evt_6grnfx2psztcn`.
+  Through ordinary production planning and lowering, the selected recursive
+  argument **is** called at the **source-machine** seat with its exact raw
+  arguments and captures, and its result is consumed in the same continuation
+  with no closure-valued unit result. That is the accepted **`D8e`/`D8j`**
+  evidence, and it is `D6b`'s positive for this conjunct.
+
+  > **Do NOT read the *"`D6b` IS MIS-SIZED"* section below as closing the
+  > source-machine path.** `evt_6azsr4xrch1he` classified the then-current
+  > refusal as a **production representation/consumer gap** and **prescribed
+  > the repair** — install the target-derived `StaticWorkerBinding` at the
+  > selected recursive position, then consume it at the source-machine callee
+  > seat ahead of the value-only `Var` path. **`D8d` and `D8e` delivered
+  > exactly that** (execution order rows 3 and 4/9, both DISCHARGED). The
+  > section describes the **pre-repair** state.
+
+  **What `08f1c2f7` adds is a NARROWER negative, and it is retained as a local
+  fail-closed control.** The **ordinary-unit copy** of that case body carries
+  only a **word** at this position, so using it as a specialized callee must
+  fail closed — measured as `Unsupported(BoundaryCarrier, ...)`. **It does not
+  generalize over the composed source-machine population and cannot retire the
+  already-proved `D8e` positive.**
+
+  **WITHDRAWN from this witness — one conjunct: *"resolves through
+  `raw_worker_calls`"* read as an ATTRIBUTION claim.** The emission does
+  resolve through that table; what no fixture can prove is that it is *that*
+  table rather than the other. See the `D6b` LIMITS block below for why that is
+  a stated proof limit and not missing instrumentation.
 
   ⛔ **WITHDRAWN: *"substituting `worker_calls` for that lookup reddens it."***
   It is **structurally unsatisfiable at an equal-table seat** — see the
@@ -1042,11 +1071,72 @@ all six failing `D0` rows.
   This belongs to `D6b`, **not** `D6c` — `D6c` owns the refusal closure *after*
   this positive is established.
 
-  ⚠ **`D6b` also owes the raw-target declared-call-table representation**,
-  which `D6a` leaves honestly inert: the existing body-origin lookup is
+  ###### `D6b` LIMIT — the ONE thing no fixture delivers, and why it is permanent
+
+  > **Scope, stated first because an earlier draft of this block got it wrong.**
+  > This limit covers the **retargeted raw-body / raw-table attribution**
+  > conjunct and **nothing else**. The *"selected recursive argument is actually
+  > called"* conjunct is **NOT** a limit — it is **delivered** by `D8e`/`D8j`
+  > (Architect `evt_6grnfx2psztcn`). Do not extend what follows to it.
+
+  **`D6b` previously owed the raw-target declared-call-table representation**,
+  on the reading that `D6a` leaves it honestly inert: the body-origin lookup is
   overwritten by the generated context and the raw body is removed from the
-  executable population, so a raw route is not yet consumable in a retargeted
-  specialization.
+  executable population, so a raw route is not consumable in a retargeted
+  specialization. **The observation is true. The obligation is WITHDRAWN**, and
+  what follows is why it cannot be re-derived.
+
+  **The only known mechanism is BANNED, on measurement.** Making that lookup
+  answerable means retaining the raw body as a **declared-and-defined
+  `Function`**. That was built and measured: it defines a standalone `Function`
+  whose result is a `Constructor` containing a raw `Closure`, and **25 newly-red
+  rows** all stop at the permanent unit-result closure boundary, causally
+  isolated to one retention predicate (`741/2` unarmed, `716/27` armed). It is
+  **not a missing predicate** — it proves the retention **reopens the exact
+  boundary the generated-context design exists to avoid.** Architect
+  `evt_3dcafs581921e` Finding 2 withdrew `D7a2`'s raw-body executable-set
+  equality on that measurement.
+
+  **Do NOT** flip the retention predicate, force-declare a body, or substitute
+  the existing IH `GeneratedContext` — it has different semantics and operands.
+  **Do NOT read the `D7a`-`D7e` block as a live route**: that whole cut is
+  SPENT (superseded by `D8a`-`D8g`), and its surviving prose is the reason this
+  mechanism kept looking available.
+
+  ###### The attribution limit — an ABSENCE OF DISTINCTION, not a coverage hole
+
+  Measured at `08f1c2f7`, at the body-definition seat with no mutation armed:
+
+  ```
+  spec 0  worker body 36  retargeted  worker_calls {5,33,36,40}
+                                      raw_worker_calls {5,33,40}
+  spec 1  worker body 33  plain       both tables {5,33,40}
+  ```
+
+  **The two tables disagree exactly where a retarget happened, and nowhere
+  else.** So at the only body that emits a raw call the tables are **equal** —
+  the other one answers identically — and at the only body where they **differ**
+  no raw call can be emitted at all, because body 36 is in the emittable
+  population and absent from the executable one.
+
+  ⇒ **Raw-table attribution is unprovable, structurally.** That is clause 4 of
+  the asymmetric law above: where the entries are equal a table swap is
+  **observational identity**. No mutation can discriminate what the
+  representation does not encode, so nothing here is left unproved.
+
+  **Nothing retires this limit — do not label it a transition sentinel.** A
+  sentinel names the obligation that clears it; this has none. The mechanism
+  that would clear it is banned on measurement, and the attribution consequence
+  is a property of the representation rather than a gap in it. Labelling it as
+  pending leaves a later reader waiting for a checkpoint that will never be
+  cut, which is precisely how the spent `D7a2` pointer stayed live.
+  **`08f1c2f7`'s "transition sentinel" wording must become this permanent
+  limit** (Architect `evt_6grnfx2psztcn`).
+
+  **What these rows DO own:** which bodies each table answers **for**. A defect
+  keeping both key sets exact and changing the `FuncRef` one entry holds is
+  invisible to them — the same family as `D8g`'s residual, caught at the emitter
+  if at all.
 
   ###### `D8g`'s LANDED EVIDENCE for the clauses above — read before building
 
@@ -1138,13 +1228,29 @@ all six failing `D0` rows.
   position for which the unit projects no worker. ⛔ Do **not** generalize this
   ruling into a multi-worker population.
 
-  ##### ⛔ `D6b` IS MIS-SIZED. `D7` is the substrate, and it RUNS BEFORE `D6b` CLOSES.
+  ##### `D6b` IS MIS-SIZED — the two lowering paths DIFFER at the recursive field
+
+  > **The substrate claim in this heading named `D7`, which is now SPENT.** It
+  > read *"`D7` is the substrate, and it RUNS BEFORE `D6b` CLOSES."* The
+  > substrate work was recut as `D8a`-`D8g` (Architect `evt_3dcafs581921e`) and
+  > is discharged through `D8g` at `400bddde`, so **there is no longer a
+  > predecessor pending between here and `D6b`'s close.**
+  >
+  > ⇒ **The ruling below describes a gap that has since been REPAIRED. It is
+  > the history of that repair, NOT a live prohibition.** `evt_6azsr4xrch1he`
+  > classified the refusal as a production representation/consumer gap and
+  > **prescribed** the fix; **`D8d` and `D8e` delivered it** (rows 3 and 4/9,
+  > both DISCHARGED), and `D8e`/`D8j` is now the accepted positive that the
+  > selected recursive argument **is** called at the source-machine seat.
+  >
+  > **Do NOT cite this section to argue the source-machine path is closed.**
+  > Doing so converts a discharged repair back into a limit and would retire an
+  > already-proved positive. Architect `evt_6grnfx2psztcn` corrected exactly
+  > that misreading.
 
   **Architect ruling `evt_6azsr4xrch1he`, 2026-08-05**, accepting the composed-path
-  hard stop on preserved exact `d86be55d`. ⚠ **`D7`'s number is allocation order,
-  not execution order** — it precedes `D6b` closeout. `D6b`, `D6c`, QA, candidate,
-  `D6` closure and downstream are **frozen** meanwhile; `d86be55d` is preserved as
-  **accepted partial progress**, not a residual.
+  hard stop on preserved exact `d86be55d`. `d86be55d` is preserved as **accepted
+  partial progress**, not a residual.
 
   **The false claim was this frame's, and it is corrected: the two lowering paths
   do NOT build the same segments at the recursive field.**
@@ -1474,7 +1580,8 @@ all six failing `D0` rows.
   | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **DISCHARGED** `2be7adb0` (Architect `evt_6sk9hbp17893t`), after a mechanism-accepted evidence block at `198b7c14` |
   | 16 | `D8f` — checked-marker occupancy | integration | **DISCHARGED** at exact `04c40d4c` (Architect `evt_6cka0ecwnd25t`). Three-case disposition partial accepted at `c49d0652`; the four refusal controls then took **five** bounded evidence holds, closing at `d94a3df9` with both wrong-occurrence origins named from planner authority. `04c40d4c` is a whitespace-only identity child of it |
   | 17 | `D8g` — non-vacuous closeout, over TWO populations | proof | **Owner re-measurement DISCHARGED** `1b367065` (Architect `evt_7v6ve6rsc8d39`) — **outcome (1): the owner VARIES but SEPARATES nothing**, so the prohibition stands and no owner positive is required. **Closeout then HARD-STOPPED** (`evt_9yrrhnjp6dfd`): its two facts live in disjoint witness families. **RECUT over both populations** by Architect disposition `evt_6afmy0398n847`; frame clauses replaced 2026-08-06. Closeout then ran four review rounds — `b0614513`, `337ee9d9`, `6d884090`, `90f96c00`, `0665b9d5` all preserved as held progress. **Two review requirements were withdrawn as STRONGER THAN THE FRAME**: post-emission-FIRST refusal for the mutations (`evt_5vwdtrznf3km4` — earliest structural guard is accepted, and is the stronger evidence), and the independent `(defining Function, call origin)` expectation (`evt_399j195rn8fpa` — **no authority exists to derive it from**; see `EXACT-KEY LIMIT`). **SECOND RECUT landed 2026-08-06.** ⇒ **DISCHARGED at exact `400bddde`** (Architect `evt_4mzks855xpw8h`) |
-  | 18 | `D6b` closeout, then `D6c` refusal set | — | held |
+  | 18 | `D6b` closeout | proof | **`08f1c2f7` HELD — acceptable bounded evidence, NOT yet the completion object** (Architect `evt_6grnfx2psztcn`; three commits on `400bddde`, `771/2/1`, no production change). **ONE conjunct retired as a permanent LIMIT**: *"resolves through `raw_worker_calls`"* read as attribution — the tables are equal wherever a raw call emits, the body where they differ emits none, and the retention that would change it is banned on measurement (`evt_3dcafs581921e` Finding 2). **The *"selected recursive argument is actually called"* conjunct is DELIVERED, not limited** — `D8e`/`D8j` is the accepted positive on the composed source-machine path; `08f1c2f7`'s `BoundaryCarrier` row is only the **ordinary-unit copy** and is retained as a local fail-closed control. Remaining work is a **comment/failure-text-only fidelity child**; no executable or test-condition change authorized |
+  | 19 | `D6c` — the refusal set, pre-emission | proof | held. **Entirely a refusal set, so the refusal plane is its whole proof** — see `TWO PROOF PLANES` |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
   This heading previously read *"label order, for the first time on this
@@ -1696,6 +1803,14 @@ all six failing `D0` rows.
   > unretargeted body. That is neither an incomplete mechanism nor an impossible
   > population — it is **the absence of a distinction**, and it is the only one
   > of the three that requires no repair and no prohibition.
+  >
+  > **A fourth case sits under the same words and belongs to the IMPOSSIBLE-
+  > POPULATION category, not the incomplete-mechanism one:** `raw_worker_calls`
+  > answering for the **retargeted** body. That body is in the emittable
+  > population and absent from the executable one by design, and the only
+  > mechanism that would change it is **banned on measurement** (`evt_3dcafs581921e`
+  > Finding 2). ⇒ **Do not read "the mechanism was incomplete" as an invitation
+  > to complete it.** See `D6b` LIMITS.
 
   The owner-collision refusal is unreachable **because the planner
   proves the population impossible**, which is `D8a`'s finding rather than a
@@ -1756,10 +1871,28 @@ all six failing `D0` rows.
 
   ###### STANDING — on this node, "correct and unreachable" is the DEFAULT, and the WITNESS is the deliverable
 
-  **Third occurrence, and the pattern is now the thing to plan around rather
-  than rediscover:** `D6b`'s raw table, `D7a2`'s retention, and now `D8d`'s
-  binding all landed **correct and unreached**. Any checkpoint that builds a
-  mechanism ahead of its consumer produces this, so on this node:
+  **The pattern is the thing to plan around rather than rediscover:** a
+  checkpoint that builds a mechanism ahead of its consumer lands it **correct
+  and unreached**. `D8d`'s binding is the clean instance.
+
+  > **TWO of the three examples this paragraph once listed have been
+  > RECLASSIFIED, and citing them as unreached mechanisms now teaches the exact
+  > conflation this frame bans elsewhere.**
+  >
+  > - **`D6b`'s raw table is a LIMIT, not an unreached mechanism.** The raw
+  >   route **is** reached and emits. Attribution is unprovable because the two
+  >   tables are equal wherever a raw call is emitted — an **absence of
+  >   distinction**. See `D6b` LIMITS above.
+  > - **`D7a2`'s retention never landed at all.** It was built, measured to red
+  >   **25 rows** at the permanent unit-result closure boundary, and
+  >   **withdrawn and banned** (Architect `evt_3dcafs581921e` Finding 2). A
+  >   banned mechanism is not an unreached one.
+  >
+  > ⇒ The standing lesson below is unchanged and still right. Only these two
+  > citations were wrong, and a reader who took them at face value would price
+  > a limit as owed work.
+
+  On this node:
 
   - **The mechanism is the cheap half. The witness that reaches it is the
     deliverable**, and a checkpoint that lands a mechanism with no witness has

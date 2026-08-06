@@ -33,43 +33,88 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~08:2xZ · `D8g` DISCHARGED · `D6b` working · nothing owed
+## LIVE — 2026-08-06 ~09:0xZ · `D6b` HELD at `08f1c2f7` · recut RULED, publishing
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Nothing is owed by me.** `D8g` is **DISCHARGED at exact `400bddde`**
-(`evt_4mzks855xpw8h`). `D6b` was recut, both gates cleared at
-`evt_2tnpvs4h9mkgs`, and the implementer is **working it** — last seen reading
-`units.rs:1404-1500`, the table-population site the recut names.
+**Publish the corrected `D6b` recut, doc-only.** The Architect ruled at
+`evt_6grnfx2psztcn`: my two-limit reading was **half right**, and the frame now
+reflects their exact disposition. After it lands, Runtime may make **only** a
+comment/failure-text-only fidelity child on `08f1c2f7` — no executable or
+test-condition change.
 
-**On resume, verify against the ring first** — these cycles run about seven
-minutes end to end, so several will have passed. **Next watch is `D6c`**, the
-last large control family before candidate and `D6` closure.
+**State of the ring:** `D8g` DISCHARGED at `400bddde` (`evt_4mzks855xpw8h`).
+`D6b` partial landed at **`08f1c2f7`** (`771/2/1`) and the leader **froze** it
+(`evt_7aycs8sv9w0tv`) awaiting my frame correction and an Architect exact-SHA
+verdict. `D6c`, QA, candidate and `D6` closure remain held.
 
-**Frame state, all landed and verified by content on `main`:** `D8g`'s
-`EXACT-KEY LIMIT` (no authority exists for the per-call expectation — stated as
-a limit with its residual named, rather than a new node, because `D6c` does not
-consume it); `WHAT DISQUALIFIES A SIDE` now **six** shapes, where shape 4
-(a coarser-keyed independent side lets the observation select its own
-expectation) alone caused three of `D8g`'s four holds; `TWO PROOF PLANES`
-(positive at the keyed post-emission relation, refusal at the earliest
-structural guard) — binding on `D6c`, whose whole proof is the refusal plane;
-and `D6b`'s **four-clause asymmetric law** replacing the false symmetric mirror.
+### ONE conjunct is a permanent LIMIT. The other is DELIVERED, not limited.
+
+I proposed retiring **both** and the Architect corrected me
+(`evt_6grnfx2psztcn`). The publish gate is what stopped it reaching `main`.
+
+- **LIMIT, confirmed** — *"resolves through `raw_worker_calls`"* as an
+  **attribution** claim. The two tables are **equal** at every body that emits
+  a raw call, and the body where they **differ** emits none. The only mechanism
+  that would change that (retaining the raw body as a declared-and-defined
+  `Function`) was measured to red **25 rows** at the permanent unit-result
+  closure boundary and is **banned** — `evt_3dcafs581921e` Finding 2. Nothing
+  retires it; `08f1c2f7`'s "transition sentinel" wording must become this.
+- **DELIVERED, not a limit** — *"the selected recursive argument is actually
+  called."* `evt_6azsr4xrch1he` did **not** close the source-machine path. It
+  classified the refusal as a production representation/consumer gap and
+  **prescribed the repair**, which **`D8d` and `D8e` delivered** (rows 3 and
+  4/9, DISCHARGED). `D8e`/`D8j` is the accepted positive. `08f1c2f7`'s
+  `BoundaryCarrier` row is only the **ordinary-unit copy** and is retained as a
+  local fail-closed control — it does not generalize.
+
+**Do not read the spent `D7a`-`D7e` block as a live route** — its surviving
+prose is why the banned retention kept looking available.
+
+### The queue is deep — verified, so do not re-derive it
+
+Six nodes sit behind this branch; the five not yet started are **all `ready`
+with written frames**: `RT-SEED-CALL-PORT`, `RT-DESCENT-RETIRE`,
+`RT-CONTSPEC-LEDGER`, `NATIVE-HANDLE-CARRIER`, `PX8-ERRID-ALLOC`. No framing
+debt. `RT-UNIT-CLOSURE-CONVERT` reads as a successor but is correctly `closed`
+(false premise, remainder folded into this node's `D5`).
+`RT-CONTSRC-CALLABLE-CONTRACT` is `ready` but **off the critical path by its
+own §0**. All six wait on one unmerged branch, now **191+ commits** ahead —
+that concentration is the parked campaign-sizing question for the operator.
 
 **`runtime-implementer` was compacted `ctx 69% → 0%`** at `400bddde` (clean, 191
 ahead). ⛔ **Never `handoff-gate-compact.sh` that seat** — it hard-resets to
 `origin/main` and would move the branch ref off the whole preserved evidence
 chain. Hand-drive `/compact` on the single quiescent pane.
 
-⚠ **Three frame defects on this node were mine, all one shape: a requirement
-carried forward by COPY and never re-grounded** (`D8g`'s same-witness
-conjunction, its exact-key clause, `D6b`'s non-vacuity diagnosis). **The
-instrument that caught each was checking that withdrawn text is ABSENT — not
-reading the diff**, which is silent about a stale claim nobody touched and
-equally silent about one you just re-introduced by copying a superseded ruling.
+### FIVE frame defects were mine, in TWO shapes. The second shape is new.
+
+**Shape 1 — a requirement carried forward by COPY and never re-grounded**
+(four): `D8g`'s same-witness conjunction, its exact-key clause, `D6b`'s
+non-vacuity diagnosis, `D6b`'s attribution conjunct. The frame **contained the
+refutation** of the last one about 400 lines away and had since 2026-08-05; I
+recut that very paragraph hours earlier and left it standing. **A 3600-line
+frame can hold a requirement and its refutation at once, and the diff shows
+neither.**
+
+**Shape 2 — reading a ruling that PRESCRIBED A REPAIR as one that CLOSED A
+PATH.** I cited `evt_6azsr4xrch1he` to retire the selected-argument call as
+impossible. It had diagnosed a gap and prescribed the fix, and **`D8d`/`D8e`
+had already delivered it** — both DISCHARGED in the execution-order table I had
+open. **A ruling's description of a gap outlives the gap.** Before citing one
+as a live prohibition, check whether the checkpoints it prescribed have
+discharged.
+
+**Two instruments, and each caught a different shape.** Absence-checking
+withdrawn text catches shape 1 — a diff is silent about a stale claim nobody
+touched, and equally silent about one you just re-introduced by copying a
+superseded ruling. **Sweeping the clause you replace is not enough; sweep every
+site that CITES it.** Shape 2 was caught only by **gating the publish on the
+ruling's author** — I could not have caught it by reading, because I had
+already read the discharge rows and drawn the wrong conclusion from them.
 
 **`D8p` DISCHARGED at exact `2be7adb0`** (`evt_6sk9hbp17893t`). **`D8f`
 CLASSIFIED bounded and IN-NODE** (`evt_3ynqrahtzngaz`) — ⭐ **no further
