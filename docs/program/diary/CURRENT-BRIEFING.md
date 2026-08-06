@@ -60,15 +60,30 @@ carried-context resolution, aggregate reconciliation. ⛔ **`defining_unit` is
 likewise unbound there, so a one-field patch without a read/write census is
 unsafe.**
 
-⚠ **THE RETROACTIVE QUESTION, raised to @architect and candidate-blocking:**
-`D8a`'s selector is five-field and its **first field is the emission owner**;
-`D8i`'s wrong-owner refusal and `D8j`'s clause 2 (*"claiming function equals
-`identity.emission_owner()`"*) are both owner-keyed. **Does any `D8a`-`D8k`
-control derive BOTH sides from the stale ambient owner and therefore pass
-vacuously?** Not asserting the evidence is bad — **refusing to assume it is
-fine**, because the defect is in the field that chain is keyed on. If rows need
-re-derivation, that is re-measurement on preserved SHAs, not reopened
-checkpoints.
+⭐ **THE RETROACTIVE QUESTION IS ANSWERED — and asking it paid**
+(`evt_t4e294qz932v`). ⛔ **No checkpoint is invalidated: `D8a`-`D8k` are NOT
+reopened.** `D8a`/`D8b`/`D8h` derive everything from planner-issued records;
+`D8k`'s row passes the owner explicitly; `D8i`'s and `D8j`'s positives are
+measured in **ordinary declaration-owned / root** bodies where the owner **is**
+bound before lowering; `WrongClaimingOwner` substitutes `None` rather than a
+second agreeing value.
+
+⛔ **But ONE control is self-correlated: `D8i` clause 2.** Its mutation picks a
+"foreign" identity by asking for a target whose owner **differs from
+`self.defining_emission_owner`**, and the guard compares that identity's owner
+**back to the same field**. ⇒ It proves the guard rejects disagreement
+**relative to the ambient value**, not that the ambient value is planner
+correct — **if the field were stale, mutation and guard would still agree.**
+Not a false green today (the refusal lands in the ordinary pass), but **it may
+no longer be cited as evidence for specialization-body owner correctness.**
+`D8j` verification 2 has the same limitation.
+
+⇒ **After `D8o`, re-run and record `D8i` clause 2 and `D8j` verification 2's
+positive and negative rows on the `D8o` descendant.** ⛔ **Bounded
+remeasurement, not rework — preserve their prior exact SHAs as baselines, do
+not rewrite or reopen them.** `D8a`/`D8b`/`D8h` and `D8k` need ordinary
+regression coverage only. **If no lawful specialization-body composed claim
+exists, record the population EMPTY; do not fabricate one.**
 
 **Sequencing:** `D8o` does not mechanically block `D8n`'s evidence-only edit,
 but must precede a candidate **and** the `D8m` witness, which spans both
