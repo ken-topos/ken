@@ -418,7 +418,7 @@ struct CaseProducerAuthority {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum CaseEmissionStatus {
+pub(in crate::cranelift_backend) enum CaseEmissionStatus {
     Reachable,
     Eliminated,
 }
@@ -9746,6 +9746,37 @@ impl<'src> StaticTransitionPlan<'src> {
         position: usize,
     ) -> Result<StaticOriginId, CraneliftBackendError> {
         self.semantic.child_origin(parent, position)
+    }
+
+    /// The planner's exact emission verdict for one ordinary `Match` case.
+    ///
+    /// `Reachable` when the scrutinee's producer set is `Open`, or is
+    /// `Closed(S)` and contains this case's canonical constructor identity;
+    /// `Eliminated` when it is `Closed(S)` and does not. The derivation lives in
+    /// `build_case_emission_plan` and is validated against a re-derivation, so
+    /// this is a projection of an already-closed fact.
+    ///
+    /// Lowering asks an occurrence-and-ordinal keyed QUESTION and receives a
+    /// verdict it cannot mint: `case_emissions`, `semantic` and the producer-set
+    /// derivation all stay private, so an emitter can obtain this answer and
+    /// cannot derive a different one. It returns no source term, so it cannot
+    /// widen the single `-> Result<&'src RuntimeExpr` route.
+    ///
+    /// `None` means the origin is not a planned ordinary `Match` occurrence --
+    /// a `ComputationalMatch` has no record here. That is a refusal to answer,
+    /// never a default to `Reachable`.
+    pub(in crate::cranelift_backend) fn case_emission_status(
+        &self,
+        match_origin: StaticOriginId,
+        ordinal: usize,
+    ) -> Result<Option<CaseEmissionStatus>, CraneliftBackendError> {
+        let ordinal =
+            u32::try_from(ordinal).map_err(|_| planner_error("case-emission ordinal exhausted"))?;
+        Ok(self
+            .case_emissions
+            .iter()
+            .find(|record| record.match_origin == match_origin && record.ordinal == ordinal)
+            .map(|record| record.status))
     }
 
     /// Consume the planner-owned result contract for one source join.

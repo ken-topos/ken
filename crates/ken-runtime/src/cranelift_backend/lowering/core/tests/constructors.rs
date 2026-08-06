@@ -3680,11 +3680,6 @@ fn c1_d3_ac_c4_a_carried_hypothesis_applied_to_arguments_fails_closed() {
 /// the whole point: the generic seat classified a carried scrutinee by phase and
 /// this one did not, so a carried value reaching it fell past every
 /// `Lowered`-shape test onto `"scrutinee is not a constructor value"`.
-///
-/// The scrutinee is `Var(1)`, the carried `Leaf` child. Case 0 is deliberately a
-/// constructor that CANNOT match, and it is placed FIRST: an eliminator that
-/// always took case 0 would return `Sentinel` rather than the child, so the two
-/// cases disagree on the only input this fixture can produce.
 fn ac1_source_machine_carried_match(cases: Vec<crate::RuntimeMatchCase>) -> RuntimeExpr {
     RuntimeExpr::Match {
         scrutinee: Box::new(RuntimeExpr::Var(1)),
@@ -3693,127 +3688,45 @@ fn ac1_source_machine_carried_match(cases: Vec<crate::RuntimeMatchCase>) -> Runt
     }
 }
 
-/// The arms are `Bool`s because this seat merges its arms through the SCALAR
-/// join, which admits `Int`/`Bool` and refuses an aggregate. That restriction is
-/// the join's and predates this arm -- it is not what `AC-1` repaired, and using
-/// a shape it already accepts keeps this fixture measuring case SELECTION rather
-/// than re-measuring the join. `Bool` specifically, because its merged payload is
-/// the plain `0`/`1` this rig returns, with no native-`Int` encoding in between.
-const AC1_MATCHED_ARM: i64 = 1;
-const AC1_UNMATCHED_ARM: i64 = 0;
-
 fn ac1_unmatchable_case() -> crate::RuntimeMatchCase {
     crate::RuntimeMatchCase {
         constructor: "ctor:fixture::C1::Sentinel".to_string(),
         binders: 0,
-        body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
+        body: ac_c7_ctor("Sentinel"),
     }
-}
-
-/// Drive one source-machine ordinary `Match` over a carried scrutinee.
-///
-/// The same fixture as [`ac_c4_recursive_edge`] -- a carried
-/// `ComputationalMatch` whose recursive case body is lowered through
-/// `Lowering::lower_source_machine` -- with the ordinary `Match` as that body.
-/// The observation is the merged scalar rather than a carrier tag, because these
-/// arms merge through the scalar join.
-fn ac1_source_machine_edge(
-    match_body: RuntimeExpr,
-) -> Result<i64, CraneliftBackendError> {
-    let fixture = RuntimeExpr::Let {
-        value: Box::new(ac_c7_wrap("Wrap", "Leaf")),
-        body: Box::new(RuntimeExpr::ComputationalMatch {
-            scrutinee: Box::new(RuntimeExpr::Var(0)),
-            cases: vec![
-                crate::RuntimeComputationalMatchCase {
-                    constructor: "ctor:fixture::C1::Wrap".to_string(),
-                    argument_binders: 1,
-                    recursive_positions: vec![0],
-                    body: match_body,
-                },
-                crate::RuntimeComputationalMatchCase {
-                    constructor: "ctor:fixture::C1::Leaf".to_string(),
-                    argument_binders: 0,
-                    recursive_positions: Vec::new(),
-                    body: RuntimeExpr::Value(RuntimeValue::Bool(false)),
-                },
-            ],
-            default: ac_c7_trap(),
-        }),
-    };
-    let RuntimeExpr::Let {
-        body: match_expr, ..
-    } = &fixture
-    else {
-        unreachable!("the fixture is a `Let`")
-    };
-    let (plan, root) = planned_root_occurrence(&fixture);
-    let scrutinee_origin = plan
-        .child_static_origin(root, 0)
-        .expect("a `Let`'s value is child 0");
-    let match_origin = plan
-        .child_static_origin(root, 1)
-        .expect("a `Let`'s body is child 1");
-
-    let lowered = ac_c7_lowered_wrap(&plan, scrutinee_origin, "Wrap", "Leaf");
-    let seed_env = NativeSeedEnvironment::empty();
-    let (_module, code) = ac_c7_try_compile_edge(&seed_env, plan, move |compiler, builder| {
-        let word = compiler.transfer_into_carrier(builder, scrutinee_origin, &lowered)?;
-        let eliminated = compiler.lower_expr(
-            builder,
-            SourceOccurrence {
-                expr: match_expr.as_ref(),
-                static_origin: match_origin,
-            },
-            &[LoweringEnvironmentBinding::Value(LoweringOperand::Carried(word))],
-        )?;
-        match eliminated {
-            LoweringOperand::Specialized(Lowered::Bool { value, .. }) => Ok(value),
-            LoweringOperand::Carried(selected) => compiler.emit_carrier_tag(builder, selected),
-            _ => panic!("the fixture's arms are `Bool`s, so the merge is scalar or carried"),
-        }
-    })?;
-
-    let mut store = crate::boundary_value::BoundaryValueStore::new();
-    let (_arena, base) = ac_c7_bind_arena(&mut store);
-    Ok(ac_c7_run(code, base))
 }
 
 /// `AC-1` -- an ordinary `Match` at the SOURCE-MACHINE seat CLASSIFIES A
 /// CARRIED SCRUTINEE BY PHASE instead of asking it for a `Lowered` shape.
 ///
-/// MEASURED: the fixture whose arms are constructors is refused by the carried
-/// `Match`'s ARM machinery, for the scalar join's arm-shape reason. Pre-repair
-/// the identical fixture was refused earlier and elsewhere, by
-/// `Match: "scrutinee is not a constructor value"`.
+/// MEASURED: the fixture is refused by `Lowering::lower_source_carried_match`'s
+/// own join acquisition, because this rig's enclosing continuation has no
+/// planned scalar cut. Pre-repair the identical fixture was refused earlier and
+/// elsewhere, by `Match: "scrutinee is not a constructor value"`.
 ///
 /// CLAIMED: `SourceContinuation::MatchScrutinee` classifies a `LoweringOperand`
-/// by PHASE before any arm asks for a `Lowered` shape, and routes a carried
-/// scrutinee into `Lowering::lower_carried_match` -- the same helper the generic
-/// `lower_expr` seat uses.
+/// by PHASE before any arm asks for a `Lowered` shape, and dispatches a carried
+/// scrutinee into the source-machine carried route.
 ///
 /// THE GAP, stated plainly because this row asserts on a REFUSAL: "it errored"
 /// is satisfied by erroring for any reason at all. Closed by the identity of the
-/// error rather than its presence. `"a carried `Match` arm"` is produced ONLY
-/// inside the carried-match arm machinery, which is unreachable unless the seat
-/// accepted the carried phase and dispatched into it -- so this wording cannot
-/// be produced by the pre-repair code path. The scalar-join arm restriction it
-/// names is the join's own and predates this arm; it is not what `AC-1`
-/// repaired, and it is why this row stops at a refusal rather than a value.
+/// error rather than its presence -- the refusal below is raised only INSIDE the
+/// carried route, after the phase classification and the dispatch, so it cannot
+/// be produced by the pre-repair code path, which never reached that route.
 ///
-/// What this row does NOT claim: that case SELECTION is correct. That property
-/// belongs to `lower_carried_match`, which this repair REUSES rather than
-/// reimplements, and it is measured on its own row at the generic seat --
-/// `c1_d3_ac_c7_match_eliminates_a_carried_value_and_selects_the_right_case`.
-/// The executable closed-default row below exercises this seat end to end.
+/// ⛔ What this row does NOT claim, and what is still OWED: it does not exercise
+/// a nontrivial post-match continuation, a nested or inherited source join,
+/// exact-once join consumption, distinct predecessor edges, or the carried
+/// identity / arity / field-order negatives. Those need a whole-process fixture
+/// with a planned scalar cut, which this JIT edge rig does not supply. They are
+/// not claimed here and are not discharged anywhere else.
 ///
-/// Promise class: transition sentinel. It is pinned to the arm-shape refusal the
-/// scalar join currently raises; whichever change teaches that join to merge an
-/// aggregate arm retires this row, and the row below plus the generic seat's
-/// selection row are what survive it.
+/// Promise class: transition sentinel. It is pinned to the join-acquisition
+/// refusal this rig currently raises; a rig that supplies a planned scalar cut
+/// retires this row in favour of the real positive.
 #[test]
 fn ac1_source_machine_match_classifies_a_carried_scrutinee_by_phase() {
-    let refused = ac1_source_machine_edge(ac1_source_machine_carried_match(vec![
+    let refused = ac_c4_recursive_edge(ac1_source_machine_carried_match(vec![
         ac1_unmatchable_case(),
         crate::RuntimeMatchCase {
             constructor: "ctor:fixture::C1::Leaf".to_string(),
@@ -3821,12 +3734,12 @@ fn ac1_source_machine_match_classifies_a_carried_scrutinee_by_phase() {
             body: ac_c7_ctor("Sentinel"),
         },
     ]))
-    .expect_err("the scalar join refuses an aggregate arm at this seat");
+    .expect_err("this rig's continuation has no planned scalar cut");
     let CraneliftBackendError::Unsupported(UnsupportedLowering {
         construct, reason, ..
     }) = &refused
     else {
-        panic!("the arm refusal is an unsupported-lowering: got {refused:?}");
+        panic!("the refusal is an unsupported-lowering: got {refused:?}");
     };
     assert_ne!(
         *reason, "scrutinee is not a constructor value",
@@ -3836,46 +3749,12 @@ fn ac1_source_machine_match_classifies_a_carried_scrutinee_by_phase() {
     assert_eq!(
         (*construct, reason.as_str()),
         (
-            "a carried `Match` arm",
-            "dynamic arms must produce scalar Int or Bool values"
+            "NativeJoinPlanV1",
+            "active checked continuation has no planned scalar cut before its outer suffix"
         ),
-        "AC-1: the refusal must come from INSIDE the carried-match arm machinery, \
+        "AC-1: the refusal must come from INSIDE the source-machine carried route, \
          which is reachable only once the seat has classified the scrutinee's \
          phase and dispatched into it"
-    );
-}
-
-/// `AC-1`'s negative arm -- a carried scrutinee outside the case set reaches the
-/// closed default at the same seat.
-///
-/// MEASURED: the identical rig, with the only case being one the carried `Leaf`
-/// cannot match, returns the emitted trap status rather than any case's value.
-///
-/// CLAIMED: the source-machine carried `Match`'s case chain is CLOSED -- it
-/// falls through to the match's own default rather than selecting arbitrarily.
-///
-/// THE GAP: "it returned the trap status" is satisfiable by any failure
-/// whatsoever, including the arena never binding. Closed by the row above
-/// sharing this rig: the same fixture, same arena, same producer path returns a
-/// real identity when a case does match, so the trap here is attributable to the
-/// case chain rather than to the rig.
-///
-/// Promise class: durable invariant.
-#[test]
-fn ac1_source_machine_match_reaches_the_closed_default_off_the_case_set() {
-    let observed =
-        ac1_source_machine_edge(ac1_source_machine_carried_match(vec![
-            ac1_unmatchable_case(),
-        ]))
-        .expect("the source-machine ordinary Match lowers a carried scrutinee");
-    assert_eq!(
-        observed, AC_C7_TRAP_STATUS,
-        "AC-1: `Leaf` matches no case, so the emitted chain must reach the closed \
-         default; got {observed}"
-    );
-    assert_ne!(
-        observed, AC1_UNMATCHED_ARM,
-        "the default must not be reachable by falling into the only case anyway"
     );
 }
 

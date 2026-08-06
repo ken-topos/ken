@@ -4089,6 +4089,20 @@ fn exactly_one_plan_origin_to_expression_lookup_exists() {
             // `D8` exports one opaque, origin-keyed join-plan token. The token
             // contains no term and has no public constructor.
             "pub(in crate::cranelift_backend) fn join_plan_token(",
+            // `RT-CONTSRC-PRODUCER-LOCAL` `AC-1` — the case-emission verdict,
+            // added deliberately and argued rather than bumped.
+            //
+            // The carried source-machine `Match` route must emit exactly the
+            // cases the planner authorizes, and it must not re-derive that
+            // authority. This returns a VERDICT for one occurrence-and-ordinal:
+            // `case_emissions`, the producer-set derivation and `semantic` all
+            // stay private, so an emitter can obtain the answer and cannot mint
+            // or vary one. `None` is a refusal to answer, not a default.
+            //
+            // ⚠ It returns `Result<Option<CaseEmissionStatus>, _>`, so it does
+            // not contribute to the `-> Result<&'src RuntimeExpr` count that
+            // carries `B2A-S`'s `AC-4`.
+            "pub(in crate::cranelift_backend) fn case_emission_status(",
             // `RT-FNSPLIT-C1` `D1` — the artifact-static identity capability.
             //
             // ⭐ These four are the whole of `D1`, and they are the shape the

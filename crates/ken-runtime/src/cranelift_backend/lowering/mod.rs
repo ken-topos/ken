@@ -85,7 +85,7 @@ pub(in crate::cranelift_backend) use super::planning::{
     ContinuationSourceSlotAuthority,
     ContinuationSpecializationId,
     ContinuationUnitView, EmittableCallKind, EmittableUnit, FieldIdentity, JoinPlanToken,
-    PlannedReferentLifetime,
+    CaseEmissionStatus, PlannedReferentLifetime,
     host_effect_seat_contract_of, EffectSeatNeed, EffectSeatOperation, EffectSeatPhase,
     EffectSeatSlot, PlannedEffectSeat,
     AggregateOccurrenceId, PlannedAggregateAllocation, PlannedAggregateShape,

@@ -20,7 +20,8 @@ pub(super) use static_transition::{
     ScaleBPlanCensus,
 };
 pub(super) use static_transition::{
-    planned_partiality_trap, ConstructorIdentity, DeclarationCallTargetClass, JoinPlanToken,
+    planned_partiality_trap, CaseEmissionStatus, ConstructorIdentity, DeclarationCallTargetClass,
+    JoinPlanToken,
     JoinResultRepresentation, StaticOriginId, StaticTransitionPlan, SynthesizedConstructorRole,
     SynthesizedFixedConstructorRole,
 };

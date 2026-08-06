@@ -4894,17 +4894,18 @@ impl<'a> Lowering<'a> {
                                 // wrong thing, naming a cause that is not the
                                 // cause: the value is fine, the question is.
                                 //
-                                // This is the same arm the generic `lower_expr`
-                                // `Match` emitter and the source machine's
-                                // `ComputationalMatchScrutinee` already carry,
-                                // and it eliminates through the SAME helper the
-                                // generic route uses, so the borrowed-opaque
-                                // process-input lane is not re-decided here.
-                                // The elimination merges in the carrier lane to
-                                // one operand and the machine then resumes with
-                                // the continuation once -- exactly how the
-                                // computational sibling resumes after
-                                // `lower_carried_computational_match`.
+                                // The generic `lower_expr` `Match` emitter and
+                                // the source machine's
+                                // `ComputationalMatchScrutinee` both already
+                                // carry this arm. This seat was the only one of
+                                // the three missing it.
+                                //
+                                // It does NOT delegate to the generic seat's
+                                // `lower_carried_match`: that helper returns a
+                                // value to its caller, while this seat owns a
+                                // continuation, so each case body is lowered
+                                // under the match's original `next` through its
+                                // own source predecessor edge.
                                 //
                                 // Taken as an explicit arm rather than a
                                 // fallback, so this match is exhaustive over
@@ -4912,18 +4913,15 @@ impl<'a> Lowering<'a> {
                                 // compile error here rather than a silent
                                 // refusal.
                                 LoweringOperand::Carried(word) => {
-                                    let eliminated = self.lower_carried_match(
+                                    return self.lower_source_carried_match(
                                         builder,
                                         word,
                                         &cases,
                                         &default,
                                         static_origin,
                                         &env,
-                                    )?;
-                                    SourceMachineState::Value {
-                                        value: RoutedAnswer::direct(eliminated),
                                         control,
-                                    }
+                                    );
                                 }
                                 LoweringOperand::Specialized(_) => {
                                     return Err(unsupported(
@@ -5946,6 +5944,233 @@ impl<'a> Lowering<'a> {
         }
         self.consumed_subcontinuation_frames = frame_scope.finish();
 
+        let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
+            local_completion
+        else {
+            return Ok(LoweringOperand::Specialized(Lowered::RecursiveBackedge));
+        };
+        let merged = self.finish_planned_join(
+            builder,
+            merge,
+            target.join_plan.as_ref(),
+            Some(required_kind),
+            "NativeJoinPlanV1",
+        );
+        let suffix_active = ActiveContinuationFrame {
+            activation: suffix_control.selected.activation,
+            cursor: suffix_control.selected.cursor,
+            parent: suffix_control.selected.parent,
+            pending: &suffix_pending,
+            selected_ancestry: &suffix_control.selected.selected_ancestry,
+            source_lineage: &suffix_control.selected_lineage,
+            source_selected_cursor: Some(suffix_control.selected.cursor),
+            selected_scope: suffix_control.selected.selected_scope.as_ref(),
+        };
+        self.restore_root_terminal_authority(root_authority, suffix_control.terminal_outer)?;
+        self.resume_active_continuation(builder, merged?, suffix_active)
+    }
+
+    /// Eliminate a CARRIED scrutinee at the source-machine ordinary `Match`
+    /// seat, under the source machine's own continuation discipline.
+    ///
+    /// A runtime boundary word has no compile-time template, so the case cannot
+    /// be selected at compile time. The dispatch is the carrier ABI's and
+    /// nothing else: the canonical case identity comes from the planner, the tag
+    /// and field count are read through the carrier, and each projected child
+    /// stays `Carried` into the case environment. There is no decode and no
+    /// `Carried -> Lowered` reconstruction anywhere on this path.
+    ///
+    /// This does NOT delegate to `Lowering::lower_carried_match`. That helper
+    /// belongs to the generic `lower_expr` seat, which returns a value to its
+    /// caller; this seat owns a continuation, so each case body must be lowered
+    /// under the match's original `next` through a distinct source predecessor
+    /// edge, and the suffix resumed exactly once at the join.
+    ///
+    /// Case emission is the planner's verdict, not this emitter's: a case the
+    /// scrutinee's closed producer set eliminates is not emitted and its body is
+    /// not lowered. The runtime closed default covers it, so an eliminated
+    /// constructor arriving anyway still reaches a defined outcome rather than
+    /// falling into a neighbouring case.
+    fn lower_source_carried_match<'b>(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        scrutinee: CarriedBoundaryWord,
+        cases: &[crate::RuntimeMatchCase],
+        default: &RuntimeTrap,
+        static_origin: StaticOriginId,
+        env: &[LoweringEnvironmentBinding],
+        suffix_control: SourceControl<'b>,
+    ) -> Result<LoweringOperand, CraneliftBackendError> {
+        let (source_prefix_template, terminal) =
+            Self::split_source_prefix(suffix_control.continuation)?;
+        let mut local_completion = None;
+        let target = match terminal {
+            SourcePrefixTerminal::Join(inherited_edge) => inherited_edge.target,
+            SourcePrefixTerminal::ResumeOuter { root_authority } => {
+                let active = suffix_control
+                    .selected
+                    .as_active(&suffix_control.selected_lineage);
+                let (prefix, suffix_pending, required_kind, site_id) =
+                    self.planned_active_scalar_cut(active)?;
+                let join_id = self.next_source_join;
+                self.next_source_join = self
+                    .next_source_join
+                    .checked_add(1)
+                    .expect("compiler-private source join identity exhausted");
+                let join_plan = std::rc::Rc::new(self.consumed_join_plan_token(static_origin)?);
+                let merge = builder.create_block();
+                self.append_planned_join_params(builder, merge, join_plan.as_ref());
+                local_completion = Some((
+                    merge,
+                    suffix_pending.to_vec(),
+                    required_kind,
+                    site_id,
+                    root_authority,
+                ));
+                SourceJoinTarget {
+                    join_id,
+                    block: merge,
+                    expected_outer: suffix_control.terminal_outer,
+                    required_kind,
+                    join_plan,
+                    result_origin: static_origin,
+                    terminal_active_prefix: prefix,
+                }
+            }
+        };
+
+        // Read once, in the block that dominates every arm below.
+        let tag = self.emit_carrier_tag(builder, scrutinee)?;
+        let field_count = self.emit_carrier_field_count(builder, scrutinee)?;
+
+        let mut frame_scope =
+            CheckedFrameBranchScope::capture(&self.consumed_subcontinuation_frames);
+        let mut test_block = builder
+            .current_block()
+            .expect("carried source match block");
+
+        for (index, case) in cases.iter().enumerate() {
+            // The planner's verdict, asked per case and never defaulted. An
+            // origin with no record is a refusal to answer, so it fails closed
+            // rather than being read as `Reachable`.
+            let status = self
+                .static_transition_plan
+                .case_emission_status(static_origin, index)?
+                .ok_or_else(|| {
+                    unsupported(
+                        "Match",
+                        "a carried source match has no planned case-emission verdict",
+                    )
+                })?;
+            if status == CaseEmissionStatus::Eliminated {
+                continue;
+            }
+
+            if builder.current_block() != Some(test_block) {
+                builder.switch_to_block(test_block);
+            }
+            let identity = self
+                .static_transition_plan
+                .case_constructor_identity(static_origin, index)?
+                .tag_abi_word()?;
+            let arm = builder.create_block();
+            let next = builder.create_block();
+            let matched = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::Equal,
+                tag,
+                identity as i64,
+            );
+            builder.ins().brif(matched, arm, &[], next, &[]);
+
+            builder.switch_to_block(arm);
+            let binders = i64::try_from(case.binders).map_err(|_| {
+                unsupported(
+                    "BoundaryCarrier",
+                    "a case binds more constructor arguments than the carrier ABI can count",
+                )
+            })?;
+            // The declared arity is checked against the word actually delivered,
+            // at runtime, which is where a disagreement between a case header
+            // and a boundary value belongs.
+            Self::require_i64(builder, field_count, binders);
+            let mut children = Vec::with_capacity(case.binders);
+            for position in 0..case.binders {
+                let child = self.emit_carrier_field(builder, scrutinee, position)?;
+                children.push(LoweringOperand::Carried(child));
+            }
+
+            let edge = self.mint_source_predecessor(target.clone());
+            let continuation =
+                Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
+            let branch_control = SourceControl {
+                continuation,
+                selected: suffix_control.selected.clone(),
+                selected_lineage: suffix_control.selected_lineage.clone(),
+                terminal_outer: suffix_control.terminal_outer,
+            };
+            let body = self.owned_case_body_occurrence(static_origin, index, case.body.clone())?;
+            let lowered = self.lower_forked_branch(
+                builder,
+                &mut frame_scope,
+                body,
+                env_with_operands(children, env),
+                branch_control,
+            )?;
+            if self.seal_source_trap_branch(builder, &lowered)? {
+                // A trap terminates this mutually exclusive predecessor.
+            } else if !matches!(
+                lowered,
+                LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+            ) {
+                return Err(unsupported(
+                    "NativeJoinPlanV1",
+                    format!(
+                        "carried-match predecessor {index} did not seal its distinct affine join edge"
+                    ),
+                ));
+            }
+            test_block = next;
+        }
+
+        // The runtime closed default. It carries every case the planner
+        // eliminated as well as every constructor outside the case set, so the
+        // chain is closed by construction rather than by exhausting the arms.
+        // `default` is an ATOM of the match occurrence rather than a child of
+        // it, so the honest origin for this synthesized term is the match
+        // occurrence's own; `Trap` is a leaf, so no child is derived from it.
+        // Do not mint an origin here.
+        builder.switch_to_block(test_block);
+        let edge = self.mint_source_predecessor(target.clone());
+        let continuation =
+            Self::instantiate_source_prefix_template(&source_prefix_template, edge)?;
+        let default_control = SourceControl {
+            continuation,
+            selected: suffix_control.selected.clone(),
+            selected_lineage: suffix_control.selected_lineage.clone(),
+            terminal_outer: suffix_control.terminal_outer,
+        };
+        let lowered = self.lower_forked_branch(
+            builder,
+            &mut frame_scope,
+            OwnedSourceOccurrence {
+                expr: RuntimeExpr::Trap(default.clone()),
+                static_origin,
+            },
+            env.to_vec(),
+            default_control,
+        )?;
+        if self.seal_source_trap_branch(builder, &lowered)? {
+            // The default trap terminates the fall-through predecessor.
+        } else if !matches!(
+            lowered,
+            LoweringOperand::Specialized(Lowered::RecursiveBackedge)
+        ) {
+            return Err(unsupported(
+                "NativeJoinPlanV1",
+                "carried-match default predecessor did not seal its distinct affine join edge",
+            ));
+        }
+        self.consumed_subcontinuation_frames = frame_scope.finish();
         let Some((merge, suffix_pending, required_kind, _site_id, root_authority)) =
             local_completion
         else {
