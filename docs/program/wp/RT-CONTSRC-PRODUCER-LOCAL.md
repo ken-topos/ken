@@ -1389,7 +1389,7 @@ all six failing `D0` rows.
   | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | DISCHARGED `1f9a2020`+`abe46dda`, **QA-approved** |
   | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | **DISCHARGED** `3a63fe64`, after two bounded evidence corrections |
   | 13 | `D8o` — ambient body authority | lowering compiler state | **DISCHARGED** `3aadbaae`, after two evidence blocks (`5154d94a`, `d3f7e32c`) |
-  | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | mechanism accepted `7d7f248b`; **witness blocked** — **NEXT**, releases from `3aadbaae` |
+  | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | matrix complete `e5ad0e10` (`759/2/1`), **in Architect review** — corrects a clause accepted at `7d7f248b` |
   | 15 | `D8f` — checked-marker occupancy | integration | gate landed, **UNWITNESSABLE until `D8m`**; evidence `e80fd42f` |
   | 16 | `D8g` — non-vacuous closeout, both paths | proof | held |
   | 17 | `D6b` closeout, then `D6c` refusal set | — | held |
@@ -2558,8 +2558,53 @@ all six failing `D0` rows.
   does.
 
   ⇒ **Where the values coincide, the discriminating power has to come from
-  somewhere else** — on `D8m` that is the real distinct occurrence, which is
-  exactly the outstanding fixture work.
+  somewhere else** — on `D8m` that is the real distinct occurrence.
+
+  ⭐ **RESOLVED at `e5ad0e10`, and the mechanism is worth copying.** The second
+  occurrence is **two structurally identical checked composed bridges side by
+  side in one scope, with distinct frame ids and distinct slot templates but
+  DELIBERATELY EQUAL FINGERPRINTS.** ⇒ The pair is **invisible to every
+  shape-keyed check**, leaving the transported identity as the only thing that
+  tells them apart — and equal fingerprints are also **what lets a transplant
+  reach lowering at all**, since planning compares them and admits the
+  exchange. ⇒ **The permutation is now ENFORCED rather than recorded.**
+
+  ###### SIXTH sub-shape — a difference proof needs a SOLE producer
+
+  ⛔ **Binding on `D8f` and `D8g`.** Found at `e5ad0e10` by mutation, in
+  evidence **already accepted at `7d7f248b`**:
+  `d8m_the_source_frame_identity_survives_the_bridge` **clause 1 was green for
+  the wrong reason.**
+
+  It was written as `D8m`'s difference proof, reasoning that the slot-marker
+  guard is **unreachable while the bridge carries `None`**. ⛔ **That reasoning
+  is false for that witness: the same match is ALSO lowered by the DIRECT
+  path**, which carried the identity before `D8m` and still does. ⇒ **The
+  refusal arrives whether or not the bridge transports anything.**
+
+  ⭐ **How it was caught, and it is the cheap test:** reverting the bridge to
+  its complete pre-`D8m` all-`None` tuple **reds four of the five rows and
+  leaves clause 1 GREEN.** A difference proof that survives the removal of the
+  difference is not a difference proof.
+
+  ⇒ **The rule: a difference proof requires the withheld mechanism to be the
+  ONLY producer of the observable.** Before claiming one, ask **what else in
+  production yields this same outcome** — a second lowering path, a fallback, an
+  earlier guard. ⛔ **The independent side can be perfectly chosen and the proof
+  still vacuous, because the defect is in the SUBJECT, not in the comparison.**
+
+  ⚠ **Recording ORDER is part of this.** The `D8m` pair is recorded **before**
+  the binding law runs. **Recorded after it, the two components could not
+  disagree and the comparison would be agreeing with itself** — the same
+  self-correlation as rows 3 and 4 above, reached through sequencing rather
+  than through field choice.
+
+  ⭐ **Two disciplines from that same delivery, both worth copying:** every
+  refusal row is **labelled with the PLANE that catches it** (planning versus
+  the consumption seam), because *"it refuses"* and *"it refuses at the bridge"*
+  are different findings and **only the second is about `D8m`**; and where a
+  control **refuses identically without** the new witness, that is **stated as
+  a bound on what the witness buys** rather than quietly counted as coverage.
 
   Three sub-shapes have now appeared, and all three read as rigorous:
 
