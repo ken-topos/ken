@@ -21763,12 +21763,19 @@ fn d8p_a_checked_application_binds_and_emits_in_every_defining_body() {
 /// occurrence; the other emits with no binding.
 ///
 /// This is the occupancy behaviour `D8f` is about, and it is now on a live path.
-/// `D8f` is NOT discharged by this row and is not claimed to be: the program
-/// still refuses further downstream, at the affine causal law -- *"one causal
-/// identity was discharged twice in a single function"* -- because the ordinary
-/// call re-uses a binding that carries a composed authority. That is a separate
-/// question about the ordinary call's discharge, and it is stated here so the
-/// binding evidence is not read as more than it is.
+/// The program **compiles**.
+///
+/// It did not when this row was first written. It refused at the affine causal
+/// law -- *"one causal identity was discharged twice in a single function"* --
+/// because the declined call still answered for the checked application's
+/// composed identity. `D8f`'s closed three-case disposition stopped it
+/// answering, and `d8f_the_declined_call_does_not_answer_for_the_checked_identity`
+/// holds that as a difference.
+///
+/// ⛔ `D8f` is still NOT discharged and this row does not claim it: its
+/// omission, duplicate, transplant and wrong-occurrence refusals are owed on
+/// separate live paths. What this row establishes is the BINDING behaviour, and
+/// it should not be read as more.
 ///
 /// **Promise class: durable invariant.**
 #[test]
@@ -21949,11 +21956,17 @@ fn d8p_preserves_the_refusals_the_projection_could_have_weakened() {
 /// different sites -- the seam and the integration boundary -- so their agreement
 /// is a relation, not a restatement.
 ///
-/// ## Clause 2 — exactly one claim
+/// ## Clause 2 — no identity is discharged twice
 ///
 /// The composed causal identities actually discharged are read from closeout,
-/// which is a third site and knows nothing about dispositions. One claim per
-/// defining body, and the program compiles.
+/// which is a third site and knows nothing about dispositions.
+///
+/// ⚠ The claim is **identity-global nonduplication**, not one claim per defining
+/// body. MEASURED: this witness's two defining bodies share ONE planner-issued
+/// causal identity, so a per-body count is the wrong shape here and would fail
+/// on a lawful program. The affine fact is that no identity appears twice in the
+/// discharged set -- which is exactly what the declined call answering would
+/// break.
 ///
 /// ## Clause 3 — the difference
 ///
@@ -21973,12 +21986,18 @@ fn d8p_preserves_the_refusals_the_projection_could_have_weakened() {
 fn d8f_the_declined_call_does_not_answer_for_the_checked_identity() {
     use crate::cranelift_backend::lowering::core::set_d8f_declined_call_claims;
     use crate::cranelift_backend::lowering::{
-        d8f_dispositions, d8j_discharged, d8p_application_bindings, reset_d8n_observations,
-        CheckedApplicationDisposition,
+        d8f_dispositions, d8j_discharged, d8p_application_bindings, reset_d8j_discharged,
+        reset_d8n_observations, CheckedApplicationDisposition,
     };
 
     // Clause 1 — the live occurrence decision, per defining body.
+    //
+    // ⛔ The discharged-identity log is cleared HERE, immediately before the
+    // program it is read for. `reset_d8n_observations` does not clear it, so
+    // without this every claim below could belong to a preceding clause or a
+    // preceding test, and the assertion would be attributable to nothing.
     reset_d8n_observations();
+    reset_d8j_discharged();
     let outcome = d8f_compile(true);
     assert!(
         outcome.is_none(),
@@ -22054,7 +22073,8 @@ fn d8f_the_declined_call_does_not_answer_for_the_checked_identity() {
         );
     }
 
-    // Clause 2 — exactly one claim per defining body, read from closeout.
+    // Clause 2 — no identity is discharged twice, read from closeout. NOT one
+    // claim per defining body: the two bodies share one planner-issued identity.
     let claims = d8j_discharged();
     assert!(
         !claims.is_empty(),
@@ -22086,7 +22106,12 @@ fn d8f_the_declined_call_does_not_answer_for_the_checked_identity() {
     );
 
     // Clause 4 — the D8j population is not collapsed.
+    //
+    // ⛔ Cleared again immediately before THIS program, for the same reason: the
+    // claims asserted below must be the no-marker program's own, not clause 1's
+    // still sitting in the log.
     reset_d8n_observations();
+    reset_d8j_discharged();
     let plain = d8n_compile();
     assert!(plain.is_none(), "the unmarked composed witness compiles: {plain:?}");
     assert!(
