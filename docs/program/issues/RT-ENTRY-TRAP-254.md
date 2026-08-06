@@ -1,15 +1,46 @@
 ---
 id: RT-ENTRY-TRAP-254
 title: "public_source_observes_raw_argv_environment_cwd_bytes_in_field_order exits 1 with an explicit entry trap where it expects 254 — branch-introduced, and the only tip failure that is not the byte-span gap"
-status: ready
+status: closed
 owner: runtime
 size: M
 gate: none
 depends_on: [RT-CONTSRC-PRODUCER-LOCAL]
 blocks: []
+superseded_by: RT-SRCBODY-BIND-ORDER
 github: null
 origin: Measured at candidate tip b914c7ff (evt_2h8wm2ff99ayq) and provenance-probed (evt_fxgentgrpw6g). Filed by the Steward because it was the one attributed tip failure with no owning node; an unowned failure is what gets lost. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
+
+> ## SUPERSEDED and CLOSED 2026-08-06 — the repair is [[RT-SRCBODY-BIND-ORDER]]
+>
+> **Architect mechanism ruling `evt_7yfs6qxp9hm5b`.** The `D0`-`D9` chain here
+> did its job: it found a **general multi-parameter source-body binding
+> permutation**, of which this node's single failing row is **one
+> discriminator**.
+>
+> **The defect:** a functionized source-body unit records `defining_abi_operands`
+> in ABI descriptor order (correct) and installs the same operands into the body
+> environment in that same order (wrong) — a declaration body reads its
+> parameters **de Bruijn-nearest-first**. `units.rs:3701-3790`. So
+> `main(input, caps)` gives `env = [input, caps]` while the body names `input`
+> as `Var(1)`; `Var(1)` reads `ProgramCaps`.
+>
+> **Closed rather than re-scoped** because this node's title names one test, and
+> a general permutation kept under it would understate the scope to every future
+> reader. Three of the four required controls are not about this row at all.
+>
+> **The skipped row moves to the successor** as control 2 of 4, and un-skipping
+> it is that node's `D4`. Nothing here is owed.
+>
+> **`D9`'s own attribution was refuted** and that matters: it named the common
+> transfer coordinate as the selector. `call_declared_unit_target` already does
+> positional pairing, and a carried word bypasses `transfer_into_carrier`
+> entirely — so **per-argument transfer coordinates are banned in the successor**;
+> they would have been a design change that left the defect intact.
+>
+> **`D6` landed** (the stale carried-scrutinee reachability comment) and sits on
+> `wp/RT-ENTRY-TRAP-254-d6` at `c4112237`, awaiting a follow-up PR.
 
 > ## DIAGNOSIS DISCHARGED. Recut to instrument, localize, repair. `size: M`.
 >

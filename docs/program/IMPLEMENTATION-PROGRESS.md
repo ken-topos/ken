@@ -32,7 +32,7 @@ the committed file matches the generator's output.
 
 ## Last generated
 
-2026-08-06 21:29:47Z — from 165 issue file(s) in `docs/program/issues/`.
+2026-08-06 22:08:33Z — from 166 issue file(s) in `docs/program/issues/`.
 
 ## Work-item status
 
@@ -144,7 +144,7 @@ the committed file matches the generator's output.
 | `RT-DECL-CLOSURE-PORT` | Transparent-declaration-closure emission port — a retained TransparentDeclarationClosure residual forces the whole object onto the monolithic RecursiveDescent root, which exceeds Cranelift's per-function ceiling | active | runtime | L | none | — |
 | `RT-DESCENT-RETIRE` | Retire RecursiveDescent — delete the migration selector, the residual enum, the authority variant, and the recursive-descent emission lane | ready | runtime | M | none | — |
 | `RT-EFFECT-DIFF` | One reusable rich differential boundary over EffectObservation — interpreter vs native, first-divergence reporting, so backend-local tests can observe what only the CLI suites currently can | ready | runtime | L | none | — |
-| `RT-ENTRY-TRAP-254` | public_source_observes_raw_argv_environment_cwd_bytes_in_field_order exits 1 with an explicit entry trap where it expects 254 — branch-introduced, and the only tip failure that is not the byte-span gap | ready | runtime | M | none | — |
+| `RT-ENTRY-TRAP-254` | public_source_observes_raw_argv_environment_cwd_bytes_in_field_order exits 1 with an explicit entry trap where it expects 254 — branch-introduced, and the only tip failure that is not the byte-span gap | closed | runtime | M | none | — |
 | `RT-ESCAPE` | escaping a second Resource through a bracket fails native lowering | merged | runtime | M | none | PR #911 @ 238a5c5d (origin/main 4ac9141e, CI green) |
 | `RT-FNSPLIT-B1R` | RT-NATIVE-FNSPLIT Boundary B1R — encode the occurrence-local semantic material B1 counted but never stored (repair of landed B1) | merged | runtime | L | none | 937 |
 | `RT-FNSPLIT-B2A-C` | plan↔lowering occurrence correspondence — transport the preallocated StaticOriginId to the site where it is out of scope | merged | runtime | L | none | 940 |
@@ -174,6 +174,7 @@ the committed file matches the generator's output.
 | `RT-SEED-CALL-PORT` | Seed-closure call port — a Call whose callee is the retained non-lexical closure form routes the whole object to RecursiveDescent | ready | runtime | M | none | — |
 | `RT-SPLIT` | decompose cranelift_backend.rs | merged | runtime | L | none | — |
 | `RT-SRC-DISPATCH-COVER` | close the source-machine scrutinee-dispatch coverage tier surfaced by RT-SPLIT slice 4 | draft | runtime | TBD | none | — |
+| `RT-SRCBODY-BIND-ORDER` | Functionized source-body units install the parameter run in ABI order where the body reads de Bruijn-nearest-first, so every multi-parameter source body binds its parameters permuted | ready | runtime | M | none | — |
 | `RT-SYMLINK-LANE` | SymlinkPolicy is honoured by the interpreter lane and unreachable in the native lane — FollowWithinScope has no native behaviour | draft | runtime | TBD | none | — |
 | `RT-UNIT-CLOSURE-CONVERT` | Activate function-unit closure conversion for predeclared units — a retained nested body's free de Bruijn references become declared typed capture slots, reconstructed at unit entry from exact caller operands | closed | runtime | TBD | none | — |
 | `RT-VALUE-TOTALITY` | Make every total traversal of Value non-recursive in the host stack, and remove the closure capabilities the landed closure boundary forbids | merged | runtime | L | none | — |
@@ -261,10 +262,10 @@ is itself not yet `merged`/`closed`:
 - `RT-DESCENT-RETIRE` blocked by `RT-SEED-CALL-PORT` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-PRODUCER-MATCH-PORT` (status: ready)
 - `RT-DESCENT-RETIRE` blocked by `RT-RECURSOR-TRANSPORT` (status: ready)
-- `RT-ENTRY-TRAP-254` blocked by `RT-CONTSRC-PRODUCER-LOCAL` (status: active)
 - `RT-PRODUCER-MATCH-PORT` blocked by `RT-SEED-CALL-PORT` (status: ready)
 - `RT-RECURSOR-TRANSPORT` blocked by `RT-CONTSPEC-WITNESS` (status: ready)
 - `RT-SEED-CALL-PORT` blocked by `RT-DECL-CLOSURE-PORT` (status: active)
+- `RT-SRCBODY-BIND-ORDER` blocked by `RT-CONTSRC-PRODUCER-LOCAL` (status: active)
 
 ## Gate progress
 
