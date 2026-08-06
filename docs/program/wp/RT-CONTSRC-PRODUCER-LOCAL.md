@@ -1390,9 +1390,10 @@ all six failing `D0` rows.
   | 12 | `D8n` — per-`Function` consumption lifecycle | lowering compiler state | **DISCHARGED** `3a63fe64`, after two bounded evidence corrections |
   | 13 | `D8o` — ambient body authority | lowering compiler state | **DISCHARGED** `3aadbaae`, after two evidence blocks (`5154d94a`, `d3f7e32c`) |
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | **DISCHARGED** `01263e44` (`760/2/1`), after a matrix block and two fidelity children |
-  | 15 | `D8f` — checked-marker occupancy | integration | **IN FLIGHT** — released `evt_4m560r79pv6hh` from `01263e44`; earlier evidence `e80fd42f` |
-  | 16 | `D8g` — non-vacuous closeout, both paths | proof | held |
-  | 17 | `D6b` closeout, then `D6c` refusal set | — | held |
+  | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **NEXT** — `D8f`'s missing predecessor, Architect `evt_6jay1wesbfhbw` |
+  | 16 | `D8f` — checked-marker occupancy | integration | **HARD STOP accepted** at `0eb04397` (evidence only); resumes after `D8p` |
+  | 17 | `D8g` — non-vacuous closeout, both paths | proof | held |
+  | 18 | `D6b` closeout, then `D6c` refusal set | — | held |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
   This heading previously read *"label order, for the first time on this
@@ -2491,9 +2492,102 @@ all six failing `D0` rows.
   recorded.** `D8m` remains correctly sequenced after `D8o`, because it does
   span ordinary and specialization `Function`s.
 
+  ###### `D8p` — cross-body checked-application binding. `D8f`'s predecessor.
+
+  **Architect ruling `evt_6jay1wesbfhbw` on preserved exact `0eb04397`, parent
+  `01263e44`. The `D8f` HARD STOP IS ACCEPTED and `D8f` is NOT discharged.**
+
+  ⛔ **This is NOT a bounded continuation of `D8f`.** `D8f` owns **one**
+  question: when two real static-worker calls occur under one pending marker,
+  **does exact application occurrence distinguish the ordinary call from the
+  checked call?** ⛔ **The measured program never reaches that two-call state**,
+  and making it do so requires a relation that **does not exist on this exact
+  object**.
+
+  **The missing contract:**
+
+  ```text
+  (exact defining body, exact checked application occurrence,
+   checked call template + slot)
+      -> function-local callable binding and operand authority
+  ```
+
+  **Producer: planning / unit definition. Consumer: call emission in the
+  ordinary/composed unit `Function`.** ⚠ **The existing checked template names
+  the application, but the `Function` that ENTERS the marker has no callable
+  binding at that occurrence** — so supplying one changes **planner population,
+  unit-body binding, and lowering emission** *before* `D8f` can ask its
+  question. That is why it cannot fold in.
+
+  **The lawful form:** project the **existing exact checked application
+  authority** into the defining `Function` and **emit the exact call there**.
+  Call target and operand run must be **function-local declarations derived
+  from that same planner record**.
+
+  ⛔ **Refused:** transporting a specialized value across the unit boundary;
+  widening an ABI; inferring a target from worker/body shape; selecting by
+  route, arity, binder index, call order, or **whichever target exists**.
+
+  **All three present refusals stay load-bearing and must be preserved:**
+
+  1. **Do not weaken the checked-segment law.** An inferred semantic IH layer
+     cannot coexist with checked layers without its **own checked invocation
+     authority**.
+  2. **Do not let `finish_checked_computational_ih_marker` accept a pending
+     marker.** ⇒ That **erases** the exact-call obligation instead of
+     satisfying it.
+  3. **Do not bypass the source-open/dynamic-parent comparison.** ⇒ That
+     attaches a real call to the **wrong dynamic invocation**.
+
+  **The required proof, per exact defining body AND application occurrence:**
+  zero/one/multiple binding behaviour; agreement of application origin, call
+  template, slot, target and operand contract; a **real function-local emitted
+  call**; and preservation of all three refusals above.
+
+  **Only then may `D8f` resume** and prove the earlier ordinary call leaves the
+  marker pending while the exact checked occurrence consumes it.
+
+  ⛔ **`0eb04397` is HARD-STOP EVIDENCE ONLY.** Its sentinel and corrected
+  post-`D8m` explanation are **sound evidence, not a candidate mechanism.**
+
+  ⚠ **Mechanical, for any descendant:** `git diff --check 01263e44..0eb04397`
+  reports a **new blank line at EOF in `control.rs`**. It does not affect the
+  ruling but **must not transfer into a candidate.**
+
+  ###### `D8p` sizing — IN-NODE, on my own recorded flip condition
+
+  **An ordered in-node predecessor checkpoint, executing BEFORE `D8f`.** Label
+  order does not track execution order on this node; read the numbers in the
+  execution-order table.
+
+  ⚠ **The case for a separate node is stronger here than at `D8n`, and I am
+  recording it rather than brushing past it.** The Architect called it a
+  **predecessor substrate** and it crosses **three planes** — planner
+  population, unit-definition binding, lowering emission. It **would stand
+  alone**, and this node is already large. By the standalone test alone, it
+  passes.
+
+  ⛔ **What decides it is the condition I NAMED at `D8n` and must now apply to
+  myself:** *"if this node's branch ever merges before the lifecycle work is
+  done, the answer flips to a node."* **`wp/RT-DECL-CLOSURE-PORT-typed-units`
+  is UNMERGED and 168+ commits ahead of `origin/main`.** ⇒ **The condition is
+  NOT met, so the topology argument stands unchanged:** a separate node reaches
+  the held branch only by rebasing it — **destroying every preserved exact
+  checkpoint SHA this node's evidence chain is addressed by**, including the
+  `0eb04397` the Architect just ruled on — or by landing on the same branch
+  anyway, which recreates "two nodes, one branch, one candidate".
+
+  ⭐ **Applying my own recorded criterion rather than re-deriving one is the
+  point.** A sizing rule that is re-argued at each use is not a rule.
+
+  ⚠ **What this does NOT settle, and it is the OPERATOR's:** whether the whole
+  campaign should be restructured now that this node has absorbed `D8h`-`D8p`.
+  **That is the standing campaign-sizing question, not a per-checkpoint call**,
+  and no in-node ruling should be read as answering it.
+
   ###### GOVERNING — name the INDEPENDENT SIDE, and KEY the relation.
 
-  **Binding on `D8m`, `D8f` and `D8g`. Author their controls against this
+  **Binding on `D8p`, `D8f` and `D8g`. Author their controls against this
   before writing them, not after review sends them back.**
 
   Two Architect verdicts blocked `D8o`'s evidence — `evt_6gk0n7p2eazn2` and

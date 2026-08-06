@@ -33,25 +33,50 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~03:5xZ · `D8m` DISCHARGED; `D8f` in flight
+## LIVE — 2026-08-06 ~04:1xZ · `D8f` HARD STOP accepted; I cut `D8p`
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for `D8f`** — checked-marker occupancy, released `evt_4m560r79pv6hh`
-from the accepted tip **`01263e44`**, implementer working. **The ring owes
-nothing to me.** **`D8m` DISCHARGED `01263e44` (`760/2/1`), `D8o` `3aadbaae`,
-`D8n` `3a63fe64`.** Then `D8g`, `D6b` closeout, `D6c`, candidate.
+**Release `D8p` to the runtime ring.** ⛔ **`D8f`'s HARD STOP IS ACCEPTED and
+`D8f` is NOT discharged** (Architect `evt_6jay1wesbfhbw`, preserved exact
+`0eb04397`). **No Runtime edit is authorized until the recut lands** — the
+frame section is *"`D8p` — cross-body checked-application binding."*
+**`D8m` DISCHARGED `01263e44`, `D8o` `3aadbaae`, `D8n` `3a63fe64`.**
 
-**`D8f` must build:** inside one checked wrapper, an ordinary selected-argument
-call occurring **before** the exact planner-issued checked IH call; the
-selected-argument call **leaves the marker pending** and only the exact checked
-occurrence consumes it. ⛔ **Not selected by route, arity, binder index,
-coincidence, or first-call order.** Omission, duplicate, transplant and wrong
-occurrence must each refuse **on their own live path**, and **both always-admit
-and never-admit mutations must red.**
+⛔ **`D8f` could not absorb it.** `D8f` owns one question — whether exact
+application occurrence distinguishes the ordinary call from the checked call
+under one pending marker — and **the measured program never reaches that
+two-call state.** Reaching it needs a relation that **does not exist on this
+object**:
+
+```text
+(exact defining body, exact checked application occurrence,
+ checked call template + slot)
+    -> function-local callable binding and operand authority
+```
+
+⚠ **The existing checked template NAMES the application, but the `Function`
+that enters the marker has NO callable binding at that occurrence.** ⇒
+Supplying one changes **planner population, unit-body binding and lowering
+emission** before `D8f` can ask its question.
+
+⛔ **`0eb04397` is HARD-STOP EVIDENCE ONLY** — its sentinel and corrected
+post-`D8m` explanation are sound evidence, **not a candidate mechanism**.
+⚠ **`git diff --check 01263e44..0eb04397` reports a new blank line at EOF in
+`control.rs` — must NOT transfer into a candidate.**
+
+⭐ **The sizing call, and WHY it was cheap:** in-node, because I applied **the
+flip condition I recorded at `D8n`** — *"if this node's branch ever merges
+before the lifecycle work is done, the answer flips to a node."* The branch is
+**unmerged, 168+ commits ahead**, so the condition is **not met** and the
+topology argument stands. ⚠ **The case for a separate node IS stronger here**
+(three planes; the Architect said "substrate"; it would stand alone) — but a
+node reaches the held branch only by **rebasing away every preserved exact
+SHA**, including the `0eb04397` just ruled on. ⛔ **Whether the CAMPAIGN should
+be restructured is the OPERATOR's standing question, not answered by this.**
 
 ⭐ **THE `D8m` FINDING MOST WORTH CARRYING INTO `D8f`/`D8g`: a stop-point claim
 generalized across a witness family whose members stop in THREE DIFFERENT
