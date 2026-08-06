@@ -23054,14 +23054,22 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
         "the planner's composed calls must be distinct under their causal coordinate, or naming \
          one by coordinate is ambiguous"
     );
-    // The two source-authored halves of the coordinate, read off the WITNESS's
-    // own text rather than off the planned set: the composed bridge sits in the
-    // eliminator's case 0, and its producer's recursive position is 0.
+    // ALL FOUR coordinate fields, named before any selection.
     //
-    // ⛔ Not `coordinates.iter().next()`, not an observed set, not a
-    // complement, and not any order surrogate. The construct and continuation
-    // origins are then read from the ONE call this source-named key selects --
-    // which is sound precisely because the key did the selecting.
+    // The two source-authored halves come off the WITNESS's own text: the
+    // eliminator case whose body is a `CheckedSubcontinuationFrame`, and that
+    // case's declared recursive position. ⚠ For this `D8m`-derived Wrap case
+    // the recursive position is **1**, not 0 -- the worker sits at field 1 and
+    // the selected field at 0. An earlier comment here said 0; the value was
+    // always read from the case, so only the prose was wrong.
+    //
+    // ⛔ Uniqueness is PROVED, not assumed: exactly one case carries a bridge
+    // and that case declares exactly one recursive position. No `.position` or
+    // `.first` order surrogate decides either.
+    //
+    // The two origin halves come from the planner's own unit population -- a
+    // different population from the calls being selected -- and the match below
+    // is on the COMPLETE tuple.
     let (source_alternative, source_recursive_position) = {
         let RuntimeDeclarationKind::Transparent { body } = &declaration.kind else {
             panic!("transparent")
@@ -23075,35 +23083,65 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
         let RuntimeExpr::ComputationalMatch { cases, .. } = value.as_ref() else {
             panic!("eliminator")
         };
-        let alternative = cases
+        let bridges = cases
             .iter()
-            .position(|case| {
+            .enumerate()
+            .filter(|(_, case)| {
                 matches!(case.body, RuntimeExpr::CheckedSubcontinuationFrame { .. })
             })
-            .expect("the witness's composed bridge sits in exactly one case");
-        let position = *cases[alternative]
-            .recursive_positions
-            .first()
-            .expect("that case declares its recursive position");
-        (alternative as u32, position as u32)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            bridges.len(),
+            1,
+            "the witness must spell exactly ONE composed bridge case, or naming the alternative \
+             from the source is ambiguous and any pick is an order surrogate"
+        );
+        let (alternative, case) = bridges[0];
+        assert_eq!(
+            case.recursive_positions.len(),
+            1,
+            "and that case must declare exactly ONE recursive position, for the same reason"
+        );
+        (alternative as u32, case.recursive_positions[0] as u32)
     };
+    // The origin halves, from the planner's UNIT population.
+    let (source_construct_origin, source_continuation_origin) = {
+        let units = plan.continuation_units().expect("continuation units");
+        let named = units
+            .iter()
+            .filter(|unit| {
+                unit.producer_alternative() == source_alternative
+                    && unit.recursive_position() == source_recursive_position
+            })
+            .map(|unit| (unit.producer_construct_origin(), unit.continuation_origin()))
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            named.len(),
+            1,
+            "exactly one planned UNIT carries the source-named alternative and recursive \
+             position, so its construct and continuation origins name the coordinate's other two \
+             fields without consulting the call population being selected"
+        );
+        *named.iter().next().expect("one")
+    };
+    let named_coordinate = (
+        source_construct_origin,
+        source_continuation_origin,
+        source_alternative,
+        source_recursive_position,
+    );
     let matching = calls
         .iter()
-        .filter(|call| {
-            call.producer_alternative() == source_alternative
-                && call.recursive_position() == source_recursive_position
-        })
+        .filter(|call| coordinate(call) == named_coordinate)
         .collect::<Vec<_>>();
     assert_eq!(
         matching.len(),
         1,
-        "exactly ONE planned call carries the coordinate the SOURCE names -- alternative \
-         {source_alternative}, recursive position {source_recursive_position}. More would make \
-         the source-authored key ambiguous and force an order surrogate; none would mean the \
-         planner issued no call for the bridge the witness spells"
+        "exactly ONE planned call carries the COMPLETE independently named coordinate \
+         {named_coordinate:?}. More would make the naming ambiguous; none would mean the planner \
+         issued no call for the bridge the witness spells"
     );
     let call = matching[0];
-    let wanted = coordinate(call);
     let units = plan.continuation_units().expect("continuation units");
     let target = units
         .iter()
@@ -23154,7 +23192,7 @@ fn d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter()
     // case 0 body (the slot marker), the slot marker's body (the invocation
     // marker), and the marker's body (the application itself).
     let named_application = {
-        let mut cursor = call.continuation_origin();
+        let mut cursor = source_continuation_origin;
         for step in [1usize, 0, 1, 0, 0] {
             cursor = plan
                 .child_static_origin(cursor, step)
@@ -23262,15 +23300,38 @@ fn d8g_each_producer_input_mutation_is_caught_by_the_guard_that_owns_it() {
             "the {mutation:?} mutation must have FIRED. Zero applications means the switch never \
              reached its site, and any refusal below is about something else"
         );
-        let refusal = outcome.expect_err(&format!(
+        let error = outcome.expect_err(&format!(
             "{mutation:?} moves an input a production guard owns, so the compile must refuse"
         ));
-        let refusal = format!("{refusal:?}");
+        // The refusal is matched EXHAUSTIVELY on the typed error, so the
+        // category is asserted as well as the reason. A `contains` over a
+        // formatted string would accept the right words carried by the wrong
+        // error kind.
+        let reason = match (&error, mutation) {
+            (
+                CraneliftBackendError::Unsupported(UnsupportedLowering { construct, reason }),
+                D8gMutation::WrongTable,
+            ) => {
+                assert_eq!(
+                    *construct, "Call",
+                    "the wrong-table refusal is the CALL construct's own: {error:?}"
+                );
+                reason.clone()
+            }
+            (
+                CraneliftBackendError::Backend(BackendFailure::Module(reason)),
+                D8gMutation::WithholdContextSuffix,
+            ) => reason.clone(),
+            _ => panic!(
+                "{mutation:?} must be caught by its own guard's error CATEGORY, not merely by \
+                 some error: {error:?}"
+            ),
+        };
         assert!(
-            refusal.contains(guard),
-            "and it must be the EXACT guard that owns the moved input, by its discriminating \
-             reason -- not merely an error. A different refusal means the mutation is being \
-             caught by something that does not own what it moved: {refusal}"
+            reason.contains(guard),
+            "and by its discriminating reason -- not merely the right category. A different \
+             reason means the mutation is being caught by something that does not own what it \
+             moved: {reason}"
         );
         assert!(
             d8g_emissions().is_empty(),
