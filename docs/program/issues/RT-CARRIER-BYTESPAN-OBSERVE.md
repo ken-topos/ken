@@ -39,9 +39,49 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 >
 > ⇒ **This node may NOT merge as an activation without carrying forward the
 > still-BLOCKED control families from `RT-CONTSRC-PRODUCER-LOCAL`** — their
-> completing producer **and** their red-before-green controls. Read that node's
-> per-family register (BUILDABLE / BLOCKED, each BLOCKED family naming its exact
-> first missing producer) and discharge what activation makes reachable.
+> completing producer **and** their red-before-green controls.
+>
+> ### ⭐ THE GATE IS ONE PRODUCER, NOT FIVE OBLIGATIONS
+>
+> **Measured per-family register `evt_5tzqtkgw02gxg`, disposition
+> `evt_5p3hcgng950pw`.** Four of the five non-buildable families name the
+> **same** first missing producer:
+>
+> > a **cross-unit carried word** reaching a source-machine `Match` **in a unit
+> > that does not feed a byte-span effect seat**.
+>
+> | family | status | producer |
+> |---|---|---|
+> | 1 nontrivial continuation | BLOCKED | the producer above |
+> | 2b distinct predecessors + exact-once | BLOCKED | the producer above |
+> | 6 HostResult Ok/Err | BLOCKED | the producer above, word classed `HostResult` |
+> | 3 identity / arity / field-order | BLOCKED | the producer above **plus** a `RuntimeExpr`-level route to a malformed case table that still reaches the seat (`rt_parity` is typed Ken, so the elaborator refuses a wrong constructor before lowering) |
+> | 7 borrowed route | BLOCKED | the producer above, word classed `BorrowedOpaque`, whole case set the borrowed family |
+> | 8 wrong-class | NOT RELEASABLE | `mismatch_block` measured reached **zero** times |
+>
+> ⛔ **Family 7 is UNREACHED, not UNREACHABLE.** It was never measured
+> unreachable. **Do not compress that** — unreached is a producer gap someone
+> closes; unreachable is a closed question, and they license opposite decisions.
+>
+> **Why the obvious substitutes do not work, so nobody re-spends the turn:** the
+> `rt_parity` carried producer is a **declared function unit's parameter
+> carrying a cross-unit runtime value.** A closure parameter bound to a
+> `Construct`, a `RuntimeDeclaration` parameter fed a `Construct`, and the
+> borrowed process input **all arrive `Specialized`** — each completes and
+> returns a plausible value **from a route that is not this one.**
+>
+> **Abort boundary, exact:** Phases 0–2 (descriptors, block allocation, whole
+> selector graph) are decided; `PHASE 2 selector graph COMPLETE` fires,
+> **`ALL LEAVES LOWERED` never does.** Phase 3 leaf lowering and Phase 4 join
+> completion are after the abort.
+>
+> ### GATE-SHAPED is not GATE-SATISFYING
+>
+> **A control whose red can only be demonstrated by an UNCOMMITTED production
+> mutation is gate-SHAPED.** The gate must be re-runnable by someone who was not
+> present for the demonstration — that is the only moment it exists for. A red
+> observed once in a turn and not committed discharges *that day's* question and
+> guards nothing here.
 >
 > ⛔ **Removing the first blocker is NOT a promise that byte-span alone
 > completes every row.** It may reveal a later one. Treat the register as the
