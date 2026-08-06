@@ -42,6 +42,76 @@
 
 ### The one thing to do next
 
+> ## ⛔ THE JOINT KEY LANDED IN A CELL THE CRITERION DOES NOT HAVE
+>
+> **Ruled `evt_1pfdz8ba5yqva` on the joint-keyed probe at `87382297`.** This
+> supersedes the outcome-2 block below, which read a seat-keyed probe.
+>
+> ```
+> leaf=(match_origin 268, CARRIED, case 0, reps={Constructor})
+>   effect_origin 264  FsReadFile  Argument(0)  phase=CarriedWord
+>   need=BytesPointerLength  avail={specialized:true, carried:FALSE}  REFUSED
+> ```
+>
+> The Architect's three cells were: refused in a relevant leaf **including
+> `HostResult`** ⇒ premise re-established; entry **only in an unrelated** leaf ⇒
+> not; **satisfied** in the relevant leaf ⇒ recut reopens. **This is refused, in
+> a RELEVANT match (`268` is one of AC-1's own two carried source matches), with
+> `reps={Constructor}` — no `HostResult`. No cell covers it.** ⇒ A taxonomy with
+> no cell for the actual case **reads as complete**, which is how a criterion
+> returns a confident wrong answer.
+>
+> **My reading, offered as a reading and NOT a ruling:** the *"those words take
+> the `HostResult` arm"* claim is now falsified **in the other direction**.
+> Under valid IR they are **genuinely `Constructor`-represented carried words,
+> correctly decoded**, and they still need a byte span. If so the capability gap
+> is **real and better-grounded**, the misdecode hypothesis is simply retired,
+> and the successor survives on a `Constructor` leaf.
+>
+> ⛔ **ONE QUESTION IS OUT TO THE ARCHITECT and the disposition turns on it:**
+> the criterion keyed re-establishment to `HostResult` because misdecode was the
+> hypothesis under test. **Is a relevant leaf refusing with `reps={Constructor}`
+> only the LAWFUL DECODE, or a REMAINING DECODE GAP?** Opposite dispositions;
+> scope cannot tell them apart. **`RT-CARRIER-BYTESPAN-OBSERVE` stays `draft`
+> and unframed until it answers.** It blocks nothing.
+>
+> ⭐ **The second row survives the joint key and is still the sentence the
+> successor's frame gets written from:** same leaf, same `CarriedWord` phase,
+> different slot of the same operation ⇒ **SATISFIED**. `avail.carried = false`
+> is **per-seat, not a blanket phase ban.**
+>
+> ### SIZING RULING — the controls are their own child. TAKEN, and overdue.
+>
+> **Released three times, landed zero times.** My standing test is that
+> repeatedly firing one audit on a node means **the sizing was the defect and
+> the next cut is mine** — three is well past it. ⇒ The eight control families,
+> the `control.rs` **exact-inventory enforcement** fix, and the generic-helper
+> comment corrections are **a child containing nothing else.** No mechanism work
+> in it.
+>
+> **Precondition that actually changed** (not a scheduling preference): the
+> suite needs a **completing whole-process capacity fixture built from
+> scratch**, and until `87382297` it would have been testing a moving target.
+> Valid IR + four corrections + a measured effect-seat reading ⇒ **stable enough
+> to test against.**
+>
+> **`runtime-implementer` compacted by me at this seam** (ctx 50%, turn
+> finished, branch freed at `87382297`, on home branch) — hand-driven `/compact`
+> with `postcompact-resume.sh` armed. ⛔ **Never `handoff-gate-compact.sh` this
+> seat**: it hard-resets to `origin/main` and would move the ref off the whole
+> preserved evidence chain.
+>
+> **Where the mechanism is:** `87382297`, child of `c6994834`, free, unaccepted.
+> Four bounded corrections in: descriptors + arena type before the first block;
+> exhaustive `Reachable`/`Eliminated` match, no wildcard; **unconditional**
+> `HostResult` selector with `Ok`/`Err` resolved independently to leaf-or-
+> default; grounded mismatch status + honest leaf-helper ownership.
+> `775/2/1` vs baseline `774/2/1`, same two by name. Architect preserved
+> `c6994834` as the valid-IR checkpoint; `fda636d8` still last approved.
+
+<details>
+<summary>Superseded — the seat-keyed reading (outcome 2), kept for the shape</summary>
+
 > ## ⭐ ANSWERED — OUTCOME 2. The recut STANDS, provisionally at the leaf.
 >
 > **Ruled `evt_717v77e36vr32` on the keyed probe at `c6994834`.** The block
@@ -156,6 +226,8 @@ class-test skeleton first, fill arms after. **The Architect is ruling that now**
 
 **Nothing is owed by me** beyond the question above. Earlier ruling
 `evt_2j83zm8j9zqvv` and its reachability answer are discharged.
+
+</details>
 
 **The fork FIRED and it is measured.** Exact `PlannedCaseEmission` authority on
 both of AC-1's carried source matches: `status=Reachable`, `producers=Open`,
