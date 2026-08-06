@@ -1402,7 +1402,7 @@ all six failing `D0` rows.
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | **DISCHARGED** `01263e44` (`760/2/1`), after a matrix block and two fidelity children |
   | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **DISCHARGED** `2be7adb0` (Architect `evt_6sk9hbp17893t`), after a mechanism-accepted evidence block at `198b7c14` |
   | 16 | `D8f` — checked-marker occupancy | integration | **DISCHARGED** at exact `04c40d4c` (Architect `evt_6cka0ecwnd25t`). Three-case disposition partial accepted at `c49d0652`; the four refusal controls then took **five** bounded evidence holds, closing at `d94a3df9` with both wrong-occurrence origins named from planner authority. `04c40d4c` is a whitespace-only identity child of it |
-  | 17 | `D8g` — non-vacuous closeout, over TWO populations | proof | **Owner re-measurement DISCHARGED** `1b367065` (Architect `evt_7v6ve6rsc8d39`) — **outcome (1): the owner VARIES but SEPARATES nothing**, so the prohibition stands and no owner positive is required. **Closeout then HARD-STOPPED** (`evt_9yrrhnjp6dfd`): its two facts live in disjoint witness families. **RECUT over both populations** by Architect disposition `evt_6afmy0398n847`; frame clauses replaced 2026-08-06. Ready for release |
+  | 17 | `D8g` — non-vacuous closeout, over TWO populations | proof | **Owner re-measurement DISCHARGED** `1b367065` (Architect `evt_7v6ve6rsc8d39`) — **outcome (1): the owner VARIES but SEPARATES nothing**, so the prohibition stands and no owner positive is required. **Closeout then HARD-STOPPED** (`evt_9yrrhnjp6dfd`): its two facts live in disjoint witness families. **RECUT over both populations** by Architect disposition `evt_6afmy0398n847`; frame clauses replaced 2026-08-06. Closeout then ran four review rounds — `b0614513`, `337ee9d9`, `6d884090`, `90f96c00`, `0665b9d5` all preserved as held progress. **Two review requirements were withdrawn as STRONGER THAN THE FRAME**: post-emission-FIRST refusal for the mutations (`evt_5vwdtrznf3km4` — earliest structural guard is accepted, and is the stronger evidence), and the independent `(defining Function, call origin)` expectation (`evt_399j195rn8fpa` — **no authority exists to derive it from**; see `EXACT-KEY LIMIT`). **SECOND RECUT landed 2026-08-06.** Ready for release |
   | 18 | `D6b` closeout, then `D6c` refusal set | — | held |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
@@ -1900,12 +1900,103 @@ all six failing `D0` rows.
 
   | # | population | what it owns | required relation |
   |---|---|---|---|
-  | 1 | **ordinary / functionized — `px8tr`** | the table-choice and suffix contract; it already holds the mixed route population — a same-body `GeneratedContext` IH and a `RawWorker` route through ordinary production lowering | a **keyed post-emission** relation from planner/unit-definition expectation to **both** actual calls. Wrong-table mutation **red**; context-suffix mutation **stays red** |
+  | 1 | **ordinary / functionized — `px8tr`** | the table-choice and suffix contract; it already holds the mixed route population — a same-body `GeneratedContext` IH and a `RawWorker` route through ordinary production lowering | the **composed post-emission evidence set** of the `EXACT-KEY LIMIT` below, and **only** that set. Wrong-table mutation **red**; context-suffix mutation **stays red** — each at its **earliest structural guard**, per `evt_5vwdtrznf3km4` |
   | 2 | **composed — the lawful `D8e`/`D8m`/`D8n`/`D8f` family** | the composed ingress | the exact selected recursive argument reaches its `D8b` composed-call target, then **the same** production `call_static_worker_with_inputs` emitter. Compare exact target, application occurrence, **actual defining body kind**, decoded raw callee, operand run, and composed discharge against independent planner/unit-definition authority |
 
   **Both relations must NAME `call_static_worker_with_inputs` as the
   convergence seam, and prove that NEITHER INGRESS DUPLICATES target or operand
-  assembly.** Keyed exact relations both times — **never two output bags.**
+  assembly.** Never two output bags. **Population 2 is a keyed exact relation.
+  Population 1's ACTUAL side is exactly keyed and rejects duplicates, but its
+  INDEPENDENT side is bounded by the limit below — do not read "keyed exact
+  relation" as reaching population 1's expectation.**
+
+  ##### `D8g` EXACT-KEY LIMIT — the per-call expectation has NO AUTHORITY
+
+  **Ruled `evt_399j195rn8fpa`, 2026-08-06.**
+
+  ⛔ **WITHDRAWN: the clause requiring an independent expectation keyed by
+  `(defining Function, call origin)`.** It was written as though satisfiable.
+  **It is not, and the absence is structural — not an accessor anyone missed.**
+
+  The required population is
+
+  ```
+  (exact defining body, source Call occurrence)
+      -> (worker target, route/table, arity, captures, context suffix)
+  ```
+
+  and **no planner or unit authority names it.** Measured at
+  `0665b9d5`, four surfaces were checked and each falls short in a different way:
+
+  | surface | why it does not name the population |
+  |---|---|
+  | `EmittableCallEdge` | carries caller, callee and call-site origin, but its **closed** `EmittableCallKind` is `StaticBody \| Declaration` (`static_transition.rs:9458-9470`). The local `StaticWorker` applications at issue are **not members** |
+  | `ContinuationCallView` | names planner-issued **causal continuation calls** and their specialization target (`:11350-11392`) — never the source `RuntimeExpr::Call` that later invokes a static-worker binding |
+  | `ContinuationUnitView` / `ContinuationContextView` | independently name worker contracts and suffixes, but `continuation_context_for(enclosing, worker_body_origin)` **requires those two facts from its caller** (`:11298-11347`); it projects no body/call edge |
+  | `D8oBodyKey` | lawfully joins an emitted `FuncId` to a planner body descriptor, and the source-origin walk names syntax — but neither **resolves that syntax's de Bruijn callee to the worker binding installed in that body** |
+
+  **That last resolution happens during lowering, not planning.** The
+  specialization pass decides the IH route from the retarget outcome and
+  constructs the binding (`units.rs:1688-1705`); the binder run maps into the
+  lowering environment (`:1764-1802`); only then does
+  `call_static_worker_with_inputs` consume the binding and record
+  `(Function, call_origin)` **after emission** (`core.rs:8079-8306`). **The
+  planner retains no per-body application record spanning those seams.**
+
+  ⇒ **An accessor added now could do only one of two unsound things:** package
+  observed emission keys and call them independent — **the self-selection defect
+  already held four times** — or reimplement the lowering environment walk beside
+  production, **a second authority that can reproduce the same bug.** Neither is
+  authorized by `D8g`'s evidence-only scope.
+
+  ###### What `D8g` proves INSTEAD — and what it must never be CALLED
+
+  Actual-key duplicate rejection; independently validated `D8o` body membership;
+  independently named source occurrence; planner/unit contract and
+  generated-context suffix checks; emitted-`FuncRef` evidence; and the two exact
+  structural mutation refusals at their earliest guard with an empty emission set.
+
+  ⛔ **Two things this composition must NEVER be called**, because both are the
+  withdrawn clause wearing the shape of the fix:
+
+  1. **an independently enumerated expected key set** — its keys come from the
+     observations, and a key set derived from what it checks is not evidence;
+  2. **an independently selected target** — the observed target still chooses
+     which record it is compared against.
+
+  **State the residual plainly in the closeout:** a defect that moves target and
+  route **together** to another lawful same-shaped worker is **not** caught by
+  population 1. That is the exact hole, it is admitted rather than papered over,
+  and `D8j`'s finished-CLIF decode plus the `D8o` body authority bound how far it
+  can travel.
+
+  ###### Why this is a LIMIT and not a NEW NODE — the constraint was interrogated
+
+  Option 1 was available: make static-worker application resolution a
+  planner-owned unmintable population keyed by the `D8oBodyKey` domain plus exact
+  source `Call` origin, and make lowering consume it. **It is refused here on one
+  factual finding, not on cost.**
+
+  **`D6c` does not consume it.** `D6c` is the **pre-emission refusal set** about
+  *selecting* the raw/IH target and its selected-recursive-argument member. Every
+  obligation in it — omission, duplicate, wrong source position, wrong
+  closure/body, wrong capture run, wrong order, fabricated availability,
+  cross-routing raw and IH targets, and the route/suffix exactness law — is
+  discharged by **a perturbation and a guard at the selection seam**
+  (`units.rs:1688-1705`), which is the proof shape ruled adequate at
+  `evt_5vwdtrznf3km4`. **A refusal needs a guard, never an independently
+  enumerated expectation population.**
+
+  ⇒ Creating a second planning population **solely to satisfy a test** violates
+  **subsume-don't-proliferate** (`docs/PRINCIPLES.md`). If a later checkpoint
+  genuinely needs the fact **in production**, option 1 is the right move and
+  makes it structural with one owner — **but it must be raised as its own node
+  with that consumer named, never folded into `D8g` and never disguised as a test
+  accessor.**
+
+  **What would reopen this:** a named production consumer of the per-call
+  application record. **Not** a reviewer wanting a stronger `D8g` row — that is
+  the pressure this limit exists to absorb.
 
   **Why two populations suffice, stated so it is not re-litigated.** `px8tr`
   already exercises coexistence of the two route/table/suffix arms, and the
@@ -2968,14 +3059,15 @@ all six failing `D0` rows.
   data leaves this assertion green?* If swapping two records between two
   subjects passes, the relation is unkeyed.
 
-  ##### WHAT DISQUALIFIES A SIDE — from `D8f`'s three holds, 2026-08-06
+  ##### WHAT DISQUALIFIES A SIDE — from `D8f`'s three holds and `D8g`'s four
 
   Half 1 says the independent side must be **derivable without consulting the
   mechanism**. That was precise enough for the Architect to adjudicate every
   time, and the implementer conceded each finding — so the rule is not
-  ambiguous. **It is nonetheless satisfiable three ways that feel independent
-  and are not**, and rows 6-8 are one instance of each. Author against this
-  list, because "I did not call the mechanism" is not the test:
+  ambiguous. **It is nonetheless satisfiable SIX ways that feel independent and
+  are not.** 1-3 are `D8f`'s (rows 6-8, one instance each); **4-6 are `D8g`'s
+  closeout, where 4 alone accounts for THREE of its four holds.** Author against
+  this list, because "I did not call the mechanism" is not the test:
 
   1. **Distance is not independence.** Reading the mechanism under test on a
      **different program** — a lawful comparison compile — leaves the side
@@ -2987,6 +3079,26 @@ all six failing `D0` rows.
   3. **A shared collector re-joins two sides that look separate.** Two
      populations built from one collector agree because they have a common
      ancestor, not because the property holds.
+  4. ⛔ **A COARSER-KEYED independent side lets the observation select its own
+     expectation.** This is the one that cost three holds, in three disguises:
+     the observed `route` chose which branch to validate against; then a
+     `worker_body_origin`-keyed map was compared against `(Function,
+     call_origin)` observations; then the observed **target** picked which
+     independent record it was checked against. **If the independent side is
+     keyed more coarsely than the observation, the observation supplies the
+     selector and the relation validates itself** — and a defect moving two
+     fields **together** stays green. **Key both sides at the same granularity,
+     require the KEY SETS EQUAL, and only then compare values.**
+  5. **An expectation relabelled as an observation.** `worker.body_origin` was
+     recorded as a "decoded raw callee". It is the binding's **expected** origin,
+     read **before** emission, and raw and generated-context routes **share it by
+     design** — so no wrong-table mutation could ever move it. **A rename is not
+     a measurement:** say which side of the seam a value was read from.
+  6. **An order surrogate is not a causal selector.** `.first()`,
+     `.position(...)`, `.iter().next()` name *whichever sorted first*, not the
+     subject. Injectivity makes the choice **unique without making it
+     derived**. **Prove the population is a singleton, or name the subject from
+     its own authority.**
 
   **What discharged it** (`d94a3df9`): both origins named by walking
   `StaticTransitionPlan::child_static_origin` — the planner's sole child-origin
@@ -2997,6 +3109,29 @@ all six failing `D0` rows.
 
   ⇒ **Binding on `D8g` and `D6c`, which inherit this rule.** `D6c`'s refusal
   set is the next control family large enough to repeat this arc.
+
+  ###### THE TWO PROOF PLANES — ruled `evt_5vwdtrznf3km4`. `D6c` reads this FIRST.
+
+  **A positive and a refusal are proved at different seams, and requiring one
+  to meet the other's bar is how `D8g` lost a round.**
+
+  | plane | where it must land |
+  |---|---|
+  | **positive** | the **keyed post-emission** relation with its exact actual-call evidence. ⛔ **For population 1 the independent side is bounded by the `EXACT-KEY LIMIT` — read it before quoting this row.** `evt_5vwdtrznf3km4` predates `evt_399j195rn8fpa` and did not know the authority was absent |
+  | **refusal** | the **FIRST existing production guard that owns the moved input**, before any instruction exists, with an **empty emission set** |
+
+  ⛔ **An earlier fail-closed guard is STRONGER, not weaker.** Arranging a
+  bad-but-emittable call so a downstream observer can reject it is **not
+  authorized** — that weakens production to satisfy a test. **Do not describe a
+  pre-emission refusal as a post-emission relation failure; they are distinct
+  planes.** A refusal row owes: the mutation **fired** (application count), the
+  **typed** error matched exhaustively — **category plus discriminating reason**,
+  never `is_err()` or a `contains` over formatted text — **zero** post-emission
+  records, and the exact positive rerun separately.
+
+  ⇒ **`D6c` is entirely a refusal set, so the refusal plane is its whole
+  proof.** It owes **no** independently enumerated expectation population; a
+  perturbation and a guard at the selection seam is the shape.
 
   ⛔ **LIMIT ON THAT QUESTION — added 2026-08-06 from the `D8m` partial, and it
   is a correction to the rule as I first wrote it.** **The swap discriminator
