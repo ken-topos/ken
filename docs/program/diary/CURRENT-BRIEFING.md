@@ -140,9 +140,29 @@ branch and then re-reads that branch's tip.
   at **generic** `lower_carried_match`, `core.rs:10420`. **The input boundary
   word takes the borrowed-opaque lane and fails the one `ProcessInput`
   constructor case, selecting the closed default.**
-- **Residual:** which comparison within class/kind/tag/arity fails. `D5` is
-  released as **runtime-side probing only** — no pin, no sentinel encoding, no
-  shim. Repair still held on the Steward.
+- **`D5` RETURNED, no commit, no repair.** The failing comparison is the
+  **class** comparison at `core.rs:10420`: expected
+  `BoundaryClass::BorrowedOpaque` (8), observed `BoundaryClass::Constructor`
+  (4). A compile-time-gated probe scoped to only the single-case
+  `ProcessInput::MkProcessInput` match returned exit `Some(4)`; sibling `List`
+  and `Prod` untouched. **Class is the borrowed-lane entry condition**, so
+  kind/tag/arity are never evaluated —
+  `brif(class == BorrowedOpaque, borrowed, represented)` diverts first. The
+  generic declared-unit parameter is **carrier-represented, not a borrowed
+  handle**.
+- **WITH THE ARCHITECT (`evt_6ffzd8pfpj7ba`):** should a declared-unit parameter
+  carrying `ProcessInput` arrive `BorrowedOpaque`, or is `Constructor` correct
+  and the borrowed-lane expectation misplaced? Producer defect or consumer
+  defect. Representation/ABI, so not the Steward's.
+- **TWO STACKED FAILURES ARE LIKELY. Do not treat "fix the class" as
+  complete.** The ring flagged it: *"restoring only the borrowed class would not
+  prove selection works"* — the `represented` branch runs and **also** reaches
+  the closed default, and its failing comparison is **unmeasured**. Hold the
+  repair until that is measured, or the only evidence would be one row going
+  green.
+- **Repair held on SCOPE**, raised by the ring rather than absorbed. This began
+  as an `S` diagnosis; re-cut it honestly on the Architect's answer rather than
+  growing it in place.
 - **`D6` landed** (stale carried-scrutinee reachability comment), on
   `wp/RT-ENTRY-TRAP-254-d6`. Targeted: 778 passed / 2 named pre-existing / 1
   ignored.
