@@ -1391,7 +1391,7 @@ all six failing `D0` rows.
   | 13 | `D8o` — ambient body authority | lowering compiler state | **DISCHARGED** `3aadbaae`, after two evidence blocks (`5154d94a`, `d3f7e32c`) |
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | **DISCHARGED** `01263e44` (`760/2/1`), after a matrix block and two fidelity children |
   | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **DISCHARGED** `2be7adb0` (Architect `evt_6sk9hbp17893t`), after a mechanism-accepted evidence block at `198b7c14` |
-  | 16 | `D8f` — checked-marker occupancy | integration | **AT THE CLASSIFICATION GATE.** Two-call state now **reachable** on `2be7adb0` but refuses downstream at same-function double causal discharge. Leader routed the gate `evt_z0k71pe8006d`; Architect reading `evt_7rh1kx42d8k`. **No implementer action authorized until the disposition.** Recut section is re-derived and final |
+  | 16 | `D8f` — checked-marker occupancy | integration | **CLASSIFIED bounded and IN-NODE** (Architect `evt_3ynqrahtzngaz`) — no further predecessor, `D8p` not reopened. Three-case claim-disposition repair **released from `2be7adb0`** by the leader `evt_4m0ad56ry110r`; implementer working. The four refusals remain owed on separate live paths |
   | 17 | `D8g` — non-vacuous closeout, both paths | proof | held. **FIRST deliverable is a MEASUREMENT** — re-measure the `D8a` owner-separation prohibition before obeying it |
   | 18 | `D6b` closeout, then `D6c` refusal set | — | held |
 
@@ -2741,6 +2741,70 @@ all six failing `D0` rows.
 
   ⛔ **Nothing further re-derives here.** `D8f`'s remaining gate is the
   classification, not this section.
+
+  ###### `D8f` CLASSIFIED — bounded and IN-NODE. No further predecessor.
+
+  **Architect ruling `evt_3ynqrahtzngaz`, on accepted exact `2be7adb0`.**
+  ⭐ **The cheap outcome: the `D8n` flip condition never had to be applied**,
+  because no new checkpoint is cut. `D8p` is not reopened.
+
+  **Why it is bounded, and it is worth reading because it is nearly the
+  opposite of what the refusal suggests.** The two calls are **already**
+  separated by an exact authority at the right seat:
+  `consume_checked_ih_marker_at_static_worker_call` compares the live
+  `static_origin` with the pending marker's planner-issued `application_origin`
+  **before either call is emitted**, and on the measured witness it **correctly**
+  leaves the earlier ordinary call pending and consumes only at the exact
+  checked occurrence.
+
+  ⇒ **The refusal is DOWNSTREAM of a decision that is already right.** Both
+  seats call `claim_composed_discharge` **regardless of that decision**, and it
+  treats the binding-level `ComposedSourceContinuation(identity)` facet as
+  sufficient call-site authority. So the ordinary call claims the identity
+  first, the checked call claims it again, and the **unchanged** Function-local
+  affine ledger **correctly** rejects the duplicate.
+
+  ⛔ **Nothing is missing** — no planner population, ABI field, target lookup,
+  causal identity, route, or validator. **This is the integration boundary
+  failing to carry forward an authority decision it had already made.**
+
+  **The required law — a closed disposition, three cases that may NOT be
+  collapsed:**
+
+  | case | required behaviour |
+  |---|---|
+  | no checked application pending | preserve `D8j` — a composed binding may claim normally |
+  | pending at a **different** occurrence | emit the ordinary call, **leave the marker pending**, and do **not** claim its composed causal identity |
+  | the **exact** checked application consumed | emit the call and claim that same planner-issued identity **exactly once** |
+
+  ⛔ **A `bound: bool` gate is specifically wrong.** `false` currently conflates
+  *"no marker exists"* with *"a different occurrence owns the pending marker"*,
+  and those two must diverge. **Names and representation are Runtime's; the
+  three cases are not.**
+
+  ⛔ **Banned in the same breath:** rewriting the fixture, reclassifying a
+  composed binding as direct, adding occurrence to the causal identity, minting
+  a second identity, weakening or resetting or special-casing the
+  Function-local affine ledger, and selecting by route, arity, binder index,
+  call order, target shape or availability.
+
+  **The proof, on the real two-call witness, derived INDEPENDENTLY of the live
+  occurrence decision:** the first emitted call has a **pending-nonmatching**
+  disposition and makes **no** composed claim, while the exact occurrence emits
+  and makes **exactly one**. **Mutating the declined first call into an eligible
+  claim must reproduce the current duplicate-discharge refusal**, and a lawful
+  **no-marker `D8j` composed-call positive** must be retained so that an
+  over-broad only-checked-discharge repair **reds**. Direct bindings still make
+  no composed claim.
+
+  ⚠ **The baseline duplicate is evidence only through explicit mutation — do
+  not leave the positive witness red.**
+
+  ⭐ **This confirms the correction above rather than superseding it.** The
+  release requires the two-call ordering to be **proved**, which is exactly what
+  the table records as *not settled*; and it carries the four refusals forward
+  as **still owed on separate live paths**, which is the residue this section
+  named. **The frame is being executed as written.**
 
   **What `D8f` still owes.** The four refusals — **omission, duplicate,
   transplant, wrong occurrence** — **each on its own live path**, plus **the

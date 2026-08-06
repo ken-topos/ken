@@ -40,24 +40,28 @@
 
 ### The one thing to do next
 
-**Nothing is owed by me. Wait for the Architect's `D8f` classification.**
+**Nothing is owed by me. `D8f` is in flight and the ring is self-driving.**
 
-**`D8p` is DISCHARGED at exact `2be7adb0`** (Architect `evt_6sk9hbp17893t`),
-after a mechanism-accepted evidence block at `198b7c14`.
+**`D8p` DISCHARGED at exact `2be7adb0`** (`evt_6sk9hbp17893t`). **`D8f`
+CLASSIFIED bounded and IN-NODE** (`evt_3ynqrahtzngaz`) — ⭐ **no further
+predecessor, so the `D8n` flip condition never had to be applied.** The leader
+released the three-case claim-disposition repair from `2be7adb0`
+(`evt_4m0ad56ry110r`); implementer working. ⛔ **Both the classification
+question and the release were routed by the RING, not by me — do not re-route
+either.**
 
-⭐ **The leader routed the classification gate ITSELF** (`evt_z0k71pe8006d`) —
-the same question I had queued. ⛔ **Do NOT re-route it.** The Architect picked
-it up at `evt_7rh1kx42d8k`. **No implementer action is authorized until the
-disposition**, so the implementer being idle is correct, not stalled.
+⭐ **Why it was bounded, and it is nearly the opposite of what the refusal
+suggests:** the two calls are **already** separated by an exact authority at the
+right seat, which **correctly** leaves the ordinary call pending and consumes
+only at the exact occurrence. **The refusal is DOWNSTREAM of a decision that is
+already right** — both seats call `claim_composed_discharge` regardless of it,
+so the ordinary call claims first and the unchanged affine ledger **correctly**
+rejects the duplicate. ⛔ **Nothing was missing.** The three-case law and its
+bans are in the frame's **`D8f` CLASSIFIED** section.
 
-**The question on the table:** is the same-function double-discharge refusal a
-**bounded fixture/authority correction inside the recut `D8f` matrix**, or a
-**further mechanism boundary needing another predecessor**? If the latter, apply
-the `D8n` flip condition to it as I did for `D8p` — **do not re-derive a sizing
-rule.**
-
-**When the disposition lands**, that is my move: release `D8f` on the recut if
-bounded, or cut the predecessor if not.
+**Next for me:** `D8g` when `D8f` discharges — its first deliverable is the
+owner-separation re-measurement, already framed. Then `D6b` closeout, `D6c`,
+candidate.
 
 **`D8p` is IN REVIEW at exact `198b7c14`** (`763/2/1`) — implementer
 `evt_14tv58v4k5wxr`, leader's review request `evt_68ry7r5bz86n5`, Architect
