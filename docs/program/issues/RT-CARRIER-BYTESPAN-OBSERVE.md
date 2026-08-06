@@ -22,6 +22,46 @@ origin: Architect capability disposition evt_4c26q24rp7xqb (2026-08-06) — no s
 > It exists because a real capability gap was measured, not to make a graph
 > tidy.
 
+> ## THE ATTRIBUTION — write the frame from THIS SENTENCE, not a paraphrase
+>
+> **Architect `evt_2qzwanx82m06r`, and it CORRECTS an earlier reading of mine.**
+> The gap is:
+>
+> > The reachable `Constructor` predecessor of AC-1 match origin `268` projects
+> > a carried child into effect origin `264`; that child's
+> > `BytesPointerLength` seat lacks carried availability.
+>
+> ⛔ **It is NOT "HostResult payloads require this."**
+> ⛔ **Do NOT claim the probe identified the concrete runtime class of the
+> child, or a `HostResult`-selected path. It identified neither.**
+>
+> **Why the obvious reading is wrong.** The joint-keyed probe reported
+> `leaf=(match_origin 268, CARRIED, case 0, reps={Constructor})`. That
+> `reps` component is a **compile-time selector predecessor** — the only
+> selector edge that can enter physical carried case 0 — **not an observed
+> runtime class.** The diagnostic is emitted while the compiler lowers a
+> selector graph.
+>
+> Under `Open` / `OpaqueIngress` the planner maps **every** case to
+> `Reachable` and validation forbids eliminating one, so **compilation must
+> lower the reachable `Constructor` leaf even if a later execution would select
+> `HostResult`.** A different runtime arm cannot rescue a compile-time failure
+> in an independently reachable leaf. ⇒ **Lawful decode, not a class gap.**
+>
+> ⭐ **THE SCOPE BOUNDARY, and it is the sentence that sizes this node.** The
+> *same leaf*, *same `CarriedWord` phase*, a *different slot of the same
+> operation* is **SATISFIED**:
+>
+> ```
+> Argument(0)  need=BytesPointerLength    avail={specialized:true, carried:FALSE} REFUSED
+> Capability   need=CapabilityTokenScalar avail={specialized:true, carried:true}  SATISFIED
+> ```
+>
+> ⇒ **Per-seat availability, never a blanket phase ban.** This node is *give
+> `BytesPointerLength` a total emitted observer over the carrier*. It is **not**
+> "make `CarriedWord` observable" and **not** a phase relaxation. ⛔ A frame
+> opening *"carried words cannot satisfy this operation"* would be **FALSE**.
+
 ## The gap, as measured rather than described
 
 `RT-CONTSRC-PRODUCER-LOCAL`'s `AC-1` row reaches a host effect seat and refuses:
