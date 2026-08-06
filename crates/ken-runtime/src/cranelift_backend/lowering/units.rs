@@ -2068,10 +2068,6 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
         // transaction, spanning the generated-context body exactly. ⛔ Opened before the builder and
         // closed after it, so every branch scope inside nests within it.
         let frame_scope = CheckedFrameFunctionScope::open(compiler)?;
-        // `D8o` — same binding, same unchanged domain: the emission owner is the
-        // enclosing specialization and `defining_unit` stays the RAW owner,
-        // which is the distinction the two fields exist to keep.
-        let ambient = AmbientBodyAuthority::bind(compiler, emission_owner, context.raw_owner);
         let mut func_ctx = FunctionBuilderContext::new();
         {
             let mut builder = FunctionBuilder::new(&mut func, &mut func_ctx);
@@ -2118,6 +2114,12 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
             )?;
             compiler.function_local = function_local;
             compiler.open_aggregate_events(id)?;
+            // `D8o` — same binding, same unchanged domain: the emission owner is
+            // the enclosing specialization and `defining_unit` stays the RAW
+            // owner, which is the distinction the two fields exist to keep.
+            // ⛔ After `open_aggregate_events`, so the observation this binding
+            // writes is labelled with the Function it belongs to.
+            let ambient = AmbientBodyAuthority::bind(compiler, emission_owner, context.raw_owner);
 
             // The environment: Parameter slots then Capture slots, in slot
             // order. ⭐ This is the SAME walk `define_unit_body` uses, which is
@@ -2184,9 +2186,9 @@ pub(super) fn define_continuation_context_bodies<M: Module>(
             builder.ins().return_(&[status]);
             builder.seal_all_blocks();
             builder.finalize();
+            ambient.release(compiler);
         }
-        ambient.release(compiler);
-    frame_scope.close(compiler)?;
+        frame_scope.close(compiler)?;
         // The same emission-seam gate every other generated function passes: the
         // callee of each recorded causal emission is decoded back out of THIS
         // finished CLIF and compared with the planner-issued target.
@@ -3187,6 +3189,7 @@ fn define_unit_body<M: Module>(
         "UNIT-BODY entry function={:?} origin={:?}",
         unit.function, unit.origin
     ));
+    compiler.open_aggregate_events(id)?;
     // `D8o` — bound for this body's lifetime and released on exit, so no later
     // Function inherits it. ⛔ The domain is unchanged: `D5a`'s rule that an
     // ordinary predeclared unit body emits as itself.
@@ -3195,7 +3198,6 @@ fn define_unit_body<M: Module>(
         ContinuationEmissionOwner::Predeclared(unit.function),
         unit.function,
     );
-    compiler.open_aggregate_events(id)?;
     function_local.unit_calls = declared_calls.static_bodies;
     function_local.declaration_calls = declared_calls.declarations;
     // `RT-DECL-CLOSURE-PORT` `D5` — the causal control on the ABI half.

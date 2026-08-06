@@ -99,21 +99,30 @@ impl AmbientBodyAuthority {
             enclosing_owner: compiler.defining_emission_owner,
             enclosing_unit: compiler.defining_unit,
         };
-        // `D8o` — the observation, at the binding itself: what this body was
-        // given, and what it INHERITED. ⛔ The inherited pair is the load-bearing
-        // half -- with the release in place it is `None` at every body, and a
-        // release that failed to restore would show up here as the previous
-        // body's facts arriving as this one's enclosing scope.
+        compiler.defining_emission_owner = Some(owner);
+        compiler.defining_unit = Some(unit);
+        // `D8o` — the observation, taken AFTER installation and read back out of
+        // the LIVE fields, under the Function currently being defined.
+        //
+        // ⛔ Not the bind arguments. Recording those would say only that this
+        // function was called with them; reading the fields says what any
+        // reader in this body will actually see, which is the property the
+        // census is about. The two differ exactly when the install is wrong.
+        //
+        // ⛔ The inherited pair is the load-bearing half -- with the release in
+        // place it is `None` at every body, and a release that failed to restore
+        // shows up here as the previous body's facts arriving as this one's
+        // enclosing scope.
         #[cfg(test)]
         crate::cranelift_backend::lowering::record_d8o_body_authority(
             compiler.defining_function_id,
-            owner,
-            unit,
+            compiler
+                .defining_emission_owner
+                .expect("just installed above"),
+            compiler.defining_unit.expect("just installed above"),
             scope.enclosing_owner,
             scope.enclosing_unit,
         );
-        compiler.defining_emission_owner = Some(owner);
-        compiler.defining_unit = Some(unit);
         scope
     }
 
@@ -9575,6 +9584,16 @@ impl<'a> Lowering<'a> {
         // an ordinary binding refuse here rather than silently discharge
         // nothing.
         let identity = worker.composed_continuation_authority()?.clone();
+        // `D8o` correction 4 — the EMITTER BODY, recorded at the real composed
+        // claim seam from the live ambient fields plus the Function being
+        // defined. ⛔ Never inferred from `identity.emission_owner()`: that is
+        // the field the owner guard below validates, so reading it here would
+        // make the population question answer itself.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d8o_composed_claim_body(
+            self.defining_function_id,
+            self.defining_emission_owner,
+        );
 
         // `D8j` verification 1 -- the identity came from the exact paired
         // planner target.

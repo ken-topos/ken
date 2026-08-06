@@ -3688,10 +3688,18 @@ pub(in crate::cranelift_backend) fn d8l2_consumed_facets() -> Vec<bool> {
 ///
 /// ⚠ The identity is `defining_function_id`, set by `open_aggregate_events` at
 /// the START of every body -- the one per-`Function` fact in scope at both
-/// seams. ⛔ NOT `defining_emission_owner`, which is set only by the ordinary
-/// unit-body and generated-context passes and is therefore **stale** inside a
-/// specialization body: measured, both consumptions reported the same owner
-/// there while genuinely occurring in two different Functions.
+/// seams.
+///
+/// **Pre-`D8o` history, retained because it is why this field was chosen:**
+/// `defining_emission_owner` was then set only by the ordinary unit-body and
+/// generated-context passes, so it was **stale** inside a specialization body,
+/// and both consumptions reported the same owner while genuinely occurring in
+/// two different Functions. ⭐ `D8o` repaired that: all three source-bearing
+/// body kinds now bind both ambient fields for their own lifetime and restore
+/// on exit, so the current invariant is that the owner is the planner's for the
+/// body being emitted. `defining_function_id` remains the right identity here
+/// regardless -- it answers "which module definition", which is the question
+/// these two seams ask.
 #[cfg(test)]
 thread_local! {
     static D8N_FRAME_CONSUMPTIONS: std::cell::RefCell<Vec<(Option<FuncId>, u64, u64)>> =
@@ -3780,6 +3788,29 @@ pub(in crate::cranelift_backend) fn d8o_body_authorities() -> Vec<D8oBodyAuthori
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn reset_d8o_body_authorities() {
     D8O_BODY_AUTHORITIES.with(|log| log.borrow_mut().clear());
+    D8O_COMPOSED_CLAIM_BODIES.with(|log| log.borrow_mut().clear());
+}
+
+/// **`D8o`** — the emitter body of every composed claim actually reached.
+#[cfg(test)]
+thread_local! {
+    static D8O_COMPOSED_CLAIM_BODIES: std::cell::RefCell<
+        Vec<(Option<FuncId>, Option<ContinuationEmissionOwner>)>,
+    > = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8o_composed_claim_body(
+    function: Option<FuncId>,
+    body_owner: Option<ContinuationEmissionOwner>,
+) {
+    D8O_COMPOSED_CLAIM_BODIES.with(|log| log.borrow_mut().push((function, body_owner)));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8o_composed_claim_bodies(
+) -> Vec<(Option<FuncId>, Option<ContinuationEmissionOwner>)> {
+    D8O_COMPOSED_CLAIM_BODIES.with(|log| log.borrow().clone())
 }
 
 #[cfg(test)]

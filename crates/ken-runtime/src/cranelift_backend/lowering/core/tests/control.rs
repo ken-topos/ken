@@ -19219,10 +19219,14 @@ fn d8n_checked_frame_consumption_is_per_function_not_per_compile() {
     // ⛔ Nothing here is reconstructed; a reader that rebuilt the identity or
     // the pair would be agreeing with itself.
     //
-    // ⚠ MEASURED on the way to this: `defining_emission_owner` reports the SAME
-    // value for both consumptions, because only the ordinary unit-body and
-    // generated-context passes set it and it is stale inside a specialization
-    // body. It would have made this clause read as a single-Function witness.
+    // ⚠ PRE-`D8o` HISTORY, retained because it is why this clause keys on the
+    // Function rather than the owner: `defining_emission_owner` then reported
+    // the SAME value for both consumptions -- only two of the three body kinds
+    // set it, so it was stale inside a specialization body -- and this clause
+    // would have read as a single-Function witness. `D8o` repaired that; the
+    // current invariant is that every body binds its own planner-issued owner.
+    // The Function id stays the right key here because it answers "which module
+    // definition", which is what "once under each" means.
     let consumptions = crate::cranelift_backend::lowering::d8n_frame_consumptions();
     // ⛔ EVERY record must name a Function before distinctness is asked. A
     // `None` beside a `Some` makes a two-element set just as well as two real
@@ -19376,39 +19380,53 @@ fn d8o_every_emitted_body_binds_its_own_planner_issued_authority() {
         d8o_body_authorities, reset_d8o_body_authorities, set_d8o_inherit_residue,
     };
 
+    // ⭐ The `D5a` witness, because it is the one program in reach that emits
+    // ALL THREE source-bearing body kinds: ordinary units, specializations, and
+    // a generated context. A witness missing a kind would leave that kind's
+    // population empty and the clause below vacuous for it.
     reset_d8o_body_authorities();
-    let compiled = d8n_compile();
-    assert!(
-        compiled.is_none(),
-        "the D8o witness must still compile; this row measures the authority each body binds, \
-         not a refusal: {compiled:?}"
-    );
+    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "ken_d8o_authority",
+        false,
+    )
+    .expect("the D5a witness compiles");
     let bound = d8o_body_authorities();
-    assert!(
-        bound.len() >= 2,
-        "at least the ordinary unit body and the specialization body must bind, or this row is \
-         measuring a single-body program: {bound:?}"
-    );
 
-    // Clause 1 — the expectation set, derived from the plan.
+    // Clause 1 — a ONE-TO-ONE correspondence with the plan's own bodies.
+    //
+    // ⛔ The expected multiset has exactly one pair per emittable unit, per
+    // continuation unit and per generated context, all read from planner views.
+    // The observed multiset must EQUAL it -- not merely be contained in it,
+    // which is what the previous membership check asked and which two bodies
+    // binding one pair would have satisfied. ⛔ The `FuncId` labels the observed
+    // body and is never used to derive its expected pair.
     let expected = d8o_expected_authorities();
-    for authority in &bound {
-        assert!(
-            expected.contains(&(authority.owner, authority.unit)),
-            "every emitted body must bind the pair its OWN pass input names. This pair is in no \
-             body descriptor, so it was inherited, inferred, or invented: {authority:?} against \
-             {expected:?}"
-        );
-    }
-    // ⭐ And a specialization body must actually be among them: the kind that
-    // bound nothing before this repair is the one the row exists for.
-    assert!(
-        bound.iter().any(|authority| matches!(
-            authority.owner,
-            crate::cranelift_backend::planning::ContinuationEmissionOwner::Specialization(_)
-        )),
-        "a specialization body must be among the bound bodies, or the repair's subject is \
-         unexercised: {bound:?}"
+    let mut observed = bound
+        .iter()
+        .map(|authority| (authority.owner, authority.unit))
+        .collect::<Vec<_>>();
+    observed.sort();
+    let mut expected_sorted = expected.clone();
+    expected_sorted.sort();
+    assert_eq!(
+        observed, expected_sorted,
+        "the bodies that bound authority must correspond one-to-one with the bodies the PLAN \
+         names. A missing pair means a body kind never bound; an extra or repeated one means a \
+         body bound something no descriptor issued"
+    );
+    let functions = bound
+        .iter()
+        .map(|authority| {
+            authority
+                .function
+                .expect("every binding must be labelled with the Function it belongs to")
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        functions.len(),
+        bound.len(),
+        "and each observation must belong to a DISTINCT Function, or the one-to-one claim above \
+         is between bodies that are not actually separate: {bound:?}"
     );
 
     // Clause 2 — nothing inherits.
@@ -19427,37 +19445,43 @@ fn d8o_every_emitted_body_binds_its_own_planner_issued_authority() {
     let _ = d8n_compile();
     set_d8o_inherit_residue(false);
     let leaked = d8o_body_authorities();
+    // ⛔ Discriminated on the LIVE keyed observation, not merely on "something
+    // inherited": the inherited owner must be one a PREVIOUS body actually bound
+    // in this same run, under a different Function. That is what makes the red
+    // attributable to residue crossing a body boundary rather than to any
+    // non-`None` value appearing.
+    let inherited_from_a_previous_body = leaked.iter().enumerate().any(|(index, authority)| {
+        authority.inherited_owner.is_some_and(|inherited| {
+            leaked[..index].iter().any(|earlier| {
+                earlier.owner == inherited && earlier.function != authority.function
+            })
+        })
+    });
     assert!(
-        leaked
-            .iter()
-            .any(|authority| authority.inherited_owner.is_some()),
+        inherited_from_a_previous_body,
         "leaving the facts in place at release -- the pre-repair behaviour -- must make a later \
-         body inherit them. If nothing inherits even then, the release is not what clause 2 is \
-         measuring: {leaked:?}"
+         body inherit an owner an EARLIER body under a DIFFERENT Function bound. If nothing does, \
+         the release is not what clause 2 is measuring: {leaked:?}"
     );
 }
 
-/// The `(owner, unit)` pairs the plan itself names, one per body kind.
+/// The `(owner, unit)` pairs the plan itself names — **one per body**, so the
+/// result is a multiset a one-to-one correspondence can be asserted against.
 ///
 /// ⛔ Built from planner views and unit descriptors only. Nothing here reads the
 /// ambient fields, a `FuncId`, a raw origin, or a composed identity.
 #[cfg(test)]
-fn d8o_expected_authorities() -> std::collections::BTreeSet<(
+fn d8o_expected_authorities() -> Vec<(
     crate::cranelift_backend::planning::ContinuationEmissionOwner,
     PredeclaredFunctionId,
 )> {
     use crate::cranelift_backend::planning::ContinuationEmissionOwner;
-    let declaration = d8n_declaration();
-    let entry = RuntimeExpr::Call {
-        callee: Box::new(RuntimeExpr::DeclarationRef {
-            symbol: D8N_SYMBOL.to_string(),
-        }),
-        args: vec![RuntimeExpr::Construct {
-            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
-            args: Vec::new(),
-        }],
-    };
-    let declarations = BTreeMap::from([(D8N_SYMBOL, &declaration)]);
+    let (entry, declarations) =
+        crate::cranelift_backend::test_objects::px8tr_nested_post_effect_planning_inputs();
+    let declarations = declarations
+        .iter()
+        .map(|declaration| (declaration.symbol.as_str(), declaration))
+        .collect::<BTreeMap<_, _>>();
     let plan = plan_static_transition_graph_with_symbols(
         &entry,
         &declarations,
@@ -19465,22 +19489,26 @@ fn d8o_expected_authorities() -> std::collections::BTreeSet<(
         AbiRootIngress::Value,
         true,
     )
-    .expect("the D8o witness plans");
-    let mut expected = std::collections::BTreeSet::new();
-    for unit in plan.emittable_units().expect("emittable units") {
-        expected.insert((
+    .expect("the D5a witness plans");
+    let mut expected = Vec::new();
+    // ⛔ `executable_units`, not `emittable_units`: the executable population is
+    // the one `define_unit_bodies` actually walks. A template-only unit is
+    // declared but never defined, so it emits no body and binds no authority --
+    // expecting one would make this correspondence fail for a lawful program.
+    for unit in plan.executable_units().expect("executable units") {
+        expected.push((
             ContinuationEmissionOwner::Predeclared(unit.function()),
             unit.function(),
         ));
     }
     for unit in plan.continuation_units().expect("continuation units") {
-        expected.insert((
+        expected.push((
             ContinuationEmissionOwner::Specialization(unit.id()),
             unit.consumer_owner(),
         ));
     }
     for context in plan.continuation_contexts().expect("contexts") {
-        expected.insert((
+        expected.push((
             ContinuationEmissionOwner::Specialization(context.enclosing_specialization()),
             context.raw_owner(),
         ));
@@ -19523,7 +19551,7 @@ fn d8o_expected_authorities() -> std::collections::BTreeSet<(
 #[test]
 fn d8o_remeasures_the_two_owner_keyed_guards_on_the_descendant() {
     use crate::cranelift_backend::lowering::{
-        d8i_discharges, reset_d8d_bindings, set_d8i_foreign_authority, D8jMutation,
+        reset_d8d_bindings, reset_d8o_body_authorities, set_d8i_foreign_authority, D8jMutation,
     };
 
     // D8i clause 2, re-run.
@@ -19570,32 +19598,39 @@ fn d8o_remeasures_the_two_owner_keyed_guards_on_the_descendant() {
     // composed facet built inside a specialization body would appear here; none
     // does, on any witness in reach. Recorded, not fabricated.
     reset_d8d_bindings();
+    reset_d8o_body_authorities();
     let _ = d8n_compile();
-    let composed = d8i_discharges()
-        .iter()
-        .filter_map(|record| record.composed)
-        .collect::<Vec<_>>();
+    let claim_bodies = crate::cranelift_backend::lowering::d8o_composed_claim_bodies();
     assert!(
-        !composed.is_empty(),
-        "the witness must make at least one composed claim, or the population question below is \
-         not being asked at all: {composed:?}"
+        !claim_bodies.is_empty(),
+        "the witness must reach the composed claim seam at least once, or the population question \
+         below is not being asked at all"
     );
-    let from_specialization = composed
+    // ⛔ The emitter body is the one RECORDED AT THE SEAM from the live ambient
+    // fields -- never `identity.emission_owner()`, which is the field the owner
+    // guard validates and would make this question answer itself.
+    let from_specialization = claim_bodies
         .iter()
-        .filter(|(owner, _)| {
+        .filter(|(_, body_owner)| {
             matches!(
-                owner,
-                crate::cranelift_backend::planning::ContinuationEmissionOwner::Specialization(_)
+                body_owner,
+                Some(crate::cranelift_backend::planning::ContinuationEmissionOwner::Specialization(
+                    _
+                ))
             )
         })
         .count();
     assert_eq!(
         from_specialization, 0,
-        "MEASURED, and recorded rather than fabricated: every composed claim in reach is owned by \
-         a Predeclared emitter, so the SPECIALIZATION-body composed-claim population is EMPTY and \
-         there is nothing to re-measure there. ⛔ D8j's own guard requires the claiming function \
-         to equal the identity's emission owner, so a Specialization-owned claim would be one \
-         made from inside a specialization body. If this ever becomes non-zero that population \
-         exists and needs its own owner-correctness evidence: {composed:?}"
+        "MEASURED at the seam and recorded rather than fabricated: every composed claim in reach \
+         is made from an ORDINARY body, so the specialization-body composed-claim population is \
+         EMPTY and there is nothing to re-measure there. If this ever becomes non-zero that \
+         population exists and needs its own owner-correctness evidence: {claim_bodies:?}"
+    );
+    assert!(
+        claim_bodies
+            .iter()
+            .all(|(function, _)| function.is_some()),
+        "and each must be labelled with the Function it was claimed in: {claim_bodies:?}"
     );
 }
