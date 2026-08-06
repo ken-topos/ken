@@ -22728,12 +22728,30 @@ fn d8f_the_remaining_checked_marker_refusals() {
 /// the one emitter both ingresses reach. Every fact below is written there,
 /// after the instruction exists.
 ///
-/// ## The independent side
+/// ## What the independent side IS, and what it is NOT
 ///
-/// The planner's own continuation-context population: for each generated
-/// context, the raw worker body it retargets and the capture run it declares.
-/// Read from a plan built independently of the emission run, so a claim cannot
-/// be an echo of the compile that produced it.
+/// It is the planner's own **contract** populations -- unit definition for a
+/// worker body's declared arity and capture count, and the continuation-context
+/// population for the capture run a retarget declares -- read from a plan built
+/// separately from the emission run, so no expectation is an echo of the compile
+/// that produced the observations.
+///
+/// ⛔ **It is NOT a per-call planning authority, and this row must not be read
+/// as one.** No planner or unit authority names the per-body source-`Call`
+/// population, so there is no independently enumerated expected key set and no
+/// independently selected target. The keys and the targets below are the
+/// ACTUAL ones; what the planner supplies is the contract each named target must
+/// satisfy.
+///
+/// ## THE RESIDUAL, stated plainly
+///
+/// **A defect that moved target and route TOGETHER to another lawful
+/// same-shaped worker would not be caught here.** Every clause would still hold:
+/// the substituted target has its own planner-declared contract, its own route
+/// implied by whether a context exists for it, and its own suffix. Catching that
+/// needs an authority naming which target each source call is *supposed* to
+/// reach, and none exists. This row owns table choice and suffix contract for
+/// the target a call names; it does not own which target it names.
 ///
 /// ## Clause 1 — the keyed relation, one emission per call occurrence
 ///
@@ -22831,11 +22849,15 @@ fn d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emit
     // Clause 2 — the planner's expectation, under the SAME key, and the route
     // does not choose it.
     //
-    // ⛔ The expected route is derived from whether the PLANNER issued a
-    // generated context for the target this call decodes -- not read off the
-    // emission. Letting the observed route pick its own branch is how the raw
-    // arm became a tautology: `supplied == raw` is trivially true for any call
-    // the emitter never appended to.
+    // ⛔ The expected route is derived from whether the PLANNER declares a
+    // generated context for the target this call names -- not read off the
+    // emission's own route field. Letting the observed route pick its own branch
+    // is how the raw arm became a tautology: `supplied == raw` is trivially true
+    // for any call the emitter never appended to.
+    //
+    // ⚠ The TARGET is the actual one. This is the planner adjudicating the route
+    // and contract for a named target, not the planner naming which target the
+    // call should have reached -- see THE RESIDUAL in the header.
     let mut context_routed = 0usize;
     let mut raw_routed = 0usize;
     let mut emitted_callees: Vec<u32> = Vec::new();
@@ -22879,8 +22901,10 @@ fn d8g_the_functionized_population_binds_its_table_and_suffix_at_the_shared_emit
         };
         assert_eq!(
             *route, expected_route,
-            "the route must be the one the PLANNER's context population implies for this target, \
-             under key ({function:?}, {call:?}). Derived before the observation is read"
+            "the route must be the one the PLANNER's context population implies FOR THIS TARGET \
+             -- derived from whether a context is declared for it, not read off the emission's \
+             route field, under key ({function:?}, {call:?}). ⚠ The target itself is the actual \
+             one: no authority names which target this call should reach"
         );
         match expected_suffix {
             Some(declared) => {
