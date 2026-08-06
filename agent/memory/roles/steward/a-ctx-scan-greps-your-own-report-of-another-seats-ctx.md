@@ -53,6 +53,38 @@ number you published about a *different* seat. Two seats at exactly the same
 unusual percentage is not a coincidence worth explaining — it is one string,
 read twice.
 
+## RECURRED THE SAME DAY, with the rule already at the point of work
+
+Hours later, same tick, `runtime-leader` read **`ctx 7%`** — again quoted text
+(the implementer's footer plus my own `ctx 69% → ctx 0%` post, echoed in the
+leader's pane). Two things were already true and neither prevented it:
+
+1. **this lesson existed**, naming the discriminator exactly; and
+2. **the watchdog interval prompt carried it inline** — *"discriminating harness
+   first (Codex `gpt-*` panes never emit `ctx N%`, so any match there is quoted
+   text)"*.
+
+⇒ **Knowing the rule and putting it at the point of work were both
+insufficient, so neither is the fix.** What defeated it was the **shape of the
+command**:
+
+```sh
+for r in impl leader architect qa; do ... | grep -oE 'ctx [0-9]+%|[0-9]+% context left'; done
+```
+
+**A uniform batch loop over heterogeneous seats has nowhere to put a per-seat
+conditional.** Reaching for one alternated pattern across all roles *encodes the
+assumption the rule forbids* — the discriminator cannot be applied because the
+command shape has no branch to hang it on. The rule was not ignored; it was
+**unexpressible in the idiom I reached for**, and the idiom is what a scan of
+several panes naturally suggests.
+
+⇒ **Scan per seat with the model line resolved FIRST, or emit the model line
+beside every reading so an impossible pairing is visible in the output.** A
+`gpt-*` seat showing `ctx N%` must be a self-evident contradiction on the page,
+never a number you have to remember to doubt. **When a known rule fails twice,
+suspect the shape of the tool before your recall.**
+
 Sibling of
 [[a-process-count-matches-your-own-shell-when-the-command-embeds-the-path]] —
 same shape, where the measurement's own artifact is inside the measured
