@@ -59,9 +59,29 @@ so the ordinary call claims first and the unchanged affine ledger **correctly**
 rejects the duplicate. ⛔ **Nothing was missing.** The three-case law and its
 bans are in the frame's **`D8f` CLASSIFIED** section.
 
+**Where `D8f` actually is:** a **disposition PARTIAL** at exact `20b0d6be`
+(implementer `evt_1zbszmgc08yc7`, review request `evt_3qnqxm7w4xkqf`, Architect
+reading `evt_42jz30xzyw2h`). ⭐ **The real two-call witness now COMPILES** —
+first call `PendingAtAnotherOccurrence` with no claim, exact second call
+`ConsumedHere` with one. ⛔ **This is NOT a `D8f` completion and NOT a
+candidate:** the four refusals remain open on their own live paths, and the
+implementer and leader both said so unprompted.
+
+⚠ **One evidence shape to watch when it reaches QA:** the two defining bodies
+**share one causal identity**, so the closeout asserts non-duplication **per
+identity** rather than once per body. That is the Architect's lane and it is
+reviewing now.
+
+⛔ **`D8f`'s four refusals are NOT `D6c`'s.** Both lists open *omission,
+duplicate*; `D8f`'s is about **which call consumes a pending checked-IH
+marker**, `D6c`'s about **selecting the raw/IH target pre-emission.**
+**Discharging one discharges nothing of the other.** Disambiguated at both
+sites in the frame.
+
 **Next for me:** `D8g` when `D8f` discharges — its first deliverable is the
-owner-separation re-measurement, already framed. Then `D6b` closeout, `D6c`,
-candidate.
+owner-separation re-measurement, already framed. Then `D6b` closeout (which
+also owes the raw-target declared-call-table representation `D6a` left
+honestly inert), `D6c`, candidate, `D6` closure.
 
 **`D8p` is IN REVIEW at exact `198b7c14`** (`763/2/1`) — implementer
 `evt_14tv58v4k5wxr`, leader's review request `evt_68ry7r5bz86n5`, Architect
