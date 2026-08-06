@@ -33,41 +33,44 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~03:4xZ · `D8m` matrix BLOCKED on two bounded defects
+## LIVE — 2026-08-06 ~03:5xZ · `D8m` DISCHARGED; `D8f` in flight
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Wait for the `D8m` test/fidelity correction.** Architect blocked exact
-`e5ad0e10` (`evt_58ggvqc2d771q`); leader routed `evt_46rp51hsey329`;
-implementer **working**. **The ring owes nothing to me.** **`D8o` DISCHARGED
-`3aadbaae`, `D8n` DISCHARGED `3a63fe64`.** Then `D8f`, `D8g`, `D6b` closeout,
-`D6c`, candidate.
+**Wait for `D8f`** — checked-marker occupancy, released `evt_4m560r79pv6hh`
+from the accepted tip **`01263e44`**, implementer working. **The ring owes
+nothing to me.** **`D8m` DISCHARGED `01263e44` (`760/2/1`), `D8o` `3aadbaae`,
+`D8n` `3a63fe64`.** Then `D8g`, `D6b` closeout, `D6c`, candidate.
 
-⛔ **Bounded test/fidelity ONLY — the two-occurrence matrix is accepted as
-sound progress.** The equal-fingerprint witness has distinct frame/slot
-identities, the relation is recorded **before** the binding law, the keyed
-relation rejects the live permutation, transplant and omission **demonstrably
-reach lowering**, and both directions of the frame/marker bijection are live.
-⛔ **Do not re-cut `D8m`.**
+**`D8f` must build:** inside one checked wrapper, an ordinary selected-argument
+call occurring **before** the exact planner-issued checked IH call; the
+selected-argument call **leaves the marker pending** and only the exact checked
+occurrence consumes it. ⛔ **Not selected by route, arity, binder index,
+coincidence, or first-call order.** Omission, duplicate, transplant and wrong
+occurrence must each refuse **on their own live path**, and **both always-admit
+and never-admit mutations must red.**
 
-**The two defects, both already covered by the frame's GOVERNING section:**
+⭐ **THE `D8m` FINDING MOST WORTH CARRYING INTO `D8f`/`D8g`: a stop-point claim
+generalized across a witness family whose members stop in THREE DIFFERENT
+PLACES.** The doc had said the projected-causal-edge stop is where *"every
+witness in this family stops, the checked one included."* ⛔ **That was FALSE:**
+the two-occurrence checked witness **compiles**; the single checked witness
+stops **earlier**, at the missing-slot guard; only the new ordinary witness
+stops at the causal-edge seat. ⇒ **Three programs, three outcomes, and none may
+be read onto another.**
 
-1. ⛔ **The clause-1 correction landed in the PROSE and not in the EXECUTABLE
-   row.** `control.rs:18861` still read `Clause 1 — the identity arrives` and
-   `:18869` *"the bridge must carry ... the proof is WHICH guard is reached"* —
-   **the exact inference clause 1b refutes**, still standing as the assertion's
-   own label and failure message. ⇒ **Sweep clause labels and assertion
-   messages, not only doc comments.**
-2. ⚠ **A zero on an EMPTY population.**
-   `d8m_the_bridge_arm_populations_move_only_with_the_marker` runs **only**
-   `ComputationalMatch` sites, so **nothing in it reaches
-   `D8mBridgeArm::Ordinary`** — it observes zero ordinary sites before and
-   after on a population containing no ordinary bridge. Needs a lawful ordinary
-   bridge reaching the same production recorder, **expected arm derived from
-   the source descriptor, not the recorder under test.**
+⭐ **How the ordinary positive handles not compiling green** — it reaches the
+arm, is classified, then stops. So the row compares **outcome EQUALITY across
+three perturbations** (withheld tuple, wrapper-occurrence substitution, pre-`D8n`
+ledger) rather than asserting success. **If any switch ever changes WHERE it
+stops, that is the finding.** ⭐ **The witness is the `D8m` witness with its
+bridge respelled as an ordinary `Match`** — same scrutinee, constructors, binder
+counts, default — **so it is a control on the classification, not a second
+unrelated program**, and the expected arm is restated from the witness's own
+**source text**, never from the recorder, plan, or lowering.
 
 ⚠ **`D8m` CORRECTS EVIDENCE ACCEPTED AT `7d7f248b`, and flagged it as such** —
 the Architect should review it as a change to accepted text, not as new work.
