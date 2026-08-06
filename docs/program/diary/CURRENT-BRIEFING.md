@@ -33,15 +33,19 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~06:2xZ · `D8f` DISCHARGED · `D8g` measurement IN FLIGHT
+## LIVE — 2026-08-06 ~06:4xZ · `D8g` closeout RECUT, ready for release
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Nothing is owed by me. `D8g`'s measurement is in flight and the ring is
-self-driving — it routed `D8g` off the frame without me.**
+**I WAS the blocker and the recut is now written. Release `D8g`'s closeout.**
+
+The Architect's disposition (`evt_6afmy0398n847`) named **the frame owner as
+next mover** and held `D8g` *"until the contradictory frame clauses are
+replaced."* They are replaced — the `D8g` paragraph and the `D8l` clause both
+landed this pass. **Nothing further is owed by me before the release.**
 
 **`D8p` DISCHARGED at exact `2be7adb0`** (`evt_6sk9hbp17893t`). **`D8f`
 CLASSIFIED bounded and IN-NODE** (`evt_3ynqrahtzngaz`) — ⭐ **no further
@@ -92,12 +96,30 @@ marker**, `D6c`'s about **selecting the raw/IH target pre-emission.**
 **Discharging one discharges nothing of the other.** Disambiguated at both
 sites in the frame.
 
-**Next for me: nothing until `D8g`'s measurement returns.** The leader released
-that first deliverable itself (`evt_6bzantbemt8jt`), quoting the frame — an
-ANSWER not a mechanism, the two exact outcomes, no production edit authorized,
-no manufactured population. Do not re-route it. Then `D6b` closeout (which also
-owes the raw-target declared-call-table representation `D6a` left honestly
-inert), `D6c`, candidate, `D6` closure.
+**`D8g`'s owner re-measurement is DISCHARGED** at `1b367065` — **outcome (1),
+the owner VARIES but SEPARATES nothing.** The prohibition stands on a checked
+premise, and no owner positive is authorized or required. The measurement asked
+**injectivity**, not "do owners differ anywhere?" — `px8tr` carries two genuinely
+distinct owners, so the naive census would have returned the opposite answer.
+
+**Then the closeout HARD-STOPPED, correctly, and the root cause was my frame.**
+Its two required facts live in **disjoint witness families**: `px8tr` reaches the
+same-body `GeneratedContext` IH but every discharge is `composed: None` with an
+empty facet log; the composed family reaches composed-target emission but has no
+generated context. The implementer measured before building and refused the
+substitution that would have gone green — weakening *emission through* the
+composed-call target into *a composed target exists in the plan*.
+
+**The recut, as ruled and now written into the frame.** Two populations, joined
+at one exact production seam rather than at their outputs: `px8tr` owns the
+table-choice and suffix contract; the composed family adds a distinct **ingress**
+to the same `call_static_worker_with_inputs` emitter. Both relations must name
+that seam and prove neither ingress duplicates target or operand assembly.
+**No combined witness** — a combined fixture would cover no additional route
+contract and would manufacture the ungrounded conjunction being removed.
+
+**Then** `D6b` closeout (which also owes the raw-target declared-call-table
+representation `D6a` left honestly inert), `D6c`, candidate, `D6` closure.
 
 **Watch `D6c` specifically.** It is the next control family big enough to
 repeat `D8f`'s five-hold arc, and it inherits the same governing rule. The
