@@ -46,6 +46,24 @@ the PR, and continue work, restoring the tests as work allows."*
 The campaign-sizing question — whether the 212-commit branch should have been
 restructured — **is still parked with the operator** and blocks nothing.
 
+### BLOCKED ON A GITHUB ACTIONS OUTAGE — not on the candidate, not on a seat
+
+**Incident `qcvjkzcs7j74`, Critical, open since 2026-08-06T15:22Z.** Webhook
+triggers throttled to roughly 15%. **The merge cannot land until Actions
+recovers**, and no action here changes that.
+
+**The tell, so nobody re-diagnoses it:** PR #1528 has a `ken-ci` **check-suite**
+with **no workflow run behind it** and `updated_at` frozen at `created_at`, and
+**no workflow run exists repo-wide since 12:11Z**. The workflow is `active`; my
+token cannot read `actions/permissions` (403), so repo settings were ruled out
+by the repo-wide gap rather than by reading them.
+
+To resume: read the Actions component at
+`https://www.githubstatus.com/api/v2/summary.json`, confirm a run finally
+exists, then re-run the publisher on the same SHA. If the suite still never
+dispatches after recovery, closing and reopening the PR is the standard nudge —
+**ask the operator first.**
+
 ### State of the publish
 
 | item | value |
