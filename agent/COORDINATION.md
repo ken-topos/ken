@@ -637,6 +637,15 @@ would go red" are not bars (see §12 and the 2026-07-28 no-users ruling).
 prefix preserves every exact SHA and every review verdict below it with no
 rebase, so verdict transfer is paid only on what is still in flight.
 
+**A reviewed prefix is not thereby a releasable one.** Checkpoint approvals
+bind an exact SHA for a deliverable's own claim; none of them asserts the tree
+is green there, because nobody asked. Establish greenness on the cut **and** on
+`main` before routing a candidate, so a red is attributable rather than
+inherited. Measured 2026-08-06: a complete, fully-reviewed 34-commit prefix of
+`RT-DECL-CLOSURE-PORT` failed eight CI checks against a green `main`. The
+node-id boundary is bookkeeping; greenness is semantic, and the two need not
+coincide.
+
 **`scripts/` and `agent/` are not in the operator's split.** Until the operator
 rules, treat publisher/tooling changes under `scripts/` as the **Architect's**
 review surface (machinery, not library content) and `agent/` as the **Steward's**

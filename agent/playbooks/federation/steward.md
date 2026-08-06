@@ -145,6 +145,28 @@ The bar is *accepted*, not *finished-looking*: reviewed and cleared on its own
 terms. Its deliverables must be complete — landing a deliverable's first half
 is not partial-WP merging, it is shipping a fragment.
 
+**"Reviewed" and "releasable" are different properties, and the cut needs
+both.** Checkpoint reviews bind exact SHAs *for a deliverable's own claim* —
+they do not assert the tree is green at that commit, because nobody ever asked
+them that. **A prefix every one of whose commits carries a live approval can
+still be red.** Before publishing any cut, establish that the target is green
+**and** that `main` is green, so a red is attributable to the cut rather than
+inherited. CI is the instrument; the local `--workspace` run is still banned
+(§12).
+
+> **Measured 2026-08-06, one hour after the rule above was written.** I cut
+> `RT-DECL-CLOSURE-PORT` at `fc758323` — 34 commits, `D1`-`D6a`, every
+> deliverable complete and reviewed — and published it. **Eight CI checks
+> failed** on a shared `ken native trap: malformed borrowed process input`
+> signature. `main` was green at `3015aafd`, so the prefix introduced it. PR
+> closed, branch deleted.
+>
+> ⇒ **A contiguous, complete, fully-reviewed prefix is not thereby a
+> releasable one.** The node-id boundary I cut on is a *bookkeeping* boundary;
+> greenness is a *semantic* one, and they do not have to coincide. Find the
+> green boundary by measurement before you publish, not by inference from the
+> deliverable table.
+
 **The one genuine bar is semantic atomicity.** Where two deliverables are a
 declared atomic pair — one regresses alone, or the other has no reaching
 witness alone — they land together. That is a property of the work. Nothing
