@@ -1401,8 +1401,8 @@ all six failing `D0` rows.
   | 13 | `D8o` — ambient body authority | lowering compiler state | **DISCHARGED** `3aadbaae`, after two evidence blocks (`5154d94a`, `d3f7e32c`) |
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | **DISCHARGED** `01263e44` (`760/2/1`), after a matrix block and two fidelity children |
   | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **DISCHARGED** `2be7adb0` (Architect `evt_6sk9hbp17893t`), after a mechanism-accepted evidence block at `198b7c14` |
-  | 16 | `D8f` — checked-marker occupancy | integration | **PARTIAL ACCEPTED** at exact `c49d0652` (Architect `evt_2azbt52vxm47g`) — three-case disposition landed, real two-call witness **compiles**, identity-global nonduplication. **NOT a completion, NOT a candidate.** The four refusals released `evt_7gxhvgpn5v7sw`; implementer working |
-  | 17 | `D8g` — non-vacuous closeout, both paths | proof | held. **FIRST deliverable is a MEASUREMENT** — re-measure the `D8a` owner-separation prohibition before obeying it |
+  | 16 | `D8f` — checked-marker occupancy | integration | **DISCHARGED** at exact `04c40d4c` (Architect `evt_6cka0ecwnd25t`). Three-case disposition partial accepted at `c49d0652`; the four refusal controls then took **five** bounded evidence holds, closing at `d94a3df9` with both wrong-occurrence origins named from planner authority. `04c40d4c` is a whitespace-only identity child of it |
+  | 17 | `D8g` — non-vacuous closeout, both paths | proof | **FIRST deliverable RELEASED** `evt_6bzantbemt8jt` — the owner-separation re-measurement, as framed. It is an ANSWER, not a mechanism: neither outcome authorizes a production edit, and neither licenses manufacturing a population |
   | 18 | `D6b` closeout, then `D6c` refusal set | — | held |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
@@ -2878,8 +2878,8 @@ all six failing `D0` rows.
   before writing them, not after review sends them back.**
 
   Two Architect verdicts blocked `D8o`'s evidence — `evt_6gk0n7p2eazn2` and
-  `evt_4y1q8s6cq5m11` — and with the earlier rounds this shape has now
-  surfaced **five** times in this node:
+  `evt_4y1q8s6cq5m11` — and with the earlier rounds and `D8f`'s three, this
+  shape has now surfaced **eight** times in this node:
 
   | # | where | how the two sides agreed with each other |
   |---|---|---|
@@ -2888,6 +2888,9 @@ all six failing `D0` rows.
   | 3 | `D8i` clause 2 | mutation picks "foreign" **relative to** `defining_emission_owner`; the guard compares **back to that same field** |
   | 4 | `D8o` round 1 | the authority row records the **bind arguments**, and the EMPTY specialization population is filtered by **the field under validation** |
   | 5 | `D8o` round 2 | timing fixed, but the proof **erases the body key** — an unkeyed pair multiset, so **swapping two lawful pairs between two bodies stays green** |
+  | 6 | `D8f` `f42fff78` | the "independent side" is an expected **error substring**, and the final comparison is a `BTreeSet` of four formatted errors — a **bag of final errors**. Messages say where compilation stopped, never which call did what |
+  | 7 | `D8f` `8671825c` | keyed at last, but the two planning "sides" **share one marker collector**, so the independent side is built from the thing it is checking |
+  | 8 | `D8f` `cf770717` | origins read from the mechanism **on a lawful comparison compile**, and the second subject derived as the **complement** of the observed set |
 
   **The rule, in two halves. The second half is the one that took two rounds.**
 
@@ -2918,6 +2921,36 @@ all six failing `D0` rows.
   frame could not state until now:** *what lawful permutation of my observed
   data leaves this assertion green?* If swapping two records between two
   subjects passes, the relation is unkeyed.
+
+  ##### WHAT DISQUALIFIES A SIDE — from `D8f`'s three holds, 2026-08-06
+
+  Half 1 says the independent side must be **derivable without consulting the
+  mechanism**. That was precise enough for the Architect to adjudicate every
+  time, and the implementer conceded each finding — so the rule is not
+  ambiguous. **It is nonetheless satisfiable three ways that feel independent
+  and are not**, and rows 6-8 are one instance of each. Author against this
+  list, because "I did not call the mechanism" is not the test:
+
+  1. **Distance is not independence.** Reading the mechanism under test on a
+     **different program** — a lawful comparison compile — leaves the side
+     dependent. A consistent *wrong* classification in both runs keeps the row
+     green. The lawful run is the same mechanism, one program removed.
+  2. **A complement is not a derivation.** Naming subject A independently and
+     defining subject B as *"the other one"* pins one origin, not two. The
+     second subject must be named by its own authority.
+  3. **A shared collector re-joins two sides that look separate.** Two
+     populations built from one collector agree because they have a common
+     ancestor, not because the property holds.
+
+  **What discharged it** (`d94a3df9`): both origins named by walking
+  `StaticTransitionPlan::child_static_origin` — the planner's sole child-origin
+  production point — down a positional path spelled from the witness's own
+  shape, with the two occurrences asserted distinct so a collapsed path cannot
+  leave the control with one subject. **Exact equalities against a named key,
+  never filters over the observed set.**
+
+  ⇒ **Binding on `D8g` and `D6c`, which inherit this rule.** `D6c`'s refusal
+  set is the next control family large enough to repeat this arc.
 
   ⛔ **LIMIT ON THAT QUESTION — added 2026-08-06 from the `D8m` partial, and it
   is a correction to the rule as I first wrote it.** **The swap discriminator
