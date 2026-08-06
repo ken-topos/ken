@@ -2394,6 +2394,71 @@ all six failing `D0` rows.
   witness spans both function kinds and its ownership facts must be trustworthy
   when measured.
 
+  ###### ANSWERED — nothing invalidated; ONE control is self-correlated. `evt_t4e294qz932v`.
+
+  ⛔ **`D8a`-`D8k` are NOT reopened.** The stale specialization owner does not
+  explain any accepted positive, `D8j` wrong-owner red, or `D8k` partition
+  result. Why, per checkpoint:
+
+  | checkpoint | why the stale field is not an input |
+  |---|---|
+  | `D8a`, `D8b`, `D8h` | owner, selector, target and identity populations derive entirely from planner-issued `ContinuationUnitView` / composed-target records |
+  | `D8k` law-level row | obtains opaque identities from the plan and passes `identity.emission_owner()` **explicitly**; no specialization-body composed accumulation site exists |
+  | `D8i` composed positive | its witness constructs and consumes in an **ordinary declaration-owned unit body**, whose pass binds `Predeclared(unit.function)` **before** source lowering |
+  | `D8j` positive | **root-owned**; the claim is finalized in that ordinary root body, after the exact predeclared owner is bound. The later specialization emission is **downstream** of the measured relation |
+  | `D8j` `WrongClaimingOwner` | substitutes **`None`** — it does not derive a second agreeing value from the stale field |
+
+  ###### The ONE self-correlated control — `D8i` clause 2
+
+  ⭐ **This is the finding, and it is exactly the shape worth having asked
+  about.** Clause 2's mutation chooses a "foreign" identity by asking for a
+  planner target whose owner **differs from `self.defining_emission_owner`**;
+  the production guard then compares that identity's owner **back to the same
+  `self.defining_emission_owner`.**
+
+  ⇒ **It proves the guard rejects disagreement RELATIVE TO THE AMBIENT VALUE.
+  It cannot prove the ambient value is the planner-correct owner of the defining
+  `Function`. If the field were stale, the mutation and the guard would still
+  agree about which identity is "foreign."**
+
+  **It is NOT a false green today** — on the current witness the refusal occurs
+  during the earlier ordinary-unit pass, where the owner is explicitly bound.
+  ⛔ **But it must no longer be cited as evidence for specialization-body owner
+  correctness.**
+
+  **`D8j` verification 2 carries the same limitation** as a generic
+  implementation guard: it proves **agreement with the ambient field**, not the
+  independent `Function`-to-owner mapping. Its root-owned row **remains valid**;
+  it simply **says nothing about the stale specialization population.**
+
+  ###### `D8o`'s candidate gate, and the BOUNDED remeasurement it enables
+
+  **`D8o` must supply the independent missing premise:** for ordinary,
+  specialization **and** generated-context bodies, observe the defining
+  `Function` and compare its **live `defining_unit` / `defining_emission_owner`
+  pair** to the **planner-issued body authority**, with **cross-body
+  inheritance red**. ⛔ **The expected owner comes from the body
+  descriptor/pass input — never from the ambient field, `FuncId`, raw origin,
+  or a selected composed identity.** Deriving the expectation from the thing
+  under test is the defect this whole section is about.
+
+  **Then re-run and record, on the `D8o` descendant:** `D8i` clause 2, and
+  `D8j` verification 2's positive **and** negative rows.
+
+  ⭐ **This is bounded REMEASUREMENT, not rework** — it composes their
+  **unchanged guard laws** with `D8o`'s newly independent body-owner premise.
+  ⛔ **Preserve `D8i`'s and `D8j`'s prior exact SHAs as baselines; do not
+  rewrite or reopen them.** `D8a`/`D8b`/`D8h` and `D8k` need **ordinary
+  regression coverage only**, not owner-source re-derivation.
+
+  ⛔ **If no lawful specialization-body composed claim exists, record that
+  population as EMPTY — do not fabricate one.** `D8o`'s three-body authority
+  evidence is the proof for that body kind.
+
+  **Candidate stays held until `D8o` AND this bounded remeasurement are both
+  recorded.** `D8m` remains correctly sequenced after `D8o`, because it does
+  span ordinary and specialization `Function`s.
+
   ###### `D8k`'s ledger row is proved ON THE LAW, not on reach — and that is owed
 
   Recorded because the implementer stated it plainly rather than letting it
