@@ -12472,6 +12472,16 @@ struct DeferredConstructorCaseEnvironment<'a> {
     splice_caller: Option<&'a ActiveContinuationFrame<'a>>,
     selected_active: ActiveContinuationFrame<'a>,
 }
+/// **`D8m`** — the four checked facts a source `ComputationalMatch` frame
+/// carries, kept together so no site can supply three of them.
+#[derive(Clone, Copy)]
+struct CheckedComputationalFrame {
+    id: Option<u64>,
+    invocation_id: Option<u64>,
+    invocation_source: Option<InvocationTemplateRef>,
+    invocation_depth: usize,
+}
+
 #[derive(Clone, Copy)]
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8m` — the closed bridge descriptor.**
 ///
@@ -13538,6 +13548,50 @@ impl<'a> Lowering<'a> {
             ));
         }
         Ok(Some(frame_id))
+    }
+
+    /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8m` — the checked computational frame
+    /// tuple, derived ONCE.**
+    ///
+    /// ⭐⭐ Every consumer of a source `ComputationalMatch` needs the same four
+    /// facts, and they are not independent: the invocation id exists only when
+    /// a frame id does, and the source and depth both come from the innermost
+    /// active recursive invocation. Deriving them at each site is how they
+    /// drift.
+    ///
+    /// ⛔ `D8m`'s first draft hard-coded three of the four at the checked bridge
+    /// -- `checked_invocation_id: None`, `checked_invocation_source: None`,
+    /// `checked_invocation_depth: 0` -- which made the bridge's tuple a
+    /// different object from the one the direct path builds for the SAME source
+    /// match. Sharing the derivation is what makes "the bridge is an
+    /// optimization of the source match" true of the whole tuple rather than of
+    /// its first field.
+    ///
+    /// ⛔ This is not a validator. It consumes the marker through the existing
+    /// entry/consumption pair and reads the invocation stack; it checks nothing
+    /// the callers did not already have checked for them.
+    fn checked_computational_frame(
+        &mut self,
+        cases: &[crate::RuntimeComputationalMatchCase],
+        default: &RuntimeTrap,
+    ) -> Result<CheckedComputationalFrame, CraneliftBackendError> {
+        let id = self.consume_checked_subcontinuation_frame(cases, default)?;
+        Ok(CheckedComputationalFrame {
+            id,
+            invocation_id: id.map(|_| {
+                self.active_recursive_invocations
+                    .last()
+                    .map_or(0, |instance| instance.invocation_instance_id)
+            }),
+            invocation_source: self
+                .active_recursive_invocations
+                .last()
+                .map(|instance| instance.source),
+            invocation_depth: self
+                .active_recursive_invocations
+                .last()
+                .map_or(0, |instance| instance.semantic_depth),
+        })
     }
 
     fn computational_ih_slots_for_case(

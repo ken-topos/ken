@@ -1272,16 +1272,9 @@ impl<'a> Lowering<'a> {
         producer_env: &[LoweringEnvironmentBinding],
         eliminator_env: &[LoweringEnvironmentBinding],
     ) -> Result<LoweringOperand, CraneliftBackendError> {
-        let checked_frame_id = self.consume_checked_subcontinuation_frame(cases, default)?;
-        let checked_invocation_id = checked_frame_id.map(|_| {
-            self.active_recursive_invocations
-                .last()
-                .map_or(0, |instance| instance.invocation_instance_id)
-        });
-        let checked_invocation_depth = self
-            .active_recursive_invocations
-            .last()
-            .map_or(0, |instance| instance.semantic_depth);
+        // `D8m` — the shared derivation. ⛔ Not re-spelled here: the checked
+        // bridge must carry this exact tuple, and two spellings is how they part.
+        let checked = self.checked_computational_frame(cases, default)?;
         let provenance = self.mint_recursor_frame_provenance();
         self.lower_computational_producer_expr(
             builder,
@@ -1296,13 +1289,10 @@ impl<'a> Lowering<'a> {
                     retained_scrutinee_index: None,
                     deferred_constructor_case: None,
                     provenance,
-                    checked_frame_id,
-                    checked_invocation_id,
-                    checked_invocation_source: self
-                        .active_recursive_invocations
-                        .last()
-                        .map(|instance| instance.source),
-                    checked_invocation_depth,
+                    checked_frame_id: checked.id,
+                    checked_invocation_id: checked.invocation_id,
+                    checked_invocation_source: checked.invocation_source,
+                    checked_invocation_depth: checked.invocation_depth,
                     answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                 },
             )],
@@ -2168,8 +2158,9 @@ impl<'a> Lowering<'a> {
                             default,
                         } => {
                             self.enter_checked_subcontinuation_frame(frame_id)?;
-                            let checked_frame_id =
-                                self.consume_checked_subcontinuation_frame(cases, default)?;
+                            // ⭐ `D8m` — the SAME derivation the direct path
+                            // uses, whole. All four facts, not the id alone.
+                            let checked = self.checked_computational_frame(cases, default)?;
                             EliminatorFrame::Computational(ComputationalEliminatorFrame {
                                 cases,
                                 default,
@@ -2190,10 +2181,10 @@ impl<'a> Lowering<'a> {
                                 retained_scrutinee_index: None,
                                 deferred_constructor_case: Some(&deferred),
                                 provenance: self.mint_recursor_frame_provenance(),
-                                checked_frame_id,
-                                checked_invocation_id: None,
-                                checked_invocation_source: None,
-                                checked_invocation_depth: 0,
+                                checked_frame_id: checked.id,
+                                checked_invocation_id: checked.invocation_id,
+                                checked_invocation_source: checked.invocation_source,
+                                checked_invocation_depth: checked.invocation_depth,
                                 // ⛔ UNCHANGED. Checked-frame presence is an
                                 // identity fact, not a routing one; making it
                                 // move the answer route would make the two forms
@@ -2569,17 +2560,7 @@ impl<'a> Lowering<'a> {
                 // no intermediate aggregate is materialized or exit-lowered.
                 let mut composed = Vec::with_capacity(eliminators.len() + 1);
                 let provenance = self.mint_recursor_frame_provenance();
-                let checked_frame_id =
-                    self.consume_checked_subcontinuation_frame(inner_cases, inner_default)?;
-                let checked_invocation_id = checked_frame_id.map(|_| {
-                    self.active_recursive_invocations
-                        .last()
-                        .map_or(0, |instance| instance.invocation_instance_id)
-                });
-                let checked_invocation_depth = self
-                    .active_recursive_invocations
-                    .last()
-                    .map_or(0, |instance| instance.semantic_depth);
+                let checked = self.checked_computational_frame(inner_cases, inner_default)?;
                 composed.push(EliminatorFrame::Computational(
                     ComputationalEliminatorFrame {
                         cases: inner_cases,
@@ -2589,13 +2570,10 @@ impl<'a> Lowering<'a> {
                         retained_scrutinee_index: None,
                         deferred_constructor_case: None,
                         provenance,
-                        checked_frame_id,
-                        checked_invocation_id,
-                        checked_invocation_source: self
-                            .active_recursive_invocations
-                            .last()
-                            .map(|instance| instance.source),
-                        checked_invocation_depth,
+                        checked_frame_id: checked.id,
+                        checked_invocation_id: checked.invocation_id,
+                        checked_invocation_source: checked.invocation_source,
+                        checked_invocation_depth: checked.invocation_depth,
                         answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                     },
                 ));

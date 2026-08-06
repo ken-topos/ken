@@ -18655,7 +18655,7 @@ fn d8l2_the_composed_call_returns_the_ordinary_payload_it_consumed() {
 /// **bridge** — the case body `immediate_binder_eliminator` selects — so the
 /// source frame identity has something to be preserved through.
 #[cfg(test)]
-fn d8m_witness(frame_id: u64, second_frame: bool) -> RuntimeExpr {
+fn d8m_witness(frame_id: u64) -> RuntimeExpr {
     let wrap = "ctor:fixture::D8M::Wrap";
     let done = "ctor:fixture::D8M::Done";
     let unit = || RuntimeExpr::Construct {
@@ -18710,8 +18710,8 @@ fn d8m_witness(frame_id: u64, second_frame: bool) -> RuntimeExpr {
             message: "d8m bridge default".to_string(),
         },
     };
-    // ⭐ The marker sits on the case body the bridge is built FROM. `second_frame`
-    // gives the SAME shape a different occurrence, for the distinctness control.
+    // ⭐ The marker sits on the case body the bridge is built FROM -- the only
+    // position where `immediate_binder_eliminator` can see it.
     let marked_bridge = RuntimeExpr::CheckedSubcontinuationFrame {
         frame_id,
         body: Box::new(bridge),
@@ -18740,7 +18740,6 @@ fn d8m_witness(frame_id: u64, second_frame: bool) -> RuntimeExpr {
             message: "d8m eliminator default".to_string(),
         },
     };
-    let _ = second_frame;
     RuntimeExpr::Let {
         value: Box::new(eliminator),
         body: Box::new(RuntimeExpr::Var(0)),
@@ -18848,7 +18847,7 @@ fn d8m_compile(expr: &RuntimeExpr, frame_id: u64) -> Option<CraneliftBackendErro
 #[test]
 fn d8m_the_source_frame_identity_survives_the_bridge() {
     // Clause 1 — the identity arrives.
-    let marked = d8m_witness(7, false);
+    let marked = d8m_witness(7);
     let refusal = format!(
         "{:?}",
         d8m_compile(&marked, 7).expect("the marked witness stops at the IH slot marker")
@@ -18929,14 +18928,14 @@ fn d8m_compile_without_plan(expr: &RuntimeExpr) -> Option<CraneliftBackendError>
 /// occurrence, carrying no identity to preserve.
 #[cfg(test)]
 fn d8m_unmarked_witness() -> RuntimeExpr {
-    strip_bridge_marker(&d8m_witness(7, false), false)
+    strip_bridge_marker(&d8m_witness(7), false)
 }
 
 /// The `D8m` witness with the marker moved onto a non-`ComputationalMatch`,
 /// which the closed descriptor must not accept as a bridge.
 #[cfg(test)]
 fn d8m_marker_around_nonmatch() -> RuntimeExpr {
-    strip_bridge_marker(&d8m_witness(7, false), true)
+    strip_bridge_marker(&d8m_witness(7), true)
 }
 
 #[cfg(test)]
