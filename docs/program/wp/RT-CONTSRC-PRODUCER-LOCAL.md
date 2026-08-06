@@ -1567,10 +1567,10 @@ all six failing `D0` rows.
   | 2 | `D8b` — composed-call target, planner representation | planner | DISCHARGED `e4b4c26c` |
   | 3 | `D8d` — install the one target-derived environment binding | lowering environment | DISCHARGED `c2e8314f` |
   | 4 | `D8e` — consumer at the source-machine callee seat | lowering consumer | consumer DISCHARGED `70171a99`; **witness proved `89e36ec1`; NOT discharged** |
-  | 5 | `D8h` — planner pairing: target to exact opaque causal identity | planner | **NEXT** |
-  | 6 | `D8i` — transport the discharge authority on the binding | lowering environment | held |
-  | 7 | `D8j` — verified source-machine discharge + function-local relation | lowering consumer + proof | held |
-  | 8 | `D8k` — partitioned global closeout | proof | held |
+  | 5 | `D8h` — planner pairing: target to exact opaque causal identity | planner | **DISCHARGED** `a435d180` |
+  | 6 | `D8i` — transport the discharge authority on the binding | lowering environment | **DISCHARGED** `abfd67ff`. Clause 2 is **self-correlated** and is not evidence for specialization-body owner correctness; re-measured under `D8o`'s plan-derived authority at `5154d94a` |
+  | 7 | `D8j` — verified source-machine discharge + function-local relation | lowering consumer + proof | **DISCHARGED** `86fe8bc6`. Verification 2 carries the same ambient-agreement limit; re-measured at `5154d94a`, positive and negative |
+  | 8 | `D8k` — partitioned global closeout | proof | **DISCHARGED** `372097de` |
   | 9 | `D8e` DISCHARGES — causal obligation dischargeable and discharged | — | **DISCHARGED, Steward ruling below** |
   | 10 | `D8l1` — MEASURE the envelope frontier | planner | ANSWERED at `aaef1772`: **not structural** |
   | 11 | `D8l2` — repair `ordinary_envelope`'s nonrecursive population | planner | DISCHARGED `1f9a2020`+`abe46dda`, **QA-approved** |
@@ -1580,8 +1580,8 @@ all six failing `D0` rows.
   | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **DISCHARGED** `2be7adb0` (Architect `evt_6sk9hbp17893t`), after a mechanism-accepted evidence block at `198b7c14` |
   | 16 | `D8f` — checked-marker occupancy | integration | **DISCHARGED** at exact `04c40d4c` (Architect `evt_6cka0ecwnd25t`). Three-case disposition partial accepted at `c49d0652`; the four refusal controls then took **five** bounded evidence holds, closing at `d94a3df9` with both wrong-occurrence origins named from planner authority. `04c40d4c` is a whitespace-only identity child of it |
   | 17 | `D8g` — non-vacuous closeout, over TWO populations | proof | **Owner re-measurement DISCHARGED** `1b367065` (Architect `evt_7v6ve6rsc8d39`) — **outcome (1): the owner VARIES but SEPARATES nothing**, so the prohibition stands and no owner positive is required. **Closeout then HARD-STOPPED** (`evt_9yrrhnjp6dfd`): its two facts live in disjoint witness families. **RECUT over both populations** by Architect disposition `evt_6afmy0398n847`; frame clauses replaced 2026-08-06. Closeout then ran four review rounds — `b0614513`, `337ee9d9`, `6d884090`, `90f96c00`, `0665b9d5` all preserved as held progress. **Two review requirements were withdrawn as STRONGER THAN THE FRAME**: post-emission-FIRST refusal for the mutations (`evt_5vwdtrznf3km4` — earliest structural guard is accepted, and is the stronger evidence), and the independent `(defining Function, call origin)` expectation (`evt_399j195rn8fpa` — **no authority exists to derive it from**; see `EXACT-KEY LIMIT`). **SECOND RECUT landed 2026-08-06.** ⇒ **DISCHARGED at exact `400bddde`** (Architect `evt_4mzks855xpw8h`) |
-  | 18 | `D6b` closeout | proof | **`08f1c2f7` HELD — acceptable bounded evidence, NOT yet the completion object** (Architect `evt_6grnfx2psztcn`; three commits on `400bddde`, `771/2/1`, no production change). **ONE conjunct retired as a permanent LIMIT**: *"resolves through `raw_worker_calls`"* read as attribution — the tables are equal wherever a raw call emits, the body where they differ emits none, and the retention that would change it is banned on measurement (`evt_3dcafs581921e` Finding 2). **The *"selected recursive argument is actually called"* conjunct is DELIVERED, not limited** — `D8e`/`D8j` is the accepted positive on the composed source-machine path; `08f1c2f7`'s `BoundaryCarrier` row is only the **ordinary-unit copy** and is retained as a local fail-closed control. Remaining work is a **comment/failure-text-only fidelity child**; no executable or test-condition change authorized |
-  | 19 | `D6c` — the refusal set, pre-emission | proof | held. **Entirely a refusal set, so the refusal plane is its whole proof** — see `TWO PROOF PLANES` |
+  | 18 | `D6b` closeout | proof | **DISCHARGED at exact `c47d94a7`** (Architect `evt_61y1n1y7kpj3f`), reached as `08f1c2f7` → `b7d34bf7` → `c47d94a7`. `08f1c2f7` was the accepted bounded evidence block, not the completion object (Architect `evt_6grnfx2psztcn`; three commits on `400bddde`, `771/2/1`, no production change). **ONE conjunct retired as a permanent LIMIT**: *"resolves through `raw_worker_calls`"* read as attribution — the tables are equal wherever a raw call emits, the body where they differ emits none, and the retention that would change it is banned on measurement (`evt_3dcafs581921e` Finding 2). **The *"selected recursive argument is actually called"* conjunct is DELIVERED, not limited** — `D8e`/`D8j` is the accepted positive on the composed source-machine path; `08f1c2f7`'s `BoundaryCarrier` row is only the **ordinary-unit copy** and is retained as a local fail-closed control. The remaining work was a **comment/failure-text-only fidelity chain** and it landed: `b7d34bf7` retired two false source contracts, `c47d94a7` named the discriminator the row actually has — proved by inversion, substituting the identifier back reproduces the parent blob byte for byte |
+  | 19 | `D6c` — the refusal set, pre-emission | proof | **DISCHARGED at exact `bd79daa7`** (Architect `evt_41j4y5rpy4zfc`). **Entirely a refusal set, so the refusal plane is its whole proof** — see `TWO PROOF PLANES`. Mechanism accepted at `93424655`: a checked, producer-local, exhaustive canonical-run postcondition in `continuation_case_binder_run`, five refusal rows, two positives, the `px8tr` order discriminator and the governed equal-value limit. `e7390f2e` → `93424655` → `8ec921aa` → `bd79daa7`, the last two comment-only |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
   This heading previously read *"label order, for the first time on this
@@ -1596,6 +1596,41 @@ all six failing `D0` rows.
   ruled on exactly this trade at `D8c`: a deliberate gap beats reusing a spent
   label for different content.** The same reasoning forbids the reuse here, so
   the ordering invariant is what gives way.
+
+  ###### STEWARD RULING — all checkpoints DISCHARGED. No `D6`-closure unit. QA released.
+
+  **Issued 2026-08-06, answering `runtime-leader`'s `evt_9gq3s2n9rcj2` and the
+  Architect's disposition. The leader's frame read was correct and its refusal
+  to infer a unit was right** — the `D6` cut defines exactly `D6a`, `D6b`,
+  `D6c` and nothing else, so there was no closure action to find.
+
+  **"`D6` closure" in the held-language of this frame names the cut COMPLETING,
+  not a fourth checkpoint.** All three are discharged — `D6a` `70d4e8d9`,
+  `D6b` `c47d94a7`, `D6c` `bd79daa7` — so `D6` is closed by that fact alone.
+  Nothing further is owed at `D6` and **no `D6d` may be allocated.**
+
+  **The whole ledger is discharged.** `D0`-`D4` landed; `D5`'s work is the
+  `D6a`/`D6b`/`D6c` cut above (`D5a-1`/`D5a-2` spent, GOVERNING block); the
+  `D8` series is complete across all nineteen execution-order rows.
+
+  **The two candidate gates this frame sets are both MET, and I checked each
+  against its own text rather than against the discharge table:**
+
+  | gate | where | status |
+  |---|---|---|
+  | `D8o` plus the bounded remeasurement | *"`D8o`'s candidate gate"* | `D8o` discharged `3aadbaae`; the remeasurement is recorded at `5154d94a` — `D8i` clause 2 and `D8j` verification 2 both hold positive and negative, with the specialization-body composed-claim population recorded **empty rather than fabricated**, which is what that gate demanded |
+  | the retroactive stale-owner question | *"`D8o` — the RETROACTIVE question"* | ANSWERED `evt_t4e294qz932v`: nothing invalidated, `D8a`-`D8k` not reopened, one self-correlated control identified and now carried as a stated limit on rows 6 and 7 |
+
+  **"Correct and unreachable" is the DEFAULT still binds the candidate** and is
+  not discharged by this ruling — it is QA's to evidence, per the standing
+  section above. `D8e`'s own layer is exercised end to end, which is what
+  distinguishes it from the `D6b` limit.
+
+  ⇒ **Next unit: node QA against `AC-1` through `AC-5`.** Then the candidate.
+  `AC-1` and `AC-1b` are **per row, never a total**, and `AC-1`'s row refuses
+  at a different site from the other five — report the two populations
+  separately. `AC-4` is workspace green **in CI**, never a local `--workspace`
+  run (`COORDINATION §12`).
 
   ###### `D8c` IS RETIRED — folded into `D8e`. Architect `evt_nwgvvr4vaf7y`.
 

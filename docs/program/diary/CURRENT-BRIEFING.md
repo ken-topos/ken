@@ -33,24 +33,38 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~10:3xZ · `D6b` DISCHARGED · `D6c` at `93424655` in review
+## LIVE — 2026-08-06 ~11:1xZ · EVERY checkpoint DISCHARGED · node QA RELEASED
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Nothing is owed by me — but CHECK THE RING FIRST, and check it the specific
-way named below.** `D6c`'s guard is built and the ring is in review cycles of
-about seven minutes, so several will have passed.
+**Node QA is RELEASED and the ring is running it. Nothing is owed by me** —
+watch for the QA return, then the candidate. **The next Steward action is the
+candidate publish**, not another checkpoint.
 
-**State of the ring:** `D8g` DISCHARGED `400bddde`. **`D6b` DISCHARGED at exact
-`c47d94a7`** (`evt_61y1n1y7kpj3f`) via `08f1c2f7` → `b7d34bf7` → `c47d94a7`,
-each proved mechanically against its parent. **`D6c`: the guard is BUILT.**
-`6f8b34da` (five refusal rows, accepted) → `e7390f2e` (the postcondition, held
-for four bounded corrections, `evt_72gpaqxan1n70`) → **`93424655`** (all four
-applied, `773/2/1`), awaiting fresh Architect review. `D6` closure, QA,
-candidate and downstream remain held.
+**State of the ring: the whole ledger is discharged.** `D6a` `70d4e8d9`, `D6b`
+`c47d94a7`, `D6c` **`bd79daa7`** (`evt_41j4y5rpy4zfc`), and all nineteen
+execution-order rows. `D6c` ran `6f8b34da` → `e7390f2e` → `93424655`
+(mechanism accepted) → `8ec921aa` → `bd79daa7`, the last two comment-only.
+
+**My ruling `evt_9gq3s2n9rcj2`-answering, written into the frame:** there is
+**no `D6`-closure unit and no `D6d`.** The `D6` cut defines exactly
+`D6a`/`D6b`/`D6c`; "`D6` closure" in the held-language names **the cut
+completing**, which it has. Both candidate gates are met — `D8o` plus its
+bounded remeasurement (recorded at `5154d94a`, not merely implied by `D8o`'s
+discharge) and the retroactive stale-owner question (`evt_t4e294qz932v`).
+
+**Still binding on the candidate, and QA's to evidence:** *"correct and
+unreachable" is the DEFAULT.* This node must not ship a composed mechanism no
+program can reach.
+
+**Four execution-order rows were STALE when I read them** — rows 5-8 said
+`D8h` NEXT and `D8i`-`D8k` held, when my own ruling three sections below had
+declared them complete; rows 18-19 still held `D6b`/`D6c`. All six corrected.
+**Row 5 would have sent QA or an implementer to rebuild a finished
+checkpoint** — check the table against the rulings, not just the table.
 
 ### THE ACTIVE OPERATIONAL DEFECT — check this before anything else
 
@@ -67,50 +81,34 @@ anything past ~5 is anomalous *for it*. A fixed threshold is useless here: the
 T1 implementer legitimately runs for hours.
 
 **The repair is a mention from me naming the exact SHA**, which has woken the
-leader in ~10 seconds every time. **The fix is not mine to apply** — Steward to
-implementer is not a routing edge — so I asked the leader (`evt_3m4r5ykc20t1k`)
-to carry it as a line **inside its next release**, since a standing request
-posted to the channel already failed to change it once. The leader's and
-Architect's own posts carry mentions correctly; this is one seat's post shape.
+leader in ~10-20 seconds every time. **The fix is not mine to apply** — Steward
+to implementer is not a routing edge. The leader's and Architect's own posts
+carry mentions correctly; this is one seat's post shape.
 
-### `D6c`'s open work: a guard, and it is IN-node — my ruling `evt_480c6zx5y8t2y`
+**CORRECTED 2026-08-06 ~10:5xZ, and the correction is the useful part.** I
+diagnosed this as non-compliance and escalated the **venue** twice: a channel
+ask, then a line inside the release (`evt_4r0j4x74rzcss`, which the leader did
+carry). **The very next return was still `Mentions: none` — five for five.**
 
-Omission and duplicate reach **no owning production guard**. The fix is a
-fail-closed structural postcondition in `continuation_case_binder_run`, after
-segment 3 and immediately before `Ok(run)` (Architect's placement).
+⇒ **The instruction itself was unfollowable. `mentions` takes participant IDs,
+not role names.** It said *"put `runtime-leader` in the `mentions` field"*; the
+field wants **`agt_37reqrd72cg00`**, and a role name there is dropped
+**silently**. So the seat could comply exactly and still wake nobody. I asked
+the leader (`evt_7vw7gz7wmm8kw`) to put the literal id in its next release,
+resolved via `scripts/moot-actor-id.sh <role>`.
 
-**I ruled it is `D6c`'s own work, not a new node**, on frame grounds: `D6c`'s
-framed shape already **is** *"a perturbation **and a guard** at the selection
-seam"*, and the frame already assigns `D6c` the cardinality law. It is **not**
-`D6b`'s banned production change — it mints nothing, uses only values already
-passed in, and enforces an invariant the function's **own doc already claims**
-(*"a gap-filled run would silently shift every later binder, which is a wrong
-program rather than a refused one"*). Its consumer is correctness, not a test.
+**The tell I missed for three rounds:** a seat that complies precisely on
+everything else and fails one thing **every** time is hitting a mechanism, not
+ignoring you. This implementer applied four corrections, then two prose
+passages, then unprompted **strengthened its own mechanical proof** on noticing
+the previous one masked string literals — while never once populating
+`mentions`. **Repeating an instruction more loudly is what you do when you
+believe it is being ignored; it buys nothing against a mechanism, and each
+round costs a stall.** After the second failure, go read what the field accepts.
 
-**Premise correction the Architect had not seen when ruling:** wrong order is
-**not** unguarded. The unguarded set is **two, not three**. Steps 3-4 of the
-placement still stand, but now because the order half is caught **downstream by
-the wrong mechanism**, not because it is uncaught.
-
-### `D6b`, as discharged — ONE permanent LIMIT, one DELIVERED positive
-
-I proposed retiring **both** and the Architect corrected me
-(`evt_6grnfx2psztcn`). The publish gate is what stopped it reaching `main`.
-
-- **LIMIT, confirmed** — *"resolves through `raw_worker_calls`"* as an
-  **attribution** claim. The two tables are **equal** at every body that emits
-  a raw call, and the body where they **differ** emits none. The only mechanism
-  that would change that (retaining the raw body as a declared-and-defined
-  `Function`) was measured to red **25 rows** at the permanent unit-result
-  closure boundary and is **banned** — `evt_3dcafs581921e` Finding 2. Nothing
-  retires it; `08f1c2f7`'s "transition sentinel" wording must become this.
-- **DELIVERED, not a limit** — *"the selected recursive argument is actually
-  called."* `evt_6azsr4xrch1he` did **not** close the source-machine path. It
-  classified the refusal as a production representation/consumer gap and
-  **prescribed the repair**, which **`D8d` and `D8e` delivered** (rows 3 and
-  4/9, DISCHARGED). `D8e`/`D8j` is the accepted positive. `08f1c2f7`'s
-  `BoundaryCarrier` row is only the **ordinary-unit copy** and is retained as a
-  local fail-closed control — it does not generalize.
+**Falsifier, so this does not run forever:** if the next return is still empty,
+the hypothesis is dead and the seat cannot populate the field from where it
+sits — a harness issue for the operator, not something to restate again.
 
 **Do not read the spent `D7a`-`D7e` block as a live route** — its surviving
 prose is why the banned retention kept looking available.
