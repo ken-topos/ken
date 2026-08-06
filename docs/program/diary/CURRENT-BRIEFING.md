@@ -33,28 +33,66 @@
 > advertised themselves as authoritative were WRONG** (see *Corrections*), and a
 > hand-maintained list of 6 preserved refs when origin held **26**.
 
-## LIVE — 2026-08-06 ~11:1xZ · EVERY checkpoint DISCHARGED · node QA RELEASED
+## LIVE — 2026-08-06 ~12:0xZ · `D9b` partial · `AC-1` scope cut HELD, not taken
 
 **Verify `origin/main` before trusting anything below.**
 `RT-CONTSRC-PRODUCER-LOCAL` is `active` in thread **`thr_6m43v75yndhtj`**.
 
 ### The one thing to do next
 
-**Node QA is RELEASED and the ring is running it. Nothing is owed by me** —
-watch for the QA return, then the candidate. **The next Steward action is the
-candidate publish**, not another checkpoint.
+**Nothing is owed by me. Wait for `D9b`'s corrected child.** The implementer is
+compacting; the leader re-releases `D9b` after. **Do not take the `AC-1` scope
+cut to the operator until the refusal-SITE measurement returns** — see below,
+this is the live trap.
 
-**State of the ring: the whole ledger is discharged.** `D6a` `70d4e8d9`, `D6b`
-`c47d94a7`, `D6c` **`bd79daa7`** (`evt_41j4y5rpy4zfc`), and all nineteen
-execution-order rows. `D6c` ran `6f8b34da` → `e7390f2e` → `93424655`
-(mechanism accepted) → `8ec921aa` → `bd79daa7`, the last two comment-only.
+**State of the ring.** All `D`-checkpoints through `D6a`/`D6b`/`D6c`
+(`70d4e8d9` / `c47d94a7` / `bd79daa7`) and all nineteen execution-order rows are
+discharged. **Node QA then BLOCKED on `AC-1`** — which had **no owning
+deliverable**, my framing defect. That is **`D9`**, and every AC in section 4
+now must name its owner.
 
-**My ruling `evt_9gq3s2n9rcj2`-answering, written into the frame:** there is
-**no `D6`-closure unit and no `D6d`.** The `D6` cut defines exactly
-`D6a`/`D6b`/`D6c`; "`D6` closure" in the held-language names **the cut
-completing**, which it has. Both candidate gates are met — `D8o` plus its
-bounded remeasurement (recorded at `5154d94a`, not merely implied by `D8o`'s
-discharge) and the retroactive stale-owner question (`evt_t4e294qz932v`).
+- **`D9a` `df1ebfb9`** — assembly landed. The repair surface was **two** caller
+  sites, not one, and the Architect's measurement had named the one `AC-1` does
+  not use. Both carried comments asserting the *other* side appended the
+  captures; neither did. Subsumed into `claim_and_call_resolved_continuation`.
+- **`D9b` `b08c1b21`** — HELD as honest partial (Architect `evt_3dk4mj01v0ssk`):
+  the keyed relation never relates a role to its operand, the capture mutations
+  apply **zero** times, and the assembly is recorded before its own cardinality
+  guard. Three bounded corrections owed.
+
+### THE LIVE TRAP — do NOT take the `AC-1` cut on the variant measurement
+
+**The measurement is sound and its ATTRIBUTION is not.** `D0` and HEAD both
+observe `LoweringOperand::Carried` at the `lower_expr` seat. The leader and
+Architect both converted that into *"at `core.rs:7942` the scrutinee is
+`Carried`"* and concluded the residual is upstream and the cut is mine.
+
+⇒ **That is structurally impossible.** `7742`, `7752` and `7942` are all in
+**one function** (`lower_carried_computational_match_inner`, opens `7165`), and
+the `Carried` arm at `7752` **returns**. A carried scrutinee never reaches
+`7942`. The `D3` comment above `7752` says so deliberately.
+
+**The second candidate emitter is `core.rs:3916`, inside `lower_source_machine`
+— this node's own subject.** If that is the emitter, **`AC-1` is in scope and
+there is no cut to make at all.**
+
+**The `7942` anchor was mine** — I named it in the ask, and it propagated into
+both downstream summaries. Both were withdrawn (`evt_4dybxhrjvpcsn`).
+
+⇒ **The discriminator, folded into `D9b`'s correction release:** which
+`unsupported("Match", …)` call actually executes on `AC-1`'s row — `7942`,
+`3916`, or `4075`. **Report the SITE, not the variant.**
+
+**This is the third variant of one failure today, each a level finer:**
+identical message with different causes → identical arrival variant with an
+unmeasured refusal site. It is the node's own `GOVERNING` defect — **an
+observed value and a claimed location that are not keyed to each other.**
+
+### Both candidate gates are met, and stay met
+
+`D8o` plus its bounded remeasurement (recorded at `5154d94a`, **not** implied by
+`D8o`'s discharge) and the retroactive stale-owner question
+(`evt_t4e294qz932v`). Neither is reopened by `D9`.
 
 **Still binding on the candidate, and QA's to evidence:** *"correct and
 unreachable" is the DEFAULT.* This node must not ship a composed mechanism no
@@ -65,6 +103,36 @@ program can reach.
 declared them complete; rows 18-19 still held `D6b`/`D6c`. All six corrected.
 **Row 5 would have sent QA or an implementer to rebuild a finished
 checkpoint** — check the table against the rulings, not just the table.
+
+### CAMPAIGN — research `evt_2y8a2e5n281ye`, and a constraint it killed
+
+**My split constraint was RIGHT in conclusion, FALSE in reason.** I refused
+three splits with *"a rebase destroys the preserved exact SHAs"* and published
+it. Objects are **not** destroyed — a branch can be cut **at** the held tip. What
+binds is **verdict transfer** (reviews bind exact SHAs; a rebased commit does
+not inherit them, so each needs re-anchoring) and the **merge boundary**. For
+`D7`+Recursor the decisive constraint is neither: it is **semantic atomicity**.
+Corrected at all three sites.
+
+⇒ **A constraint that keeps producing the right answer never gets audited.**
+And **sweep the CLAIM, not the sentence** — I grepped my own remembered wording
+and missed two paraphrased copies; research found them.
+
+**The campaign is NOT four more nodes like #3.** The residual class retired at
+**commit 29 of 201**. Recursor is **not an independent future sample** — its
+hard part already caused much of #3's expansion, so its nominal size would
+**double-count**. Seed Call may find its population **empty**. Trap 2 is a
+reachability warning, **not a monotone size law**.
+
+**Measured process amplifier:** 15+ substantive evidence-review holds, 4
+explicit sizing recuts, 11+ frame-premise/ownership defects before `D9`. A large
+share are mine.
+
+⇒ **The lever is successor-frame quality, not restructuring** — and it is
+**owed work, not optional**: `RT-SEED-CALL-PORT`, `RT-PRODUCER-MATCH-PORT` and
+`RT-RECURSOR-TRANSPORT` must each begin with **complete populations**, **every
+AC naming its owning deliverable**, and **independent keyed controls** stated up
+front. This is the next Steward unit after `D9`.
 
 ### THE ACTIVE OPERATIONAL DEFECT — check this before anything else
 
