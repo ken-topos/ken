@@ -2141,10 +2141,63 @@ impl<'a> Lowering<'a> {
                                 retained_scrutinee_index: None,
                                 deferred_constructor_case: Some(&deferred),
                                 provenance: self.mint_recursor_frame_provenance(),
+                                // `D8m` — an UNWRAPPED bridge stays all-None.
+                                // The source declared no frame here, so there is
+                                // none to preserve, and inventing one is exactly
+                                // what this checkpoint forbids.
                                 checked_frame_id: None,
                                 checked_invocation_id: None,
                                 checked_invocation_source: None,
                                 checked_invocation_depth: 0,
+                                answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
+                            })
+                        }
+                        // ⭐⭐ `D8m` — THE SOURCE FRAME, PRESERVED THROUGH THE
+                        // BRIDGE.
+                        //
+                        // ⛔ Entered and consumed through the EXISTING pair, and
+                        // only here, after the existing gates have already
+                        // selected the bridge. That is deliberate: the
+                        // consumption path is where the fingerprint agreement
+                        // and the consumed-once law live, so routing through it
+                        // means this adds no second validator and cannot drift
+                        // from the one the direct path uses.
+                        ImmediateBinderEliminator::CheckedComputational {
+                            frame_id,
+                            cases,
+                            default,
+                        } => {
+                            self.enter_checked_subcontinuation_frame(frame_id)?;
+                            let checked_frame_id =
+                                self.consume_checked_subcontinuation_frame(cases, default)?;
+                            EliminatorFrame::Computational(ComputationalEliminatorFrame {
+                                cases,
+                                default,
+                                env: &[],
+                                // ⛔ CHILD 0 of the marker occurrence, never the
+                                // wrapper's own origin. The marker names the
+                                // frame; the match IS the frame, and every
+                                // origin-keyed lookup downstream -- case bodies,
+                                // the planner's continuation origin -- must land
+                                // on the match.
+                                static_origin: self
+                                    .child_occurrence(
+                                        case_body.static_origin,
+                                        0,
+                                        case_body.expr,
+                                    )?
+                                    .static_origin,
+                                retained_scrutinee_index: None,
+                                deferred_constructor_case: Some(&deferred),
+                                provenance: self.mint_recursor_frame_provenance(),
+                                checked_frame_id,
+                                checked_invocation_id: None,
+                                checked_invocation_source: None,
+                                checked_invocation_depth: 0,
+                                // ⛔ UNCHANGED. Checked-frame presence is an
+                                // identity fact, not a routing one; making it
+                                // move the answer route would make the two forms
+                                // of one source match lower differently.
                                 answer_route: SourceComputationalAnswerRoute::DirectScrutinee,
                             })
                         }

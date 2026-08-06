@@ -12473,6 +12473,28 @@ struct DeferredConstructorCaseEnvironment<'a> {
     selected_active: ActiveContinuationFrame<'a>,
 }
 #[derive(Clone, Copy)]
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8m` — the closed bridge descriptor.**
+///
+/// Exactly three admissible shapes for the case body an
+/// `immediate_binder_eliminator` bridge is built from, and no fourth:
+///
+/// 1. a direct [`RuntimeExpr::ComputationalMatch`];
+/// 2. a direct ordinary [`RuntimeExpr::Match`];
+/// 3. exactly `CheckedSubcontinuationFrame { frame_id, body: ComputationalMatch }`.
+///
+/// ⭐⭐ **The third exists because the bridge is an OPTIMIZATION of the source
+/// match, not a new semantic frame.** The source declared one checked frame
+/// there; deforesting the producer into it does not create a second frame and
+/// must not lose the first. Before `D8m` the bridge always carried
+/// `checked_frame_id: None`, so a checked IH slot inside a composed case body
+/// refused as "detached from its checked frame" — the `D8f` hard stop.
+///
+/// ⛔ **Nothing here mints, borrows or infers a frame identity.** The id is the
+/// one the source marker carries and is reached only by matching that exact
+/// shape. There is deliberately no fingerprint lookup, no body-shape match, no
+/// origin coincidence, no "the only frame in the plan", and no generic wrapper
+/// peeling: a marker around anything but a `ComputationalMatch`, or any other
+/// checked wrapper kind, simply is not a bridge.
 enum ImmediateBinderEliminator<'a> {
     Computational {
         cases: &'a [crate::RuntimeComputationalMatchCase],
@@ -12480,6 +12502,14 @@ enum ImmediateBinderEliminator<'a> {
     },
     Ordinary {
         cases: &'a [crate::RuntimeMatchCase],
+        default: &'a RuntimeTrap,
+    },
+    /// The wrapped form. ⛔ The match's own occurrence is **child 0 of the
+    /// marker occurrence**, never the wrapper's origin — the wrapper is not the
+    /// frame, it names it.
+    CheckedComputational {
+        frame_id: u64,
+        cases: &'a [crate::RuntimeComputationalMatchCase],
         default: &'a RuntimeTrap,
     },
 }
@@ -12497,6 +12527,29 @@ fn immediate_binder_eliminator(
             scrutinee.as_ref(),
             ImmediateBinderEliminator::Computational { cases, default },
         ),
+        // `D8m` — the EXACT wrapped shape, and only it. ⛔ Not a loop, not a
+        // helper that strips any checked wrapper: a `CheckedRecursiveInvocation`
+        // or a `CheckedJoinSite` around a match is a different construct with a
+        // different consumption law, and peeling it here would silently give the
+        // bridge an identity nobody transported for it.
+        RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body } => {
+            let RuntimeExpr::ComputationalMatch {
+                scrutinee,
+                cases,
+                default,
+            } = body.as_ref()
+            else {
+                return None;
+            };
+            (
+                scrutinee.as_ref(),
+                ImmediateBinderEliminator::CheckedComputational {
+                    frame_id: *frame_id,
+                    cases,
+                    default,
+                },
+            )
+        }
         RuntimeExpr::Match {
             scrutinee,
             cases,

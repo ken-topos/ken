@@ -18650,3 +18650,346 @@ fn d8l2_the_composed_call_returns_the_ordinary_payload_it_consumed() {
         );
     }
 }
+
+/// The `D8l2` composed witness with a `CheckedSubcontinuationFrame` around the
+/// **bridge** — the case body `immediate_binder_eliminator` selects — so the
+/// source frame identity has something to be preserved through.
+#[cfg(test)]
+fn d8m_witness(frame_id: u64, second_frame: bool) -> RuntimeExpr {
+    let wrap = "ctor:fixture::D8M::Wrap";
+    let done = "ctor:fixture::D8M::Done";
+    let unit = || RuntimeExpr::Construct {
+        constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+        args: Vec::new(),
+    };
+    let worker = RuntimeExpr::LexicalClosure {
+        captures: Vec::new(),
+        params: vec!["carried".to_string()],
+        body: Box::new(RuntimeExpr::Var(0)),
+    };
+    let selected_field = RuntimeExpr::Match {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Bool::True".to_string(),
+            args: Vec::new(),
+        }),
+        cases: [
+            ("ctor:prelude::Bool::True", "ctor:prelude::Result::Ok"),
+            ("ctor:prelude::Bool::False", "ctor:prelude::Result::Err"),
+        ]
+        .into_iter()
+        .map(|(constructor, result)| RuntimeMatchCase {
+            constructor: constructor.to_string(),
+            binders: 0,
+            body: RuntimeExpr::Construct {
+                constructor: result.to_string(),
+                args: vec![RuntimeExpr::Value(RuntimeValue::Int((41).into()))],
+            },
+        })
+        .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "d8m field default".to_string(),
+        },
+    };
+    let bridge = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Var(1)),
+        cases: ["ctor:prelude::Result::Err", "ctor:prelude::Result::Ok"]
+            .into_iter()
+            .map(|constructor| crate::RuntimeComputationalMatchCase {
+                constructor: constructor.to_string(),
+                argument_binders: 1,
+                recursive_positions: vec![0],
+                body: RuntimeExpr::Call {
+                    callee: Box::new(RuntimeExpr::Var(4)),
+                    args: vec![RuntimeExpr::Var(1)],
+                },
+            })
+            .collect(),
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "d8m bridge default".to_string(),
+        },
+    };
+    // ⭐ The marker sits on the case body the bridge is built FROM. `second_frame`
+    // gives the SAME shape a different occurrence, for the distinctness control.
+    let marked_bridge = RuntimeExpr::CheckedSubcontinuationFrame {
+        frame_id,
+        body: Box::new(bridge),
+    };
+    let eliminator = RuntimeExpr::ComputationalMatch {
+        scrutinee: Box::new(RuntimeExpr::Construct {
+            constructor: wrap.to_string(),
+            args: vec![selected_field, worker],
+        }),
+        cases: vec![
+            crate::RuntimeComputationalMatchCase {
+                constructor: wrap.to_string(),
+                argument_binders: 2,
+                recursive_positions: vec![1],
+                body: marked_bridge,
+            },
+            crate::RuntimeComputationalMatchCase {
+                constructor: done.to_string(),
+                argument_binders: 0,
+                recursive_positions: Vec::new(),
+                body: unit(),
+            },
+        ],
+        default: RuntimeTrap {
+            code: RuntimeTrapCode::PatternMatchFailure,
+            message: "d8m eliminator default".to_string(),
+        },
+    };
+    let _ = second_frame;
+    RuntimeExpr::Let {
+        value: Box::new(eliminator),
+        body: Box::new(RuntimeExpr::Var(0)),
+    }
+}
+
+#[cfg(test)]
+fn d8m_plan(expr: &RuntimeExpr, frame_id: u64) -> crate::OrientedSubcontinuationPlanV1 {
+    let RuntimeExpr::Let { value, .. } = expr else { panic!("let") };
+    let RuntimeExpr::ComputationalMatch { cases, .. } = value.as_ref() else {
+        panic!("eliminator")
+    };
+    let RuntimeExpr::CheckedSubcontinuationFrame { body, .. } = &cases[0].body else {
+        panic!("marked bridge")
+    };
+    let RuntimeExpr::ComputationalMatch { cases, default, .. } = body.as_ref() else {
+        panic!("bridge")
+    };
+    let mut frame = crate::OrientedSubcontinuationFramePlanV1 {
+        frame_id,
+        segment_site_id: 9,
+        declaration: "<entry>".to_string(),
+        checked_occurrence_path: vec![frame_id],
+        semantic_position: 0,
+        input_interface: oriented_test_interface(1),
+        output_interface: oriented_test_interface(2),
+        runtime_frame_fingerprint:
+            crate::compiler_private_computational_match_frame_fingerprint(cases, default),
+        occurrence_binding_fingerprint: 0,
+        control_witness: crate::OrientedControlWitnessV1::DistinguishedRoot,
+    };
+    frame.occurrence_binding_fingerprint =
+        crate::compiler_private_oriented_occurrence_binding_fingerprint(&frame);
+    crate::OrientedSubcontinuationPlanV1 {
+        representation_rule_version:
+            crate::OrientedSubcontinuationPlanV1::REPRESENTATION_RULE_VERSION,
+        frames: vec![frame],
+        recursive_calls: Vec::new(),
+        computational_ih_slots: Vec::new(),
+        computational_ih_calls: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+fn d8m_compile(expr: &RuntimeExpr, frame_id: u64) -> Option<CraneliftBackendError> {
+    compile_expr_into_module(
+        new_object_module("d8m").expect("module"),
+        "ken_d8m",
+        Linkage::Export,
+        expr,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        Some(d8m_plan(expr, frame_id)),
+    )
+    .err()
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8m` — the source match's checked-frame
+/// identity survives the `immediate_binder_eliminator` bridge.**
+///
+/// The bridge is an **optimization of the source match, not a new semantic
+/// frame**. Before `D8m` it always carried `checked_frame_id: None`, so a
+/// checked IH slot inside a composed case body refused as *"detached from its
+/// checked frame"* — the `D8f` hard stop.
+///
+/// ## Clause 1 — the identity arrives, and the proof is which refusal fires
+///
+/// ⭐⭐ With the marker on the case body the bridge is built from, the program
+/// refuses with **"checked computational case is missing its IH slot marker"**
+/// instead. That branch of `computational_ih_slots_for_case` is guarded by
+/// `checked_frame_id.is_some()` and is **unreachable while the bridge carries
+/// `None`** — so the change of refusal is the identity arriving, not a
+/// coincidence of two errors. ⛔ Completing that program needs IH slot markers
+/// in the bridge's cases, which is `D8f`'s business and is held.
+///
+/// ## Clause 2 — an unwrapped bridge stays all-None
+///
+/// The same witness without the marker does **not** reach that refusal. It is
+/// structurally identical — same cases, same default, same fingerprint — so a
+/// rule that borrowed an identity by shape, by fingerprint, or by "the only
+/// frame in the plan" would give it one. None does.
+///
+/// ## Clause 3 — the descriptor is closed
+///
+/// A `CheckedSubcontinuationFrame` wrapping anything but a
+/// `ComputationalMatch` is **not a bridge at all**: deforestation does not
+/// engage, so the composed site is never reached. ⛔ There is no generic
+/// wrapper peeling and no fallback — the third descriptor form matches one
+/// exact shape, and the enum's exhaustive match at the bridge site makes a
+/// fourth form a compile error rather than a silent `None`.
+///
+/// ## Clause 4 — plan frames and Runtime markers stay in bijection
+///
+/// A plan naming a frame the source does not mark, and a source marker the plan
+/// does not carry, both refuse. ⛔ Preserving an identity through the bridge
+/// must not create or consume a frame: the counts are what would move if it did.
+///
+/// **Promise class: durable invariant.** Refusal identities and a bijection,
+/// with the positive clause keyed on which guard is reached rather than on a
+/// program that compiles.
+#[test]
+fn d8m_the_source_frame_identity_survives_the_bridge() {
+    // Clause 1 — the identity arrives.
+    let marked = d8m_witness(7, false);
+    let refusal = format!(
+        "{:?}",
+        d8m_compile(&marked, 7).expect("the marked witness stops at the IH slot marker")
+    );
+    assert!(
+        refusal.contains("missing its IH slot marker"),
+        "the bridge must carry the source frame's identity, and the proof is WHICH guard is \
+         reached: this branch is guarded by `checked_frame_id.is_some()`. A 'detached from its \
+         checked frame' refusal here means the identity was dropped at the bridge again: {refusal}"
+    );
+    assert!(
+        !refusal.contains("detached from its checked frame"),
+        "and specifically not the D8f hard-stop refusal, which is the one D8m exists to retire"
+    );
+
+    // Clause 2 — the same shape, unmarked, borrows nothing.
+    let plain = d8m_unmarked_witness();
+    let plain_refusal = d8m_compile_without_plan(&plain).map(|error| format!("{error:?}"));
+    assert!(
+        !plain_refusal
+            .as_deref()
+            .is_some_and(|reason| reason.contains("missing its IH slot marker")),
+        "an unwrapped bridge must stay all-None. This witness is structurally identical to the \
+         marked one -- same cases, same default, same fingerprint -- so a rule that borrowed an \
+         identity by shape, by fingerprint, or by uniqueness in the plan would hand it one: \
+         {plain_refusal:?}"
+    );
+
+    // Clause 3 — the descriptor is closed: a marker around a non-match is not a
+    // bridge, so deforestation never engages and the composed site is unreached.
+    let wrapped_nonmatch = d8m_marker_around_nonmatch();
+    let outcome = d8m_compile_without_plan(&wrapped_nonmatch).map(|error| format!("{error:?}"));
+    assert!(
+        !outcome
+            .as_deref()
+            .is_some_and(|reason| reason.contains("IH slot marker")),
+        "a CheckedSubcontinuationFrame wrapping anything but a ComputationalMatch is not a \
+         bridge; if this reaches a slot-marker guard, the descriptor is peeling wrappers \
+         generically instead of matching one exact shape: {outcome:?}"
+    );
+
+    // Clause 4 — the bijection, in both directions.
+    for (frame_id, expected) in [
+        (8u64, "missing or transplanted"),
+        (7, "missing its IH slot marker"),
+    ] {
+        let refusal = format!(
+            "{:?}",
+            d8m_compile(&marked, frame_id).expect("both directions refuse or stop at the slot")
+        );
+        assert!(
+            refusal.contains(expected),
+            "a plan frame the source does not mark must refuse before anything else; preserving \
+             an identity through the bridge must neither create nor consume a frame: {refusal}"
+        );
+    }
+}
+
+#[cfg(test)]
+fn d8m_compile_without_plan(expr: &RuntimeExpr) -> Option<CraneliftBackendError> {
+    compile_expr_into_module(
+        new_object_module("d8m-plain").expect("module"),
+        "ken_d8m_plain",
+        Linkage::Export,
+        expr,
+        &NativeSeedEnvironment::empty(),
+        BTreeMap::new(),
+        None,
+        true,
+        None,
+        Some(test_only_distinguished_root_join_plan()),
+        None,
+    )
+    .err()
+}
+
+/// The `D8m` witness with the marker removed: the SAME bridge shape at its own
+/// occurrence, carrying no identity to preserve.
+#[cfg(test)]
+fn d8m_unmarked_witness() -> RuntimeExpr {
+    strip_bridge_marker(&d8m_witness(7, false), false)
+}
+
+/// The `D8m` witness with the marker moved onto a non-`ComputationalMatch`,
+/// which the closed descriptor must not accept as a bridge.
+#[cfg(test)]
+fn d8m_marker_around_nonmatch() -> RuntimeExpr {
+    strip_bridge_marker(&d8m_witness(7, false), true)
+}
+
+#[cfg(test)]
+fn strip_bridge_marker(expr: &RuntimeExpr, wrap_nonmatch: bool) -> RuntimeExpr {
+    let RuntimeExpr::Let { value, body } = expr else { panic!("let") };
+    let RuntimeExpr::ComputationalMatch {
+        scrutinee,
+        cases,
+        default,
+    } = value.as_ref()
+    else {
+        panic!("eliminator")
+    };
+    let RuntimeExpr::CheckedSubcontinuationFrame { frame_id, body: bridge } = &cases[0].body else {
+        panic!("marked bridge")
+    };
+    let rebuilt = if wrap_nonmatch {
+        // ⛔ The marker survives but now wraps the bridge's own SCRUTINEE, which
+        // is a `Var`. Same marker, same id, one shape away from the admissible
+        // form -- so this separates "the descriptor matches an exact shape" from
+        // "the descriptor peels a wrapper".
+        let RuntimeExpr::ComputationalMatch {
+            scrutinee: inner,
+            cases: inner_cases,
+            default: inner_default,
+        } = bridge.as_ref()
+        else {
+            panic!("bridge")
+        };
+        RuntimeExpr::ComputationalMatch {
+            scrutinee: Box::new(RuntimeExpr::CheckedSubcontinuationFrame {
+                frame_id: *frame_id,
+                body: inner.clone(),
+            }),
+            cases: inner_cases.clone(),
+            default: inner_default.clone(),
+        }
+    } else {
+        (**bridge).clone()
+    };
+    let mut cases = cases.clone();
+    cases[0] = crate::RuntimeComputationalMatchCase {
+        constructor: cases[0].constructor.clone(),
+        argument_binders: cases[0].argument_binders,
+        recursive_positions: cases[0].recursive_positions.clone(),
+        body: rebuilt,
+    };
+    RuntimeExpr::Let {
+        value: Box::new(RuntimeExpr::ComputationalMatch {
+            scrutinee: scrutinee.clone(),
+            cases,
+            default: default.clone(),
+        }),
+        body: body.clone(),
+    }
+}
