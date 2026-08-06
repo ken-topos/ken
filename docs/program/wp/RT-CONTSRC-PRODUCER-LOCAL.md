@@ -641,11 +641,18 @@ all six failing `D0` rows.
      **The severity question, ruled by the Steward rather than left open.** The
      implementer correctly noted this is not shown reachable in a program that
      compiles green today, because the population already dies downstream at the
-     unit-body boundary. **That does not make it latent.**
-     [[RT-UNIT-CLOSURE-CONVERT]] exists to clear that boundary, so **landing it
-     is what unmasks this defect** — the correction lands before or with that
-     node. A defect masked by a second defect is not lower priority when the
-     mask is itself scheduled work.
+     unit-body boundary. **That does not make it latent.** A defect masked by a
+     second defect is not lower priority when the mask is itself scheduled work.
+
+     ⛔ **The ANCHOR moved and the old one is dead.** This clause used to read
+     *"[[RT-UNIT-CLOSURE-CONVERT]] exists to clear that boundary, so landing it
+     is what unmasks this defect — the correction lands before or with that
+     node."* **That node is `closed` and will never land**, so the sentence
+     named a scheduling anchor that cannot arrive. ⛔ Do not restore it from an
+     older revision. **The mask is cleared IN THIS NODE, at `D5`** — the
+     unit-body boundary turned out to be a real functionized-unit environment
+     transport failure, recut as `D5a`/`D5b`, not a substrate gap. The severity
+     ruling is unchanged; only what clears the mask has moved.
 
      **`f5e4fa9f` is preservation-only.** The correction is `D3b`'s re-cut
      above, and it is *not* a fourth pairing.
