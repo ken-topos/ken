@@ -8128,26 +8128,29 @@ fn d6a_a_specialization_binds_two_leading_static_workers_for_the_ih_and_its_recu
 /// `SelectedRecursiveArgument` must land on static workers, `ContinuationInput`
 /// on a carried operand.
 ///
-/// ⛔ **STATED GAP, measured — `Var(1)` is proven as a BINDING, not as a call.**
-/// No witness in this suite calls a `SelectedRecursiveArgument`. MEASURED on
-/// this fixture: every specialization's emitted static-worker call has callee
-/// `Var(0)`, the induction hypothesis; `Var(1)` is bound and never invoked. So
-/// this row pins that the argument occupies its exact position with a
-/// static-worker binding, which is what `D6a` represents and what a consumer
-/// would resolve — it does **not** and cannot pin what calling it emits.
+/// ⛔ **STATED GAP, and it is THIS FIXTURE's alone — `Var(1)` is proven here as
+/// a BINDING, not as a call.** MEASURED on the governed fixture: every
+/// specialization's emitted static-worker call has callee `Var(0)`, the
+/// induction hypothesis; `Var(1)` is bound and never invoked. So this row pins
+/// that the argument occupies its exact position with a static-worker binding,
+/// which is what `D6a` represents and what a consumer would resolve — it does
+/// **not** and cannot pin what calling it emits.
 ///
-/// ⭐ **`D6b` measured WHY that gap stands, and it is two obstacles rather than
-/// a missing fixture.** Both are behavioural rows on the mixed witness, not
-/// notes:
-/// [`d6b_calling_the_selected_recursive_argument_from_ordinary_source_fails_closed_at_the_carrier`]
-/// shows the call refused at the source machine's callee edge, because the same
-/// case body is also lowered into the ordinary unit body where that member is a
-/// carried word — upstream of any worker seat. And
-/// [`d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_disagree`]
-/// shows that in the one body where the argument *is* raw-routed beside a
-/// context-routed hypothesis, `raw_worker_calls` cannot answer for it at all:
-/// the retargeted body has a descriptor and no `Function`. ⇒ Closing this gap
-/// is a representation change, not a fixture.
+/// ⛔ **WITHDRAWN — the unscoped reading of the sentence above.** It used to say
+/// *"no witness in this suite calls a `SelectedRecursiveArgument`"*, and that is
+/// **false**: the composed source-machine path calls it lawfully, with its exact
+/// raw arguments and captures, and
+/// [`d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter`]
+/// asserts it is emitted from **two** bodies. The gap is a property of the
+/// **governed** fixture, which is route-degenerate and never invokes the member;
+/// it was never a property of the suite. Architect `evt_6grnfx2psztcn`; the
+/// delivering work is `D8d`/`D8e`/`D8j`.
+///
+/// ⇒ Nothing here is owed. A reader wanting the call, rather than the binding,
+/// should go to the `D8e`/`D8j` evidence — **not** to
+/// [`d6b_calling_the_selected_recursive_argument_from_ordinary_source_fails_closed_at_the_carrier`],
+/// which is a local fail-closed control over one copy of one case body and
+/// generalizes to nothing.
 ///
 /// **Promise class: durable invariant.** The assertion is a correspondence
 /// between two derivations of the same law. A fixture that grows fields or
@@ -23473,16 +23476,33 @@ fn d8g_each_producer_input_mutation_is_caught_by_the_guard_that_owns_it() {
 /// the same family as `D8g`'s stated residual. ⇒ This row owns which bodies each
 /// table ANSWERS FOR; it does not own what it answers WITH.
 ///
+/// ## THE PERMANENT ATTRIBUTION LIMIT this row measures
+///
+/// **Raw emissions occur only where `worker_calls` and `raw_worker_calls`
+/// lawfully name the SAME declared callee. Where the two tables differ, no
+/// lawful raw call emits at all.** Both halves are measured below, and together
+/// they mean raw-table attribution is unprovable — not for want of
+/// instrumentation, but because the representation encodes no distinction there.
+/// That is clause 4 of the asymmetric law: at an equal-table seat a swap is
+/// observational identity.
+///
+/// ⛔ **This is NOT a transition sentinel, and must never be relabelled as one.**
+/// A sentinel names the obligation that clears it; this has none. The only known
+/// mechanism — retaining the raw body as a declared-and-defined `Function` — is
+/// **banned on measurement**: it defines a standalone `Function` whose result is
+/// a `Constructor` containing a raw `Closure`, and it reopens the permanent
+/// unit-result closure boundary the generated-context design exists to avoid
+/// (`741/2` unarmed against `716/27` armed, causally isolated to one retention
+/// predicate; Architect `evt_3dcafs581921e` Finding 2). Calling it pending would
+/// leave a reader waiting for a checkpoint that will never be cut.
+///
 /// ## Promise class
 ///
-/// **Durable invariant**, with ONE exception named honestly. Clauses 1, 2 and 4
-/// and the equal-tables half of clause 3 are relations that survive any fixture
-/// growth. The clause asserting `raw_worker_calls` **cannot** answer for a
-/// retargeted body is a **transition sentinel**: it is the current
-/// representation, and `D6b`'s outstanding raw-target declared-call-table
-/// obligation is precisely the change that would retire it. It is written to red
-/// loudly, and it names that obligation, so completing the representation forces
-/// this row back through review rather than silently passing.
+/// **Durable invariant.** Every clause is a relation over the retarget split —
+/// which side a body falls on, what each table answers for there, and the routes
+/// and origins of the members installed. A fixture that grows bodies or calls
+/// keeps it green. The raw-table clause is durable for the same reason as the
+/// rest: it states a property of the representation, not a stage of it.
 #[test]
 fn d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_disagree() {
     use crate::cranelift_backend::lowering::{
@@ -23598,17 +23618,20 @@ fn d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_
                 "`worker_calls` must answer for the retargeted body: the retarget inserts the \
                  generated context under exactly this origin: {body:?}"
             );
-            // ⛔ TRANSITION SENTINEL. This is the CURRENT representation, and
-            // `D6b`'s outstanding raw-target declared-call-table obligation is
-            // the event that retires it: completing it makes `raw_worker_calls`
-            // answer here and reds this clause deliberately, forcing the row
-            // back through review rather than letting the change pass silently.
+            // ⛔ THE PERMANENT LIMIT, not a pending obligation. Where the tables
+            // differ, the raw route has no callee -- so no lawful raw call can
+            // emit here, and raw-table attribution has no seat where it could be
+            // observed. The only mechanism that would change this retains the
+            // raw body as a declared-and-defined `Function`, which is banned on
+            // measurement: it reopens the unit-result closure boundary.
             assert!(
                 !body.raw_worker_call_targets.contains(&selected),
-                "TRANSITION SENTINEL -- `raw_worker_calls` currently CANNOT answer for a \
-                 retargeted body, so the raw route over it has no callee. This is the open \
-                 raw-target declared-call-table obligation; when that lands, this clause is the \
-                 one that must be re-ruled: {body:?}"
+                "THE PERMANENT ATTRIBUTION LIMIT -- `raw_worker_calls` does not answer for a \
+                 retargeted body, so no lawful raw call emits where the two tables differ. ⛔ Not \
+                 a pending obligation and not a sentinel: the only mechanism that would make this \
+                 answerable retains the raw body as a declared-and-defined `Function`, which \
+                 reopens the permanent unit-result closure boundary and is banned on measurement: \
+                 {body:?}"
             );
 
             // Clause 4 — WHY, from the planner rather than from the absence.
@@ -23652,16 +23675,25 @@ fn d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_
     );
 }
 
-/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6b` — calling the selected recursive argument
-/// from ordinary source fails closed BEFORE any worker seat, and the reason is
-/// not the raw table.**
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D6b` — the ORDINARY-UNIT COPY carries a word
+/// at the recursive position, so using it as a specialized callee fails closed
+/// there. A LOCAL control, and nothing wider.**
 ///
-/// ## Why this row exists
+/// ⛔ **READ THIS FIRST, because the row's name is narrower than it sounds.**
+/// *"The selected recursive argument is actually called"* is **DELIVERED, not
+/// blocked.** Through ordinary production planning and lowering the argument
+/// **is** called at the **source-machine** seat with its exact raw arguments and
+/// captures, and its result is consumed in the same continuation with no
+/// closure-valued unit result. That is the accepted **`D8d`/`D8e`/`D8j`**
+/// evidence — see
+/// [`d8g_the_composed_selected_argument_reaches_its_target_at_the_shared_emitter`],
+/// which asserts the composed selected recursive argument is emitted from **two**
+/// bodies. Architect `evt_6grnfx2psztcn`.
 ///
-/// `D6b` owes a witness in which the selected recursive argument is *actually
-/// called*. This row is the measurement of why that witness could not be built
-/// from ordinary source on this fixture, kept as a **behavioural** fact rather
-/// than a note somebody has to trust.
+/// ## What this row actually measures
+///
+/// One narrower negative, on **one copy** of one case body. It is retained as a
+/// local fail-closed control and **nothing more**.
 ///
 /// ## What is armed
 ///
@@ -23671,20 +23703,25 @@ fn d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_
 /// and `Var(2)` is the selected recursive argument, per the binder run
 /// `[IH, ordinary field 0, SelectedRecursiveArgument{1}, ..]`.
 ///
-/// ## The measured obstacle
+/// ## The measured behaviour
 ///
-/// The same case body is lowered **twice**: once into each specialization body,
-/// where the environment does bind both members as static workers, and once by
-/// the **source machine** into the ordinary unit body, where the selected
-/// recursive argument arrives as a carried boundary word. The source machine's
-/// callee edge is a specialized-only surface, so it fails closed there — ⛔
-/// **before** any specialization body is reached, and therefore before the raw
-/// table is ever consulted.
+/// That case body is lowered **twice**: once into each specialization body, where
+/// the environment binds both members as static workers, and once by the source
+/// machine into the **ordinary-unit copy**, where this position carries only a
+/// **word**. Using a word as a specialized callee must fail closed, and it does —
+/// `Unsupported(BoundaryCarrier, ..)`, before any specialization body is reached.
 ///
-/// ⇒ The obstacle is upstream of the route mechanism entirely. A reader must not
-/// take this refusal as evidence about `raw_worker_calls`; that separate fact is
-/// measured directly by
-/// [`d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_disagree`].
+/// ⛔ **Three things this row does NOT say**, each of which it was briefly
+/// written to say:
+///
+/// 1. It does **not** generalize over the composed source-machine population.
+///    The composed path calls the member lawfully; this is the ordinary-unit
+///    copy alone.
+/// 2. It does **not** prescribe a future representation change. Failing closed
+///    on a word in a specialized callee position is the boundary working.
+/// 3. It is **not** evidence about `raw_worker_calls`. It fails before any table
+///    is consulted; that separate fact is measured by
+///    [`d6b_the_mixed_pair_is_over_one_body_and_only_a_retarget_makes_the_two_tables_disagree`].
 ///
 /// ## The positive control
 ///
@@ -23734,8 +23771,10 @@ fn d6b_calling_the_selected_recursive_argument_from_ordinary_source_fails_closed
             );
         }
         other => panic!(
-            "calling the selected recursive argument must fail closed at the carrier boundary; \
-             got {other:?}"
+            "the ORDINARY-UNIT COPY carries a word at this position, so using it as a specialized \
+             callee must fail closed there. ⛔ This is the local control only -- the composed \
+             source-machine path calls this member lawfully (`D8d`/`D8e`/`D8j`), and a green here \
+             is not a claim about that path; got {other:?}"
         ),
     }
 }
@@ -23766,18 +23805,23 @@ fn d6b_calling_the_selected_recursive_argument_from_ordinary_source_fails_closed
 /// The join itself is the already-governed one — emitting `FuncId` to `D8o`'s
 /// body authority to the specialization identity — so no new key is minted here.
 ///
-/// ## The consequence worth writing down
+/// ## The consequence worth writing down — THE PERMANENT ATTRIBUTION LIMIT
 ///
 /// Where the two tables hold the **same** entry, *"this emission resolved through
 /// `raw_worker_calls`"* is not an observable fact: the other table would answer
-/// identically. ⇒ **Raw-table attribution is unprovable at every raw emission on
-/// this witness**, and this row is what stops a later reader assuming it was
-/// proved. The single body whose tables *do* differ emits no raw call, because
-/// the raw route has no callee there at all.
+/// identically. ⇒ **Raw-table attribution is unprovable**, and this row is what
+/// stops a later reader assuming it was proved.
 ///
-/// That is not a coverage hole. It is clause 4 of the law — an inert table swap
-/// at an equal-table seat is the absence of a distinction, not a missing
-/// negative.
+/// The limit is **structural, not fixture-local**, and both halves are asserted
+/// below: raw emissions occur only where the two tables lawfully name the same
+/// declared callee, and where they differ no lawful raw call emits at all.
+///
+/// ⛔ **Nothing retires it.** The only mechanism that would — retaining the raw
+/// body as a declared-and-defined `Function` — is banned on measurement, because
+/// it reopens the permanent unit-result closure boundary. So this is not a
+/// coverage hole and not a pending obligation: it is clause 4 of the law, an
+/// inert table swap at an equal-table seat being the absence of a distinction
+/// rather than a missing negative.
 ///
 /// **Promise class: durable invariant.** The assertion is a correspondence
 /// between two planes keyed on body origin, with the planner supplying the side.
