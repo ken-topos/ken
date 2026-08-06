@@ -1402,7 +1402,7 @@ all six failing `D0` rows.
   | 14 | `D8m` — preserve the source frame through the bridge | lowering preservation | **DISCHARGED** `01263e44` (`760/2/1`), after a matrix block and two fidelity children |
   | 15 | `D8p` — cross-body checked-application binding contract | planner + unit definition + lowering | **DISCHARGED** `2be7adb0` (Architect `evt_6sk9hbp17893t`), after a mechanism-accepted evidence block at `198b7c14` |
   | 16 | `D8f` — checked-marker occupancy | integration | **DISCHARGED** at exact `04c40d4c` (Architect `evt_6cka0ecwnd25t`). Three-case disposition partial accepted at `c49d0652`; the four refusal controls then took **five** bounded evidence holds, closing at `d94a3df9` with both wrong-occurrence origins named from planner authority. `04c40d4c` is a whitespace-only identity child of it |
-  | 17 | `D8g` — non-vacuous closeout, both paths | proof | **FIRST deliverable RELEASED** `evt_6bzantbemt8jt` — the owner-separation re-measurement, as framed. It is an ANSWER, not a mechanism: neither outcome authorizes a production edit, and neither licenses manufacturing a population |
+  | 17 | `D8g` — non-vacuous closeout, over TWO populations | proof | **Owner re-measurement DISCHARGED** `1b367065` (Architect `evt_7v6ve6rsc8d39`) — **outcome (1): the owner VARIES but SEPARATES nothing**, so the prohibition stands and no owner positive is required. **Closeout then HARD-STOPPED** (`evt_9yrrhnjp6dfd`): its two facts live in disjoint witness families. **RECUT over both populations** by Architect disposition `evt_6afmy0398n847`; frame clauses replaced 2026-08-06. Ready for release |
   | 18 | `D6b` closeout, then `D6c` refusal set | — | held |
 
   ⛔ **`D8h`-`D8k` execute BEFORE `D8f`/`D8g`, despite sorting after them.**
@@ -1882,13 +1882,49 @@ all six failing `D0` rows.
   never route, arity, binder-index coincidence, or first-call order. Omission,
   duplicate, transplant and wrong occurrence must all refuse.
 
-  **`D8g` — non-vacuous closeout, both paths.** Re-run the ordinary A/B source
-  witness through **both** composed and functionized paths. It must reach a
-  same-body `GeneratedContext` IH and a selected-argument emission through the
-  composed-call target, make the wrong-table mutation **red**, and keep the
-  context-suffix mutation **red**. **The declared-and-defined standalone
-  `Function` clause is withdrawn** — see Finding 2. `D6c`'s refusal set follows
-  only after this positive closes.
+  **`D8g` — non-vacuous closeout, over TWO populations. RECUT 2026-08-06.**
+
+  **The former text assigned both required facts to the `px8tr` A/B witness,
+  and it is WITHDRAWN.** It demanded a same-program conjunction — a same-body
+  `GeneratedContext` IH **and** a selected-argument emission through the
+  composed-call target, on one witness — that **no population in reach
+  satisfies**, and that **was never derived from a production contract.** The
+  implementer measured that edge and hard-stopped rather than fabricating a
+  route (`evt_9yrrhnjp6dfd`); the Architect accepted the stop and ruled this
+  recut (`evt_6afmy0398n847`). **The grounded clause was always `D8l`'s** —
+  composed emission belongs to a **composed** witness, never to the A/B one.
+  **Do not construct a combined witness.**
+
+  **The two populations join at one exact PRODUCTION SEAM, not at their
+  outputs. That is what makes the recut non-vacuous.**
+
+  | # | population | what it owns | required relation |
+  |---|---|---|---|
+  | 1 | **ordinary / functionized — `px8tr`** | the table-choice and suffix contract; it already holds the mixed route population — a same-body `GeneratedContext` IH and a `RawWorker` route through ordinary production lowering | a **keyed post-emission** relation from planner/unit-definition expectation to **both** actual calls. Wrong-table mutation **red**; context-suffix mutation **stays red** |
+  | 2 | **composed — the lawful `D8e`/`D8m`/`D8n`/`D8f` family** | the composed ingress | the exact selected recursive argument reaches its `D8b` composed-call target, then **the same** production `call_static_worker_with_inputs` emitter. Compare exact target, application occurrence, **actual defining body kind**, decoded raw callee, operand run, and composed discharge against independent planner/unit-definition authority |
+
+  **Both relations must NAME `call_static_worker_with_inputs` as the
+  convergence seam, and prove that NEITHER INGRESS DUPLICATES target or operand
+  assembly.** Keyed exact relations both times — **never two output bags.**
+
+  **Why two populations suffice, stated so it is not re-litigated.** `px8tr`
+  already exercises coexistence of the two route/table/suffix arms, and the
+  composed witness adds a **distinct ingress to that same emitter**. Putting
+  both ingress shapes in one source program would cover **no additional route
+  contract** — it would manufacture the ungrounded conjunction this recut
+  exists to remove.
+
+  **Every independent side stays subject to the `D8f` rules** — see **WHAT
+  DISQUALIFIES A SIDE**: no different-program mechanism read, no
+  complement-derived subject, no shared collector; and any difference proof
+  withholds the sole producer of its observable.
+
+  **Not authorized:** a combined fixture, an owner-positive population, or any
+  change to production mechanism, identity, ABI, route/selection authority,
+  binding classification, or the ledger.
+
+  **The declared-and-defined standalone `Function` clause is withdrawn** — see
+  Finding 2. `D6c`'s refusal set follows only after this positive closes.
 
   **Watch, carried from the implementer's own handoff:** the reconciliation gate
   **refuses in production by design** at `9f21ff0e`. Anything that starts
@@ -1978,6 +2014,16 @@ all six failing `D0` rows.
   target"* and `D8f`'s marker occupancy is emission-adjacent, so **both are
   blocked until a composed witness reaches emission.** This is not an optional
   tidy-up.
+
+  > **DISCHARGED — and this paragraph is the clause the `D8g` recut restored.**
+  > `D8l2` landed (`1f9a2020`+`abe46dda`) and `D8f` discharged at `04c40d4c`, so
+  > the block above is history, not a live hold. **Its wording is nonetheless
+  > operative**: it assigns composed emission to a **composed** witness. The
+  > `D8g` paragraph above once assigned the same fact to the `px8tr` A/B
+  > witness; the Architect ruled **this** clause the grounded execution
+  > dependency (`evt_6afmy0398n847`) — *it is the checkpoint that made the
+  > composed family reach emission* — and the `D8g` conjunction the defect.
+  > **Do not re-derive a same-program conjunction from the sentence above.**
 
   ⛔ **`D8l1` is: is the refusal STRUCTURAL to the composed shape, or a fixture
   accident? Do not size the repair before that answer exists.** Flagged by the
