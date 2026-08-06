@@ -3,7 +3,7 @@ id: RT-ENTRY-TRAP-254
 title: "public_source_observes_raw_argv_environment_cwd_bytes_in_field_order exits 1 with an explicit entry trap where it expects 254 — branch-introduced, and the only tip failure that is not the byte-span gap"
 status: ready
 owner: runtime
-size: TBD
+size: S
 gate: none
 depends_on: [RT-CONTSRC-PRODUCER-LOCAL]
 blocks: []
@@ -11,14 +11,33 @@ github: null
 origin: Measured at candidate tip b914c7ff (evt_2h8wm2ff99ayq) and provenance-probed (evt_fxgentgrpw6g). Filed by the Steward because it was the one attributed tip failure with no owning node; an unowned failure is what gets lost. Steward-filed (agents cannot create tracked work per COORDINATION §2).
 ---
 
-> ## THE FRAME IS OWED. This node is `draft` and NOT startable.
+> ## THE FRAME IS WRITTEN. This node is `ready`, and it is DIAGNOSIS ONLY.
 >
-> It is filed to give a measured, branch-introduced failure an owner. It has no
-> fixed inputs at a named SHA, no acceptance criteria with controls, and no
-> contention check. The Steward owes those before it flips `ready`.
+> **`docs/program/wp/RT-ENTRY-TRAP-254.md`, 2026-08-06.** It attributes the trap
+> and returns for sizing. **It does not repair it** — the repair is a separate
+> cut the Steward makes on the return, because a guessed size on this campaign
+> has been wrong every time it was guessed. `size: S` covers the diagnosis, not
+> the fix.
 >
-> Size is `TBD` deliberately. Nothing measured so far bounds the repair, and a
-> guessed size on this campaign has been wrong every time it was guessed.
+> **Two things the frame settles that this node had left open.**
+>
+> **The exit `1` is not the defect and must not be investigated.** The linked
+> shim ends `if (value < 0) return 1;`, so **every** negative sentinel collapses
+> to exit 1 and the code cannot distinguish `-1` from `-4`. Only the stderr line
+> can. The single fact that matters is that the entrypoint returned `-4`.
+>
+> **`254` IS the correct expectation — this node's second open obligation is
+> discharged.** The test sets `K` to the byte `0xfe` under `env_clear()` and
+> asserts exit `254`, with a second arm asserting `253` and an `assert_ne!`
+> between them. Those are **legitimate non-negative exit codes**: the program
+> observes a raw process byte and returns it, and `return (int)value` passes any
+> non-negative value straight through. **254 is producible by this shim today.**
+> The program is meant to compute and return a byte and traps instead. Do not
+> re-open whether the expectation is stale, and do not "fix" the row by changing
+> it — that is the cheapest available repair and the frame forbids it.
+>
+> **The row ships marked `#[ignore]`** under the operator's 2026-08-06 publish
+> ruling. A skipped row measures nothing, so `D0` un-skips it first.
 
 ## What is measured
 
@@ -82,21 +101,39 @@ is a lowering refusal at a host-effect seat; this is a runtime `-1` sentinel.
 Whether the two share a root cause is **unmeasured and must be measured, not
 argued from the name.**
 
-## First obligations, when this is framed
+## First obligations — SUPERSEDED by the frame, and one is discharged
 
-1. **Attribute the trap.** Which entry path emits `explicit entry trap`, and why
-   the observed exit is `1` where the test expects `254`. The `-1` sentinel is
-   rendered by `object_linker_packaging.rs` from borrowed-input validation
-   paths (Architect, `evt_7v61ed5pn9q3t`) — confirm or refute that this is the
-   same emitter.
-2. **Decide whether `254` is still the correct expectation**, or whether the
-   test encodes a contract the branch legitimately changed. A wrong expectation
-   and a wrong runtime are indistinguishable from the exit code alone.
-3. Only then size the repair.
+This list was written before the frame. **Read the frame, not this** — kept
+because obligation 2 was answered rather than dropped, and a reader who only saw
+it disappear would reasonably wonder which way it went.
 
-## Relationship to the publish decision
+1. **Attribute the trap.** Live, and it is the frame's `D1`. Confirm or refute
+   that `-4` shares the `-1` sentinel's borrowed-input-validation emitter
+   (Architect, `evt_7v61ed5pn9q3t`), and report either way.
 
-If the operator's gate-readiness ruling lands the branch behind
-exact-signature residual gates, **this node owns re-enabling its row**, and the
-gate must assert this signature exactly so a *different* failure at that row
-still reds.
+   **The half of this obligation asking "why the observed exit is `1`" is
+   retired.** The shim collapses every negative sentinel to 1, so there is no
+   `1`-specific question to answer.
+2. **Decide whether `254` is still the correct expectation** — **DISCHARGED.**
+   It is correct. `254` and `253` are legitimate non-negative exit codes the
+   program returns from an observed process byte, and the shim passes any
+   non-negative value through. **Do not re-open it**, and do not repair the row
+   by changing the expectation.
+
+   The premise this obligation rested on — *"a wrong expectation and a wrong
+   runtime are indistinguishable from the exit code alone"* — was **true and
+   not binding**: the test body distinguishes them, and nobody had read it.
+3. **Size the repair only on the diagnosis return.** The frame stops at `D2` and
+   hands back; the Steward re-cuts.
+
+## Relationship to the publish decision — RESOLVED
+
+The operator ruled on 2026-08-06: land the candidate with the five failing rows
+marked `#[ignore]`, restoring them as work allows. **This node owns re-enabling
+its row**, and un-skipping it is the frame's `D0` rather than a later
+courtesy — a skipped row measures nothing, so nothing may be asserted while the
+attribute is present.
+
+The exact signature the Steward would have put in a residual gate is instead
+recorded **in the source comment above the test**, which is where whoever
+restores the row will actually read it.
