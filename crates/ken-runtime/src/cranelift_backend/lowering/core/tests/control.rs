@@ -21484,6 +21484,49 @@ fn d8p_planned_application(with_ordinary_call: bool) -> (u64, u64, u64, u64) {
     )
 }
 
+/// What the PLANNER defines each callable target to be: the declared arity and
+/// ordered capture count of every continuation unit's static worker, keyed by
+/// that worker's own body origin.
+///
+/// The INDEPENDENT SIDE for the target relation. Built by running the static
+/// transition planner over the witness's own inputs -- unit definition is the
+/// producer of this authority -- and never read from the environment binding,
+/// the emitted call, or an observation. A target the planner does not define,
+/// or one called at an arity or capture run that is not the planner's for it,
+/// disagrees here.
+#[cfg(test)]
+fn d8p_planned_targets(with_ordinary_call: bool) -> BTreeMap<StaticOriginId, (u32, usize)> {
+    let declaration = d8f_declaration(with_ordinary_call);
+    let entry = RuntimeExpr::Call {
+        callee: Box::new(RuntimeExpr::DeclarationRef {
+            symbol: D8F_SYMBOL.to_string(),
+        }),
+        args: vec![RuntimeExpr::Construct {
+            constructor: "ctor:prelude::Unit::MkUnit".to_string(),
+            args: Vec::new(),
+        }],
+    };
+    let declarations = BTreeMap::from([(D8F_SYMBOL, &declaration)]);
+    let plan = plan_static_transition_graph_with_symbols(
+        &entry,
+        &declarations,
+        &crate::NativeProcessSymbols::legacy_prelude(),
+        AbiRootIngress::Value,
+        true,
+    )
+    .expect("the witness plans");
+    plan.continuation_units()
+        .expect("continuation units")
+        .into_iter()
+        .map(|unit| {
+            (
+                unit.worker_body_origin(),
+                (unit.worker_declared_arity(), unit.worker_capture_count()),
+            )
+        })
+        .collect()
+}
+
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8p` — a checked application binds and emits
 /// in EVERY defining body that lowers it.**
 ///
@@ -21504,20 +21547,35 @@ fn d8p_planned_application(with_ordinary_call: bool) -> (u64, u64, u64, u64) {
 ///
 /// `(exact defining body, exact application occurrence)` -> the plan side
 /// `(call template, slot template, binder ordinal, arity)` and the target side
-/// `(target body origin, declared arity, captures)`.
+/// `(target body origin, declared arity, captures, supplied operand run)`.
 ///
-/// The two sides are written at two different seams -- the plan side where the
-/// binding happens, the target side where the call is emitted -- so joining them
-/// on that key is a relation between two observations rather than one site
-/// agreeing with itself. The body key is `D8o`'s, supplied by the pass that owns
-/// the descriptor, so the body KIND is carried and never recovered from an owner
-/// variant.
+/// The plan side is written at the seam where the binding happens; the target
+/// side **after the call instruction exists**, carrying the run the instruction
+/// actually took. Written before the emitter it would be a claim about a call
+/// that had not been made, and an operand run widened inside the emitter would
+/// be invisible to it.
 ///
-/// ## Clause 3 — the permutation
+/// The independent side of the target relation is `d8p_planned_targets`: the
+/// planner's own definition of each callable, from unit definition. The
+/// observation says WHICH target; the planner says what that target's declared
+/// arity and capture run must be, and the emitted operand count must be their
+/// sum. The body key is `D8o`'s, supplied by the pass that owns the descriptor,
+/// so body KIND is carried and never recovered from an owner variant.
 ///
-/// The two defining bodies bind at DISTINCT application occurrences, so
-/// exchanging their observations is a real difference. An unkeyed comparison
-/// cannot see it; the keyed relation must.
+/// ## Clause 3 — the permutation, and its MEASURED limit
+///
+/// On this witness the two defining bodies bind at the **same** application
+/// occurrence and call the **same** target with the same arity and capture run.
+/// Exchanging their observations is therefore a no-op that neither an unkeyed
+/// comparison nor the keyed relation can see. That is recorded, not asserted
+/// away, and no claim is made here that the occurrences are distinct or that the
+/// swap currently bites.
+///
+/// What would make it discriminating is a **population change, not a stronger
+/// assertion**: a witness whose defining bodies bind at different application
+/// occurrences, or call different targets. This one has a single checked
+/// application lowered by two bodies, so both coordinates coincide by
+/// construction. No such population is fabricated here.
 ///
 /// **Promise class: durable invariant.**
 #[test]
@@ -21547,7 +21605,8 @@ fn d8p_a_checked_application_binds_and_emits_in_every_defining_body() {
     // Clause 1 — every binding is under the plan's own template run, keyed on
     // the exact body and the exact application occurrence.
     let planned = d8p_planned_application(false);
-    let mut plan_side: BTreeMap<(D8oBodyKey, StaticOriginId), (u64, u64, u64, u64)> = BTreeMap::new();
+    let mut plan_side: BTreeMap<(D8oBodyKey, StaticOriginId), (u64, u64, u64, u64)> =
+        BTreeMap::new();
     for binding in &bindings {
         let function = binding
             .function
@@ -21583,21 +21642,31 @@ fn d8p_a_checked_application_binds_and_emits_in_every_defining_body() {
         );
     }
 
-    // Clause 2 — a real emitted call under the SAME key, and its target and
-    // operand run are the binding's own.
-    let mut target_side: BTreeMap<(D8oBodyKey, StaticOriginId), (StaticOriginId, u32, usize)> = BTreeMap::new();
+    // Clause 2 — a real emitted call under the SAME key, whose target and
+    // operand run are the PLANNER's for that target.
+    let planned_targets = d8p_planned_targets(false);
+    let mut target_side: BTreeMap<(D8oBodyKey, StaticOriginId), (StaticOriginId, u32, usize, usize)> =
+        BTreeMap::new();
     for target in &targets {
         let function = target
             .function
             .expect("every emitted checked application names its defining Function");
         let key = *keys.get(&function).expect("an emitting body has a key");
-        target_side.insert(
+        let previous = target_side.insert(
             (key, target.application_origin),
             (
                 target.target_body_origin,
                 target.declared_arity,
                 target.captures,
+                target.supplied_operands,
             ),
+        );
+        assert!(
+            previous.is_none(),
+            "one (defining body, application occurrence) emits at most ONE checked call. A second \
+             observation under the same key must be REJECTED rather than replace the first -- \
+             overwriting would hide exactly the duplicate this relation exists to exclude: \
+             {targets:?}"
         );
     }
     assert_eq!(
@@ -21608,17 +21677,32 @@ fn d8p_a_checked_application_binds_and_emits_in_every_defining_body() {
          binding with no emission is an application that was accounted for and never made: \
          {targets:?} vs {bindings:?}"
     );
-    for ((key, _), (_, declared_arity, _)) in &target_side {
+    for (key, (body_origin, declared_arity, captures, supplied)) in &target_side {
+        let (planned_arity, planned_captures) = planned_targets.get(body_origin).unwrap_or_else(|| {
+            panic!(
+                "the call under key {key:?} went to {body_origin:?}, which the PLANNER defines no \
+                 unit for. A target the planner does not define is a callable this body invented: \
+                 {planned_targets:?}"
+            )
+        });
         assert_eq!(
-            u64::from(*declared_arity),
-            planned.3,
-            "the emitted call's operand contract must be the arity the plan holds the application \
-             to, under key {key:?}. A widened or narrowed run here is the ABI widening this \
-             checkpoint refuses"
+            (*declared_arity, *captures),
+            (*planned_arity, *planned_captures),
+            "and it must be called at the planner's own declared arity and capture run for that \
+             target, under key {key:?}. A widened or narrowed contract here is the ABI widening \
+             this checkpoint refuses"
+        );
+        assert_eq!(
+            *supplied,
+            *planned_arity as usize + *planned_captures,
+            "and the run the INSTRUCTION carried must be exactly that contract -- explicit \
+             arguments then stored captures, nothing appended. This is read off the emission \
+             after the call exists, so an operand assembled inside the emitter is visible here, \
+             under key {key:?}"
         );
     }
 
-    // Clause 3 — both body kinds bind, and the permutation is discriminating.
+    // Clause 3 — both body kinds bind. The permutation is measured, not claimed.
     let bodies = plan_side.keys().map(|(key, _)| *key).collect::<BTreeSet<_>>();
     assert!(
         bodies
@@ -21633,10 +21717,6 @@ fn d8p_a_checked_application_binds_and_emits_in_every_defining_body() {
         "and more than one defining body must lower this application, or 'in every defining body' \
          is a claim about a population of one: {bodies:?}"
     );
-    let occurrences = plan_side
-        .keys()
-        .map(|(_, origin)| *origin)
-        .collect::<BTreeSet<_>>();
     let permuted = {
         let entries = target_side
             .iter()
@@ -21647,32 +21727,16 @@ fn d8p_a_checked_application_binds_and_emits_in_every_defining_body() {
         permuted.insert(entries[1].0, entries[0].1);
         permuted
     };
-    let bag = |relation: &BTreeMap<(D8oBodyKey, StaticOriginId), (StaticOriginId, u32, usize)>| {
-        let mut values = relation.values().copied().collect::<Vec<_>>();
-        values.sort();
-        values
-    };
     assert_eq!(
-        bag(&permuted),
-        bag(&target_side),
-        "the permutation must be invisible to an unkeyed comparison, or it is not the control it \
-         claims to be"
+        permuted, target_side,
+        "MEASURED: this witness's defining bodies bind at the SAME application occurrence and call \
+         the SAME target with the same contract, so exchanging their observations is a no-op and \
+         neither an unkeyed comparison nor the keyed relation is discriminated by it here. What \
+         would change that is a POPULATION with more than one checked application -- bodies \
+         binding at different occurrences, or calling different targets -- not a stronger \
+         assertion over this one. If this ever differs, the permutation has become a real control \
+         and this expectation should be inverted rather than deleted"
     );
-    if occurrences.len() > 1 {
-        assert_ne!(
-            permuted, target_side,
-            "and visible to the keyed one: the two bodies bind at DISTINCT application \
-             occurrences, so exchanging which body emitted which call is a real difference"
-        );
-    } else {
-        assert_eq!(
-            permuted, target_side,
-            "MEASURED: on this witness the two bodies observe the same target and occurrence \
-             values, so the swap is a no-op and this clause is not discriminated by it here. If \
-             this ever differs, the permutation has become a real control and this expectation \
-             should be inverted rather than deleted"
-        );
-    }
 }
 
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8p` — zero, one, and declined, per exact

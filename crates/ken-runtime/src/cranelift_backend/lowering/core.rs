@@ -4211,7 +4211,16 @@ impl<'a> Lowering<'a> {
                                     0,
                                     static_origin,
                                 )?;
-                                // `D8p` — the TARGET side, under the same key.
+                                let before = self.live_source_continuations;
+                                let (called, emission) = self.call_static_worker_with_inputs(
+                                    builder,
+                                    &worker,
+                                    Vec::new(),
+                                    static_origin,
+                                )?;
+                                // `D8p` — the TARGET side, under the same key,
+                                // written only now that the call instruction
+                                // exists and carrying the run it actually took.
                                 #[cfg(test)]
                                 if bound {
                                     crate::cranelift_backend::lowering::record_d8p_emitted_target(
@@ -4221,16 +4230,10 @@ impl<'a> Lowering<'a> {
                                             target_body_origin: worker.body_origin,
                                             declared_arity: worker.declared_arity,
                                             captures: worker.captures.len(),
+                                            supplied_operands: emission.supplied_operands,
                                         },
                                     );
                                 }
-                                let before = self.live_source_continuations;
-                                let (called, emission) = self.call_static_worker_with_inputs(
-                                    builder,
-                                    &worker,
-                                    Vec::new(),
-                                    static_origin,
-                                )?;
                                 // `D8j` — the call is emitted and its result is
                                 // in hand under the SAME `control` this arm was
                                 // entered with. Only now may a composed
@@ -5303,6 +5306,15 @@ impl<'a> Lowering<'a> {
                                                 lowered.len(),
                                                 static_origin,
                                             )?;
+                                        let before = self.live_source_continuations;
+                                        let (called, emission) = self
+                                            .call_static_worker_with_inputs(
+                                                builder,
+                                                &worker,
+                                                lowered,
+                                                static_origin,
+                                            )?;
+                                        // `D8p` — the target side, post-instruction.
                                         #[cfg(test)]
                                         if bound {
                                             crate::cranelift_backend::lowering::record_d8p_emitted_target(
@@ -5312,17 +5324,10 @@ impl<'a> Lowering<'a> {
                                                     target_body_origin: worker.body_origin,
                                                     declared_arity: worker.declared_arity,
                                                     captures: worker.captures.len(),
+                                                    supplied_operands: emission.supplied_operands,
                                                 },
                                             );
                                         }
-                                        let before = self.live_source_continuations;
-                                        let (called, emission) = self
-                                            .call_static_worker_with_inputs(
-                                                builder,
-                                                &worker,
-                                                lowered,
-                                                static_origin,
-                                            )?;
                                         // `D8j` — the non-empty argument run
                                         // reached here through `CallArgument`
                                         // under the machine's own control, and

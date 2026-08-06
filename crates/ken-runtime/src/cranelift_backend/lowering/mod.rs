@@ -3758,6 +3758,14 @@ pub(in crate::cranelift_backend) struct D8pEmittedTarget {
     pub(in crate::cranelift_backend) target_body_origin: StaticOriginId,
     pub(in crate::cranelift_backend) declared_arity: u32,
     pub(in crate::cranelift_backend) captures: usize,
+    /// The operand run the call instruction ACTUALLY carried, read off the
+    /// emission rather than from the binding.
+    ///
+    /// Written only after `call_static_worker_with_inputs` has returned, so this
+    /// record exists exactly when a call instruction does. Recorded before the
+    /// emitter it would be a claim about a call that had not been made, and a
+    /// widened run assembled inside the emitter would be invisible to it.
+    pub(in crate::cranelift_backend) supplied_operands: usize,
 }
 
 /// The arm of the closed immediate-binder bridge descriptor a composed site took.
