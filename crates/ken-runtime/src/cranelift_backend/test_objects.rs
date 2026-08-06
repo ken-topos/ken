@@ -199,7 +199,23 @@ fn px8tr_nested_post_effect_fixture() -> (
                     checked_occurrence_path: vec![30],
                     body: Box::new(RuntimeExpr::Call {
                         callee: Box::new(RuntimeExpr::Var(0)),
-                        args: vec![unit()],
+                        // `D8p` — under test only, nest an ORDINARY call on the
+                        // same recursor binder inside the checked application.
+                        // The nested call instantiates a semantic IH layer of
+                        // its own, and a segment carrying a checked frame
+                        // requires every semantic layer to carry a checked
+                        // invocation authority. This is the refusal `D8p` must
+                        // not weaken: projecting the checked-application seam
+                        // onto a second call edge must not make an unauthorised
+                        // layer acceptable.
+                        args: if px8tr_nest_ordinary_ih_call() {
+                            vec![RuntimeExpr::Call {
+                                callee: Box::new(RuntimeExpr::Var(0)),
+                                args: vec![unit()],
+                            }]
+                        } else {
+                            vec![unit()]
+                        },
                     }),
                 }),
             },
@@ -310,6 +326,28 @@ fn px8tr_nested_post_effect_fixture() -> (
             computational_ih_calls: vec![call],
         },
     )
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8p`** — nest an ordinary call on the same
+/// recursor binder inside the checked application, under test only.
+#[cfg(test)]
+thread_local! {
+    static PX8TR_NEST_ORDINARY_IH_CALL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+pub(crate) fn set_px8tr_nest_ordinary_ih_call(armed: bool) {
+    PX8TR_NEST_ORDINARY_IH_CALL.with(|cell| cell.set(armed));
+}
+
+#[cfg(test)]
+fn px8tr_nest_ordinary_ih_call() -> bool {
+    PX8TR_NEST_ORDINARY_IH_CALL.with(std::cell::Cell::get)
+}
+
+#[cfg(not(test))]
+fn px8tr_nest_ordinary_ih_call() -> bool {
+    false
 }
 
 pub(crate) fn emit_px8tr_nested_post_effect_object(

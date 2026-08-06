@@ -4163,13 +4163,13 @@ impl<'a> Lowering<'a> {
                         let static_worker = match callee.as_ref() {
                             RuntimeExpr::Var(index) => match env.get(*index as usize) {
                                 Some(LoweringEnvironmentBinding::StaticWorker(worker)) => {
-                                    Some(worker.clone())
+                                    Some((u64::from(*index), worker.clone()))
                                 }
                                 _ => None,
                             },
                             _ => None,
                         };
-                        if let Some(worker) = static_worker {
+                        if let Some((binder_index, worker)) = static_worker {
                             #[cfg(test)]
                             d8e_record_consumption();
                             // `D8l2` — which facet this consumption carried,
@@ -4187,6 +4187,43 @@ impl<'a> Lowering<'a> {
                             // only the completion differs.
                             let mut remaining = args;
                             if remaining.is_empty() {
+                                // **`D8p` — THE CHECKED-APPLICATION SEAM, on the
+                                // source machine's call edge.**
+                                //
+                                // The direct descent has consulted it since
+                                // `D5a`; this edge did not, so a checked-IH
+                                // marker entered in a body whose application the
+                                // SOURCE MACHINE lowers could never be consumed
+                                // and failed closed at the marker's close. The
+                                // seam is the same function, on the same exact
+                                // occurrence and binder ordinal -- no second
+                                // authority, no target lookup, and no new
+                                // identity.
+                                //
+                                // ⛔ Immediately BEFORE the call is written, so
+                                // consumption still precedes the instruction it
+                                // discharges, and after the arguments are in
+                                // hand so an ordinary selected-argument call
+                                // reaches the seat first and leaves the marker
+                                // for the occurrence that owns it.
+                                let bound = self.consume_checked_ih_marker_at_static_worker_call(
+                                    binder_index,
+                                    0,
+                                    static_origin,
+                                )?;
+                                // `D8p` — the TARGET side, under the same key.
+                                #[cfg(test)]
+                                if bound {
+                                    crate::cranelift_backend::lowering::record_d8p_emitted_target(
+                                        crate::cranelift_backend::lowering::D8pEmittedTarget {
+                                            function: self.defining_function_id,
+                                            application_origin: static_origin,
+                                            target_body_origin: worker.body_origin,
+                                            declared_arity: worker.declared_arity,
+                                            captures: worker.captures.len(),
+                                        },
+                                    );
+                                }
                                 let before = self.live_source_continuations;
                                 let (called, emission) = self.call_static_worker_with_inputs(
                                     builder,
@@ -4209,6 +4246,7 @@ impl<'a> Lowering<'a> {
                                     callee: SourceCallee::StaticWorker {
                                         worker,
                                         static_origin,
+                                        binder_index,
                                     },
                                     remaining,
                                     lowered: Vec::new(),
@@ -5251,7 +5289,32 @@ impl<'a> Lowering<'a> {
                                     SourceCallee::StaticWorker {
                                         worker,
                                         static_origin,
+                                        binder_index,
                                     } => {
+                                        // `D8p` — the same seam, at the
+                                        // non-empty argument run's emission
+                                        // seat. The arguments are already
+                                        // lowered, so any ordinary call among
+                                        // them has already reached this seat and
+                                        // already declined the marker.
+                                        let bound = self
+                                            .consume_checked_ih_marker_at_static_worker_call(
+                                                binder_index,
+                                                lowered.len(),
+                                                static_origin,
+                                            )?;
+                                        #[cfg(test)]
+                                        if bound {
+                                            crate::cranelift_backend::lowering::record_d8p_emitted_target(
+                                                crate::cranelift_backend::lowering::D8pEmittedTarget {
+                                                    function: self.defining_function_id,
+                                                    application_origin: static_origin,
+                                                    target_body_origin: worker.body_origin,
+                                                    declared_arity: worker.declared_arity,
+                                                    captures: worker.captures.len(),
+                                                },
+                                            );
+                                        }
                                         let before = self.live_source_continuations;
                                         let (called, emission) = self
                                             .call_static_worker_with_inputs(

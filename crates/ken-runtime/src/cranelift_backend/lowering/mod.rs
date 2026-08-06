@@ -3724,6 +3724,40 @@ thread_local! {
     /// measurement rather than a reading of the match.
     static D8M_BRIDGE_ARMS: std::cell::RefCell<Vec<(Option<FuncId>, D8mBridgeArm)>> =
         const { std::cell::RefCell::new(Vec::new()) };
+    /// `D8p` — the PLAN side of each checked-application binding, written at the
+    /// seam the moment it binds: the exact defining body, the exact application
+    /// occurrence, and the call/slot/binder/arity the plan holds it to.
+    static D8P_APPLICATION_BINDINGS: std::cell::RefCell<Vec<D8pApplicationBinding>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+    /// `D8p` — the TARGET side, written at the emission seat under the same key.
+    /// Kept as a separate record on purpose: joining the two on
+    /// `(defining body, application occurrence)` is what makes the agreement a
+    /// relation rather than one site agreeing with itself.
+    static D8P_EMITTED_TARGETS: std::cell::RefCell<Vec<D8pEmittedTarget>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// `D8p` — what the plan bound at one checked application.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct D8pApplicationBinding {
+    pub(in crate::cranelift_backend) function: Option<FuncId>,
+    pub(in crate::cranelift_backend) application_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) call_template_id: u64,
+    pub(in crate::cranelift_backend) slot_template_id: u64,
+    pub(in crate::cranelift_backend) binder_index: u64,
+    pub(in crate::cranelift_backend) arity: u64,
+}
+
+/// `D8p` — what was actually called there.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct D8pEmittedTarget {
+    pub(in crate::cranelift_backend) function: Option<FuncId>,
+    pub(in crate::cranelift_backend) application_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) target_body_origin: StaticOriginId,
+    pub(in crate::cranelift_backend) declared_arity: u32,
+    pub(in crate::cranelift_backend) captures: usize,
 }
 
 /// The arm of the closed immediate-binder bridge descriptor a composed site took.
@@ -3773,6 +3807,26 @@ pub(in crate::cranelift_backend) fn record_d8m_slot_frame_pair(
 #[cfg(test)]
 pub(in crate::cranelift_backend) fn d8m_slot_frame_pairs() -> Vec<(Option<FuncId>, u64, u64)> {
     D8M_SLOT_FRAME_PAIRS.with(|log| log.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8p_application_binding(binding: D8pApplicationBinding) {
+    D8P_APPLICATION_BINDINGS.with(|log| log.borrow_mut().push(binding));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d8p_emitted_target(target: D8pEmittedTarget) {
+    D8P_EMITTED_TARGETS.with(|log| log.borrow_mut().push(target));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8p_application_bindings() -> Vec<D8pApplicationBinding> {
+    D8P_APPLICATION_BINDINGS.with(|log| log.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d8p_emitted_targets() -> Vec<D8pEmittedTarget> {
+    D8P_EMITTED_TARGETS.with(|log| log.borrow().clone())
 }
 
 #[cfg(test)]
@@ -3931,6 +3985,8 @@ pub(in crate::cranelift_backend) fn reset_d8n_observations() {
     D8N_SLOT_RECONCILIATIONS.with(|log| log.borrow_mut().clear());
     D8M_SLOT_FRAME_PAIRS.with(|log| log.borrow_mut().clear());
     D8M_BRIDGE_ARMS.with(|log| log.borrow_mut().clear());
+    D8P_APPLICATION_BINDINGS.with(|log| log.borrow_mut().clear());
+    D8P_EMITTED_TARGETS.with(|log| log.borrow_mut().clear());
 }
 
 #[cfg(test)]
@@ -12445,6 +12501,16 @@ enum SourceCallee {
     StaticWorker {
         worker: StaticWorkerBinding,
         static_origin: StaticOriginId,
+        /// **`RT-CONTSRC-PRODUCER-LOCAL` `D8p`** — the exact binder index the
+        /// callee `Var` resolved at.
+        ///
+        /// ⛔ Carried from the occurrence that resolved it, never re-derived at
+        /// the emission seat. The checked-IH seam holds the emitted call to the
+        /// binder ordinal the plan seated the hypothesis at, and a second
+        /// derivation here could disagree with the one that actually chose the
+        /// binding -- which is the shape `D8f` already rules out for the
+        /// application origin.
+        binder_index: u64,
     },
 }
 enum SourceContinuationTerminal<'a> {
@@ -13497,6 +13563,19 @@ impl<'a> Lowering<'a> {
         self.pending_computational_ih_call = None;
         #[cfg(test)]
         record_d5a_marker_event(D5aMarkerEvent::Consumed {
+            call_template_id,
+            slot_template_id: call.slot_template_id,
+            binder_index,
+            arity: call.arity,
+        });
+        // `D8p` — the plan side of the binding, keyed on the pair the
+        // checkpoint is about: the exact defining body and the exact
+        // application occurrence. Written here because this is where the
+        // binding happens, not reconstructed by a reader afterwards.
+        #[cfg(test)]
+        record_d8p_application_binding(D8pApplicationBinding {
+            function: self.defining_function_id,
+            application_origin: static_origin,
             call_template_id,
             slot_template_id: call.slot_template_id,
             binder_index,

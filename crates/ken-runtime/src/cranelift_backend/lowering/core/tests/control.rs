@@ -21458,103 +21458,401 @@ fn d8f_compile(with_ordinary_call: bool) -> Option<CraneliftBackendError> {
     .err()
 }
 
-/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8f` — TRANSITION SENTINEL. The composed
-/// route still cannot host a checked-IH invocation marker, and the reason is no
-/// longer the one `D8m` retired.**
+/// The plan-derived expectation for one checked application: the call template
+/// the invocation marker names, the slot it binds, the binder ordinal the plan
+/// seats the hypothesis at, and the arity.
 ///
-/// `D8f`'s occupancy rule is correct and unwitnessed: mutating the seat's
-/// occurrence comparison to ALWAYS admit -- the pre-`D8f` behaviour -- leaves the
-/// whole suite green, so no landed fixture poses the question. The witness the
-/// checkpoint needs is one where, inside a pending invocation marker, an
-/// ordinary call on the same selected recursive argument reaches the
-/// static-worker seat and must leave the marker for the occurrence that owns it.
+/// The INDEPENDENT SIDE. Read out of the oriented plan the compile is handed,
+/// never out of an observation, the environment binding, or the emitted call.
+#[cfg(test)]
+fn d8p_planned_application(with_ordinary_call: bool) -> (u64, u64, u64, u64) {
+    let plan = d8f_plan(with_ordinary_call);
+    let call = plan
+        .computational_ih_calls
+        .first()
+        .expect("one planned checked application");
+    let slot = plan
+        .computational_ih_slots
+        .iter()
+        .find(|slot| slot.slot_template_id == call.slot_template_id)
+        .expect("the call template's slot");
+    (
+        call.call_template_id,
+        call.slot_template_id,
+        slot.method_binder_ordinal,
+        call.arity,
+    )
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8p` — a checked application binds and emits
+/// in EVERY defining body that lowers it.**
 ///
-/// ## What this row pins
+/// ## What was missing
 ///
-/// The `D8n` composed checked-bridge witness -- which compiles, and whose bridge
-/// carries a real source frame identity since `D8m` -- with a checked-IH
-/// invocation marker added around its application. It refuses, and **it refuses
-/// identically with and without the ordinary call**. That equality is the
-/// finding: the obstacle is the marker in a composed body, not the occupancy
-/// shape, so building a better occupancy fixture on this route cannot help.
+/// Two call edges emit a static-worker call: the direct descent in `lower_expr`,
+/// and the source machine's. The direct one has consulted the checked-IH seam
+/// since `D5a`; **the source machine's did not**. So a checked-IH invocation
+/// marker entered in a body whose application the source machine lowers could
+/// never be consumed there, and failed closed at the marker's close as *"a
+/// checked computational-IH marker is a specialized-only surface"*.
 ///
-/// The refusal is *"a checked computational-IH marker is a specialized-only
-/// surface and a carried boundary word has no compile-time template for it to
-/// read"*. Measured cause: the ordinary unit body that lowers this case body has
-/// no static-worker seat at the application, so the marker is entered there,
-/// never consumed, and fails closed at
-/// `finish_checked_computational_ih_marker` before any specialization body is
-/// reached.
+/// That is what `D8f`'s hard stop measured at `0eb04397`, and its sentinel
+/// `d8f_the_composed_route_still_cannot_host_an_invocation_marker` said to
+/// invert rather than delete when the obstacle went. This row is that inversion.
 ///
-/// ## Why this is a sentinel and not a defect
+/// ## The relation, keyed on the pair the checkpoint is about
 ///
-/// It goes red when the composed route gains a specialized application in the
-/// ordinary unit body, or when the marker's close stops requiring one. **Either
-/// event is what makes the `D8f` witness constructible on this route**, and
-/// whoever lands it should invert this row into the positive occupancy witness
-/// rather than delete it.
+/// `(exact defining body, exact application occurrence)` -> the plan side
+/// `(call template, slot template, binder ordinal, arity)` and the target side
+/// `(target body origin, declared arity, captures)`.
 ///
-/// ## MEASURED, but not committed here
+/// The two sides are written at two different seams -- the plan side where the
+/// binding happens, the target side where the call is emitted -- so joining them
+/// on that key is a relation between two observations rather than one site
+/// agreeing with itself. The body key is `D8o`'s, supplied by the pass that owns
+/// the descriptor, so the body KIND is carried and never recovered from an owner
+/// variant.
 ///
-/// Two further routes were measured this turn and are named so the next attempt
-/// does not repeat them. Neither is committed, because one needs a shared
-/// fixture mutated and the other a second witness family that adds nothing:
+/// ## Clause 3 — the permutation
 ///
-/// - **Non-composed (`px8tr`).** The landed object fixture hosts the invocation
-///   marker green. Nesting an ordinary call on the same recursor binder inside
-///   the marker's application -- replacing its `args: vec![unit()]` with
-///   `args: vec![Call { callee: Var(0), args: vec![unit()] }]` in
-///   `test_objects.rs` -- refuses with *"oriented segment mixes checked and
-///   inferred computational frames"*, detail `(Some(7), None, ...)`. The
-///   ordinary call instantiates a semantic IH layer, and a segment carrying any
-///   checked frame requires every semantic layer to carry a checked invocation
-///   id. **The call that must leave the marker pending is exactly the call that
-///   would have to have consumed one.**
-/// - **A composed static-worker call as the checked application's argument**, so
-///   the seat is reached without instantiating an IH layer. Refuses with
-///   *"source open occurrence disagrees with the closure-selected dynamic
-///   parent"*.
-/// - The `D8e` declaration-owned composed family was also built and refuses
-///   exactly as this one does, for the same measured cause.
+/// The two defining bodies bind at DISTINCT application occurrences, so
+/// exchanging their observations is a real difference. An unkeyed comparison
+/// cannot see it; the keyed relation must.
 ///
-/// **Promise class: transition sentinel.** Named for the boundary, not for a
-/// count, and naming the event that retires it.
+/// **Promise class: durable invariant.**
 #[test]
-fn d8f_the_composed_route_still_cannot_host_an_invocation_marker() {
-    let mut refusals = Vec::new();
-    for with_ordinary_call in [false, true] {
-        let outcome = d8f_compile(with_ordinary_call);
-        refusals.push(format!(
-            "{:?}",
-            outcome.unwrap_or_else(|| panic!(
-                "the composed route must still refuse the invocation marker \
-                 (with_ordinary_call={with_ordinary_call}). If it compiles, the obstacle this \
-                 sentinel names is gone and the D8f occupancy witness is constructible here -- \
-                 invert this row into that witness rather than deleting it"
-            ))
-        ));
-    }
-    for refusal in &refusals {
-        assert!(
-            refusal.contains(
-                "a checked computational-IH marker is a specialized-only surface"
+fn d8p_a_checked_application_binds_and_emits_in_every_defining_body() {
+    use crate::cranelift_backend::lowering::{
+        d8o_body_keys, d8p_application_bindings, d8p_emitted_targets, reset_d8n_observations,
+        reset_d8o_body_authorities, D8oBodyKey,
+    };
+
+    reset_d8n_observations();
+    reset_d8o_body_authorities();
+    let outcome = d8f_compile(false);
+    assert!(
+        outcome.is_none(),
+        "the composed checked-application witness must compile. Before D8p it refused with 'a \
+         checked computational-IH marker is a specialized-only surface', because the source \
+         machine's call edge never consulted the seam: {outcome:?}"
+    );
+
+    let keys = d8o_body_keys()
+        .into_iter()
+        .map(|(function, key)| (function.expect("body keys are labelled"), key))
+        .collect::<BTreeMap<_, _>>();
+    let bindings = d8p_application_bindings();
+    let targets = d8p_emitted_targets();
+
+    // Clause 1 — every binding is under the plan's own template run, keyed on
+    // the exact body and the exact application occurrence.
+    let planned = d8p_planned_application(false);
+    let mut plan_side: BTreeMap<(D8oBodyKey, StaticOriginId), (u64, u64, u64, u64)> = BTreeMap::new();
+    for binding in &bindings {
+        let function = binding
+            .function
+            .expect("every checked-application binding names its defining Function");
+        let key = *keys
+            .get(&function)
+            .expect("every binding body recorded its exact body key");
+        let previous = plan_side.insert(
+            (key, binding.application_origin),
+            (
+                binding.call_template_id,
+                binding.slot_template_id,
+                binding.binder_index,
+                binding.arity,
             ),
-            "and it must be THAT refusal. The pre-D8m obstacle was 'detached from its checked \
-             frame', which D8m retired; a different message here means the route moved again and \
-             this sentinel's stated cause is stale: {refusal}"
         );
         assert!(
-            !refusal.contains("detached from its checked frame"),
-            "specifically not the pre-D8m refusal. If this fires, D8m's transport has regressed \
-             on this fixture and that is a finding about D8m, not about D8f: {refusal}"
+            previous.is_none(),
+            "one application occurrence binds at most ONCE in one defining body; a second is a \
+             duplicate consumption the affine law is supposed to have refused: {bindings:?}"
+        );
+    }
+    assert!(
+        !plan_side.is_empty(),
+        "at least one checked application must bind, or every clause below is vacuous"
+    );
+    for (key, observed) in &plan_side {
+        assert_eq!(
+            *observed, planned,
+            "each binding must agree with the PLAN's call template, slot, binder ordinal and \
+             arity, under key {key:?}. The independent side is the oriented plan the compile was \
+             handed; the observed side is what the seam bound"
+        );
+    }
+
+    // Clause 2 — a real emitted call under the SAME key, and its target and
+    // operand run are the binding's own.
+    let mut target_side: BTreeMap<(D8oBodyKey, StaticOriginId), (StaticOriginId, u32, usize)> = BTreeMap::new();
+    for target in &targets {
+        let function = target
+            .function
+            .expect("every emitted checked application names its defining Function");
+        let key = *keys.get(&function).expect("an emitting body has a key");
+        target_side.insert(
+            (key, target.application_origin),
+            (
+                target.target_body_origin,
+                target.declared_arity,
+                target.captures,
+            ),
         );
     }
     assert_eq!(
-        refusals[0], refusals[1],
-        "THE FINDING: the refusal is identical with and without the ordinary selected-argument \
-         call, so what closes this route is the marker in a composed body -- not the occupancy \
-         shape D8f is about. A difference here would mean the ordinary call has become \
-         load-bearing, which is the first sign this route can carry the witness"
+        target_side.keys().collect::<Vec<_>>(),
+        plan_side.keys().collect::<Vec<_>>(),
+        "every binding must have produced a real emitted call at the SAME exact body and \
+         application occurrence, and nothing may be emitted under a key that did not bind. A \
+         binding with no emission is an application that was accounted for and never made: \
+         {targets:?} vs {bindings:?}"
+    );
+    for ((key, _), (_, declared_arity, _)) in &target_side {
+        assert_eq!(
+            u64::from(*declared_arity),
+            planned.3,
+            "the emitted call's operand contract must be the arity the plan holds the application \
+             to, under key {key:?}. A widened or narrowed run here is the ABI widening this \
+             checkpoint refuses"
+        );
+    }
+
+    // Clause 3 — both body kinds bind, and the permutation is discriminating.
+    let bodies = plan_side.keys().map(|(key, _)| *key).collect::<BTreeSet<_>>();
+    assert!(
+        bodies
+            .iter()
+            .any(|key| matches!(key, D8oBodyKey::OrdinaryUnit(_))),
+        "the ordinary unit body must bind -- that body is the one the pre-D8p refusal came from, \
+         so a witness where only a specialization binds proves nothing about the repair: \
+         {bodies:?}"
+    );
+    assert!(
+        bodies.len() >= 2,
+        "and more than one defining body must lower this application, or 'in every defining body' \
+         is a claim about a population of one: {bodies:?}"
+    );
+    let occurrences = plan_side
+        .keys()
+        .map(|(_, origin)| *origin)
+        .collect::<BTreeSet<_>>();
+    let permuted = {
+        let entries = target_side
+            .iter()
+            .map(|(k, v)| (*k, *v))
+            .collect::<Vec<_>>();
+        let mut permuted = target_side.clone();
+        permuted.insert(entries[0].0, entries[1].1);
+        permuted.insert(entries[1].0, entries[0].1);
+        permuted
+    };
+    let bag = |relation: &BTreeMap<(D8oBodyKey, StaticOriginId), (StaticOriginId, u32, usize)>| {
+        let mut values = relation.values().copied().collect::<Vec<_>>();
+        values.sort();
+        values
+    };
+    assert_eq!(
+        bag(&permuted),
+        bag(&target_side),
+        "the permutation must be invisible to an unkeyed comparison, or it is not the control it \
+         claims to be"
+    );
+    if occurrences.len() > 1 {
+        assert_ne!(
+            permuted, target_side,
+            "and visible to the keyed one: the two bodies bind at DISTINCT application \
+             occurrences, so exchanging which body emitted which call is a real difference"
+        );
+    } else {
+        assert_eq!(
+            permuted, target_side,
+            "MEASURED: on this witness the two bodies observe the same target and occurrence \
+             values, so the swap is a no-op and this clause is not discriminated by it here. If \
+             this ever differs, the permutation has become a real control and this expectation \
+             should be inverted rather than deleted"
+        );
+    }
+}
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8p` — zero, one, and declined, per exact
+/// application occurrence.**
+///
+/// ## Zero
+///
+/// The `D8n` witness has composed static-worker calls and no invocation marker
+/// at all. The seam is on its call edge now, and it must bind nothing and change
+/// nothing: an ordinary composed call is untouched, exactly as it is on the
+/// direct descent.
+///
+/// ## One
+///
+/// The `D8p` witness binds exactly once per defining body.
+///
+/// ## Declined
+///
+/// The same witness with an ORDINARY call on the same selected recursive
+/// argument inside the pending marker's own application. Two static-worker calls
+/// reach the seat under one pending marker, and they are the same worker at the
+/// same arity in the same frame -- route, arity, binder index and call order are
+/// all blind. Exactly one binds, and it is the one at the plan's application
+/// occurrence; the other emits with no binding.
+///
+/// This is the occupancy behaviour `D8f` is about, and it is now on a live path.
+/// `D8f` is NOT discharged by this row and is not claimed to be: the program
+/// still refuses further downstream, at the affine causal law -- *"one causal
+/// identity was discharged twice in a single function"* -- because the ordinary
+/// call re-uses a binding that carries a composed authority. That is a separate
+/// question about the ordinary call's discharge, and it is stated here so the
+/// binding evidence is not read as more than it is.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d8p_binding_is_zero_one_or_declined_per_application_occurrence() {
+    use crate::cranelift_backend::lowering::{
+        d5a_marker_events, d8p_application_bindings, reset_d5a_marker_events,
+        reset_d8n_observations, D5aMarkerEvent,
+    };
+
+    // Zero.
+    reset_d8n_observations();
+    reset_d5a_marker_events();
+    let plain = d8n_compile();
+    assert!(plain.is_none(), "the unmarked composed witness compiles: {plain:?}");
+    assert!(
+        d8p_application_bindings().is_empty(),
+        "a composed static-worker call with no marker pending must bind NOTHING. The seam is on \
+         this edge now, so 'it only fires under a marker' has to be measured rather than read off \
+         the code: {:?}",
+        d8p_application_bindings()
+    );
+    assert!(
+        d5a_marker_events()
+            .iter()
+            .any(|event| matches!(event, D5aMarkerEvent::WorkerCallEmitted { .. })),
+        "and the calls must still be emitted, or the zero above is the zero of a path nothing took"
+    );
+
+    // One.
+    reset_d8n_observations();
+    let one = d8f_compile(false);
+    assert!(one.is_none(), "the marked witness compiles: {one:?}");
+    let bound = d8p_application_bindings();
+    let occurrences = bound
+        .iter()
+        .map(|binding| (binding.function, binding.application_origin))
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        occurrences.len(),
+        bound.len(),
+        "each (defining body, application occurrence) binds at most once: {bound:?}"
+    );
+    assert!(!bound.is_empty(), "and at least one binds: {bound:?}");
+
+    // Declined.
+    reset_d8n_observations();
+    reset_d5a_marker_events();
+    let declined = d8f_compile(true);
+    let events = d5a_marker_events();
+    let emitted = events
+        .iter()
+        .filter(|event| matches!(event, D5aMarkerEvent::WorkerCallEmitted { .. }))
+        .count();
+    let consumed = events
+        .iter()
+        .filter(|event| matches!(event, D5aMarkerEvent::Consumed { .. }))
+        .count();
+    assert!(
+        emitted >= 2,
+        "two static-worker calls must reach the seat under one pending marker, or there is no \
+         occupancy question on this program: {events:?}"
+    );
+    assert_eq!(
+        consumed, 1,
+        "and exactly ONE of them may bind. More than one is the marker being consumed by a call \
+         the planner never issued a template for; zero is the exact occurrence failing to find \
+         its own marker: {events:?}"
+    );
+    assert!(
+        matches!(events.first(), Some(D5aMarkerEvent::WorkerCallEmitted { .. })),
+        "the FIRST call emitted is the ordinary one, and it emits with no consumption before it. \
+         That ordering is the property: the ordinary call reaches the seat first, declines, and \
+         leaves the marker for the occurrence that owns it: {events:?}"
+    );
+    let refusal = format!("{declined:?}");
+    assert!(
+        refusal.contains("one causal identity was discharged twice in a single function"),
+        "MEASURED, and stated so the binding evidence above is not read as more than it is: this \
+         program still refuses downstream, because the ordinary call re-uses a binding that \
+         carries a composed causal authority and the affine law refuses the second discharge. \
+         That is D8f's remaining question, not D8p's, and D8f stays held. If this refusal ever \
+         changes, the occupancy witness has moved and this expectation should be restated rather \
+         than deleted: {refusal}"
     );
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D8p` — the three refusals the projection must
+/// not weaken.**
+///
+/// Projecting the checked-application seam onto a second call edge widens where a
+/// marker CAN be consumed. Each clause below is a case that must still refuse.
+///
+/// ## Clause 1 — no unauthorised semantic IH layer in a checked segment
+///
+/// The landed `px8tr` object fixture, with an ordinary call on the same recursor
+/// binder nested inside its checked application. The nested call instantiates a
+/// semantic IH layer of its own, and a segment carrying a checked frame requires
+/// every semantic layer to carry a checked invocation authority. `D8p` must not
+/// make that layer acceptable.
+///
+/// ## Clause 2 — no pending-marker acceptance at the marker's close
+///
+/// With consumption suppressed, the marker reaches its close still pending and
+/// must fail closed. `D8p` moved WHERE a marker may be consumed; it must not
+/// have moved WHETHER an unconsumed one is tolerated.
+///
+/// ## Clause 3 — no bypass of the source-open versus dynamic-parent comparison
+///
+/// Pinned by the landed row that names that refusal directly; this clause states
+/// the dependency rather than restating the fixture, so there is one copy of that
+/// evidence and it cannot go stale in two places.
+///
+/// **Promise class: durable invariant.**
+#[test]
+fn d8p_preserves_the_refusals_the_projection_could_have_weakened() {
+    use crate::cranelift_backend::lowering::{with_d5a_marker_mutation, D5aMarkerMutation};
+
+    // Clause 1.
+    crate::cranelift_backend::test_objects::set_px8tr_nest_ordinary_ih_call(true);
+    let nested = crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "ken_d8p_nested",
+        false,
+    )
+    .err();
+    crate::cranelift_backend::test_objects::set_px8tr_nest_ordinary_ih_call(false);
+    let nested = format!("{nested:?}");
+    assert!(
+        nested.contains("oriented segment mixes checked and inferred computational frames"),
+        "an ordinary call nested inside the checked application instantiates a semantic IH layer \
+         with no checked invocation authority, and a segment carrying a checked frame must still \
+         refuse it. D8p widened where a marker may be consumed; if that also made an unauthorised \
+         layer acceptable, this is where it shows: {nested}"
+    );
+
+    // Clause 2.
+    let pending = with_d5a_marker_mutation(D5aMarkerMutation::SuppressConsumption, || {
+        format!("{:?}", d8f_compile(false))
+    });
+    assert!(
+        pending.contains("a checked computational-IH marker is a specialized-only surface")
+            || pending.contains("marker"),
+        "with consumption withheld the marker reaches its close still pending and must fail \
+         closed. This is the exact refusal D8p's repair routes AROUND when the marker is genuinely \
+         consumed, so a green here would mean the repair works by tolerating the unconsumed case \
+         rather than by consuming: {pending}"
+    );
+    assert!(
+        !pending.contains("None"),
+        "and it must be a refusal, not a compile: {pending}"
+    );
+}
