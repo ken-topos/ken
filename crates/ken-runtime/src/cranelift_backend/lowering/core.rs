@@ -7334,6 +7334,20 @@ impl<'a> Lowering<'a> {
         // aliasing this node removed, and reintroducing it here would alias the
         // closure's capture run onto the producer's environment.
         let envelope = unit.ordinary_envelope()?;
+        // `D9b` — the envelope perturbations, under test only. ⛔ Each moves ONE
+        // fact of the planner's own sequence and leaves the assembler, the field
+        // run and the selected closure untouched, so a refusal is attributable
+        // to the moved role rather than to a rewritten assembly. Applied to the
+        // sequence the assembler is about to read, which is the producer input
+        // the role relation is about.
+        #[cfg(test)]
+        let envelope = crate::cranelift_backend::lowering::d9_perturb_envelope(envelope);
+        // `D9b` — the assembled run, recorded per role position AFTER assembly.
+        // ⛔ Recorded as a keyed sequence, never a multiset: a bag of five
+        // capture values proves only that the right values exist somewhere, and
+        // is satisfied by any permutation of them.
+        #[cfg(test)]
+        let recorded_envelope = envelope.clone();
         // The selected recursive field, by the ruled position. Its identity is
         // checked against the planner's own worker facts before a single
         // capture is read from it, so a capture taken below is known to have
@@ -7508,6 +7522,20 @@ impl<'a> Lowering<'a> {
         // than against the envelope's length: the two are separate planner
         // facts, and comparing the assembled run with the sequence it was
         // assembled from would be an identity.
+        #[cfg(test)]
+        crate::cranelift_backend::lowering::record_d9_assembly(
+            crate::cranelift_backend::lowering::D9Assembly {
+                unit: unit.id(),
+                roles: recorded_envelope
+                    .iter()
+                    .map(crate::cranelift_backend::lowering::d9_describe_role)
+                    .collect(),
+                operands: ordinary
+                    .iter()
+                    .map(crate::cranelift_backend::lowering::d9_describe_operand)
+                    .collect(),
+            },
+        );
         if ordinary.len() != unit.ordinary_parameters() as usize {
             return Err(unsupported(
                 "ContinuationSpecialization",

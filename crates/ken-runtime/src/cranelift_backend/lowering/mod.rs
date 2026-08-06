@@ -3854,6 +3854,235 @@ pub(in crate::cranelift_backend) enum D8gMutation {
     WithholdContextSuffix,
 }
 
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D9b` — the ordinary-envelope perturbations.**
+///
+/// ⛔ Each moves ONE fact of the planner's own role sequence. The assembler, the
+/// lowered field run and the selected closure are untouched, so a refusal is
+/// attributable to the moved role and not to a rewritten assembly.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) enum D9EnvelopeMutation {
+    Exact,
+    /// Exchange the ordinals of the first two capture roles, leaving both roles
+    /// at their own positions. ⭐ The required discriminator: a multiset of
+    /// capture values cannot see this, because the same five values are still
+    /// present.
+    SwapCaptureOrdinals,
+    /// Move the leading nonrecursive role behind the capture run, so the ruled
+    /// prefix-then-captures order is violated with the same roles present.
+    NonrecursiveAfterCaptures,
+    /// Point one capture role at another closure occurrence, leaving its ordinal
+    /// and position alone.
+    ForeignCaptureClosure,
+    /// Drop the last capture role, so the selected closure's run is consumed
+    /// short.
+    DropLastCaptureRole,
+}
+
+#[cfg(test)]
+thread_local! {
+    static D9_ENVELOPE_MUTATION: std::cell::Cell<D9EnvelopeMutation> =
+        const { std::cell::Cell::new(D9EnvelopeMutation::Exact) };
+    static D9_ENVELOPE_APPLICATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static D9_ASSEMBLIES: std::cell::RefCell<Vec<D9Assembly>> =
+        const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// One assembled ordinary run, keyed by role position.
+#[cfg(test)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(in crate::cranelift_backend) struct D9Assembly {
+    pub(in crate::cranelift_backend) unit: ContinuationSpecializationId,
+    /// The role sequence the assembler consumed, in order.
+    pub(in crate::cranelift_backend) roles: Vec<String>,
+    /// What it put at each of those positions, in the same order.
+    pub(in crate::cranelift_backend) operands: Vec<String>,
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d9_describe_role(
+    role: &ContinuationOrdinaryEnvelopeRole,
+) -> String {
+    match role {
+        ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField { source_position } => {
+            format!("field@{source_position}")
+        }
+        ContinuationOrdinaryEnvelopeRole::WorkerCapture {
+            ordinal,
+            closure_origin,
+            ..
+        } => format!("capture#{ordinal}@{closure_origin:?}"),
+    }
+}
+
+/// A phase-preserving description. ⛔ Names the PHASE and the shape, never a
+/// value: the relation this serves is about which role got which operand, and a
+/// description that collapsed two distinct captures to one string would make a
+/// swap invisible.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d9_describe_operand(operand: &LoweringOperand) -> String {
+    match operand {
+        LoweringOperand::Carried(word) => format!("carried:{:?}", word.word),
+        LoweringOperand::Specialized(lowered) => format!("specialized:{}", d9_lowered_tag(lowered)),
+    }
+}
+
+#[cfg(test)]
+fn d9_lowered_tag(lowered: &Lowered) -> String {
+    match lowered {
+        Lowered::Closure { body, params, .. } => format!("closure@{body:?}/{}", params.len()),
+        Lowered::Constructor { .. } => "constructor".to_string(),
+        _ => "other".to_string(),
+    }
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d9_perturb_envelope(
+    envelope: Vec<ContinuationOrdinaryEnvelopeRole>,
+) -> Vec<ContinuationOrdinaryEnvelopeRole> {
+    let mutation = D9_ENVELOPE_MUTATION.with(std::cell::Cell::get);
+    if mutation == D9EnvelopeMutation::Exact {
+        return envelope;
+    }
+    let capture_positions = envelope
+        .iter()
+        .enumerate()
+        .filter(|(_, role)| {
+            matches!(role, ContinuationOrdinaryEnvelopeRole::WorkerCapture { .. })
+        })
+        .map(|(position, _)| position)
+        .collect::<Vec<_>>();
+    let mut perturbed = envelope;
+    match mutation {
+        D9EnvelopeMutation::Exact => {}
+        // ⛔ Declines unless there are TWO captures to exchange. With fewer the
+        // swap is the identity, and counting an application for it would let a
+        // control read a green as a defence.
+        D9EnvelopeMutation::SwapCaptureOrdinals => {
+            if capture_positions.len() >= 2 {
+                let (first, second) = (capture_positions[0], capture_positions[1]);
+                let (a, b) = (
+                    d9_role_ordinal(&perturbed[first]),
+                    d9_role_ordinal(&perturbed[second]),
+                );
+                if let (Some(a), Some(b)) = (a, b) {
+                    if a != b {
+                        d9_set_role_ordinal(&mut perturbed[first], b);
+                        d9_set_role_ordinal(&mut perturbed[second], a);
+                        D9_ENVELOPE_APPLICATIONS.with(|cell| cell.set(cell.get() + 1));
+                    }
+                }
+            }
+        }
+        D9EnvelopeMutation::NonrecursiveAfterCaptures => {
+            if let Some(position) = perturbed.iter().position(|role| {
+                matches!(
+                    role,
+                    ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField { .. }
+                )
+            }) {
+                if !capture_positions.is_empty() {
+                    let role = perturbed.remove(position);
+                    perturbed.push(role);
+                    D9_ENVELOPE_APPLICATIONS.with(|cell| cell.set(cell.get() + 1));
+                }
+            }
+        }
+        D9EnvelopeMutation::ForeignCaptureClosure => {
+            if let Some(position) = capture_positions.first().copied() {
+                if let ContinuationOrdinaryEnvelopeRole::WorkerCapture {
+                    closure_origin, ..
+                } = &mut perturbed[position]
+                {
+                    // A REAL origin naming the wrong role, not a fabricated id:
+                    // an unknown id could be refused merely for being unknown.
+                    if let Some(other) = d9_other_origin(*closure_origin) {
+                        *closure_origin = other;
+                        D9_ENVELOPE_APPLICATIONS.with(|cell| cell.set(cell.get() + 1));
+                    }
+                }
+            }
+        }
+        D9EnvelopeMutation::DropLastCaptureRole => {
+            if let Some(position) = capture_positions.last().copied() {
+                perturbed.remove(position);
+                D9_ENVELOPE_APPLICATIONS.with(|cell| cell.set(cell.get() + 1));
+            }
+        }
+    }
+    perturbed
+}
+
+#[cfg(test)]
+fn d9_role_ordinal(role: &ContinuationOrdinaryEnvelopeRole) -> Option<u32> {
+    match role {
+        ContinuationOrdinaryEnvelopeRole::WorkerCapture { ordinal, .. } => Some(*ordinal),
+        ContinuationOrdinaryEnvelopeRole::NonrecursiveConstructorField { .. } => None,
+    }
+}
+
+#[cfg(test)]
+fn d9_set_role_ordinal(role: &mut ContinuationOrdinaryEnvelopeRole, value: u32) {
+    if let ContinuationOrdinaryEnvelopeRole::WorkerCapture { ordinal, .. } = role {
+        *ordinal = value;
+    }
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d9_set_foreign_origin(origin: Option<StaticOriginId>) {
+    D9_FOREIGN_ORIGIN.with(|cell| cell.set(origin));
+}
+
+#[cfg(test)]
+thread_local! {
+    static D9_FOREIGN_ORIGIN: std::cell::Cell<Option<StaticOriginId>> =
+        const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+fn d9_other_origin(current: StaticOriginId) -> Option<StaticOriginId> {
+    D9_FOREIGN_ORIGIN
+        .with(std::cell::Cell::get)
+        .filter(|candidate| *candidate != current)
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn record_d9_assembly(assembly: D9Assembly) {
+    D9_ASSEMBLIES.with(|log| log.borrow_mut().push(assembly));
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn d9_assemblies() -> Vec<D9Assembly> {
+    D9_ASSEMBLIES.with(|log| log.borrow().clone())
+}
+
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn reset_d9_assemblies() {
+    D9_ASSEMBLIES.with(|log| log.borrow_mut().clear());
+}
+
+/// Arm one `D9b` envelope perturbation for `body`, restoring however it leaves.
+#[cfg(test)]
+pub(in crate::cranelift_backend) fn with_d9_envelope_mutation<T>(
+    mutation: D9EnvelopeMutation,
+    body: impl FnOnce() -> T,
+) -> (T, usize) {
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            D9_ENVELOPE_MUTATION.with(|cell| cell.set(D9EnvelopeMutation::Exact));
+        }
+    }
+    D9_ENVELOPE_MUTATION.with(|cell| cell.set(mutation));
+    D9_ENVELOPE_APPLICATIONS.with(|cell| cell.set(0));
+    let _restore = Restore;
+    let result = body();
+    (
+        result,
+        D9_ENVELOPE_APPLICATIONS.with(std::cell::Cell::get),
+    )
+}
+
 /// **`RT-CONTSRC-PRODUCER-LOCAL` `D6c` — the pre-emission SELECTION refusal set.**
 ///
 /// ⛔ **Not `D8f`'s set, despite sharing vocabulary.** `D8f` is about which call

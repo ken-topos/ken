@@ -24359,3 +24359,170 @@ fn d6c_the_sealed_binder_run_refuses_a_miscounted_or_permuted_run_at_its_produce
     recursive_port_process_compiles(&expr)
         .expect("THE EXACT POSITIVE: the unperturbed governed witness still compiles");
 }
+
+
+/// **`RT-CONTSRC-PRODUCER-LOCAL` `D9b` — the assembled ordinary run corresponds
+/// to the planner's role sequence BY EXACT ROLE POSITION.**
+///
+/// ## The independent side
+///
+/// The planner-issued `ContinuationOrdinaryEnvelopeRole` sequence, read from a
+/// plan built separately from the emission run. ⛔ It is not derived from the
+/// assembled run, and the assembler is not consulted to produce it — deriving
+/// the expectation from the assembly is the defect the GOVERNING section is
+/// about.
+///
+/// ## Keyed, never a multiset
+///
+/// The relation is `role position -> operand`, compared position by position and
+/// with the two lengths required equal. ⛔ A multiset of the assembled operands
+/// would prove only that the right values exist *somewhere*, and every
+/// permutation of them would satisfy it.
+///
+/// ## ⛔ THE WITNESS LIMIT — the capture-dependent refusals cannot be built here
+///
+/// **Measured, not assumed:** every continuation unit reachable from this
+/// crate's fixtures declares **zero** worker captures.
+///
+/// ```text
+/// px8tr  ContinuationSpecializationId(0)  captures=0  ordinary_params=1
+/// px8tr  ContinuationSpecializationId(1)  captures=0  ordinary_params=1
+/// governed                                envelope=[] on every unit
+/// ```
+///
+/// So the four envelope perturbations that need a capture role — **the required
+/// swapped-ordinal red**, the role-order violation, the foreign closure
+/// occurrence and the short capture run — have nothing to move. They **decline
+/// and count no application**, and this row asserts exactly that rather than
+/// asserting a refusal that does not happen.
+///
+/// ⭐ **What would make them bite:** a witness whose selected worker has at
+/// least two captures. The one that exists is `AC-1`'s buffer-allocate row,
+/// whose five-capture envelope is what the Architect measured
+/// (`evt_1y7h08xd7ermp`) — and it lives in `ken-cli`, not here, and does not
+/// currently reach this seat. ⇒ This row goes red the moment an in-crate witness
+/// gains a capture-bearing worker, which is the honest form of the check: the
+/// alternative, omitting the clause, would never notice.
+///
+/// The guards themselves are landed and fail closed in `D9a`; what is absent is
+/// a witness that can exercise them, not the guards.
+///
+/// **Promise class: durable invariant** for the keyed correspondence; the
+/// decline clauses are a measured statement about this crate's witnesses and are
+/// written to red when that changes.
+#[test]
+fn d9b_the_assembled_ordinary_run_matches_the_planner_role_sequence_by_position() {
+    use crate::cranelift_backend::lowering::{
+        d9_assemblies, d9_describe_role, reset_d9_assemblies, with_d9_envelope_mutation,
+        D9EnvelopeMutation,
+    };
+
+    reset_d9_assemblies();
+    crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+        "ken_d9b_exact",
+        false,
+    )
+    .map(|_| ())
+    .map_err(|error| format!("{error:?}"))
+    .expect("the witness compiles");
+    let assembled = d9_assemblies();
+    assert!(
+        !assembled.is_empty(),
+        "no continuation ordinary run was assembled, so every clause below would be vacuous"
+    );
+
+    // The independent side: the planner's own role sequence per unit, from a
+    // plan built separately from the emission run above.
+    let planned = with_d5a_witness_plan(|plan| {
+        plan.continuation_units()
+            .expect("continuation units")
+            .into_iter()
+            .map(|unit| {
+                (
+                    unit.id(),
+                    (
+                        unit.ordinary_envelope()
+                            .expect("the planner's own envelope")
+                            .iter()
+                            .map(d9_describe_role)
+                            .collect::<Vec<_>>(),
+                        unit.ordinary_parameters() as usize,
+                    ),
+                )
+            })
+            .collect::<BTreeMap<_, _>>()
+    });
+
+    for run in &assembled {
+        let (expected_roles, declared) = planned
+            .get(&run.unit)
+            .map(|(roles, declared)| (roles, *declared))
+            .unwrap_or_else(|| panic!("{:?} assembled a run the planner defines no unit for", run.unit));
+        assert_eq!(
+            &run.roles, expected_roles,
+            "the assembler must consume the PLANNER's role sequence for {:?}, in its order",
+            run.unit
+        );
+        assert_eq!(
+            run.operands.len(),
+            run.roles.len(),
+            "one operand per role, keyed by position -- a length disagreement means the run and \
+             the sequence it was assembled from are not the same relation: {run:?}"
+        );
+        assert_eq!(
+            run.operands.len(),
+            declared,
+            "and the run's length is the continuation's independently declared ordinary-parameter \
+             count: {run:?}"
+        );
+    }
+
+    // ── THE WITNESS LIMIT, measured ────────────────────────────────────────
+    //
+    // ⛔ Each of these needs a capture role to move. Asserting zero applications
+    // is what keeps the absence a MEASUREMENT: a control that merely ran them
+    // and saw a green compile would read as a defence of guards that were never
+    // reached.
+    for mutation in [
+        D9EnvelopeMutation::SwapCaptureOrdinals,
+        D9EnvelopeMutation::NonrecursiveAfterCaptures,
+        D9EnvelopeMutation::ForeignCaptureClosure,
+        D9EnvelopeMutation::DropLastCaptureRole,
+    ] {
+        reset_d9_assemblies();
+        let (outcome, applications) = with_d9_envelope_mutation(mutation, || {
+            crate::cranelift_backend::test_objects::emit_px8tr_nested_post_effect_object(
+                "ken_d9b_limit",
+                false,
+            )
+            .map(|_| ())
+            .map_err(|error| format!("{error:?}"))
+        });
+        assert_eq!(
+            applications, 0,
+            "⛔ {mutation:?} APPLIED on this witness. This row records that it cannot -- every \
+             in-crate unit declares zero worker captures -- so a nonzero count means a \
+             capture-bearing witness now exists and the real refusal clause must be written \
+             instead of this limit"
+        );
+        outcome.expect(
+            "and with nothing moved the compile is unchanged, which is what makes the zero above \
+             a decline rather than a suppressed refusal",
+        );
+    }
+
+    let captures = with_d5a_witness_plan(|plan| {
+        plan.continuation_units()
+            .expect("continuation units")
+            .into_iter()
+            .map(|unit| unit.worker_capture_count())
+            .max()
+            .unwrap_or(0)
+    });
+    assert_eq!(
+        captures, 0,
+        "⛔ THE LIMIT'S OWN PREMISE. A unit here now declares {captures} worker captures, so the \
+         swapped-ordinal discriminator IS constructible and must be built. This assertion is the \
+         trigger, and it is deliberately the thing that reds first"
+    );
+}
