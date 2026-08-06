@@ -3717,9 +3717,27 @@ fn ac1_unmatchable_case() -> crate::RuntimeMatchCase {
 /// ⛔ What this row does NOT claim, and what is still OWED: it does not exercise
 /// a nontrivial post-match continuation, a nested or inherited source join,
 /// exact-once join consumption, distinct predecessor edges, or the carried
-/// identity / arity / field-order negatives. Those need a whole-process fixture
-/// with a planned scalar cut, which this JIT edge rig does not supply. They are
-/// not claimed here and are not discharged anywhere else.
+/// identity / arity / field-order negatives. They are not claimed here and are
+/// not discharged anywhere else.
+///
+/// ⛔ AND THE OBVIOUS NEXT STEP IS MEASURED CLOSED. An earlier draft of this
+/// paragraph said those controls "need a whole-process fixture with a planned
+/// scalar cut", which reads as an instruction to go build one. A probe over the
+/// whole `ken-runtime` lib suite (779 tests) measured otherwise:
+///
+///   * `SourceContinuation::MatchScrutinee` is reached **7 times total**, and
+///     with a CARRIED operand **exactly once** -- this row.
+///   * `lower_source_carried_match` is entered **exactly once** -- this row --
+///     and refuses at join acquisition before emitting any selector.
+///   * The whole-process capacity family (`run_capacity_fixture` and every
+///     sibling in `effects.rs`) reaches the seat **zero** times. A closure
+///     parameter bound to a `Construct` stays `Specialized(Lowered::Constructor)`
+///     and is selected at COMPILE time, so the carried arm is never taken.
+///
+/// ⇒ Writing the owed controls is not a fixture-authoring task on the existing
+/// rigs. It needs a producer that delivers a genuinely carried word into a
+/// source-machine `Match` under a planned scalar cut, and no rig in this crate
+/// does that today. Do not read the list above as buildable work.
 ///
 /// Promise class: transition sentinel. It is pinned to the join-acquisition
 /// refusal this rig currently raises; a rig that supplies a planned scalar cut

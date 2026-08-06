@@ -1375,9 +1375,19 @@ fn compile_expr_into_module_with_root_projection<'a, M: Module>(
 /// ⚠ Named locally and deliberately: this is NOT claimed to be a canonical
 /// carrier-wide failure word. It reuses the value the dynamic-constructor
 /// emitter already returns for a malformed represented value, because both mean
-/// *"this word is not the representation this chain decodes"* -- and the
-/// wrong-class control pins that exact value, so a divergence is a test failure
-/// rather than a silent drift.
+/// *"this word is not the representation this chain decodes"*.
+///
+/// ⛔ NOTHING PINS THIS VALUE, and an earlier draft of this comment claimed a
+/// wrong-class control did. It does not exist and cannot be written today:
+/// `mismatch_block` is emitted on the residual arm of the class chain, and a
+/// sentinel sweep of the whole `ken-runtime` lib suite measured that arm as
+/// reached ZERO times. `lower_source_carried_match` is entered exactly once in
+/// the crate -- by
+/// `constructors::ac1_source_machine_match_classifies_a_carried_scrutinee_by_phase`
+/// -- and that entry refuses at join acquisition, before any selector is
+/// emitted. So a divergence in this value is a SILENT DRIFT, not a test
+/// failure. Retiring this paragraph needs a fixture that reaches the arm, not
+/// a re-reading of the code.
 const CARRIED_REPRESENTATION_MISMATCH_STATUS: i64 = MALFORMED_DYNAMIC_CONSTRUCTOR_STATUS;
 
 /// One emitted-case descriptor for the carried source-machine `Match`.
@@ -5990,27 +6000,6 @@ impl<'a> Lowering<'a> {
         self.resume_active_continuation(builder, merged?, suffix_active)
     }
 
-    /// Eliminate a CARRIED scrutinee at the source-machine ordinary `Match`
-    /// seat, under the source machine's own continuation discipline.
-    ///
-    /// A runtime boundary word has no compile-time template, so the case cannot
-    /// be selected at compile time. The dispatch is the carrier ABI's and
-    /// nothing else: the canonical case identity comes from the planner, the tag
-    /// and field count are read through the carrier, and each projected child
-    /// stays `Carried` into the case environment. There is no decode and no
-    /// `Carried -> Lowered` reconstruction anywhere on this path.
-    ///
-    /// This does NOT delegate to `Lowering::lower_carried_match`. That helper
-    /// belongs to the generic `lower_expr` seat, which returns a value to its
-    /// caller; this seat owns a continuation, so each case body must be lowered
-    /// under the match's original `next` through a distinct source predecessor
-    /// edge, and the suffix resumed exactly once at the join.
-    ///
-    /// Case emission is the planner's verdict, not this emitter's: a case the
-    /// scrutinee's closed producer set eliminates is not emitted and its body is
-    /// not lowered. The runtime closed default covers it, so an eliminated
-    /// constructor arriving anyway still reaches a defined outcome rather than
-    /// falling into a neighbouring case.
     /// One emitted-case descriptor, resolved BEFORE any block exists.
     ///
     /// Every planner and schema question the carried source-machine `Match`
@@ -6116,6 +6105,27 @@ impl<'a> Lowering<'a> {
         Ok(())
     }
 
+    /// Eliminate a CARRIED scrutinee at the source-machine ordinary `Match`
+    /// seat, under the source machine's own continuation discipline.
+    ///
+    /// A runtime boundary word has no compile-time template, so the case cannot
+    /// be selected at compile time. The dispatch is the carrier ABI's and
+    /// nothing else: the canonical case identity comes from the planner, the tag
+    /// and field count are read through the carrier, and each projected child
+    /// stays `Carried` into the case environment. There is no decode and no
+    /// `Carried -> Lowered` reconstruction anywhere on this path.
+    ///
+    /// This does NOT delegate to `Lowering::lower_carried_match`. That helper
+    /// belongs to the generic `lower_expr` seat, which returns a value to its
+    /// caller; this seat owns a continuation, so each case body must be lowered
+    /// under the match's original `next` through a distinct source predecessor
+    /// edge, and the suffix resumed exactly once at the join.
+    ///
+    /// Case emission is the planner's verdict, not this emitter's: a case the
+    /// scrutinee's closed producer set eliminates is not emitted and its body is
+    /// not lowered. The runtime closed default covers it, so an eliminated
+    /// constructor arriving anyway still reaches a defined outcome rather than
+    /// falling into a neighbouring case.
     fn lower_source_carried_match<'b>(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
